@@ -69,7 +69,7 @@ function SharedCalendarItem({
             {!condensed && (
                 <>
                     <span className="text-sm truncate flex-1">{sc.calendarName}</span>
-                    <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                    <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
                         <TooltipButton
                             icon={Pencil}
                             tooltipText="Edit calendar"
@@ -193,7 +193,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                                     {!condensed && (
                                         <>
                                             <span className="text-sm truncate flex-1">{cal.name}</span>
-                                            <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                                            <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
                                                 <TooltipButton
                                                     icon={Pencil}
                                                     tooltipText="Edit calendar"

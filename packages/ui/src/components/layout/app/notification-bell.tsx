@@ -53,7 +53,7 @@ function NotificationItem({ notification, previewOpts, onMarkRead, onDismiss }: 
                     variant="ghost"
                     size="icon"
                     aria-label="Dismiss notification"
-                    className="shrink-0 h-6 w-6 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100"
+                    className="shrink-0 h-6 w-6 opacity-0 group-hover/item:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                     onClick={(e) => {
                         e.stopPropagation();
                         onDismiss(notification.id);

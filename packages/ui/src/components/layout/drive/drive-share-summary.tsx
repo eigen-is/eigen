@@ -71,7 +71,7 @@ export function DriveShareSummary({
                 </div>
             ) : (
                 showIconOnHover && (
-                    <div className="invisible group-hover:visible">
+                    <div className="invisible group-hover:visible pointer-coarse:visible">
                         <UserRoundPlus className="h-4 w-4 text-muted-foreground" />
                     </div>
                 )

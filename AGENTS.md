@@ -293,13 +293,16 @@ the two read at the same weight.
 #### Hover-Only Icons Pattern
 
 To show action icons only on row hover (like the share icon in Drive), use the Tailwind `group` +
-`invisible group-hover:visible` pattern:
+`invisible group-hover:visible` pattern. Always add the matching `pointer-coarse:` variant so the
+affordance rests visible on touch devices, which have no hover — mirror the value the mouse user sees on
+hover (`group-hover:visible` → `pointer-coarse:visible`, `group-hover:opacity-80` →
+`pointer-coarse:opacity-80`, `group-hover:opacity-100` → `pointer-coarse:opacity-100`):
 
 ```tsx
 <TableRow className="eigen-list-item group">
     <TableCell>
         <span>Item name</span>
-        <div className="invisible group-hover:visible ml-auto">
+        <div className="invisible group-hover:visible pointer-coarse:visible ml-auto">
             <TooltipButton icon={Edit} tooltipText="Edit" className="h-7 w-7" onClick={...} />
         </div>
     </TableCell>

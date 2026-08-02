@@ -268,7 +268,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                                 className="group flex items-center justify-between rounded-md pr-1 hover:bg-muted/50"
                                             >
                                                 <UserItem email={p.email} />
-                                                <div className="invisible group-hover:visible">
+                                                <div className="invisible group-hover:visible pointer-coarse:visible">
                                                     <TooltipButton
                                                         icon={X}
                                                         tooltipText="Remove"

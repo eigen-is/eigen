@@ -99,7 +99,7 @@ export function DriveTile({
                         e.stopPropagation();
                         openContextMenuFromButton(e.currentTarget, item);
                     }}
-                    className="ml-auto flex-shrink-0 h-6 w-6 rounded hover:bg-accent flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100"
+                    className="ml-auto flex-shrink-0 h-6 w-6 rounded hover:bg-accent flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"
                 >
                     <MoreVertical className="h-4 w-4" />
                 </button>
