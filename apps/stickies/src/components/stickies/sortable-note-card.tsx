@@ -49,10 +49,11 @@ export const SortableNoteCard = memo(function SortableNoteCard({
 
     // Long-press opens the same menu on touch. `touch-none` (required by the drag sensor) suppresses
     // the browser's native contextmenu, so the timer-based hook is the only path here. dnd-kit's
-    // onPointerDown listener is composed with the hook's (not clobbered) — the 5 px drag activation
-    // and the 10 px long-press cancel keep a stationary press from starting a drag.
+    // onPointerDown listener is composed with the hook's (not clobbered). Drag activates at 5 px but
+    // the long-press only self-cancels at 10 px, so `isDragging` in `disabled` cancels the armed timer
+    // the moment a drag actually starts — otherwise the menu could open mid-drag.
     const longPress = useLongPress<CommentCard>((c, x, y) => onLongPress?.(c, x, y), {
-        disabled: !canWrite || !onLongPress,
+        disabled: !canWrite || !onLongPress || isDragging,
     });
     const bound = longPress.bind(card);
     const handlePointerDown = (e: React.PointerEvent) => {

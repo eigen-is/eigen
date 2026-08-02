@@ -497,7 +497,7 @@ export function DriveLayout({
                 }
                 description={
                     pendingDeletePaths.length === 1
-                        ? 'This will move the item to trash. You can restore it later from the trash.'
+                        ? 'You can restore it later from the trash. Move'
                         : `This will move ${pendingDeletePaths.length} items to trash. You can restore them later from the trash.`
                 }
                 itemName={pendingDeletePaths.length === 1 ? stripEigenExtension(pendingDeletePaths[0].name) : undefined}

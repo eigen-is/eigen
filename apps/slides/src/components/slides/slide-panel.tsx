@@ -43,8 +43,9 @@ export function SlidePanel({
     const slideContextMenu = useContextMenu<string>();
 
     // Mobile thumbnails render bare (no SortableSlide, no per-item component to hang a hook on), so
-    // one panel-level useLongPress carries the pressed slide via bind(slideId). This is the only touch
-    // path to the menu on mobile — the desktop panel keeps its onContextMenu right-click.
+    // one panel-level useLongPress carries the pressed slide via bind(slideId). Both layouts share this
+    // instance: mobile spreads it on the bare thumbnail, desktop composes it into SortableSlide (below)
+    // so a coarse-pointer press reaches the menu there too; desktop mouse keeps its onContextMenu right-click.
     const { openAt: openSlideMenuAt } = slideContextMenu;
     const handleSlideLongPress = useCallback(
         (slideId: string, x: number, y: number) => {
@@ -82,7 +83,7 @@ export function SlidePanel({
             );
 
         return (
-            <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false}>
+            <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false} longPressBind={slideLongPress.bind}>
                 <div onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}>{thumbnail}</div>
             </SortableSlide>
         );
@@ -145,12 +146,23 @@ function SortableSlide({
     slideId,
     children,
     isDragOverlay,
+    longPressBind,
 }: {
     slideId: string;
     children: React.ReactNode;
     isDragOverlay: boolean;
+    longPressBind: ReturnType<typeof useLongPress<string>>['bind'];
 }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slideId });
+
+    // Compose the long-press hook's onPointerDown with dnd-kit's drag-activation listener so a
+    // coarse-pointer press opens the menu in desktop layout too, without clobbering either side.
+    // The hook arms only for touch, so mouse drag stays byte-identical.
+    const bound = longPressBind(slideId);
+    const handlePointerDown = (e: React.PointerEvent) => {
+        listeners?.onPointerDown?.(e);
+        bound.onPointerDown(e);
+    };
 
     return (
         <div
@@ -161,7 +173,11 @@ function SortableSlide({
                 opacity: isDragging && !isDragOverlay ? 0.3 : 1,
             }}
             {...attributes}
-            {...listeners}
+            onPointerDown={handlePointerDown}
+            onPointerMove={bound.onPointerMove}
+            onPointerUp={bound.onPointerUp}
+            onPointerCancel={bound.onPointerCancel}
+            onClickCapture={bound.onClickCapture}
         >
             {children}
         </div>

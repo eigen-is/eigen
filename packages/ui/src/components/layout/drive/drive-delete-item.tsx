@@ -26,7 +26,7 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     };
 
     const description = isSingle
-        ? 'This will move the item to trash. You can restore it later from the trash.'
+        ? 'You can restore it later from the trash. Move'
         : `This will move ${paths.length} items to trash. You can restore them later from the trash.`;
 
     return (
