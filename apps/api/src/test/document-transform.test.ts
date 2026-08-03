@@ -14,14 +14,27 @@ import { captureCollabSource } from '../lib/document/transform/collab-source';
 import type { DocumentTransformResponse } from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
 import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
+import { exportEigendocToHtml, generateExportHtml } from '../lib/export/doc/html';
 import { exportSheetsToHtml } from '../lib/export/sheets/html';
 import { exportSheetsToXlsx } from '../lib/export/sheets/xlsx';
+import { exportSlidesToHtml, generateSlidesExportHtml } from '../lib/export/slides/html';
 import { getHome } from '../lib/home/get-home';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
+import { generateEigendocPreview } from '../lib/preview/eigendoc-preview';
 import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-preview';
+import { generateEigenslidesPreview } from '../lib/preview/eigenslides-preview';
+import {
+    buildGoldenDeck,
+    buildGoldenDocJson,
+    GOLDEN_BEYOND_CAP,
+    GOLDEN_MEDIA_NAME,
+    seedDocumentMedia,
+    seedEigendoc,
+    seedSlidesDoc,
+} from './fixtures/golden-documents';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from './fixtures/heavy-sheets';
-import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestContext } from './setup';
+import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from './setup';
 
 // End-to-end validation of the off-thread eigensheets preview and exports: Worker
 // output must equal the same pipeline executed on the main thread, corruption and
@@ -29,6 +42,10 @@ import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestC
 // preview cache keeps its dedupe/stale-while-revalidate contract on top of the runner.
 
 const GARBAGE = Buffer.from([0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+function sha256(data: ArrayBuffer | Buffer | string): string {
+    return new Bun.CryptoHasher('sha256').update(data).digest('hex');
+}
 
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let rootId: string;
@@ -307,10 +324,6 @@ describe('document transform (eigensheets export)', () => {
         golden = await home.drive.resolveFile(mountId, sheetsPath.id);
     });
 
-    function sha256(data: ArrayBuffer | Buffer): string {
-        return new Bun.CryptoHasher('sha256').update(data).digest('hex');
-    }
-
     test('html export through the Worker is byte-identical to the pre-move pipeline', async () => {
         const result = await exportSheetsToHtml(golden.mount, golden.path);
         expect(sha256(result.data)).toBe(GOLDEN_EXPORT_HTML_SHA256);
@@ -563,5 +576,127 @@ describe('document transform (xlsx import)', () => {
             errorSpy.mockRestore();
             runSpy.mockRestore();
         }
+    }, 120_000);
+});
+
+// Recorded from the pre-Worker doc/slides pipeline on the golden fixtures (preview
+// generators, exportEigendocToHtml/exportSlidesToHtml, and the wrapped documents fed
+// to WeasyPrint), so the move off-thread is proven byte-identical. Regenerate only
+// for an intentional renderer change. The embedded media data URI comes from the
+// screen-preview pipeline (sharp → WebP), so a preview-encoder change moves the
+// export hashes legitimately.
+const GOLDEN_DOC_PREVIEW_SHA256 = 'f61e8785cd4e3b3872e5fcf6ee817abdae5e2ed4119a113dc17342fd922e6b44';
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '1f6657ad5e4e05b50d582246037d55ecc9ce6b4c4de03288e14213f9a1fdf7a1';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '1f6657ad5e4e05b50d582246037d55ecc9ce6b4c4de03288e14213f9a1fdf7a1';
+const GOLDEN_DECK_PREVIEW_SHA256 = '351d31560954f2490f67bd5aeba11f24d083e3646c78b25599e0fef816c65616';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '7b584e034fcf9fe42b2dc2dd6d20d9f4af4bb1c21444875c985dacfe59bd9644';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '4c70de4e940fd61e27152e00f718546b37747bc22f5f1acbc5d53d8c753f6aec';
+
+// Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
+// normalize them out so the golden pins the rendering, not the fixture's uuids.
+function normalizeMediaUrls(body: string): string {
+    return body.replace(/http:\/\/localhost\/drive\/[^"')\s]+\/preview/g, '{media}');
+}
+
+async function seedGoldenDocument(
+    fileName: string,
+    type: 'doc' | 'slides',
+): Promise<{ mount: Mount; path: DrivePath }> {
+    const created = await drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${rootId}/create/${type}`,
+        { fileName },
+    );
+    const home = await getHome(ctx.alice.user.id);
+    const collab = await home.drive.getCollabDocument(mountId, created.id);
+    if (type === 'doc') seedEigendoc(collab.doc, buildGoldenDocJson());
+    else seedSlidesDoc(collab.doc, buildGoldenDeck());
+
+    const resolved = await home.drive.resolveFile(mountId, created.id);
+    await seedDocumentMedia(resolved.mount, resolved.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
+    return resolved;
+}
+
+describe('document transform (eigendoc)', () => {
+    let golden: { mount: Mount; path: DrivePath };
+
+    beforeAll(async () => {
+        golden = await seedGoldenDocument('golden-doc', 'doc');
+    });
+
+    test('preview body matches the pinned golden hash', async () => {
+        const body = await generateEigendocPreview(golden.mount, golden.path);
+        // A glance, not the document: the first 20 blocks with the truncated marker,
+        // media as an embed URL, hostile content defanged.
+        expect(body).toContain('Quarterly Report');
+        expect(body).not.toContain(GOLDEN_BEYOND_CAP);
+        expect(body).toContain('Preview truncated');
+        expect(body).toMatch(/<img src="http:\/\/localhost\/drive\/[^"]+\/preview"/);
+        expect(body).not.toMatch(/<script/i);
+        expect(body).not.toContain('javascript:alert');
+        expect(sha256(normalizeMediaUrls(body))).toBe(GOLDEN_DOC_PREVIEW_SHA256);
+
+        // The route serves exactly that body in the { body, mode } envelope.
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${golden.path.id}/text-preview`,
+        );
+        expect(res.status).toBe(200);
+        const preview = await res.json();
+        expect(preview.mode).toBe('eigendoc');
+        expect(preview.body).toBe(body);
+    }, 120_000);
+
+    test('html export is byte-identical to the pre-move pipeline', async () => {
+        const result = await exportEigendocToHtml(golden.mount, golden.path);
+        expect(sha256(result.data)).toBe(GOLDEN_DOC_EXPORT_HTML_SHA256);
+    }, 120_000);
+
+    test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
+        // The stage before htmlToPdf: the wrapped document WeasyPrint renders.
+        const html = await generateExportHtml(golden.mount, golden.path);
+        expect(sha256(html)).toBe(GOLDEN_DOC_EXPORT_PDF_HTML_SHA256);
+    }, 120_000);
+});
+
+describe('document transform (eigenslides)', () => {
+    let golden: { mount: Mount; path: DrivePath };
+
+    beforeAll(async () => {
+        golden = await seedGoldenDocument('golden-deck', 'slides');
+    });
+
+    test('preview body matches the pinned golden hash', async () => {
+        const body = await generateEigenslidesPreview(golden.mount, golden.path);
+        // First 8 slides with the truncated marker, media as an embed URL.
+        expect(body).toContain('Deck <strong>title</strong>');
+        expect(body).not.toContain(GOLDEN_BEYOND_CAP);
+        expect(body).toContain('Preview truncated');
+        expect(body).toMatch(/<img src="http:\/\/localhost\/drive\/[^"]+\/preview"/);
+        expect(body).not.toMatch(/<script/i);
+        expect(body).not.toMatch(/"\s*onload/i);
+        expect(sha256(normalizeMediaUrls(body))).toBe(GOLDEN_DECK_PREVIEW_SHA256);
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${golden.path.id}/text-preview`,
+        );
+        expect(res.status).toBe(200);
+        const preview = await res.json();
+        expect(preview.mode).toBe('eigenslides');
+        expect(preview.body).toBe(body);
+    }, 120_000);
+
+    test('html export is byte-identical to the pre-move pipeline', async () => {
+        const result = await exportSlidesToHtml(golden.mount, golden.path);
+        expect(sha256(result.data)).toBe(GOLDEN_DECK_EXPORT_HTML_SHA256);
+    }, 120_000);
+
+    test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
+        // Fixed-size PDF mode: px geometry instead of container queries.
+        const html = await generateSlidesExportHtml(golden.mount, golden.path, 'pdf');
+        expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 });
