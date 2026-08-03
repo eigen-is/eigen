@@ -173,10 +173,12 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const resize = useCallback(() => {
         const sheetData = dataRef.current;
         if (!sheetData) return;
-        const placeholder = placeholderRef.current!;
-        // A hidden container measures 0×0, and writing that pins the canvas blank until the
-        // next resize. Skip it — the observer fires again with a real box on un-hide.
-        if (placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
+        // Nothing measurable yet: React detaches the ref during unmount before this effect's
+        // cleanup disconnects the observer, and removing a watched node fires it. A hidden
+        // container likewise measures 0×0 — writing that pins the canvas blank until the next
+        // resize, so wait for the real box the observer reports on un-hide.
+        const placeholder = placeholderRef.current;
+        if (!placeholder || placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
         setContext((draftCtx) => {
             if (settings.devicePixelRatio === 0) {
                 draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
