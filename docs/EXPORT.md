@@ -62,10 +62,12 @@ GET /drive/:ownerId/:mountId/file/:pathId/export/:format
 The route handler is thin:
 ```typescript
 const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-const result = await exportDocument(mount, path, params.format);
+const result = await exportDocument(mount, path, params.format, request.signal);
 ```
 
-Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only).
+Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only), 503 when the transform runner
+is saturated (sheets). `request.signal` is threaded through so a disconnected sheet export drops its queued
+job or terminates its Worker — doc/slides exports still run on the main thread and ignore it.
 
 ## HTML Pipeline
 
@@ -180,13 +182,24 @@ apps/api/src/lib/export/slides/
 
 ## Sheets Export
 
-Eigensheets (`.eigensheets`) support XLSX, PDF, and HTML export via the same route:
+Eigensheets (`.eigensheets`) support XLSX, PDF, and HTML export via the same route. Every format runs in the
+one-shot document-transform Worker (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phase 2 as-built), so Yjs
+reconstruction, op replay, recalc, rendering, sanitization, and ExcelJS/ZIP work never block the API event
+loop:
 
-| Format | Pipeline |
-|--------|----------|
-| `xlsx`  | Yjs snapshot → `Sheet[]` → ExcelJS workbook |
-| `pdf`   | `Sheet[]` → `renderSheetsHtml` → WeasyPrint (page sized to the widest/tallest sheet) |
-| `html`  | `Sheet[]` → `renderSheetsHtml` standalone HTML |
+| Format | Worker | Main thread |
+|--------|--------|-------------|
+| `xlsx`  | Yjs blobs → `Sheet[]` → ExcelJS workbook → transferred bytes | headers + response |
+| `pdf`   | `Sheet[]` → `renderSheetsPdfDocument` (page sized to the widest/tallest sheet) | `htmlToPdf` WeasyPrint subprocess |
+| `html`  | `Sheet[]` → `renderSheetsExportDocument` standalone HTML | headers + response |
+
+`exportSheetsToHtml/Pdf/Xlsx` are thin wrappers: they derive the title and call `runTransformToBytes`
+(`lib/document/transform/run-transform.ts`) — the one main-thread seam that captures the compressed Yjs blobs,
+admits the job, surfaces warnings, and maps failures, shared with the sheets preview. Inside the Worker,
+`renderEigensheetsExport` (`export/sheets/transform.ts`) materializes once and lazily imports only the
+requested format's renderer, so an HTML export never evaluates ExcelJS. A recalc failure or an unreadable Yjs
+blob comes back as a warning, never as a failed export. There is no main-thread fallback: an overloaded runner
+returns `503` and any other transform failure throws.
 
 The XLSX conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
 same ExcelJS library. Round-tripped: cell values, formulas, rich-text runs (`ct.s`), styles (font, fill,
@@ -207,9 +220,10 @@ gate (internal links stay plain text — no meaningful target in standalone HTML
 
 ```
 apps/api/src/lib/export/sheets/
+  transform.ts   # Worker-side: materialized doc → export bytes + warnings, lazy per-format import
   html.ts        # Sheet[] → HTML table (renderSheetsHtml full export + renderSheetsPreviewHtml budgeted preview)
   xlsx.ts        # Sheet[] → XLSX buffer via ExcelJS
-  pdf.ts         # Sheet[] → HTML → WeasyPrint
+  pdf.ts         # Sheet[] → HTML document sized for WeasyPrint
   fonts.ts       # FONT_ARRAY + resolveFontFamily (numeric/string ff → family name)
 # content loader: apps/api/src/lib/document/sheets.ts (Yjs snapshot → Sheet[])
 ```

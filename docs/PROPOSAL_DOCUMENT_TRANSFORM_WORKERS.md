@@ -1,6 +1,7 @@
 # Proposal: Off-thread Document Transforms
 
-> **Status:** Phases 0–1 implemented (branch `transform-workers`, 2026-08-03); Phases 2–4 open
+> **Status:** Phases 0–1 and the export half of Phase 2 implemented (branch `transform-workers`, 2026-08-03);
+> XLSX import (Phase 2) and Phases 3–4 open
 > **Date:** 2026-08-03
 > **Scope:** Server-side preview generation first, then reuse for document exports and imports
 >
@@ -10,6 +11,13 @@
 > warm-pool decision: each terminated one-shot Worker that evaluated the heavy sheet module graph retains
 > ~7MB RSS under Bun 1.3 (trivial Workers plateau; the identical pipeline run on-thread is flat), so
 > sustained cold-preview churn favors recycling Workers after N jobs.
+>
+> **As-built notes (Phase 2, exports):** sheet HTML/XLSX exports and the HTML stage of PDF export run in the
+> same Worker; WeasyPrint stays a main-thread subprocess. Route contracts are unchanged and pinned
+> (`sheets-export-route.test.ts`); the HTML and pdf-html documents are byte-identical to the pre-move pipeline
+> (hashes in `document-transform.test.ts`). Every transform — preview and export — now goes through one
+> main-thread seam, `lib/document/transform/run-transform.ts`, so a Phase 3 operation is a thin wrapper plus a
+> pure renderer. As-built docs in EXPORT.md.
 
 ## Summary
 

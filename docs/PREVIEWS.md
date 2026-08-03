@@ -77,10 +77,13 @@ document `<head>`.
 
 Eigensheets preview generation runs in a one-shot Bun Worker so Yjs reconstruction, op replay, recalc, HTML
 rendering, and sanitization never block the API event loop (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`,
-Phase 1 as-built):
+Phases 1–2 as-built). Sheet exports ride the same runner through the same seam — see
+[EXPORT.md § Sheets Export](EXPORT.md#sheets-export):
 
 1. The main thread keeps ACL, cache lookup/dedupe, and captures the document's compressed Yjs blobs in a
-   short SELECT-only transaction (`readYjsStatePayload` via `captureCollabSource`).
+   short SELECT-only transaction (`readYjsStatePayload` via `captureCollabSource`). Every transform goes
+   through `runTransformToText` / `runTransformToBytes` (`lib/document/transform/run-transform.ts`), the one
+   main-thread seam that owns capture timing, admission, warning surfacing, and failure mapping.
 2. `DocumentTransformRunner` (`lib/document/transform/runner.ts`) admits the job: one active Worker, queue of
    16 with foreground (first cache miss) and background (stale regeneration) priorities, foreground admission
    additionally bounded by predicted wait. Overload rejects with `503` (surfaced to the client); background
@@ -194,7 +197,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides Yjs → positioned HTML divs (first 8 slides)  |
 | `apps/api/src/lib/preview/eigensheets-preview.ts`                         | Sheets preview: Worker-side body renderer + runner orchestration |
 | `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
-| `apps/api/src/lib/document/transform/protocol.ts`                         | Clone-safe transform request/response unions        |
+| `apps/api/src/lib/document/transform/protocol.ts`                         | Clone-safe transform job/request/response unions    |
+| `apps/api/src/lib/document/transform/run-transform.ts`                    | Shared main-thread seam: capture → run → map        |
 | `apps/api/src/lib/document/transform/runner.ts`                           | Bounded queue + one-shot Worker lifecycle           |
 | `apps/api/src/lib/document/transform/worker.ts`                           | Worker entry: operation dispatch with lazy imports  |
 | `apps/api/src/lib/document/transform/collab-source.ts`                    | Main-thread compressed Yjs payload capture          |
