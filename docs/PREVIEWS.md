@@ -231,7 +231,7 @@ shared content loaders in `apps/api/src/lib/document/`.
 |------|--------|----------|
 | eigendoc | **Done** | `readEigendocContent` (Yjs → PM JSON) → tiptap static renderer with `doc/render.ts` node mappings, first 20 blocks |
 | eigenslides | **Done** | `readSlidesContent` → `renderDeckHtml`, first 8 slides |
-| eigensheets | **Done** | `readSheetsContent` → `renderSheetsHtml(…, 'preview')`, first sheet |
+| eigensheets | **Done** | `renderEigensheetsPreviewBody` in the transform Worker (`readSheetsFromDoc` → `renderSheetsPreviewHtml`), budgeted first sheet |
 | eigenstickies | Future | Load stickies JSON, render simplified kanban columns as HTML |
 
 ---
