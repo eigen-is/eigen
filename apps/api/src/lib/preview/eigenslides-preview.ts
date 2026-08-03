@@ -8,7 +8,7 @@ import { runTransformToText } from '../document/transform/run-transform';
 import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
 import { renderDeckHtml, responsiveSizeUnit } from '../export/slides/render';
 import type { Mount } from '../mount';
-import { renderPreviewTruncatedMarker } from './preview-marker';
+import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
 const PREVIEW_MAX_SLIDES = 8;
 
@@ -29,8 +29,11 @@ export function renderEigenslidesPreviewBody(
     const slidesHtml = renderDeckHtml(limitedDeck, responsiveSizeUnit, (mediaName) =>
         resolveMediaUrl(mediaUrls, mediaName),
     );
+    const warnings: TransformWarning[] = [];
     const sanitized = DOMPurify.sanitize(slidesHtml, { FORCE_BODY: true });
-    return { body: truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized, warnings: [] };
+    const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
+
+    return { body: applyPreviewByteGuard(body, warnings), warnings };
 }
 
 // Main-thread orchestration runs through the shared transform seam (prepare media →

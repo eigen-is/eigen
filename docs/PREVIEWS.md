@@ -63,7 +63,7 @@ document. The cap keeps the cached preview body small. Each type compacts by its
 
 | Type        | Preview cap               | Mechanism                                                                 |
 |-------------|---------------------------|---------------------------------------------------------------------------|
-| eigensheets | first sheet, ≤ 200 rows × 50 cols / 10,000 cells | `renderSheetsPreviewHtml(sheets)` clips from the top-left of the used range — the CF resolver still spans every sheet so cross-sheet formula refs resolve; a final 8MB byte guard replaces an oversized body with the truncated notice |
+| eigensheets | first sheet, ≤ 200 rows × 50 cols / 10,000 cells | `renderSheetsPreviewHtml(sheets)` clips from the top-left of the used range — the CF resolver still spans every sheet so cross-sheet formula refs resolve |
 | eigenslides | first 8 slides            | `renderEigenslidesPreviewBody` slices `deck.slideOrder` (slides/objects maps stay whole) |
 | eigendoc    | first 20 top-level blocks | `renderEigendocPreviewBody` slices `json.content` before rendering        |
 
@@ -72,6 +72,10 @@ slides/eigendoc), leaving the full-document export renderers untouched. When con
 each generator appends a shared `renderPreviewTruncatedMarker()`
 (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the
 document `<head>`.
+
+All three then run their body through `applyPreviewByteGuard()` from that same module: the caps count blocks,
+slides and cells, so one enormous block sails through all of them. A body over 8MB is replaced by the
+truncated marker — never a partially sliced string — and surfaces a `byte-guard-truncated` warning.
 
 ## Off-thread Collab Previews (document-transform Worker)
 

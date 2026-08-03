@@ -11,7 +11,7 @@ import { runTransformToText } from '../document/transform/run-transform';
 import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
 import type { Mount } from '../mount';
-import { renderPreviewTruncatedMarker } from './preview-marker';
+import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
@@ -49,8 +49,11 @@ export function renderEigendocPreviewBody(
         },
     });
 
+    const warnings: TransformWarning[] = [];
     const sanitized = DOMPurify.sanitize(html, { FORCE_BODY: true });
-    return { body: truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized, warnings: [] };
+    const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
+
+    return { body: applyPreviewByteGuard(body, warnings), warnings };
 }
 
 // Main-thread orchestration runs through the shared transform seam (prepare media →

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
-import type { ImageObject } from '@workspace/lib/slides';
+import type { ImageObject, TextObject } from '@workspace/lib/slides';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
@@ -739,6 +739,22 @@ describe('document transform (eigendoc)', () => {
         expect(renderEigendocPreviewBody(doc, {}).body).not.toContain('<img');
     });
 
+    test('byte guard replaces an oversized body with the truncated notice, never a sliced string', () => {
+        // The cap counts top-level blocks, not bytes — one enormous paragraph sails
+        // through the 20-block limit and only the byte guard stands between it and
+        // the cache.
+        const doc = new Y.Doc();
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x'.repeat(9_000_000) }] }],
+        });
+
+        const { body, warnings } = renderEigendocPreviewBody(doc, {});
+        expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
+        expect(body).toContain('Preview truncated');
+        expect(body.length).toBeLessThan(1000);
+    }, 60_000);
+
     test('export media crosses the boundary as transferred buffers', async () => {
         const { mount, path } = golden;
         const media = await collectExportMedia(mount, path);
@@ -853,6 +869,20 @@ describe('document transform (eigenslides)', () => {
         seedSlidesDoc(doc, deck);
         expect(renderEigenslidesPreviewBody(doc, {}).body).not.toContain('<img');
     });
+
+    test('byte guard replaces an oversized body with the truncated notice, never a sliced string', () => {
+        // The cap counts slides, not bytes — one enormous text object sails through
+        // the 8-slide limit and only the byte guard stands between it and the cache.
+        const deck = buildGoldenDeck();
+        (deck.objects['obj-1'] as TextObject).text = `<p>${'x'.repeat(9_000_000)}</p>`;
+        const doc = new Y.Doc();
+        seedSlidesDoc(doc, deck);
+
+        const { body, warnings } = renderEigenslidesPreviewBody(doc, {});
+        expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
+        expect(body).toContain('Preview truncated');
+        expect(body.length).toBeLessThan(1000);
+    }, 60_000);
 
     test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
         const { mount, path } = await seedGoldenDocument('worker-deck-corrupt', 'slides', (doc) =>
