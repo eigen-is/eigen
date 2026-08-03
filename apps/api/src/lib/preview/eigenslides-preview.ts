@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { buildPreviewUrlMap } from '../document/media';
 import { runTransformToText } from '../document/transform/run-transform';
-import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
+import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 
 // Main-thread orchestration runs through the shared transform seam (prepare media →
@@ -18,7 +18,6 @@ export async function generateEigenslidesPreview(
     const job = { kind: 'preview', documentType: 'eigenslides', mediaUrls } as const;
     return runTransformToText(mount, drivePath, job, {
         priority,
-        deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS,
         prepMs: performance.now() - prepStart,
     });
 }

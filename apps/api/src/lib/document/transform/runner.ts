@@ -2,8 +2,9 @@ import { ApiError } from '../../core/errors';
 import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
+    resultBytes,
+    resultMatchesRequest,
     type TransformError,
-    type TransformResult,
     transferListOf,
     type WorkerResponseEnvelope,
 } from './protocol';
@@ -38,7 +39,7 @@ const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 // captureMs / prepMs: main-thread source-capture and media-preparation time measured
 // by the caller — logged per job because a fast Worker time with slow main-thread
 // preparation is not a successful offload.
-type RunOptions = {
+export type RunOptions = {
     priority: TransformPriority;
     deadlineMs: number;
     captureMs?: number;
@@ -71,32 +72,13 @@ function isValidResponse(response: unknown, request: DocumentTransformRequest): 
     if (!response || typeof response !== 'object') return false;
     const r = response as {
         ok?: unknown;
-        result?: { body?: unknown; data?: unknown; snapshotJson?: unknown; update?: unknown; images?: unknown };
+        result?: unknown;
         warnings?: unknown;
         error?: { code?: unknown; message?: unknown };
     };
-    if (r.ok === true) {
-        if (!Array.isArray(r.warnings)) return false;
-        switch (request.kind) {
-            case 'preview':
-                return typeof r.result?.body === 'string';
-            case 'export':
-                return r.result?.data instanceof ArrayBuffer;
-            case 'import':
-                return request.targetType === 'eigendoc'
-                    ? r.result?.update instanceof ArrayBuffer && Array.isArray(r.result.images)
-                    : r.result?.snapshotJson instanceof ArrayBuffer;
-        }
-    }
+    if (r.ok === true) return Array.isArray(r.warnings) && resultMatchesRequest(request, r.result);
     if (r.ok === false) return typeof r.error?.code === 'string' && typeof r.error?.message === 'string';
     return false;
-}
-
-function resultBytes(result: TransformResult): number {
-    if ('body' in result) return Buffer.byteLength(result.body);
-    if ('data' in result) return result.data.byteLength;
-    if ('snapshotJson' in result) return result.snapshotJson.byteLength;
-    return result.images.reduce((sum, image) => sum + image.data.byteLength, result.update.byteLength);
 }
 
 // An import has no source document type — log the type it produces.

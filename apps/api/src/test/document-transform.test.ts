@@ -365,9 +365,7 @@ describe('document transform (eigensheets export)', () => {
             format: 'pdf-html',
             title: 'golden-export',
         } as const;
-        const html = await runTransformToBytes(golden.mount, golden.path, job, {
-            deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-        });
+        const html = await runTransformToBytes(golden.mount, golden.path, job, {});
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 

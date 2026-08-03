@@ -1,7 +1,6 @@
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { SheetExportFormat } from '../../document/transform/protocol';
 import { runTransformToBytes } from '../../document/transform/run-transform';
-import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 
@@ -20,10 +19,7 @@ export async function runEigensheetsExport(
         format,
         title: stripEigenExtension(drivePath.name),
     } as const;
-    return runTransformToBytes(mount, drivePath, job, {
-        deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-        signal,
-    });
+    return runTransformToBytes(mount, drivePath, job, { signal });
 }
 
 export async function exportSheetsToHtml(

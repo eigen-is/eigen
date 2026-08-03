@@ -80,8 +80,8 @@ export type DocImportWorkerResult = { update: ArrayBuffer; images: TransformMedi
 
 export type TransformResult = PreviewResult | ExportWorkerResult | SheetsImportWorkerResult | DocImportWorkerResult;
 
-export type DocumentTransformResponse<Result = TransformResult> =
-    | { ok: true; result: Result; warnings: TransformWarning[] }
+export type DocumentTransformResponse =
+    | { ok: true; result: TransformResult; warnings: TransformWarning[] }
     | { ok: false; error: TransformError };
 
 export type WorkerRequestEnvelope = { jobId: number; request: DocumentTransformRequest };
@@ -110,6 +110,36 @@ export function transferListOfResult(response: DocumentTransformResponse): Array
     if ('snapshotJson' in result) return [result.snapshotJson];
     if ('update' in result) return [result.update, ...result.images.map((image) => image.data)];
     return [];
+}
+
+// Which result member pairs with which request — the runner checks this at the trust
+// boundary, so every seam past it narrows without re-checking. Exhaustive over kind
+// (and, for imports, over the type produced), so a future union arm is a compile error
+// instead of a silent fallthrough.
+export function resultMatchesRequest(request: DocumentTransformRequest, result: unknown): boolean {
+    const r = result as
+        | { body?: unknown; data?: unknown; snapshotJson?: unknown; update?: unknown; images?: unknown }
+        | undefined;
+    switch (request.kind) {
+        case 'preview':
+            return typeof r?.body === 'string';
+        case 'export':
+            return r?.data instanceof ArrayBuffer;
+        case 'import':
+            switch (request.targetType) {
+                case 'eigendoc':
+                    return r?.update instanceof ArrayBuffer && Array.isArray(r.images);
+                case 'eigensheets':
+                    return r?.snapshotJson instanceof ArrayBuffer;
+            }
+    }
+}
+
+export function resultBytes(result: TransformResult): number {
+    if ('body' in result) return Buffer.byteLength(result.body);
+    if ('data' in result) return result.data.byteLength;
+    if ('snapshotJson' in result) return result.snapshotJson.byteLength;
+    return result.images.reduce((sum, image) => sum + image.data.byteLength, result.update.byteLength);
 }
 
 // Buffers from TextEncoder/ExcelJS can be views over a larger pool, and a transfer

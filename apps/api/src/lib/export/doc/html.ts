@@ -1,7 +1,6 @@
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EigendocExportFormat } from '../../document/transform/protocol';
 import { runTransformToBytes } from '../../document/transform/run-transform';
-import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { collectExportMedia } from '../media';
@@ -21,7 +20,6 @@ export async function runEigendocExport(
     const media = await collectExportMedia(mount, drivePath);
     const job = { kind: 'export', documentType: 'eigendoc', format, title: drivePath.name, media } as const;
     return runTransformToBytes(mount, drivePath, job, {
-        deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
         prepMs: performance.now() - prepStart,
         signal,
     });

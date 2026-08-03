@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { runTransformToText } from '../document/transform/run-transform';
-import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
+import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 
 // Main-thread orchestration runs through the shared transform seam (capture → run
@@ -14,5 +14,5 @@ export async function generateEigensheetsPreview(
     priority: TransformPriority = 'foreground',
 ): Promise<string> {
     const job = { kind: 'preview', documentType: 'eigensheets' } as const;
-    return runTransformToText(mount, drivePath, job, { priority, deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS });
+    return runTransformToText(mount, drivePath, job, { priority });
 }

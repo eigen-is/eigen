@@ -10,7 +10,6 @@ import {
     toTransferableBuffer,
 } from '../document/transform/protocol';
 import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
-import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../document/transform/runner';
 import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
@@ -25,17 +24,11 @@ const DOCX_TO_DOC: DocImportJob = { kind: 'import', sourceFormat: 'docx', target
 // The upload Buffer can be a view over a larger pool, and a transfer hands over
 // the WHOLE backing buffer — copy into an exact standalone one first.
 function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<string> {
-    return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), {
-        deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-        signal,
-    });
+    return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
 }
 
 function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
-    return runImportToDocumentUpdate(DOCX_TO_DOC, toTransferableBuffer(buffer), {
-        deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-        signal,
-    });
+    return runImportToDocumentUpdate(DOCX_TO_DOC, toTransferableBuffer(buffer), { signal });
 }
 
 // The route checked write before buffering, but the job can queue and transform for
