@@ -9,7 +9,12 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import {
+    findCardIdByChatName,
+    useCommentFilter,
+    useCommentLifecycle,
+    useDocumentPanels,
+} from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -184,8 +189,8 @@ function SlideEditorInner({
     }, [isPresenting, clearHighlights]);
 
     const auth = useAuth();
-    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+    const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, closePanels } =
+        useDocumentPanels();
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetObjId, setAddTargetObjId] = useState<string | null>(null);
@@ -714,11 +719,7 @@ function SlideEditorInner({
 
     // Below the mobile breakpoint that sibling has no room, so mobile hosts the same panels in a
     // full-width Column instead.
-    const mobilePanelOpen = isMobile && (commentPanelOpen || activityPanelOpen);
-    const closePanels = () => {
-        setCommentPanelOpen(false);
-        setActivityPanelOpen(false);
-    };
+    const mobilePanelOpen = isMobile && panel !== null;
 
     if (!isSynced) return <LoadingState />;
 
@@ -788,15 +789,9 @@ function SlideEditorInner({
                                 onPresent={handlePresent}
                                 // Both toggles are always offered: the panels render as the right
                                 // sibling above the breakpoint and as the mobile Column below it.
-                                onToggleCommentPanel={() => {
-                                    setActivityPanelOpen(false);
-                                    setCommentPanelOpen((v) => !v);
-                                }}
+                                onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
-                                onToggleActivityPanel={() => {
-                                    setCommentPanelOpen(false);
-                                    setActivityPanelOpen((v) => !v);
-                                }}
+                                onToggleActivityPanel={toggleActivity}
                                 activityPanelOpen={activityPanelOpen}
                                 unresolvedCommentCount={unresolvedCount}
                             />
@@ -877,7 +872,7 @@ function SlideEditorInner({
                                                 currentUserEmail={auth.user!.email}
                                                 filter={commentFilter}
                                                 members={members}
-                                                onClose={() => setCommentPanelOpen(false)}
+                                                onClose={closePanels}
                                                 onCommentClick={openCommentCard}
                                                 onCommentContextMenu={(e, card, entry) =>
                                                     commentContextMenu.handleContextMenu(e, { card, entry })
@@ -886,7 +881,7 @@ function SlideEditorInner({
                                         ) : activityPanelOpen ? (
                                             <ActivityPanel
                                                 path={path}
-                                                onClose={() => setActivityPanelOpen(false)}
+                                                onClose={closePanels}
                                                 onOpenCard={({ cardId, chatName }) => {
                                                     const id =
                                                         cardId ??
@@ -935,7 +930,7 @@ function SlideEditorInner({
 
             {mobilePanelOpen && (
                 <MobilePanelColumn
-                    activePanel={commentPanelOpen ? 'comments' : 'activity'}
+                    activePanel={panel}
                     onBack={closePanels}
                     path={path}
                     lifecycle={lifecycle}

@@ -1,5 +1,10 @@
 import { useAuth } from '@workspace/lib/auth';
-import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import {
+    findCardIdByChatName,
+    useCommentFilter,
+    useCommentLifecycle,
+    useDocumentPanels,
+} from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
     isPendingMediaName,
@@ -80,8 +85,8 @@ function SheetEditorInner({
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
-    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+    const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, closePanels } =
+        useDocumentPanels();
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
@@ -227,15 +232,9 @@ function SheetEditorInner({
             <DocumentShareCluster
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
-                onToggleCommentPanel={() => {
-                    setActivityPanelOpen(false);
-                    setCommentPanelOpen((v) => !v);
-                }}
+                onToggleCommentPanel={toggleComments}
                 commentPanelOpen={commentPanelOpen}
-                onToggleActivityPanel={() => {
-                    setCommentPanelOpen(false);
-                    setActivityPanelOpen((v) => !v);
-                }}
+                onToggleActivityPanel={toggleActivity}
                 activityPanelOpen={activityPanelOpen}
                 unresolvedCommentCount={unresolvedCount}
                 watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
@@ -256,11 +255,7 @@ function SheetEditorInner({
     // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
     // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
     const { isMobile } = useLayout();
-    const mobilePanelOpen = isMobile && (commentPanelOpen || activityPanelOpen);
-    const closePanels = () => {
-        setCommentPanelOpen(false);
-        setActivityPanelOpen(false);
-    };
+    const mobilePanelOpen = isMobile && panel !== null;
 
     if (!synced || !initialData) {
         return <LoadingState />;
@@ -377,7 +372,7 @@ function SheetEditorInner({
                 </div>
                 {mobilePanelOpen ? (
                     <MobilePanelColumn
-                        activePanel={commentPanelOpen ? 'comments' : 'activity'}
+                        activePanel={panel}
                         onBack={closePanels}
                         path={path}
                         lifecycle={lifecycle}
@@ -398,8 +393,8 @@ function SheetEditorInner({
                                 currentUserEmail={auth.user!.email}
                                 filter={commentFilter}
                                 members={members}
-                                onClose={() => setCommentPanelOpen(false)}
-                                onCommentClick={(cardId) => setOpenCardId(cardId)}
+                                onClose={closePanels}
+                                onCommentClick={setOpenCardId}
                                 onCommentContextMenu={(e, card, entry) =>
                                     commentContextMenu.handleContextMenu(e, { card, entry })
                                 }
@@ -408,7 +403,7 @@ function SheetEditorInner({
                         {activityPanelOpen && (
                             <ActivityPanel
                                 path={path}
-                                onClose={() => setActivityPanelOpen(false)}
+                                onClose={closePanels}
                                 onOpenCard={({ cardId, chatName }) => {
                                     const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
                                     if (id) setOpenCardId(id);

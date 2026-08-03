@@ -8,7 +8,12 @@ import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import {
+    findCardIdByChatName,
+    useCommentFilter,
+    useCommentLifecycle,
+    useDocumentPanels,
+} from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
 import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import {
@@ -236,6 +241,8 @@ const TiptapEditor = ({
     const { resolveMediaPath, startUpload } = useMediaResolver();
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
+    const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, openComments, closePanels } =
+        useDocumentPanels();
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
     const needsScale = canvasScale < 1;
@@ -286,11 +293,13 @@ const TiptapEditor = ({
         };
     }, []);
 
-    const handleCommentClick = useCallback((cardId: string) => {
-        setActivityPanelOpen(false);
-        setOpenCardId(cardId);
-        setCommentPanelOpen(true);
-    }, []);
+    const handleCommentClick = useCallback(
+        (cardId: string) => {
+            openComments();
+            setOpenCardId(cardId);
+        },
+        [openComments],
+    );
 
     const editor = useEditor(
         {
@@ -314,7 +323,7 @@ const TiptapEditor = ({
                         selectionContextMenu.handleContextMenu(event as unknown as React.MouseEvent, true);
                     },
                     onAddComment: () => handleAddCommentRef.current?.(),
-                    onToggleCommentPanel: () => setCommentPanelOpen((v) => !v),
+                    onToggleCommentPanel: toggleComments,
                 }),
                 Collaboration.configure({
                     document: yDoc,
@@ -563,8 +572,6 @@ const TiptapEditor = ({
     const lastPanelRef = useRef<'figure' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
 
-    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
         ownerId: path.ownerId,
@@ -675,13 +682,8 @@ const TiptapEditor = ({
     if (!editor) return null;
 
     // Below isWide the side panel has no room, so mobile hosts it as a full-width Column instead.
-    const mobilePanelOpen = isMobile && (commentPanelOpen || activityPanelOpen);
-    const closePanels = () => {
-        setCommentPanelOpen(false);
-        setActivityPanelOpen(false);
-    };
-
-    const activePanel = commentPanelOpen ? 'comments' : activityPanelOpen ? 'activity' : sidebarContext;
+    const mobilePanelOpen = isMobile && panel !== null;
+    const activePanel = panel ?? sidebarContext;
     const showSidebar =
         isWide &&
         (activePanel === 'comments' || activePanel === 'activity' || (access.canWrite && activePanel !== 'document'));
@@ -701,10 +703,7 @@ const TiptapEditor = ({
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
-            if (isWide || isMobile) {
-                setActivityPanelOpen(false);
-                setCommentPanelOpen(true);
-            }
+            if (isWide || isMobile) openComments();
             // The mobile pane replaces the editor column, so scrolling would drive a detached view.
             if (!isMobile) handleScrollToComment(cardId);
             setOpenCardId(cardId);
@@ -742,23 +741,9 @@ const TiptapEditor = ({
                                     // panel above isWide, the mobile Column below isMobile. In the band between
                                     // there is nowhere to put them, so the button is omitted (DocumentShareCluster
                                     // hides it when absent) rather than left an enabled no-op.
-                                    onToggleCommentPanel={
-                                        isWide || isMobile
-                                            ? () => {
-                                                  setActivityPanelOpen(false);
-                                                  setCommentPanelOpen((v) => !v);
-                                              }
-                                            : undefined
-                                    }
+                                    onToggleCommentPanel={isWide || isMobile ? toggleComments : undefined}
                                     commentPanelOpen={commentPanelOpen}
-                                    onToggleActivityPanel={
-                                        isWide || isMobile
-                                            ? () => {
-                                                  setCommentPanelOpen(false);
-                                                  setActivityPanelOpen((v) => !v);
-                                              }
-                                            : undefined
-                                    }
+                                    onToggleActivityPanel={isWide || isMobile ? toggleActivity : undefined}
                                     activityPanelOpen={activityPanelOpen}
                                     unresolvedCommentCount={unresolvedCount}
                                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
@@ -816,7 +801,7 @@ const TiptapEditor = ({
                                                 currentUserEmail={auth.user!.email}
                                                 filter={commentFilter}
                                                 members={members}
-                                                onClose={() => setCommentPanelOpen(false)}
+                                                onClose={closePanels}
                                                 onCommentClick={(cardId) => {
                                                     handleScrollToComment(cardId);
                                                     setOpenCardId(cardId);
@@ -828,14 +813,13 @@ const TiptapEditor = ({
                                         ) : activePanel === 'activity' ? (
                                             <ActivityPanel
                                                 path={path}
-                                                onClose={() => setActivityPanelOpen(false)}
+                                                onClose={closePanels}
                                                 onOpenCard={({ cardId, chatName }) => {
                                                     const id =
                                                         cardId ??
                                                         (chatName ? findCardIdByChatName(cards, chatName) : undefined);
                                                     if (!id) return;
-                                                    setActivityPanelOpen(false);
-                                                    setCommentPanelOpen(true);
+                                                    openComments();
                                                     handleScrollToComment(id);
                                                     setOpenCardId(id);
                                                 }}
@@ -859,7 +843,7 @@ const TiptapEditor = ({
 
                 {mobilePanelOpen && (
                     <MobilePanelColumn
-                        activePanel={commentPanelOpen ? 'comments' : 'activity'}
+                        activePanel={panel}
                         onBack={closePanels}
                         path={path}
                         lifecycle={lifecycle}
@@ -868,8 +852,7 @@ const TiptapEditor = ({
                         commentContextMenu={commentContextMenu}
                         onCommentClick={setOpenCardId}
                         onOpenCard={(cardId) => {
-                            setCommentPanelOpen(true);
-                            setActivityPanelOpen(false);
+                            openComments();
                             setOpenCardId(cardId);
                         }}
                     />
