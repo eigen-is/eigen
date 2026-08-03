@@ -1,7 +1,6 @@
 # Proposal: Off-thread Document Transforms
 
-> **Status:** Phases 0–1 and the export half of Phase 2 implemented (branch `transform-workers`, 2026-08-03);
-> XLSX import (Phase 2) and Phases 3–4 open
+> **Status:** Phases 0–2 implemented (branch `transform-workers`, 2026-08-03); Phases 3–4 open
 > **Date:** 2026-08-03
 > **Scope:** Server-side preview generation first, then reuse for document exports and imports
 >
@@ -18,6 +17,16 @@
 > (hashes in `document-transform.test.ts`). Every transform — preview and export — now goes through one
 > main-thread seam, `lib/document/transform/run-transform.ts`, so a Phase 3 operation is a thin wrapper plus a
 > pure renderer. As-built docs in EXPORT.md.
+>
+> **As-built notes (Phase 2, imports):** xlsx import (`/import`, `/import-from-drive`) and xlsx→sheets
+> conversion (`/convert/:targetType`) run their ZIP/cell guards, parse, mapping, recalc and snapshot
+> serialization in the same Worker, through the capture-free half of the shared seam
+> (`runImportToSnapshotJson`); the main thread only commits the returned UTF-8 snapshot with
+> `writeSheetsSnapshotToYjs`, so nothing is created or mutated before the Worker succeeds. Route statuses and
+> bodies are unchanged and pinned at route level (`sheets-import.test.ts`), and the snapshot is byte-identical
+> to the pre-move pipeline (hash in `document-transform.test.ts`). `/convert` gained the missing source-size
+> bound (413 `Source file too large`). The 120s deadline constant now covers both directions
+> (`EXPORT_IMPORT_TRANSFORM_DEADLINE_MS`). As-built docs in EXPORT.md § Sheets Import.
 
 ## Summary
 

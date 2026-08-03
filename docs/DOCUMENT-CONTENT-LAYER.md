@@ -12,6 +12,7 @@
 apps/api/src/lib/document/
   doc.ts      # readEigendocContent(mount, path)        + writeEigendocToYjs(doc, json, schema)
   sheets.ts   # readSheetsContent(mount, path) → Sheet[] + writeSheetsToYjs(doc, sheets)
+              #   + writeSheetsSnapshotToYjs(doc, snapshotJson) — commits already-serialized JSON
   slides.ts   # readSlidesContent(mount, path)          [no writer]
 ```
 
@@ -51,12 +52,14 @@ failing the whole read; the doc stays loadable with everything else applied.
 
 ## Writers are unsafe against live editors
 
-`writeSheetsToYjs` (sheets.ts:24) does:
+`writeSheetsSnapshotToYjs` — which `writeSheetsToYjs(doc, sheets)` composes after
+`JSON.stringify`, and which the xlsx import path calls directly with the Worker's snapshot JSON —
+does:
 
 ```typescript
 doc.transact(() => {
-    doc.getMap('state').set('snapshot', JSON.stringify(sheets)); // wholesale replace
-    doc.getArray('ops').delete(0, ops.length);                   // wipes pending edits
+    doc.getMap('state').set('snapshot', snapshotJson); // wholesale replace
+    doc.getArray('ops').delete(0, ops.length);         // wipes pending edits
 });
 ```
 
@@ -88,10 +91,13 @@ when the target file has active editors — and ideally the route should refuse 
 | Export (HTML/PDF/DOCX/XLSX) | `lib/export/{doc,sheets,slides}/{html,pdf,xlsx,docx}.ts` |
 | Preview generation | `lib/preview/{eigendoc,eigensheets,eigenslides}-preview.ts` |
 | Import dispatcher | `lib/import/import-document.ts` (calls writers) |
-| Pure converters | `lib/import/{doc/from-docx.ts, sheets/from-xlsx.ts}` |
+| Pure converters | `lib/import/{doc/from-docx.ts, sheets/{from-xlsx,transform}.ts}` |
 
 The pure converters in `lib/import/{doc,sheets}/` are buffer ⇆ native-content (`Buffer →
 Sheet[]`, `Buffer → JSONContent + images + schema`); the dispatcher wires them to the writers.
+For xlsx the converter runs off-thread: `sheets/transform.ts` composes parse + recalc + snapshot
+serialization inside the document-transform Worker, and the dispatcher only commits the returned
+JSON (see [EXPORT.md § Sheets Import](EXPORT.md#sheets-import)).
 Export has no equivalent dispatcher today — each format calls the reader directly.
 
 ## Pending work

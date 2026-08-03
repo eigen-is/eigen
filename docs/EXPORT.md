@@ -230,15 +230,29 @@ apps/api/src/lib/export/sheets/
 
 ## Sheets Import
 
-Eigensheets import XLSX via the same shape, reversed:
+Eigensheets import XLSX via the same shape, reversed — and, like the exports, off the main thread:
 
 ```
 apps/api/src/lib/import/sheets/
+  transform.ts   # Worker-side: uploaded bytes → lean snapshot JSON + warnings
   from-xlsx.ts   # xlsxToSheets(buffer) → Sheet[] (ExcelJS Workbook → sheet cells)
 ```
 
-`from-xlsx.ts` only produces `Sheet[]`; `import/import-document.ts` writes it into the Yjs state map via
-`writeSheetsToYjs` (`apps/api/src/lib/document/sheets.ts`). The importer only needs to emit `celldata` (with
+| Stage | Where |
+|-------|-------|
+| ACL and the upload / stored-source size bound (`/import`, `/import-from-drive`, `/convert`) | main thread |
+| ZIP guards, ExcelJS parse, mapping, engine recalc, snapshot serialization | Worker |
+| Destination creation (convert) and the Yjs commit | main thread, only after the Worker succeeds |
+
+`importIntoDocument` / `convertToDocument` (`import/import-document.ts`) call `runImportToSnapshotJson`
+(`lib/document/transform/run-transform.ts`) — the same main-thread seam preview and export use, minus the
+Yjs capture — and commit the returned UTF-8 snapshot through `writeSheetsSnapshotToYjs`
+(`lib/document/sheets.ts`) without parsing it. The Worker does pure conversion: it never sees an owner,
+mount, ACL or destination path, so a failed transform creates no document and mutates no Yjs state. The
+`400` (not a valid xlsx) and `413` (too large / too many cells) bodies survive the boundary unchanged, and
+a recalc failure comes back as a warning with the parsed values persisted.
+
+`from-xlsx.ts` only produces `Sheet[]`. The importer only needs to emit `celldata` (with
 `f` for formula cells) and `config`. `calcChain` and initial computed values are filled in by the Workbook's
 mount-time bootstrap — see [SHEETS.md § Mount-time Bootstrap](SHEETS.md#mount-time-bootstrap).
 
