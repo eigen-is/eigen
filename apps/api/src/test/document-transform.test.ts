@@ -736,7 +736,7 @@ describe('document transform (eigendoc)', () => {
             type: 'doc',
             content: [{ type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'constructor' } }] }],
         });
-        expect(renderEigendocPreviewBody(doc, {}).body).not.toContain('<img');
+        expect(renderEigendocPreviewBody(doc, new Map()).body).not.toContain('<img');
     });
 
     test('byte guard replaces an oversized body with the truncated notice, never a sliced string', () => {
@@ -749,7 +749,7 @@ describe('document transform (eigendoc)', () => {
             content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x'.repeat(9_000_000) }] }],
         });
 
-        const { body, warnings } = renderEigendocPreviewBody(doc, {});
+        const { body, warnings } = renderEigendocPreviewBody(doc, new Map());
         expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
         expect(body).toContain('Preview truncated');
         expect(body.length).toBeLessThan(1000);
@@ -867,7 +867,7 @@ describe('document transform (eigenslides)', () => {
         (deck.objects['obj-2'] as ImageObject).mediaName = 'toString';
         const doc = new Y.Doc();
         seedSlidesDoc(doc, deck);
-        expect(renderEigenslidesPreviewBody(doc, {}).body).not.toContain('<img');
+        expect(renderEigenslidesPreviewBody(doc, new Map()).body).not.toContain('<img');
     });
 
     test('byte guard replaces an oversized body with the truncated notice, never a sliced string', () => {
@@ -878,7 +878,7 @@ describe('document transform (eigenslides)', () => {
         const doc = new Y.Doc();
         seedSlidesDoc(doc, deck);
 
-        const { body, warnings } = renderEigenslidesPreviewBody(doc, {});
+        const { body, warnings } = renderEigenslidesPreviewBody(doc, new Map());
         expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
         expect(body).toContain('Preview truncated');
         expect(body.length).toBeLessThan(1000);

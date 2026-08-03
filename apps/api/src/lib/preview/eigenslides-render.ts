@@ -1,6 +1,5 @@
 import DOMPurify from 'isomorphic-dompurify';
 import type * as Y from 'yjs';
-import { resolveMediaUrl } from '../document/media';
 import { readDeckFromDoc } from '../document/slides';
 import type { TransformWarning } from '../document/transform/protocol';
 import { renderDeckHtml, responsiveSizeUnit } from '../export/slides/render';
@@ -15,7 +14,7 @@ const PREVIEW_MAX_SLIDES = 8;
 // through the URL map the main thread prepared — the Worker has no Mount.
 export function renderEigenslidesPreviewBody(
     doc: Y.Doc,
-    mediaUrls: Record<string, string>,
+    mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
     const deck = readDeckFromDoc(doc);
 
@@ -24,9 +23,7 @@ export function renderEigenslidesPreviewBody(
     const truncated = deck.slideOrder.length > PREVIEW_MAX_SLIDES;
     const limitedDeck = truncated ? { ...deck, slideOrder: deck.slideOrder.slice(0, PREVIEW_MAX_SLIDES) } : deck;
 
-    const slidesHtml = renderDeckHtml(limitedDeck, responsiveSizeUnit, (mediaName) =>
-        resolveMediaUrl(mediaUrls, mediaName),
-    );
+    const slidesHtml = renderDeckHtml(limitedDeck, responsiveSizeUnit, (mediaName) => mediaUrls.get(mediaName) ?? null);
     const warnings: TransformWarning[] = [];
     const sanitized = DOMPurify.sanitize(slidesHtml, { FORCE_BODY: true });
     const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;

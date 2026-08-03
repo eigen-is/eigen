@@ -15,6 +15,7 @@ import {
     type TransformMedia,
     type TransformWarning,
     toTransferableBuffer,
+    toTransferableText,
 } from '../../document/transform/protocol';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
@@ -34,7 +35,7 @@ export async function renderEigendocExport(
     media: TransformMedia[],
 ): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const html = renderEigendocDocument(readEigendocFromDoc(doc), toDataUriMap(media), title);
-    if (format !== 'docx') return { data: toTransferableBuffer(new TextEncoder().encode(html)), warnings: [] };
+    if (format !== 'docx') return { data: toTransferableText(html), warnings: [] };
 
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
     // The HTML <title> keeps the full container name (frozen output); the docx

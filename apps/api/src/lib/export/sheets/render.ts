@@ -551,7 +551,7 @@ function getGridBounds(
     return { minRow, minCol, maxRow, maxCol };
 }
 
-export function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: number; height: number }): string {
+function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: number; height: number }): string {
     const pageCSS = pageSize
         ? `@page { size: ${pageSize.width}px ${pageSize.height}px; margin: 40px; }`
         : '@page { size: landscape; margin: 1.5cm; }';

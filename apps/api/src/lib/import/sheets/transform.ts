@@ -1,7 +1,7 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import { ApiError } from '../../core';
-import { type TransformWarning, toTransferableBuffer } from '../../document/transform/protocol';
+import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
 import { xlsxToSheets } from './from-xlsx';
 
 // Uploaded xlsx bytes → the lean snapshot JSON the main thread commits. Runs
@@ -15,7 +15,7 @@ export async function importXlsxToSheetsSnapshot(
     const warnings: TransformWarning[] = [];
     const parsed = await parseXlsxOrThrow(Buffer.from(data));
     const sheets = recalcImportedSheets(parsed, warnings);
-    return { snapshotJson: toTransferableBuffer(new TextEncoder().encode(JSON.stringify(sheets))), warnings };
+    return { snapshotJson: toTransferableText(JSON.stringify(sheets)), warnings };
 }
 
 // xlsx is a zip-based format — the parser needs the full file in memory to read

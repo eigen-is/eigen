@@ -4,7 +4,6 @@ import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
-import { resolveMediaUrl } from '../document/media';
 import type { TransformWarning } from '../document/transform/protocol';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
@@ -22,7 +21,7 @@ const PREVIEW_MAX_BLOCKS = 20;
 // no Mount.
 export function renderEigendocPreviewBody(
     doc: Y.Doc,
-    mediaUrls: Record<string, string>,
+    mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
     const json = readEigendocFromDoc(doc);
 
@@ -41,7 +40,7 @@ export function renderEigendocPreviewBody(
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) =>
                     renderFigureNode(
                         node.attrs,
-                        (mediaName, src) => (mediaName ? resolveMediaUrl(mediaUrls, mediaName) : src),
+                        (mediaName, src) => (mediaName ? (mediaUrls.get(mediaName) ?? null) : src),
                         { lazy: true },
                     ),
             },

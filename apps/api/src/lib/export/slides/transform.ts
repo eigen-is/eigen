@@ -9,7 +9,7 @@ import {
     type DocumentExportFormat,
     type TransformMedia,
     type TransformWarning,
-    toTransferableBuffer,
+    toTransferableText,
 } from '../../document/transform/protocol';
 import { getFontCSS } from '../fonts';
 import type { SizeUnit } from '../render-types';
@@ -30,7 +30,7 @@ export function renderEigenslidesExport(
     media: TransformMedia[],
 ): { data: ArrayBuffer; warnings: TransformWarning[] } {
     const html = renderDeckDocument(readDeckFromDoc(doc), toDataUriMap(media), title, format);
-    return { data: toTransferableBuffer(new TextEncoder().encode(html)), warnings: [] };
+    return { data: toTransferableText(html), warnings: [] };
 }
 
 function renderDeckDocument(

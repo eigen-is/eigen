@@ -1,6 +1,11 @@
 import type * as Y from 'yjs';
 import { readSheetsFromDoc } from '../../document/sheets';
-import { type SheetExportFormat, type TransformWarning, toTransferableBuffer } from '../../document/transform/protocol';
+import {
+    type SheetExportFormat,
+    type TransformWarning,
+    toTransferableBuffer,
+    toTransferableText,
+} from '../../document/transform/protocol';
 
 // Materialized doc → export bytes. Runs inside the transform Worker (worker.ts owns
 // execution; the format logic stays here in export/, pure over Sheet[] + title).
@@ -19,19 +24,15 @@ export async function renderEigensheetsExport(
     switch (format) {
         case 'html': {
             const { renderSheetsExportDocument } = await import('./render');
-            return { data: encodeDocument(renderSheetsExportDocument(sheets, title)), warnings };
+            return { data: toTransferableText(renderSheetsExportDocument(sheets, title)), warnings };
         }
         case 'pdf-html': {
             const { renderSheetsPdfDocument } = await import('./render');
-            return { data: encodeDocument(renderSheetsPdfDocument(sheets, title)), warnings };
+            return { data: toTransferableText(renderSheetsPdfDocument(sheets, title)), warnings };
         }
         case 'xlsx': {
             const { sheetsToXlsx } = await import('./to-xlsx');
             return { data: toTransferableBuffer(await sheetsToXlsx(sheets)), warnings };
         }
     }
-}
-
-function encodeDocument(html: string): ArrayBuffer {
-    return toTransferableBuffer(new TextEncoder().encode(html));
 }

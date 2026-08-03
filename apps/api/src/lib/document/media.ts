@@ -28,22 +28,17 @@ function resolvePublicApiUrl(): string {
 const PUBLIC_API_URL = resolvePublicApiUrl();
 
 // Preview media prep: the name → embed-URL map a preview transform carries. Previews
-// reference media by URL, so no bytes cross the Worker boundary.
-export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Promise<Record<string, string>> {
+// reference media by URL, so no bytes cross the Worker boundary. A Map, so a
+// mediaName that is document data (`constructor`, `toString`) can never resolve to
+// something off Object.prototype.
+export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Promise<Map<string, string>> {
     const media = await listDocumentMedia(mount, drivePath);
-    return Object.fromEntries(
+    return new Map(
         [...media].map(([name, file]) => [
             name,
             `${PUBLIC_API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.id}/preview`,
         ]),
     );
-}
-
-// A figure/slide-object mediaName is document data, so the preview URL map is looked
-// up by own key only — an unknown name like `constructor` must resolve to null, not
-// to something off Object.prototype.
-export function resolveMediaUrl(mediaUrls: Record<string, string>, mediaName: string): string | null {
-    return Object.hasOwn(mediaUrls, mediaName) ? mediaUrls[mediaName] : null;
 }
 
 // The Worker side of export media: the transferred buffers become the data: URIs the

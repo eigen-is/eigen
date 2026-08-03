@@ -20,9 +20,9 @@ import type { Mount } from '../../lib/mount';
 
 export const GOLDEN_MEDIA_NAME = 'pixel.png';
 export const GOLDEN_BEYOND_CAP = 'BEYOND-PREVIEW-CAP';
-export const GOLDEN_DOC_XSS = '<script>alert("doc-xss")</script>';
-export const GOLDEN_DECK_XSS = '<p>legit body</p><script>alert("deck-xss")</script>';
-export const GOLDEN_DOC_LINK = 'https://example.com/report';
+const GOLDEN_DOC_XSS = '<script>alert("doc-xss")</script>';
+const GOLDEN_DECK_XSS = '<p>legit body</p><script>alert("deck-xss")</script>';
+const GOLDEN_DOC_LINK = 'https://example.com/report';
 
 // The lowlight instance the doc renderers use — the schema must match, or a
 // codeBlock node cannot be written into the Yjs document.

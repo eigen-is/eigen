@@ -1,9 +1,9 @@
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 
 // Closed request/response unions crossing the document-transform Worker boundary.
-// Only clone-safe primitives and ArrayBuffers ride here — never Mount, database,
-// Y.Doc, or other class instances, and never module/function names user input
-// could influence. Phases 2–3 carry every eigensheets/eigendoc/eigenslides preview,
+// Only clone-safe primitives, ArrayBuffers and Maps of primitives ride here — never
+// Mount, database, Y.Doc, or other class instances, and never module/function names
+// user input could influence. Phases 2–3 carry every eigensheets/eigendoc/eigenslides preview,
 // every HTML/PDF/XLSX/DOCX export, and the xlsx and docx imports.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
@@ -23,7 +23,7 @@ export type TransformMedia = { name: string; contentType: string; data: ArrayBuf
 // Doc/slides previews reference media by URL, so no bytes cross for a preview.
 export type PreviewTransformJob =
     | { kind: 'preview'; documentType: 'eigensheets' }
-    | { kind: 'preview'; documentType: 'eigendoc' | 'eigenslides'; mediaUrls: Record<string, string> };
+    | { kind: 'preview'; documentType: 'eigendoc' | 'eigenslides'; mediaUrls: Map<string, string> };
 
 // `title` is the document title the renderer embeds — the Worker has no DrivePath.
 // (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
@@ -48,7 +48,6 @@ export type ImportTransformJob = SheetsImportJob | DocImportJob;
 
 // Preview and export read the persisted collaborative document; import does not.
 export type CollabTransformJob = PreviewTransformJob | ExportTransformJob;
-export type DocumentTransformJob = CollabTransformJob | ImportTransformJob;
 
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
@@ -148,4 +147,10 @@ export function toTransferableBuffer(bytes: Uint8Array): ArrayBuffer {
     const out = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(out).set(bytes);
     return out;
+}
+
+// Every text result (export documents, the import snapshot JSON) crosses as UTF-8
+// bytes the main thread decodes or serves as-is.
+export function toTransferableText(text: string): ArrayBuffer {
+    return toTransferableBuffer(new TextEncoder().encode(text));
 }
