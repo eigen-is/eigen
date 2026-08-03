@@ -21,14 +21,7 @@ import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    ActivityPanel,
-    CardFormDialog,
-    CommentFilterButton,
-    CommentLifecycleDialogs,
-    CommentPanel,
-    ToolbarTitle,
-} from '@workspace/ui';
+import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel, MobilePanelColumn } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
@@ -941,59 +934,19 @@ function SlideEditorInner({
             </div>
 
             {mobilePanelOpen && (
-                <Column
-                    id="panel"
-                    width="flex"
+                <MobilePanelColumn
+                    activePanel={commentPanelOpen ? 'comments' : 'activity'}
                     onBack={closePanels}
-                    toolbar={
-                        commentPanelOpen ? (
-                            <>
-                                <ToolbarTitle>Comments</ToolbarTitle>
-                                <div className="ml-auto">
-                                    <CommentFilterButton
-                                        filter={commentFilter}
-                                        members={members}
-                                        currentUserEmail={auth.user!.email}
-                                    />
-                                </div>
-                            </>
-                        ) : (
-                            <ToolbarTitle>Activity</ToolbarTitle>
-                        )
-                    }
-                >
-                    {commentPanelOpen ? (
-                        <CommentPanel
-                            cards={cards}
-                            entries={allComments}
-                            activeCardIds={activeComments.ids}
-                            anchorTexts={activeComments.anchorTexts}
-                            currentUserEmail={auth.user!.email}
-                            filter={commentFilter}
-                            members={members}
-                            hideHeader
-                            className="w-full border-l-0"
-                            onClose={closePanels}
-                            // Plain setOpenCardId, not openCommentCard: the canvas is unmounted here, so
-                            // its slide + object reveal would drive a view nobody can see.
-                            onCommentClick={setOpenCardId}
-                            onCommentContextMenu={(e, card, entry) =>
-                                commentContextMenu.handleContextMenu(e, { card, entry })
-                            }
-                        />
-                    ) : (
-                        <ActivityPanel
-                            path={path}
-                            hideHeader
-                            className="w-full border-l-0"
-                            onClose={closePanels}
-                            onOpenCard={({ cardId, chatName }) => {
-                                const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                if (id) setOpenCardId(id);
-                            }}
-                        />
-                    )}
-                </Column>
+                    path={path}
+                    lifecycle={lifecycle}
+                    activeComments={activeComments}
+                    filter={commentFilter}
+                    commentContextMenu={commentContextMenu}
+                    // Plain setOpenCardId, not openCommentCard: the canvas is unmounted here, so its
+                    // slide + object reveal would drive a view nobody can see.
+                    onCommentClick={setOpenCardId}
+                    onOpenCard={setOpenCardId}
+                />
             )}
 
             <CardFormDialog

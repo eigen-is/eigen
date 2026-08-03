@@ -30,12 +30,11 @@ import {
     CardFormDialog,
     Column,
     ColumnLayout,
-    CommentFilterButton,
     CommentLifecycleDialogs,
     CommentMenuItems,
     CommentPanel,
     LoadingState,
-    ToolbarTitle,
+    MobilePanelColumn,
     useLayout,
 } from '@workspace/ui';
 import {
@@ -855,61 +854,21 @@ const TiptapEditor = ({
             </div>
 
             {mobilePanelOpen && (
-                <Column
-                    id="panel"
-                    width="flex"
+                <MobilePanelColumn
+                    activePanel={commentPanelOpen ? 'comments' : 'activity'}
                     onBack={closePanels}
-                    toolbar={
-                        commentPanelOpen ? (
-                            <>
-                                <ToolbarTitle>Comments</ToolbarTitle>
-                                <div className="ml-auto">
-                                    <CommentFilterButton
-                                        filter={commentFilter}
-                                        members={members}
-                                        currentUserEmail={auth.user!.email}
-                                    />
-                                </div>
-                            </>
-                        ) : (
-                            <ToolbarTitle>Activity</ToolbarTitle>
-                        )
-                    }
-                >
-                    {commentPanelOpen ? (
-                        <CommentPanel
-                            cards={cards}
-                            entries={allComments}
-                            activeCardIds={activeComments.ids}
-                            anchorTexts={activeComments.anchorTexts}
-                            currentUserEmail={auth.user!.email}
-                            filter={commentFilter}
-                            members={members}
-                            hideHeader
-                            className="w-full border-l-0"
-                            onClose={closePanels}
-                            // No scroll: the editor column is unmounted, so it would drive a detached view.
-                            onCommentClick={(cardId) => setOpenCardId(cardId)}
-                            onCommentContextMenu={(e, card, entry) => {
-                                commentContextMenu.handleContextMenu(e, { card, entry });
-                            }}
-                        />
-                    ) : (
-                        <ActivityPanel
-                            path={path}
-                            hideHeader
-                            className="w-full border-l-0"
-                            onClose={closePanels}
-                            onOpenCard={({ cardId, chatName }) => {
-                                const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                if (!id) return;
-                                setCommentPanelOpen(true);
-                                setActivityPanelOpen(false);
-                                setOpenCardId(id);
-                            }}
-                        />
-                    )}
-                </Column>
+                    path={path}
+                    lifecycle={lifecycle}
+                    activeComments={activeComments}
+                    filter={commentFilter}
+                    commentContextMenu={commentContextMenu}
+                    onCommentClick={setOpenCardId}
+                    onOpenCard={(cardId) => {
+                        setCommentPanelOpen(true);
+                        setActivityPanelOpen(false);
+                        setOpenCardId(cardId);
+                    }}
+                />
             )}
 
             <CardFormDialog

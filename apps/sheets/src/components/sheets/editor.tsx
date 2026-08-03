@@ -7,11 +7,18 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
 } from '@workspace/lib/drive';
-import { useIsMobile } from '@workspace/lib/media';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
+import {
+    ActivityPanel,
+    CardFormDialog,
+    CommentLifecycleDialogs,
+    CommentPanel,
+    LoadingState,
+    MobilePanelColumn,
+    useLayout,
+} from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
@@ -246,12 +253,14 @@ function SheetEditorInner({
         ],
     );
 
-    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the panel covers the
-    // editor area instead. It floats over the workbook rather than hiding it: the grid re-measures its
-    // canvas on window resize only, and a resize while the container is display:none pins it at 0×0.
-    const isMobile = useIsMobile();
+    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
+    // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
+    const { isMobile } = useLayout();
     const mobilePanelOpen = isMobile && (commentPanelOpen || activityPanelOpen);
-    const panelClassName = cn(mobilePanelOpen && 'absolute inset-0 w-full border-l-0');
+    const closePanels = () => {
+        setCommentPanelOpen(false);
+        setActivityPanelOpen(false);
+    };
 
     if (!synced || !initialData) {
         return <LoadingState />;
@@ -270,10 +279,10 @@ function SheetEditorInner({
                     accept="image/*"
                 />
             )}
-            <div className={cn('flex h-full w-full overflow-hidden', mobilePanelOpen && 'relative')}>
-                {/* isolate: the find bar floats at z-10 inside this wrapper and would otherwise paint
-                    over the panel (the grid's own overlays are already isolated by DocSearchProvider). */}
-                <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'isolate')}>
+            <div className="flex h-full w-full overflow-hidden">
+                {/* Hiding takes the find bar with it: the bar floats inside this wrapper, outside the
+                    pane's Column, and would otherwise paint over the pane. */}
+                <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'hidden')}>
                     <DocSearchProvider
                         controller={searchController}
                         initialSearchTerm={initialSearchTerm}
@@ -366,33 +375,47 @@ function SheetEditorInner({
                         />
                     </DocSearchProvider>
                 </div>
-                {commentPanelOpen && (
-                    <CommentPanel
-                        cards={cards}
-                        entries={allComments}
-                        activeCardIds={activeComments.ids}
-                        anchorTexts={activeComments.anchorTexts}
-                        currentUserEmail={auth.user!.email}
-                        filter={commentFilter}
-                        members={members}
-                        className={panelClassName}
-                        onClose={() => setCommentPanelOpen(false)}
-                        onCommentClick={(cardId) => setOpenCardId(cardId)}
-                        onCommentContextMenu={(e, card, entry) =>
-                            commentContextMenu.handleContextMenu(e, { card, entry })
-                        }
-                    />
-                )}
-                {activityPanelOpen && (
-                    <ActivityPanel
+                {mobilePanelOpen ? (
+                    <MobilePanelColumn
+                        activePanel={commentPanelOpen ? 'comments' : 'activity'}
+                        onBack={closePanels}
                         path={path}
-                        className={panelClassName}
-                        onClose={() => setActivityPanelOpen(false)}
-                        onOpenCard={({ cardId, chatName }) => {
-                            const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                            if (id) setOpenCardId(id);
-                        }}
+                        lifecycle={lifecycle}
+                        activeComments={activeComments}
+                        filter={commentFilter}
+                        commentContextMenu={commentContextMenu}
+                        onCommentClick={setOpenCardId}
+                        onOpenCard={setOpenCardId}
                     />
+                ) : (
+                    <>
+                        {commentPanelOpen && (
+                            <CommentPanel
+                                cards={cards}
+                                entries={allComments}
+                                activeCardIds={activeComments.ids}
+                                anchorTexts={activeComments.anchorTexts}
+                                currentUserEmail={auth.user!.email}
+                                filter={commentFilter}
+                                members={members}
+                                onClose={() => setCommentPanelOpen(false)}
+                                onCommentClick={(cardId) => setOpenCardId(cardId)}
+                                onCommentContextMenu={(e, card, entry) =>
+                                    commentContextMenu.handleContextMenu(e, { card, entry })
+                                }
+                            />
+                        )}
+                        {activityPanelOpen && (
+                            <ActivityPanel
+                                path={path}
+                                onClose={() => setActivityPanelOpen(false)}
+                                onOpenCard={({ cardId, chatName }) => {
+                                    const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                    if (id) setOpenCardId(id);
+                                }}
+                            />
+                        )}
+                    </>
                 )}
             </div>
 

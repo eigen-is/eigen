@@ -281,16 +281,18 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
   All/For-you tabs + status Select are gone.
 - **Hosting**: `hideHeader` + `className` let a host supply its own chrome instead of the panel's
-  title row. Docs and slides use them below the mobile breakpoint, where the panel is a full-width
-  `Column` (`ColumnLayout mobileColumn`) whose toolbar carries the back arrow, `ToolbarTitle` and
-  `CommentFilterButton`; `ActivityPanel` takes the same two props for the same Column. Clicks there
-  only open the card — the editor column is unmounted, so scroll-to-mark (docs) and the slide +
-  object reveal (slides) would drive a detached view.
-  Sheets has no `ColumnLayout` (the Workbook owns its toolbar), so below the breakpoint it keeps the
-  panel's own header — the X is the back path — and passes `className="absolute inset-0 w-full
-  border-l-0"` so the panel covers the editor area instead of squeezing it. It floats over the
-  workbook rather than hiding it — written before the engine observed container resizes; that
-  observer now re-measures the canvas on un-hide, so hiding the workbook is safe too.
+  title row. Below the mobile breakpoint all three editors mount the same
+  `MobilePanelColumn` (`packages/ui/src/components/layout/comments/mobile-panel-column.tsx`): one
+  full-width `Column` with id `panel` whose toolbar carries the back arrow, `ToolbarTitle` and — for
+  comments — `CommentFilterButton`, holding `CommentPanel`/`ActivityPanel` with `hideHeader` +
+  `className="w-full border-l-0"`. It takes the `useCommentLifecycle` bundle plus the host's open
+  handlers, and resolves an activity row's `chatName` to a cardId itself. Those handlers only open
+  the card: the editor is hidden while the pane is up, so scroll-to-mark (docs) and the slide +
+  object reveal (slides) would drive a view nobody can see.
+  Docs and slides step their editor column aside with `ColumnLayout mobileColumn="panel"`. Sheets has
+  no `ColumnLayout` (the Workbook owns its toolbar), so it puts `hidden` on the workbook wrapper
+  instead — safe since the engine re-measures its canvas on un-hide. Hiding also takes the find bar
+  with it, in all three. Desktop is untouched: the panels stay `w-64` siblings with their own header.
 
 ### Comment filters (`packages/lib/src/core/comments/filter.ts` + filter UI)
 
