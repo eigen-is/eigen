@@ -9,9 +9,12 @@ import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { ApiError } from '../lib/core';
+import { getSharedDrive } from '../lib/drive/get-drive';
 import { getHome } from '../lib/home/get-home';
+import { importIntoDocument } from '../lib/import/import-document';
 import { normalizeMonthMinuteTokens, xlsxToSheets } from '../lib/import/sheets/from-xlsx';
-import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
+import { getUserById } from '../lib/user';
+import { assertJson, authedRequest, driveGet, drivePut, driveUpload, getTestContext } from './setup';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -1350,6 +1353,41 @@ describe('Sheets xlsx import/convert', () => {
         );
         expect(res.status).toBe(403);
     });
+
+    test('write revoked while the transform ran blocks the commit', async () => {
+        // The route checks write before buffering, then the job queues and transforms
+        // for up to minutes. Calling the commit seam directly with a writer whose
+        // permission was revoked in that window is exactly the race: read still
+        // resolves the collab document, only the write recheck stands in the way.
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]),
+            'acl-race.xlsx',
+        );
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: true }],
+        });
+
+        const bob = await getUserById(ctx.bob.user.id);
+        const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
+        const { mount, path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
+
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+
+        const before = await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id);
+        const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
+        let error: unknown;
+        try {
+            await importIntoDocument(bobDrive, mount, path, replacement, bob!);
+        } catch (e) {
+            error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(403);
+        expect((error as ApiError).message).toBe('No write permission');
+        expect(await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual(before);
+    }, 60_000);
 });
 
 // Forge the uncompressedSize a zip DECLARES for its file entries, so the declared size no

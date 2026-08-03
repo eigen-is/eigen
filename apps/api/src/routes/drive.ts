@@ -234,7 +234,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             const buffer = Buffer.from(await request.arrayBuffer());
             if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
-            await importIntoDocument(drive, mount, path, buffer, request.signal);
+            await importIntoDocument(drive, mount, path, buffer, user, request.signal);
             return { success: true };
         },
         { auth: true, parse: 'none' },
@@ -255,7 +255,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const sourceFile = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!sourceFile) throw new ApiError(404, 'Source file not found');
             const buffer = Buffer.from(await sourceFile.arrayBuffer());
-            await importIntoDocument(drive, mount, path, buffer, request.signal);
+            await importIntoDocument(drive, mount, path, buffer, user, request.signal);
             return { success: true };
         },
         {

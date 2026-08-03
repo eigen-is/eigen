@@ -1,12 +1,25 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { ApiError } from '../lib/core';
 import { readEigendocFromDoc } from '../lib/document/doc';
 import { toTransferableBuffer } from '../lib/document/transform/protocol';
+import { getSharedDrive } from '../lib/drive/get-drive';
 import { getHome } from '../lib/home/get-home';
+import { importIntoDocument } from '../lib/import/import-document';
+import { getUserById } from '../lib/user';
 import { seedEigendoc } from './fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_HEADING, GOLDEN_DOCX_IMAGE_NAME, GOLDEN_DOCX_LINK } from './fixtures/golden-docx';
-import { assertJson, authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    driveGet,
+    drivePost,
+    drivePut,
+    driveUpload,
+    getTestContext,
+    TEST_PNG_BYTES,
+} from './setup';
 
 // Route contract of docx import and conversion: what lands in the document, what
 // the media folder gets, and the exact error statuses and bodies. Pinned here so
@@ -149,6 +162,50 @@ describe('Eigendoc docx import/convert', () => {
         const res = await importRequest(docPath.id, toTransferableBuffer(Buffer.from('not a valid docx file')));
         expect(res.status).toBe(400);
         expect(await res.text()).toBe('Not a valid docx file');
+    }, 60_000);
+
+    test('write revoked while the transform ran blocks the commit', async () => {
+        // The route checks write before buffering, then the job queues and transforms
+        // for up to minutes. Calling the commit seam directly with a writer whose
+        // permission was revoked in that window is exactly the race: read still
+        // resolves the collab document, only the write recheck stands in the way.
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'acl-race-target' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, docPath.id);
+        seedEigendoc(collab.doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR CONTENT' }] }],
+        });
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docPath.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: true }],
+        });
+
+        const bob = await getUserById(ctx.bob.user.id);
+        const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
+        const { mount, path } = await bobDrive.resolveFile(mountId, docPath.id);
+
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docPath.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+
+        const before = await readDocJson(docPath.id);
+        const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
+        let error: unknown;
+        try {
+            await importIntoDocument(bobDrive, mount, path, buffer, bob!);
+        } catch (e) {
+            error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(403);
+        expect((error as ApiError).message).toBe('No write permission');
+        expect(await readDocJson(docPath.id)).toEqual(before);
     }, 60_000);
 
     test('convert rejects a stored .docx over the upload limit with 413', async () => {

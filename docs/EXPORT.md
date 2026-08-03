@@ -279,7 +279,7 @@ apps/api/src/lib/import/sheets/
 |-------|-------|
 | ACL and the upload / stored-source size bound (`/import`, `/import-from-drive`, `/convert`) | main thread |
 | ZIP guards, ExcelJS parse, mapping, engine recalc, snapshot serialization | Worker |
-| Destination creation (convert) and the Yjs commit | main thread, only after the Worker succeeds |
+| Destination creation (convert), the write recheck and the Yjs commit | main thread, only after the Worker succeeds |
 
 `importIntoDocument` / `convertToDocument` (`import/import-document.ts`) call `runImportToSnapshotJson`
 (`lib/document/transform/run-transform.ts`) — the same main-thread seam preview and export use, minus the
@@ -288,6 +288,11 @@ Yjs capture — and commit the returned UTF-8 snapshot through `writeSheetsSnaps
 mount, ACL or destination path, so a failed transform creates no document and mutates no Yjs state. The
 `400` (not a valid xlsx) and `413` (too large / too many cells) bodies survive the boundary unchanged, and
 a recalc failure comes back as a warning with the parsed values persisted.
+
+`importIntoDocument` takes the acting user and re-checks write permission immediately before the commit:
+the route's check happens before buffering, and the job can queue and transform for minutes, long enough
+for the share to be revoked. A revoked writer gets `403 No write permission` and the target stays untouched
+(`convertToDocument` needs no recheck — `SharedDrive.create` checks write when it creates the destination).
 
 `from-xlsx.ts` only produces `Sheet[]`. The importer only needs to emit `celldata` (with
 `f` for formula cells) and `config`. `calcChain` and initial computed values are filled in by the Workbook's
@@ -317,7 +322,7 @@ apps/api/src/lib/import/doc/
 |-------|-------|
 | ACL and the upload / stored-source size bound (`/import`, `/import-from-drive`, `/convert`) | main thread |
 | mammoth parse, sanitization, ProseMirror conversion, ProseMirror → Yjs encoding | Worker |
-| Destination creation (convert), the Yjs commit, and the media writes | main thread, only after the Worker succeeds |
+| Destination creation (convert), the write recheck, the Yjs commit and the media writes | main thread, only after the Worker succeeds |
 
 The Worker returns a ready Yjs update plus the extracted images, so the ProseMirror-to-Yjs conversion cost
 also stays off the event loop. `importIntoDocument` / `convertToDocument` call `runImportToDocumentUpdate`,

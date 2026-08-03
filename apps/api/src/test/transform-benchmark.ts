@@ -186,7 +186,7 @@ if (xlsxPath && fs.existsSync(xlsxPath)) {
     const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
     const buffer = Buffer.from(fs.readFileSync(xlsxPath));
     await measure(`real xlsx: import (${buffer.byteLength} bytes)`, () =>
-        importIntoDocument(home.drive, mount, path, buffer),
+        importIntoDocument(home.drive, mount, path, buffer, home.user),
     );
     console.log(`imported ${xlsxPath}`);
     await runScenario('real xlsx', doc.id);
