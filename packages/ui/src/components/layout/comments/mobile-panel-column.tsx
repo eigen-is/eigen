@@ -12,6 +12,8 @@ import { CommentPanel } from './comment-panel';
 
 // The mobile comments/activity pane, identical across docs, slides and sheets: a full-width Column
 // carrying the back arrow, the title and (for comments) the filter, so the panel drops its header.
+// Mount it outside any <ColumnLayout mobileColumn="…">: a Column self-hides when its id doesn't
+// match, so a host that wraps this one gets no pane at all, silently.
 type MobilePanelColumnProps = {
     activePanel: 'comments' | 'activity';
     onBack: () => void;

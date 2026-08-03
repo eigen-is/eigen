@@ -26,6 +26,7 @@ import {
     CardFormDialog,
     Column,
     ColumnLayout,
+    type CommentContextMenuItem,
     CommentLifecycleDialogs,
     CommentPanel,
     EmptyState,
@@ -33,7 +34,6 @@ import {
     MobilePanelColumn,
     useLayout,
 } from '@workspace/ui';
-import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
@@ -937,7 +937,7 @@ function SlideEditorInner({
                     activeComments={activeComments}
                     filter={commentFilter}
                     commentContextMenu={commentContextMenu}
-                    // Plain setOpenCardId, not openCommentCard: the canvas is unmounted here, so its
+                    // Plain setOpenCardId, not openCommentCard: the canvas is hidden here, so its
                     // slide + object reveal would drive a view nobody can see.
                     onCommentClick={setOpenCardId}
                     onOpenCard={setOpenCardId}

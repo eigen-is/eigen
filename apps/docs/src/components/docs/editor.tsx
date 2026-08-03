@@ -283,8 +283,9 @@ const TiptapEditor = ({
         documentRef.current = el;
         if (!el) return;
         const ro = new ResizeObserver(() => {
-            if (el.offsetHeight === 0) return;
-            setDocHeight(el.offsetHeight);
+            const height = el.offsetHeight;
+            if (height === 0) return;
+            setDocHeight(height);
         });
         ro.observe(el);
         return () => {
@@ -704,7 +705,7 @@ const TiptapEditor = ({
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
             if (isWide || isMobile) openComments();
-            // The mobile pane replaces the editor column, so scrolling would drive a detached view.
+            // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
             if (!isMobile) handleScrollToComment(cardId);
             setOpenCardId(cardId);
         },

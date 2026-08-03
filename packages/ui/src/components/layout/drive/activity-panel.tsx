@@ -9,7 +9,8 @@ import { ActivityEventList } from './activity-event-list';
 
 type ActivityPanelProps = {
     path: DrivePath;
-    cards: Record<string, CommentCard>;
+    // Only read to resolve a row's chatName to a cardId; without it those rows stay inert.
+    cards?: Record<string, CommentCard>;
     // Absent = the host draws its own chrome, so the panel renders no header.
     onClose?: () => void;
     // Opens the card a row references in-doc; other rows stay inert (see ActivityEventList).
@@ -43,7 +44,8 @@ export function ActivityPanel({ path, cards, onClose, onOpenCard, className }: A
                         onOpenCard={
                             onOpenCard &&
                             (({ cardId, chatName }) => {
-                                const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                const id =
+                                    cardId ?? (cards && chatName ? findCardIdByChatName(cards, chatName) : undefined);
                                 if (id) onOpenCard(id);
                             })
                         }
