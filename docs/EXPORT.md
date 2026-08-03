@@ -24,7 +24,7 @@ apps/api/src/lib/export/
   export-document.ts             # Entry point: dispatches by mime type + format
   weasyprint.ts                  # Generic: htmlToPdf(html) -> Buffer via subprocess
   modules.d.ts                   # Type declarations for untyped npm packages
-  render-types.ts                # Shared contracts: RenderMode, SizeUnit, *ImgSrcResolver
+  render-types.ts                # Shared contracts: SizeUnit, *ImgSrcResolver
   fonts.ts                       # Embedded WOFF2 @font-face CSS (Inter, Source Serif 4, JetBrains Mono, Excalifont)
   media.ts                       # collectExportMedia: screen previews -> transferable buffers (main thread)
   doc/
