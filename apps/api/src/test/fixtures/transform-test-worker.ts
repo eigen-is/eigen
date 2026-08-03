@@ -27,6 +27,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
             return;
         case 'exit':
             process.exit(1);
+            return;
         case 'malformed':
             postMessage({ nonsense: true });
             return;

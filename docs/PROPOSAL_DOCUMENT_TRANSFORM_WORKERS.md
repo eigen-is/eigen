@@ -1,8 +1,15 @@
 # Proposal: Off-thread Document Transforms
 
-> **Status:** Proposed
+> **Status:** Phases 0–1 implemented (branch `transform-workers`, 2026-08-03); Phases 2–4 open
 > **Date:** 2026-08-03
 > **Scope:** Server-side preview generation first, then reuse for document exports and imports
+>
+> **As-built notes (Phases 0–1):** eigensheets preview runs off-thread as specified; as-built docs in
+> PREVIEWS.md. Measured on the reference dev machine: cold heavy preview went from a 14.1s event-loop stall
+> to a 9ms worst delay (health p95 0.3ms) with the body bounded 7.6MB → 1.0MB. One finding for the Phase 4
+> warm-pool decision: each terminated one-shot Worker that evaluated the heavy sheet module graph retains
+> ~7MB RSS under Bun 1.3 (trivial Workers plateau; the identical pipeline run on-thread is flat), so
+> sustained cold-preview churn favors recycling Workers after N jobs.
 
 ## Summary
 

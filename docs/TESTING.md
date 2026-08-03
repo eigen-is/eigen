@@ -52,6 +52,8 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 | `comment-index.test.ts`       | Comment index CRUD, mentions                               |
 | `contacts.test.ts`            | CRUD, labels, isolation                                    |
 | `delete-user.test.ts`         | User deletion, admin permissions, data cleanup             |
+| `document-transform.test.ts`  | Off-thread sheet preview: Worker equivalence, warnings, cache behavior |
+| `document-transform-runner.test.ts` | Transform runner: concurrency, priorities, overload, timeout, crash, cancel, shutdown |
 | `drive.test.ts`               | Mounts, folders, files, sharing, ACL, docs, stickies       |
 | `editor.test.ts`              | Inline text editing                                        |
 | `effective-members.test.ts`   | Effective member resolution                                |
@@ -69,11 +71,16 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 | `public.test.ts`              | Public routes, avatars                                     |
 | `settings.test.ts`            | Server settings, admin access control                      |
 | `share-registry.test.ts`      | Share registry push/pull, reconciliation                   |
+| `sheets-preview.test.ts`      | Eigensheets preview golden hash + budget contract          |
 | `sharing-restricted.test.ts`  | Sharing restriction enforcement                            |
 | `sse.test.ts`                 | SSE endpoint, events                                       |
 | `storage.test.ts`             | Storage backend operations                                 |
 | `streaming-upload.test.ts`    | Streaming file upload, multi-file upload                   |
 | `team-calendar-share.test.ts` | Team calendar sharing                                      |
+| `yjs-loader.test.ts`          | Yjs capture/materialize split, corruption equivalence      |
+
+Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for
+document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see PREVIEWS.md).
 
 ## Key Details
 

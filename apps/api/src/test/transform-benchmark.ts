@@ -137,6 +137,28 @@ async function runScenario(label: string, pathId: string) {
     await runScenario(`synthetic ${ROWS}x${COLS}`, doc.id);
 }
 
+// Memory pass (proposal § Memory benchmark): repeat the heavy preview through
+// one-shot Workers and verify post-job RSS stabilizes instead of growing linearly.
+if (args.includes('--memory')) {
+    const { generateEigensheetsPreview } = await import('../lib/preview/eigensheets-preview');
+    const doc = await createSheetsDoc('bench-memory');
+    const home = await getHome(ownerId);
+    const collab = await home.drive.getCollabDocument(mountId, doc.id);
+    seedSheetsDoc(collab.doc, buildHeavySheets(600, 45), buildHeavyOps(40, 25, 600, 45));
+    const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
+
+    const memoryRuns = argNum('memory-runs', 8);
+    console.log(`\n=== memory: ${memoryRuns} repeated Worker previews (600x45) ===`);
+    for (let i = 0; i < memoryRuns; i++) {
+        const start = performance.now();
+        await generateEigensheetsPreview(mount, path);
+        Bun.gc(true);
+        console.log(
+            `run ${i + 1}: ${(performance.now() - start).toFixed(0)}ms rss=${(process.memoryUsage.rss() / 1024 / 1024).toFixed(0)}MB`,
+        );
+    }
+}
+
 // Scenario 2: a real workbook, if provided (kept out of the repo).
 const xlsxPath = process.env['EIGEN_BENCH_XLSX'];
 if (xlsxPath && fs.existsSync(xlsxPath)) {

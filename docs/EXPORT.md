@@ -197,16 +197,17 @@ the autofilter range, conditional formatting (engine rule order becomes explicit
 `duplicateValue` exports as a COUNTIF expression — ExcelJS has no native writer for it), data validation
 (per-cell rules that ExcelJS re-merges into sqref rectangles), and hyperlinks. Webpage links are scheme-gated
 through `resolveWebLink` (`@workspace/lib/sheets/web-link`, the same gate the editor's link navigation uses);
-internal links are written in Excel-native `location` form. `renderSheetsHtml` (`sheets/html.ts`) is shared
-with the quick preview and takes a `RenderMode` so the preview renders only the first sheet (see PREVIEWS.md);
-it renders webpage hyperlinks as `target="_blank" rel="noopener noreferrer"` anchors through the same scheme
+internal links are written in Excel-native `location` form. `renderSheetsHtml` (`sheets/html.ts`) renders the
+full workbook for exports; the quick preview shares its internals via `renderSheetsPreviewHtml`, which clips
+the first sheet to the preview budget and runs inside the document-transform Worker (see PREVIEWS.md). Both
+render webpage hyperlinks as `target="_blank" rel="noopener noreferrer"` anchors through the same scheme
 gate (internal links stay plain text — no meaningful target in standalone HTML).
 
 ### File Structure
 
 ```
 apps/api/src/lib/export/sheets/
-  html.ts        # Sheet[] → HTML table (renderSheetsHtml — shared with preview, RenderMode-aware)
+  html.ts        # Sheet[] → HTML table (renderSheetsHtml full export + renderSheetsPreviewHtml budgeted preview)
   xlsx.ts        # Sheet[] → XLSX buffer via ExcelJS
   pdf.ts         # Sheet[] → HTML → WeasyPrint
   fonts.ts       # FONT_ARRAY + resolveFontFamily (numeric/string ff → family name)
