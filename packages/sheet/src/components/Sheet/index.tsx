@@ -157,6 +157,9 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const contextRef = useRef(context);
     contextRef.current = context;
 
+    const dataRef = useRef(data);
+    dataRef.current = data;
+
     const rafIdRef = useRef(0);
 
     const rowlenKey = useStableJson(context.config?.rowlen);
@@ -164,37 +167,37 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const rowhiddenKey = useStableJson(context.config?.rowhidden);
     const colhiddenKey = useStableJson(context.config?.colhidden);
 
-    // Resize handler
-    useEffect(() => {
+    // Resize handler. Reads the sheet data through a ref so its identity survives every edit:
+    // re-observing re-measures immediately, and updateContextWithCanvas' canvas.width write clears
+    // the bitmap, so an observer rebuilt per keystroke would repaint the whole grid per keystroke.
+    const resize = useCallback(() => {
+        const sheetData = dataRef.current;
+        if (!sheetData) return;
         const placeholder = placeholderRef.current!;
+        // A hidden container measures 0×0, and writing that pins the canvas blank until the
+        // next resize. Skip it — the observer fires again with a real box on un-hide.
+        if (placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
+        setContext((draftCtx) => {
+            if (settings.devicePixelRatio === 0) {
+                draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
+            }
+            updateContextWithSheetData(draftCtx, sheetData);
+            updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder);
+        });
+    }, [refs.canvas, setContext, settings.devicePixelRatio]);
 
-        function resize() {
-            if (!data) return;
-            // A hidden container measures 0×0, and writing that pins the canvas blank until the
-            // next resize. Skip it — the observer fires again with a real box on un-hide.
-            if (placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
-            setContext((draftCtx) => {
-                if (settings.devicePixelRatio === 0) {
-                    draftCtx.devicePixelRatio = (
-                        typeof globalThis !== 'undefined' ? globalThis : window
-                    ).devicePixelRatio;
-                }
-                updateContextWithSheetData(draftCtx, data);
-                updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder);
-            });
-        }
-
-        // Window resize also covers devicePixelRatio changes, which leave the box alone; the
-        // observer covers container-only resizes (side panels, layout switches, un-hiding).
-        // No feedback loop: the placeholder is sized by its flex parent, canvas and overlay are absolute.
+    // Window resize also covers devicePixelRatio changes, which leave the box alone; the observer
+    // covers container-only resizes (side panels, layout switches, un-hiding). No feedback loop:
+    // the placeholder is sized by its flex parent, canvas and overlay are absolute.
+    useEffect(() => {
         window.addEventListener('resize', resize);
         const observer = new ResizeObserver(resize);
-        observer.observe(placeholder);
+        observer.observe(placeholderRef.current!);
         return () => {
             window.removeEventListener('resize', resize);
             observer.disconnect();
         };
-    }, [data, refs.canvas, setContext, settings.devicePixelRatio]);
+    }, [resize]);
 
     // Recalculate row/col info when data or config dimensions change
     // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from context.config; the source object refs would re-fire on identity churn
