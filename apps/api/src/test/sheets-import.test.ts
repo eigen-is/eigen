@@ -80,6 +80,15 @@ async function injectLocationHyperlinks(
     return zip.generateAsync({ type: 'arraybuffer' });
 }
 
+async function setMaxUploadSizeMB(sessionToken: string, mb: number): Promise<void> {
+    const res = await authedRequest(sessionToken, '/settings/server', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
+    });
+    expect(res.status).toBe(200);
+}
+
 async function readSnapshot(ownerId: string, mountId: string, pathId: string): Promise<Sheet[]> {
     const home = await getHome(ownerId);
     const dataDbPath = await home.drive.getChildByName(mountId, pathId, 'data.db');
@@ -396,6 +405,81 @@ describe('Sheets xlsx import/convert', () => {
             { method: 'POST', body: notXlsx },
         );
         expect(res.status).toBe(400);
+        expect(await res.text()).toBe('Not a valid xlsx file');
+    });
+
+    test('convert of a garbage .xlsx returns 400 Not a valid xlsx file', async () => {
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            new File(['not a spreadsheet at all'], 'garbage.xlsx', { type: XLSX_MIME }),
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        expect(res.status).toBe(400);
+        expect(await res.text()).toBe('Not a valid xlsx file');
+    });
+
+    test('import route surfaces the decompression-bomb guard as 413 Spreadsheet too large', async () => {
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
+            'bomb-target.xlsx',
+        );
+        const zip = new JSZip();
+        zip.file('xl/worksheets/sheet1.xml', Buffer.from('<sheetData/>'));
+        const honest = Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
+        const bomb = forgeCentralDirUncompressedSize(honest, 201 * 1024 * 1024);
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            { method: 'POST', body: bomb },
+        );
+        expect(res.status).toBe(413);
+        expect(await res.text()).toBe('Spreadsheet too large');
+    });
+
+    test('import route surfaces the cell-count guard as 413 Spreadsheet has too many cells', async () => {
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
+            'cells-target.xlsx',
+        );
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Huge');
+        ws.getCell('A1048576').value = 'x';
+        ws.getCell('XFD1').value = 'y';
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            { method: 'POST', body: await workbookToBuffer(workbook) },
+        );
+        expect(res.status).toBe(413);
+        expect(await res.text()).toBe('Spreadsheet has too many cells');
+    });
+
+    test('import route rejects an over-quota upload with 413 Upload too large', async () => {
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
+            'quota-target.xlsx',
+        );
+        await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+                { method: 'POST', body: new Uint8Array(2 * 1024 * 1024) },
+            );
+            expect(res.status).toBe(413);
+            expect(await res.text()).toBe('Upload too large');
+        } finally {
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
+        }
     });
 
     test('convert scales column widths from character units to pixels', async () => {
