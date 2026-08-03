@@ -11,3 +11,4 @@ export { CommentThread } from './comment-thread';
 export { CreatedByMeta } from './created-by-meta';
 export { MemberAvatar } from './member-avatar';
 export { MemberCommandList } from './member-command-list';
+export { MobilePanelColumn } from './mobile-panel-column';
