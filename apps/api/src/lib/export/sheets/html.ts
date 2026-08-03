@@ -17,7 +17,6 @@ import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import type { RenderMode } from '../render-types';
 import { sanitizeExportHtml } from '../sanitize';
 import { resolveFontFamily } from './fonts';
 
@@ -77,11 +76,18 @@ export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePat
     return wrapInDocument(title, sanitized);
 }
 
-export function renderSheetsHtml(sheets: Sheet[], mode: RenderMode = 'export'): string {
-    // One engine + resolver per export, shared across sheets so cross-sheet refs in
-    // formula CF rules (e.g. `=Sheet2!A1>10`) resolve correctly. The resolver reads
-    // saved `cell.v` values from the snapshot — formulas are not recomputed, only the
-    // CF rule's own formula is evaluated against existing cell values.
+// Preview budget (proposal § Preview output budget): rendered from the top-left
+// of the used range. maxCells is an independent ceiling so tuning rows/columns
+// against fixtures can never silently remove the bound (at the defaults it never
+// binds: 200 × 50 = 10,000).
+export type SheetPreviewBudget = { maxRows: number; maxCols: number; maxCells: number };
+export const PREVIEW_SHEET_BUDGET: SheetPreviewBudget = { maxRows: 200, maxCols: 50, maxCells: 10_000 };
+
+// One engine + resolver per render, shared across sheets so cross-sheet refs in
+// formula CF rules (e.g. `=Sheet2!A1>10`) resolve correctly. The resolver reads
+// saved `cell.v` values from the snapshot — formulas are not recomputed, only the
+// CF rule's own formula is evaluated against existing cell values.
+function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver: CellResolver } {
     const engine = new FormulaEngine();
     const resolver = createArrayResolver(
         sheets.map((s) => ({
@@ -92,11 +98,24 @@ export function renderSheetsHtml(sheets: Sheet[], mode: RenderMode = 'export'): 
             dynamicArrayCompute: [],
         })),
     );
-    // Preview is a glance, not a document — render only the first sheet to keep the
-    // cached body small. The resolver above still spans every sheet, so cross-sheet
-    // CF formula refs in the first sheet resolve correctly.
-    const rendered = mode === 'preview' ? sheets.slice(0, 1) : sheets;
-    return rendered.map((sheet, i) => renderSheet(sheet, i === rendered.length - 1, engine, resolver)).join('\n');
+    return { engine, resolver };
+}
+
+export function renderSheetsHtml(sheets: Sheet[]): string {
+    const { engine, resolver } = createRenderContext(sheets);
+    return sheets.map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver).html).join('\n');
+}
+
+// Preview is a glance, not a document — render only the first sheet, clipped to
+// the hard row/column/cell budget, to keep the cached body small. The resolver
+// still spans every sheet so cross-sheet CF formula refs resolve correctly.
+// `truncated` is true whenever rows, columns, cells, or additional sheets were
+// omitted — the caller appends the shared truncated marker.
+export function renderSheetsPreviewHtml(sheets: Sheet[]): { html: string; truncated: boolean } {
+    if (sheets.length === 0) return { html: '', truncated: false };
+    const { engine, resolver } = createRenderContext(sheets);
+    const first = renderSheet(sheets[0], true, engine, resolver, PREVIEW_SHEET_BUDGET);
+    return { html: first.html, truncated: first.truncated || sheets.length > 1 };
 }
 
 // Builds the `evaluateFormula` callback for a single sheet's CF formula rules. The
@@ -143,7 +162,13 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     return { width, height };
 }
 
-function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resolver: CellResolver): string {
+function renderSheet(
+    sheet: Sheet,
+    isLast: boolean,
+    engine: FormulaEngine,
+    resolver: CellResolver,
+    budget?: SheetPreviewBudget,
+): { html: string; truncated: boolean } {
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
@@ -164,7 +189,19 @@ function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resol
     // Find the minimal bounding box containing all visible content
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) {
-        return `<div class="sheet"></div>`;
+        return { html: `<div class="sheet"></div>`, truncated: false };
+    }
+
+    // Visible columns from the left edge of the used range, clipped to the budget.
+    let truncated = false;
+    const renderCols: number[] = [];
+    for (let c = minCol; c <= maxCol; c++) {
+        if (config.colhidden?.[c]) continue;
+        if (budget && renderCols.length >= budget.maxCols) {
+            truncated = true;
+            break;
+        }
+        renderCols.push(c);
     }
 
     // Build merge lookup: "r,c" -> { rs, cs } for anchor cells
@@ -193,8 +230,7 @@ function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resol
     // Colgroup
     const cols: string[] = [];
     let tableWidth = 0;
-    for (let c = minCol; c <= maxCol; c++) {
-        if (config.colhidden?.[c]) continue;
+    for (const c of renderCols) {
         const w = config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
         tableWidth += w;
         cols.push(`<col style="width:${w}px">`);
@@ -203,13 +239,18 @@ function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resol
 
     // Rows
     const rows: string[] = [];
+    let cellCount = 0;
     for (let r = minRow; r <= maxRow; r++) {
         if (config.rowhidden?.[r]) continue;
+        if (budget && (rows.length >= budget.maxRows || cellCount + renderCols.length > budget.maxCells)) {
+            truncated = true;
+            break;
+        }
+        cellCount += renderCols.length;
         const h = config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT;
         const cells: string[] = [];
 
-        for (let c = minCol; c <= maxCol; c++) {
-            if (config.colhidden?.[c]) continue;
+        for (const c of renderCols) {
             const key = `${r},${c}`;
 
             // Skip non-anchor merged cells
@@ -249,9 +290,10 @@ function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resol
     }
 
     const pageBreak = isLast ? '' : ' style="page-break-after:always"';
-    return `<div class="sheet"${pageBreak}>
+    const html = `<div class="sheet"${pageBreak}>
 <table style="border-collapse:collapse;table-layout:fixed;font-family:&quot;Inter&quot;,system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px">${colgroup}<tbody>${rows.join('')}</tbody></table>
 </div>`;
+    return { html, truncated };
 }
 
 function getCellDisplay(v: Cell | null): string {

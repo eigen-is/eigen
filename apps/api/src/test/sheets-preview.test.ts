@@ -101,7 +101,7 @@ describe('eigensheets preview (heavy fixture)', () => {
         ctx = await getTestContext();
     });
 
-    test('renders a first sheet far beyond any glance size (current unbounded behavior)', async () => {
+    test('bounds the first-sheet render to the preview budget with a truncated marker', async () => {
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, 'default', 'root');
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
@@ -122,10 +122,17 @@ describe('eigensheets preview (heavy fixture)', () => {
         const preview = (await res.json()) as TextPreview;
         expect(preview.mode).toBe('eigensheets');
 
-        // Phase 0 baseline: the whole 600×45 grid lands in the cached body, deep
-        // corner included. Phase 1 replaces these with the bounded-budget contract.
-        expect(preview.body).toContain(HEAVY_FAR_CORNER);
-        expect(preview.body.length).toBeGreaterThan(1_000_000);
+        // Phase 1 budget contract (intentional change from the Phase 0 baseline,
+        // which rendered the whole 600×45 grid): at most 200 rows × 50 columns /
+        // 10k cells from the top-left, valid HTML, marker appended.
+        const { body } = preview;
+        expect(body).not.toContain(HEAVY_FAR_CORNER);
+        expect(body).toContain('Preview truncated');
+        expect(body.match(/<tr/g)!.length).toBeLessThanOrEqual(200);
+        expect(body.match(/<col /g)!.length).toBeLessThanOrEqual(50);
+        expect(body.match(/<td/g)!.length).toBeLessThanOrEqual(10_000);
+        // First-row content still renders from the top-left of the used range.
+        expect(body).toContain('>HA</td>');
     }, 120_000);
 });
 

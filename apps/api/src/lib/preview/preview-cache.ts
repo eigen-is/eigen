@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { getTextPreviewMode } from '@workspace/lib/constants';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
+import { ApiError } from '../core/errors';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { generateEigendocPreview } from './eigendoc-preview';
@@ -27,7 +28,8 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 
 // Renderer format version — bump when generated HTML changes shape (e.g. plaintext moved
 // from <pre> to prose paragraphs) so cached previews regenerate despite an unchanged updatedAt.
-const TEXT_FORMAT = 'f2';
+// f3: sheets previews render off-thread with the row/column/cell budget.
+const TEXT_FORMAT = 'f3';
 
 function textCacheName(drivePath: DrivePath): string {
     return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.${TEXT_FORMAT}.json`;
@@ -92,9 +94,18 @@ async function getOrCacheImage(
 // background — the route marks them no-store so the client refetches the fresh copy.
 type ServedTextPreview = { value: TextPreviewResult; stale: boolean };
 
+// Collab generators run through the document-transform runner: a first cache miss
+// is foreground work (the request waits on it), a stale regeneration is background
+// work the runner may drop under load. Plain-file generators ignore the priority.
+type TextPreviewGenerator = (priority: 'foreground' | 'background') => Promise<string | null>;
+
 // In-flight background regenerations keyed by cache filename, so a folder grid of N tiles
 // for one just-edited doc triggers a single regeneration instead of N.
 const inFlightText = new Map<string, Promise<void>>();
+
+// In-flight first-ever generations, so concurrent misses for the same cache key
+// share one generation (mirrors inFlightImage above).
+const inFlightFirstText = new Map<string, Promise<ServedTextPreview | null>>();
 
 // Read-through cache for a text preview artifact (the JSON { body, mode } envelope).
 async function getOrCacheText(
@@ -102,7 +113,7 @@ async function getOrCacheText(
     pathId: string,
     cacheName: string,
     mode: TextPreviewResult['mode'],
-    generate: () => Promise<string | null>,
+    generate: TextPreviewGenerator,
 ): Promise<ServedTextPreview | null> {
     const cacheFile = path.join(previewsDir, cacheName);
     if (fs.existsSync(cacheFile)) {
@@ -122,16 +133,30 @@ async function getOrCacheText(
     }
 
     // First-ever preview for this path: nothing to serve, so generate synchronously.
+    const existing = inFlightFirstText.get(cacheName);
+    if (existing) return existing;
+
+    const task = (async (): Promise<ServedTextPreview | null> => {
+        try {
+            const body = await generate('foreground');
+            if (!body) return null;
+            const result: TextPreviewResult = { body, mode };
+            await Bun.write(cacheFile, JSON.stringify(result));
+            pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
+            return { value: result, stale: false };
+        } catch (err) {
+            // Overload is not "no preview": surface the runner's 503 so the client
+            // can retry, instead of caching the miss as a 404.
+            if (err instanceof ApiError && err.status === 503) throw err;
+            console.error(`[preview] Failed to generate ${mode} preview for ${pathId}:`, err);
+            return null;
+        }
+    })();
+    inFlightFirstText.set(cacheName, task);
     try {
-        const body = await generate();
-        if (!body) return null;
-        const result: TextPreviewResult = { body, mode };
-        await Bun.write(cacheFile, JSON.stringify(result));
-        pruneOldVersions(previewsDir, pathId, cacheName).catch(() => {});
-        return { value: result, stale: false };
-    } catch (err) {
-        console.error(`[preview] Failed to generate ${mode} preview for ${pathId}:`, err);
-        return null;
+        return await task;
+    } finally {
+        inFlightFirstText.delete(cacheName);
     }
 }
 
@@ -170,18 +195,19 @@ async function readNewestStaleText(
 }
 
 // Fire-and-forget regeneration of the current-version text preview, deduped on cacheName so
-// concurrent requests for the same stale path share one generation.
+// concurrent requests for the same stale path share one generation. A failed or dropped
+// (runner-overload) regeneration leaves the stale file in place — a later request retries.
 function regenerateTextInBackground(
     previewsDir: string,
     pathId: string,
     cacheName: string,
     mode: TextPreviewResult['mode'],
-    generate: () => Promise<string | null>,
+    generate: TextPreviewGenerator,
 ): void {
     if (inFlightText.has(cacheName)) return;
     const task = (async () => {
         try {
-            const body = await generate();
+            const body = await generate('background');
             if (!body) return;
             const result: TextPreviewResult = { body, mode };
             await Bun.write(path.join(previewsDir, cacheName), JSON.stringify(result));
@@ -281,8 +307,8 @@ async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<Ser
     }
 
     if (mime === DRIVE_MIME_SHEETS) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigensheets', () =>
-            generateEigensheetsPreview(mount, drivePath),
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigensheets', (priority) =>
+            generateEigensheetsPreview(mount, drivePath, priority),
         );
     }
 

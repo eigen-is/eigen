@@ -3,7 +3,7 @@
   "scripts": {
     "test": "bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/",
     "dev": "bun run --env-file=../../.env --watch src/index.ts",
-    "buildfordocker": "bun build --minify --sourcemap --target=bun --entry-naming '[name].[ext]' --external 'node_modules/*' --external 'sharp' --external 'jsdom' --external 'css-tree' --external '@turbodocx/*' --splitting src/index.ts src/lib/shared/thumbnail-worker.ts --outdir=./build",
+    "buildfordocker": "bun build --minify --sourcemap --target=bun --entry-naming '[name].[ext]' --external 'node_modules/*' --external 'sharp' --external 'jsdom' --external 'css-tree' --external '@turbodocx/*' --splitting src/index.ts src/lib/shared/thumbnail-worker.ts src/lib/document/transform/worker.ts --outdir=./build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -1,4 +1,5 @@
 import { app } from './app';
+import { documentTransformRunner } from './lib/document/transform/runner';
 import { drainACLFanOuts } from './lib/drive/acl-propagation';
 import { shutdownAllHomes } from './lib/home';
 import { registerScheduledJobs } from './lib/scheduler/jobs';
@@ -25,6 +26,10 @@ async function gracefulShutdown(signal: string) {
     console.log(`\n${signal} received, shutting down gracefully...`);
     stopAllSchedules();
     server.stop();
+    // Stop transform admission and finish/terminate the active Worker before the
+    // Mount/database teardown below — jobs hold no db leases, but their results
+    // must not race the cache/mount shutdown.
+    await documentTransformRunner.close();
     // Each mount flushes its upload queue (bounded by this deadline) during destruct, after
     // its final close-time enqueues but before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
