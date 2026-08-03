@@ -18,6 +18,7 @@ import {
     drivePut,
     driveUpload,
     getTestContext,
+    setMaxUploadSizeMB,
     TEST_PNG_BYTES,
 } from './setup';
 
@@ -79,15 +80,6 @@ async function readDocMedia(pathId: string, name: string): Promise<Buffer> {
     const file = await mount.readFile(image.id);
     if (!file) throw new Error(`${name} unreadable`);
     return Buffer.from(await file.arrayBuffer());
-}
-
-async function setMaxUploadSizeMB(mb: number): Promise<void> {
-    const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
-    });
-    expect(res.status).toBe(200);
 }
 
 // Node types the document carries, flattened for order-independent assertions.
@@ -212,13 +204,13 @@ describe('Eigendoc docx import/convert', () => {
         // /convert buffers an already-stored file, so it needs its own bound — the
         // upload-time limit can have been raised since the file landed.
         const uploaded = await upload('x'.repeat(2 * 1024 * 1024), 'oversized.docx');
-        await setMaxUploadSizeMB(1);
+        await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
         try {
             const res = await convertRequest(uploaded.id);
             expect(res.status).toBe(413);
             expect(await res.text()).toBe('Source file too large');
         } finally {
-            await setMaxUploadSizeMB(35);
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }
     }, 60_000);
 });

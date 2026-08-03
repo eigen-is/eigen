@@ -1,6 +1,14 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
-import { assertJson, authedRequest, driveGet, drivePost, driveUpload, getTestContext } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    driveGet,
+    drivePost,
+    driveUpload,
+    getTestContext,
+    setMaxUploadSizeMB,
+} from './setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -34,15 +42,6 @@ async function importFromDrive(
             body: JSON.stringify(body),
         },
     );
-}
-
-async function setMaxUploadSizeMB(sessionToken: string, mb: number) {
-    const res = await authedRequest(sessionToken, '/settings/server', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
-    });
-    expect(res.status).toBe(200);
 }
 
 describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {

@@ -14,7 +14,15 @@ import { getHome } from '../lib/home/get-home';
 import { importIntoDocument } from '../lib/import/import-document';
 import { normalizeMonthMinuteTokens, xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { getUserById } from '../lib/user';
-import { assertJson, authedRequest, driveGet, drivePut, driveUpload, getTestContext } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    driveGet,
+    drivePut,
+    driveUpload,
+    getTestContext,
+    setMaxUploadSizeMB,
+} from './setup';
 
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -81,15 +89,6 @@ async function injectLocationHyperlinks(
         : xml.replace('<pageMargins', `<hyperlinks>${entries}</hyperlinks><pageMargins`);
     zip.file(path, patched);
     return zip.generateAsync({ type: 'arraybuffer' });
-}
-
-async function setMaxUploadSizeMB(sessionToken: string, mb: number): Promise<void> {
-    const res = await authedRequest(sessionToken, '/settings/server', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
-    });
-    expect(res.status).toBe(200);
 }
 
 async function readSnapshot(ownerId: string, mountId: string, pathId: string): Promise<Sheet[]> {

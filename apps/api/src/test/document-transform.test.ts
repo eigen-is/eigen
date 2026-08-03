@@ -16,11 +16,7 @@ import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } fro
 import { buildPreviewUrlMap } from '../lib/document/media';
 import { readSheetsFromDoc } from '../lib/document/sheets';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
-import {
-    type DocImportWorkerResult,
-    type DocumentTransformResponse,
-    toTransferableBuffer,
-} from '../lib/document/transform/protocol';
+import { type DocumentTransformResponse, toTransferableBuffer } from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
 import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
 import { exportEigendocToHtml, runEigendocExport } from '../lib/export/doc/html';
@@ -50,6 +46,7 @@ import {
 } from './fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from './fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from './fixtures/heavy-sheets';
+import { exportBytes, importDocUpdate, importSnapshot, previewBody } from './fixtures/transform-results';
 import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from './setup';
 
 // End-to-end validation of the off-thread eigensheets preview and exports: Worker
@@ -72,36 +69,6 @@ beforeAll(async () => {
     const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
     rootId = root.id;
 });
-
-// The request kind decides which result member the Worker returns; these keep the
-// assertions honest about which one they expect.
-function previewBody(response: DocumentTransformResponse): string {
-    if (!response.ok || !('body' in response.result)) {
-        throw new Error(`expected a preview body, got ${JSON.stringify(response)}`);
-    }
-    return response.result.body;
-}
-
-function exportBytes(response: DocumentTransformResponse): ArrayBuffer {
-    if (!response.ok || !('data' in response.result)) {
-        throw new Error(`expected export bytes, got ${JSON.stringify(response)}`);
-    }
-    return response.result.data;
-}
-
-function importSnapshot(response: DocumentTransformResponse): string {
-    if (!response.ok || !('snapshotJson' in response.result)) {
-        throw new Error(`expected an import snapshot, got ${JSON.stringify(response)}`);
-    }
-    return new TextDecoder().decode(response.result.snapshotJson);
-}
-
-function importDocUpdate(response: DocumentTransformResponse): DocImportWorkerResult {
-    if (!response.ok || !('update' in response.result)) {
-        throw new Error(`expected a document update, got ${JSON.stringify(response)}`);
-    }
-    return response.result;
-}
 
 // Corrupt only the newest update — the base write must survive so the transform
 // still has content to render.
@@ -439,35 +406,133 @@ async function buildImportFixture(): Promise<ArrayBuffer> {
     notes.getCell('A1').value = 'Second sheet';
     notes.getCell('A2').value = { text: 'link', hyperlink: 'https://example.com/report' };
 
-    const buffer = await workbook.xlsx.writeBuffer();
-    const view = new Uint8Array(buffer);
-    const out = new ArrayBuffer(view.byteLength);
-    new Uint8Array(out).set(view);
-    return out;
+    return toTransferableBuffer(new Uint8Array(await workbook.xlsx.writeBuffer()));
+}
+
+async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
+    return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
+        method: 'POST',
+        body,
+    });
+}
+
+// The xlsx and docx import/convert failure contracts are identical — same routes, same
+// statuses, the same untouched-target guarantee — so both formats run through one pair
+// of helpers over their own fixture.
+type ImportFormatFixture = {
+    extension: 'xlsx' | 'docx';
+    createType: 'sheets' | 'doc';
+    targetType: 'eigensheets' | 'eigendoc';
+    mimeType: string;
+    build: () => Promise<ArrayBuffer>;
+    readState: (pathId: string) => Promise<unknown>;
+    expectSeeded: (state: unknown) => void;
+};
+
+async function liveState(pathId: string, read: (doc: Y.Doc) => unknown): Promise<unknown> {
+    const home = await getHome(ctx.alice.user.id);
+    const collab = await home.drive.getCollabDocument(mountId, pathId);
+    return read(collab.doc);
+}
+
+const XLSX_FIXTURE: ImportFormatFixture = {
+    extension: 'xlsx',
+    createType: 'sheets',
+    targetType: 'eigensheets',
+    mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    build: buildImportFixture,
+    readState: (pathId) => liveState(pathId, (doc) => doc.getMap('state').get('snapshot')),
+    expectSeeded: (state) => expect(typeof state).toBe('string'),
+};
+
+const DOCX_FIXTURE: ImportFormatFixture = {
+    extension: 'docx',
+    createType: 'doc',
+    targetType: 'eigendoc',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    build: () => buildGoldenDocx(TEST_PNG_BYTES),
+    readState: (pathId) => liveState(pathId, readEigendocFromDoc),
+    expectSeeded: (state) => expect((state as JSONContent).content?.length).toBeGreaterThan(0),
+};
+
+async function expectFailedImportLeavesTargetUntouched(fixture: ImportFormatFixture): Promise<void> {
+    const target = await drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${rootId}/create/${fixture.createType}`,
+        { fileName: `${fixture.extension}-import-crash-target` },
+    );
+    expect((await importRequest(target.id, await fixture.build())).status).toBe(200);
+    const before = await fixture.readState(target.id);
+    fixture.expectSeeded(before);
+
+    const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+        ok: false as const,
+        error: { code: 'crashed' as const, message: 'forced failure' },
+    }));
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+        const res = await importRequest(target.id, await fixture.build());
+        expect(res.status).toBe(500);
+        expect(await fixture.readState(target.id)).toEqual(before);
+    } finally {
+        errorSpy.mockRestore();
+        runSpy.mockRestore();
+    }
+}
+
+async function expectFailedConvertCreatesNoDestination(fixture: ImportFormatFixture): Promise<void> {
+    const folder = await drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${rootId}`,
+        { folderName: `${fixture.extension}-convert-crash` },
+    );
+    const sourceName = `crash.${fixture.extension}`;
+    const uploaded = await driveUpload<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        folder.id,
+        new File([await fixture.build()], sourceName, { type: fixture.mimeType }),
+    );
+
+    const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+        ok: false as const,
+        error: { code: 'crashed' as const, message: 'forced failure' },
+    }));
+    const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+    try {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/${fixture.targetType}`,
+            { method: 'POST' },
+        );
+        expect(res.status).toBe(500);
+        const contents = await driveGetList(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            'folder',
+            folder.id,
+        );
+        expect(contents.map((entry) => entry.name)).toEqual([sourceName]);
+    } finally {
+        errorSpy.mockRestore();
+        runSpy.mockRestore();
+    }
 }
 
 describe('document transform (xlsx import)', () => {
-    async function importRequest(pathId: string, body: ArrayBuffer) {
-        return authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`,
-            { method: 'POST', body },
-        );
-    }
-
-    async function liveSnapshot(pathId: string): Promise<unknown> {
-        const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, pathId);
-        return collab.doc.getMap('state').get('snapshot');
-    }
-
     test('Worker import equals the pre-move parse + recalc pipeline', async () => {
         const response = await documentTransformRunner.run(
             { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data: await buildImportFixture() },
             { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
         );
         const snapshotJson = importSnapshot(response);
-        expect(new Bun.CryptoHasher('sha256').update(snapshotJson).digest('hex')).toBe(GOLDEN_IMPORT_SNAPSHOT_SHA256);
+        expect(sha256(snapshotJson)).toBe(GOLDEN_IMPORT_SNAPSHOT_SHA256);
         expect(response.ok && response.warnings).toEqual([]);
 
         // The same pure pipeline the Worker dispatches to, run on this thread.
@@ -526,74 +591,11 @@ describe('document transform (xlsx import)', () => {
     }, 120_000);
 
     test('a failed import Worker leaves the target document untouched', async () => {
-        const target = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/sheets`,
-            { fileName: 'import-crash-target' },
-        );
-        expect((await importRequest(target.id, await buildImportFixture())).status).toBe(200);
-        const before = await liveSnapshot(target.id);
-        expect(typeof before).toBe('string');
-
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
-            ok: false as const,
-            error: { code: 'crashed' as const, message: 'forced failure' },
-        }));
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const res = await importRequest(target.id, await buildImportFixture());
-            expect(res.status).toBe(500);
-            expect(await liveSnapshot(target.id)).toBe(before);
-        } finally {
-            errorSpy.mockRestore();
-            runSpy.mockRestore();
-        }
+        await expectFailedImportLeavesTargetUntouched(XLSX_FIXTURE);
     }, 120_000);
 
     test('a failed convert Worker creates no destination document', async () => {
-        const folder = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}`,
-            { folderName: 'convert-crash' },
-        );
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            folder.id,
-            new File([await buildImportFixture()], 'crash.xlsx', {
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            }),
-        );
-
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
-            ok: false as const,
-            error: { code: 'crashed' as const, message: 'forced failure' },
-        }));
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
-                { method: 'POST' },
-            );
-            expect(res.status).toBe(500);
-            const contents = await driveGetList(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                'folder',
-                folder.id,
-            );
-            expect(contents.map((entry) => entry.name)).toEqual(['crash.xlsx']);
-        } finally {
-            errorSpy.mockRestore();
-            runSpy.mockRestore();
-        }
+        await expectFailedConvertCreatesNoDestination(XLSX_FIXTURE);
     }, 120_000);
 });
 
@@ -923,14 +925,6 @@ const GOLDEN_DOCX_PM_JSON_SHA256 = '15b5feca693ca9ee7c3cf8fe3d030a1bc79bc3a1ac56
 const GOLDEN_DOCX_DOCUMENT_SHA256 = '51ae42c1e14f8f5acfa31337873d126218c155746f6850860afdc90900808cfe';
 
 describe('document transform (docx import)', () => {
-    async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
-        return authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`,
-            { method: 'POST', body },
-        );
-    }
-
     async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {
         return documentTransformRunner.run(
             { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', data },
@@ -989,74 +983,10 @@ describe('document transform (docx import)', () => {
     }, 120_000);
 
     test('a failed import Worker leaves the target document untouched', async () => {
-        const target = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/doc`,
-            { fileName: 'docx-import-crash-target' },
-        );
-        expect((await importRequest(target.id, await buildGoldenDocx(TEST_PNG_BYTES))).status).toBe(200);
-        const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, target.id);
-        const before = readEigendocFromDoc(collab.doc);
-
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
-            ok: false as const,
-            error: { code: 'crashed' as const, message: 'forced failure' },
-        }));
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const res = await importRequest(target.id, await buildGoldenDocx(TEST_PNG_BYTES));
-            expect(res.status).toBe(500);
-            expect(readEigendocFromDoc(collab.doc)).toEqual(before);
-        } finally {
-            errorSpy.mockRestore();
-            runSpy.mockRestore();
-        }
+        await expectFailedImportLeavesTargetUntouched(DOCX_FIXTURE);
     }, 120_000);
 
     test('a failed convert Worker creates no destination document', async () => {
-        const folder = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}`,
-            { folderName: 'docx-convert-crash' },
-        );
-        const uploaded = await driveUpload<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            folder.id,
-            new File([await buildGoldenDocx(TEST_PNG_BYTES)], 'crash.docx', {
-                type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            }),
-        );
-
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
-            ok: false as const,
-            error: { code: 'crashed' as const, message: 'forced failure' },
-        }));
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigendoc`,
-                { method: 'POST' },
-            );
-            expect(res.status).toBe(500);
-            const contents = await driveGetList(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                'folder',
-                folder.id,
-            );
-            expect(contents.map((entry) => entry.name)).toEqual(['crash.docx']);
-        } finally {
-            errorSpy.mockRestore();
-            runSpy.mockRestore();
-        }
+        await expectFailedConvertCreatesNoDestination(DOCX_FIXTURE);
     }, 120_000);
 });

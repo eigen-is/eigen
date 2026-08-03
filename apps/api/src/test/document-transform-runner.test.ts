@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../lib/core/errors';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../lib/document/transform/protocol';
 import { DocumentTransformRunner } from '../lib/document/transform/runner';
+import { exportBytes, importSnapshot, previewBody } from './fixtures/transform-results';
 
 // Runner behavior suite (proposal § Runner tests), driven through the scriptable
 // test worker so no document code runs. The real preview operation is covered in
@@ -56,29 +57,8 @@ function makeRunner(opts: ConstructorParameters<typeof DocumentTransformRunner>[
     return new DocumentTransformRunner({ workerUrl: TEST_WORKER_URL, ...opts });
 }
 
-function responseBody(response: DocumentTransformResponse): string {
-    if (!response.ok || !('body' in response.result)) {
-        throw new Error(`expected a body response, got ${JSON.stringify(response)}`);
-    }
-    return response.result.body;
-}
-
 function timings(response: DocumentTransformResponse): { startedAt: number; endedAt: number } {
-    return JSON.parse(responseBody(response));
-}
-
-function exportBytes(response: DocumentTransformResponse): ArrayBuffer {
-    if (!response.ok || !('data' in response.result)) {
-        throw new Error(`expected export bytes, got ${JSON.stringify(response)}`);
-    }
-    return response.result.data;
-}
-
-function importSnapshot(response: DocumentTransformResponse): string {
-    if (!response.ok || !('snapshotJson' in response.result)) {
-        throw new Error(`expected an import snapshot, got ${JSON.stringify(response)}`);
-    }
-    return new TextDecoder().decode(response.result.snapshotJson);
+    return JSON.parse(previewBody(response));
 }
 
 describe('DocumentTransformRunner', () => {
@@ -248,7 +228,7 @@ describe('DocumentTransformRunner', () => {
             deadlineMs: 5000,
         });
         expect(buffer.byteLength).toBe(0); // detached from the sender
-        expect(JSON.parse(responseBody(response)).receivedBytes).toEqual([5]);
+        expect(JSON.parse(previewBody(response)).receivedBytes).toEqual([5]);
         await runner.close();
     });
 

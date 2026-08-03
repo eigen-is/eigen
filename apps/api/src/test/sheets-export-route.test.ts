@@ -11,33 +11,33 @@ import { authedRequest, driveGet, drivePost, getTestContext } from './setup';
 // Pinned here so moving the transforms into the document-transform Worker cannot
 // change what the route hands back.
 
+const mountId = 'default';
+let ctx: Awaited<ReturnType<typeof getTestContext>>;
+let sheetsPath: DrivePath;
+
+beforeAll(async () => {
+    ctx = await getTestContext();
+    const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+    sheetsPath = await drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${root.id}/create/sheets`,
+        { fileName: 'Export Contract' },
+    );
+    const home = await getHome(ctx.alice.user.id);
+    const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+    seedSheetsDoc(collab.doc, buildGoldenSheets(), buildGoldenOps());
+});
+
+function exportRequest(format: string) {
+    return authedRequest(
+        ctx.alice.user.sessionToken,
+        `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsPath.id}/export/${format}`,
+    );
+}
+
 describe('Sheets export route — response contract', () => {
-    let ctx: Awaited<ReturnType<typeof getTestContext>>;
-    let sheetsPath: DrivePath;
-    const mountId = 'default';
-
-    beforeAll(async () => {
-        ctx = await getTestContext();
-        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
-        sheetsPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${root.id}/create/sheets`,
-            { fileName: 'Export Contract' },
-        );
-        const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
-        seedSheetsDoc(collab.doc, buildGoldenSheets(), buildGoldenOps());
-    });
-
-    function exportRequest(format: string) {
-        return authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsPath.id}/export/${format}`,
-        );
-    }
-
     test('html export serves a standalone document as an attachment', async () => {
         const res = await exportRequest('html');
         expect(res.status).toBe(200);
@@ -86,27 +86,10 @@ const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
 
 suite('Sheets export route — PDF (WeasyPrint end-to-end)', () => {
     test('pdf export serves a rendered PDF as an attachment', async () => {
-        const ctx = await getTestContext();
-        const mountId = 'default';
-        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
-        const sheetsPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${root.id}/create/sheets`,
-            { fileName: 'Pdf Contract' },
-        );
-        const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
-        seedSheetsDoc(collab.doc, buildGoldenSheets(), buildGoldenOps());
-
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsPath.id}/export/pdf`,
-        );
+        const res = await exportRequest('pdf');
         expect(res.status).toBe(200);
         expect(res.headers.get('content-type')).toBe('application/pdf');
-        expect(res.headers.get('content-disposition')).toBe('attachment; filename="Pdf Contract.pdf"');
+        expect(res.headers.get('content-disposition')).toBe('attachment; filename="Export Contract.pdf"');
         const pdf = Buffer.from(await res.arrayBuffer());
         expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
     }, 120_000);

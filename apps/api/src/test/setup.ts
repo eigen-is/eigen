@@ -178,6 +178,17 @@ export async function authedRequest(sessionToken: string, path: string, options?
     );
 }
 
+// The server-wide upload bound every 413 test drives. Server settings are global, so
+// a test that lowers it must restore 35 (the seeded default) in a finally block.
+export async function setMaxUploadSizeMB(sessionToken: string, mb: number): Promise<void> {
+    const res = await authedRequest(sessionToken, '/settings/server', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
+    });
+    expect(res.status).toBe(200);
+}
+
 export function cleanup() {
     // if (existsSync(TEST_DATA_DIR)) {
     //     rmSync(TEST_DATA_DIR, {recursive: true, force: true});
