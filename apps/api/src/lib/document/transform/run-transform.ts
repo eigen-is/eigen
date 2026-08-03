@@ -23,7 +23,14 @@ import { documentTransformRunner, type TransformPriority } from './runner';
 // There is deliberately no main-thread fallback: a runner 503 and controlled
 // document errors keep their HTTP status, every other failure throws.
 
-type TransformOptions = { priority?: TransformPriority; deadlineMs: number; signal?: AbortSignal };
+// prepMs: main-thread media preparation time, measured by the caller's wrapper —
+// logged with the job so a fast Worker behind slow preparation stays visible.
+type TransformOptions = {
+    priority?: TransformPriority;
+    deadlineMs: number;
+    prepMs?: number;
+    signal?: AbortSignal;
+};
 
 async function runTransformRequest(
     request: DocumentTransformRequest,
@@ -33,6 +40,7 @@ async function runTransformRequest(
         priority: opts.priority ?? 'foreground',
         deadlineMs: opts.deadlineMs,
         captureMs: opts.captureMs,
+        prepMs: opts.prepMs,
         signal: opts.signal,
     });
     if (!response.ok) {

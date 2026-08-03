@@ -17,9 +17,8 @@ export type ExportResult = {
     fileName: string;
 };
 
-// `signal` aborts the off-thread sheet transforms when the client disconnects —
-// the runner drops the queued job or terminates its Worker. Doc/slides exports
-// still run on the main thread and ignore it until they move too.
+// `signal` aborts the off-thread transforms when the client disconnects — the runner
+// drops the queued job or terminates its Worker.
 export async function exportDocument(
     mount: Mount,
     path: DrivePath,
@@ -27,9 +26,9 @@ export async function exportDocument(
     signal?: AbortSignal,
 ): Promise<ExportResult> {
     if (path.mimeType === DRIVE_MIME_DOC) {
-        if (format === 'docx') return exportEigendocToDocx(mount, path);
-        if (format === 'pdf') return exportEigendocToPdf(mount, path);
-        if (format === 'html') return exportEigendocToHtml(mount, path);
+        if (format === 'docx') return exportEigendocToDocx(mount, path, signal);
+        if (format === 'pdf') return exportEigendocToPdf(mount, path, signal);
+        if (format === 'html') return exportEigendocToHtml(mount, path, signal);
     }
     if (path.mimeType === DRIVE_MIME_SHEETS) {
         if (format === 'xlsx') return exportSheetsToXlsx(mount, path, signal);
@@ -37,8 +36,8 @@ export async function exportDocument(
         if (format === 'html') return exportSheetsToHtml(mount, path, signal);
     }
     if (path.mimeType === DRIVE_MIME_SLIDES) {
-        if (format === 'pdf') return exportSlidesToPdf(mount, path);
-        if (format === 'html') return exportSlidesToHtml(mount, path);
+        if (format === 'pdf') return exportSlidesToPdf(mount, path, signal);
+        if (format === 'html') return exportSlidesToHtml(mount, path, signal);
     }
     throw new ApiError(400, `Format "${format}" is not supported for ${path.mimeType}`);
 }

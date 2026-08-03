@@ -16,6 +16,7 @@ type TestDirective = {
         | 'echo-buffers'
         | 'document-error'
         | 'export-ok'
+        | 'export-echo-media'
         | 'export-malformed'
         | 'import-ok'
         | 'import-malformed';
@@ -53,6 +54,15 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
         case 'export-ok': {
             // Export results ride the response transfer list, never a clone.
             const data = new Uint8Array([9, 8, 7, 6]).buffer;
+            const response: WorkerResponseEnvelope = { jobId, response: { ok: true, result: { data }, warnings: [] } };
+            postMessage(response, [data]);
+            return;
+        }
+        case 'export-echo-media': {
+            // Doc/slides exports carry prepared media on the same transfer list.
+            const media = 'media' in request ? request.media : [];
+            const sizes = new TextEncoder().encode(JSON.stringify(media.map((item) => item.data.byteLength)));
+            const data = sizes.buffer as ArrayBuffer;
             const response: WorkerResponseEnvelope = { jobId, response: { ok: true, result: { data }, warnings: [] } };
             postMessage(response, [data]);
             return;

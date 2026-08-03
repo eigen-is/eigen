@@ -9,24 +9,28 @@ import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
 import { materializeYjsState } from '../lib/collab/yjs-loader';
 import { ApiError } from '../lib/core/errors';
+import { buildPreviewUrlMap } from '../lib/document/media';
 import { readSheetsFromDoc } from '../lib/document/sheets';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
 import type { DocumentTransformResponse } from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
 import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
-import { exportEigendocToHtml, generateExportHtml } from '../lib/export/doc/html';
+import { exportEigendocToHtml, runEigendocExport } from '../lib/export/doc/html';
+import { collectExportMedia } from '../lib/export/media';
 import { exportSheetsToHtml } from '../lib/export/sheets/html';
 import { exportSheetsToXlsx } from '../lib/export/sheets/xlsx';
-import { exportSlidesToHtml, generateSlidesExportHtml } from '../lib/export/slides/html';
+import { exportSlidesToHtml, runSlidesExport } from '../lib/export/slides/html';
 import { getHome } from '../lib/home/get-home';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
-import { generateEigendocPreview } from '../lib/preview/eigendoc-preview';
+import { generateEigendocPreview, renderEigendocPreviewBody } from '../lib/preview/eigendoc-preview';
 import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-preview';
-import { generateEigenslidesPreview } from '../lib/preview/eigenslides-preview';
+import { generateEigenslidesPreview, renderEigenslidesPreviewBody } from '../lib/preview/eigenslides-preview';
 import {
+    appendGoldenDocParagraph,
     buildGoldenDeck,
     buildGoldenDocJson,
+    editGoldenDeckTitle,
     GOLDEN_BEYOND_CAP,
     GOLDEN_MEDIA_NAME,
     seedDocumentMedia,
@@ -78,6 +82,20 @@ function importSnapshot(response: DocumentTransformResponse): string {
         throw new Error(`expected an import snapshot, got ${JSON.stringify(response)}`);
     }
     return new TextDecoder().decode(response.result.snapshotJson);
+}
+
+// Corrupt only the newest update — the base write must survive so the transform
+// still has content to render.
+async function corruptNewestUpdate(mount: Mount, drivePath: DrivePath): Promise<void> {
+    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
+    const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath!.id);
+    const last = managedDb.db.select({ id: collabSchema.docUpdates.id }).from(collabSchema.docUpdates).all().at(-1);
+    if (!last) throw new Error(`${drivePath.name}: no update to corrupt`);
+    managedDb.db
+        .update(collabSchema.docUpdates)
+        .set({ updateData: GARBAGE })
+        .where(eq(collabSchema.docUpdates.id, last.id))
+        .run();
 }
 
 async function seedDoc(fileName: string): Promise<DrivePath> {
@@ -139,17 +157,7 @@ describe('document transform (eigensheets preview)', () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
 
-        const dataDbPath = await mount.getChildByName(path.id, 'data.db');
-        const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath!.id);
-        const last = managedDb.db.select({ id: collabSchema.docUpdates.id }).from(collabSchema.docUpdates).all().at(-1);
-        expect(last).toBeDefined();
-        // Corrupt only the newest update — the base write must survive so the
-        // preview still has content to render.
-        managedDb.db
-            .update(collabSchema.docUpdates)
-            .set({ updateData: GARBAGE })
-            .where(eq(collabSchema.docUpdates.id, last!.id))
-            .run();
+        await corruptNewestUpdate(mount, path);
 
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
@@ -360,14 +368,7 @@ describe('document transform (eigensheets export)', () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
 
-        const dataDbPath = await mount.getChildByName(path.id, 'data.db');
-        const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath!.id);
-        const last = managedDb.db.select({ id: collabSchema.docUpdates.id }).from(collabSchema.docUpdates).all().at(-1);
-        managedDb.db
-            .update(collabSchema.docUpdates)
-            .set({ updateData: GARBAGE })
-            .where(eq(collabSchema.docUpdates.id, last!.id))
-            .run();
+        await corruptNewestUpdate(mount, path);
 
         const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
         try {
@@ -598,9 +599,11 @@ function normalizeMediaUrls(body: string): string {
     return body.replace(/http:\/\/localhost\/drive\/[^"')\s]+\/preview/g, '{media}');
 }
 
+// `edit` runs as a follow-up transaction, so data.db carries more than one update row.
 async function seedGoldenDocument(
     fileName: string,
     type: 'doc' | 'slides',
+    edit?: (doc: Y.Doc) => void,
 ): Promise<{ mount: Mount; path: DrivePath }> {
     const created = await drivePost<DrivePath>(
         ctx.alice.user.sessionToken,
@@ -613,6 +616,7 @@ async function seedGoldenDocument(
     const collab = await home.drive.getCollabDocument(mountId, created.id);
     if (type === 'doc') seedEigendoc(collab.doc, buildGoldenDocJson());
     else seedSlidesDoc(collab.doc, buildGoldenDeck());
+    edit?.(collab.doc);
 
     const resolved = await home.drive.resolveFile(mountId, created.id);
     await seedDocumentMedia(resolved.mount, resolved.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
@@ -656,8 +660,77 @@ describe('document transform (eigendoc)', () => {
 
     test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
         // The stage before htmlToPdf: the wrapped document WeasyPrint renders.
-        const html = await generateExportHtml(golden.mount, golden.path);
+        const html = await runEigendocExport(golden.mount, golden.path, 'pdf-html');
         expect(sha256(html)).toBe(GOLDEN_DOC_EXPORT_PDF_HTML_SHA256);
+    }, 120_000);
+
+    test('Worker preview equals the same pipeline run on the main thread', async () => {
+        const { mount, path } = golden;
+        const mediaUrls = await buildPreviewUrlMap(mount, path);
+        const direct = renderEigendocPreviewBody(
+            materializeYjsState(await captureCollabSource(mount, path)).doc,
+            mediaUrls,
+        );
+
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'preview',
+                documentType: 'eigendoc',
+                mediaUrls,
+                source: await captureCollabSource(mount, path),
+            },
+            { priority: 'foreground', deadlineMs: 30_000 },
+        );
+        expect(previewBody(response)).toBe(direct.body);
+        expect(response.ok && response.warnings).toEqual(direct.warnings);
+    }, 120_000);
+
+    test('a corrupt update blob surfaces as a warning, not a failed preview', async () => {
+        const { mount, path } = await seedGoldenDocument('worker-doc-corrupt', 'doc', (doc) =>
+            appendGoldenDocParagraph(doc, 'a later edit'),
+        );
+        await corruptNewestUpdate(mount, path);
+
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const response = await documentTransformRunner.run(
+                {
+                    kind: 'preview',
+                    documentType: 'eigendoc',
+                    mediaUrls: await buildPreviewUrlMap(mount, path),
+                    source: await captureCollabSource(mount, path),
+                },
+                { priority: 'foreground', deadlineMs: 30_000 },
+            );
+            expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
+            // The skipped edit is gone, the base write still renders.
+            expect(previewBody(response)).toContain('Quarterly Report');
+            expect(previewBody(response)).not.toContain('a later edit');
+        } finally {
+            errorSpy.mockRestore();
+        }
+    }, 120_000);
+
+    test('export media crosses the boundary as transferred buffers', async () => {
+        const { mount, path } = golden;
+        const media = await collectExportMedia(mount, path);
+        expect(media).toHaveLength(1);
+        expect(media[0].name).toBe(GOLDEN_MEDIA_NAME);
+
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'export',
+                documentType: 'eigendoc',
+                format: 'html',
+                title: path.name,
+                media,
+                source: await captureCollabSource(mount, path),
+            },
+            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+        );
+        // Ownership moved to the Worker, and the bytes came back as a data URI.
+        expect(media[0].data.byteLength).toBe(0);
+        expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/webp;base64,');
     }, 120_000);
 });
 
@@ -696,7 +769,57 @@ describe('document transform (eigenslides)', () => {
 
     test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
         // Fixed-size PDF mode: px geometry instead of container queries.
-        const html = await generateSlidesExportHtml(golden.mount, golden.path, 'pdf');
+        const html = await runSlidesExport(golden.mount, golden.path, 'pdf-html');
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
+    }, 120_000);
+
+    test('Worker preview equals the same pipeline run on the main thread', async () => {
+        const { mount, path } = golden;
+        const mediaUrls = await buildPreviewUrlMap(mount, path);
+        const direct = renderEigenslidesPreviewBody(
+            materializeYjsState(await captureCollabSource(mount, path)).doc,
+            mediaUrls,
+        );
+
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'preview',
+                documentType: 'eigenslides',
+                mediaUrls,
+                source: await captureCollabSource(mount, path),
+            },
+            { priority: 'foreground', deadlineMs: 30_000 },
+        );
+        expect(previewBody(response)).toBe(direct.body);
+        expect(response.ok && response.warnings).toEqual(direct.warnings);
+    }, 120_000);
+
+    test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
+        const { mount, path } = await seedGoldenDocument('worker-deck-corrupt', 'slides', (doc) =>
+            editGoldenDeckTitle(doc, 'a later edit'),
+        );
+        await corruptNewestUpdate(mount, path);
+
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const response = await documentTransformRunner.run(
+                {
+                    kind: 'export',
+                    documentType: 'eigenslides',
+                    format: 'html',
+                    title: stripEigenExtension(path.name),
+                    media: await collectExportMedia(mount, path),
+                    source: await captureCollabSource(mount, path),
+                },
+                { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+            );
+            expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
+            // The skipped edit is gone, the base write still renders.
+            const html = Buffer.from(exportBytes(response)).toString('utf-8');
+            expect(html).toContain('Deck <strong>title</strong>');
+            expect(html).not.toContain('a later edit');
+        } finally {
+            errorSpy.mockRestore();
+        }
     }, 120_000);
 });

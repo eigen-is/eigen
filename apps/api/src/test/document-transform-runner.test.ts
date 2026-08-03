@@ -33,6 +33,20 @@ function makeExportRequest(directive: TestDirective = {}): DocumentTransformRequ
     return request as unknown as DocumentTransformRequest;
 }
 
+// Doc/slides exports carry prepared media buffers, which ride the same transfer list.
+function makeMediaExportRequest(directive: TestDirective, media: ArrayBuffer[]): DocumentTransformRequest {
+    const request = {
+        kind: 'export',
+        documentType: 'eigendoc',
+        format: 'html',
+        title: 'runner-test',
+        media: media.map((data, i) => ({ name: `media-${i}.png`, contentType: 'image/png', data })),
+        source: { snapshot: null, updates: [] },
+        test: directive,
+    };
+    return request as unknown as DocumentTransformRequest;
+}
+
 function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)) {
     const request = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data, test: directive };
     return request as unknown as DocumentTransformRequest;
@@ -245,6 +259,18 @@ describe('DocumentTransformRunner', () => {
             deadlineMs: 5000,
         });
         expect([...new Uint8Array(exportBytes(response))]).toEqual([9, 8, 7, 6]);
+        await runner.close();
+    });
+
+    test('export media buffers transfer (detach) to the worker and arrive intact', async () => {
+        const runner = makeRunner();
+        const media = [new Uint8Array([1, 2, 3]).buffer, new Uint8Array([4, 5, 6, 7]).buffer];
+        const response = await runner.run(makeMediaExportRequest({ behavior: 'export-echo-media' }, media), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(media.map((buffer) => buffer.byteLength)).toEqual([0, 0]); // detached from the sender
+        expect(JSON.parse(Buffer.from(exportBytes(response)).toString('utf-8'))).toEqual([3, 4]);
         await runner.close();
     });
 

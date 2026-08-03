@@ -142,6 +142,16 @@ export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     writeEigendocToYjs(doc, json, docSchema);
 }
 
+// A follow-up edit in its own transaction, the way an editor session writes one, so
+// data.db carries a real update-row history instead of a single consolidated blob.
+export function appendGoldenDocParagraph(doc: Y.Doc, text: string): void {
+    doc.transact(() => {
+        const paragraph = new Y.XmlElement('paragraph');
+        paragraph.insert(0, [new Y.XmlText(text)]);
+        doc.getXmlFragment('default').push([paragraph]);
+    });
+}
+
 function textObject(id: string, slideId: string, overrides: Partial<TextObject>): TextObject {
     return {
         id,
@@ -254,6 +264,15 @@ export function seedSlidesDoc(doc: Y.Doc, deck: DeckData): void {
             slidesMap.set(slideId, ySlide);
         }
         slideOrder.push(deck.slideOrder);
+    });
+}
+
+// A follow-up edit in its own transaction — the deck's equivalent of
+// appendGoldenDocParagraph.
+export function editGoldenDeckTitle(doc: Y.Doc, text: string): void {
+    doc.transact(() => {
+        const title = doc.getMap('objects').get('obj-1') as Y.Map<unknown>;
+        title.set('text', `<p>${text}</p>`);
     });
 }
 

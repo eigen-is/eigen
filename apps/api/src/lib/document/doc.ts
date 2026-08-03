@@ -6,11 +6,18 @@ import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
+import { listDocumentMedia } from './media';
 
 export type EigendocContent = {
     json: JSONContent;
     mediaByName: Map<string, DrivePath>;
 };
+
+// Materialized Yjs doc → ProseMirror JSON. Media-free, so it runs identically on the
+// main thread and inside the document-transform Worker (which has no Mount).
+export function readEigendocFromDoc(doc: Y.Doc): JSONContent {
+    return yXmlFragmentToProsemirrorJSON(doc.getXmlFragment('default'));
+}
 
 export async function readEigendocContent(mount: Mount, drivePath: DrivePath): Promise<EigendocContent> {
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
@@ -20,13 +27,8 @@ export async function readEigendocContent(mount: Mount, drivePath: DrivePath): P
     // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
     const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
     const { doc: ydoc } = loadYjsState(managedDb);
-    const json = yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default'));
 
-    const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
-    const mediaChildren = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
-    const mediaByName = new Map(mediaChildren.map((f) => [f.name, f]));
-
-    return { json, mediaByName };
+    return { json: readEigendocFromDoc(ydoc), mediaByName: await listDocumentMedia(mount, drivePath) };
 }
 
 export function writeEigendocToYjs(doc: Y.Doc, json: JSONContent, schema: Schema): void {

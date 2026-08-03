@@ -2,10 +2,16 @@
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
-import { generateExportHtml } from './html';
+import { runEigendocExport } from './html';
 
-export async function exportEigendocToDocx(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const html = await generateExportHtml(mount, drivePath);
+export async function exportEigendocToDocx(
+    mount: Mount,
+    drivePath: DrivePath,
+    signal?: AbortSignal,
+): Promise<ExportResult> {
+    // The same document the HTML download serves; the DOCX conversion itself still
+    // runs on the main thread (it moves into the Worker with the DOCX phase).
+    const html = (await runEigendocExport(mount, drivePath, 'html', signal)).toString('utf-8');
     const title = stripEigenExtension(drivePath.name);
 
     const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;

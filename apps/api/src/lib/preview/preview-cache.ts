@@ -296,14 +296,14 @@ async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<Ser
     const cacheName = textCacheName(drivePath);
 
     if (mime === DRIVE_MIME_DOC) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigendoc', () =>
-            generateEigendocPreview(mount, drivePath),
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigendoc', (priority) =>
+            generateEigendocPreview(mount, drivePath, priority),
         );
     }
 
     if (mime === DRIVE_MIME_SLIDES) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigenslides', () =>
-            generateEigenslidesPreview(mount, drivePath),
+        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigenslides', (priority) =>
+            generateEigenslidesPreview(mount, drivePath, priority),
         );
     }
 

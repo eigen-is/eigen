@@ -35,9 +35,16 @@ const CLOSE_GRACE_MS = 5_000;
 // Shown verbatim by useExportDocument's error toast — keep it human-readable.
 const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
-// captureMs: main-thread source-capture time measured by the caller — logged per
-// job because a fast Worker time with a slow capture is not a successful offload.
-type RunOptions = { priority: TransformPriority; deadlineMs: number; captureMs?: number; signal?: AbortSignal };
+// captureMs / prepMs: main-thread source-capture and media-preparation time measured
+// by the caller — logged per job because a fast Worker time with slow main-thread
+// preparation is not a successful offload.
+type RunOptions = {
+    priority: TransformPriority;
+    deadlineMs: number;
+    captureMs?: number;
+    prepMs?: number;
+    signal?: AbortSignal;
+};
 
 type Job = {
     id: number;
@@ -45,6 +52,7 @@ type Job = {
     priority: TransformPriority;
     deadlineMs: number;
     captureMs?: number;
+    prepMs?: number;
     enqueuedAt: number;
     resolve: (response: DocumentTransformResponse) => void;
 };
@@ -137,6 +145,7 @@ export class DocumentTransformRunner {
                 priority: opts.priority,
                 deadlineMs: opts.deadlineMs,
                 captureMs: opts.captureMs,
+                prepMs: opts.prepMs,
                 enqueuedAt: Date.now(),
                 resolve,
             };
@@ -203,7 +212,8 @@ export class DocumentTransformRunner {
             console.log(
                 `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
                     `priority=${job.priority} outcome=${outcome} queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
-                    `captureMs=${job.captureMs?.toFixed(0) ?? -1} inputBytes=${inputBytes} ` +
+                    `captureMs=${job.captureMs?.toFixed(0) ?? -1} prepMs=${job.prepMs?.toFixed(0) ?? -1} ` +
+                    `inputBytes=${inputBytes} ` +
                     `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes}` +
                     (warnings ? ` warnings=${warnings.map((warning) => warning.code).join(',')}` : ''),
             );

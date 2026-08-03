@@ -3,24 +3,37 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 // Closed request/response unions crossing the document-transform Worker boundary.
 // Only clone-safe primitives and ArrayBuffers ride here — never Mount, database,
 // Y.Doc, or other class instances, and never module/function names user input
-// could influence. Phase 2 carries the eigensheets preview, sheet exports and
-// xlsx import; doc/slides operations join the union in later phases.
+// could influence. Phases 2–3 carry every eigensheets/eigendoc/eigenslides preview
+// and HTML/PDF export plus the xlsx import; DOCX joins the union in a later phase.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the Worker returns the document it renders from.
 export type SheetExportFormat = 'html' | 'xlsx' | 'pdf-html';
+export type DocumentExportFormat = 'html' | 'pdf-html';
+
+// Doc/slides media, prepared on the main thread (Mount I/O + screen previews) and
+// transferred; the Worker builds the data: URIs from these bytes.
+export type ExportMedia = { name: string; contentType: string; data: ArrayBuffer };
 
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
-export type PreviewTransformJob = { kind: 'preview'; documentType: 'eigensheets' };
+// Doc/slides previews reference media by URL, so no bytes cross for a preview.
+export type PreviewTransformJob =
+    | { kind: 'preview'; documentType: 'eigensheets' }
+    | { kind: 'preview'; documentType: 'eigendoc' | 'eigenslides'; mediaUrls: Record<string, string> };
 
-// `title` is the stripped document name — the Worker has no DrivePath.
-export type ExportTransformJob = {
-    kind: 'export';
-    documentType: 'eigensheets';
-    format: SheetExportFormat;
-    title: string;
-};
+// `title` is the document title the renderer embeds — the Worker has no DrivePath.
+// (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
+// container name, frozen output.)
+export type ExportTransformJob =
+    | { kind: 'export'; documentType: 'eigensheets'; format: SheetExportFormat; title: string }
+    | {
+          kind: 'export';
+          documentType: 'eigendoc' | 'eigenslides';
+          format: DocumentExportFormat;
+          title: string;
+          media: ExportMedia[];
+      };
 
 // Pure conversion of uploaded bytes: the Worker learns nothing about the
 // destination — no owner, mount, ACL or path. The formats stay narrow until
@@ -73,6 +86,9 @@ export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[]
     const buffers: ArrayBuffer[] = [];
     if (request.source.snapshot) buffers.push(request.source.snapshot.data);
     for (const update of request.source.updates) buffers.push(update.data);
+    if (request.kind === 'export' && 'media' in request) {
+        for (const item of request.media) buffers.push(item.data);
+    }
     return buffers;
 }
 
