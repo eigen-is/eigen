@@ -18,15 +18,15 @@ export async function renderEigensheetsExport(
 
     switch (format) {
         case 'html': {
-            const { renderSheetsExportDocument } = await import('./html');
+            const { renderSheetsExportDocument } = await import('./render');
             return { data: encodeDocument(renderSheetsExportDocument(sheets, title)), warnings };
         }
         case 'pdf-html': {
-            const { renderSheetsPdfDocument } = await import('./pdf');
+            const { renderSheetsPdfDocument } = await import('./render');
             return { data: encodeDocument(renderSheetsPdfDocument(sheets, title)), warnings };
         }
         case 'xlsx': {
-            const { sheetsToXlsx } = await import('./xlsx');
+            const { sheetsToXlsx } = await import('./to-xlsx');
             return { data: toTransferableBuffer(await sheetsToXlsx(sheets)), warnings };
         }
     }

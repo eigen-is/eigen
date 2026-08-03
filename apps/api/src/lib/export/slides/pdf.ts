@@ -2,7 +2,7 @@ import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive'
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { htmlToPdf } from '../weasyprint';
-import { runSlidesExport } from './html';
+import { runEigenslidesExport } from './html';
 
 export async function exportSlidesToPdf(
     mount: Mount,
@@ -11,7 +11,7 @@ export async function exportSlidesToPdf(
 ): Promise<ExportResult> {
     // The Worker returns the fixed-size HTML; WeasyPrint stays a main-thread
     // subprocess (already off-process, so it never blocks the event loop).
-    const bytes = await runSlidesExport(mount, drivePath, 'pdf-html', signal);
+    const bytes = await runEigenslidesExport(mount, drivePath, 'pdf-html', signal);
 
     return {
         data: await htmlToPdf(bytes.toString('utf-8')),

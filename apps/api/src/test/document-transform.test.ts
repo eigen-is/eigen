@@ -27,7 +27,7 @@ import { exportEigendocToHtml, runEigendocExport } from '../lib/export/doc/html'
 import { collectExportMedia } from '../lib/export/media';
 import { exportSheetsToHtml } from '../lib/export/sheets/html';
 import { exportSheetsToXlsx } from '../lib/export/sheets/xlsx';
-import { exportSlidesToHtml, runSlidesExport } from '../lib/export/slides/html';
+import { exportSlidesToHtml, runEigenslidesExport } from '../lib/export/slides/html';
 import { getHome } from '../lib/home/get-home';
 import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
@@ -819,7 +819,7 @@ describe('document transform (eigenslides)', () => {
 
     test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
         // Fixed-size PDF mode: px geometry instead of container queries.
-        const html = await runSlidesExport(golden.mount, golden.path, 'pdf-html');
+        const html = await runEigenslidesExport(golden.mount, golden.path, 'pdf-html');
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 

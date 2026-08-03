@@ -5,7 +5,7 @@ import { readSheetsFromDoc } from '../document/sheets';
 import type { TransformWarning } from '../document/transform/protocol';
 import { runTransformToText } from '../document/transform/run-transform';
 import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
-import { renderSheetsPreviewHtml } from '../export/sheets/html';
+import { renderSheetsPreviewHtml } from '../export/sheets/render';
 import type { Mount } from '../mount';
 import { renderPreviewTruncatedMarker } from './preview-marker';
 

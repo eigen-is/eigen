@@ -218,7 +218,7 @@ HTML/PDF export use this same shape — see § HTML/PDF export below.
 
 ### HTML/PDF export
 
-`apps/api/src/lib/export/sheets/html.ts` calls `evaluateConditionalFormat` per sheet and merges
+`apps/api/src/lib/export/sheets/render.ts` calls `evaluateConditionalFormat` per sheet and merges
 `textColor`/`cellColor` into the cell's inline style. `dataBar` entries render as an
 absolutely-positioned `<div>` inside a `position:relative` `<td>`, with geometry mirrored from
 the canvas painter. Negative bars hardcode red (canvas legacy); positive bars use the
@@ -235,7 +235,7 @@ before the sheets reach any exporter.
 Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
 through the same `resolveWebLink` (`@workspace/lib/sheets/web-link`) the editor's link navigation
 uses; internal (`sheet`/`cellrange`) links stay plain text. Native xlsx export lives in
-`export/sheets/xlsx.ts` — coverage and encoding decisions in [EXPORT.md](EXPORT.md#sheets-export).
+`export/sheets/to-xlsx.ts` — coverage and encoding decisions in [EXPORT.md](EXPORT.md#sheets-export).
 
 ### Accepted xlsx round-trip drifts (decisions, pinned in tests where applicable)
 

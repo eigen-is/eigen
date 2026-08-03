@@ -10,7 +10,7 @@ import { collectExportMedia } from '../media';
 // screen previews stay here), then run the one shared transform seam. The Worker
 // returns the UTF-8 export document — `html` is the responsive deck, `pdf-html` the
 // fixed-size document WeasyPrint renders.
-export async function runSlidesExport(
+export async function runEigenslidesExport(
     mount: Mount,
     drivePath: DrivePath,
     format: DocumentExportFormat,
@@ -33,7 +33,7 @@ export async function exportSlidesToHtml(
     signal?: AbortSignal,
 ): Promise<ExportResult> {
     return {
-        data: await runSlidesExport(mount, drivePath, 'html', signal),
+        data: await runEigenslidesExport(mount, drivePath, 'html', signal),
         contentType: 'text/html; charset=utf-8',
         fileName: `${stripEigenExtension(drivePath.name)}.html`,
     };

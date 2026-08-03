@@ -228,7 +228,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 ### Phase — Eigen Native Types (eigenstickies remaining)
 
 **Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets are done — each
-preview reuses the export render functions (`doc/render.ts`, `slides/render.ts`, `sheets/html.ts`) over the
+preview reuses the export render functions (`doc/render.ts`, `slides/render.ts`, `sheets/render.ts`) over the
 shared content readers in `apps/api/src/lib/document/`, inside the transform Worker.
 
 | Type | Status | Approach |

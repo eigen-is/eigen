@@ -220,7 +220,7 @@ function walkFormulaRefs(txt: string, onRef: (ref: string) => string): string {
 //   - state/modules/condition-format.ts (CF formula rules)
 //   - state/events/paste.ts (formula paste with relative refs)
 //   - state/modules/sort.ts (sort moves formulas around)
-//   - apps/api/src/lib/export/sheets/html.ts (server-side CF rule evaluation)
+//   - apps/api/src/lib/export/sheets/render.ts (server-side CF rule evaluation)
 export function functionCopy(txt: string, mode: FormulaShiftMode = 'down', step = 1): string {
     const orient = mode[0] as 'd' | 'u' | 'l' | 'r';
     return walkFormulaRefs(txt, (ref) => shiftRef(orient, ref, step));
