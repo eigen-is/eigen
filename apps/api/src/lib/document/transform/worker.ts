@@ -1,8 +1,9 @@
-import type {
-    DocumentTransformRequest,
-    DocumentTransformResponse,
-    WorkerRequestEnvelope,
-    WorkerResponseEnvelope,
+import {
+    type DocumentTransformRequest,
+    type DocumentTransformResponse,
+    transferListOfResult,
+    type WorkerRequestEnvelope,
+    type WorkerResponseEnvelope,
 } from './protocol';
 
 // One-shot document-transform Worker: executes exactly one request, posts one
@@ -12,7 +13,14 @@ import type {
 // never evaluates DOCX/ExcelJS code (and an HTML export never loads ExcelJS).
 
 async function handleRequest(request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
-    // Every kind carries a Yjs source today, so materialization is shared.
+    // Imports convert uploaded bytes — no document to materialize.
+    if (request.kind === 'import') {
+        const { importXlsxToSheetsSnapshot } = await import('../../import/sheets/transform');
+        const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(request.data);
+        return { ok: true, result: { snapshotJson }, warnings };
+    }
+
+    // Preview and export both read the persisted document, so materialization is shared.
     const { materializeYjsState } = await import('../../collab/yjs-loader');
     const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-worker');
 
@@ -55,6 +63,5 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
         };
     }
     const envelope: WorkerResponseEnvelope = { jobId, response, transformMs: performance.now() - startedAt };
-    // Export bytes ride the transfer list; a preview body is a small clone.
-    postMessage(envelope, response.ok && 'data' in response.result ? [response.result.data] : []);
+    postMessage(envelope, transferListOfResult(response));
 };

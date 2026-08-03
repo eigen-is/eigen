@@ -33,6 +33,11 @@ function makeExportRequest(directive: TestDirective = {}): DocumentTransformRequ
     return request as unknown as DocumentTransformRequest;
 }
 
+function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = new ArrayBuffer(0)) {
+    const request = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data, test: directive };
+    return request as unknown as DocumentTransformRequest;
+}
+
 function makeRunner(opts: ConstructorParameters<typeof DocumentTransformRunner>[0] = {}) {
     return new DocumentTransformRunner({ workerUrl: TEST_WORKER_URL, ...opts });
 }
@@ -53,6 +58,13 @@ function exportBytes(response: DocumentTransformResponse): ArrayBuffer {
         throw new Error(`expected export bytes, got ${JSON.stringify(response)}`);
     }
     return response.result.data;
+}
+
+function importSnapshot(response: DocumentTransformResponse): string {
+    if (!response.ok || !('snapshotJson' in response.result)) {
+        throw new Error(`expected an import snapshot, got ${JSON.stringify(response)}`);
+    }
+    return new TextDecoder().decode(response.result.snapshotJson);
 }
 
 describe('DocumentTransformRunner', () => {
@@ -239,6 +251,29 @@ describe('DocumentTransformRunner', () => {
     test('an export response without export bytes resolves as invalid-response', async () => {
         const runner = makeRunner();
         const malformed = await runner.run(makeExportRequest({ behavior: 'export-malformed' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(malformed.ok).toBe(false);
+        if (!malformed.ok) expect(malformed.error.code).toBe('invalid-response');
+        await runner.close();
+    });
+
+    test('import bytes transfer to the worker and the snapshot returns intact', async () => {
+        const runner = makeRunner();
+        const data = new Uint8Array([1, 2, 3, 4, 5, 6]).buffer;
+        const response = await runner.run(makeImportRequest({ behavior: 'import-ok' }, data), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(data.byteLength).toBe(0); // detached from the sender
+        expect(JSON.parse(importSnapshot(response)).received).toBe(6);
+        await runner.close();
+    });
+
+    test('an import response without snapshot bytes resolves as invalid-response', async () => {
+        const runner = makeRunner();
+        const malformed = await runner.run(makeImportRequest({ behavior: 'import-malformed' }), {
             priority: 'foreground',
             deadlineMs: 5000,
         });

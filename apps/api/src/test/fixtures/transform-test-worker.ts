@@ -16,7 +16,9 @@ type TestDirective = {
         | 'echo-buffers'
         | 'document-error'
         | 'export-ok'
-        | 'export-malformed';
+        | 'export-malformed'
+        | 'import-ok'
+        | 'import-malformed';
     ms?: number;
 };
 
@@ -59,6 +61,21 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
             // Right discriminant, result missing the export payload.
             postMessage({ jobId, response: { ok: true, result: {}, warnings: [] } });
             return;
+        case 'import-ok': {
+            // Import snapshots ride the transfer list too; echo what arrived.
+            const received = 'data' in request ? request.data.byteLength : -1;
+            const snapshotJson = new TextEncoder().encode(JSON.stringify({ received })).buffer as ArrayBuffer;
+            const response: WorkerResponseEnvelope = {
+                jobId,
+                response: { ok: true, result: { snapshotJson }, warnings: [] },
+            };
+            postMessage(response, [snapshotJson]);
+            return;
+        }
+        case 'import-malformed':
+            // Right discriminant, result missing the snapshot payload.
+            postMessage({ jobId, response: { ok: true, result: {}, warnings: [] } });
+            return;
         case 'document-error': {
             const response: WorkerResponseEnvelope = {
                 jobId,
@@ -71,10 +88,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
             break;
     }
 
+    const updates = 'source' in request ? request.source.updates : [];
     const body = JSON.stringify({
         startedAt,
         endedAt: Date.now(),
-        receivedBytes: request.source.updates.map((update) => update.data.byteLength),
+        receivedBytes: updates.map((u) => u.data.byteLength),
     });
     const response: WorkerResponseEnvelope = {
         jobId,

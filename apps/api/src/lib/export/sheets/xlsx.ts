@@ -31,7 +31,7 @@ import type {
 } from 'exceljs';
 import JSZip from 'jszip';
 import { runTransformToBytes } from '../../document/transform/run-transform';
-import { EXPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
+import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { resolveFontFamily } from './fonts';
@@ -84,7 +84,10 @@ export async function exportSheetsToXlsx(
     const job = { kind: 'export', documentType: 'eigensheets', format: 'xlsx', title } as const;
 
     return {
-        data: await runTransformToBytes(mount, drivePath, job, { deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS, signal }),
+        data: await runTransformToBytes(mount, drivePath, job, {
+            deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+            signal,
+        }),
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         fileName: `${title}.xlsx`,
     };

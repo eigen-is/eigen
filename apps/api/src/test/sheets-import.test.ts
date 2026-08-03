@@ -438,7 +438,7 @@ describe('Sheets xlsx import/convert', () => {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
-            { method: 'POST', body: bomb },
+            { method: 'POST', body: new Uint8Array(bomb) },
         );
         expect(res.status).toBe(413);
         expect(await res.text()).toBe('Spreadsheet too large');

@@ -200,7 +200,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-        async ({ params, user }) => {
+        async ({ params, request, user }) => {
             if (params.targetType !== 'eigensheets' && params.targetType !== 'eigendoc') {
                 throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
             }
@@ -211,7 +211,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (path.size > (await getUploadMaxSize(params.ownerId, user.id, params.mountId))) {
                 throw new ApiError(413, 'Source file too large');
             }
-            return await convertToDocument(drive, mount, path, params.targetType, user);
+            // A disconnected conversion has no value — the signal lets the runner drop
+            // the queued job or terminate its Worker.
+            return await convertToDocument(drive, mount, path, params.targetType, user, request.signal);
         },
         { auth: true },
     )
@@ -232,14 +234,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             const buffer = Buffer.from(await request.arrayBuffer());
             if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
-            await importIntoDocument(drive, mount, path, buffer);
+            await importIntoDocument(drive, mount, path, buffer, request.signal);
             return { success: true };
         },
         { auth: true, parse: 'none' },
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
-        async ({ params, body, user }) => {
+        async ({ params, body, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
@@ -253,7 +255,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const sourceFile = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!sourceFile) throw new ApiError(404, 'Source file not found');
             const buffer = Buffer.from(await sourceFile.arrayBuffer());
-            await importIntoDocument(drive, mount, path, buffer);
+            await importIntoDocument(drive, mount, path, buffer, request.signal);
             return { success: true };
         },
         {

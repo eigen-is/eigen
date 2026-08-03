@@ -2,9 +2,8 @@ import { ApiError } from '../../core/errors';
 import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
-    type ExportWorkerResult,
-    type PreviewResult,
     type TransformError,
+    type TransformResult,
     transferListOf,
     type WorkerResponseEnvelope,
 } from './protocol';
@@ -23,8 +22,9 @@ import {
 export type TransformPriority = 'foreground' | 'background';
 
 export const PREVIEW_TRANSFORM_DEADLINE_MS = 30_000;
-// Heavy but user-requested work; the PDF subprocess keeps its own deadline.
-export const EXPORT_TRANSFORM_DEADLINE_MS = 120_000;
+// Heavy but user-requested work (exports, imports and conversions); the PDF
+// subprocess keeps its own deadline.
+export const EXPORT_IMPORT_TRANSFORM_DEADLINE_MS = 120_000;
 
 const MAX_ACTIVE_WORKERS = 1;
 const MAX_QUEUED_JOBS = 16;
@@ -66,20 +66,33 @@ function isValidResponse(
     if (!response || typeof response !== 'object') return false;
     const r = response as {
         ok?: unknown;
-        result?: { body?: unknown; data?: unknown };
+        result?: { body?: unknown; data?: unknown; snapshotJson?: unknown };
         warnings?: unknown;
         error?: { code?: unknown; message?: unknown };
     };
     if (r.ok === true) {
         if (!Array.isArray(r.warnings)) return false;
-        return kind === 'preview' ? typeof r.result?.body === 'string' : r.result?.data instanceof ArrayBuffer;
+        switch (kind) {
+            case 'preview':
+                return typeof r.result?.body === 'string';
+            case 'export':
+                return r.result?.data instanceof ArrayBuffer;
+            case 'import':
+                return r.result?.snapshotJson instanceof ArrayBuffer;
+        }
     }
     if (r.ok === false) return typeof r.error?.code === 'string' && typeof r.error?.message === 'string';
     return false;
 }
 
-function resultBytes(result: PreviewResult | ExportWorkerResult): number {
-    return 'body' in result ? Buffer.byteLength(result.body) : result.data.byteLength;
+function resultBytes(result: TransformResult): number {
+    if ('body' in result) return Buffer.byteLength(result.body);
+    return 'data' in result ? result.data.byteLength : result.snapshotJson.byteLength;
+}
+
+// An import has no source document type — log the type it produces.
+function requestType(request: DocumentTransformRequest): string {
+    return request.kind === 'import' ? request.targetType : request.documentType;
 }
 
 export class DocumentTransformRunner {
@@ -188,7 +201,7 @@ export class DocumentTransformRunner {
             const outputBytes = response.ok ? resultBytes(response.result) : 0;
             const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
             console.log(
-                `[transform] job=${job.id} kind=${job.request.kind} type=${job.request.documentType} ` +
+                `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
                     `priority=${job.priority} outcome=${outcome} queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
                     `captureMs=${job.captureMs?.toFixed(0) ?? -1} inputBytes=${inputBytes} ` +
                     `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes}` +

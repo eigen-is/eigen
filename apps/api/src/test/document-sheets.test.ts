@@ -3,7 +3,8 @@ import type { Op, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { sheetsNeedRecalc } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
-import { readSheetsContent, writeSheetsToYjs } from '../lib/document/sheets';
+import * as Y from 'yjs';
+import { readSheetsContent, writeSheetsSnapshotToYjs, writeSheetsToYjs } from '../lib/document/sheets';
 import { getHome } from '../lib/home/get-home';
 import { importIntoDocument } from '../lib/import/import-document';
 import { driveGet, drivePost, getTestContext } from './setup';
@@ -106,6 +107,38 @@ describe('document/sheets', () => {
         const result = await readSheetsContent(mount, path);
 
         expect(result).toEqual(sheets);
+    });
+
+    test('writeSheetsSnapshotToYjs commits pre-serialized JSON and clears the ops array', async () => {
+        // The import path commits the Worker's snapshot bytes without parsing them,
+        // so this writer must leave the doc in the same state as the Sheet[] one.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'snapshot-writer' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        collab.doc.transact(() => {
+            collab.doc.getArray('ops').push([[{ op: 'replace', path: ['x'], value: 1 }]]);
+        });
+
+        const sheets: Sheet[] = [
+            { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: { v: 'hi' } }], config: {} },
+        ];
+        writeSheetsSnapshotToYjs(collab.doc, JSON.stringify(sheets));
+
+        expect(collab.doc.getArray('ops').length).toBe(0);
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        expect(await readSheetsContent(mount, path)).toEqual(sheets);
+
+        const viaSheets = new Y.Doc();
+        writeSheetsToYjs(viaSheets, sheets);
+        expect(collab.doc.getMap('state').get('snapshot')).toBe(viaSheets.getMap('state').get('snapshot'));
+        viaSheets.destroy();
     });
 
     test('writeSheetsToYjs clears the ops array', async () => {

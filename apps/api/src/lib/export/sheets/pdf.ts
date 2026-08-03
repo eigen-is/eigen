@@ -1,7 +1,7 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { runTransformToBytes } from '../../document/transform/run-transform';
-import { EXPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
+import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { sanitizeExportHtml } from '../sanitize';
@@ -21,7 +21,7 @@ export async function exportSheetsToPdf(
     // The Worker returns the wrapped HTML; WeasyPrint stays a main-thread
     // subprocess (already off-process, so it never blocks the event loop).
     const bytes = await runTransformToBytes(mount, drivePath, job, {
-        deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS,
+        deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
         signal,
     });
     const html = bytes.toString('utf-8');

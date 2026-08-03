@@ -1,47 +1,31 @@
-import type { Sheet } from '@workspace/lib/sheets';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
-import { recalcSheets } from '@workspace/sheet/engine';
 import { ApiError } from '../core';
 import { writeEigendocToYjs } from '../document/doc';
-import { writeSheetsToYjs } from '../document/sheets';
+import { writeSheetsSnapshotToYjs } from '../document/sheets';
+import { type ImportTransformJob, toTransferableBuffer } from '../document/transform/protocol';
+import { runImportToSnapshotJson } from '../document/transform/run-transform';
+import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../document/transform/runner';
 import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
 import type { DocxImage } from './doc/from-docx';
-import { xlsxToSheets } from './sheets/from-xlsx';
 
-// xlsx and docx are zip-based formats — the parsers need the full file in memory to read
-// the central directory and extract parts. Callers are expected to size-check before passing.
-async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
-    try {
-        return await xlsxToSheets(buffer);
-    } catch (err) {
-        if (err instanceof ApiError) throw err;
-        throw new ApiError(400, 'Not a valid xlsx file');
-    }
+const XLSX_TO_SHEETS: ImportTransformJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
+
+// Parsing, guards, recalc and serialization run in the transform Worker; the main
+// thread only commits the returned snapshot. Nothing is created or mutated before
+// the Worker succeeds, so a failed import leaves source and target untouched.
+// The upload Buffer can be a view over a larger pool, and a transfer hands over
+// the WHOLE backing buffer — copy into an exact standalone one first.
+function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<string> {
+    return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), {
+        deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+        signal,
+    });
 }
 
-// Recompute formula cells through our engine once at import so the persisted
-// snapshot carries engine-verified v/m (and a calcChain, so the read-path gate
-// never fires for imported docs). The importer's cached values are usually
-// Excel's own, so this mainly reconciles divergence; a recalc failure must not
-// block the import, so fall back to the parsed sheets. recalcSheets returns a
-// dense `data` matrix, but the importer persists sparse `celldata` only (the
-// computed values are synced into it) — drop `data` so a large import doesn't
-// bloat the snapshot; the read path re-materializes it.
-function recalcImportedSheets(sheets: Sheet[]): Sheet[] {
-    try {
-        return recalcSheets(sheets).map((sheet) => {
-            const lean = { ...sheet };
-            delete lean.data;
-            return lean;
-        });
-    } catch (err) {
-        console.warn('[import] server recalc of imported sheets failed, persisting parsed values:', err);
-        return sheets;
-    }
-}
-
+// docx is a zip-based format — the parser needs the full file in memory to read
+// the central directory and extract parts. Callers are expected to size-check first.
 async function parseDocxOrThrow(buffer: Buffer) {
     try {
         const { docxToPmJson, docSchema } = await import('./doc/from-docx');
@@ -68,6 +52,7 @@ export async function convertToDocument(
     sourcePath: DrivePath,
     targetType: 'eigensheets' | 'eigendoc',
     user?: User,
+    signal?: AbortSignal,
 ): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
 
@@ -79,11 +64,11 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.xlsx')) {
             throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
         }
-        const sheets = await parseXlsxOrThrow(buffer);
+        const snapshotJson = await importXlsxSnapshot(buffer, signal);
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeSheetsToYjs(collabDoc.doc, recalcImportedSheets(sheets));
+        writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
         return newPath;
     }
 
@@ -108,11 +93,12 @@ export async function importIntoDocument(
     mount: Mount,
     path: DrivePath,
     buffer: Buffer,
+    signal?: AbortSignal,
 ): Promise<void> {
     if (path.mimeType === DRIVE_MIME_SHEETS) {
-        const sheets = await parseXlsxOrThrow(buffer);
+        const snapshotJson = await importXlsxSnapshot(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeSheetsToYjs(collabDoc.doc, recalcImportedSheets(sheets));
+        writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
         return;
     }
 

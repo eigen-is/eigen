@@ -14,7 +14,7 @@ import {
     functionCopy,
 } from '@workspace/sheet/engine';
 import { runTransformToBytes } from '../../document/transform/run-transform';
-import { EXPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
+import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
@@ -65,7 +65,10 @@ export async function exportSheetsToHtml(
     const title = stripEigenExtension(drivePath.name);
     const job = { kind: 'export', documentType: 'eigensheets', format: 'html', title } as const;
     return {
-        data: await runTransformToBytes(mount, drivePath, job, { deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS, signal }),
+        data: await runTransformToBytes(mount, drivePath, job, {
+            deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+            signal,
+        }),
         contentType: 'text/html; charset=utf-8',
         fileName: `${title}.html`,
     };

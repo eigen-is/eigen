@@ -13,14 +13,15 @@ import { readSheetsFromDoc } from '../lib/document/sheets';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
 import type { DocumentTransformResponse } from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
-import { documentTransformRunner, EXPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
+import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
 import { exportSheetsToHtml } from '../lib/export/sheets/html';
 import { exportSheetsToXlsx } from '../lib/export/sheets/xlsx';
 import { getHome } from '../lib/home/get-home';
+import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
 import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-preview';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from './fixtures/heavy-sheets';
-import { authedRequest, driveGet, drivePost, getTestContext } from './setup';
+import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestContext } from './setup';
 
 // End-to-end validation of the off-thread eigensheets preview and exports: Worker
 // output must equal the same pipeline executed on the main thread, corruption and
@@ -53,6 +54,13 @@ function exportBytes(response: DocumentTransformResponse): ArrayBuffer {
         throw new Error(`expected export bytes, got ${JSON.stringify(response)}`);
     }
     return response.result.data;
+}
+
+function importSnapshot(response: DocumentTransformResponse): string {
+    if (!response.ok || !('snapshotJson' in response.result)) {
+        throw new Error(`expected an import snapshot, got ${JSON.stringify(response)}`);
+    }
+    return new TextDecoder().decode(response.result.snapshotJson);
 }
 
 async function seedDoc(fileName: string): Promise<DrivePath> {
@@ -318,7 +326,7 @@ describe('document transform (eigensheets export)', () => {
             title: 'golden-export',
         } as const;
         const html = await runTransformToBytes(golden.mount, golden.path, job, {
-            deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS,
+            deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
         });
         expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
@@ -358,12 +366,202 @@ describe('document transform (eigensheets export)', () => {
                     title: stripEigenExtension(path.name),
                     source: await captureCollabSource(mount, path),
                 },
-                { priority: 'foreground', deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS },
+                { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
             expect(exportBytes(response).byteLength).toBeGreaterThan(0);
         } finally {
             errorSpy.mockRestore();
+        }
+    }, 120_000);
+});
+
+// Recorded from the pre-Worker import pipeline (xlsxToSheets + import-document's
+// recalcImportedSheets + JSON.stringify) over buildImportFixture(), so the move
+// off-thread is proven byte-identical. Regenerate only for an intentional
+// converter change.
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '0d9772e1958e05d72706cdb6980ecd3859fd44ea4c2b74c70a4652e557038811';
+
+// Small but representative workbook: values, a stale cached formula result the
+// import recalc must correct, styles, a date format, a merge, a column width, a
+// second sheet and a hyperlink.
+async function buildImportFixture(): Promise<ArrayBuffer> {
+    const workbook = new ExcelJS.Workbook();
+    const data = workbook.addWorksheet('Data');
+    data.getCell('A1').value = 'Region';
+    data.getCell('B1').value = 'Count';
+    data.getCell('A2').value = 'North';
+    data.getCell('B2').value = 42;
+    data.getCell('A3').value = 'South';
+    data.getCell('B3').value = 7;
+    data.getCell('B4').value = { formula: 'SUM(B2:B3)', result: 999 };
+    data.getCell('A1').font = { bold: true, color: { argb: 'FF0000FF' } };
+    data.getCell('B1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEEEEEE' } };
+    const dated = data.getCell('C2');
+    dated.value = new Date(Date.UTC(2024, 2, 15));
+    dated.numFmt = 'dd/mm/yyyy';
+    data.getColumn(1).width = 18;
+    data.mergeCells('A6:B6');
+    data.getCell('A6').value = 'Merged footer';
+
+    const notes = workbook.addWorksheet('Notes');
+    notes.getCell('A1').value = 'Second sheet';
+    notes.getCell('A2').value = { text: 'link', hyperlink: 'https://example.com/report' };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const view = new Uint8Array(buffer);
+    const out = new ArrayBuffer(view.byteLength);
+    new Uint8Array(out).set(view);
+    return out;
+}
+
+describe('document transform (xlsx import)', () => {
+    async function importRequest(pathId: string, body: ArrayBuffer) {
+        return authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`,
+            { method: 'POST', body },
+        );
+    }
+
+    async function liveSnapshot(pathId: string): Promise<unknown> {
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, pathId);
+        return collab.doc.getMap('state').get('snapshot');
+    }
+
+    test('Worker import equals the pre-move parse + recalc pipeline', async () => {
+        const response = await documentTransformRunner.run(
+            { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data: await buildImportFixture() },
+            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+        );
+        const snapshotJson = importSnapshot(response);
+        expect(new Bun.CryptoHasher('sha256').update(snapshotJson).digest('hex')).toBe(GOLDEN_IMPORT_SNAPSHOT_SHA256);
+        expect(response.ok && response.warnings).toEqual([]);
+
+        // The same pure pipeline the Worker dispatches to, run on this thread.
+        const direct = await importXlsxToSheetsSnapshot(await buildImportFixture());
+        expect(snapshotJson).toBe(new TextDecoder().decode(direct.snapshotJson));
+        // The stale cached SUM(B2:B3)=999 was recomputed at import.
+        const sheets = JSON.parse(snapshotJson) as Sheet[];
+        expect(sheets[0].celldata?.find((cell) => cell.r === 3 && cell.c === 1)?.v?.v).toBe(49);
+    }, 120_000);
+
+    test('a recalc failure keeps the parsed values and returns a warning', async () => {
+        const original = { ...engine };
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: () => {
+                throw new Error('forced recalc failure');
+            },
+        }));
+        try {
+            const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(await buildImportFixture());
+            expect(warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
+            const sheets = JSON.parse(new TextDecoder().decode(snapshotJson)) as Sheet[];
+            // Parsed values survive: the xlsx's own stale cached result, not a failure.
+            expect(sheets[0].celldata?.find((cell) => cell.r === 3 && cell.c === 1)?.v?.v).toBe(999);
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
+        }
+    }, 120_000);
+
+    test('a recalc warning from the Worker is logged by the import orchestrator', async () => {
+        const target = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'import-recalc-warning' },
+        );
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Warned', order: 0, celldata: [], config: {} }];
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+            ok: true as const,
+            result: { snapshotJson: new TextEncoder().encode(JSON.stringify(sheets)).buffer as ArrayBuffer },
+            warnings: [{ code: 'recalc-failed' as const, message: 'forced' }],
+        }));
+        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const res = await importRequest(target.id, await buildImportFixture());
+            expect(res.status).toBe(200);
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[import] server recalc of imported sheets failed, persisting parsed values:',
+                'forced',
+            );
+        } finally {
+            warnSpy.mockRestore();
+            runSpy.mockRestore();
+        }
+    }, 120_000);
+
+    test('a failed import Worker leaves the target document untouched', async () => {
+        const target = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'import-crash-target' },
+        );
+        expect((await importRequest(target.id, await buildImportFixture())).status).toBe(200);
+        const before = await liveSnapshot(target.id);
+        expect(typeof before).toBe('string');
+
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+            ok: false as const,
+            error: { code: 'crashed' as const, message: 'forced failure' },
+        }));
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const res = await importRequest(target.id, await buildImportFixture());
+            expect(res.status).toBe(500);
+            expect(await liveSnapshot(target.id)).toBe(before);
+        } finally {
+            errorSpy.mockRestore();
+            runSpy.mockRestore();
+        }
+    }, 120_000);
+
+    test('a failed convert Worker creates no destination document', async () => {
+        const folder = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}`,
+            { folderName: 'convert-crash' },
+        );
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            folder.id,
+            new File([await buildImportFixture()], 'crash.xlsx', {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            }),
+        );
+
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+            ok: false as const,
+            error: { code: 'crashed' as const, message: 'forced failure' },
+        }));
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+                { method: 'POST' },
+            );
+            expect(res.status).toBe(500);
+            const contents = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                'folder',
+                folder.id,
+            );
+            expect(contents.map((entry) => entry.name)).toEqual(['crash.xlsx']);
+        } finally {
+            errorSpy.mockRestore();
+            runSpy.mockRestore();
         }
     }, 120_000);
 });

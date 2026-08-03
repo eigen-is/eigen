@@ -49,11 +49,16 @@ export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Pro
     return sheets;
 }
 
-export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[]): void {
-    const json = JSON.stringify(sheets);
+// The import commit: an already-serialized snapshot goes straight into the live
+// doc, so the Worker's snapshot JSON is never parsed and re-stringified here.
+export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void {
     doc.transact(() => {
-        doc.getMap('state').set('snapshot', json);
+        doc.getMap('state').set('snapshot', snapshotJson);
         const ops = doc.getArray('ops');
         if (ops.length > 0) ops.delete(0, ops.length);
     });
+}
+
+export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[]): void {
+    writeSheetsSnapshotToYjs(doc, JSON.stringify(sheets));
 }
