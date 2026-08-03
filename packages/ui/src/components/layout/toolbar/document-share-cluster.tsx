@@ -1,5 +1,5 @@
 import { useIsMobile } from '@workspace/lib/media';
-import { Activity, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
+import { Activity, Check, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
 import { CountBadge } from '../count-badge';
 import { FindInDocumentButton, FindInDocumentMenuItem, useFindBarRefocus } from '../search/find-in-document-button';
@@ -80,9 +80,11 @@ function MobileClusterKebab({
     onAccessDialogOpen,
     onRename,
     onToggleCommentPanel,
+    commentPanelOpen,
     unresolvedCommentCount,
     watchTarget,
     onToggleActivityPanel,
+    activityPanelOpen,
 }: DocumentShareClusterProps) {
     const { focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
 
@@ -103,6 +105,7 @@ function MobileClusterKebab({
                         <DropdownMenuItem onClick={onToggleActivityPanel}>
                             <Activity className="mr-2" />
                             Activity
+                            {activityPanelOpen && <Check className="h-4 w-4 ml-auto" />}
                         </DropdownMenuItem>
                     )}
                     {watchTarget && <WatchMenuItem {...watchTarget} />}
@@ -110,6 +113,7 @@ function MobileClusterKebab({
                         <DropdownMenuItem onClick={onToggleCommentPanel}>
                             <MessageSquare className="mr-2" />
                             {unresolvedCommentCount ? `Comments (${unresolvedCommentCount})` : 'Comments'}
+                            {commentPanelOpen && <Check className="h-4 w-4 ml-auto" />}
                         </DropdownMenuItem>
                     )}
                     {canWrite && (
