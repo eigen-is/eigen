@@ -14,7 +14,7 @@ export async function exportSlidesToPdf(
     const bytes = await runEigenslidesExport(mount, drivePath, 'pdf-html', signal);
 
     return {
-        data: await htmlToPdf(bytes.toString('utf-8')),
+        data: await htmlToPdf(bytes),
         contentType: 'application/pdf',
         fileName: `${stripEigenExtension(drivePath.name)}.pdf`,
     };

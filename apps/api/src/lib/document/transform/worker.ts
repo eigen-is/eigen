@@ -23,15 +23,15 @@ async function renderPreview(
 ): Promise<{ body: string; warnings: TransformWarning[] }> {
     switch (request.documentType) {
         case 'eigensheets': {
-            const { renderEigensheetsPreviewBody } = await import('../../preview/eigensheets-preview');
+            const { renderEigensheetsPreviewBody } = await import('../../preview/eigensheets-render');
             return renderEigensheetsPreviewBody(doc);
         }
         case 'eigendoc': {
-            const { renderEigendocPreviewBody } = await import('../../preview/eigendoc-preview');
+            const { renderEigendocPreviewBody } = await import('../../preview/eigendoc-render');
             return renderEigendocPreviewBody(doc, request.mediaUrls);
         }
         case 'eigenslides': {
-            const { renderEigenslidesPreviewBody } = await import('../../preview/eigenslides-preview');
+            const { renderEigenslidesPreviewBody } = await import('../../preview/eigenslides-render');
             return renderEigenslidesPreviewBody(doc, request.mediaUrls);
         }
     }

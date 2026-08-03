@@ -1,34 +1,13 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import DOMPurify from 'isomorphic-dompurify';
-import type * as Y from 'yjs';
-import { readSheetsFromDoc } from '../document/sheets';
-import type { TransformWarning } from '../document/transform/protocol';
 import { runTransformToText } from '../document/transform/run-transform';
 import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
-import { renderSheetsPreviewHtml } from '../export/sheets/render';
 import type { Mount } from '../mount';
-import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
-
-// Materialized doc → sanitized preview body. Runs inside the transform Worker
-// (worker.ts owns execution; the format logic stays here in preview/). Recalc
-// failure serves replayed values with a warning — a preview must never fail
-// because recalc hiccuped.
-export function renderEigensheetsPreviewBody(doc: Y.Doc): { body: string; warnings: TransformWarning[] } {
-    const warnings: TransformWarning[] = [];
-    const { sheets, recalcError } = readSheetsFromDoc(doc);
-    if (recalcError) warnings.push({ code: 'recalc-failed', message: recalcError });
-
-    const { html, truncated } = renderSheetsPreviewHtml(sheets);
-    const sanitized = DOMPurify.sanitize(html, { FORCE_BODY: true });
-    const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
-
-    return { body: applyPreviewByteGuard(body, warnings), warnings };
-}
 
 // Main-thread orchestration runs through the shared transform seam (capture → run
 // → map), so a failing or overloaded runner surfaces as an error (503 passes
 // through to the route; other failures let the preview cache serve stale or 404),
-// never as an on-thread render.
+// never as an on-thread render. The renderer itself lives in eigensheets-render.ts,
+// which only the Worker imports.
 export async function generateEigensheetsPreview(
     mount: Mount,
     drivePath: DrivePath,

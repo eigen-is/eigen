@@ -32,9 +32,11 @@ import { getHome } from '../lib/home/get-home';
 import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
-import { generateEigendocPreview, renderEigendocPreviewBody } from '../lib/preview/eigendoc-preview';
-import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-preview';
-import { generateEigenslidesPreview, renderEigenslidesPreviewBody } from '../lib/preview/eigenslides-preview';
+import { generateEigendocPreview } from '../lib/preview/eigendoc-preview';
+import { renderEigendocPreviewBody } from '../lib/preview/eigendoc-render';
+import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-render';
+import { generateEigenslidesPreview } from '../lib/preview/eigenslides-preview';
+import { renderEigenslidesPreviewBody } from '../lib/preview/eigenslides-render';
 import {
     appendGoldenDocParagraph,
     buildGoldenDeck,
