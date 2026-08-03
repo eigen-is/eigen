@@ -1,3 +1,4 @@
+import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import {
     getMonthRange,
@@ -17,7 +18,7 @@ import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/si
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { cn } from '@workspace/ui/lib/utils';
 import { CalendarDays, CalendarPlus, CalendarRange, Check, Pencil, Plus } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type MouseEvent, useMemo, useState } from 'react';
 import { CalendarConfigDialog } from './calendar-config-dialog';
 import { CreateEventDialog } from './create-event-dialog';
 import { SharedCalendarConfigDialog } from './shared-calendar-config-dialog';
@@ -92,6 +93,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const { data: myTeams } = useMyTeams();
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
+    const navigate = useNavigate();
 
     const [configCalendar, setConfigCalendar] = useState<CalendarItem | null>(null);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -135,7 +137,18 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
         setSharedConfigDialogOpen(true);
     };
 
-    // Today-anchored, like the index redirect — the links jump to the current period.
+    // Recompute the target period at click time so a tab left open across a midnight or month
+    // boundary still lands on today's period. The render-time ranges below only seed the Link's
+    // params and its active-route highlight, which re-derive on the post-navigation render.
+    const navigateToCurrentPeriod = (e: MouseEvent, mode: 'month' | 'week') => {
+        e.preventDefault();
+        const range = mode === 'month' ? getMonthRange(new Date()) : getWeekRange(new Date());
+        navigate({
+            to: '/view/$mode/$from/$to',
+            params: { mode, from: String(range.from), to: String(range.to) },
+            search: { eventId: undefined },
+        });
+    };
     const monthRange = getMonthRange(new Date());
     const weekRange = getWeekRange(new Date());
 
@@ -155,6 +168,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                         label="View Month"
                         to="/view/$mode/$from/$to"
                         params={{ mode: 'month', from: String(monthRange.from), to: String(monthRange.to) }}
+                        onClick={(e) => navigateToCurrentPeriod(e, 'month')}
                         condensed={condensed}
                     />
                     <SidebarItem
@@ -162,6 +176,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                         label="View Week"
                         to="/view/$mode/$from/$to"
                         params={{ mode: 'week', from: String(weekRange.from), to: String(weekRange.to) }}
+                        onClick={(e) => navigateToCurrentPeriod(e, 'week')}
                         condensed={condensed}
                     />
                 </SidebarSection>

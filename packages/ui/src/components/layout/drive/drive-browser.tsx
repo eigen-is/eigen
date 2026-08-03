@@ -241,6 +241,7 @@ export function DriveBrowser({
                 hideModified
                 hideOwner
                 hideShareClick
+                hideActions
                 hideHeader={hideHeader}
                 externalSelectedIds={externalSelectedIds}
                 onSelectionChange={onSelectionChange}

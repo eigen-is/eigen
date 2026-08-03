@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
 import { useLayout } from '../app/layout-context.tsx';
@@ -12,7 +12,7 @@ export type SidebarItemProps = {
     params?: Record<string, string>;
     isActive?: boolean;
     colorDot?: string;
-    onClick?: () => void;
+    onClick?: (e: MouseEvent) => void;
     condensed?: boolean;
     className?: string;
     children?: ReactNode;
@@ -55,8 +55,12 @@ export function SidebarItem({
             <Link
                 to={to}
                 params={params}
-                // A tap on the already-current route is a router no-op, so close explicitly.
-                onClick={() => setSidebarOpen(false)}
+                // Forward the click first (a caller can preventDefault here to run its own
+                // navigation), then close: a tap on the already-current route is a router no-op.
+                onClick={(e) => {
+                    onClick?.(e);
+                    setSidebarOpen(false);
+                }}
                 className={baseStyles}
                 activeProps={{
                     className: 'bg-primary/10 text-primary',

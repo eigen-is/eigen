@@ -50,6 +50,9 @@ export type DriveTableProps = DriveViewProps & {
     hideShared?: boolean;
     hideShareClick?: boolean;
     hideHeader?: boolean;
+    // Drop the ⋮ actions column (its grid track included) at every pointer type — used by the
+    // pickers (DriveBrowser), whose rows have no meaningful item actions to surface.
+    hideActions?: boolean;
     dateLabel?: string;
     getItemDate?: (item: DrivePath) => Date | null;
     ancestorBreadcrumb?: DrivePath[];
@@ -66,6 +69,18 @@ const GRID_COLS_800: Record<string, string> = {
     shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%_40px]',
     modified: '@[800px]:grid-cols-[minmax(0,1fr)_15%_40px]',
     '': '@[800px]:grid-cols-[minmax(0,1fr)_40px]',
+};
+
+// Same permutations without the trailing 40px kebab track, for `hideActions` (pickers).
+const GRID_COLS_800_NO_ACTIONS: Record<string, string> = {
+    'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%]',
+    'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%]',
+    'owner-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_15%]',
+    'shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_10%_15%]',
+    owner: '@[800px]:grid-cols-[minmax(0,1fr)_8%]',
+    shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%]',
+    modified: '@[800px]:grid-cols-[minmax(0,1fr)_15%]',
+    '': '@[800px]:grid-cols-[minmax(0,1fr)]',
 };
 
 export function DriveTable({
@@ -95,6 +110,7 @@ export function DriveTable({
     hideShared = false,
     hideShareClick = false,
     hideHeader = false,
+    hideActions = false,
     dateLabel = 'Modified',
     getItemDate,
     selection,
@@ -139,12 +155,18 @@ export function DriveTable({
     const colsKey = [!hideOwner && 'owner', !hideShared && 'shared', !hideModified && 'modified']
         .filter(Boolean)
         .join('-');
-    const gridCols = cn(
-        coarse ? 'grid-cols-[minmax(0,1fr)_40px]' : 'grid-cols-[minmax(0,1fr)]',
-        !hideModified &&
-            (coarse ? '@[600px]:grid-cols-[minmax(0,1fr)_15%_40px]' : '@[600px]:grid-cols-[minmax(0,1fr)_15%]'),
-        GRID_COLS_800[colsKey],
-    );
+    const gridCols = hideActions
+        ? cn(
+              'grid-cols-[minmax(0,1fr)]',
+              !hideModified && '@[600px]:grid-cols-[minmax(0,1fr)_15%]',
+              GRID_COLS_800_NO_ACTIONS[colsKey],
+          )
+        : cn(
+              coarse ? 'grid-cols-[minmax(0,1fr)_40px]' : 'grid-cols-[minmax(0,1fr)]',
+              !hideModified &&
+                  (coarse ? '@[600px]:grid-cols-[minmax(0,1fr)_15%_40px]' : '@[600px]:grid-cols-[minmax(0,1fr)_15%]'),
+              GRID_COLS_800[colsKey],
+          );
 
     return (
         <div
@@ -173,7 +195,7 @@ export function DriveTable({
                             {dateLabel}
                         </div>
                     )}
-                    <div className={coarse ? 'block' : 'hidden @[800px]:block'} />
+                    {!hideActions && <div className={coarse ? 'block' : 'hidden @[800px]:block'} />}
                 </div>
             )}
 
@@ -207,6 +229,7 @@ export function DriveTable({
                                 hideShared={hideShared}
                                 hideModified={hideModified}
                                 hideShareClick={hideShareClick}
+                                hideActions={hideActions}
                                 getItemDate={getItemDate}
                                 ancestorBreadcrumb={ancestorBreadcrumb}
                                 unreadPathIds={unreadPathIds}

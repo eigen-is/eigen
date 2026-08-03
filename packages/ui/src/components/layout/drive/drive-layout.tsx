@@ -11,17 +11,17 @@ import {
     useMovePath,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
-import { DeleteDialog } from '../delete/delete-dialog';
 import { DriveAccessDialog } from './drive-access-dialog';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import { DriveCreateFolder } from './drive-create-folder';
+import { DriveDeleteItem } from './drive-delete-item';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
 import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveList, DriveListToolbar } from './drive-list';
@@ -484,29 +484,14 @@ export function DriveLayout({
                 onConfirm={handlePickDestination}
             />
 
-            <DeleteDialog
+            <DriveDeleteItem
+                paths={pendingDeletePaths}
                 open={deleteConfirmOpen}
                 onOpenChange={(open) => {
                     setDeleteConfirmOpen(open);
                     if (!open) setPendingDeletePaths([]);
                 }}
-                title={
-                    pendingDeletePaths.length === 1
-                        ? 'Move to trash'
-                        : `Move ${pendingDeletePaths.length} items to trash`
-                }
-                description={
-                    pendingDeletePaths.length === 1
-                        ? 'You can restore it later from the trash. Move'
-                        : `This will move ${pendingDeletePaths.length} items to trash. You can restore them later from the trash.`
-                }
-                itemName={pendingDeletePaths.length === 1 ? stripEigenExtension(pendingDeletePaths[0].name) : undefined}
-                onDelete={() => {
-                    runDeletePaths(pendingDeletePaths);
-                    setDeleteConfirmOpen(false);
-                    setPendingDeletePaths([]);
-                }}
-                deleteText="Move to trash"
+                onAfterAction={onAfterAction}
             />
 
             <ExportProgressDialog open={isExporting} />

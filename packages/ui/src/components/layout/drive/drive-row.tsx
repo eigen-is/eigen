@@ -29,6 +29,7 @@ type DriveRowProps = {
     hideShared?: boolean;
     hideModified?: boolean;
     hideShareClick?: boolean;
+    hideActions?: boolean;
     getItemDate?: (item: DrivePath) => Date | null;
     ancestorBreadcrumb?: DrivePath[];
     unreadPathIds?: Set<string>;
@@ -51,6 +52,7 @@ export function DriveRow({
     hideShared = false,
     hideModified = false,
     hideShareClick = false,
+    hideActions = false,
     getItemDate = (i) => i.updatedAt,
     ancestorBreadcrumb,
     unreadPathIds,
@@ -122,25 +124,27 @@ export function DriveRow({
                     {itemDate ? formatDateTime(itemDate) : 'Unknown'}
                 </div>
             )}
-            <div
-                className={
-                    coarse
-                        ? 'flex items-center justify-center py-1.5'
-                        : 'hidden @[800px]:flex items-center justify-center py-1.5'
-                }
-            >
-                <button
-                    type="button"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        openContextMenuFromButton(e.currentTarget, item);
-                    }}
-                    className="h-7 w-7 rounded hover:bg-accent flex items-center justify-center text-muted-foreground"
-                    aria-label="More actions"
+            {!hideActions && (
+                <div
+                    className={
+                        coarse
+                            ? 'flex items-center justify-center py-1.5'
+                            : 'hidden @[800px]:flex items-center justify-center py-1.5'
+                    }
                 >
-                    <MoreVertical className="h-4 w-4" />
-                </button>
-            </div>
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            openContextMenuFromButton(e.currentTarget, item);
+                        }}
+                        className="h-7 w-7 rounded hover:bg-accent flex items-center justify-center text-muted-foreground"
+                        aria-label="More actions"
+                    >
+                        <MoreVertical className="h-4 w-4" />
+                    </button>
+                </div>
+            )}
         </div>
     );
 }

@@ -19,7 +19,7 @@ export function useLongPress<T>(onLongPress: (item: T, x: number, y: number) => 
     const disabled = opts?.disabled ?? false;
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const start = useRef<{ x: number; y: number } | null>(null);
-    const pressed = useRef<T | null>(null);
+    const pressed = useRef<{ item: T } | null>(null);
     const fired = useRef(false);
 
     const cancel = useCallback(() => {
@@ -35,9 +35,12 @@ export function useLongPress<T>(onLongPress: (item: T, x: number, y: number) => 
         if (disabled) cancel();
     }, [disabled, cancel]);
 
-    // Cancel a pending timer if the host unmounts mid-press (a virtualized drive/mail row removed by
-    // a data refresh, a sticky deleted by a collaborator) — it must not fire onLongPress for a gone
-    // component.
+    // Cancel a pending timer when the component HOSTING this hook unmounts. For the list-level
+    // instances (drive-table, drive-grid, email-list, slide-panel, SheetOverlay) that host is the
+    // whole list, so this covers the list going away — not one row: a single row removed mid-press
+    // (data refresh, a collaborator's delete) inside the 500 ms window is an accepted narrow race.
+    // Its bound handlers vanish with its DOM but the armed timer still fires, opening the menu for a
+    // now-stale item whose actions fail gracefully. Per-row hosts (stickies) get true per-row teardown.
     useEffect(() => cancel, [cancel]);
 
     const bind = useCallback(
@@ -54,13 +57,13 @@ export function useLongPress<T>(onLongPress: (item: T, x: number, y: number) => 
                 const x = e.clientX;
                 const y = e.clientY;
                 start.current = { x, y };
-                pressed.current = item;
+                pressed.current = { item };
                 timer.current = setTimeout(() => {
                     timer.current = null;
                     fired.current = true;
                     // Fire at the press-start coords: a move past MOVE_CANCEL_PX has already cancelled,
                     // so the drift from finger jitter is sub-threshold and imperceptible.
-                    onLongPress(pressed.current!, x, y);
+                    onLongPress(pressed.current!.item, x, y);
                 }, LONG_PRESS_MS);
             },
             onPointerMove: (e: React.PointerEvent) => {
