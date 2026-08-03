@@ -108,13 +108,21 @@ async function coldPreview(pathId: string): Promise<{ bytes: number; cacheBytes:
     return { bytes: Buffer.byteLength(body), cacheBytes: cacheFile ? fs.statSync(cacheFile).size : 0 };
 }
 
-async function exportXlsx(pathId: string): Promise<{ bytes: number }> {
+async function exportXlsx(pathId: string): Promise<{ data: ArrayBuffer }> {
     const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/export/xlsx`);
     if (res.status !== 200) throw new Error(`export failed: ${res.status}`);
-    return { bytes: (await res.arrayBuffer()).byteLength };
+    return { data: await res.arrayBuffer() };
 }
 
-async function runScenario(label: string, pathId: string) {
+async function importXlsx(pathId: string, data: ArrayBuffer): Promise<void> {
+    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/import`, {
+        method: 'POST',
+        body: data,
+    });
+    if (res.status !== 200) throw new Error(`import failed: ${res.status} ${await res.text()}`);
+}
+
+async function runScenario(label: string, pathId: string): Promise<ArrayBuffer> {
     const cold = await measure(`${label}: cold preview`, () => coldPreview(pathId));
     const sizes = cold.result as { bytes: number; cacheBytes: number };
     console.log(`body bytes ${sizes.bytes}  cache bytes ${sizes.cacheBytes}`);
@@ -123,7 +131,17 @@ async function runScenario(label: string, pathId: string) {
     console.log(`cache-hit e2e ${warm.e2eMs.toFixed(1)}ms`);
 
     const xlsx = await measure(`${label}: xlsx export`, () => exportXlsx(pathId));
-    console.log(`xlsx bytes ${(xlsx.result as { bytes: number }).bytes}`);
+    const exported = (xlsx.result as { data: ArrayBuffer }).data;
+    console.log(`xlsx bytes ${exported.byteLength}`);
+    return exported;
+}
+
+// The export's own bytes go back in through the /import route, into a fresh doc —
+// so import runs under the same event-loop/health probes as preview and export.
+async function importScenario(label: string, xlsx: ArrayBuffer) {
+    const target = await createSheetsDoc(`bench-import-${Date.now()}`);
+    await measure(`${label}: xlsx import`, () => importXlsx(target.id, xlsx));
+    console.log(`import bytes ${xlsx.byteLength}`);
 }
 
 // Scenario 1: deterministic synthetic heavy sheet (same generator the tests use).
@@ -134,7 +152,8 @@ async function runScenario(label: string, pathId: string) {
     const seedStart = performance.now();
     seedSheetsDoc(collab.doc, buildHeavySheets(ROWS, COLS), buildHeavyOps(60, 25, ROWS, COLS));
     console.log(`seeded synthetic ${ROWS}x${COLS} in ${(performance.now() - seedStart).toFixed(0)}ms`);
-    await runScenario(`synthetic ${ROWS}x${COLS}`, doc.id);
+    const exported = await runScenario(`synthetic ${ROWS}x${COLS}`, doc.id);
+    await importScenario(`synthetic ${ROWS}x${COLS}`, exported);
 }
 
 // Memory pass (proposal § Memory benchmark): repeat the heavy preview through
@@ -166,11 +185,10 @@ if (xlsxPath && fs.existsSync(xlsxPath)) {
     const home = await getHome(ownerId);
     const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
     const buffer = Buffer.from(fs.readFileSync(xlsxPath));
-    const importStart = performance.now();
-    await importIntoDocument(home.drive, mount, path, buffer);
-    console.log(
-        `\nimported ${xlsxPath} (${buffer.byteLength} bytes) in ${(performance.now() - importStart).toFixed(0)}ms`,
+    await measure(`real xlsx: import (${buffer.byteLength} bytes)`, () =>
+        importIntoDocument(home.drive, mount, path, buffer),
     );
+    console.log(`imported ${xlsxPath}`);
     await runScenario('real xlsx', doc.id);
 } else {
     console.log('\n(no EIGEN_BENCH_XLSX provided — skipping real-workbook scenario)');
