@@ -300,8 +300,8 @@ describe('document transform (eigensheets preview)', () => {
     }, 60_000);
 });
 
-// Recorded from the pre-Worker pipeline on the golden fixture (exportSheetsToHtml
-// and pdf.ts's wrapped document before htmlToPdf), so the move off-thread is proven
+// Recorded from the pre-Worker pipeline on the golden fixture (the html download and
+// the wrapped document fed to htmlToPdf), so the move off-thread is proven
 // byte-identical. Regenerate only for an intentional renderer change.
 const GOLDEN_EXPORT_HTML_SHA256 = '7ca7f67cbdcdfb160fb34f4f22d81b9df74c06fba9b37be368e57e4c861bbc98';
 const GOLDEN_EXPORT_PDF_HTML_SHA256 = '8189376ecb1b541ebfd86bcffc937c3daae711e8f76558cddf8e9dbec047422c';
@@ -597,8 +597,8 @@ describe('document transform (xlsx import)', () => {
 });
 
 // Recorded from the pre-Worker doc/slides pipeline on the golden fixtures (preview
-// generators, exportEigendocToHtml/exportSlidesToHtml, and the wrapped documents fed
-// to WeasyPrint), so the move off-thread is proven byte-identical. Regenerate only
+// generators, the html downloads, and the wrapped documents fed to WeasyPrint), so the
+// move off-thread is proven byte-identical. Regenerate only
 // for an intentional renderer change. The embedded media data URI comes from the
 // screen-preview pipeline (sharp → WebP), so a preview-encoder change moves the
 // export hashes legitimately.
