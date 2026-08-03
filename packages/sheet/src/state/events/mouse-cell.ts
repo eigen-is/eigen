@@ -528,9 +528,13 @@ export function handleCellAreaDoubleClick(
     setEditingCell(ctx, row_index, col_index);
 }
 
+// Coords-plus-modifiers shape so both a real right-click (MouseEvent) and a long-press (touch,
+// synthetic point) can drive the same select-cell-then-open flow. The caller preventDefaults.
+type ContextMenuPoint = { pageX: number; pageY: number; metaKey?: boolean; ctrlKey?: boolean };
+
 export function handleContextMenu(
     ctx: Context,
-    e: MouseEvent,
+    point: ContextMenuPoint,
     container: HTMLDivElement,
     area: 'cell' | 'rowHeader' | 'columnHeader',
 ) {
@@ -540,11 +544,10 @@ export function handleContextMenu(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    e.preventDefault();
     if (area === 'cell') {
         const rect = container.getBoundingClientRect();
-        const mouseX = e.pageX - rect.left - window.scrollX;
-        const mouseY = e.pageY - rect.top - window.scrollY;
+        const mouseX = point.pageX - rect.left - window.scrollX;
+        const mouseY = point.pageY - rect.top - window.scrollY;
         const _selected_x = mouseX + ctx.scrollLeft;
         const _selected_y = mouseY + ctx.scrollTop;
         const { x: selected_x, y: selected_y } = fixPositionOnFrozenCells(
@@ -572,7 +575,7 @@ export function handleContextMenu(
                 col_index >= obj_s.column[0] &&
                 col_index <= obj_s.column[1],
         );
-        if (!isInSelection && (e.metaKey || e.ctrlKey)) {
+        if (!isInSelection && (point.metaKey || point.ctrlKey)) {
             // Add to selection
             if (flowdata[row_index][col_index]?.mc) {
                 // Handle merged cell
@@ -675,7 +678,7 @@ export function handleContextMenu(
         ];
     } else if (area === 'rowHeader') {
         const rect = container.getBoundingClientRect();
-        const mouseY = e.pageY - rect.top - window.scrollY;
+        const mouseY = point.pageY - rect.top - window.scrollY;
         const _selected_y = mouseY + ctx.scrollTop;
         const { y: selected_y } = fixPositionOnFrozenCells(
             ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
@@ -720,7 +723,7 @@ export function handleContextMenu(
         });
     } else if (area === 'columnHeader') {
         const rect = container.getBoundingClientRect();
-        const mouseX = e.pageX - rect.left - window.scrollX;
+        const mouseX = point.pageX - rect.left - window.scrollX;
         const _selected_x = mouseX + ctx.scrollLeft;
         const { x: selected_x } = fixPositionOnFrozenCells(
             ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],

@@ -52,6 +52,7 @@ import {
     Link2Off,
     List,
     ListOrdered,
+    MessageSquarePlus,
     Minus,
     Pilcrow,
     Printer,
@@ -80,6 +81,8 @@ type EditorToolbarProps = {
     unresolvedCommentCount?: number;
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
+    // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
+    onAddComment?: () => void;
 };
 
 export const EditorToolbar = ({
@@ -96,11 +99,14 @@ export const EditorToolbar = ({
     unresolvedCommentCount,
     onImageUpload,
     onImagePickFromDrive,
+    onAddComment,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [importPickerOpen, setImportPickerOpen] = useState(false);
+    // Controlled: useEditor skips selection-only re-renders, so opening must re-render for a live disabled check.
+    const [insertMenuOpen, setInsertMenuOpen] = useState(false);
     const { exportDocument, isExporting } = useExportDocument();
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
@@ -333,7 +339,7 @@ export const EditorToolbar = ({
                                     </DropdownMenuContent>
                                 </DropdownMenu>
 
-                                <DropdownMenu>
+                                <DropdownMenu open={insertMenuOpen} onOpenChange={setInsertMenuOpen}>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="ghost">Insert</Button>
                                     </DropdownMenuTrigger>
@@ -371,6 +377,17 @@ export const EditorToolbar = ({
                                         >
                                             <CodeXml className="h-4 w-4 mr-2" /> Code block
                                         </DropdownMenuItem>
+                                        {onAddComment && (
+                                            <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    disabled={editor.state.selection.empty}
+                                                    onClick={onAddComment}
+                                                >
+                                                    <MessageSquarePlus className="h-4 w-4 mr-2" /> Comment
+                                                </DropdownMenuItem>
+                                            </>
+                                        )}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </>

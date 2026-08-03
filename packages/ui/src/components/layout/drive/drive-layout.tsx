@@ -10,13 +10,15 @@ import {
     useExportDocument,
     useMovePath,
 } from '@workspace/lib/drive';
-import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
+import { useIsCoarsePointer } from '@workspace/lib/media';
+import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type React from 'react';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
+import { DeleteDialog } from '../delete/delete-dialog';
 import { DriveAccessDialog } from './drive-access-dialog';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import { DriveCreateFolder } from './drive-create-folder';
@@ -97,6 +99,9 @@ export function DriveLayout({
     const duplicatePath = useDuplicatePath();
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
     const convertMutation = useConvertDocument(ownerId, mountId);
+    const isCoarsePointer = useIsCoarsePointer();
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [pendingDeletePaths, setPendingDeletePaths] = useState<DrivePath[]>([]);
 
     // Sort order comes from the shared view preference.
     const { sortKey, sortDir } = useDriveViewPreferences();
@@ -119,16 +124,31 @@ export function DriveLayout({
     // whenever the action object's identity changes. Without memoization, the
     // useCommandPalette context subscription combined with each re-render of
     // DriveLayout produced an infinite setState loop.
-    const handleDeletePaths = useCallback(
+    const runDeletePaths = useCallback(
         (paths: DrivePath[]) => {
-            if (!allowDelete || paths.length === 0) return;
             deletePathsMutation.mutate(paths, {
                 onSuccess: () => {
                     for (const path of paths) onAfterAction?.('delete', path);
                 },
             });
         },
-        [allowDelete, deletePathsMutation, onAfterAction],
+        [deletePathsMutation, onAfterAction],
+    );
+
+    const handleDeletePaths = useCallback(
+        (paths: DrivePath[]) => {
+            if (!allowDelete || paths.length === 0) return;
+            // Touch has no hover cue and mis-taps are easy, so confirm move-to-trash on coarse
+            // pointers. Fine-pointer stays instant — byte-identical to before. Palette-triggered
+            // deletes flow through here too, so they also confirm on touch (intended).
+            if (isCoarsePointer) {
+                setPendingDeletePaths(paths);
+                setDeleteConfirmOpen(true);
+                return;
+            }
+            runDeletePaths(paths);
+        },
+        [allowDelete, isCoarsePointer, runDeletePaths],
     );
 
     const handleRenamePath = useCallback(
@@ -350,6 +370,9 @@ export function DriveLayout({
         onItemOpen: onRowActivate,
         allowDelete,
         onRename: allowRename ? handleRenamePath : undefined,
+        onMoveTo: allowMove ? handleMoveTo : undefined,
+        onCopyTo: handleCopyTo,
+        onDuplicate: allowMove ? handleDuplicate : undefined,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         onConvert: handleConvertPath,
         onExport: handleExportPath,
@@ -459,6 +482,31 @@ export function DriveLayout({
                     currentPath?.ownerId === ownerId && currentPath?.mountId === mountId ? currentPath?.id : undefined
                 }
                 onConfirm={handlePickDestination}
+            />
+
+            <DeleteDialog
+                open={deleteConfirmOpen}
+                onOpenChange={(open) => {
+                    setDeleteConfirmOpen(open);
+                    if (!open) setPendingDeletePaths([]);
+                }}
+                title={
+                    pendingDeletePaths.length === 1
+                        ? 'Move to trash'
+                        : `Move ${pendingDeletePaths.length} items to trash`
+                }
+                description={
+                    pendingDeletePaths.length === 1
+                        ? 'You can restore it later from the trash. Move'
+                        : `This will move ${pendingDeletePaths.length} items to trash. You can restore them later from the trash.`
+                }
+                itemName={pendingDeletePaths.length === 1 ? stripEigenExtension(pendingDeletePaths[0].name) : undefined}
+                onDelete={() => {
+                    runDeletePaths(pendingDeletePaths);
+                    setDeleteConfirmOpen(false);
+                    setPendingDeletePaths([]);
+                }}
+                deleteText="Move to trash"
             />
 
             <ExportProgressDialog open={isExporting} />

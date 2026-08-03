@@ -392,6 +392,9 @@
     .eigen-list-item {
         @apply bg-background cursor-pointer select-none;
         box-shadow: inset 2px 0 0 0 transparent;
+        /* The row name is a real <a href>; suppress iOS's long-press link-preview callout so it
+           doesn't fight the long-press context menu. */
+        -webkit-touch-callout: none;
     }
 
     /* Soft app-color wash for row states. The wash itself lives in
@@ -430,8 +433,11 @@
     /* Grid tiles use a full app-color border on hover/active/selected — the row
        stripe+wash above only covers a tile's label strip and reads as stray chrome. */
     .eigen-tile {
-        @apply bg-background;
+        @apply bg-background select-none;
         border-color: var(--border);
+        /* Match .eigen-list-item: suppress the iOS link-preview callout and the text-selection
+           loupe so neither competes with the long-press context menu on touch. */
+        -webkit-touch-callout: none;
     }
 
     .eigen-tile:hover,

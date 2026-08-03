@@ -2,6 +2,7 @@ import { formatDateTime } from '@workspace/lib/date';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
+import type { useLongPress } from '../../../hooks/use-long-press';
 import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user-avatar';
 import { DriveItemNameLink } from './drive-item-name-link';
@@ -16,7 +17,11 @@ type DriveRowProps = {
     isSelected: boolean;
     disabled: boolean;
     gridCols: string;
+    coarse: boolean;
     controller: ReturnType<typeof useDriveItemController>;
+    // Stable bind from the list-level useLongPress (hoisted in DriveTable) — bind(item) yields the
+    // spreadable touch handlers for this row.
+    longPressBind: ReturnType<typeof useLongPress<DrivePath>>['bind'];
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;
     onShareClick?: (item: DrivePath) => void;
@@ -36,7 +41,9 @@ export function DriveRow({
     isSelected,
     disabled,
     gridCols,
+    coarse,
     controller,
+    longPressBind,
     getItemHref,
     onItemClick,
     onShareClick,
@@ -79,6 +86,7 @@ export function DriveRow({
                 }
             }}
             onContextMenu={(e) => handleContextMenu(e, item)}
+            {...(disabled ? {} : longPressBind(item))}
             {...drag.getDragProps(item)}
             {...getDropProps(item)}
         >
@@ -114,7 +122,13 @@ export function DriveRow({
                     {itemDate ? formatDateTime(itemDate) : 'Unknown'}
                 </div>
             )}
-            <div className="hidden @[800px]:flex items-center justify-center py-1.5">
+            <div
+                className={
+                    coarse
+                        ? 'flex items-center justify-center py-1.5'
+                        : 'hidden @[800px]:flex items-center justify-center py-1.5'
+                }
+            >
                 <button
                     type="button"
                     onClick={(e) => {

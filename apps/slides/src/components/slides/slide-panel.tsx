@@ -6,8 +6,10 @@ import { getBackgroundStyle } from '@workspace/lib/background';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { Copy, Trash2 } from 'lucide-react';
+import { useCallback } from 'react';
 import { SlideThumbnail } from './slide-thumbnail';
 import { type DeckData, SLIDE_ASPECT_RATIO } from './types';
 
@@ -40,6 +42,20 @@ export function SlidePanel({
     const { resolveMediaUrl } = useMediaResolver();
     const slideContextMenu = useContextMenu<string>();
 
+    // Mobile thumbnails render bare (no SortableSlide, no per-item component to hang a hook on), so
+    // one panel-level useLongPress carries the pressed slide via bind(slideId). Both layouts share this
+    // instance: mobile spreads it on the bare thumbnail, desktop composes it into SortableSlide (below)
+    // so a coarse-pointer press reaches the menu there too; desktop mouse keeps its onContextMenu right-click.
+    const { openAt: openSlideMenuAt } = slideContextMenu;
+    const handleSlideLongPress = useCallback(
+        (slideId: string, x: number, y: number) => {
+            openSlideMenuAt(slideId, x, y);
+        },
+        [openSlideMenuAt],
+    );
+    // dragActiveId cancels an armed press the moment a drag starts (same mechanism as stickies cards).
+    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId });
+
     const slideList = deck.slideOrder.map((slideId, index) => {
         const slide = deck.slides[slideId];
         if (!slide) return null;
@@ -56,10 +72,19 @@ export function SlidePanel({
             />
         );
 
-        if (mobile) return <div key={slideId}>{thumbnail}</div>;
+        if (mobile)
+            return (
+                <div
+                    key={slideId}
+                    onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}
+                    {...slideLongPress.bind(slideId)}
+                >
+                    {thumbnail}
+                </div>
+            );
 
         return (
-            <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false}>
+            <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false} longPressBind={slideLongPress.bind}>
                 <div onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}>{thumbnail}</div>
             </SortableSlide>
         );
@@ -96,25 +121,24 @@ export function SlidePanel({
                     </DndContext>
                 )}
             </div>
-            {!mobile && (
-                <ContextMenuAnchor contextMenu={slideContextMenu}>
-                    {menuSlideId && (
-                        <>
-                            <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuSlideId)}>
-                                <Copy className="h-4 w-4 mr-2" /> Duplicate
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                                variant="destructive"
-                                disabled={deck.slideOrder.length <= 1}
-                                onClick={() => onDeleteSlide?.(menuSlideId)}
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
-                            </DropdownMenuItem>
-                        </>
-                    )}
-                </ContextMenuAnchor>
-            )}
+            {/* Rendered on mobile too — long-press is the only way to reach it there. */}
+            <ContextMenuAnchor contextMenu={slideContextMenu}>
+                {menuSlideId && (
+                    <>
+                        <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuSlideId)}>
+                            <Copy className="h-4 w-4 mr-2" /> Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            variant="destructive"
+                            disabled={deck.slideOrder.length <= 1}
+                            onClick={() => onDeleteSlide?.(menuSlideId)}
+                        >
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                        </DropdownMenuItem>
+                    </>
+                )}
+            </ContextMenuAnchor>
         </div>
     );
 }
@@ -123,12 +147,23 @@ function SortableSlide({
     slideId,
     children,
     isDragOverlay,
+    longPressBind,
 }: {
     slideId: string;
     children: React.ReactNode;
     isDragOverlay: boolean;
+    longPressBind: ReturnType<typeof useLongPress<string>>['bind'];
 }) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: slideId });
+
+    // Compose the long-press hook's onPointerDown with dnd-kit's drag-activation listener so a
+    // coarse-pointer press opens the menu in desktop layout too, without clobbering either side.
+    // The hook arms only for touch, so mouse drag stays byte-identical.
+    const bound = longPressBind(slideId);
+    const handlePointerDown = (e: React.PointerEvent) => {
+        listeners?.onPointerDown?.(e);
+        bound.onPointerDown(e);
+    };
 
     return (
         <div
@@ -139,7 +174,11 @@ function SortableSlide({
                 opacity: isDragging && !isDragOverlay ? 0.3 : 1,
             }}
             {...attributes}
-            {...listeners}
+            onPointerDown={handlePointerDown}
+            onPointerMove={bound.onPointerMove}
+            onPointerUp={bound.onPointerUp}
+            onPointerCancel={bound.onPointerCancel}
+            onClickCapture={bound.onClickCapture}
         >
             {children}
         </div>

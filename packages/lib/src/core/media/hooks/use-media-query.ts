@@ -45,3 +45,7 @@ export function useIsTablet() {
 export function useIsDesktop() {
     return useMediaQuery('(min-width: 1025px)');
 }
+
+export function useIsCoarsePointer() {
+    return useMediaQuery('(pointer: coarse)');
+}

@@ -18,6 +18,7 @@ type ColumnProps = {
     onEditColumn: (columnId: string) => void;
     onCardOpen?: (cardId: string) => void;
     onCardContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
+    onCardLongPress?: (card: CommentCard, x: number, y: number) => void;
     isMobile: boolean;
     scrollToTopSignal?: number;
     highlighted?: boolean;
@@ -33,6 +34,7 @@ export const Column = memo(function Column({
     onEditColumn,
     onCardOpen,
     onCardContextMenu,
+    onCardLongPress,
     isMobile,
     scrollToTopSignal,
     highlighted,
@@ -120,6 +122,7 @@ export const Column = memo(function Column({
                                         highlighted={highlightedCardIds?.has(card.id)}
                                         onOpen={onCardOpen}
                                         onContextMenu={onCardContextMenu}
+                                        onLongPress={onCardLongPress}
                                     />
                                 );
                             })}

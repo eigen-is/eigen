@@ -1,5 +1,7 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import type { DrivePath } from '@workspace/lib/types';
 import { useEffect, useRef, useState } from 'react';
+import { useLongPress } from '../../../hooks/use-long-press';
 import { DriveItemContextMenu } from './drive-item-context-menu';
 import type { DriveViewProps } from './drive-table';
 import { DriveTile } from './drive-tile';
@@ -73,6 +75,9 @@ export function DriveGrid({
         onSelectionChange,
     });
 
+    // One long-press instance for the whole grid — tiles spread bind(item); disabled tiles skip it.
+    const longPress = useLongPress<DrivePath>((item, x, y) => controller.openContextMenuAt(item, x, y));
+
     return (
         <div
             ref={containerRef}
@@ -105,6 +110,7 @@ export function DriveGrid({
                                         key={item.id}
                                         item={item}
                                         controller={controller}
+                                        longPressBind={longPress.bind}
                                         isActive={activeItemId === item.id || controller.selectedIndex === index}
                                         isSelected={controller.selection.isSelected(item.id)}
                                         disabled={isItemDisabled?.(item) ?? false}

@@ -77,7 +77,7 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                                     <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"
                                         onClick={() => removeAttendee(attendee.email)}
                                     >
                                         <XIcon className="h-3 w-3" />
