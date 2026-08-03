@@ -1,7 +1,7 @@
 import type { BorderInfo, CellBorderInfo, RangeBorderInfo } from '@workspace/lib/sheets';
 import { cloneDeep, set } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
-import type { SingleRange } from '../../engine/types';
+import type { Cell, SingleRange } from '../../engine/types';
 
 import { type Context, getFlowdata } from '../context';
 import { en } from '../locale/en';
@@ -258,7 +258,7 @@ export function onCellsMoveEnd(
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     for (let r = last.row[0]; r <= last.row[1]; r += 1) {
         for (let c = last.column[0]; c <= last.column[1]; c += 1) {
-            const cellData = d[r][c];
+            const cellData: Cell | null = d[r][c];
 
             if (cellData?.mc != null) {
                 const mergeKey = `${cellData.mc.r}_${c}`;

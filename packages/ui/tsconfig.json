@@ -1,7 +1,6 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@workspace/lib/*": ["../lib/src/core/*", "../lib/src/*"],
       "@workspace/ui/*": ["./src/*"]

@@ -63,6 +63,7 @@ next-env.d.ts
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 .claude/worktrees/
+.claude/data/
 .env.eigen
 /docs/superpowers/
 /docs/plans/

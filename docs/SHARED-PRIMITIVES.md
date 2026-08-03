@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-840 primitives across 6 kinds. `packages/sheet` internals are excluded.
+839 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -376,7 +376,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (232)
+## Types (233)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -588,6 +588,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveTableProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `DriveViewProps` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-table.tsx |
 | `EigenDocAppConfig` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
+| `FilePresentation` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
 | `LabelFilterHeaderProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-filter-header.tsx |
 | `LabelManagerProps` | `@workspace/ui` | packages/ui/src/components/layout/labels/types.ts |
 | `LayoutContextType` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
@@ -613,7 +614,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (263)
+## Utilities & constants (261)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -776,7 +777,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
-| `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
 | `defaultDriveSort` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
@@ -805,7 +806,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DEFAULT_MOUNT_ID` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `describeFileEvent` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `DRIVE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -864,13 +864,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DOCS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `eigenDocValidateSearch` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
-| `FilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `getAtSuggestQuery` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
 | `getFileIcon` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
-| `getFileIconComponent` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
-| `getFilePresentation` | `@workspace/ui` | packages/ui/src/components/layout/drive/file-presentation.tsx |
+| `getFileIconComponent` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
+| `getFilePresentation` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
 | `getSlashTargetQuery` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
 | `loginSearchSchema` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `renderPresenceCaret` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |

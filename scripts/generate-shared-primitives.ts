@@ -13,7 +13,8 @@
 
 import { basename, dirname, join, relative } from 'node:path';
 import { Glob } from 'bun';
-import ts from 'typescript';
+import * as ts from 'typescript/unstable/ast';
+import { API, SymbolFlags } from 'typescript/unstable/async';
 
 const ROOT = join(import.meta.dir, '..');
 const OUT = join(ROOT, 'docs/SHARED-PRIMITIVES.md');
@@ -87,15 +88,15 @@ function isReactComponentClass(decl: ts.Declaration): boolean {
     return false;
 }
 
-function classify(name: string, flags: ts.SymbolFlags, decl: ts.Declaration): Kind {
-    if (flags & (ts.SymbolFlags.TypeAlias | ts.SymbolFlags.Interface)) return 'Type';
+function classify(name: string, flags: SymbolFlags, decl: ts.Declaration): Kind {
+    if (flags & (SymbolFlags.TypeAlias | SymbolFlags.Interface)) return 'Type';
     if (/^use[A-Z]/.test(name)) return 'Hook';
     if (/^invalidate|Keys$/.test(name)) return 'Cache';
     if (/Provider$/.test(name)) return 'Provider';
     // Non-component classes (AppError), React contexts, and TipTap Node/Mark schemas are
     // values but not components — name+flags alone can't tell them apart, so inspect the
     // declaration; React class components (ErrorBoundary) still classify as Component.
-    if (flags & ts.SymbolFlags.Class) return isReactComponentClass(decl) ? 'Component' : 'Schema';
+    if (flags & SymbolFlags.Class) return isReactComponentClass(decl) ? 'Component' : 'Schema';
     if (ts.isVariableDeclaration(decl) && decl.initializer) {
         let init = decl.initializer;
         if (ts.isCallExpression(init) && (calleeName(init) === 'createContext' || calleeName(init) === 'create')) {
@@ -106,7 +107,7 @@ function classify(name: string, flags: ts.SymbolFlags, decl: ts.Declaration): Ki
         if (ts.isObjectLiteralExpression(init)) return 'Util';
     }
     // PascalCase value (has a lowercase letter, unlike SCREAMING_SNAKE constants) → a component.
-    const isValue = flags & (ts.SymbolFlags.Function | ts.SymbolFlags.Variable | ts.SymbolFlags.Class);
+    const isValue = flags & (SymbolFlags.Function | SymbolFlags.Variable | SymbolFlags.Class);
     if (isValue && /^[A-Z]/.test(name) && /[a-z]/.test(name)) return 'Component';
     return 'Util';
 }
@@ -120,47 +121,44 @@ for (const pkg of PACKAGES) {
 }
 
 const entries = [...fileToImport.keys()];
-const program = ts.createProgram(entries, {
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ESNext,
-    jsx: ts.JsxEmit.Preserve,
-    allowImportingTsExtensions: true,
-    noEmit: true,
-    skipLibCheck: true,
-    baseUrl: ROOT,
-});
-const checker = program.getTypeChecker();
-
 const collected: Primitive[] = [];
 let unresolved = 0;
-for (const entry of entries) {
-    const source = program.getSourceFile(entry);
-    const moduleSym = source && checker.getSymbolAtLocation(source);
-    if (!moduleSym) continue;
-    const importPath = fileToImport.get(entry)!;
-    for (const exported of checker.getExportsOfModule(moduleSym)) {
-        const name = exported.getName();
-        if (name === 'default') continue;
-        let sym = exported;
-        if (sym.flags & ts.SymbolFlags.Alias) sym = checker.getAliasedSymbol(sym);
-        const decl = sym.declarations?.[0] ?? exported.declarations?.[0];
-        if (!decl) {
-            unresolved++;
-            continue;
+const api = new API({ cwd: ROOT });
+const snapshot = await api.updateSnapshot({ openFiles: entries });
+try {
+    for (const entry of entries) {
+        const project = await snapshot.getDefaultProjectForFile(entry);
+        const source = await project?.program.getSourceFile(entry);
+        const moduleSym = source && (await project?.checker.getSymbolAtLocation(source));
+        if (!project || !moduleSym) continue;
+        const importPath = fileToImport.get(entry)!;
+        for (const exported of await project.checker.getExportsOfModule(moduleSym)) {
+            const name = exported.name;
+            if (name === 'default') continue;
+            const sym =
+                exported.flags & SymbolFlags.Alias ? await project.checker.getAliasedSymbol(exported) : exported;
+            const declHandle = sym.declarations[0] ?? exported.declarations[0];
+            const decl = await declHandle?.resolve();
+            if (!decl) {
+                unresolved++;
+                continue;
+            }
+            const declFile = decl.getSourceFile().fileName;
+            if (declFile.includes('node_modules')) continue;
+            const kind = classify(name, sym.flags, decl);
+            // Query-key factories + invalidators are intra-domain plumbing, co-located with the domain's hooks
+            // (same @workspace/lib/<domain> import as the hook you already found). Listing them is redundant
+            // noise, so they're excluded — the convention is documented in the header note instead.
+            if (kind === 'Cache') continue;
+            // Normalize to POSIX separators so the generated doc is identical across
+            // platforms (Windows `relative()` yields backslashes, which would otherwise
+            // flip every path and break `primitives:check`).
+            collected.push({ name, kind, importPath, file: relative(ROOT, declFile).replaceAll('\\', '/') });
         }
-        const declFile = decl.getSourceFile().fileName;
-        if (declFile.includes('node_modules')) continue;
-        const kind = classify(name, sym.flags, decl);
-        // Query-key factories + invalidators are intra-domain plumbing, co-located with the domain's hooks
-        // (same @workspace/lib/<domain> import as the hook you already found). Listing them is redundant
-        // noise, so they're excluded — the convention is documented in the header note instead.
-        if (kind === 'Cache') continue;
-        // Normalize to POSIX separators so the generated doc is identical across
-        // platforms (Windows `relative()` yields backslashes, which would otherwise
-        // flip every path and break `primitives:check`).
-        collected.push({ name, kind, importPath, file: relative(ROOT, declFile).replaceAll('\\', '/') });
     }
+} finally {
+    await snapshot.dispose();
+    await api.close();
 }
 
 // Dedup by declaration identity, keeping the shortest (most canonical) import path.

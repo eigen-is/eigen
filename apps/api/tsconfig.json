@@ -8,7 +8,6 @@
     "jsx": "react-jsx",
     "allowJs": true,
     "moduleResolution": "bundler",
-    "baseUrl": ".",
     "paths": {
       "@workspace/lib/*": ["../../packages/lib/src/core/*", "../../packages/lib/src/*"]
     },
