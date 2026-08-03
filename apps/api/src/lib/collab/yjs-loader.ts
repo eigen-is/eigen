@@ -9,58 +9,93 @@ import * as schema from './schema';
 
 type DocDb = BunSQLiteDatabase<typeof schema>;
 
-// Reconstructs Yjs state from doc_snapshots + doc_updates into `doc`. The
-// SQLite transaction is shared between live (`loadYjsState`) and snapshot-file
-// (`readYjsStateFromFile`) reads to avoid two near-identical copies of this.
-// Returns counters used by DbProvider's snapshot threshold (count + bytes) and
-// the number of corrupt blobs skipped. Skipping keeps a live doc best-effort
-// openable; whether a skip is tolerable is the caller's decision.
-function replayYjsState(
-    db: DocDb,
-    doc: Y.Doc,
-    label?: string,
-): { updatesApplied: number; bytesApplied: number; blobsSkipped: number } {
-    let updatesApplied = 0;
-    let bytesApplied = 0;
-    let blobsSkipped = 0;
+// Compressed persisted Yjs state, captured as standalone buffers so it can be
+// transferred to a document-transform Worker (or materialized right here on the
+// main thread). Blob ids ride along for diagnostics only.
+export type YjsStatePayload = {
+    snapshot: { id: number; lastUpdateId: number; data: ArrayBuffer } | null;
+    updates: { id: number; data: ArrayBuffer }[];
+};
+
+function copyBlob(stored: Uint8Array): ArrayBuffer {
+    return stored.buffer.slice(stored.byteOffset, stored.byteOffset + stored.byteLength) as ArrayBuffer;
+}
+
+// Selects the newest snapshot plus every update with id > snapshot.lastUpdateId
+// (all updates when no snapshot exists). The transaction holds only SELECTs and
+// buffer copies — decompression and Y.applyUpdate happen in materializeYjsState,
+// off the write path and possibly off-thread.
+//
+// Pruning invariant this capture relies on: DbProvider.createSnapshot inserts the
+// snapshot row and deletes every update with id <= lastUpdateId in the SAME
+// transaction (collabDocument.ts). So when a snapshot blob later turns out to be
+// corrupt, "the captured updates" and "all updates" are the same set, and
+// materializeYjsState replays exactly what the pre-split loader replayed via its
+// re-select-everything fallback. Pinned by the corrupt-snapshot equivalence test.
+function readPayload(db: DocDb): YjsStatePayload {
+    let payload: YjsStatePayload = { snapshot: null, updates: [] };
     db.transaction((tx) => {
         const snapshot = tx.select().from(schema.docSnapshots).orderBy(desc(schema.docSnapshots.id)).limit(1).get();
-
-        let loadedSnapshot = false;
-        if (snapshot) {
-            try {
-                Y.applyUpdate(doc, decompressBlob(snapshot.stateData as Uint8Array));
-                loadedSnapshot = true;
-            } catch {
-                blobsSkipped++;
-                console.error(`[yjs-loader] Skipping corrupted snapshot${label ? ` for ${label}` : ''}`);
-            }
-        }
-
-        const updates =
-            loadedSnapshot && snapshot
-                ? tx
-                      .select()
-                      .from(schema.docUpdates)
-                      .where(gt(schema.docUpdates.id, snapshot.lastUpdateId))
-                      .orderBy(asc(schema.docUpdates.id))
-                      .all()
-                : tx.select().from(schema.docUpdates).orderBy(asc(schema.docUpdates.id)).all();
-
-        for (const update of updates) {
-            try {
-                const data = decompressBlob(update.updateData as Uint8Array);
-                Y.applyUpdate(doc, data);
-                bytesApplied += data.byteLength;
-            } catch {
-                blobsSkipped++;
-                console.error(`[yjs-loader] Skipping corrupted update ${update.id}${label ? ` for ${label}` : ''}`);
-            }
-        }
-
-        updatesApplied = updates.length;
+        const updates = snapshot
+            ? tx
+                  .select()
+                  .from(schema.docUpdates)
+                  .where(gt(schema.docUpdates.id, snapshot.lastUpdateId))
+                  .orderBy(asc(schema.docUpdates.id))
+                  .all()
+            : tx.select().from(schema.docUpdates).orderBy(asc(schema.docUpdates.id)).all();
+        payload = {
+            snapshot: snapshot
+                ? {
+                      id: snapshot.id,
+                      lastUpdateId: snapshot.lastUpdateId,
+                      data: copyBlob(snapshot.stateData as Uint8Array),
+                  }
+                : null,
+            updates: updates.map((update) => ({ id: update.id, data: copyBlob(update.updateData as Uint8Array) })),
+        };
     });
-    return { updatesApplied, bytesApplied, blobsSkipped };
+    return payload;
+}
+
+export function readYjsStatePayload(managedDb: ManagedDatabase<SchemaType>): YjsStatePayload {
+    return readPayload(managedDb.db as DocDb);
+}
+
+// Decompresses and applies a captured payload into `doc`. Returns counters used
+// by DbProvider's snapshot threshold (count + bytes) and the number of corrupt
+// blobs skipped. Skipping keeps a live doc best-effort openable; whether a skip
+// is tolerable is the caller's decision.
+export function materializeYjsState(
+    payload: YjsStatePayload,
+    doc?: Y.Doc,
+    label?: string,
+): { doc: Y.Doc; updatesApplied: number; bytesApplied: number; blobsSkipped: number } {
+    if (!doc) doc = new Y.Doc();
+    let bytesApplied = 0;
+    let blobsSkipped = 0;
+
+    if (payload.snapshot) {
+        try {
+            Y.applyUpdate(doc, decompressBlob(new Uint8Array(payload.snapshot.data)));
+        } catch {
+            blobsSkipped++;
+            console.error(`[yjs-loader] Skipping corrupted snapshot${label ? ` for ${label}` : ''}`);
+        }
+    }
+
+    for (const update of payload.updates) {
+        try {
+            const data = decompressBlob(new Uint8Array(update.data));
+            Y.applyUpdate(doc, data);
+            bytesApplied += data.byteLength;
+        } catch {
+            blobsSkipped++;
+            console.error(`[yjs-loader] Skipping corrupted update ${update.id}${label ? ` for ${label}` : ''}`);
+        }
+    }
+
+    return { doc, updatesApplied: payload.updates.length, bytesApplied, blobsSkipped };
 }
 
 export function loadYjsState(
@@ -68,9 +103,7 @@ export function loadYjsState(
     doc?: Y.Doc,
     label?: string,
 ): { doc: Y.Doc; updatesApplied: number; bytesApplied: number } {
-    if (!doc) doc = new Y.Doc();
-    const { updatesApplied, bytesApplied } = replayYjsState(managedDb.db as DocDb, doc, label);
-    return { doc, updatesApplied, bytesApplied };
+    return materializeYjsState(readYjsStatePayload(managedDb), doc, label);
 }
 
 // Reads a snapshot data.db file (a versions/<timestamp>.db copy) and returns
@@ -86,7 +119,7 @@ export function readYjsStateFromFile(localPath: string, label?: string): Uint8Ar
     const rawDb = new BunDatabase(localPath);
     try {
         const doc = new Y.Doc();
-        const { blobsSkipped } = replayYjsState(drizzle(rawDb, { schema }), doc, label);
+        const { blobsSkipped } = materializeYjsState(readPayload(drizzle(rawDb, { schema })), doc, label);
         if (blobsSkipped > 0) {
             throw new ApiError(422, `Snapshot is corrupted (${blobsSkipped} unreadable Yjs blobs); restore aborted`);
         }
