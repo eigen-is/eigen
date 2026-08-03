@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
-import type { ExportMedia } from './transform/protocol';
+import type { TransformMedia } from './transform/protocol';
 
 // Media helpers for eigen documents, shared by the main-thread transform wrappers
 // and the Worker-side converters. This module must stay light: the modules the
@@ -48,7 +48,7 @@ export function resolveMediaUrl(mediaUrls: Record<string, string>, mediaName: st
 
 // The Worker side of export media: the transferred buffers become the data: URIs the
 // export renderers embed.
-export function toDataUriMap(media: ExportMedia[]): Map<string, string> {
+export function toDataUriMap(media: TransformMedia[]): Map<string, string> {
     return new Map(
         media.map((item) => [
             item.name,

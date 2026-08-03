@@ -3,6 +3,7 @@ import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
     type ExportTransformJob,
+    type ImportTransformJob,
     type PreviewTransformJob,
     type TransformWarning,
     transferListOfResult,
@@ -46,10 +47,8 @@ async function renderExport(
             return renderEigensheetsExport(doc, request.format, request.title);
         }
         case 'eigendoc': {
-            // html and pdf-html render the same document — the format only decides
-            // what the main thread does with the bytes.
             const { renderEigendocExport } = await import('../../export/doc/transform');
-            return renderEigendocExport(doc, request.title, request.media);
+            return renderEigendocExport(doc, request.format, request.title, request.media);
         }
         case 'eigenslides': {
             const { renderEigenslidesExport } = await import('../../export/slides/transform');
@@ -58,13 +57,23 @@ async function renderExport(
     }
 }
 
+async function runImport(request: ImportTransformJob & { data: ArrayBuffer }): Promise<DocumentTransformResponse> {
+    switch (request.sourceFormat) {
+        case 'xlsx': {
+            const { importXlsxToSheetsSnapshot } = await import('../../import/sheets/transform');
+            const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(request.data);
+            return { ok: true, result: { snapshotJson }, warnings };
+        }
+        case 'docx': {
+            const { importDocxToEigendocUpdate } = await import('../../import/doc/transform');
+            return { ok: true, result: await importDocxToEigendocUpdate(request.data), warnings: [] };
+        }
+    }
+}
+
 async function handleRequest(request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
     // Imports convert uploaded bytes — no document to materialize.
-    if (request.kind === 'import') {
-        const { importXlsxToSheetsSnapshot } = await import('../../import/sheets/transform');
-        const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(request.data);
-        return { ok: true, result: { snapshotJson }, warnings };
-    }
+    if (request.kind === 'import') return runImport(request);
 
     // Preview and export both read the persisted document, so materialization is shared.
     const { materializeYjsState } = await import('../../collab/yjs-loader');

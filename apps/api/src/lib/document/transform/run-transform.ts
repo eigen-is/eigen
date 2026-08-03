@@ -4,10 +4,12 @@ import type { Mount } from '../../mount';
 import { captureCollabSource } from './collab-source';
 import type {
     CollabTransformJob,
+    DocImportJob,
+    DocImportWorkerResult,
     DocumentTransformRequest,
     ExportTransformJob,
-    ImportTransformJob,
     PreviewTransformJob,
+    SheetsImportJob,
     TransformResult,
     TransformWarning,
 } from './protocol';
@@ -100,14 +102,25 @@ export async function runTransformToBytes(
     return Buffer.from(result.data);
 }
 
-// Imports carry uploaded bytes instead of a captured document, and hand back the
-// snapshot JSON the caller commits — decoded, never parsed, on the main thread.
+// Imports carry uploaded bytes instead of a captured document, and hand back what
+// the caller commits: the snapshot JSON (decoded, never parsed, on the main thread)
+// for sheets, a ready Yjs update plus extracted media for documents.
 export async function runImportToSnapshotJson(
-    job: ImportTransformJob,
+    job: SheetsImportJob,
     data: ArrayBuffer,
     opts: TransformOptions,
 ): Promise<string> {
     const result = await runTransformRequest({ ...job, data }, opts);
     if (!('snapshotJson' in result)) throw new Error(`${job.kind} transform returned no snapshot`);
     return new TextDecoder().decode(result.snapshotJson);
+}
+
+export async function runImportToDocumentUpdate(
+    job: DocImportJob,
+    data: ArrayBuffer,
+    opts: TransformOptions,
+): Promise<DocImportWorkerResult> {
+    const result = await runTransformRequest({ ...job, data }, opts);
+    if (!('update' in result)) throw new Error(`${job.kind} transform returned no document update`);
+    return result;
 }

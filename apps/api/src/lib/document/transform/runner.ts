@@ -67,26 +67,25 @@ function errorResponse(code: TransformError['code'], message: string): DocumentT
 // with no result, or a result that doesn't match the request kind) must become a
 // structured invalid-response, not a throw inside settle that leaves the
 // requester's promise hanging forever.
-function isValidResponse(
-    response: unknown,
-    kind: DocumentTransformRequest['kind'],
-): response is DocumentTransformResponse {
+function isValidResponse(response: unknown, request: DocumentTransformRequest): response is DocumentTransformResponse {
     if (!response || typeof response !== 'object') return false;
     const r = response as {
         ok?: unknown;
-        result?: { body?: unknown; data?: unknown; snapshotJson?: unknown };
+        result?: { body?: unknown; data?: unknown; snapshotJson?: unknown; update?: unknown; images?: unknown };
         warnings?: unknown;
         error?: { code?: unknown; message?: unknown };
     };
     if (r.ok === true) {
         if (!Array.isArray(r.warnings)) return false;
-        switch (kind) {
+        switch (request.kind) {
             case 'preview':
                 return typeof r.result?.body === 'string';
             case 'export':
                 return r.result?.data instanceof ArrayBuffer;
             case 'import':
-                return r.result?.snapshotJson instanceof ArrayBuffer;
+                return request.targetType === 'eigendoc'
+                    ? r.result?.update instanceof ArrayBuffer && Array.isArray(r.result.images)
+                    : r.result?.snapshotJson instanceof ArrayBuffer;
         }
     }
     if (r.ok === false) return typeof r.error?.code === 'string' && typeof r.error?.message === 'string';
@@ -95,7 +94,9 @@ function isValidResponse(
 
 function resultBytes(result: TransformResult): number {
     if ('body' in result) return Buffer.byteLength(result.body);
-    return 'data' in result ? result.data.byteLength : result.snapshotJson.byteLength;
+    if ('data' in result) return result.data.byteLength;
+    if ('snapshotJson' in result) return result.snapshotJson.byteLength;
+    return result.images.reduce((sum, image) => sum + image.data.byteLength, result.update.byteLength);
 }
 
 // An import has no source document type — log the type it produces.
@@ -229,7 +230,7 @@ export class DocumentTransformRunner {
         worker.onmessage = (event: MessageEvent) => {
             const envelope = event.data as Partial<WorkerResponseEnvelope> | null;
             const response = envelope?.response;
-            if (!isValidResponse(response, job.request.kind)) {
+            if (!isValidResponse(response, job.request)) {
                 settle(errorResponse('invalid-response', 'Worker returned a malformed response'));
                 return;
             }

@@ -3,17 +3,20 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 // Closed request/response unions crossing the document-transform Worker boundary.
 // Only clone-safe primitives and ArrayBuffers ride here — never Mount, database,
 // Y.Doc, or other class instances, and never module/function names user input
-// could influence. Phases 2–3 carry every eigensheets/eigendoc/eigenslides preview
-// and HTML/PDF export plus the xlsx import; DOCX joins the union in a later phase.
+// could influence. Phases 2–3 carry every eigensheets/eigendoc/eigenslides preview,
+// every HTML/PDF/XLSX/DOCX export, and the xlsx and docx imports.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the Worker returns the document it renders from.
 export type SheetExportFormat = 'html' | 'xlsx' | 'pdf-html';
 export type DocumentExportFormat = 'html' | 'pdf-html';
+// Only eigendoc exports to docx; the slides route rejects the format.
+export type EigendocExportFormat = DocumentExportFormat | 'docx';
 
-// Doc/slides media, prepared on the main thread (Mount I/O + screen previews) and
-// transferred; the Worker builds the data: URIs from these bytes.
-export type ExportMedia = { name: string; contentType: string; data: ArrayBuffer };
+// Doc/slides media crossing the boundary: prepared on the main thread for an export
+// (Mount I/O + screen previews), extracted from the upload by a docx import. The
+// bytes always ride as transferred buffers.
+export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
@@ -27,18 +30,21 @@ export type PreviewTransformJob =
 // container name, frozen output.)
 export type ExportTransformJob =
     | { kind: 'export'; documentType: 'eigensheets'; format: SheetExportFormat; title: string }
+    | { kind: 'export'; documentType: 'eigendoc'; format: EigendocExportFormat; title: string; media: TransformMedia[] }
     | {
           kind: 'export';
-          documentType: 'eigendoc' | 'eigenslides';
+          documentType: 'eigenslides';
           format: DocumentExportFormat;
           title: string;
-          media: ExportMedia[];
+          media: TransformMedia[];
       };
 
 // Pure conversion of uploaded bytes: the Worker learns nothing about the
-// destination — no owner, mount, ACL or path. The formats stay narrow until
-// Phase 3 widens them for DOCX/eigendoc.
-export type ImportTransformJob = { kind: 'import'; sourceFormat: 'xlsx'; targetType: 'eigensheets' };
+// destination — no owner, mount, ACL or path. One arm per supported source format,
+// so an impossible pairing (xlsx into an eigendoc) does not compile.
+export type SheetsImportJob = { kind: 'import'; sourceFormat: 'xlsx'; targetType: 'eigensheets' };
+export type DocImportJob = { kind: 'import'; sourceFormat: 'docx'; targetType: 'eigendoc' };
+export type ImportTransformJob = SheetsImportJob | DocImportJob;
 
 // Preview and export read the persisted collaborative document; import does not.
 export type CollabTransformJob = PreviewTransformJob | ExportTransformJob;
@@ -67,9 +73,12 @@ export type PreviewResult = { body: string };
 export type ExportWorkerResult = { data: ArrayBuffer };
 // UTF-8 bytes of the lean Sheet[] JSON — the main thread commits the string
 // without parsing it.
-export type ImportWorkerResult = { snapshotJson: ArrayBuffer };
+export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer };
+// A ready Yjs update plus the images extracted from the docx: the main thread only
+// applies the update and writes the media through Mount.
+export type DocImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
 
-export type TransformResult = PreviewResult | ExportWorkerResult | ImportWorkerResult;
+export type TransformResult = PreviewResult | ExportWorkerResult | SheetsImportWorkerResult | DocImportWorkerResult;
 
 export type DocumentTransformResponse<Result = TransformResult> =
     | { ok: true; result: Result; warnings: TransformWarning[] }
@@ -96,8 +105,10 @@ export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[]
 // body is a small clone.
 export function transferListOfResult(response: DocumentTransformResponse): ArrayBuffer[] {
     if (!response.ok) return [];
-    if ('data' in response.result) return [response.result.data];
-    if ('snapshotJson' in response.result) return [response.result.snapshotJson];
+    const result = response.result;
+    if ('data' in result) return [result.data];
+    if ('snapshotJson' in result) return [result.snapshotJson];
+    if ('update' in result) return [result.update, ...result.images.map((image) => image.data)];
     return [];
 }
 

@@ -7,7 +7,7 @@ import { toDataUriMap } from '../../document/media';
 import { readDeckFromDoc } from '../../document/slides';
 import {
     type DocumentExportFormat,
-    type ExportMedia,
+    type TransformMedia,
     type TransformWarning,
     toTransferableBuffer,
 } from '../../document/transform/protocol';
@@ -27,7 +27,7 @@ export function renderEigenslidesExport(
     doc: Y.Doc,
     format: DocumentExportFormat,
     title: string,
-    media: ExportMedia[],
+    media: TransformMedia[],
 ): { data: ArrayBuffer; warnings: TransformWarning[] } {
     const html = renderDeckDocument(readDeckFromDoc(doc), toDataUriMap(media), title, format);
     return { data: toTransferableBuffer(new TextEncoder().encode(html)), warnings: [] };

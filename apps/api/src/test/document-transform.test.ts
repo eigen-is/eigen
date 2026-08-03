@@ -1,20 +1,26 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
+import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { ImageObject } from '@workspace/lib/slides';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
 import { materializeYjsState } from '../lib/collab/yjs-loader';
 import { ApiError } from '../lib/core/errors';
-import { readEigendocFromDoc, writeEigendocToYjs } from '../lib/document/doc';
+import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../lib/document/doc';
 import { buildPreviewUrlMap } from '../lib/document/media';
 import { readSheetsFromDoc } from '../lib/document/sheets';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
-import type { DocumentTransformResponse } from '../lib/document/transform/protocol';
+import {
+    type DocImportWorkerResult,
+    type DocumentTransformResponse,
+    toTransferableBuffer,
+} from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
 import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
 import { exportEigendocToHtml, runEigendocExport } from '../lib/export/doc/html';
@@ -86,6 +92,13 @@ function importSnapshot(response: DocumentTransformResponse): string {
         throw new Error(`expected an import snapshot, got ${JSON.stringify(response)}`);
     }
     return new TextDecoder().decode(response.result.snapshotJson);
+}
+
+function importDocUpdate(response: DocumentTransformResponse): DocImportWorkerResult {
+    if (!response.ok || !('update' in response.result)) {
+        throw new Error(`expected a document update, got ${JSON.stringify(response)}`);
+    }
+    return response.result;
 }
 
 // Corrupt only the newest update — the base write must survive so the transform
@@ -747,6 +760,28 @@ describe('document transform (eigendoc)', () => {
         expect(media[0].data.byteLength).toBe(0);
         expect(Buffer.from(exportBytes(response)).toString('utf-8')).toContain('src="data:image/webp;base64,');
     }, 120_000);
+
+    test('docx export loads Turbodocx from runtime node_modules inside the Worker', async () => {
+        const { mount, path } = golden;
+        const response = await documentTransformRunner.run(
+            {
+                kind: 'export',
+                documentType: 'eigendoc',
+                format: 'docx',
+                title: path.name,
+                media: await collectExportMedia(mount, path),
+                source: await captureCollabSource(mount, path),
+            },
+            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+        );
+        // Turbodocx is externalized from the bundle — a real zip proves the Worker
+        // resolved it at runtime and produced the document off-thread.
+        const docx = Buffer.from(exportBytes(response));
+        expect(docx.byteLength).toBeGreaterThan(0);
+        expect(docx.subarray(0, 2).toString()).toBe('PK');
+        const zip = await JSZip.loadAsync(docx);
+        expect(Object.keys(zip.files)).toContain('word/document.xml');
+    }, 120_000);
 });
 
 describe('document transform (eigenslides)', () => {
@@ -858,6 +893,32 @@ const GOLDEN_DOCX_PM_JSON_SHA256 = '15b5feca693ca9ee7c3cf8fe3d030a1bc79bc3a1ac56
 const GOLDEN_DOCX_DOCUMENT_SHA256 = '51ae42c1e14f8f5acfa31337873d126218c155746f6850860afdc90900808cfe';
 
 describe('document transform (docx import)', () => {
+    async function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
+        return authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`,
+            { method: 'POST', body },
+        );
+    }
+
+    async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {
+        return documentTransformRunner.run(
+            { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', data },
+            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+        );
+    }
+
+    // The document the pre-move pipeline produced: parse on this thread, commit into
+    // a fresh Y.Doc, read back. The Worker must reproduce it exactly.
+    async function referenceDocument(): Promise<JSONContent> {
+        const { json } = await docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
+        const doc = new Y.Doc();
+        writeEigendocToYjs(doc, json, docSchema);
+        const read = readEigendocFromDoc(doc);
+        doc.destroy();
+        return read;
+    }
+
     test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
         const { json, images } = await docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
         expect(sha256(JSON.stringify(json))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
@@ -870,5 +931,102 @@ describe('document transform (docx import)', () => {
         writeEigendocToYjs(doc, json, docSchema);
         expect(sha256(JSON.stringify(readEigendocFromDoc(doc)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
         doc.destroy();
+    }, 120_000);
+
+    test('Worker import returns a Yjs update that commits to the golden document', async () => {
+        const response = await runDocxImport(await buildGoldenDocx(TEST_PNG_BYTES));
+        const { update, images } = importDocUpdate(response);
+        expect(response.ok && response.warnings).toEqual([]);
+
+        const doc = new Y.Doc();
+        writeEigendocUpdateToYjs(doc, new Uint8Array(update));
+        const committed = readEigendocFromDoc(doc);
+        doc.destroy();
+        expect(committed).toEqual(await referenceDocument());
+        expect(sha256(JSON.stringify(committed))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+
+        // The extracted image crossed the boundary as a transferred buffer, byte-intact.
+        expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
+            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+        ]);
+        expect(Buffer.from(images[0].data)).toEqual(Buffer.from(TEST_PNG_BYTES));
+    }, 120_000);
+
+    test('garbage bytes keep their 400 across the Worker boundary', async () => {
+        const response = await runDocxImport(toTransferableBuffer(GARBAGE));
+        expect(response.ok).toBe(false);
+        expect(!response.ok && response.error).toMatchObject({ status: 400, message: 'Not a valid docx file' });
+    }, 120_000);
+
+    test('a failed import Worker leaves the target document untouched', async () => {
+        const target = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'docx-import-crash-target' },
+        );
+        expect((await importRequest(target.id, await buildGoldenDocx(TEST_PNG_BYTES))).status).toBe(200);
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, target.id);
+        const before = readEigendocFromDoc(collab.doc);
+
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+            ok: false as const,
+            error: { code: 'crashed' as const, message: 'forced failure' },
+        }));
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const res = await importRequest(target.id, await buildGoldenDocx(TEST_PNG_BYTES));
+            expect(res.status).toBe(500);
+            expect(readEigendocFromDoc(collab.doc)).toEqual(before);
+        } finally {
+            errorSpy.mockRestore();
+            runSpy.mockRestore();
+        }
+    }, 120_000);
+
+    test('a failed convert Worker creates no destination document', async () => {
+        const folder = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}`,
+            { folderName: 'docx-convert-crash' },
+        );
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            folder.id,
+            new File([await buildGoldenDocx(TEST_PNG_BYTES)], 'crash.docx', {
+                type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            }),
+        );
+
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+            ok: false as const,
+            error: { code: 'crashed' as const, message: 'forced failure' },
+        }));
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigendoc`,
+                { method: 'POST' },
+            );
+            expect(res.status).toBe(500);
+            const contents = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                'folder',
+                folder.id,
+            );
+            expect(contents.map((entry) => entry.name)).toEqual(['crash.docx']);
+        } finally {
+            errorSpy.mockRestore();
+            runSpy.mockRestore();
+        }
     }, 120_000);
 });

@@ -1,8 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getSchema } from '@tiptap/core';
+import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { readEigendocContent, writeEigendocToYjs } from '../lib/document/doc';
+import * as Y from 'yjs';
+import {
+    readEigendocContent,
+    readEigendocFromDoc,
+    writeEigendocToYjs,
+    writeEigendocUpdateToYjs,
+} from '../lib/document/doc';
 import { getHome } from '../lib/home/get-home';
 import { driveGet, drivePost, getTestContext } from './setup';
 
@@ -47,6 +54,48 @@ describe('document/doc', () => {
 
         expect(content.json).toMatchObject(json);
         expect(content.mediaByName).toBeInstanceOf(Map);
+    });
+
+    test('writeEigendocUpdateToYjs commits a prepared update to the same end state', () => {
+        // The import commit path: the Worker converts ProseMirror JSON to a Yjs
+        // update, the main thread only applies it.
+        const json = {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'From the Worker.' }] }],
+        };
+        const viaJson = new Y.Doc();
+        writeEigendocToYjs(viaJson, json, schema);
+
+        const tempDoc = prosemirrorJSONToYDoc(schema, json, 'default');
+        const viaUpdate = new Y.Doc();
+        writeEigendocUpdateToYjs(viaUpdate, Y.encodeStateAsUpdate(tempDoc));
+        tempDoc.destroy();
+
+        expect(readEigendocFromDoc(viaUpdate)).toEqual(readEigendocFromDoc(viaJson));
+        viaJson.destroy();
+        viaUpdate.destroy();
+    });
+
+    test('writeEigendocUpdateToYjs replaces existing content instead of appending', () => {
+        const doc = new Y.Doc();
+        writeEigendocToYjs(
+            doc,
+            { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR' }] }] },
+            schema,
+        );
+
+        const tempDoc = prosemirrorJSONToYDoc(
+            schema,
+            { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'IMPORTED' }] }] },
+            'default',
+        );
+        writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
+        tempDoc.destroy();
+
+        const json = JSON.stringify(readEigendocFromDoc(doc));
+        expect(json).toContain('IMPORTED');
+        expect(json).not.toContain('PRIOR');
+        doc.destroy();
     });
 
     test('readEigendocContent throws when data.db is missing', async () => {

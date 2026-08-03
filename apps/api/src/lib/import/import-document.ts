@@ -1,20 +1,27 @@
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
-import { writeEigendocToYjs } from '../document/doc';
+import { writeEigendocUpdateToYjs } from '../document/doc';
 import { writeSheetsSnapshotToYjs } from '../document/sheets';
-import { type ImportTransformJob, toTransferableBuffer } from '../document/transform/protocol';
-import { runImportToSnapshotJson } from '../document/transform/run-transform';
+import {
+    type DocImportJob,
+    type DocImportWorkerResult,
+    type SheetsImportJob,
+    type TransformMedia,
+    toTransferableBuffer,
+} from '../document/transform/protocol';
+import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
 import { EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../document/transform/runner';
 import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
-import type { DocxImage } from './doc/from-docx';
 
-const XLSX_TO_SHEETS: ImportTransformJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
+const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
+const DOCX_TO_DOC: DocImportJob = { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc' };
 
 // Parsing, guards, recalc and serialization run in the transform Worker; the main
-// thread only commits the returned snapshot. Nothing is created or mutated before
-// the Worker succeeds, so a failed import leaves source and target untouched.
+// thread only commits what it returns — the snapshot for sheets, a ready Yjs update
+// plus extracted media for documents. Nothing is created or mutated before the Worker
+// succeeds, so a failed import leaves source and target untouched.
 // The upload Buffer can be a view over a larger pool, and a transfer hands over
 // the WHOLE backing buffer — copy into an exact standalone one first.
 function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<string> {
@@ -24,25 +31,20 @@ function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<strin
     });
 }
 
-// docx is a zip-based format — the parser needs the full file in memory to read
-// the central directory and extract parts. Callers are expected to size-check first.
-async function parseDocxOrThrow(buffer: Buffer) {
-    try {
-        const { docxToPmJson, docSchema } = await import('./doc/from-docx');
-        const result = await docxToPmJson(buffer);
-        return { ...result, schema: docSchema };
-    } catch (err) {
-        if (err instanceof ApiError) throw err;
-        throw new ApiError(400, 'Not a valid docx file');
-    }
+function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
+    return runImportToDocumentUpdate(DOCX_TO_DOC, toTransferableBuffer(buffer), {
+        deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+        signal,
+    });
 }
 
-async function saveDocImages(mount: Mount, docPath: DrivePath, images: DocxImage[]): Promise<void> {
+async function saveDocImages(mount: Mount, docPath: DrivePath, images: TransformMedia[]): Promise<void> {
     if (images.length === 0) return;
     const mediaFolder = await mount.getChildByName(docPath.id, 'media');
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
     for (const image of images) {
-        await mount.createFile(mediaFolder.id, image.name, image.contentType, image.data.byteLength, image.data);
+        const data = Buffer.from(image.data);
+        await mount.createFile(mediaFolder.id, image.name, image.contentType, data.byteLength, data);
     }
 }
 
@@ -76,11 +78,11 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
             throw new ApiError(400, 'Only .docx files can be converted to documents');
         }
-        const { json, images, schema } = await parseDocxOrThrow(buffer);
+        const { update, images } = await importDocxUpdate(buffer, signal);
         const name = sourcePath.name.replace(/\.docx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeEigendocToYjs(collabDoc.doc, json, schema);
+        writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
         await saveDocImages(mount, newPath, images);
         return newPath;
     }
@@ -103,9 +105,9 @@ export async function importIntoDocument(
     }
 
     if (path.mimeType === DRIVE_MIME_DOC) {
-        const { json, images, schema } = await parseDocxOrThrow(buffer);
+        const { update, images } = await importDocxUpdate(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeEigendocToYjs(collabDoc.doc, json, schema);
+        writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
         await saveDocImages(mount, path, images);
         return;
     }

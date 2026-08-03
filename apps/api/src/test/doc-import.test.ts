@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { readEigendocFromDoc } from '../lib/document/doc';
+import { toTransferableBuffer } from '../lib/document/transform/protocol';
 import { getHome } from '../lib/home/get-home';
 import { seedEigendoc } from './fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_HEADING, GOLDEN_DOCX_IMAGE_NAME, GOLDEN_DOCX_LINK } from './fixtures/golden-docx';
@@ -42,7 +43,7 @@ function convertRequest(pathId: string, targetType = 'eigendoc'): Promise<Respon
     );
 }
 
-function importRequest(pathId: string, body: ArrayBuffer | Uint8Array): Promise<Response> {
+function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
     return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
         method: 'POST',
         body,
@@ -145,7 +146,7 @@ describe('Eigendoc docx import/convert', () => {
             `folder/${rootId}/create/doc`,
             { fileName: 'garbage-import-target' },
         );
-        const res = await importRequest(docPath.id, new TextEncoder().encode('this is not a valid docx file'));
+        const res = await importRequest(docPath.id, toTransferableBuffer(Buffer.from('not a valid docx file')));
         expect(res.status).toBe(400);
         expect(await res.text()).toBe('Not a valid docx file');
     }, 60_000);

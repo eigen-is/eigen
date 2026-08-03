@@ -1,14 +1,21 @@
+/// <reference path="../modules.d.ts" />
 import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../../document/doc';
 import { toDataUriMap } from '../../document/media';
-import { type ExportMedia, type TransformWarning, toTransferableBuffer } from '../../document/transform/protocol';
+import {
+    type EigendocExportFormat,
+    type TransformMedia,
+    type TransformWarning,
+    toTransferableBuffer,
+} from '../../document/transform/protocol';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
@@ -17,16 +24,26 @@ import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './ren
 // (worker.ts owns execution; the main-thread wrappers live in doc/{html,pdf,docx}.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 //
-// html and pdf-html are the same document by design: WeasyPrint renders exactly what
-// the HTML download serves, so the format only decides what the main thread does with
-// the bytes.
-export function renderEigendocExport(
+// Every format renders the same document by design: WeasyPrint and Turbodocx both
+// consume exactly what the HTML download serves. Turbodocx loads lazily — it is an
+// externalized dependency, and an HTML export must not evaluate it.
+export async function renderEigendocExport(
     doc: Y.Doc,
+    format: EigendocExportFormat,
     title: string,
-    media: ExportMedia[],
-): { data: ArrayBuffer; warnings: TransformWarning[] } {
+    media: TransformMedia[],
+): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
     const html = renderEigendocDocument(readEigendocFromDoc(doc), toDataUriMap(media), title);
-    return { data: toTransferableBuffer(new TextEncoder().encode(html)), warnings: [] };
+    if (format !== 'docx') return { data: toTransferableBuffer(new TextEncoder().encode(html)), warnings: [] };
+
+    const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
+    // The HTML <title> keeps the full container name (frozen output); the docx
+    // document property carries the stripped one, as it always has.
+    const docx = await HTMLtoDOCX(html, undefined, {
+        title: stripEigenExtension(title),
+        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+    });
+    return { data: toTransferableBuffer(new Uint8Array(docx)), warnings: [] };
 }
 
 const lowlight = createLowlight(common);

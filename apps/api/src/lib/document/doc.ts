@@ -31,13 +31,19 @@ export async function readEigendocContent(mount: Mount, drivePath: DrivePath): P
     return { json: readEigendocFromDoc(ydoc), mediaByName: await listDocumentMedia(mount, drivePath) };
 }
 
-export function writeEigendocToYjs(doc: Y.Doc, json: JSONContent, schema: Schema): void {
+// The import commit: a Yjs update prepared elsewhere (the transform Worker) replaces
+// the document's content. Clearing first is what makes an import a replacement — an
+// applied update alone would append to whatever the document already holds.
+export function writeEigendocUpdateToYjs(doc: Y.Doc, update: Uint8Array): void {
     doc.transact(() => {
         const fragment = doc.getXmlFragment('default');
         if (fragment.length > 0) fragment.delete(0, fragment.length);
     });
+    Y.applyUpdate(doc, update);
+}
 
+export function writeEigendocToYjs(doc: Y.Doc, json: JSONContent, schema: Schema): void {
     const tempDoc = prosemirrorJSONToYDoc(schema, json, 'default');
-    Y.applyUpdate(doc, Y.encodeStateAsUpdate(tempDoc));
+    writeEigendocUpdateToYjs(doc, Y.encodeStateAsUpdate(tempDoc));
     tempDoc.destroy();
 }
