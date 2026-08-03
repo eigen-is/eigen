@@ -206,6 +206,11 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            // The stored file is buffered whole for parsing, and the upload limit that
+            // applied when it landed may have been higher — bound it here too.
+            if (path.size > (await getUploadMaxSize(params.ownerId, user.id, params.mountId))) {
+                throw new ApiError(413, 'Source file too large');
+            }
             return await convertToDocument(drive, mount, path, params.targetType, user);
         },
         { auth: true },

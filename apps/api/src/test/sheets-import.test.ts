@@ -463,6 +463,30 @@ describe('Sheets xlsx import/convert', () => {
         expect(await res.text()).toBe('Spreadsheet has too many cells');
     });
 
+    test('convert rejects a stored source file over the upload limit with 413', async () => {
+        // /convert buffers an already-stored file, so it needs its own bound — the
+        // upload-time limit can have been raised since the file landed.
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            new File(['x'.repeat(2 * 1024 * 1024)], 'oversized.xlsx', { type: XLSX_MIME }),
+        );
+        await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
+        try {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+                { method: 'POST' },
+            );
+            expect(res.status).toBe(413);
+            expect(await res.text()).toBe('Source file too large');
+        } finally {
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
+        }
+    });
+
     test('import route rejects an over-quota upload with 413 Upload too large', async () => {
         const sheetsDoc = await uploadAndConvert(
             await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
