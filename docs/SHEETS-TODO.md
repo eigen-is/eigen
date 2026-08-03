@@ -86,3 +86,9 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 
 - [ ] move the sheets toolbar onto the shared `ColumnLayout` chrome (currently the engine's own
       MenuBar; the one app not on the shared layout)
+- [ ] the canvas re-measures on `window` resize only (`Sheet/index.tsx` → `updateContextWithCanvas`),
+      never on container resize: opening the desktop comment panel leaves the grid drawn at the old
+      width (clipped under the panel), a resize while the container is `display:none` pins it at
+      0×0, and a mobile rotation across the 768 breakpoint with a panel open leaves it at the
+      narrow width until the next resize. Fix is a guarded `ResizeObserver` on the placeholder
+      (skip 0-size boxes) instead of the window listener

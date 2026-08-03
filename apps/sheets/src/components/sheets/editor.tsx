@@ -7,6 +7,7 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
 } from '@workspace/lib/drive';
+import { useIsMobile } from '@workspace/lib/media';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
@@ -16,6 +17,7 @@ import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
@@ -244,6 +246,13 @@ function SheetEditorInner({
         ],
     );
 
+    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the panel covers the
+    // editor area instead. It floats over the workbook rather than hiding it: the grid re-measures its
+    // canvas on window resize only, and a resize while the container is display:none pins it at 0×0.
+    const isMobile = useIsMobile();
+    const mobilePanelOpen = isMobile && (commentPanelOpen || activityPanelOpen);
+    const panelClassName = cn(mobilePanelOpen && 'absolute inset-0 w-full border-l-0');
+
     if (!synced || !initialData) {
         return <LoadingState />;
     }
@@ -261,8 +270,10 @@ function SheetEditorInner({
                     accept="image/*"
                 />
             )}
-            <div className="flex h-full w-full overflow-hidden">
-                <div className="flex-1 overflow-hidden">
+            <div className={cn('flex h-full w-full overflow-hidden', mobilePanelOpen && 'relative')}>
+                {/* isolate: the find bar floats at z-10 inside this wrapper and would otherwise paint
+                    over the panel (the grid's own overlays are already isolated by DocSearchProvider). */}
+                <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'isolate')}>
                     <DocSearchProvider
                         controller={searchController}
                         initialSearchTerm={initialSearchTerm}
@@ -364,6 +375,7 @@ function SheetEditorInner({
                         currentUserEmail={auth.user!.email}
                         filter={commentFilter}
                         members={members}
+                        className={panelClassName}
                         onClose={() => setCommentPanelOpen(false)}
                         onCommentClick={(cardId) => setOpenCardId(cardId)}
                         onCommentContextMenu={(e, card, entry) =>
@@ -374,6 +386,7 @@ function SheetEditorInner({
                 {activityPanelOpen && (
                     <ActivityPanel
                         path={path}
+                        className={panelClassName}
                         onClose={() => setActivityPanelOpen(false)}
                         onOpenCard={({ cardId, chatName }) => {
                             const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);

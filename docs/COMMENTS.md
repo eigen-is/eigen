@@ -286,6 +286,11 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   `CommentFilterButton`; `ActivityPanel` takes the same two props for the same Column. Clicks there
   only open the card — the editor column is unmounted, so scroll-to-mark (docs) and the slide +
   object reveal (slides) would drive a detached view.
+  Sheets has no `ColumnLayout` (the Workbook owns its toolbar), so below the breakpoint it keeps the
+  panel's own header — the X is the back path — and passes `className="absolute inset-0 w-full
+  border-l-0"` so the panel covers the editor area instead of squeezing it. It floats over the
+  workbook rather than hiding it: the grid measures its canvas from the container on window resize
+  only, so a resize while the container is `display:none` pins the canvas at 0×0.
 
 ### Comment filters (`packages/lib/src/core/comments/filter.ts` + filter UI)
 
