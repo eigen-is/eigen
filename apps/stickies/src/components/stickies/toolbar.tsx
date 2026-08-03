@@ -15,7 +15,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/layout/comments';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';

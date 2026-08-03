@@ -18,7 +18,7 @@ import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-a
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
 import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { useRef, useState } from 'react';
 
 function ChatView() {

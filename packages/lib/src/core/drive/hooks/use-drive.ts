@@ -308,14 +308,17 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     });
 }
 
-// DELETE MULTIPLE PATHS
-export function useDeletePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+// DELETE MULTIPLE PATHS — derives owner/mount from each path so mixed-owner selections
+// (aggregate filter views list other owners' items) each hit their own home.
+export function useDeletePaths() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (paths: DrivePath[]) => {
             const results = await Promise.allSettled(
                 paths.map(async (path) => {
-                    const response = await driveApi({ ownerId })({ mountId }).path({ pathId: path.id }).delete();
+                    const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+                        .path({ pathId: path.id })
+                        .delete();
                     if (response.error) throw new AppError(response);
                     return path;
                 }),
@@ -324,7 +327,7 @@ export function useDeletePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_
                 .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
                 .map((r) => r.value);
             for (const path of succeeded) {
-                invalidateItemDeleted(queryClient, ownerId, mountId, path.id, path.parentId, path.mimeType);
+                invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             }
             const failedCount = results.filter((r) => r.status === 'rejected').length;
             if (failedCount > 0) throw new Error(`Failed to delete ${failedCount} of ${paths.length} items`);

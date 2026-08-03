@@ -97,7 +97,7 @@ export function DriveLayout({
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
     const copyPath = useCopyPath();
     const duplicatePath = useDuplicatePath();
-    const deletePathsMutation = useDeletePaths(ownerId, mountId);
+    const deletePathsMutation = useDeletePaths();
     const convertMutation = useConvertDocument(ownerId, mountId);
     const isCoarsePointer = useIsCoarsePointer();
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);

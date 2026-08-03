@@ -1,4 +1,5 @@
 export * from './document-mode-button';
+export * from './document-share-cluster';
 export * from './edit-menu';
 export * from './file-menu';
 export * from './kebab-trigger';

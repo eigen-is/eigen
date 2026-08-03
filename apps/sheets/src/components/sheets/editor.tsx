@@ -15,7 +15,7 @@ import type { CommentContextMenuItem } from '@workspace/ui/components/layout/com
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';

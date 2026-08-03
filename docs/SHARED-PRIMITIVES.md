@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-839 primitives across 6 kinds. `packages/sheet` internals are excluded.
+840 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (117)
+## Components (118)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -52,6 +52,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CountBadge` | `@workspace/ui` | packages/ui/src/components/layout/count-badge.tsx |
 | `CreatedByMeta` | `@workspace/ui` | packages/ui/src/components/layout/comments/created-by-meta.tsx |
 | `DocumentModeButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
+| `DocumentShareCluster` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-share-cluster.tsx |
 | `DriveAccessList` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-access-list.tsx |
 | `DriveBrowser` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-browser.tsx |
 | `DriveCreateEigenDoc` | `@workspace/ui` | packages/ui/src/components/layout/drive/drive-create-eigendoc.tsx |

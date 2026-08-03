@@ -12,7 +12,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { ImagePlus, Play, Plus, Presentation, Type } from 'lucide-react';

@@ -1,4 +1,4 @@
-import { DEFAULT_MOUNT_ID, useDeletePaths } from '@workspace/lib/drive';
+import { useDeletePaths } from '@workspace/lib/drive';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 
@@ -12,7 +12,7 @@ export type DriveDeleteItemProps = {
 export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: DriveDeleteItemProps) {
     const first = paths[0] ?? null;
     const isSingle = paths.length === 1;
-    const deletePathsMutation = useDeletePaths(first?.ownerId || '', first?.mountId || DEFAULT_MOUNT_ID);
+    const deletePathsMutation = useDeletePaths();
 
     const handleDelete = () => {
         if (paths.length === 0) return;

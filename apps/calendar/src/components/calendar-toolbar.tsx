@@ -34,12 +34,17 @@ function formatTitle(date: Date, viewMode: ViewMode): string {
 
     const startMonth = formatMonth(startOfWeek, 'short');
     const endMonth = formatMonth(endOfWeek, 'short');
-    const year = endOfWeek.getFullYear();
+    const startYear = startOfWeek.getFullYear();
+    const endYear = endOfWeek.getFullYear();
 
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
-        return `${startMonth} ${startOfWeek.getDate()} – ${endOfWeek.getDate()}, ${year}`;
+        return `${startMonth} ${startOfWeek.getDate()} – ${endOfWeek.getDate()}, ${endYear}`;
     }
-    return `${startMonth} ${startOfWeek.getDate()} – ${endMonth} ${endOfWeek.getDate()}, ${year}`;
+    // Across a year boundary, stamp both years (e.g. "Dec 29, 2026 – Jan 4, 2027").
+    if (startYear !== endYear) {
+        return `${startMonth} ${startOfWeek.getDate()}, ${startYear} – ${endMonth} ${endOfWeek.getDate()}, ${endYear}`;
+    }
+    return `${startMonth} ${startOfWeek.getDate()} – ${endMonth} ${endOfWeek.getDate()}, ${endYear}`;
 }
 
 export function CalendarToolbar({

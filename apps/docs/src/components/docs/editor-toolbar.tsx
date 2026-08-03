@@ -25,7 +25,7 @@ import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/dri
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar/document-share-cluster';
+import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Separator } from '@workspace/ui/components/separator';
