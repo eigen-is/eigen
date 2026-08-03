@@ -14,8 +14,9 @@ sections below.
 
 Every eigendoc/eigenslides/eigensheets export runs its Yjs reconstruction, rendering and sanitization in the
 one-shot document-transform Worker (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phases 2–3 as-built): the
-main thread prepares media, the Worker returns the finished document bytes, and WeasyPrint / html-to-docx stay
-main-thread steps on top of them.
+main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too
+— the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a
+main-thread subprocess on top of the Worker's HTML.
 
 ## File Structure
 
@@ -29,9 +30,9 @@ apps/api/src/lib/export/
   media.ts                       # collectExportMedia: screen previews -> transferable buffers (main thread)
   doc/
     render.ts                    # Pure node renderers: renderFigureNode, renderCodeBlockNode, renderTaskItemNode
-    transform.ts                 # Worker-side: materialized doc + media -> standalone HTML bytes
+    transform.ts                 # Worker-side: materialized doc + media -> HTML bytes, or docx via html-to-docx
     html.ts                      # Main thread: media prep + transform seam (runEigendocExport) + HTML download
-    docx.ts                      # DOCX export via html-to-docx (over the Worker's HTML)
+    docx.ts                      # DOCX download wrapper (the conversion itself runs in the Worker)
     pdf.ts                       # PDF export via WeasyPrint (over the Worker's HTML)
 
 # Content loaders (Yjs -> PM JSON / DeckData / Sheet[] + media map) live in
@@ -110,17 +111,22 @@ wrapInDocument() -> full HTML with:
         |
         |
         v
-UTF-8 bytes transferred back to the main thread
+still in the Worker: docx feeds this HTML to @turbodocx/html-to-docx (dynamic import,
+externalized); html and pdf-html hand back the UTF-8 bytes
+        |
+        v
+bytes transferred back to the main thread
         +-> HTML export (return as-is)
-        +-> DOCX export (feed to @turbodocx/html-to-docx)
+        +-> DOCX export (return as-is)
         +-> PDF export (feed to WeasyPrint subprocess)
 ```
 
 `runEigendocExport(mount, path, format, signal?)` (`doc/html.ts`) is the single main-thread entry all three
 formats share: it prepares the media, then calls `runTransformToBytes` — the same seam sheets previews and
 exports use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the
-download serves); the format only decides what the main thread does with the bytes. The `<title>` keeps the
-UNstripped container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`.
+download serves), and `docx` is that same document converted in the Worker. The `<title>` keeps the UNstripped
+container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx
+document property keeps the stripped name (`Report`).
 
 ### CSS Handling
 
@@ -296,3 +302,26 @@ Invariants the importer must uphold:
 Location-form internal hyperlinks (`<hyperlink location=…>` — what Excel itself and our own exporter write)
 never survive ExcelJS's read reconcile, so `from-xlsx.ts` re-reads them from the raw worksheet XML (via
 `jszip`, ExcelJS's own zip dependency) and routes them through the same mapping as `#`-prefixed rel targets.
+
+## Docx Import
+
+Eigendoc imports DOCX through the same seam, in the same shape as the sheets import:
+
+```
+apps/api/src/lib/import/doc/
+  transform.ts   # Worker-side: uploaded bytes → Yjs update + extracted images
+  from-docx.ts   # docxToPmJson(buffer) → { json, images } (mammoth → DOMPurify → ProseMirror)
+```
+
+| Stage | Where |
+|-------|-------|
+| ACL and the upload / stored-source size bound (`/import`, `/import-from-drive`, `/convert`) | main thread |
+| mammoth parse, sanitization, ProseMirror conversion, ProseMirror → Yjs encoding | Worker |
+| Destination creation (convert), the Yjs commit, and the media writes | main thread, only after the Worker succeeds |
+
+The Worker returns a ready Yjs update plus the extracted images, so the ProseMirror-to-Yjs conversion cost
+also stays off the event loop. `importIntoDocument` / `convertToDocument` call `runImportToDocumentUpdate`,
+commit the update through `writeEigendocUpdateToYjs` (`lib/document/doc.ts`) — which clears the fragment
+first, so an import replaces rather than appends — and then write the images into the container's `media/`
+folder through Mount. mammoth, JSDOM and DOMPurify are evaluated only inside the Worker; the `400`
+(not a valid docx) body survives the boundary unchanged.

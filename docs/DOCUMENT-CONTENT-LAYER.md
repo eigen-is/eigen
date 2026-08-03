@@ -63,8 +63,9 @@ doc.transact(() => {
 });
 ```
 
-`writeEigendocToYjs` (doc.ts:32) takes the same shape: clears the existing
-`Y.XmlFragment('default')`, then `Y.applyUpdate` with the encoded state of a fresh
+`writeEigendocUpdateToYjs` takes the same shape: clears the existing `Y.XmlFragment('default')`,
+then `Y.applyUpdate` with a prepared update — the docx import path calls it directly with the
+Worker's update, and `writeEigendocToYjs(doc, json, schema)` composes it after encoding a fresh
 `prosemirrorJSONToYDoc` temp doc.
 
 If a live client has unflushed ops in `Y.Array('ops')` (sheets) or local typing not yet
@@ -91,13 +92,14 @@ when the target file has active editors — and ideally the route should refuse 
 | Export (HTML/PDF/DOCX/XLSX) | `lib/export/{doc,sheets,slides}/{html,pdf,xlsx,docx}.ts` |
 | Preview generation | `lib/preview/{eigendoc,eigensheets,eigenslides}-preview.ts` |
 | Import dispatcher | `lib/import/import-document.ts` (calls writers) |
-| Pure converters | `lib/import/{doc/from-docx.ts, sheets/{from-xlsx,transform}.ts}` |
+| Pure converters | `lib/import/{doc/{from-docx,transform}.ts, sheets/{from-xlsx,transform}.ts}` |
 
 The pure converters in `lib/import/{doc,sheets}/` are buffer ⇆ native-content (`Buffer →
-Sheet[]`, `Buffer → JSONContent + images + schema`); the dispatcher wires them to the writers.
-For xlsx the converter runs off-thread: `sheets/transform.ts` composes parse + recalc + snapshot
-serialization inside the document-transform Worker, and the dispatcher only commits the returned
-JSON (see [EXPORT.md § Sheets Import](EXPORT.md#sheets-import)).
+Sheet[]`, `Buffer → JSONContent + images`); the dispatcher wires them to the writers. Both run
+off-thread: `sheets/transform.ts` composes parse + recalc + snapshot serialization and
+`doc/transform.ts` composes parse + ProseMirror-to-Yjs conversion inside the document-transform
+Worker, and the dispatcher only commits the returned snapshot JSON / Yjs update and writes the
+extracted docx media (see [EXPORT.md § Sheets Import](EXPORT.md#sheets-import)).
 Export has no equivalent dispatcher today — each format calls the reader directly.
 
 ## Pending work

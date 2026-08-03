@@ -1,7 +1,6 @@
 # Proposal: Off-thread Document Transforms
 
-> **Status:** Phases 0–2 and the preview/HTML/PDF half of Phase 3 implemented (branch `transform-workers`,
-> 2026-08-03); DOCX (Phase 3 remainder) and Phase 4 open
+> **Status:** Phases 0–3 implemented (branch `transform-workers`, 2026-08-03); Phase 4 open
 > **Date:** 2026-08-03
 > **Scope:** Server-side preview generation first, then reuse for document exports and imports
 >
@@ -42,7 +41,22 @@
 > `preview/preview-cache.ts`, or every document Worker would evaluate sharp and the sheet engine — hence the
 > split between `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread),
 > and between `export/<type>/transform.ts` (Worker) and `export/<type>/{html,pdf,docx}.ts` (main thread).
-> DOCX export still converts on the main thread over the Worker's HTML.
+>
+> **As-built notes (Phase 3, DOCX):** docx export is one more format on the eigendoc export seam — the Worker
+> renders the same document the HTML download serves and feeds it to `@turbodocx/html-to-docx` there, loaded by
+> dynamic import from runtime `node_modules` (proven by a real-Worker round trip in
+> `document-transform.test.ts`); the docx `title` property keeps the stripped container name as before.
+> Docx import mirrors the xlsx shape: `import/doc/transform.ts` runs mammoth, sanitization, the ProseMirror
+> conversion AND the ProseMirror → Yjs encoding in the Worker, and returns a ready update plus the extracted
+> images through `runImportToDocumentUpdate`. The main thread only applies the update
+> (`writeEigendocUpdateToYjs`, extracted from `writeEigendocToYjs` — it clears the fragment first, so an import
+> replaces rather than appends) and writes the media through Mount, so nothing is created or mutated before the
+> Worker succeeds. The import job/result unions gained one arm each with the impossible pairings typed away
+> (`SheetsImportJob`/`DocImportJob`), and `ExportMedia` became `TransformMedia` now that media crosses in both
+> directions. Route statuses and bodies are pinned in `doc-import.test.ts`; the committed document and the image
+> bytes are pinned against the pre-move pipeline in `document-transform.test.ts`. The chunk graph keeps mammoth
+> and Turbodocx out of every other operation's static closure (verified on `buildfordocker` output). As-built
+> docs in EXPORT.md § Docx Import.
 
 ## Summary
 
