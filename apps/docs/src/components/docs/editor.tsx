@@ -854,11 +854,9 @@ const TiptapEditor = ({
                         activeComments={activeComments}
                         filter={commentFilter}
                         commentContextMenu={commentContextMenu}
-                        onCommentClick={setOpenCardId}
-                        onOpenCard={(cardId) => {
-                            openComments();
-                            setOpenCardId(cardId);
-                        }}
+                        // Plain setOpenCardId, not the desktop pair's reveal: the editor is hidden
+                        // here, and an activity row's card opens over the Activity pane, not under it.
+                        onOpenCard={setOpenCardId}
                     />
                 )}
             </div>

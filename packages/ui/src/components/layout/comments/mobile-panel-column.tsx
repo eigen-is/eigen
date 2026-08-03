@@ -22,9 +22,9 @@ type MobilePanelColumnProps = {
     activeComments: ActiveComments;
     filter: ReturnType<typeof useCommentFilter>;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
-    // Both take a resolved cardId. Hosts pass plain open handlers: the editor is hidden while this
-    // pane is up, so revealing an anchor there would drive a view nobody can see.
-    onCommentClick: (cardId: string) => void;
+    // Comment rows and activity rows both do the same thing here: open the card, leave the pane where
+    // it is. The editor is hidden while this pane is up, so revealing an anchor there — or switching
+    // panes out from under the tap — would drive a view nobody can see.
     onOpenCard: (cardId: string) => void;
 };
 
@@ -36,7 +36,6 @@ export function MobilePanelColumn({
     activeComments,
     filter,
     commentContextMenu,
-    onCommentClick,
     onOpenCard,
 }: MobilePanelColumnProps) {
     const { user } = useAuth();
@@ -71,7 +70,7 @@ export function MobilePanelColumn({
                     filter={filter}
                     members={members}
                     className="w-full border-l-0"
-                    onCommentClick={onCommentClick}
+                    onCommentClick={onOpenCard}
                     onCommentContextMenu={(e, card, entry) => commentContextMenu.handleContextMenu(e, { card, entry })}
                 />
             ) : (

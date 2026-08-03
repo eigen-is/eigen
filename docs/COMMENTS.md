@@ -287,9 +287,12 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   for comments — `CommentFilterButton`, holding a header-less `CommentPanel`/`ActivityPanel` with
   `className="w-full border-l-0"`. Mount it outside any `<ColumnLayout mobileColumn="…">` — a `Column`
   self-hides when its id doesn't match, so a host that wraps it gets no pane at all, silently. It takes
-  the `useCommentLifecycle` bundle plus the host's open handlers, which only open the card: the editor
-  is hidden while the pane is up, so scroll-to-mark (docs) and the slide + object reveal (slides) would
-  drive a view nobody can see.
+  the `useCommentLifecycle` bundle plus one `onOpenCard(cardId)` — all three hosts pass their plain
+  `setOpenCardId`, shared by comment rows and activity rows, because on mobile a tap only opens the card
+  dialog: the editor is hidden while the pane is up, so scroll-to-mark (docs) and the slide + object
+  reveal (slides) would drive a view nobody can see, and an activity row's card opens over the Activity
+  pane rather than switching the pane to Comments under the dialog. Docs' desktop `ActivityPanel` still
+  switches — that pair is unchanged.
   All three editors hide the editor (a `hidden` wrapper) rather than unmounting it and mount the
   pane's `Column` as a sibling, so tiptap node views, slide thumbnails, scroll position and selection
   survive a pane visit — that is also why docs' two resize observers and the sheet engine's skip 0×0

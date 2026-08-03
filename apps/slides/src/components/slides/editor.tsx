@@ -939,7 +939,6 @@ function SlideEditorInner({
                     commentContextMenu={commentContextMenu}
                     // Plain setOpenCardId, not openCommentCard: the canvas is hidden here, so its
                     // slide + object reveal would drive a view nobody can see.
-                    onCommentClick={setOpenCardId}
                     onOpenCard={setOpenCardId}
                 />
             )}

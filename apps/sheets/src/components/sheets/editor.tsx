@@ -374,7 +374,6 @@ function SheetEditorInner({
                         activeComments={activeComments}
                         filter={commentFilter}
                         commentContextMenu={commentContextMenu}
-                        onCommentClick={setOpenCardId}
                         onOpenCard={setOpenCardId}
                     />
                 ) : (
