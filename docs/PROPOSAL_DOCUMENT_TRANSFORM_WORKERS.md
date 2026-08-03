@@ -1,6 +1,7 @@
 # Proposal: Off-thread Document Transforms
 
-> **Status:** Phases 0–2 implemented (branch `transform-workers`, 2026-08-03); Phases 3–4 open
+> **Status:** Phases 0–2 and the preview/HTML/PDF half of Phase 3 implemented (branch `transform-workers`,
+> 2026-08-03); DOCX (Phase 3 remainder) and Phase 4 open
 > **Date:** 2026-08-03
 > **Scope:** Server-side preview generation first, then reuse for document exports and imports
 >
@@ -27,6 +28,21 @@
 > to the pre-move pipeline (hash in `document-transform.test.ts`). `/convert` gained the missing source-size
 > bound (413 `Source file too large`). The 120s deadline constant now covers both directions
 > (`EXPORT_IMPORT_TRANSFORM_DEADLINE_MS`). As-built docs in EXPORT.md § Sheets Import.
+
+> **As-built notes (Phase 3, eigendoc + eigenslides):** doc/slides previews and HTML/PDF-HTML exports run in the
+> same Worker through the same seam — a thin main-thread wrapper (media prep + `runTransformToText` /
+> `runTransformToBytes`) plus a pure renderer per operation, no new orchestration. Media stays on the Mount side:
+> previews carry a name → preview-URL map (`buildPreviewUrlMap`), exports transfer the exact screen-preview
+> buffers (`collectExportMedia`) and the Worker builds the base64 data URIs (`toDataUriMap`). The media-free
+> readers (`readEigendocFromDoc`, `readDeckFromDoc`) mirror `readSheetsFromDoc`. Preview bodies and export
+> documents are byte-identical to the pre-move pipeline (hashes in `document-transform.test.ts`) so no preview
+> cache format bump was needed; route contracts are pinned in `document-export-route.test.ts`. `exportDocument`
+> now passes the abort signal for doc/slides too, and the runner logs `prepMs` next to `captureMs`. One
+> structural constraint worth keeping: a module the Worker imports must never statically reach
+> `preview/preview-cache.ts`, or every document Worker would evaluate sharp and the sheet engine — hence the
+> split between `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread),
+> and between `export/<type>/transform.ts` (Worker) and `export/<type>/{html,pdf,docx}.ts` (main thread).
+> DOCX export still converts on the main thread over the Worker's HTML.
 
 ## Summary
 

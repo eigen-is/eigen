@@ -2,8 +2,8 @@
 
 > **TLDR**: Server-side preview generation with tmp-dir cache. Images served as screen-res WebP (max 2560px), text/code/markdown
 > and eigen-native files (eigendoc/slides/sheets, a compact HTML slice) as JSON body snippets rendered client-side with shared
-> `eigen-prose` styles. Eigensheets previews are generated off-thread in a one-shot document-transform Worker (bounded
-> first-sheet budget); text previews serve stale-while-revalidate. Video/audio/PDF redirect to embed URL for native playback.
+> `eigen-prose` styles. Eigen-native previews are generated off-thread in a one-shot document-transform Worker
+> (bounded first-sheet / 20-block / 8-slide budgets); text previews serve stale-while-revalidate. Video/audio/PDF redirect to embed URL for native playback.
 > Preview overlay in `packages/ui` with keyboard nav and sibling browsing.
 
 ## Route Structure
@@ -43,8 +43,8 @@ first-ever misses share a single generation (`inFlightFirstText`), mirroring ima
 | `markdown`     | `markdown-it` → HTML, sanitized with DOMPurify |
 | `code`         | `lowlight` syntax highlighting → HTML spans     |
 | `plaintext`    | `<pre>` wrapped, HTML-escaped                   |
-| `eigendoc`     | Yjs → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
-| `eigenslides`  | Yjs → first 8 slides → positioned divs with container-query sizing |
+| `eigendoc`     | Yjs blobs → transform Worker → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
+| `eigenslides`  | Yjs blobs → transform Worker → first 8 slides → positioned divs with container-query sizing |
 | `eigensheets`  | Yjs blobs → transform Worker → bounded first-sheet HTML table (`renderSheetsPreviewHtml`) |
 
 The `eigendoc`/`eigenslides`/`eigensheets` modes load the file's Yjs document (via `getCollabPreview` in
@@ -64,8 +64,8 @@ document. The cap keeps the cached preview body small. Each type compacts by its
 | Type        | Preview cap               | Mechanism                                                                 |
 |-------------|---------------------------|---------------------------------------------------------------------------|
 | eigensheets | first sheet, ≤ 200 rows × 50 cols / 10,000 cells | `renderSheetsPreviewHtml(sheets)` clips from the top-left of the used range — the CF resolver still spans every sheet so cross-sheet formula refs resolve; a final 8MB byte guard replaces an oversized body with the truncated notice |
-| eigenslides | first 8 slides            | `eigenslides-preview.ts` slices `deck.slideOrder` (slides/objects maps stay whole) |
-| eigendoc    | first 20 top-level blocks | `eigendoc-preview.ts` slices `json.content` before rendering              |
+| eigenslides | first 8 slides            | `renderEigenslidesPreviewBody` slices `deck.slideOrder` (slides/objects maps stay whole) |
+| eigendoc    | first 20 top-level blocks | `renderEigendocPreviewBody` slices `json.content` before rendering        |
 
 Every preview generator slices its own input (`renderSheetsPreviewHtml` for sheets, the generators for
 slides/eigendoc), leaving the full-document export renderers untouched. When content is actually dropped,
@@ -73,12 +73,12 @@ each generator appends a shared `renderPreviewTruncatedMarker()`
 (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the
 document `<head>`.
 
-## Off-thread Sheet Previews (document-transform Worker)
+## Off-thread Collab Previews (document-transform Worker)
 
-Eigensheets preview generation runs in a one-shot Bun Worker so Yjs reconstruction, op replay, recalc, HTML
-rendering, and sanitization never block the API event loop (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`,
-Phases 1–2 as-built). Sheet exports ride the same runner through the same seam — see
-[EXPORT.md § Sheets Export](EXPORT.md#sheets-export):
+Eigensheets, eigendoc and eigenslides preview generation runs in a one-shot Bun Worker so Yjs reconstruction,
+op replay, recalc, HTML rendering, and sanitization never block the API event loop
+(`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phases 1–3 as-built). Every export rides the same runner
+through the same seam — see [EXPORT.md](EXPORT.md):
 
 1. The main thread keeps ACL, cache lookup/dedupe, and captures the document's compressed Yjs blobs in a
    short SELECT-only transaction (`readYjsStatePayload` via `captureCollabSource`). Every transform goes
@@ -88,17 +88,20 @@ Phases 1–2 as-built). Sheet exports ride the same runner through the same seam
    16 with foreground (first cache miss) and background (stale regeneration) priorities, foreground admission
    additionally bounded by predicted wait. Overload rejects with `503` (surfaced to the client); background
    overflow is dropped — a later request re-enqueues it. There is **never** a main-thread fallback.
-3. The Worker (`lib/document/transform/worker.ts`) materializes the payload, replays ops, recalcs when the
-   gate fires (a recalc failure serves replayed values with a `recalc-failed` warning), renders the bounded
-   first-sheet view, sanitizes with DOMPurify (`FORCE_BODY` only — the preview config, distinct from
-   `sanitizeExportHtml`), and returns the body plus warnings over a typed, closed protocol
-   (`protocol.ts`). Corrupt blobs are skipped with warnings, matching the live-read behavior.
+3. The Worker (`lib/document/transform/worker.ts`) materializes the payload and dispatches on document type
+   through dynamic imports, so a doc preview never evaluates the sheet engine: sheets replay ops and recalc
+   when the gate fires (a recalc failure serves replayed values with a `recalc-failed` warning) and render the
+   bounded first-sheet view; doc/slides convert the Yjs roots and render their capped slice with media resolved
+   from a name → URL map the main thread prepared (`buildPreviewUrlMap` — the Worker never sees a Mount). All
+   three sanitize with DOMPurify (`FORCE_BODY` only — the preview config, distinct from `sanitizeExportHtml`)
+   and return the body plus warnings over a typed, closed protocol (`protocol.ts`). Corrupt blobs are skipped
+   with warnings, matching the live-read behavior.
 4. The main thread writes the usual `{ body, mode }` cache envelope. One-shot Workers are terminated after
    every outcome (success, timeout at 30s, crash, cancellation, shutdown); `gracefulShutdown` closes the
    runner before mount teardown.
 
-The runner logs one observability line per job (queue depth/wait, input/output bytes, transform/total ms,
-outcome, warning codes). `src/test/transform-benchmark.ts` measures end-to-end latency, event-loop delay,
+The runner logs one observability line per job (queue depth/wait, main-thread capture/media-prep ms,
+input/output bytes, transform/total ms, outcome, warning codes). `src/test/transform-benchmark.ts` measures end-to-end latency, event-loop delay,
 health-route latency, and RSS on heavy fixtures; run it from `apps/api` with
 `bun src/test/transform-benchmark.ts [--memory]`. Measured note for the warm-pool decision (proposal Phase
 4): each terminated heavy Worker currently retains ~7MB RSS in Bun 1.3 (trivial Workers plateau; the same
@@ -193,9 +196,10 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/core/drive/hooks/use-drive.ts`                          | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
-| `apps/api/src/lib/preview/eigendoc-preview.ts`                            | Eigendoc Yjs → tiptap static HTML (first 20 blocks) |
-| `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides Yjs → positioned HTML divs (first 8 slides)  |
+| `apps/api/src/lib/preview/eigendoc-preview.ts`                            | Eigendoc preview: Worker-side body renderer (first 20 blocks) + runner orchestration |
+| `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides preview: Worker-side body renderer (first 8 slides) + runner orchestration |
 | `apps/api/src/lib/preview/eigensheets-preview.ts`                         | Sheets preview: Worker-side body renderer + runner orchestration |
+| `apps/api/src/lib/document/media.ts`                                      | Document media helpers: listing, preview URLs, Worker-side data URIs |
 | `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
 | `apps/api/src/lib/document/transform/protocol.ts`                         | Clone-safe transform job/request/response unions    |
 | `apps/api/src/lib/document/transform/run-transform.ts`                    | Shared main-thread seam: capture → run → map        |
@@ -225,12 +229,12 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 
 **Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets are done — each
 preview reuses the export render functions (`doc/render.ts`, `slides/render.ts`, `sheets/html.ts`) over the
-shared content loaders in `apps/api/src/lib/document/`.
+shared content readers in `apps/api/src/lib/document/`, inside the transform Worker.
 
 | Type | Status | Approach |
 |------|--------|----------|
-| eigendoc | **Done** | `readEigendocContent` (Yjs → PM JSON) → tiptap static renderer with `doc/render.ts` node mappings, first 20 blocks |
-| eigenslides | **Done** | `readSlidesContent` → `renderDeckHtml`, first 8 slides |
+| eigendoc | **Done** | `renderEigendocPreviewBody` in the transform Worker (`readEigendocFromDoc` → tiptap static renderer with `doc/render.ts` node mappings), first 20 blocks |
+| eigenslides | **Done** | `renderEigenslidesPreviewBody` in the transform Worker (`readDeckFromDoc` → `renderDeckHtml`), first 8 slides |
 | eigensheets | **Done** | `renderEigensheetsPreviewBody` in the transform Worker (`readSheetsFromDoc` → `renderSheetsPreviewHtml`), budgeted first sheet |
 | eigenstickies | Future | Load stickies JSON, render simplified kanban columns as HTML |
 

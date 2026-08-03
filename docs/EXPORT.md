@@ -12,6 +12,11 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX) — see their
 sections below.
 
+Every eigendoc/eigenslides/eigensheets export runs its Yjs reconstruction, rendering and sanitization in the
+one-shot document-transform Worker (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phases 2–3 as-built): the
+main thread prepares media, the Worker returns the finished document bytes, and WeasyPrint / html-to-docx stay
+main-thread steps on top of them.
+
 ## File Structure
 
 ```
@@ -21,28 +26,37 @@ apps/api/src/lib/export/
   modules.d.ts                   # Type declarations for untyped npm packages
   render-types.ts                # Shared contracts: RenderMode, SizeUnit, *ImgSrcResolver
   fonts.ts                       # Embedded WOFF2 @font-face CSS (Inter, Source Serif 4, JetBrains Mono, Excalifont)
-  media.ts                       # buildDataUriMap (base64 images) + buildPreviewUrl (embed URLs)
+  media.ts                       # collectExportMedia: screen previews -> transferable buffers (main thread)
   doc/
     render.ts                    # Pure node renderers: renderFigureNode, renderCodeBlockNode, renderTaskItemNode
-    html.ts                      # PM JSON -> standalone HTML (fonts, CSS, base64 images)
-    docx.ts                      # DOCX export via html-to-docx
-    pdf.ts                       # PDF export via WeasyPrint
+    transform.ts                 # Worker-side: materialized doc + media -> standalone HTML bytes
+    html.ts                      # Main thread: media prep + transform seam (runEigendocExport) + HTML download
+    docx.ts                      # DOCX export via html-to-docx (over the Worker's HTML)
+    pdf.ts                       # PDF export via WeasyPrint (over the Worker's HTML)
 
 # Content loaders (Yjs -> PM JSON / DeckData / Sheet[] + media map) live in
-# apps/api/src/lib/document/{doc,slides,sheets}.ts — shared by export AND preview.
+# apps/api/src/lib/document/{doc,slides,sheets}.ts — shared by export AND preview; their
+# media-free halves (readEigendocFromDoc, readDeckFromDoc, readSheetsFromDoc) are what the
+# Worker calls. Media helpers live in apps/api/src/lib/document/media.ts.
 ```
 
 ### Architecture
 
 - **`render.ts`**: pure utility functions with zero side effects — no imports from tiptap, lowlight, or
-  any heavy library. Callers pass their own lowlight instance. Shared by both `html.ts` (export) and
+  any heavy library. Callers pass their own lowlight instance. Shared by both `doc/transform.ts` (export) and
   `eigendoc-preview.ts` (quick preview)
+- **Worker side vs main-thread side**: `doc/transform.ts` and `slides/transform.ts` assemble the document and
+  are imported *inside* the Worker; `doc/html.ts`, `slides/html.ts`, `pdf.ts` and `docx.ts` are the main-thread
+  wrappers that prepare media and call the seam. The split is load-bearing: a module the Worker imports must
+  never reach `preview/preview-cache.ts` (it would drag the screen-preview pipeline, sharp and the sheet engine
+  into every document Worker), which is why `document/media.ts` (light) and `export/media.ts` (screen previews)
+  are separate
 - **content loaders** (`apps/api/src/lib/document/{doc,slides,sheets}.ts`): shared Yjs -> PM JSON / DeckData /
   `Sheet[]` + media map loaders (`readEigendocContent`, `readSlidesContent`, `readSheetsContent`), used by both
   export and preview
 - **`export-document.ts`**: thin dispatcher that routes `(mount, path, format)` to the right export
   function. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
-- **`html.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
+- **`doc/transform.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
   { type: 'file' }`), CSS imported as text (via `import ... with { type: 'text' }`), and Tailwind
   preflight reset. Font/CSS paths are resolved at build time by Bun's bundler
 - **`weasyprint.ts`**: not eigendoc-specific — any file type can use it for PDF
@@ -66,13 +80,17 @@ const result = await exportDocument(mount, path, params.format, request.signal);
 ```
 
 Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only), 503 when the transform runner
-is saturated (sheets). `request.signal` is threaded through so a disconnected sheet export drops its queued
-job or terminates its Worker — doc/slides exports still run on the main thread and ignore it.
+is saturated. `request.signal` is threaded through so a disconnected export drops its queued job or terminates
+its Worker.
 
 ## HTML Pipeline
 
 ```
-readEigendocContent() -> PM JSON + media map
+main thread: listDocumentMedia() + collectExportMedia() -> { name, contentType, bytes }[]
+        |
+        |  transferred to the Worker with the compressed Yjs blobs
+        v
+readEigendocFromDoc() -> PM JSON      toDataUriMap() -> base64 data URIs
         |
         v
 renderToHTMLString() with custom nodeMappings:
@@ -90,10 +108,19 @@ wrapInDocument() -> full HTML with:
   - Tailwind preflight reset (box-sizing, list-style, input resets)
   - Print extras (@page, page breaks, text alignment)
         |
+        |
+        v
+UTF-8 bytes transferred back to the main thread
         +-> HTML export (return as-is)
         +-> DOCX export (feed to @turbodocx/html-to-docx)
         +-> PDF export (feed to WeasyPrint subprocess)
 ```
+
+`runEigendocExport(mount, path, format, signal?)` (`doc/html.ts`) is the single main-thread entry all three
+formats share: it prepares the media, then calls `runTransformToBytes` — the same seam sheets previews and
+exports use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the
+download serves); the format only decides what the main thread does with the bytes. The `<title>` keeps the
+UNstripped container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`.
 
 ### CSS Handling
 
@@ -138,7 +165,8 @@ Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onEx
 ## Edge Cases
 
 - **Empty documents**: return minimal empty HTML wrapped in the target format
-- **Missing media**: skip image (`buildDataUriMap` omits the entry, so `renderFigureNode` emits no img tag)
+- **Missing media**: skip image (`collectExportMedia` omits non-image results, so `renderFigureNode` emits no
+  img tag)
 - **WeasyPrint not installed**: return 501 with install instructions
 - **Corrupt Yjs state**: `loadYjsState()` handles this with try/catch
 - **Large docs with many images**: images loaded in parallel via `Promise.all`
@@ -163,7 +191,9 @@ GET /drive/:ownerId/:mountId/file/:pathId/export/:format
 | `pdf`  | HTML with fixed `px` values → WeasyPrint (254mm × 142.875mm landscape pages) |
 
 Both formats embed WOFF2 fonts (via shared `export/fonts.ts`) and base64 images. The `SizeUnit` abstraction
-in `render.ts` lets the same render functions produce either responsive or fixed-size output.
+in `render.ts` lets the same render functions produce either responsive or fixed-size output. Both run in the
+document-transform Worker through `runSlidesExport(mount, path, format, signal?)` (`slides/html.ts`), which
+prepares the media on the main thread and hands the deck to `renderEigenslidesExport` (`slides/transform.ts`).
 
 Text objects store HTML (TipTap output). `render.ts` runs `obj.text` through `DOMPurify` and `escapeHtml`s
 the highlight color before embedding, so the same value that's safely shown by the FE canvas is also safe
@@ -174,10 +204,11 @@ are imported via `with { type: 'text' }` from `html.ts` so canvas and export ren
 
 ```
 apps/api/src/lib/export/slides/
-  render.ts      # Slide/object → HTML strings (SizeUnit abstraction)
-  html.ts        # Standalone HTML export
-  pdf.ts         # PDF via WeasyPrint
-# content loader: apps/api/src/lib/document/slides.ts (Yjs → DeckData + media map)
+  render.ts      # Slide/object → HTML strings (SizeUnit abstraction), shared with the preview
+  transform.ts   # Worker-side: materialized deck + media → standalone HTML bytes (screen or PDF mode)
+  html.ts        # Main thread: media prep + transform seam (runSlidesExport) + HTML download
+  pdf.ts         # PDF via WeasyPrint (over the Worker's fixed-size HTML)
+# content loader: apps/api/src/lib/document/slides.ts (readDeckFromDoc + readSlidesContent)
 ```
 
 ## Sheets Export
