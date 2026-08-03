@@ -280,6 +280,11 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   a summary strip (status label always leads) + "n hidden · Clear filters" footer; the empty state
   offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
   All/For-you tabs + status Select are gone.
+- **Hosting**: `hideHeader` + `className` let a host supply its own chrome instead of the panel's
+  title row. Docs uses them below the mobile breakpoint, where the panel is a full-width
+  `Column` (`ColumnLayout mobileColumn`) whose toolbar carries the back arrow, `ToolbarTitle` and
+  `CommentFilterButton`; `ActivityPanel` takes the same two props for the same Column. Clicks there
+  only open the card — the editor column is unmounted, so scroll-to-mark would drive a detached view.
 
 ### Comment filters (`packages/lib/src/core/comments/filter.ts` + filter UI)
 

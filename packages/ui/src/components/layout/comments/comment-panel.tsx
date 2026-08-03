@@ -53,6 +53,9 @@ type CommentPanelProps = {
     onClose: () => void;
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (e: React.MouseEvent, card: CommentCard, entry: CommentEntry | undefined) => void;
+    className?: string;
+    // For hosts that carry the title + filter in their own chrome (the docs mobile Column toolbar).
+    hideHeader?: boolean;
 };
 
 export function CommentPanel({
@@ -66,6 +69,8 @@ export function CommentPanel({
     onClose,
     onCommentClick,
     onCommentContextMenu,
+    className,
+    hideHeader,
 }: CommentPanelProps) {
     const { active, visible } = useMemo(() => {
         const byChatName = new Map(entries.map((e) => [e.chatName, e]));
@@ -84,14 +89,16 @@ export function CommentPanel({
     const hidden = active - visible.length;
 
     return (
-        <PropertiesPanel>
-            <div className="flex items-center justify-between border-b px-3 py-2">
-                <span className="text-sm font-medium">Comments</span>
-                <div className="flex items-center gap-1">
-                    <CommentFilterButton filter={filter} members={members} currentUserEmail={currentUserEmail} />
-                    <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
+        <PropertiesPanel className={className}>
+            {!hideHeader && (
+                <div className="flex items-center justify-between border-b px-3 py-2">
+                    <span className="text-sm font-medium">Comments</span>
+                    <div className="flex items-center gap-1">
+                        <CommentFilterButton filter={filter} members={members} currentUserEmail={currentUserEmail} />
+                        <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
+                    </div>
                 </div>
-            </div>
+            )}
 
             {filter.isActive && <FilterSummary filter={filter} onClear={filter.clear} />}
 

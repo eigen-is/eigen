@@ -10,17 +10,22 @@ type ActivityPanelProps = {
     onClose: () => void;
     // Opens the card/comment a row references in-doc; other rows stay inert (see ActivityEventList).
     onOpenCard?: (ref: { cardId?: string; chatName?: string }) => void;
+    className?: string;
+    // For hosts that carry the title in their own chrome (the docs mobile Column toolbar).
+    hideHeader?: boolean;
 };
 
-export function ActivityPanel({ path, onClose, onOpenCard }: ActivityPanelProps) {
+export function ActivityPanel({ path, onClose, onOpenCard, className, hideHeader }: ActivityPanelProps) {
     const { data: events = [], isPending } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
 
     return (
-        <PropertiesPanel>
-            <div className="px-3 py-2 border-b flex items-center justify-between">
-                <span className="text-sm font-medium">Activity</span>
-                <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
-            </div>
+        <PropertiesPanel className={className}>
+            {!hideHeader && (
+                <div className="px-3 py-2 border-b flex items-center justify-between">
+                    <span className="text-sm font-medium">Activity</span>
+                    <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
+                </div>
+            )}
 
             {/* isPending guard: no "No activity yet" flash while the first fetch is in flight. */}
             {isPending ? null : events.length === 0 ? (
