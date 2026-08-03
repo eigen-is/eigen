@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
+import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
@@ -10,45 +11,65 @@ import { materializeYjsState } from '../lib/collab/yjs-loader';
 import { ApiError } from '../lib/core/errors';
 import { readSheetsFromDoc } from '../lib/document/sheets';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
-import { documentTransformRunner } from '../lib/document/transform/runner';
+import type { DocumentTransformResponse } from '../lib/document/transform/protocol';
+import { runTransformToBytes } from '../lib/document/transform/run-transform';
+import { documentTransformRunner, EXPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
+import { exportSheetsToHtml } from '../lib/export/sheets/html';
+import { exportSheetsToXlsx } from '../lib/export/sheets/xlsx';
 import { getHome } from '../lib/home/get-home';
+import type { Mount } from '../lib/mount';
 import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-preview';
-import { buildGoldenOps, buildGoldenSheets, seedSheetsDoc } from './fixtures/heavy-sheets';
+import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from './fixtures/heavy-sheets';
 import { authedRequest, driveGet, drivePost, getTestContext } from './setup';
 
-// End-to-end validation of the off-thread eigensheets preview: Worker output must
-// equal the same pipeline executed on the main thread, corruption and recalc
-// failures surface as warnings (never as a failed preview), and the preview cache
-// keeps its dedupe/stale-while-revalidate contract on top of the runner.
+// End-to-end validation of the off-thread eigensheets preview and exports: Worker
+// output must equal the same pipeline executed on the main thread, corruption and
+// recalc failures surface as warnings (never as a failed preview/export), and the
+// preview cache keeps its dedupe/stale-while-revalidate contract on top of the runner.
 
 const GARBAGE = Buffer.from([0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4, 5, 6, 7, 8]);
 
-describe('document transform (eigensheets preview)', () => {
-    let ctx: Awaited<ReturnType<typeof getTestContext>>;
-    let mountId: string;
-    let rootId: string;
+let ctx: Awaited<ReturnType<typeof getTestContext>>;
+let rootId: string;
+const mountId = 'default';
 
-    beforeAll(async () => {
-        ctx = await getTestContext();
-        mountId = 'default';
-        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
-        rootId = root.id;
-    });
+beforeAll(async () => {
+    ctx = await getTestContext();
+    const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+    rootId = root.id;
+});
 
-    async function seedDoc(fileName: string): Promise<DrivePath> {
-        const sheetsPath = await drivePost<DrivePath>(
-            ctx.alice.user.sessionToken,
-            ctx.alice.user.id,
-            mountId,
-            `folder/${rootId}/create/sheets`,
-            { fileName },
-        );
-        const home = await getHome(ctx.alice.user.id);
-        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
-        seedSheetsDoc(collab.doc, buildGoldenSheets(), buildGoldenOps());
-        return sheetsPath;
+// The request kind decides which result member the Worker returns; these keep the
+// assertions honest about which one they expect.
+function previewBody(response: DocumentTransformResponse): string {
+    if (!response.ok || !('body' in response.result)) {
+        throw new Error(`expected a preview body, got ${JSON.stringify(response)}`);
     }
+    return response.result.body;
+}
 
+function exportBytes(response: DocumentTransformResponse): ArrayBuffer {
+    if (!response.ok || !('data' in response.result)) {
+        throw new Error(`expected export bytes, got ${JSON.stringify(response)}`);
+    }
+    return response.result.data;
+}
+
+async function seedDoc(fileName: string): Promise<DrivePath> {
+    const sheetsPath = await drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${rootId}/create/sheets`,
+        { fileName },
+    );
+    const home = await getHome(ctx.alice.user.id);
+    const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+    seedSheetsDoc(collab.doc, buildGoldenSheets(), buildGoldenOps());
+    return sheetsPath;
+}
+
+describe('document transform (eigensheets preview)', () => {
     async function previewRequest(pathId: string) {
         return authedRequest(
             ctx.alice.user.sessionToken,
@@ -84,11 +105,8 @@ describe('document transform (eigensheets preview)', () => {
             { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
             { priority: 'foreground', deadlineMs: 30_000 },
         );
-        expect(response.ok).toBe(true);
-        if (response.ok) {
-            expect(response.result.body).toBe(direct.body);
-            expect(response.warnings).toEqual(direct.warnings);
-        }
+        expect(previewBody(response)).toBe(direct.body);
+        expect(response.ok && response.warnings).toEqual(direct.warnings);
     }, 60_000);
 
     test('a corrupt update blob surfaces as a warning, not a failed preview', async () => {
@@ -114,11 +132,8 @@ describe('document transform (eigensheets preview)', () => {
                 { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
                 { priority: 'foreground', deadlineMs: 30_000 },
             );
-            expect(response.ok).toBe(true);
-            if (response.ok) {
-                expect(response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
-                expect(response.result.body.length).toBeGreaterThan(0);
-            }
+            expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
+            expect(previewBody(response).length).toBeGreaterThan(0);
         } finally {
             errorSpy.mockRestore();
         }
@@ -267,4 +282,88 @@ describe('document transform (eigensheets preview)', () => {
             runSpy.mockRestore();
         }
     }, 60_000);
+});
+
+// Recorded from the pre-Worker pipeline on the golden fixture (exportSheetsToHtml
+// and pdf.ts's wrapped document before htmlToPdf), so the move off-thread is proven
+// byte-identical. Regenerate only for an intentional renderer change.
+const GOLDEN_EXPORT_HTML_SHA256 = '7ca7f67cbdcdfb160fb34f4f22d81b9df74c06fba9b37be368e57e4c861bbc98';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = '8189376ecb1b541ebfd86bcffc937c3daae711e8f76558cddf8e9dbec047422c';
+
+describe('document transform (eigensheets export)', () => {
+    let golden: { mount: Mount; path: DrivePath };
+
+    beforeAll(async () => {
+        const sheetsPath = await seedDoc('golden-export');
+        const home = await getHome(ctx.alice.user.id);
+        golden = await home.drive.resolveFile(mountId, sheetsPath.id);
+    });
+
+    function sha256(data: ArrayBuffer | Buffer): string {
+        return new Bun.CryptoHasher('sha256').update(data).digest('hex');
+    }
+
+    test('html export through the Worker is byte-identical to the pre-move pipeline', async () => {
+        const result = await exportSheetsToHtml(golden.mount, golden.path);
+        expect(sha256(result.data)).toBe(GOLDEN_EXPORT_HTML_SHA256);
+    }, 120_000);
+
+    test('pdf-html export through the Worker is byte-identical to the pre-move pipeline', async () => {
+        // The stage before htmlToPdf: the wrapped document WeasyPrint renders, with
+        // the @page size derived from the widest/tallest sheet.
+        const job = {
+            kind: 'export',
+            documentType: 'eigensheets',
+            format: 'pdf-html',
+            title: 'golden-export',
+        } as const;
+        const html = await runTransformToBytes(golden.mount, golden.path, job, {
+            deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS,
+        });
+        expect(sha256(html)).toBe(GOLDEN_EXPORT_PDF_HTML_SHA256);
+    }, 120_000);
+
+    test('xlsx export through the Worker returns a parseable workbook', async () => {
+        const result = await exportSheetsToXlsx(golden.mount, golden.path);
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(result.data);
+        expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
+        const dashboard = workbook.getWorksheet('Dashboard');
+        expect(dashboard?.getCell('B2').value).toBe(48);
+        // Recalc ran in the Worker before ExcelJS built the workbook.
+        expect(dashboard?.getCell('F2').value).toMatchObject({ formula: 'SUM(B2:E2)', result: GOLDEN_ROW1_TOTAL });
+    }, 120_000);
+
+    test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
+        const sheetsPath = await seedDoc('worker-export-corrupt');
+        const home = await getHome(ctx.alice.user.id);
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+
+        const dataDbPath = await mount.getChildByName(path.id, 'data.db');
+        const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath!.id);
+        const last = managedDb.db.select({ id: collabSchema.docUpdates.id }).from(collabSchema.docUpdates).all().at(-1);
+        managedDb.db
+            .update(collabSchema.docUpdates)
+            .set({ updateData: GARBAGE })
+            .where(eq(collabSchema.docUpdates.id, last!.id))
+            .run();
+
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            const response = await documentTransformRunner.run(
+                {
+                    kind: 'export',
+                    documentType: 'eigensheets',
+                    format: 'html',
+                    title: stripEigenExtension(path.name),
+                    source: await captureCollabSource(mount, path),
+                },
+                { priority: 'foreground', deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS },
+            );
+            expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
+            expect(exportBytes(response).byteLength).toBeGreaterThan(0);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    }, 120_000);
 });

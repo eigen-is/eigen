@@ -1,15 +1,10 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
 import type * as Y from 'yjs';
-import { ApiError } from '../core/errors';
 import { readSheetsFromDoc } from '../document/sheets';
-import { captureCollabSource } from '../document/transform/collab-source';
 import type { TransformWarning } from '../document/transform/protocol';
-import {
-    documentTransformRunner,
-    PREVIEW_TRANSFORM_DEADLINE_MS,
-    type TransformPriority,
-} from '../document/transform/runner';
+import { runTransformToText } from '../document/transform/run-transform';
+import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
 import { renderSheetsPreviewHtml } from '../export/sheets/html';
 import type { Mount } from '../mount';
 import { renderPreviewTruncatedMarker } from './preview-marker';
@@ -39,30 +34,15 @@ export function renderEigensheetsPreviewBody(doc: Y.Doc): { body: string; warnin
     return { body, warnings };
 }
 
-// Main-thread orchestration: capture compressed Yjs blobs, hand them to the
-// transform runner, map the Worker result back. There is deliberately no
-// main-thread fallback — an overloaded or failing runner surfaces as an error
-// (503 passes through to the route; other failures let the preview cache serve
-// stale or 404), never as an on-thread render.
+// Main-thread orchestration runs through the shared transform seam (capture → run
+// → map), so a failing or overloaded runner surfaces as an error (503 passes
+// through to the route; other failures let the preview cache serve stale or 404),
+// never as an on-thread render.
 export async function generateEigensheetsPreview(
     mount: Mount,
     drivePath: DrivePath,
     priority: TransformPriority = 'foreground',
 ): Promise<string> {
-    const captureStart = performance.now();
-    const source = await captureCollabSource(mount, drivePath);
-    const response = await documentTransformRunner.run(
-        { kind: 'preview', documentType: 'eigensheets', source },
-        { priority, deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS, captureMs: performance.now() - captureStart },
-    );
-    if (!response.ok) {
-        if (response.error.status) throw new ApiError(response.error.status, response.error.message);
-        throw new Error(`sheet preview transform failed (${response.error.code}): ${response.error.message}`);
-    }
-    for (const warning of response.warnings) {
-        if (warning.code === 'recalc-failed') {
-            console.warn('[sheets] server recalc failed, serving replayed values:', warning.message);
-        }
-    }
-    return response.result.body;
+    const job = { kind: 'preview', documentType: 'eigensheets' } as const;
+    return runTransformToText(mount, drivePath, job, { priority, deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS });
 }

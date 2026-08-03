@@ -6,7 +6,17 @@
 import type { WorkerRequestEnvelope, WorkerResponseEnvelope } from '../../lib/document/transform/protocol';
 
 type TestDirective = {
-    behavior?: 'ok' | 'sleep' | 'crash' | 'exit' | 'malformed' | 'malformed-ok' | 'echo-buffers' | 'document-error';
+    behavior?:
+        | 'ok'
+        | 'sleep'
+        | 'crash'
+        | 'exit'
+        | 'malformed'
+        | 'malformed-ok'
+        | 'echo-buffers'
+        | 'document-error'
+        | 'export-ok'
+        | 'export-malformed';
     ms?: number;
 };
 
@@ -38,6 +48,17 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
         case 'sleep':
             await Bun.sleep(directive.ms ?? 100);
             break;
+        case 'export-ok': {
+            // Export results ride the response transfer list, never a clone.
+            const data = new Uint8Array([9, 8, 7, 6]).buffer;
+            const response: WorkerResponseEnvelope = { jobId, response: { ok: true, result: { data }, warnings: [] } };
+            postMessage(response, [data]);
+            return;
+        }
+        case 'export-malformed':
+            // Right discriminant, result missing the export payload.
+            postMessage({ jobId, response: { ok: true, result: {}, warnings: [] } });
+            return;
         case 'document-error': {
             const response: WorkerResponseEnvelope = {
                 jobId,

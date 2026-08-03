@@ -21,13 +21,38 @@ function makeRequest(directive: TestDirective = {}, buffers: ArrayBuffer[] = [])
     return request as unknown as DocumentTransformRequest;
 }
 
+function makeExportRequest(directive: TestDirective = {}): DocumentTransformRequest {
+    const request = {
+        kind: 'export',
+        documentType: 'eigensheets',
+        format: 'html',
+        title: 'runner-test',
+        source: { snapshot: null, updates: [] },
+        test: directive,
+    };
+    return request as unknown as DocumentTransformRequest;
+}
+
 function makeRunner(opts: ConstructorParameters<typeof DocumentTransformRunner>[0] = {}) {
     return new DocumentTransformRunner({ workerUrl: TEST_WORKER_URL, ...opts });
 }
 
+function responseBody(response: DocumentTransformResponse): string {
+    if (!response.ok || !('body' in response.result)) {
+        throw new Error(`expected a body response, got ${JSON.stringify(response)}`);
+    }
+    return response.result.body;
+}
+
 function timings(response: DocumentTransformResponse): { startedAt: number; endedAt: number } {
-    if (!response.ok) throw new Error(`expected ok response, got ${JSON.stringify(response)}`);
-    return JSON.parse(response.result.body);
+    return JSON.parse(responseBody(response));
+}
+
+function exportBytes(response: DocumentTransformResponse): ArrayBuffer {
+    if (!response.ok || !('data' in response.result)) {
+        throw new Error(`expected export bytes, got ${JSON.stringify(response)}`);
+    }
+    return response.result.data;
 }
 
 describe('DocumentTransformRunner', () => {
@@ -197,10 +222,28 @@ describe('DocumentTransformRunner', () => {
             deadlineMs: 5000,
         });
         expect(buffer.byteLength).toBe(0); // detached from the sender
-        expect(response.ok).toBe(true);
-        if (response.ok) {
-            expect(JSON.parse(response.result.body).receivedBytes).toEqual([5]);
-        }
+        expect(JSON.parse(responseBody(response)).receivedBytes).toEqual([5]);
+        await runner.close();
+    });
+
+    test('an export result buffer arrives intact through the response transfer list', async () => {
+        const runner = makeRunner();
+        const response = await runner.run(makeExportRequest({ behavior: 'export-ok' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect([...new Uint8Array(exportBytes(response))]).toEqual([9, 8, 7, 6]);
+        await runner.close();
+    });
+
+    test('an export response without export bytes resolves as invalid-response', async () => {
+        const runner = makeRunner();
+        const malformed = await runner.run(makeExportRequest({ behavior: 'export-malformed' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(malformed.ok).toBe(false);
+        if (!malformed.ok) expect(malformed.error.code).toBe('invalid-response');
         await runner.close();
     });
 

@@ -30,7 +30,8 @@ import type {
     Cell as XlsxCell,
 } from 'exceljs';
 import JSZip from 'jszip';
-import { readSheetsContent } from '../../document/sheets';
+import { runTransformToBytes } from '../../document/transform/run-transform';
+import { EXPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { resolveFontFamily } from './fonts';
@@ -74,13 +75,16 @@ function hexToArgb(hex: string): string {
     return `FF${hex.replace('#', '')}`;
 }
 
-export async function exportSheetsToXlsx(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const sheets = await readSheetsContent(mount, drivePath);
-    const buffer = await sheetsToXlsx(sheets);
+export async function exportSheetsToXlsx(
+    mount: Mount,
+    drivePath: DrivePath,
+    signal?: AbortSignal,
+): Promise<ExportResult> {
     const title = stripEigenExtension(drivePath.name);
+    const job = { kind: 'export', documentType: 'eigensheets', format: 'xlsx', title } as const;
 
     return {
-        data: buffer,
+        data: await runTransformToBytes(mount, drivePath, job, { deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS, signal }),
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         fileName: `${title}.xlsx`,
     };

@@ -186,10 +186,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/export/:format',
-        async ({ params, user, set }) => {
+        async ({ params, request, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            const result = await exportDocument(mount, path, params.format);
+            // A disconnected export has no cached value — the signal lets the runner
+            // drop the queued job or terminate its Worker.
+            const result = await exportDocument(mount, path, params.format, request.signal);
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
             return result.data;

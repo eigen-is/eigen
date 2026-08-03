@@ -2,6 +2,8 @@ import { ApiError } from '../../core/errors';
 import {
     type DocumentTransformRequest,
     type DocumentTransformResponse,
+    type ExportWorkerResult,
+    type PreviewResult,
     type TransformError,
     transferListOf,
     type WorkerResponseEnvelope,
@@ -21,6 +23,8 @@ import {
 export type TransformPriority = 'foreground' | 'background';
 
 export const PREVIEW_TRANSFORM_DEADLINE_MS = 30_000;
+// Heavy but user-requested work; the PDF subprocess keeps its own deadline.
+export const EXPORT_TRANSFORM_DEADLINE_MS = 120_000;
 
 const MAX_ACTIVE_WORKERS = 1;
 const MAX_QUEUED_JOBS = 16;
@@ -52,19 +56,30 @@ function errorResponse(code: TransformError['code'], message: string): DocumentT
 }
 
 // Full shape check at the trust boundary: a half-valid response (`{ok: true}`
-// with no result) must become a structured invalid-response, not a throw inside
-// settle that leaves the requester's promise hanging forever.
-function isValidResponse(response: unknown): response is DocumentTransformResponse {
+// with no result, or a result that doesn't match the request kind) must become a
+// structured invalid-response, not a throw inside settle that leaves the
+// requester's promise hanging forever.
+function isValidResponse(
+    response: unknown,
+    kind: DocumentTransformRequest['kind'],
+): response is DocumentTransformResponse {
     if (!response || typeof response !== 'object') return false;
     const r = response as {
         ok?: unknown;
-        result?: { body?: unknown };
+        result?: { body?: unknown; data?: unknown };
         warnings?: unknown;
         error?: { code?: unknown; message?: unknown };
     };
-    if (r.ok === true) return typeof r.result?.body === 'string' && Array.isArray(r.warnings);
+    if (r.ok === true) {
+        if (!Array.isArray(r.warnings)) return false;
+        return kind === 'preview' ? typeof r.result?.body === 'string' : r.result?.data instanceof ArrayBuffer;
+    }
     if (r.ok === false) return typeof r.error?.code === 'string' && typeof r.error?.message === 'string';
     return false;
+}
+
+function resultBytes(result: PreviewResult | ExportWorkerResult): number {
+    return 'body' in result ? Buffer.byteLength(result.body) : result.data.byteLength;
 }
 
 export class DocumentTransformRunner {
@@ -170,7 +185,7 @@ export class DocumentTransformRunner {
             worker.terminate();
             const totalMs = Date.now() - startedAt;
             const outcome = response.ok ? 'success' : response.error.code;
-            const outputBytes = response.ok ? Buffer.byteLength(response.result.body) : 0;
+            const outputBytes = response.ok ? resultBytes(response.result) : 0;
             const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
             console.log(
                 `[transform] job=${job.id} kind=${job.request.kind} type=${job.request.documentType} ` +
@@ -191,7 +206,7 @@ export class DocumentTransformRunner {
         worker.onmessage = (event: MessageEvent) => {
             const envelope = event.data as Partial<WorkerResponseEnvelope> | null;
             const response = envelope?.response;
-            if (!isValidResponse(response)) {
+            if (!isValidResponse(response, job.request.kind)) {
                 settle(errorResponse('invalid-response', 'Worker returned a malformed response'));
                 return;
             }

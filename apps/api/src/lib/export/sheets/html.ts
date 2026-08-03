@@ -13,7 +13,8 @@ import {
     FormulaEngine,
     functionCopy,
 } from '@workspace/sheet/engine';
-import { readSheetsContent } from '../../document/sheets';
+import { runTransformToBytes } from '../../document/transform/run-transform';
+import { EXPORT_TRANSFORM_DEADLINE_MS } from '../../document/transform/runner';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
@@ -56,19 +57,23 @@ const BORDER_STYLE_CSS: Record<number, string> = {
     13: '3px solid',
 };
 
-export async function exportSheetsToHtml(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const html = await generateSheetsExportHtml(mount, drivePath);
+export async function exportSheetsToHtml(
+    mount: Mount,
+    drivePath: DrivePath,
+    signal?: AbortSignal,
+): Promise<ExportResult> {
     const title = stripEigenExtension(drivePath.name);
+    const job = { kind: 'export', documentType: 'eigensheets', format: 'html', title } as const;
     return {
-        data: Buffer.from(html, 'utf-8'),
+        data: await runTransformToBytes(mount, drivePath, job, { deadlineMs: EXPORT_TRANSFORM_DEADLINE_MS, signal }),
         contentType: 'text/html; charset=utf-8',
         fileName: `${title}.html`,
     };
 }
 
-export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePath): Promise<string> {
-    const title = stripEigenExtension(drivePath.name);
-    const sheets = await readSheetsContent(mount, drivePath);
+// Runs inside the transform Worker (worker.ts owns execution; the format logic
+// stays here in export/).
+export function renderSheetsExportDocument(sheets: Sheet[], title: string): string {
     const bodyHtml = renderSheetsHtml(sheets);
     // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
     // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.

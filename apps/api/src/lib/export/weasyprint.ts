@@ -1,4 +1,4 @@
-import { ApiError } from '../core';
+import { ApiError } from '../core/errors';
 
 let cachedAvailable: boolean | null = null;
 

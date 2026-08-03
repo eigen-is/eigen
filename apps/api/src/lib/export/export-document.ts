@@ -17,16 +17,24 @@ export type ExportResult = {
     fileName: string;
 };
 
-export async function exportDocument(mount: Mount, path: DrivePath, format: string): Promise<ExportResult> {
+// `signal` aborts the off-thread sheet transforms when the client disconnects —
+// the runner drops the queued job or terminates its Worker. Doc/slides exports
+// still run on the main thread and ignore it until they move too.
+export async function exportDocument(
+    mount: Mount,
+    path: DrivePath,
+    format: string,
+    signal?: AbortSignal,
+): Promise<ExportResult> {
     if (path.mimeType === DRIVE_MIME_DOC) {
         if (format === 'docx') return exportEigendocToDocx(mount, path);
         if (format === 'pdf') return exportEigendocToPdf(mount, path);
         if (format === 'html') return exportEigendocToHtml(mount, path);
     }
     if (path.mimeType === DRIVE_MIME_SHEETS) {
-        if (format === 'xlsx') return exportSheetsToXlsx(mount, path);
-        if (format === 'pdf') return exportSheetsToPdf(mount, path);
-        if (format === 'html') return exportSheetsToHtml(mount, path);
+        if (format === 'xlsx') return exportSheetsToXlsx(mount, path, signal);
+        if (format === 'pdf') return exportSheetsToPdf(mount, path, signal);
+        if (format === 'html') return exportSheetsToHtml(mount, path, signal);
     }
     if (path.mimeType === DRIVE_MIME_SLIDES) {
         if (format === 'pdf') return exportSlidesToPdf(mount, path);

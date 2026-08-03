@@ -9,17 +9,24 @@ import type {
 // response, and is terminated by the runner. Operation dispatch stays a closed
 // switch over the request union — nothing from the message can select a module
 // or path. Format-specific modules load via dynamic import so a sheets preview
-// never evaluates DOCX/ExcelJS code (and vice versa in later phases).
+// never evaluates DOCX/ExcelJS code (and an HTML export never loads ExcelJS).
 
 async function handleRequest(request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
+    const { materializeYjsState } = await import('../../collab/yjs-loader');
+    const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-worker');
+
     switch (request.kind) {
         case 'preview': {
-            const { materializeYjsState } = await import('../../collab/yjs-loader');
             const { renderEigensheetsPreviewBody } = await import('../../preview/eigensheets-preview');
-            const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-worker');
             const { body, warnings } = renderEigensheetsPreviewBody(doc);
             if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
             return { ok: true, result: { body }, warnings };
+        }
+        case 'export': {
+            const { renderEigensheetsExport } = await import('../../export/sheets/transform');
+            const { data, warnings } = await renderEigensheetsExport(doc, request.format, request.title);
+            if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
+            return { ok: true, result: { data }, warnings };
         }
     }
 }
@@ -47,5 +54,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
         };
     }
     const envelope: WorkerResponseEnvelope = { jobId, response, transformMs: performance.now() - startedAt };
-    postMessage(envelope);
+    // Export bytes ride the transfer list; a preview body is a small clone.
+    postMessage(envelope, response.ok && 'data' in response.result ? [response.result.data] : []);
 };
