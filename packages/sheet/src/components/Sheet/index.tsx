@@ -166,8 +166,13 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
 
     // Resize handler
     useEffect(() => {
+        const placeholder = placeholderRef.current!;
+
         function resize() {
             if (!data) return;
+            // A hidden container measures 0×0, and writing that pins the canvas blank until the
+            // next resize. Skip it — the observer fires again with a real box on un-hide.
+            if (placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
             setContext((draftCtx) => {
                 if (settings.devicePixelRatio === 0) {
                     draftCtx.devicePixelRatio = (
@@ -175,12 +180,20 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
                     ).devicePixelRatio;
                 }
                 updateContextWithSheetData(draftCtx, data);
-                updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholderRef.current!);
+                updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder);
             });
         }
 
+        // Window resize also covers devicePixelRatio changes, which leave the box alone; the
+        // observer covers container-only resizes (side panels, layout switches, un-hiding).
+        // No feedback loop: the placeholder is sized by its flex parent, canvas and overlay are absolute.
         window.addEventListener('resize', resize);
-        return () => window.removeEventListener('resize', resize);
+        const observer = new ResizeObserver(resize);
+        observer.observe(placeholder);
+        return () => {
+            window.removeEventListener('resize', resize);
+            observer.disconnect();
+        };
     }, [data, refs.canvas, setContext, settings.devicePixelRatio]);
 
     // Recalculate row/col info when data or config dimensions change
