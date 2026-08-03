@@ -10,6 +10,7 @@ import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
 import { materializeYjsState } from '../lib/collab/yjs-loader';
 import { ApiError } from '../lib/core/errors';
+import { readEigendocFromDoc, writeEigendocToYjs } from '../lib/document/doc';
 import { buildPreviewUrlMap } from '../lib/document/media';
 import { readSheetsFromDoc } from '../lib/document/sheets';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
@@ -22,6 +23,7 @@ import { exportSheetsToHtml } from '../lib/export/sheets/html';
 import { exportSheetsToXlsx } from '../lib/export/sheets/xlsx';
 import { exportSlidesToHtml, runSlidesExport } from '../lib/export/slides/html';
 import { getHome } from '../lib/home/get-home';
+import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
 import { generateEigendocPreview, renderEigendocPreviewBody } from '../lib/preview/eigendoc-preview';
@@ -38,6 +40,7 @@ import {
     seedEigendoc,
     seedSlidesDoc,
 } from './fixtures/golden-documents';
+import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from './fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from './fixtures/heavy-sheets';
 import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from './setup';
 
@@ -843,5 +846,29 @@ describe('document transform (eigenslides)', () => {
         } finally {
             errorSpy.mockRestore();
         }
+    }, 120_000);
+});
+
+// Recorded from the pre-Worker docx import pipeline (docxToPmJson, then
+// writeEigendocToYjs into a fresh document) over buildGoldenDocx(), so the move
+// off-thread is proven equivalent: the Worker must hand back a Yjs update whose
+// applied document reads back identically, and the extracted image bytes must
+// survive the transfer untouched. Regenerate only for an intentional converter change.
+const GOLDEN_DOCX_PM_JSON_SHA256 = '15b5feca693ca9ee7c3cf8fe3d030a1bc79bc3a1ac56bee9f23d644e5de19eb1';
+const GOLDEN_DOCX_DOCUMENT_SHA256 = '51ae42c1e14f8f5acfa31337873d126218c155746f6850860afdc90900808cfe';
+
+describe('document transform (docx import)', () => {
+    test('the reference parse + Yjs commit pipeline matches the pinned goldens', async () => {
+        const { json, images } = await docxToPmJson(Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES)));
+        expect(sha256(JSON.stringify(json))).toBe(GOLDEN_DOCX_PM_JSON_SHA256);
+        expect(images.map(({ name, contentType }) => ({ name, contentType }))).toEqual([
+            { name: GOLDEN_DOCX_IMAGE_NAME, contentType: 'image/png' },
+        ]);
+        expect(images[0].data).toEqual(Buffer.from(TEST_PNG_BYTES));
+
+        const doc = new Y.Doc();
+        writeEigendocToYjs(doc, json, docSchema);
+        expect(sha256(JSON.stringify(readEigendocFromDoc(doc)))).toBe(GOLDEN_DOCX_DOCUMENT_SHA256);
+        doc.destroy();
     }, 120_000);
 });
