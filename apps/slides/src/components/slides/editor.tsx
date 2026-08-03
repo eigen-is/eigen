@@ -761,9 +761,9 @@ function SlideEditorInner({
     }
 
     return (
-        <ColumnLayout mobileColumn={mobilePanelOpen ? 'panel' : 'editor'}>
-            {/* The Column self-gates on mobileColumn; hiding the wrapper too takes the find bar with it,
-                since it floats outside the Column and would otherwise squash over the mobile pane. */}
+        <ColumnLayout>
+            {/* Hiding takes the find bar with it: the bar floats inside this wrapper, outside the
+                pane's Column, and would otherwise paint over the pane. */}
             <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
                 <DocSearchProvider
                     controller={docSearchController}

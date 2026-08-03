@@ -11,9 +11,7 @@ import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentPanel } from './comment-panel';
 
 // The mobile comments/activity pane, identical across docs, slides and sheets: a full-width Column
-// carrying the back arrow, the title and (for comments) the filter, so the panel itself drops its
-// header. Hosts that wrap their editor in a ColumnLayout must pass mobileColumn="panel" — this
-// Column's id — so the editor column steps aside for it.
+// carrying the back arrow, the title and (for comments) the filter, so the panel drops its header.
 type MobilePanelColumnProps = {
     activePanel: 'comments' | 'activity';
     onBack: () => void;
