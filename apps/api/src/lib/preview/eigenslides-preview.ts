@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
 import type * as Y from 'yjs';
-import { buildPreviewUrlMap } from '../document/media';
+import { buildPreviewUrlMap, resolveMediaUrl } from '../document/media';
 import { readDeckFromDoc } from '../document/slides';
 import type { TransformWarning } from '../document/transform/protocol';
 import { runTransformToText } from '../document/transform/run-transform';
@@ -26,7 +26,9 @@ export function renderEigenslidesPreviewBody(
     const truncated = deck.slideOrder.length > PREVIEW_MAX_SLIDES;
     const limitedDeck = truncated ? { ...deck, slideOrder: deck.slideOrder.slice(0, PREVIEW_MAX_SLIDES) } : deck;
 
-    const slidesHtml = renderDeckHtml(limitedDeck, responsiveSizeUnit, (mediaName) => mediaUrls[mediaName] ?? null);
+    const slidesHtml = renderDeckHtml(limitedDeck, responsiveSizeUnit, (mediaName) =>
+        resolveMediaUrl(mediaUrls, mediaName),
+    );
     const sanitized = DOMPurify.sanitize(slidesHtml, { FORCE_BODY: true });
     return { body: truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized, warnings: [] };
 }

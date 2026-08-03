@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
+import type { ImageObject } from '@workspace/lib/slides';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
@@ -711,6 +712,17 @@ describe('document transform (eigendoc)', () => {
         }
     }, 120_000);
 
+    test('a figure naming a prototype key renders without an image, not a crash', () => {
+        // mediaName is document data — an unknown name must resolve to null, never to
+        // something off Object.prototype.
+        const doc = new Y.Doc();
+        seedEigendoc(doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'figure', attrs: { mediaName: 'constructor' } }] }],
+        });
+        expect(renderEigendocPreviewBody(doc, {}).body).not.toContain('<img');
+    });
+
     test('export media crosses the boundary as transferred buffers', async () => {
         const { mount, path } = golden;
         const media = await collectExportMedia(mount, path);
@@ -793,6 +805,16 @@ describe('document transform (eigenslides)', () => {
         expect(previewBody(response)).toBe(direct.body);
         expect(response.ok && response.warnings).toEqual(direct.warnings);
     }, 120_000);
+
+    test('an image object naming a prototype key renders empty, not a crash', () => {
+        // mediaName is document data — an unknown name must resolve to null, never to
+        // something off Object.prototype.
+        const deck = buildGoldenDeck();
+        (deck.objects['obj-2'] as ImageObject).mediaName = 'toString';
+        const doc = new Y.Doc();
+        seedSlidesDoc(doc, deck);
+        expect(renderEigenslidesPreviewBody(doc, {}).body).not.toContain('<img');
+    });
 
     test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
         const { mount, path } = await seedGoldenDocument('worker-deck-corrupt', 'slides', (doc) =>

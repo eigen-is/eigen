@@ -39,6 +39,13 @@ export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Pr
     );
 }
 
+// A figure/slide-object mediaName is document data, so the preview URL map is looked
+// up by own key only — an unknown name like `constructor` must resolve to null, not
+// to something off Object.prototype.
+export function resolveMediaUrl(mediaUrls: Record<string, string>, mediaName: string): string | null {
+    return Object.hasOwn(mediaUrls, mediaName) ? mediaUrls[mediaName] : null;
+}
+
 // The Worker side of export media: the transferred buffers become the data: URIs the
 // export renderers embed.
 export function toDataUriMap(media: ExportMedia[]): Map<string, string> {

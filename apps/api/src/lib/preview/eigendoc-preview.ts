@@ -5,7 +5,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
 import type * as Y from 'yjs';
 import { readEigendocFromDoc } from '../document/doc';
-import { buildPreviewUrlMap } from '../document/media';
+import { buildPreviewUrlMap, resolveMediaUrl } from '../document/media';
 import type { TransformWarning } from '../document/transform/protocol';
 import { runTransformToText } from '../document/transform/run-transform';
 import { PREVIEW_TRANSFORM_DEADLINE_MS, type TransformPriority } from '../document/transform/runner';
@@ -42,7 +42,7 @@ export function renderEigendocPreviewBody(
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) =>
                     renderFigureNode(
                         node.attrs,
-                        (mediaName, src) => (mediaName ? (mediaUrls[mediaName] ?? null) : src),
+                        (mediaName, src) => (mediaName ? resolveMediaUrl(mediaUrls, mediaName) : src),
                         { lazy: true },
                     ),
             },
