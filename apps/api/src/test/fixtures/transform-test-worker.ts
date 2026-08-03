@@ -6,7 +6,7 @@
 import type { WorkerRequestEnvelope, WorkerResponseEnvelope } from '../../lib/document/transform/protocol';
 
 type TestDirective = {
-    behavior?: 'ok' | 'sleep' | 'crash' | 'exit' | 'malformed' | 'echo-buffers' | 'document-error';
+    behavior?: 'ok' | 'sleep' | 'crash' | 'exit' | 'malformed' | 'malformed-ok' | 'echo-buffers' | 'document-error';
     ms?: number;
 };
 
@@ -30,6 +30,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
             return;
         case 'malformed':
             postMessage({ nonsense: true });
+            return;
+        case 'malformed-ok':
+            // Right discriminant, missing payload — must not hang the requester.
+            postMessage({ jobId, response: { ok: true } });
             return;
         case 'sleep':
             await Bun.sleep(directive.ms ?? 100);

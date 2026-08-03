@@ -49,10 +49,11 @@ export async function generateEigensheetsPreview(
     drivePath: DrivePath,
     priority: TransformPriority = 'foreground',
 ): Promise<string> {
+    const captureStart = performance.now();
     const source = await captureCollabSource(mount, drivePath);
     const response = await documentTransformRunner.run(
         { kind: 'preview', documentType: 'eigensheets', source },
-        { priority, deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS },
+        { priority, deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS, captureMs: performance.now() - captureStart },
     );
     if (!response.ok) {
         if (response.error.status) throw new ApiError(response.error.status, response.error.message);

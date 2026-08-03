@@ -4,6 +4,7 @@ import { getTextPreviewMode } from '@workspace/lib/constants';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
+import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { generateEigendocPreview } from './eigendoc-preview';
@@ -97,7 +98,7 @@ type ServedTextPreview = { value: TextPreviewResult; stale: boolean };
 // Collab generators run through the document-transform runner: a first cache miss
 // is foreground work (the request waits on it), a stale regeneration is background
 // work the runner may drop under load. Plain-file generators ignore the priority.
-type TextPreviewGenerator = (priority: 'foreground' | 'background') => Promise<string | null>;
+type TextPreviewGenerator = (priority: TransformPriority) => Promise<string | null>;
 
 // In-flight background regenerations keyed by cache filename, so a folder grid of N tiles
 // for one just-edited doc triggers a single regeneration instead of N.

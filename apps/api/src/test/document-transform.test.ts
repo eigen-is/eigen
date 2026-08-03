@@ -160,6 +160,28 @@ describe('document transform (eigensheets preview)', () => {
         }
     });
 
+    test('byte guard replaces an oversized body with the truncated notice, never a sliced string', async () => {
+        // The budget counts cells, not bytes — one enormous cell sails through
+        // 200×50/10k and only the byte guard stands between it and the cache.
+        const doc = new Y.Doc();
+        const huge = 'x'.repeat(9_000_000);
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                config: {},
+                celldata: [{ r: 0, c: 0, v: { v: huge, m: huge, ct: { fa: 'General', t: 'g' } } }],
+            },
+        ];
+        doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+
+        const { body, warnings } = renderEigensheetsPreviewBody(doc);
+        expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
+        expect(body).toContain('Preview truncated');
+        expect(body.length).toBeLessThan(1000);
+    }, 60_000);
+
     test('concurrent first-miss previews share one transform job', async () => {
         const sheetsPath = await seedDoc('cache-shared-generation');
         const runSpy = spyOn(documentTransformRunner, 'run');

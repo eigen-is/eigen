@@ -31,13 +31,16 @@ const CLOSE_GRACE_MS = 5_000;
 // Shown verbatim by useExportDocument's error toast — keep it human-readable.
 const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 
-type RunOptions = { priority: TransformPriority; deadlineMs: number; signal?: AbortSignal };
+// captureMs: main-thread source-capture time measured by the caller — logged per
+// job because a fast Worker time with a slow capture is not a successful offload.
+type RunOptions = { priority: TransformPriority; deadlineMs: number; captureMs?: number; signal?: AbortSignal };
 
 type Job = {
     id: number;
     request: DocumentTransformRequest;
     priority: TransformPriority;
     deadlineMs: number;
+    captureMs?: number;
     enqueuedAt: number;
     resolve: (response: DocumentTransformResponse) => void;
 };
@@ -46,6 +49,22 @@ type ActiveJob = { settle: (response: DocumentTransformResponse) => void; deadli
 
 function errorResponse(code: TransformError['code'], message: string): DocumentTransformResponse {
     return { ok: false, error: { code, message } };
+}
+
+// Full shape check at the trust boundary: a half-valid response (`{ok: true}`
+// with no result) must become a structured invalid-response, not a throw inside
+// settle that leaves the requester's promise hanging forever.
+function isValidResponse(response: unknown): response is DocumentTransformResponse {
+    if (!response || typeof response !== 'object') return false;
+    const r = response as {
+        ok?: unknown;
+        result?: { body?: unknown };
+        warnings?: unknown;
+        error?: { code?: unknown; message?: unknown };
+    };
+    if (r.ok === true) return typeof r.result?.body === 'string' && Array.isArray(r.warnings);
+    if (r.ok === false) return typeof r.error?.code === 'string' && typeof r.error?.message === 'string';
+    return false;
 }
 
 export class DocumentTransformRunner {
@@ -89,6 +108,7 @@ export class DocumentTransformRunner {
                 request,
                 priority: opts.priority,
                 deadlineMs: opts.deadlineMs,
+                captureMs: opts.captureMs,
                 enqueuedAt: Date.now(),
                 resolve,
             };
@@ -155,7 +175,8 @@ export class DocumentTransformRunner {
             console.log(
                 `[transform] job=${job.id} kind=${job.request.kind} type=${job.request.documentType} ` +
                     `priority=${job.priority} outcome=${outcome} queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
-                    `inputBytes=${inputBytes} transformMs=${transformMs ?? -1} totalMs=${totalMs} outputBytes=${outputBytes}` +
+                    `captureMs=${job.captureMs?.toFixed(0) ?? -1} inputBytes=${inputBytes} ` +
+                    `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes}` +
                     (warnings ? ` warnings=${warnings.map((warning) => warning.code).join(',')}` : ''),
             );
             job.resolve(response);
@@ -170,11 +191,11 @@ export class DocumentTransformRunner {
         worker.onmessage = (event: MessageEvent) => {
             const envelope = event.data as Partial<WorkerResponseEnvelope> | null;
             const response = envelope?.response;
-            if (!response || typeof response !== 'object' || typeof response.ok !== 'boolean') {
+            if (!isValidResponse(response)) {
                 settle(errorResponse('invalid-response', 'Worker returned a malformed response'));
                 return;
             }
-            transformMs = typeof envelope.transformMs === 'number' ? envelope.transformMs : undefined;
+            transformMs = typeof envelope?.transformMs === 'number' ? envelope.transformMs : undefined;
             settle(response);
         };
         worker.onerror = (event) => {

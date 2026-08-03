@@ -164,6 +164,17 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    test('a half-valid response ({ok:true} without result) resolves instead of hanging', async () => {
+        const runner = makeRunner();
+        const halfValid = await runner.run(makeRequest({ behavior: 'malformed-ok' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(halfValid.ok).toBe(false);
+        if (!halfValid.ok) expect(halfValid.error.code).toBe('invalid-response');
+        await runner.close();
+    });
+
     test('a structured document error passes through untouched', async () => {
         const runner = makeRunner();
         const failed = await runner.run(makeRequest({ behavior: 'document-error' }), {
