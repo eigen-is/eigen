@@ -23,7 +23,6 @@ import {
     useMediaResolver,
     useUploadFile,
 } from '@workspace/lib/drive';
-import { useMediaQuery } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -104,6 +103,9 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
 }
 
 const lowlight = createLowlight(common);
+
+// PropertiesPanel is w-64; the find bar's right-68 inset below is that width plus its gutter.
+const SIDE_PANEL_WIDTH_PX = 256;
 
 export const CollaborativeEditor = ({
     path,
@@ -243,9 +245,8 @@ const TiptapEditor = ({
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
     const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, openComments, closePanels } =
         useDocumentPanels();
-    const [canvasScale, setCanvasScale] = useState(1);
+    const [containerWidth, setContainerWidth] = useState(0);
     const [docHeight, setDocHeight] = useState(0);
-    const needsScale = canvasScale < 1;
     const documentRef = useRef<HTMLDivElement | null>(null);
     const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
@@ -263,14 +264,14 @@ const TiptapEditor = ({
     }, []);
 
     // Callback refs, not mount effects, so the observer dies with the node it watches. Both skip a
-    // 0×0 fire: the mobile pane hides this subtree, and writing 0 would pin canvasScale — and with
+    // 0×0 fire: the mobile pane hides this subtree, and writing 0 would pin the width — and with
     // it the document — at scale(0) until the next resize. The observer re-measures on un-hide.
     const setScrollContainer = useCallback((el: HTMLDivElement | null) => {
         scrollContainerRef.current = el;
         if (!el) return;
         const ro = new ResizeObserver(([entry]) => {
             if (entry.contentRect.width === 0) return;
-            setCanvasScale(Math.min(1, entry.contentRect.width / A4_WIDTH_PX));
+            setContainerWidth(entry.contentRect.width);
         });
         ro.observe(el);
         return () => {
@@ -677,17 +678,23 @@ const TiptapEditor = ({
     const docSearchController = useProseMirrorSearchController(editor, access.canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const isWide = !useMediaQuery('(max-width: 1200px)');
     const { isMobile } = useLayout();
 
     if (!editor) return null;
 
-    // Below isWide the side panel has no room, so mobile hosts it as a full-width Column instead.
+    // Below the mobile breakpoint the side panel has no room, so mobile hosts the same panels in a
+    // full-width Column instead.
     const mobilePanelOpen = isMobile && panel !== null;
     const activePanel = panel ?? sidebarContext;
     const showSidebar =
-        isWide &&
+        !isMobile &&
         (activePanel === 'comments' || activePanel === 'activity' || (access.canWrite && activePanel !== 'document'));
+
+    // The panel is an absolute overlay, so the scroll container keeps its full width — subtract the
+    // strip it covers, or the page would run underneath it once the viewport drops below ~1080px.
+    const availableWidth = containerWidth - (showSidebar ? SIDE_PANEL_WIDTH_PX : 0);
+    const canvasScale = containerWidth === 0 ? 1 : Math.min(1, availableWidth / A4_WIDTH_PX);
+    const needsScale = canvasScale < 1;
 
     const handleScrollToComment = (cardId: string) => {
         const positions = findCommentMarkPositions(editor.state.doc, cardId);
@@ -697,14 +704,15 @@ const TiptapEditor = ({
     };
 
     // Palette IN COMMENTS capability — reveal resolves chatName → cardId client-side, opens the
-    // panel where one can render, scrolls to the mark, and opens the card. Plain object per render;
-    // usePaletteDocSearch stabilises it, so the closure sees the current cardsRef.
+    // comments panel (side panel above the mobile breakpoint, pane below), scrolls to the mark, and
+    // opens the card. Plain object per render; usePaletteDocSearch stabilises it, so the closure sees
+    // the current cardsRef.
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
-            if (isWide || isMobile) openComments();
+            openComments();
             // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
             if (!isMobile) handleScrollToComment(cardId);
             setOpenCardId(cardId);
@@ -738,11 +746,11 @@ const TiptapEditor = ({
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}
-                                    // No panel can render between isMobile and isWide, so omit the toggle
-                                    // rather than ship a no-op (DocumentShareCluster hides it when absent).
-                                    onToggleCommentPanel={isWide || isMobile ? toggleComments : undefined}
+                                    // Both toggles are always offered: the panels render as the right
+                                    // overlay above the mobile breakpoint and as the mobile Column below it.
+                                    onToggleCommentPanel={toggleComments}
                                     commentPanelOpen={commentPanelOpen}
-                                    onToggleActivityPanel={isWide || isMobile ? toggleActivity : undefined}
+                                    onToggleActivityPanel={toggleActivity}
                                     activityPanelOpen={activityPanelOpen}
                                     unresolvedCommentCount={unresolvedCount}
                                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
@@ -784,7 +792,7 @@ const TiptapEditor = ({
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
-                                {isWide && (
+                                {!isMobile && (
                                     <div
                                         className={cn(
                                             'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
