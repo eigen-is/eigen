@@ -1,0 +1,134 @@
+import { beforeAll, describe, expect, test } from 'bun:test';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { getHome } from '../lib/home/get-home';
+import {
+    buildGoldenOps,
+    buildGoldenSheets,
+    buildHeavyOps,
+    buildHeavySheets,
+    GOLDEN_OPS_EDIT,
+    GOLDEN_OPS_PARTIAL_EDIT,
+    GOLDEN_ROW1_TOTAL,
+    GOLDEN_SHEET2_MARKER,
+    HEAVY_FAR_CORNER,
+    seedSheetsDoc,
+} from './fixtures/heavy-sheets';
+import { authedRequest, driveGet, drivePost, getTestContext } from './setup';
+
+// Golden output assertions for the eigensheets preview pipeline (proposal Phase 0:
+// pin the rendered contract BEFORE the Yjs loader / renderer refactor). The hash at
+// the bottom pins the exact sanitized body for the deterministic golden fixture —
+// it may only change for an intentional renderer/budget change, never as refactor
+// fallout.
+
+type TextPreview = { body: string; mode: string };
+
+describe('eigensheets preview (golden)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let mountId: string;
+    let rootId: string;
+    let body: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        mountId = 'default';
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        rootId = root.id;
+
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'golden-preview' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        seedSheetsDoc(collab.doc, buildGoldenSheets(), buildGoldenOps());
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsPath.id}/text-preview`,
+        );
+        expect(res.status).toBe(200);
+        const preview = (await res.json()) as TextPreview;
+        expect(preview.mode).toBe('eigensheets');
+        body = preview.body;
+    });
+
+    test('renders first-sheet content with computed formulas', () => {
+        expect(body).toContain('Region 1');
+        // `=SUM(B2:E2)` over num(1,1..4) — the server-side recalc gate must have run.
+        expect(body).toContain(`>${GOLDEN_ROW1_TOTAL}</td>`);
+        // `=IF(F2>1500,…)` computed off the recalced total.
+        expect(body).toContain('>low</td>');
+        // Edits from the pending-ops array are replayed on top of the snapshot.
+        expect(body).toContain(GOLDEN_OPS_EDIT);
+        expect(body).toContain(GOLDEN_OPS_PARTIAL_EDIT);
+    });
+
+    test('renders conditional formatting, data bars, merges, borders, rotation', () => {
+        expect(body).toContain('background:#ffe08a'); // greaterThan rule fired
+        expect(body).toContain('color:#7a1f1f');
+        expect(body).toContain('background:#638ec6'); // dataBar fill
+        expect(body).toContain('background:#d1f0d1'); // cross-sheet formula rule (=Data!A1>10)
+        expect(body).toContain('colspan="2"');
+        expect(body).toContain('border-left:2px solid #1a5fb4');
+        expect(body).toContain('rotate(-45deg)');
+    });
+
+    test('renders only the first sheet and appends the truncated marker', () => {
+        expect(body).not.toContain(GOLDEN_SHEET2_MARKER);
+        expect(body).toContain('Preview truncated');
+    });
+
+    test('sanitizes hostile content and blocks non-web link schemes', () => {
+        expect(body).not.toMatch(/<script/i);
+        expect(body).not.toContain('javascript:alert');
+        expect(body).toContain('href="https://example.com/report"');
+    });
+
+    test('body matches the pinned golden hash', () => {
+        const hash = new Bun.CryptoHasher('sha256').update(body).digest('hex');
+        expect(hash).toBe(GOLDEN_BODY_SHA256);
+    });
+});
+
+describe('eigensheets preview (heavy fixture)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('renders a first sheet far beyond any glance size (current unbounded behavior)', async () => {
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, 'default', 'root');
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            'default',
+            `folder/${root.id}/create/sheets`,
+            { fileName: 'heavy-preview' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument('default', sheetsPath.id);
+        seedSheetsDoc(collab.doc, buildHeavySheets(), buildHeavyOps());
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/default/file/${sheetsPath.id}/text-preview`,
+        );
+        expect(res.status).toBe(200);
+        const preview = (await res.json()) as TextPreview;
+        expect(preview.mode).toBe('eigensheets');
+
+        // Phase 0 baseline: the whole 600×45 grid lands in the cached body, deep
+        // corner included. Phase 1 replaces these with the bounded-budget contract.
+        expect(preview.body).toContain(HEAVY_FAR_CORNER);
+        expect(preview.body.length).toBeGreaterThan(1_000_000);
+    }, 120_000);
+});
+
+// Recorded from the deterministic golden fixture. Regenerate (and justify) only on
+// an intentional renderer or preview-budget change.
+const GOLDEN_BODY_SHA256 = 'a2a43870af39674bf78b0356955b0ecf5497547bbc1b15c4353cd9207a4c9182';
