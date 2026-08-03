@@ -42,6 +42,9 @@ export function SlidePanel({
     const { resolveMediaUrl } = useMediaResolver();
     const slideContextMenu = useContextMenu<string>();
 
+    // Read-only viewers get no handlers, so the menu would open empty — don't arm its triggers.
+    const hasSlideActions = !!onDuplicateSlide || !!onDeleteSlide;
+
     // Mobile thumbnails render bare (no SortableSlide, no per-item component to hang a hook on), so
     // one panel-level useLongPress carries the pressed slide via bind(slideId). Both layouts share this
     // instance: mobile spreads it on the bare thumbnail, desktop composes it into SortableSlide (below)
@@ -54,7 +57,7 @@ export function SlidePanel({
         [openSlideMenuAt],
     );
     // dragActiveId cancels an armed press the moment a drag starts (same mechanism as stickies cards).
-    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId });
+    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId || !hasSlideActions });
 
     const slideList = deck.slideOrder.map((slideId, index) => {
         const slide = deck.slides[slideId];
@@ -72,20 +75,20 @@ export function SlidePanel({
             />
         );
 
+        const onContextMenu = hasSlideActions
+            ? (e: React.MouseEvent) => slideContextMenu.handleContextMenu(e, slideId)
+            : undefined;
+
         if (mobile)
             return (
-                <div
-                    key={slideId}
-                    onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}
-                    {...slideLongPress.bind(slideId)}
-                >
+                <div key={slideId} onContextMenu={onContextMenu} {...slideLongPress.bind(slideId)}>
                     {thumbnail}
                 </div>
             );
 
         return (
             <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false} longPressBind={slideLongPress.bind}>
-                <div onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}>{thumbnail}</div>
+                <div onContextMenu={onContextMenu}>{thumbnail}</div>
             </SortableSlide>
         );
     });
@@ -125,17 +128,21 @@ export function SlidePanel({
             <ContextMenuAnchor contextMenu={slideContextMenu}>
                 {menuSlideId && (
                     <>
-                        <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuSlideId)}>
-                            <Copy className="h-4 w-4 mr-2" /> Duplicate
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                            variant="destructive"
-                            disabled={deck.slideOrder.length <= 1}
-                            onClick={() => onDeleteSlide?.(menuSlideId)}
-                        >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete
-                        </DropdownMenuItem>
+                        {onDuplicateSlide && (
+                            <DropdownMenuItem onClick={() => onDuplicateSlide(menuSlideId)}>
+                                <Copy className="h-4 w-4 mr-2" /> Duplicate
+                            </DropdownMenuItem>
+                        )}
+                        {onDuplicateSlide && onDeleteSlide && <DropdownMenuSeparator />}
+                        {onDeleteSlide && (
+                            <DropdownMenuItem
+                                variant="destructive"
+                                disabled={deck.slideOrder.length <= 1}
+                                onClick={() => onDeleteSlide(menuSlideId)}
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                        )}
                     </>
                 )}
             </ContextMenuAnchor>

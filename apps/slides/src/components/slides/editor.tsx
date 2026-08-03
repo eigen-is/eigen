@@ -21,7 +21,14 @@ import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
+import {
+    ActivityPanel,
+    CardFormDialog,
+    CommentFilterButton,
+    CommentLifecycleDialogs,
+    CommentPanel,
+    ToolbarTitle,
+} from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
@@ -658,6 +665,10 @@ function SlideEditorInner({
         const el = document.documentElement;
         if (el.requestFullscreen) {
             el.requestFullscreen().then(() => setIsPresenting(true));
+        } else {
+            // iOS Safari has no Element.requestFullscreen — the overlay is fixed inset-0, so present
+            // without it rather than leaving mobile's one kept action dead.
+            setIsPresenting(true);
         }
     }, []);
 
@@ -708,6 +719,14 @@ function SlideEditorInner({
     // active slide and the user can write (or comments are open) — inset the find bar clear of it.
     const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || activityPanelOpen || canWrite);
 
+    // Below the mobile breakpoint that sibling has no room, so mobile hosts the same panels in a
+    // full-width Column instead.
+    const mobilePanelOpen = isMobile && (commentPanelOpen || activityPanelOpen);
+    const closePanels = () => {
+        setCommentPanelOpen(false);
+        setActivityPanelOpen(false);
+    };
+
     if (!isSynced) return <LoadingState />;
 
     if (isPresenting && activeSlide) {
@@ -749,8 +768,10 @@ function SlideEditorInner({
     }
 
     return (
-        <ColumnLayout mobileColumn="editor">
-            <div className="flex-1 min-w-0 h-full">
+        <ColumnLayout mobileColumn={mobilePanelOpen ? 'panel' : 'editor'}>
+            {/* The Column self-gates on mobileColumn; hiding the wrapper too takes the find bar with it,
+                since it floats outside the Column and would otherwise squash over the mobile pane. */}
+            <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
                 <DocSearchProvider
                     controller={docSearchController}
                     initialSearchTerm={initialSearchTerm}
@@ -772,25 +793,17 @@ function SlideEditorInner({
                                 onAddImage={() => setImagePickerOpen(true)}
                                 onAddSlide={() => addSlide()}
                                 onPresent={handlePresent}
-                                // Only offer the toggles where the panels can render (!isMobile), else
-                                // they're enabled no-ops. DocumentShareCluster hides them when absent.
-                                onToggleCommentPanel={
-                                    !isMobile
-                                        ? () => {
-                                              setActivityPanelOpen(false);
-                                              setCommentPanelOpen((v) => !v);
-                                          }
-                                        : undefined
-                                }
+                                // Both toggles are always offered: the panels render as the right
+                                // sibling above the breakpoint and as the mobile Column below it.
+                                onToggleCommentPanel={() => {
+                                    setActivityPanelOpen(false);
+                                    setCommentPanelOpen((v) => !v);
+                                }}
                                 commentPanelOpen={commentPanelOpen}
-                                onToggleActivityPanel={
-                                    !isMobile
-                                        ? () => {
-                                              setCommentPanelOpen(false);
-                                              setActivityPanelOpen((v) => !v);
-                                          }
-                                        : undefined
-                                }
+                                onToggleActivityPanel={() => {
+                                    setCommentPanelOpen(false);
+                                    setActivityPanelOpen((v) => !v);
+                                }}
                                 activityPanelOpen={activityPanelOpen}
                                 unresolvedCommentCount={unresolvedCount}
                             />
@@ -926,6 +939,62 @@ function SlideEditorInner({
                     </Column>
                 </DocSearchProvider>
             </div>
+
+            {mobilePanelOpen && (
+                <Column
+                    id="panel"
+                    width="flex"
+                    onBack={closePanels}
+                    toolbar={
+                        commentPanelOpen ? (
+                            <>
+                                <ToolbarTitle>Comments</ToolbarTitle>
+                                <div className="ml-auto">
+                                    <CommentFilterButton
+                                        filter={commentFilter}
+                                        members={members}
+                                        currentUserEmail={auth.user!.email}
+                                    />
+                                </div>
+                            </>
+                        ) : (
+                            <ToolbarTitle>Activity</ToolbarTitle>
+                        )
+                    }
+                >
+                    {commentPanelOpen ? (
+                        <CommentPanel
+                            cards={cards}
+                            entries={allComments}
+                            activeCardIds={activeComments.ids}
+                            anchorTexts={activeComments.anchorTexts}
+                            currentUserEmail={auth.user!.email}
+                            filter={commentFilter}
+                            members={members}
+                            hideHeader
+                            className="w-full border-l-0"
+                            onClose={closePanels}
+                            // Plain setOpenCardId, not openCommentCard: the canvas is unmounted here, so
+                            // its slide + object reveal would drive a view nobody can see.
+                            onCommentClick={setOpenCardId}
+                            onCommentContextMenu={(e, card, entry) =>
+                                commentContextMenu.handleContextMenu(e, { card, entry })
+                            }
+                        />
+                    ) : (
+                        <ActivityPanel
+                            path={path}
+                            hideHeader
+                            className="w-full border-l-0"
+                            onClose={closePanels}
+                            onOpenCard={({ cardId, chatName }) => {
+                                const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                if (id) setOpenCardId(id);
+                            }}
+                        />
+                    )}
+                </Column>
+            )}
 
             <CardFormDialog
                 open={addOpen}
