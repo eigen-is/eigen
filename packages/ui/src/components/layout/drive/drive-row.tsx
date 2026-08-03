@@ -87,8 +87,8 @@ export function DriveRow({
                     onItemClick?.(item);
                 }
             }}
-            onContextMenu={(e) => handleContextMenu(e, item)}
-            {...(disabled ? {} : longPressBind(item))}
+            onContextMenu={hideActions ? undefined : (e) => handleContextMenu(e, item)}
+            {...(disabled || hideActions ? {} : longPressBind(item))}
             {...drag.getDragProps(item)}
             {...getDropProps(item)}
         >

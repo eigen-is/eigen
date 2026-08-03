@@ -239,24 +239,26 @@ export function DriveTable({
                 })}
             </div>
 
-            <DriveItemContextMenu
-                controller={controller}
-                getItemHref={getItemHref}
-                onItemOpen={onItemOpen}
-                onQuickLook={onQuickLook}
-                onDownload={onDownload}
-                onConvert={onConvert}
-                onExport={onExport}
-                onRename={onRename}
-                onMoveTo={onMoveTo}
-                onCopyTo={onCopyTo}
-                onDuplicate={onDuplicate}
-                onShareClick={onShareClick}
-                onEmailCollaborators={onEmailCollaborators}
-                onDelete={onDelete}
-                allowDelete={allowDelete}
-                renderItems={contextMenuItems}
-            />
+            {!hideActions && (
+                <DriveItemContextMenu
+                    controller={controller}
+                    getItemHref={getItemHref}
+                    onItemOpen={onItemOpen}
+                    onQuickLook={onQuickLook}
+                    onDownload={onDownload}
+                    onConvert={onConvert}
+                    onExport={onExport}
+                    onRename={onRename}
+                    onMoveTo={onMoveTo}
+                    onCopyTo={onCopyTo}
+                    onDuplicate={onDuplicate}
+                    onShareClick={onShareClick}
+                    onEmailCollaborators={onEmailCollaborators}
+                    onDelete={onDelete}
+                    allowDelete={allowDelete}
+                    renderItems={contextMenuItems}
+                />
+            )}
         </div>
     );
 }
