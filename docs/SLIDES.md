@@ -100,6 +100,6 @@ them (a "Preview truncated" marker is appended when the deck has more). Server-s
 |------|---------|
 | `apps/api/src/lib/document/slides.ts` | Yjs → DeckData + media map (shared with export + preview) |
 | `apps/api/src/lib/export/slides/render.ts` | Slide/object → HTML (SizeUnit abstraction) |
-| `apps/api/src/lib/export/slides/html.ts` | Standalone HTML export |
-| `apps/api/src/lib/export/slides/pdf.ts` | PDF via WeasyPrint |
-| `apps/api/src/lib/preview/eigenslides-preview.ts` | Quick preview HTML body |
+| `apps/api/src/lib/export/slides/transform.ts` | Worker-side: deck + media → standalone HTML (screen or PDF mode) |
+| `apps/api/src/lib/export/export-document.ts` | Main thread: HTML and PDF download envelopes |
+| `apps/api/src/lib/preview/eigenslides-render.ts` | Quick preview HTML body (Worker-side) |

@@ -19,11 +19,8 @@ import { captureCollabSource } from '../lib/document/transform/collab-source';
 import { type DocumentTransformResponse, toTransferableBuffer } from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
 import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
-import { exportEigendocToHtml, runEigendocExport } from '../lib/export/doc/html';
+import { exportDocument, runDocumentExport } from '../lib/export/export-document';
 import { collectExportMedia } from '../lib/export/media';
-import { exportSheetsToHtml } from '../lib/export/sheets/html';
-import { exportSheetsToXlsx } from '../lib/export/sheets/xlsx';
-import { exportSlidesToHtml, runEigenslidesExport } from '../lib/export/slides/html';
 import { getHome } from '../lib/home/get-home';
 import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
@@ -319,7 +316,7 @@ describe('document transform (eigensheets export)', () => {
     });
 
     test('html export through the Worker is byte-identical to the pre-move pipeline', async () => {
-        const result = await exportSheetsToHtml(golden.mount, golden.path);
+        const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_EXPORT_HTML_SHA256);
     }, 120_000);
 
@@ -337,7 +334,7 @@ describe('document transform (eigensheets export)', () => {
     }, 120_000);
 
     test('xlsx export through the Worker returns a parseable workbook', async () => {
-        const result = await exportSheetsToXlsx(golden.mount, golden.path);
+        const result = await exportDocument(golden.mount, golden.path, 'xlsx');
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.load(result.data);
         expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual(['Dashboard', 'Data', 'Empty']);
@@ -673,13 +670,17 @@ describe('document transform (eigendoc)', () => {
     }, 120_000);
 
     test('html export is byte-identical to the pre-move pipeline', async () => {
-        const result = await exportEigendocToHtml(golden.mount, golden.path);
+        const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_DOC_EXPORT_HTML_SHA256);
     }, 120_000);
 
     test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
         // The stage before htmlToPdf: the wrapped document WeasyPrint renders.
-        const html = await runEigendocExport(golden.mount, golden.path, 'pdf-html');
+        const html = await runDocumentExport(
+            { documentType: 'eigendoc', format: 'pdf-html' },
+            golden.mount,
+            golden.path,
+        );
         expect(sha256(html)).toBe(GOLDEN_DOC_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 
@@ -831,13 +832,17 @@ describe('document transform (eigenslides)', () => {
     }, 120_000);
 
     test('html export is byte-identical to the pre-move pipeline', async () => {
-        const result = await exportSlidesToHtml(golden.mount, golden.path);
+        const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_DECK_EXPORT_HTML_SHA256);
     }, 120_000);
 
     test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
         // Fixed-size PDF mode: px geometry instead of container queries.
-        const html = await runEigenslidesExport(golden.mount, golden.path, 'pdf-html');
+        const html = await runDocumentExport(
+            { documentType: 'eigenslides', format: 'pdf-html' },
+            golden.mount,
+            golden.path,
+        );
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 

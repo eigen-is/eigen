@@ -22,7 +22,8 @@ main-thread subprocess on top of the Worker's HTML.
 
 ```
 apps/api/src/lib/export/
-  export-document.ts             # Entry point: dispatches by mime type + format
+  export-document.ts             # Entry point: (mime, format) dispatch, the format->envelope table,
+                                 #   media prep and the transform seam (runDocumentExport)
   weasyprint.ts                  # Generic: htmlToPdf(html) -> Buffer via subprocess
   modules.d.ts                   # Type declarations for untyped npm packages
   render-types.ts                # Shared contracts: SizeUnit, *ImgSrcResolver
@@ -31,9 +32,6 @@ apps/api/src/lib/export/
   doc/
     render.ts                    # Pure node renderers: renderFigureNode, renderCodeBlockNode, renderTaskItemNode
     transform.ts                 # Worker-side: materialized doc + media -> HTML bytes, or docx via html-to-docx
-    html.ts                      # Main thread: media prep + transform seam (runEigendocExport) + HTML download
-    docx.ts                      # DOCX download wrapper (the conversion itself runs in the Worker)
-    pdf.ts                       # PDF export via WeasyPrint (over the Worker's HTML)
 
 # Content loaders (Yjs -> PM JSON / DeckData / Sheet[] + media map) live in
 # apps/api/src/lib/document/{doc,slides,sheets}.ts — shared by export AND preview; their
@@ -45,20 +43,19 @@ apps/api/src/lib/export/
 
 - **`render.ts`**: pure utility functions with zero side effects — no imports from tiptap, lowlight, or
   any heavy library. Callers pass their own lowlight instance. Shared by both `doc/transform.ts` (export) and
-  `eigendoc-preview.ts` (quick preview)
+  `preview/eigendoc-render.ts` (quick preview)
 - **Worker side vs main-thread side**: `{doc,slides,sheets}/transform.ts` assemble the document — over the pure
-  renderers in `*/render.ts` and `sheets/to-xlsx.ts` — and are imported *inside* the Worker; the per-format
-  `html.ts`, `pdf.ts`, `docx.ts` and `xlsx.ts` are the main-thread wrappers that prepare media and call the
-  seam through one `runEigen{doc,slides,sheets}Export` helper per type. The split is load-bearing: a module the
-  Worker imports must
+  renderers in `*/render.ts` and `sheets/to-xlsx.ts` — and are imported *inside* the Worker; `export-document.ts`
+  is the whole main-thread side, preparing media and calling the seam through one `runDocumentExport`. The split
+  is load-bearing: a module the Worker imports must
   never reach `preview/preview-cache.ts` (it would drag the screen-preview pipeline, sharp and the sheet engine
   into every document Worker), which is why `document/media.ts` (light) and `export/media.ts` (screen previews)
   are separate
 - **content loaders** (`apps/api/src/lib/document/{doc,slides,sheets}.ts`): shared Yjs -> PM JSON / DeckData /
   `Sheet[]` + media map loaders (`readEigendocContent`, `readSlidesContent`, `readSheetsContent`), used by both
   export and preview
-- **`export-document.ts`**: thin dispatcher that routes `(mount, path, format)` to the right export
-  function. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
+- **`export-document.ts`**: routes `(mount, path, format)` through the format->envelope table to one
+  `runDocumentExport`. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
 - **`doc/transform.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
   { type: 'file' }`), CSS imported as text (via `import ... with { type: 'text' }`), and Tailwind
   preflight reset. Font/CSS paths are resolved at build time by Bun's bundler
@@ -123,9 +120,9 @@ bytes transferred back to the main thread
         +-> PDF export (feed to WeasyPrint subprocess)
 ```
 
-`runEigendocExport(mount, path, format, signal?)` (`doc/html.ts`) is the single main-thread entry all three
-formats share: it prepares the media, then calls `runTransformToBytes` — the same seam sheets previews and
-exports use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the
+`runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every
+type and format shares: it prepares the media, then calls `runTransformToBytes` — the same seam sheets previews
+and exports use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the
 download serves), and `docx` is that same document converted in the Worker. The `<title>` keeps the UNstripped
 container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx
 document property keeps the stripped name (`Report`).
@@ -200,13 +197,13 @@ GET /drive/:ownerId/:mountId/file/:pathId/export/:format
 
 Both formats embed WOFF2 fonts (via shared `export/fonts.ts`) and base64 images. The `SizeUnit` abstraction
 in `render.ts` lets the same render functions produce either responsive or fixed-size output. Both run in the
-document-transform Worker through `runEigenslidesExport(mount, path, format, signal?)` (`slides/html.ts`), which
-prepares the media on the main thread and hands the deck to `renderEigenslidesExport` (`slides/transform.ts`).
+document-transform Worker through `runDocumentExport` (`export-document.ts`), which prepares the media on the
+main thread and hands the deck to `renderEigenslidesExport` (`slides/transform.ts`).
 
 Text objects store HTML (TipTap output). `render.ts` runs `obj.text` through `DOMPurify` and `escapeHtml`s
 the highlight color before embedding, so the same value that's safely shown by the FE canvas is also safe
 inside the export. The `.slide-text` typography rules live in `packages/ui/src/styles/slide-text.css` and
-are imported via `with { type: 'text' }` from `html.ts` so canvas and export render identically.
+are imported via `with { type: 'text' }` from `transform.ts` so canvas and export render identically.
 
 ### File Structure
 
@@ -214,8 +211,6 @@ are imported via `with { type: 'text' }` from `html.ts` so canvas and export ren
 apps/api/src/lib/export/slides/
   render.ts      # Slide/object → HTML strings (SizeUnit abstraction), shared with the preview
   transform.ts   # Worker-side: materialized deck + media → standalone HTML bytes (screen or PDF mode)
-  html.ts        # Main thread: media prep + transform seam (runEigenslidesExport) + HTML download
-  pdf.ts         # PDF via WeasyPrint (over the Worker's fixed-size HTML)
 # content loader: apps/api/src/lib/document/slides.ts (readDeckFromDoc + readSlidesContent)
 ```
 
@@ -232,11 +227,10 @@ loop:
 | `pdf`   | `Sheet[]` → `renderSheetsPdfDocument` (page sized to the widest/tallest sheet) | `htmlToPdf` WeasyPrint subprocess |
 | `html`  | `Sheet[]` → `renderSheetsExportDocument` standalone HTML | headers + response |
 
-`exportSheetsToHtml/Pdf/Xlsx` are thin format entries over `runEigensheetsExport(mount, path, format, signal?)`
-(`sheets/html.ts`), the single main-thread entry all three formats share — it derives the title and calls
-`runTransformToBytes` (`lib/document/transform/run-transform.ts`), the one main-thread seam that captures the
-compressed Yjs blobs, admits the job, surfaces warnings, and maps failures, shared with the sheets preview
-(the same shape as `runEigendocExport` and `runEigenslidesExport`). Inside the Worker,
+All three formats go through `runDocumentExport` (`export-document.ts`), the single main-thread entry — it
+derives the title and calls `runTransformToBytes` (`lib/document/transform/run-transform.ts`), the one
+main-thread seam that captures the compressed Yjs blobs, admits the job, surfaces warnings, and maps failures,
+shared with the sheets preview. Inside the Worker,
 `renderEigensheetsExport` (`export/sheets/transform.ts`) materializes once and lazily imports only the
 requested format's renderer, so an HTML export never evaluates ExcelJS. A recalc failure or an unreadable Yjs
 blob comes back as a warning, never as a failed export. There is no main-thread fallback: an overloaded runner
@@ -265,9 +259,6 @@ apps/api/src/lib/export/sheets/
   render.ts      # Sheet[] → HTML (renderSheetsHtml full export, renderSheetsPreviewHtml budgeted preview,
                  #   renderSheetsExportDocument + renderSheetsPdfDocument standalone documents)
   to-xlsx.ts     # Sheet[] → XLSX buffer via ExcelJS
-  html.ts        # Main thread: transform seam (runEigensheetsExport) + HTML download
-  xlsx.ts        # XLSX download wrapper (the workbook itself is built in the Worker)
-  pdf.ts         # PDF export via WeasyPrint (over the Worker's fixed-size HTML)
   fonts.ts       # FONT_ARRAY + resolveFontFamily (numeric/string ff → family name)
 # content loader: apps/api/src/lib/document/sheets.ts (Yjs snapshot → Sheet[])
 ```

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
-import { exportSlidesToHtml } from '../lib/export/slides/html';
+import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home/get-home';
 import { driveGet, drivePost, getTestContext } from './setup';
 
@@ -59,7 +59,7 @@ describe('slides export — assembled HTML surface', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile('default', deckPath.id);
-        const html = (await exportSlidesToHtml(mount, path)).data.toString('utf-8');
+        const html = (await exportDocument(mount, path, 'html')).data.toString('utf-8');
 
         // No live script tag and no attribute breakout survive into the download.
         expect(html).not.toMatch(/<script/i);

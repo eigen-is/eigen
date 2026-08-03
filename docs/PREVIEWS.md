@@ -200,9 +200,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/core/drive/hooks/use-drive.ts`                          | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
-| `apps/api/src/lib/preview/eigendoc-preview.ts`                            | Eigendoc preview: Worker-side body renderer (first 20 blocks) + runner orchestration |
-| `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides preview: Worker-side body renderer (first 8 slides) + runner orchestration |
-| `apps/api/src/lib/preview/eigensheets-preview.ts`                         | Sheets preview: Worker-side body renderer + runner orchestration |
+| `apps/api/src/lib/preview/eigen{doc,slides,sheets}-render.ts`             | Worker-side body renderers (first 20 blocks / 8 slides / budgeted first sheet) |
+| `apps/api/src/lib/preview/eigen{doc,slides,sheets}-preview.ts`            | Main-thread orchestration: media prep + the transform seam |
 | `apps/api/src/lib/document/media.ts`                                      | Document media helpers: listing, preview URLs, Worker-side data URIs |
 | `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
 | `apps/api/src/lib/document/transform/protocol.ts`                         | Clone-safe transform job/request/response unions    |
