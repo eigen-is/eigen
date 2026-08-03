@@ -110,3 +110,6 @@ limitation — resolving would cost a fetch per row).
   the read shape — old rows lack it), `commented` carries `chatName`.
 - Old rows degrade: no `details` → action + body only; missing `cardId`/`chatName` → the
   container-level link. Never blank, never a crash.
+- In-editor mode: the host passes `ActivityPanel` its lifecycle `cards` and an
+  `onOpenCard(cardId)`; the panel resolves a row's `cardId`/`chatName` to one id itself. Without
+  `onOpenCard` (Drive *Recent activity*) rows keep their deep links.

@@ -1,4 +1,6 @@
+import { findCardIdByChatName } from '@workspace/lib/comments';
 import { useFileHistory } from '@workspace/lib/drive';
+import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Activity, X } from 'lucide-react';
 import { PropertiesPanel } from '../properties-panel';
@@ -7,20 +9,20 @@ import { ActivityEventList } from './activity-event-list';
 
 type ActivityPanelProps = {
     path: DrivePath;
-    onClose: () => void;
-    // Opens the card/comment a row references in-doc; other rows stay inert (see ActivityEventList).
-    onOpenCard?: (ref: { cardId?: string; chatName?: string }) => void;
+    cards: Record<string, CommentCard>;
+    // Absent = the host draws its own chrome, so the panel renders no header.
+    onClose?: () => void;
+    // Opens the card a row references in-doc; other rows stay inert (see ActivityEventList).
+    onOpenCard?: (cardId: string) => void;
     className?: string;
-    // For hosts that carry the title in their own chrome (the docs mobile Column toolbar).
-    hideHeader?: boolean;
 };
 
-export function ActivityPanel({ path, onClose, onOpenCard, className, hideHeader }: ActivityPanelProps) {
+export function ActivityPanel({ path, cards, onClose, onOpenCard, className }: ActivityPanelProps) {
     const { data: events = [], isPending } = useFileHistory(path.ownerId, path.mountId, path.id, 50);
 
     return (
         <PropertiesPanel className={className}>
-            {!hideHeader && (
+            {onClose && (
                 <div className="px-3 py-2 border-b flex items-center justify-between">
                     <span className="text-sm font-medium">Activity</span>
                     <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
@@ -35,7 +37,17 @@ export function ActivityPanel({ path, onClose, onOpenCard, className, hideHeader
                 </div>
             ) : (
                 <div className="py-1">
-                    <ActivityEventList path={path} events={events} onOpenCard={onOpenCard} />
+                    <ActivityEventList
+                        path={path}
+                        events={events}
+                        onOpenCard={
+                            onOpenCard &&
+                            (({ cardId, chatName }) => {
+                                const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                                if (id) onOpenCard(id);
+                            })
+                        }
+                    />
                 </div>
             )}
         </PropertiesPanel>

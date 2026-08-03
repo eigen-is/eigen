@@ -737,10 +737,8 @@ const TiptapEditor = ({
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}
-                                    // Only offer these toggles where the panels can actually render — the side
-                                    // panel above isWide, the mobile Column below isMobile. In the band between
-                                    // there is nowhere to put them, so the button is omitted (DocumentShareCluster
-                                    // hides it when absent) rather than left an enabled no-op.
+                                    // No panel can render between isMobile and isWide, so omit the toggle
+                                    // rather than ship a no-op (DocumentShareCluster hides it when absent).
                                     onToggleCommentPanel={isWide || isMobile ? toggleComments : undefined}
                                     commentPanelOpen={commentPanelOpen}
                                     onToggleActivityPanel={isWide || isMobile ? toggleActivity : undefined}
@@ -813,15 +811,12 @@ const TiptapEditor = ({
                                         ) : activePanel === 'activity' ? (
                                             <ActivityPanel
                                                 path={path}
+                                                cards={cards}
                                                 onClose={closePanels}
-                                                onOpenCard={({ cardId, chatName }) => {
-                                                    const id =
-                                                        cardId ??
-                                                        (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                                    if (!id) return;
+                                                onOpenCard={(cardId) => {
                                                     openComments();
-                                                    handleScrollToComment(id);
-                                                    setOpenCardId(id);
+                                                    handleScrollToComment(cardId);
+                                                    setOpenCardId(cardId);
                                                 }}
                                             />
                                         ) : lastPanelRef.current === 'figure' ? (

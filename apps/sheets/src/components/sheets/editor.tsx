@@ -1,10 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import {
-    findCardIdByChatName,
-    useCommentFilter,
-    useCommentLifecycle,
-    useDocumentPanels,
-} from '@workspace/lib/comments';
+import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
     isPendingMediaName,
@@ -401,14 +396,7 @@ function SheetEditorInner({
                             />
                         )}
                         {activityPanelOpen && (
-                            <ActivityPanel
-                                path={path}
-                                onClose={closePanels}
-                                onOpenCard={({ cardId, chatName }) => {
-                                    const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                    if (id) setOpenCardId(id);
-                                }}
-                            />
+                            <ActivityPanel path={path} cards={cards} onClose={closePanels} onOpenCard={setOpenCardId} />
                         )}
                     </>
                 )}

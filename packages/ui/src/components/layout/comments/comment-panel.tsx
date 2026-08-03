@@ -50,12 +50,11 @@ type CommentPanelProps = {
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
-    onClose: () => void;
+    // Absent = the host draws its own chrome (title + filter), so the panel renders no header.
+    onClose?: () => void;
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (e: React.MouseEvent, card: CommentCard, entry: CommentEntry | undefined) => void;
     className?: string;
-    // For hosts that carry the title + filter in their own chrome (the docs mobile Column toolbar).
-    hideHeader?: boolean;
 };
 
 export function CommentPanel({
@@ -70,7 +69,6 @@ export function CommentPanel({
     onCommentClick,
     onCommentContextMenu,
     className,
-    hideHeader,
 }: CommentPanelProps) {
     const { active, visible } = useMemo(() => {
         const byChatName = new Map(entries.map((e) => [e.chatName, e]));
@@ -90,7 +88,7 @@ export function CommentPanel({
 
     return (
         <PropertiesPanel className={className}>
-            {!hideHeader && (
+            {onClose && (
                 <div className="flex items-center justify-between border-b px-3 py-2">
                     <span className="text-sm font-medium">Comments</span>
                     <div className="flex items-center gap-1">

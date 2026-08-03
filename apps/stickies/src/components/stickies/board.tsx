@@ -461,13 +461,9 @@ export function StickiesBoard({
                                 {!isMobile && activityPanelOpen && (
                                     <ActivityPanel
                                         path={path}
+                                        cards={cards}
                                         onClose={() => setActivityPanelOpen(false)}
-                                        onOpenCard={({ cardId, chatName }) => {
-                                            const id =
-                                                cardId ??
-                                                (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                            if (id) setOpenCardId(id);
-                                        }}
+                                        onOpenCard={setOpenCardId}
                                     />
                                 )}
                             </div>

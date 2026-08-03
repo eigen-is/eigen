@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { findCardIdByChatName, type useCommentFilter, type useCommentLifecycle } from '@workspace/lib/comments';
+import type { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
 import type { ActiveComments } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column } from '../app/column-layout';
@@ -68,23 +68,12 @@ export function MobilePanelColumn({
                     currentUserEmail={user!.email}
                     filter={filter}
                     members={members}
-                    hideHeader
                     className="w-full border-l-0"
-                    onClose={onBack}
                     onCommentClick={onCommentClick}
                     onCommentContextMenu={(e, card, entry) => commentContextMenu.handleContextMenu(e, { card, entry })}
                 />
             ) : (
-                <ActivityPanel
-                    path={path}
-                    hideHeader
-                    className="w-full border-l-0"
-                    onClose={onBack}
-                    onOpenCard={({ cardId, chatName }) => {
-                        const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                        if (id) onOpenCard(id);
-                    }}
-                />
+                <ActivityPanel path={path} cards={cards} className="w-full border-l-0" onOpenCard={onOpenCard} />
             )}
         </Column>
     );

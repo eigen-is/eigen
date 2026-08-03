@@ -280,19 +280,23 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   a summary strip (status label always leads) + "n hidden · Clear filters" footer; the empty state
   offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
   All/For-you tabs + status Select are gone.
-- **Hosting**: `hideHeader` + `className` let a host supply its own chrome instead of the panel's
-  title row. Below the mobile breakpoint all three editors mount the same
-  `MobilePanelColumn` (`packages/ui/src/components/layout/comments/mobile-panel-column.tsx`): one
-  full-width `Column` with id `panel` whose toolbar carries the back arrow, `ToolbarTitle` and — for
-  comments — `CommentFilterButton`, holding `CommentPanel`/`ActivityPanel` with `hideHeader` +
+- **Hosting**: both panels draw their own title row only when the host passes `onClose`; omit it (and
+  pass `className`) and the host supplies the chrome. Below the mobile breakpoint all three editors
+  mount the same `MobilePanelColumn` (`packages/ui/src/components/layout/comments/mobile-panel-column.tsx`):
+  one full-width `Column` with id `panel` whose toolbar carries the back arrow, `ToolbarTitle` and —
+  for comments — `CommentFilterButton`, holding a header-less `CommentPanel`/`ActivityPanel` with
   `className="w-full border-l-0"`. It takes the `useCommentLifecycle` bundle plus the host's open
-  handlers, and resolves an activity row's `chatName` to a cardId itself. Those handlers only open
-  the card: the editor is hidden while the pane is up, so scroll-to-mark (docs) and the slide +
-  object reveal (slides) would drive a view nobody can see.
-  Docs and slides step their editor column aside with `ColumnLayout mobileColumn="panel"`. Sheets has
-  no `ColumnLayout` (the Workbook owns its toolbar), so it puts `hidden` on the workbook wrapper
-  instead — safe since the engine re-measures its canvas on un-hide. Hiding also takes the find bar
-  with it, in all three. Desktop is untouched: the panels stay `w-64` siblings with their own header.
+  handlers, which only open the card: the editor is hidden while the pane is up, so scroll-to-mark
+  (docs) and the slide + object reveal (slides) would drive a view nobody can see.
+  All three editors hide the editor (a `hidden` wrapper) rather than unmounting it and mount the
+  pane's `Column` as a sibling, so tiptap node views, slide thumbnails, scroll position and selection
+  survive a pane visit — that is also why docs' two resize observers and the sheet engine's skip 0×0
+  boxes (`display: none` measures zero). Hiding takes the find bar with it, in all three; ACCEPTED
+  residue — Mod+F over an open pane opens the bar invisibly and unfocusably (hardware keyboards
+  only). Desktop is untouched: the panels stay `w-64` siblings with their own header.
+- **Open state**: `useDocumentPanels()` (`@workspace/lib/comments`) owns the comments/activity pair
+  for docs, slides and sheets — one `panel: 'comments' | 'activity' | null` slot, so the two can
+  never both be open. Host-owned like `useCommentFilter`; `isMobile` stays with the host.
 
 ### Comment filters (`packages/lib/src/core/comments/filter.ts` + filter UI)
 

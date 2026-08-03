@@ -9,12 +9,7 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import {
-    findCardIdByChatName,
-    useCommentFilter,
-    useCommentLifecycle,
-    useDocumentPanels,
-} from '@workspace/lib/comments';
+import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -26,13 +21,22 @@ import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel, MobilePanelColumn } from '@workspace/ui';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import {
+    ActivityPanel,
+    CardFormDialog,
+    Column,
+    ColumnLayout,
+    CommentLifecycleDialogs,
+    CommentPanel,
+    EmptyState,
+    LoadingState,
+    MobilePanelColumn,
+    useLayout,
+} from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
-import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type ArrangeOp, computeArrange } from './arrange';
@@ -881,13 +885,9 @@ function SlideEditorInner({
                                         ) : activityPanelOpen ? (
                                             <ActivityPanel
                                                 path={path}
+                                                cards={cards}
                                                 onClose={closePanels}
-                                                onOpenCard={({ cardId, chatName }) => {
-                                                    const id =
-                                                        cardId ??
-                                                        (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                                    if (id) openCommentCard(id);
-                                                }}
+                                                onOpenCard={openCommentCard}
                                             />
                                         ) : selectedObjects.length > 0 && canWrite ? (
                                             <SlidePropertiesPanel

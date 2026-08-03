@@ -167,16 +167,13 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const rowhiddenKey = useStableJson(context.config?.rowhidden);
     const colhiddenKey = useStableJson(context.config?.colhidden);
 
-    // Resize handler. Reads the sheet data through a ref so its identity survives every edit:
-    // re-observing re-measures immediately, and updateContextWithCanvas' canvas.width write clears
-    // the bitmap, so an observer rebuilt per keystroke would repaint the whole grid per keystroke.
+    // Data via ref so the handler identity survives edits — a rebuilt observer would re-clear the
+    // canvas bitmap, and so repaint the whole grid, per keystroke.
     const resize = useCallback(() => {
         const sheetData = dataRef.current;
         if (!sheetData) return;
-        // Nothing measurable yet: React detaches the ref during unmount before this effect's
-        // cleanup disconnects the observer, and removing a watched node fires it. A hidden
-        // container likewise measures 0×0 — writing that pins the canvas blank until the next
-        // resize, so wait for the real box the observer reports on un-hide.
+        // 0×0 = detaching or hidden; writing it pins the canvas blank until the next resize, so
+        // wait for the real box the observer reports on un-hide.
         const placeholder = placeholderRef.current;
         if (!placeholder || placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
         setContext((draftCtx) => {
@@ -208,9 +205,12 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
     }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, setContext]);
 
-    // Init canvas sizing
+    // Init canvas sizing, before the observer's first delivery. Same 0×0 skip as resize(): a Workbook
+    // remounted (snapshotVersion) while its wrapper is hidden would otherwise pin a blank canvas.
     useEffect(() => {
-        setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholderRef.current!));
+        const placeholder = placeholderRef.current!;
+        if (placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
+        setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder));
     }, [refs.canvas, setContext]);
 
     // Recalculate freeze data when sheet or freeze config changes
