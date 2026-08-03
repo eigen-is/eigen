@@ -1,0 +1,256 @@
+import { describe, expect, test } from 'bun:test';
+import { ApiError } from '../lib/core/errors';
+import type { DocumentTransformRequest, DocumentTransformResponse } from '../lib/document/transform/protocol';
+import { DocumentTransformRunner } from '../lib/document/transform/runner';
+
+// Runner behavior suite (proposal § Runner tests), driven through the scriptable
+// test worker so no document code runs. The real preview operation is covered in
+// document-transform.test.ts.
+
+const TEST_WORKER_URL = new URL('./fixtures/transform-test-worker.ts', import.meta.url).href;
+
+type TestDirective = { behavior?: string; ms?: number };
+
+function makeRequest(directive: TestDirective = {}, buffers: ArrayBuffer[] = []): DocumentTransformRequest {
+    const request = {
+        kind: 'preview',
+        documentType: 'eigensheets',
+        source: { snapshot: null, updates: buffers.map((data, i) => ({ id: i + 1, data })) },
+        test: directive,
+    };
+    return request as unknown as DocumentTransformRequest;
+}
+
+function makeRunner(opts: ConstructorParameters<typeof DocumentTransformRunner>[0] = {}) {
+    return new DocumentTransformRunner({ workerUrl: TEST_WORKER_URL, ...opts });
+}
+
+function timings(response: DocumentTransformResponse): { startedAt: number; endedAt: number } {
+    if (!response.ok) throw new Error(`expected ok response, got ${JSON.stringify(response)}`);
+    return JSON.parse(response.result.body);
+}
+
+describe('DocumentTransformRunner', () => {
+    test('runs at most one worker at a time, FIFO within a priority', async () => {
+        const runner = makeRunner();
+        const results = await Promise.all([
+            runner.run(makeRequest({ behavior: 'sleep', ms: 80 }), { priority: 'foreground', deadlineMs: 5000 }),
+            runner.run(makeRequest({ behavior: 'sleep', ms: 80 }), { priority: 'foreground', deadlineMs: 5000 }),
+            runner.run(makeRequest({ behavior: 'sleep', ms: 80 }), { priority: 'foreground', deadlineMs: 5000 }),
+        ]);
+        const spans = results.map(timings);
+        // FIFO: submission order is execution order.
+        expect(spans[0].startedAt).toBeLessThanOrEqual(spans[1].startedAt);
+        expect(spans[1].startedAt).toBeLessThanOrEqual(spans[2].startedAt);
+        // Concurrency 1: execution windows never overlap.
+        expect(spans[1].startedAt).toBeGreaterThanOrEqual(spans[0].endedAt);
+        expect(spans[2].startedAt).toBeGreaterThanOrEqual(spans[1].endedAt);
+        await runner.close();
+    });
+
+    test('waiting foreground work runs before queued background work', async () => {
+        const runner = makeRunner();
+        const first = runner.run(makeRequest({ behavior: 'sleep', ms: 100 }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        await Bun.sleep(10); // let the first job occupy the worker slot
+        const background = runner.run(makeRequest(), { priority: 'background', deadlineMs: 5000 });
+        const foreground = runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 });
+
+        const [, bg, fg] = await Promise.all([first, background, foreground]);
+        expect(timings(fg).startedAt).toBeLessThanOrEqual(timings(bg).startedAt);
+        await runner.close();
+    });
+
+    test('rejects foreground work with 503 when the queue is full', async () => {
+        const runner = makeRunner({ maxQueued: 1 });
+        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        await Bun.sleep(10);
+        const queued = runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 });
+
+        expect(() => runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 })).toThrow(ApiError);
+        try {
+            runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 });
+        } catch (err) {
+            expect((err as ApiError).status).toBe(503);
+            expect((err as ApiError).message).toContain('busy');
+        }
+        await Promise.all([active, queued]);
+        await runner.close();
+    });
+
+    test('rejects foreground work when predicted wait exceeds the bound', async () => {
+        const runner = makeRunner({ maxPredictedWaitMs: 250 });
+        const jobs = [
+            runner.run(makeRequest({ behavior: 'sleep', ms: 30 }), { priority: 'foreground', deadlineMs: 100 }),
+        ];
+        await Bun.sleep(10);
+        // active (100ms) + one queued (100ms) = 200 ≤ 250 → admitted…
+        jobs.push(runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 100 }));
+        jobs.push(runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 100 }));
+        // …but active + two queued = 300 > 250 → rejected.
+        expect(() => runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 100 })).toThrow(ApiError);
+        await Promise.all(jobs);
+        await runner.close();
+    });
+
+    test('drops queued background work on overflow without running it', async () => {
+        const runner = makeRunner({ maxQueued: 1 });
+        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        await Bun.sleep(10);
+        const queued = runner.run(makeRequest(), { priority: 'background', deadlineMs: 5000 });
+        expect(() => runner.run(makeRequest(), { priority: 'background', deadlineMs: 5000 })).toThrow(ApiError);
+        await Promise.all([active, queued]);
+        await runner.close();
+    });
+
+    test('timeout terminates the worker, resolves a structured error, and releases the slot', async () => {
+        const runner = makeRunner();
+        const start = Date.now();
+        const timedOut = await runner.run(makeRequest({ behavior: 'sleep', ms: 2000 }), {
+            priority: 'foreground',
+            deadlineMs: 100,
+        });
+        expect(Date.now() - start).toBeLessThan(1500);
+        expect(timedOut.ok).toBe(false);
+        if (!timedOut.ok) expect(timedOut.error.code).toBe('timeout');
+
+        // The slot is free again: a follow-up job completes normally.
+        const next = await runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 });
+        expect(next.ok).toBe(true);
+        await runner.close();
+    });
+
+    test('a crashing worker resolves a structured error and releases the slot', async () => {
+        const runner = makeRunner();
+        const crashed = await runner.run(makeRequest({ behavior: 'crash' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(crashed.ok).toBe(false);
+        if (!crashed.ok) expect(crashed.error.code).toBe('crashed');
+
+        const next = await runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 });
+        expect(next.ok).toBe(true);
+        await runner.close();
+    });
+
+    test('a worker that exits without replying resolves a structured error', async () => {
+        const runner = makeRunner();
+        const exited = await runner.run(makeRequest({ behavior: 'exit' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(exited.ok).toBe(false);
+        if (!exited.ok) expect(exited.error.code).toBe('crashed');
+        await runner.close();
+    });
+
+    test('a malformed worker response resolves a structured error', async () => {
+        const runner = makeRunner();
+        const malformed = await runner.run(makeRequest({ behavior: 'malformed' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(malformed.ok).toBe(false);
+        if (!malformed.ok) expect(malformed.error.code).toBe('invalid-response');
+        await runner.close();
+    });
+
+    test('a structured document error passes through untouched', async () => {
+        const runner = makeRunner();
+        const failed = await runner.run(makeRequest({ behavior: 'document-error' }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(failed.ok).toBe(false);
+        if (!failed.ok) {
+            expect(failed.error.code).toBe('transform-failed');
+            expect(failed.error.status).toBe(422);
+        }
+        await runner.close();
+    });
+
+    test('input buffers transfer (detach) to the worker and arrive intact', async () => {
+        const runner = makeRunner();
+        const buffer = new Uint8Array([1, 2, 3, 4, 5]).buffer;
+        const response = await runner.run(makeRequest({ behavior: 'echo-buffers' }, [buffer]), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        expect(buffer.byteLength).toBe(0); // detached from the sender
+        expect(response.ok).toBe(true);
+        if (response.ok) {
+            expect(JSON.parse(response.result.body).receivedBytes).toEqual([5]);
+        }
+        await runner.close();
+    });
+
+    test('aborting a queued job removes it before any worker runs it', async () => {
+        const runner = makeRunner();
+        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        await Bun.sleep(10);
+        const controller = new AbortController();
+        const queued = runner.run(makeRequest(), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+            signal: controller.signal,
+        });
+        controller.abort();
+        const canceled = await queued;
+        expect(canceled.ok).toBe(false);
+        if (!canceled.ok) expect(canceled.error.code).toBe('canceled');
+        await active;
+        await runner.close();
+    });
+
+    test('aborting an active job terminates its worker and releases the slot', async () => {
+        const runner = makeRunner();
+        const controller = new AbortController();
+        const start = Date.now();
+        const activePromise = runner.run(makeRequest({ behavior: 'sleep', ms: 2000 }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+            signal: controller.signal,
+        });
+        await Bun.sleep(20);
+        controller.abort();
+        const canceled = await activePromise;
+        expect(Date.now() - start).toBeLessThan(1000);
+        expect(canceled.ok).toBe(false);
+        if (!canceled.ok) expect(canceled.error.code).toBe('canceled');
+
+        const next = await runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 });
+        expect(next.ok).toBe(true);
+        await runner.close();
+    });
+
+    test('close() rejects queued work, stops admission, and terminates active workers after grace', async () => {
+        const runner = makeRunner({ closeGraceMs: 50 });
+        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 2000 }), {
+            priority: 'foreground',
+            deadlineMs: 5000,
+        });
+        await Bun.sleep(10);
+        const queued = runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 });
+
+        await runner.close();
+        const [activeResult, queuedResult] = await Promise.all([active, queued]);
+        expect(activeResult.ok).toBe(false);
+        if (!activeResult.ok) expect(activeResult.error.code).toBe('shutdown');
+        expect(queuedResult.ok).toBe(false);
+        if (!queuedResult.ok) expect(queuedResult.error.code).toBe('shutdown');
+
+        expect(() => runner.run(makeRequest(), { priority: 'foreground', deadlineMs: 5000 })).toThrow(ApiError);
+    });
+});
