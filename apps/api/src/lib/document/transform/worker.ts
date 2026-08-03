@@ -12,6 +12,7 @@ import type {
 // never evaluates DOCX/ExcelJS code (and an HTML export never loads ExcelJS).
 
 async function handleRequest(request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
+    // Every kind carries a Yjs source today, so materialization is shared.
     const { materializeYjsState } = await import('../../collab/yjs-loader');
     const { doc, blobsSkipped } = materializeYjsState(request.source, undefined, 'transform-worker');
 
