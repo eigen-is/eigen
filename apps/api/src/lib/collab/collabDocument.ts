@@ -18,8 +18,8 @@ import { COLLAB_DB_CONFIG } from './db-config';
 import * as schema from './schema.ts';
 import { loadYjsState } from './yjs-loader';
 
-const MESSAGE_SYNC = 0;
-const MESSAGE_AWARENESS = 1;
+export const MESSAGE_SYNC = 0;
+export const MESSAGE_AWARENESS = 1;
 
 const SNAPSHOT_INTERVAL = 100;
 // Sheets' flushSnapshot dumps the whole sheet JSON into one update row on tab
@@ -31,6 +31,11 @@ const SNAPSHOT_BYTES = 1_000_000;
 // Long-term history lives under the container's `versions/` folder (see versioning routes).
 const MAX_DOC_SNAPSHOTS = 1;
 const TOUCH_THROTTLE_MS = 60_000;
+// Grace between the last unsubscribe and teardown: an instant reconnect (tab
+// reload, y-websocket's retry loop) reattaches to the loaded doc instead of
+// re-paying S3 download + Yjs materialization — the amplification half of the
+// 2026-08-04 reconnect spiral.
+const CLOSE_LINGER_MS = 60_000;
 // One 'edited' history row per user per window. Per-instance state, so a doc
 // close+reopen within the window records an extra row — accepted spec trade-off.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
@@ -148,11 +153,14 @@ export default class CollabDocument {
     private closed: boolean = false;
     private lastTouchedAt = 0;
     private lastEditRecordedAt: Map<string, number> = new Map(); // userId -> ts
+    private closeTimer: ReturnType<typeof setTimeout> | undefined;
+    private closeLingerMs: number;
     public dataDbPathId: string | null = null;
 
-    constructor(drive: Drive, path: DrivePath) {
+    constructor(drive: Drive, path: DrivePath, opts: { closeLingerMs?: number } = {}) {
         this.drive = drive;
         this.path = path;
+        this.closeLingerMs = opts.closeLingerMs ?? CLOSE_LINGER_MS;
     }
 
     static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
@@ -261,6 +269,7 @@ export default class CollabDocument {
     public destruct() {
         if (this.closed) return;
         this.closed = true;
+        clearTimeout(this.closeTimer);
         this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
         for (const conn of this.connections.keys()) {
             conn.close();
@@ -295,6 +304,7 @@ export default class CollabDocument {
         if (this.closed) {
             return;
         }
+        clearTimeout(this.closeTimer);
         this.connections.set(conn, user);
         this.sendSyncStep1(conn);
     }
@@ -323,8 +333,18 @@ export default class CollabDocument {
             }
         }
         if (this.connections.size === 0) {
-            this.drive.closeCollabDocument(this.path.mountId, this.path.id).catch(() => {});
+            this.scheduleClose();
         }
+    }
+
+    private scheduleClose() {
+        clearTimeout(this.closeTimer);
+        this.closeTimer = setTimeout(() => {
+            if (this.closed || this.connections.size > 0) return;
+            this.drive.closeCollabDocument(this.path.mountId, this.path.id).catch(() => {});
+        }, this.closeLingerMs);
+        // A lingering doc must never hold the process open at shutdown.
+        this.closeTimer.unref();
     }
 
     // Read is checked only when a connection opens (routes/collab.ts), whereas write is
