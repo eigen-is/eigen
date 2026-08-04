@@ -13,6 +13,7 @@ import { getSharedDrive } from '../lib/drive/get-drive';
 import { getHome } from '../lib/home/get-home';
 import { importIntoDocument } from '../lib/import/import-document';
 import { normalizeMonthMinuteTokens, xlsxToSheets } from '../lib/import/sheets/from-xlsx';
+import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import { getUserById } from '../lib/user';
 import {
     assertJson,
@@ -104,6 +105,17 @@ async function readSnapshot(ownerId: string, mountId: string, pathId: string): P
     return JSON.parse(snapshot);
 }
 
+// /convert and /import commit the Worker's snapshotJson verbatim, so parsing here
+// yields the same Sheet[] a route round-trip would read back — without a Worker spawn.
+async function parseXlsx(buffer: ArrayBuffer): Promise<Sheet[]> {
+    const { snapshotJson } = await importXlsxToSheetsSnapshot(buffer);
+    return JSON.parse(new TextDecoder().decode(snapshotJson));
+}
+
+async function parseWorkbook(workbook: ExcelJS.Workbook): Promise<Sheet[]> {
+    return parseXlsx(await workbookToBuffer(workbook));
+}
+
 describe('Sheets xlsx import/convert', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let mountId: string;
@@ -131,15 +143,6 @@ describe('Sheets xlsx import/convert', () => {
             { method: 'POST' },
         );
         return assertJson<DrivePath>(res);
-    }
-
-    async function convertBuffer(buffer: ArrayBuffer, filename: string): Promise<Sheet[]> {
-        const converted = await uploadAndConvert(buffer, filename);
-        return readSnapshot(ctx.alice.user.id, mountId, converted.id);
-    }
-
-    async function convertWorkbook(workbook: ExcelJS.Workbook, filename: string): Promise<Sheet[]> {
-        return convertBuffer(await workbookToBuffer(workbook), filename);
     }
 
     test('convert .xlsx to eigensheets replicates the workbook content', async () => {
@@ -246,119 +249,6 @@ describe('Sheets xlsx import/convert', () => {
             { method: 'POST', body: buffer },
         );
         expect(res.status).toBe(400);
-    });
-
-    test('convert preserves merged cells with correct anchor/non-anchor shape', async () => {
-        const buffer = await buildXlsxBuffer(
-            [
-                { a1: 'A1', value: 'Merged' },
-                { a1: 'C1', value: 'Solo' },
-            ],
-            'Sheet1',
-            ['A1:B2'],
-        );
-        const sheets = await convertBuffer(buffer, 'merged.xlsx');
-        expect(sheets[0].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
-
-        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
-        expect(byCoord.get('0:0')?.mc).toEqual({ r: 0, c: 0, rs: 2, cs: 2 });
-        expect(byCoord.get('0:1')?.mc).toEqual({ r: 0, c: 0 });
-        expect(byCoord.get('1:0')?.mc).toEqual({ r: 0, c: 0 });
-        expect(byCoord.get('1:1')?.mc).toEqual({ r: 0, c: 0 });
-    });
-
-    test('convert preserves formulas in celldata', async () => {
-        const buffer = await buildXlsxBuffer([
-            { a1: 'A1', value: 1 },
-            { a1: 'A2', value: 2 },
-            { a1: 'A3', value: 3 },
-            { a1: 'A4', value: { formula: 'SUM(A1:A3)', result: 6 } },
-        ]);
-        const sheets = await convertBuffer(buffer, 'formula.xlsx');
-        const formulaCell = (sheets[0].celldata ?? []).find((c) => c.r === 3 && c.c === 0);
-        expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
-    });
-
-    test('convert renders custom date number formats via numfmt, not literal format tokens', async () => {
-        // Excel date formats use lowercase month tokens (m/mm/mmm) and "…" literal-text escapes.
-        // The old hand-rolled formatter leaked both — e.g. d"-"m rendered as 15"-"m, mm/dd/yyyy as
-        // 00/15/2024 (lowercase mm collided with minutes). Render through numfmt instead so the
-        // import display matches what the engine shows live.
-        const workbook = new ExcelJS.Workbook();
-        const ws = workbook.addWorksheet('Dates');
-        const date = new Date(Date.UTC(2024, 2, 15)); // 2024-03-15 → Excel serial 45366
-        for (const [a1, numFmt] of [
-            ['A1', 'd"-"m'],
-            ['A2', 'd"-"mmm'],
-            ['A3', 'mm/dd/yyyy'],
-        ] as const) {
-            const cell = ws.getCell(a1);
-            cell.value = date;
-            cell.numFmt = numFmt;
-        }
-        const sheets = await convertWorkbook(workbook, 'dates.xlsx');
-        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
-
-        // Serial value is preserved; the stored format is canonicalised to the Google
-        // month/minute convention at import — `m` after a day token is a MONTH, so it
-        // uppercases to `M` (numfmt renders both identically, see normalizeMonthMinuteTokens).
-        expect(byCoord.get('0:0')?.v).toBe(45366);
-        expect(byCoord.get('0:0')?.ct).toEqual({ fa: 'd"-"M', t: 'd' });
-
-        expect(byCoord.get('0:0')?.m).toBe('15-3');
-        expect(byCoord.get('1:0')?.m).toBe('15-Mar');
-        expect(byCoord.get('2:0')?.m).toBe('03/15/2024');
-    });
-
-    test('convert renders numeric display strings through numfmt, not raw floats', async () => {
-        // extractValueAndDisplay used to cache m = String(raw) for numbers, so a cell formatted
-        // as "€"#,##0.00 showed the raw float in the grid while ct.fa held the format — until
-        // the cell was touched. Numbers must render through the engine's numfmt like dates do.
-        const workbook = new ExcelJS.Workbook();
-        const ws = workbook.addWorksheet('Numbers');
-        for (const [a1, value, numFmt] of [
-            ['A1', 14207.82, '#,##0'],
-            ['A2', 0.4072175408, '0.00%'],
-            ['A3', 90, '[$€]#,##0'],
-            ['A4', 1, '0.0'],
-            ['A5', 495083.6, '"€"#,##0.00'],
-            ['A6', 145.2, '_-"€" * #,##0.00_-;_-"€" * #,##0.00-;_-"€" * "-"??_-;_-@'],
-        ] as const) {
-            const cell = ws.getCell(a1);
-            cell.value = value;
-            cell.numFmt = numFmt;
-        }
-        ws.getCell('B1').value = 100.5; // General/missing format stays the raw string
-        const text = ws.getCell('C1');
-        text.value = 'hello';
-        text.numFmt = '"€"#,##0.00'; // a string cell with a currency numFmt stays the string
-        const formula = ws.getCell('D1');
-        formula.value = { formula: 'A3*2', result: 90 };
-        formula.numFmt = '[$€]#,##0';
-        const sheets = await convertWorkbook(workbook, 'numbers.xlsx');
-        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
-
-        // Raw value and format are preserved; only the cached display changes.
-        expect(byCoord.get('0:0')?.v).toBe(14207.82);
-        expect(byCoord.get('0:0')?.ct).toEqual({ fa: '#,##0', t: 'n' });
-
-        expect(byCoord.get('0:0')?.m).toBe('14,208');
-        expect(byCoord.get('1:0')?.m).toBe('40.72%');
-        expect(byCoord.get('2:0')?.m).toBe('€90');
-        expect(byCoord.get('3:0')?.m).toBe('1.0');
-        expect(byCoord.get('4:0')?.m).toBe('€495,083.60');
-        // numfmt expands the accounting format's `*` fill char to one padding space per side.
-        expect(byCoord.get('5:0')?.m).toBe(' € 145.20 ');
-
-        expect(byCoord.get('0:1')?.m).toBe('100.5');
-        expect(byCoord.get('0:2')?.m).toBe('hello');
-
-        // Import-time recalc recomputes formula cells through our engine, so the
-        // xlsx's stale cached result (90) is corrected to A3*2 = 180, rendered
-        // through the cell's mask.
-        expect(byCoord.get('0:3')?.f).toBe('=A3*2');
-        expect(byCoord.get('0:3')?.v).toBe(180);
-        expect(byCoord.get('0:3')?.m).toBe('€180');
     });
 
     test('large sheet import stores a zstd-compressed blob and reads back intact', async () => {
@@ -508,9 +398,172 @@ describe('Sheets xlsx import/convert', () => {
         }
     });
 
+    test('import into another user document without write permission returns 403', async () => {
+        const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
+        const sheetsDoc = await uploadAndConvert(initial, 'alice.xlsx');
+
+        const replacement = await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]);
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            { method: 'POST', body: replacement },
+        );
+        expect(res.status).toBe(403);
+    });
+
+    test('write revoked while the transform ran blocks the commit', async () => {
+        // The route checks write before buffering, then the job queues and transforms
+        // for up to minutes. Calling the commit seam directly with a writer whose
+        // permission was revoked in that window is exactly the race: read still
+        // resolves the collab document, only the write recheck stands in the way.
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]),
+            'acl-race.xlsx',
+        );
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: true }],
+        });
+
+        const bob = await getUserById(ctx.bob.user.id);
+        const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
+        const { mount, path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
+
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: false }],
+        });
+
+        const before = await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id);
+        const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
+        let error: unknown;
+        try {
+            await importIntoDocument(bobDrive, mount, path, replacement, bob!);
+        } catch (e) {
+            error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(403);
+        expect((error as ApiError).message).toBe('No write permission');
+        expect(await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual(before);
+    }, 60_000);
+});
+
+describe('Sheets xlsx conversion fidelity', () => {
+    test('convert preserves merged cells with correct anchor/non-anchor shape', async () => {
+        const buffer = await buildXlsxBuffer(
+            [
+                { a1: 'A1', value: 'Merged' },
+                { a1: 'C1', value: 'Solo' },
+            ],
+            'Sheet1',
+            ['A1:B2'],
+        );
+        const sheets = await parseXlsx(buffer);
+        expect(sheets[0].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
+
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.mc).toEqual({ r: 0, c: 0, rs: 2, cs: 2 });
+        expect(byCoord.get('0:1')?.mc).toEqual({ r: 0, c: 0 });
+        expect(byCoord.get('1:0')?.mc).toEqual({ r: 0, c: 0 });
+        expect(byCoord.get('1:1')?.mc).toEqual({ r: 0, c: 0 });
+    });
+
+    test('convert preserves formulas in celldata', async () => {
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 1 },
+            { a1: 'A2', value: 2 },
+            { a1: 'A3', value: 3 },
+            { a1: 'A4', value: { formula: 'SUM(A1:A3)', result: 6 } },
+        ]);
+        const sheets = await parseXlsx(buffer);
+        const formulaCell = (sheets[0].celldata ?? []).find((c) => c.r === 3 && c.c === 0);
+        expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
+    });
+
+    test('convert renders custom date number formats via numfmt, not literal format tokens', async () => {
+        // Excel date formats use lowercase month tokens (m/mm/mmm) and "…" literal-text escapes.
+        // The old hand-rolled formatter leaked both — e.g. d"-"m rendered as 15"-"m, mm/dd/yyyy as
+        // 00/15/2024 (lowercase mm collided with minutes). Render through numfmt instead so the
+        // import display matches what the engine shows live.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Dates');
+        const date = new Date(Date.UTC(2024, 2, 15)); // 2024-03-15 → Excel serial 45366
+        for (const [a1, numFmt] of [
+            ['A1', 'd"-"m'],
+            ['A2', 'd"-"mmm'],
+            ['A3', 'mm/dd/yyyy'],
+        ] as const) {
+            const cell = ws.getCell(a1);
+            cell.value = date;
+            cell.numFmt = numFmt;
+        }
+        const sheets = await parseWorkbook(workbook);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+
+        // Serial value is preserved; the stored format is canonicalised to the Google
+        // month/minute convention at import — `m` after a day token is a MONTH, so it
+        // uppercases to `M` (numfmt renders both identically, see normalizeMonthMinuteTokens).
+        expect(byCoord.get('0:0')?.v).toBe(45366);
+        expect(byCoord.get('0:0')?.ct).toEqual({ fa: 'd"-"M', t: 'd' });
+
+        expect(byCoord.get('0:0')?.m).toBe('15-3');
+        expect(byCoord.get('1:0')?.m).toBe('15-Mar');
+        expect(byCoord.get('2:0')?.m).toBe('03/15/2024');
+    });
+
+    test('convert renders numeric display strings through numfmt, not raw floats', async () => {
+        // extractValueAndDisplay used to cache m = String(raw) for numbers, so a cell formatted
+        // as "€"#,##0.00 showed the raw float in the grid while ct.fa held the format — until
+        // the cell was touched. Numbers must render through the engine's numfmt like dates do.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Numbers');
+        for (const [a1, value, numFmt] of [
+            ['A1', 14207.82, '#,##0'],
+            ['A2', 0.4072175408, '0.00%'],
+            ['A3', 90, '[$€]#,##0'],
+            ['A4', 1, '0.0'],
+            ['A5', 495083.6, '"€"#,##0.00'],
+            ['A6', 145.2, '_-"€" * #,##0.00_-;_-"€" * #,##0.00-;_-"€" * "-"??_-;_-@'],
+        ] as const) {
+            const cell = ws.getCell(a1);
+            cell.value = value;
+            cell.numFmt = numFmt;
+        }
+        ws.getCell('B1').value = 100.5; // General/missing format stays the raw string
+        const text = ws.getCell('C1');
+        text.value = 'hello';
+        text.numFmt = '"€"#,##0.00'; // a string cell with a currency numFmt stays the string
+        const formula = ws.getCell('D1');
+        formula.value = { formula: 'A3*2', result: 90 };
+        formula.numFmt = '[$€]#,##0';
+        const sheets = await parseWorkbook(workbook);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+
+        // Raw value and format are preserved; only the cached display changes.
+        expect(byCoord.get('0:0')?.v).toBe(14207.82);
+        expect(byCoord.get('0:0')?.ct).toEqual({ fa: '#,##0', t: 'n' });
+
+        expect(byCoord.get('0:0')?.m).toBe('14,208');
+        expect(byCoord.get('1:0')?.m).toBe('40.72%');
+        expect(byCoord.get('2:0')?.m).toBe('€90');
+        expect(byCoord.get('3:0')?.m).toBe('1.0');
+        expect(byCoord.get('4:0')?.m).toBe('€495,083.60');
+        // numfmt expands the accounting format's `*` fill char to one padding space per side.
+        expect(byCoord.get('5:0')?.m).toBe(' € 145.20 ');
+
+        expect(byCoord.get('0:1')?.m).toBe('100.5');
+        expect(byCoord.get('0:2')?.m).toBe('hello');
+
+        // Import-time recalc recomputes formula cells through our engine, so the
+        // xlsx's stale cached result (90) is corrected to A3*2 = 180, rendered
+        // through the cell's mask.
+        expect(byCoord.get('0:3')?.f).toBe('=A3*2');
+        expect(byCoord.get('0:3')?.v).toBe(180);
+        expect(byCoord.get('0:3')?.m).toBe('€180');
+    });
+
     test('convert scales column widths from character units to pixels', async () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
-        const sheets = await convertBuffer(buffer, 'colwidth.xlsx');
+        const sheets = await parseXlsx(buffer);
         expect(sheets[0].config?.columnlen?.['0']).toBe(Math.round(15 * 8));
     });
 
@@ -520,7 +573,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'B1', value: 'small', fontSize: 8 },
             { a1: 'C1', value: 'default' },
         ]);
-        const sheets = await convertBuffer(buffer, 'fontsizes.xlsx');
+        const sheets = await parseXlsx(buffer);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.fs).toBe(24);
         expect(byCoord.get('0:1')?.fs).toBe(8);
@@ -537,7 +590,7 @@ describe('Sheets xlsx import/convert', () => {
             },
             { a1: 'B1', value: 'no border' },
         ]);
-        const sheets = await convertBuffer(buffer, 'borders.xlsx');
+        const sheets = await parseXlsx(buffer);
         const bi = sheets[0].config?.borderInfo;
         expect(bi).toBeDefined();
         const a1Border = bi?.find((b) => b.rangeType === 'cell' && b.value.row_index === 0 && b.value.col_index === 0);
@@ -557,7 +610,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'A1', value: 'text' },
             { a1: 'B1', value: 42 },
         ]);
-        const sheets = await convertBuffer(buffer, 'align.xlsx');
+        const sheets = await parseXlsx(buffer);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ht).toBeUndefined();
         expect(byCoord.get('0:1')?.ht).toBe(2);
@@ -573,7 +626,7 @@ describe('Sheets xlsx import/convert', () => {
         const cell2 = ws.getCell('B1');
         cell2.value = 'World';
         cell2.fill = { type: 'pattern', pattern: 'none' };
-        const sheets = await convertWorkbook(workbook, 'themed.xlsx');
+        const sheets = await parseWorkbook(workbook);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.fc).toBe('#FF0000');
         expect(byCoord.get('0:0')?.bg).toBe('#0000FF');
@@ -595,7 +648,7 @@ describe('Sheets xlsx import/convert', () => {
         ws.getCell('A5').alignment = { textRotation: 'vertical' };
         ws.getCell('B1').value = 'georgia';
         ws.getCell('B1').font = { name: 'Georgia' };
-        const sheets = await convertWorkbook(workbook, 'styled.xlsx');
+        const sheets = await parseWorkbook(workbook);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.rt).toBe(45);
         expect(byCoord.get('1:0')?.rt).toBe(90);
@@ -621,7 +674,7 @@ describe('Sheets xlsx import/convert', () => {
         ws.getCell('A4').font = { name: 'Wingdings' };
         ws.getCell('A5').value = 'native';
         ws.getCell('A5').font = { name: 'Inter' };
-        const sheets = await convertWorkbook(workbook, 'fonts.xlsx');
+        const sheets = await parseWorkbook(workbook);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.ff).toBe('Inter');
         expect(byCoord.get('1:0')?.ff).toBe('Source Serif 4');
@@ -636,7 +689,7 @@ describe('Sheets xlsx import/convert', () => {
         workbook.addWorksheet('Sheet A').getCell('A1').value = 'Alpha';
         workbook.addWorksheet('Sheet B').getCell('A1').value = 'Beta';
         workbook.addWorksheet('Sheet C').getCell('A1').value = 'Gamma';
-        const sheets = await convertWorkbook(workbook, 'multi.xlsx');
+        const sheets = await parseWorkbook(workbook);
         expect(sheets).toHaveLength(3);
         expect(sheets[0].name).toBe('Sheet A');
         expect(sheets[1].name).toBe('Sheet B');
@@ -660,7 +713,7 @@ describe('Sheets xlsx import/convert', () => {
             hyperlink: 'https://example.com',
         } as unknown as ExcelJS.CellHyperlinkValue;
         cell.alignment = { wrapText: true };
-        const sheets = await convertWorkbook(workbook, 'richlinks.xlsx');
+        const sheets = await parseWorkbook(workbook);
         const a1 = (sheets[0].celldata ?? []).find((c) => c.r === 0 && c.c === 0);
         expect(a1?.v?.v).toBe('GSV Assets\nCanva');
     });
@@ -674,7 +727,7 @@ describe('Sheets xlsx import/convert', () => {
         // range element; exceljs expands ranges back to per-column flags on read.
         ws.getColumn(3).hidden = true;
         ws.getColumn(4).hidden = true;
-        const sheets = await convertWorkbook(workbook, 'hiddencols.xlsx');
+        const sheets = await parseWorkbook(workbook);
         expect(sheets[0].config?.colhidden).toEqual({ '2': 0, '3': 0 });
         expect(sheets[0].config?.rowhidden).toBeUndefined();
     });
@@ -692,7 +745,7 @@ describe('Sheets xlsx import/convert', () => {
         ws.getRow(5).hidden = true;
         ws.getRow(5).height = 15;
         ws.getCell('A7').value = 'bottom';
-        const sheets = await convertWorkbook(workbook, 'hiddenrows.xlsx');
+        const sheets = await parseWorkbook(workbook);
         expect(sheets[0].config?.rowhidden).toEqual({ '1': 0, '4': 0 });
         expect(sheets[0].config?.colhidden).toBeUndefined();
     });
@@ -710,7 +763,7 @@ describe('Sheets xlsx import/convert', () => {
         both.views = [{ state: 'frozen', xSplit: 3, ySplit: 2 }];
         const plain = workbook.addWorksheet('Plain');
         plain.getCell('A1').value = 'free';
-        const sheets = await convertWorkbook(workbook, 'frozen.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // Excel semantics: ySplit=N freezes the top N rows, xSplit=M the left M columns.
         // Engine range carries the 0-based index of the LAST frozen row/col.
@@ -734,7 +787,7 @@ describe('Sheets xlsx import/convert', () => {
         filtered.getRow(4).hidden = true;
         const plain = workbook.addWorksheet('Plain');
         plain.getCell('A1').value = 'free';
-        const sheets = await convertWorkbook(workbook, 'autofilter.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         expect(sheets[0].filterRange).toEqual({ row: [1, 9], column: [1, 3] });
         // No <filterColumn> criteria → no per-column entries. A fresh filter enable in
@@ -777,7 +830,7 @@ describe('Sheets xlsx import/convert', () => {
         });
         const plain = workbook.addWorksheet('Plain');
         plain.getCell('A1').value = 'free';
-        const sheets = await convertWorkbook(workbook, 'cellis.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // Priority DESC order: priority 2 first, priority 1 last (last write wins in the engine).
         expect(sheets[0].conditionalFormatRules).toEqual([
@@ -817,7 +870,7 @@ describe('Sheets xlsx import/convert', () => {
                 },
             ],
         });
-        const sheets = await convertWorkbook(workbook, 'between.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         expect(sheets[0].conditionalFormatRules).toEqual([
             {
@@ -847,7 +900,7 @@ describe('Sheets xlsx import/convert', () => {
                 },
             ],
         });
-        const sheets = await convertWorkbook(workbook, 'expression.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // Excel anchors the formula's relative refs at the top-left of the FIRST sqref
         // range; the engine re-anchors per cellrange entry, so the importer emits one
@@ -889,7 +942,7 @@ describe('Sheets xlsx import/convert', () => {
                 },
             ],
         });
-        const sheets = await convertWorkbook(workbook, 'colorscale.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // exceljs lists stops min→max; the engine's colorGradation format is max→min.
         expect(sheets[0].conditionalFormatRules).toEqual([
@@ -917,7 +970,7 @@ describe('Sheets xlsx import/convert', () => {
                 },
             ],
         });
-        const sheets = await convertWorkbook(workbook, 'multirange.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         expect(sheets[0].conditionalFormatRules).toEqual([
             {
@@ -958,7 +1011,7 @@ describe('Sheets xlsx import/convert', () => {
                 },
             ],
         });
-        const sheets = await convertWorkbook(workbook, 'priority.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // Excel: lowest priority number wins conflicting properties. The engine applies
         // rules in array order with last-write-wins per property, so the importer emits
@@ -1012,7 +1065,7 @@ describe('Sheets xlsx import/convert', () => {
                 },
             ],
         });
-        const sheets = await convertWorkbook(workbook, 'iconset.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         expect(sheets[0].conditionalFormatRules).toEqual([
             {
@@ -1035,7 +1088,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'B3', value: 'Green', dataValidation: listRule },
             { a1: 'B4', value: '', dataValidation: listRule },
         ]);
-        const sheets = await convertBuffer(buffer, 'dv-list.xlsx');
+        const sheets = await parseXlsx(buffer);
 
         // sqref ranges arrive pre-expanded to per-cell keys; value1 holds the literal
         // with the outer quotes stripped; type2 '' is the dialog's single-select value.
@@ -1080,7 +1133,7 @@ describe('Sheets xlsx import/convert', () => {
         };
         const other = workbook.addWorksheet('Other Sheet');
         for (let i = 1; i <= 5; i++) other.getCell(`B${i}`).value = `Option ${i}`;
-        const sheets = await convertWorkbook(workbook, 'dv-ref.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // The engine's getDropdownList resolves range refs (incl. quoted sheet names)
         // live, so source edits propagate — don't inline the values at import.
@@ -1130,7 +1183,7 @@ describe('Sheets xlsx import/convert', () => {
                 },
             },
         ]);
-        const sheets = await convertBuffer(buffer, 'dv-operators.xlsx');
+        const sheets = await parseXlsx(buffer);
         const rules = sheets[0].dataVerification ?? {};
 
         expect(rules['0_0']).toMatchObject({ type: 'number_integer', type2: 'between', value1: '1', value2: '10' });
@@ -1160,7 +1213,7 @@ describe('Sheets xlsx import/convert', () => {
             { a1: 'A3', value: 7, dataValidation: { type: 'whole', operator: 'greaterThan', formulae: ['$B$1'] } },
             { a1: 'B1', value: 'Red', dataValidation: { type: 'list', allowBlank: true, formulae: ['"Red,Blue"'] } },
         ]);
-        const sheets = await convertBuffer(buffer, 'dv-skips.xlsx');
+        const sheets = await parseXlsx(buffer);
         expect(Object.keys(sheets[0].dataVerification ?? {})).toEqual(['0_1']);
     });
 
@@ -1186,7 +1239,7 @@ describe('Sheets xlsx import/convert', () => {
             },
             { a1: 'A4', value: '', dataValidation: { ...list, showInputMessage: true } },
         ]);
-        const sheets = await convertBuffer(buffer, 'dv-messages.xlsx');
+        const sheets = await parseXlsx(buffer);
         const rules = sheets[0].dataVerification ?? {};
 
         expect(rules['0_0']).toMatchObject({ hintShow: true, hintValue: 'Choose Yes or No', prohibitInput: false });
@@ -1207,7 +1260,7 @@ describe('Sheets xlsx import/convert', () => {
         (
             worksheet as unknown as { dataValidations: { add: (range: string, dv: ExcelJS.DataValidation) => void } }
         ).dataValidations.add('C1:C5000', { type: 'list', allowBlank: true, formulae: ['"Yes,No"'] });
-        const sheets = await convertWorkbook(workbook, 'dv-clamp.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         const rules = sheets[0].dataVerification ?? {};
         // rowCount is 5 → rules survive up to 0-based row 1004 (5 + 1000-row margin).
@@ -1226,7 +1279,7 @@ describe('Sheets xlsx import/convert', () => {
         };
         ws.getCell('B3').value = { text: 'Erik-Jan ten Brinke', hyperlink: 'mailto:erikjan@example.com' };
         ws.getCell('B4').value = 'no link';
-        const sheets = await convertWorkbook(workbook, 'links.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // Targets import verbatim (incl. mailto:) — fidelity at import; scheme
         // safety is enforced at navigation time by the engine's allowlist.
@@ -1257,7 +1310,7 @@ describe('Sheets xlsx import/convert', () => {
         ws.getCell('A2').value = { text: 'sheet link', hyperlink: '#Sheet2' };
         ws.getCell('A3').value = { text: 'quoted cell link', hyperlink: "#'My Sheet'!B2" };
         ws.getCell('A4').value = { text: 'quoted sheet link', hyperlink: "#'My Sheet'" };
-        const sheets = await convertWorkbook(workbook, 'internal-links.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         // cellrange keeps the quoted form (getcellrange resolves quoted names);
         // sheet links strip quotes to match goToLink's name exact-equality.
@@ -1290,7 +1343,7 @@ describe('Sheets xlsx import/convert', () => {
             // Range refs hang the link on the anchor cell.
             { ref: 'B7:C8', location: 'Sheet2!D4' },
         ]);
-        const sheets = await convertBuffer(buffer, 'location-links.xlsx');
+        const sheets = await parseXlsx(buffer);
 
         expect(sheets[0].hyperlink).toEqual({
             '0_0': { linkType: 'cellrange', linkAddress: 'Sheet2!A1' },
@@ -1315,7 +1368,7 @@ describe('Sheets xlsx import/convert', () => {
             text: { richText: [{ text: 'GSV Assets ' }, { text: 'Canva' }] },
             hyperlink: 'https://example.com/assets',
         } as unknown as ExcelJS.CellHyperlinkValue;
-        const sheets = await convertWorkbook(workbook, 'rich-links.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         expect(sheets[0].hyperlink).toEqual({
             '8_4': { linkType: 'webpage', linkAddress: 'https://example.com/assets' },
@@ -1332,61 +1385,13 @@ describe('Sheets xlsx import/convert', () => {
         // Whitespace-only targets survive the exceljs round-trip (empty ones do
         // not); a webpage entry pointing at ' ' would be navigation garbage.
         ws.getCell('A2').value = { text: 'blank target', hyperlink: ' ' };
-        const sheets = await convertWorkbook(workbook, 'no-links.xlsx');
+        const sheets = await parseWorkbook(workbook);
 
         expect(sheets[0].hyperlink).toBeUndefined();
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('1:0')?.v).toBe('blank target');
         expect(byCoord.get('1:0')?.hl).toBeUndefined();
     });
-
-    test('import into another user document without write permission returns 403', async () => {
-        const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
-        const sheetsDoc = await uploadAndConvert(initial, 'alice.xlsx');
-
-        const replacement = await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]);
-        const res = await authedRequest(
-            ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
-            { method: 'POST', body: replacement },
-        );
-        expect(res.status).toBe(403);
-    });
-
-    test('write revoked while the transform ran blocks the commit', async () => {
-        // The route checks write before buffering, then the job queues and transforms
-        // for up to minutes. Calling the commit seam directly with a writer whose
-        // permission was revoked in that window is exactly the race: read still
-        // resolves the collab document, only the write recheck stands in the way.
-        const sheetsDoc = await uploadAndConvert(
-            await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]),
-            'acl-race.xlsx',
-        );
-        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
-            add: [{ id: ctx.bob.user.email, read: true, write: true }],
-        });
-
-        const bob = await getUserById(ctx.bob.user.id);
-        const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
-        const { mount, path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
-
-        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
-            add: [{ id: ctx.bob.user.email, read: true, write: false }],
-        });
-
-        const before = await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id);
-        const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
-        let error: unknown;
-        try {
-            await importIntoDocument(bobDrive, mount, path, replacement, bob!);
-        } catch (e) {
-            error = e;
-        }
-        expect(error).toBeInstanceOf(ApiError);
-        expect((error as ApiError).status).toBe(403);
-        expect((error as ApiError).message).toBe('No write permission');
-        expect(await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual(before);
-    }, 60_000);
 });
 
 // Forge the uncompressedSize a zip DECLARES for its file entries, so the declared size no
