@@ -362,10 +362,7 @@ export function EmailDraft({
                 title="Send without subject?"
                 description="This message has no subject. Send anyway?"
                 confirmText="Send"
-                onConfirm={async () => {
-                    setConfirmNoSubject(false);
-                    await sendWithFreshDraft();
-                }}
+                onConfirm={sendWithFreshDraft}
             />
         </div>
     );

@@ -1,3 +1,4 @@
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useState } from 'react';
 
 type ImageResizeHandlesProps = {
@@ -11,6 +12,13 @@ type ImageResizeHandlesProps = {
     editable?: boolean;
 };
 
+const RESIZE_HANDLES = [
+    { direction: 'w', className: 'top-1/2 -left-1.5 -translate-y-1/2 cursor-ew-resize' },
+    { direction: 'e', className: 'top-1/2 -right-1.5 -translate-y-1/2 cursor-ew-resize' },
+    { direction: 'se', className: '-bottom-1.5 -right-1.5 cursor-nwse-resize' },
+    { direction: 'ne', className: '-top-1.5 -right-1.5 cursor-nesw-resize' },
+] as const;
+
 export function ImageResizeHandles({
     width,
     aspectRatio,
@@ -23,17 +31,20 @@ export function ImageResizeHandles({
     const [localWidth, setLocalWidth] = useState<number | null>(null);
 
     const handleResizeStart = useCallback(
-        (e: React.MouseEvent, direction: string) => {
+        (e: React.PointerEvent, direction: string) => {
             e.preventDefault();
             e.stopPropagation();
             if (!aspectRatio) return;
 
+            // Capture keeps the drag alive through the pointer stream on touch, where a scroll gesture
+            // would otherwise steal it.
+            e.currentTarget.setPointerCapture(e.pointerId);
             const startX = e.clientX;
             const startWidth = width || 300;
             const maxWidth = getMaxWidth();
             let currentWidth = startWidth;
 
-            const handleMouseMove = (moveEvent: MouseEvent) => {
+            const handlePointerMove = (moveEvent: PointerEvent) => {
                 const deltaX = moveEvent.clientX - startX;
                 const isLeft = direction === 'w' || direction === 'nw' || direction === 'sw';
                 const effectiveDelta = isLeft ? -deltaX : deltaX;
@@ -43,44 +54,57 @@ export function ImageResizeHandles({
                 setLocalWidth(Math.round(currentWidth));
             };
 
-            const handleMouseUp = () => {
+            const handlePointerUp = () => {
                 setLocalWidth(null);
                 onResize(Math.round(currentWidth));
-                document.removeEventListener('mousemove', handleMouseMove);
-                document.removeEventListener('mouseup', handleMouseUp);
+                document.removeEventListener('pointermove', handlePointerMove);
+                document.removeEventListener('pointerup', handlePointerUp);
             };
 
-            document.addEventListener('mousemove', handleMouseMove);
-            document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('pointermove', handlePointerMove);
+            document.addEventListener('pointerup', handlePointerUp);
         },
         [width, aspectRatio, getMaxWidth, onResize],
+    );
+
+    const handleKeyResize = useCallback(
+        (e: React.KeyboardEvent) => {
+            const step = e.shiftKey ? 1 : 10;
+            const delta =
+                e.key === 'ArrowRight' || e.key === 'ArrowUp'
+                    ? step
+                    : e.key === 'ArrowLeft' || e.key === 'ArrowDown'
+                      ? -step
+                      : 0;
+            if (delta === 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const next = Math.max(100, Math.min(getMaxWidth(), (width || 300) + delta));
+            onResize(Math.round(next));
+        },
+        [width, getMaxWidth, onResize],
     );
 
     const displayWidth = localWidth ?? width;
 
     return (
-        <div className="relative inline-block group" style={{ width: displayWidth ? `${displayWidth}px` : undefined }}>
+        <div className="relative inline-block" style={{ width: displayWidth ? `${displayWidth}px` : undefined }}>
             {children}
-            {selected && editable && (
-                <>
-                    <div
-                        className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-ew-resize"
-                        onMouseDown={(e) => handleResizeStart(e, 'w')}
+            {selected &&
+                editable &&
+                RESIZE_HANDLES.map(({ direction, className }) => (
+                    <button
+                        key={direction}
+                        type="button"
+                        aria-label="Resize image"
+                        className={cn(
+                            'absolute h-3 w-3 bg-background border border-selection-handle rounded-sm touch-none p-0',
+                            className,
+                        )}
+                        onPointerDown={(e) => handleResizeStart(e, direction)}
+                        onKeyDown={handleKeyResize}
                     />
-                    <div
-                        className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-ew-resize"
-                        onMouseDown={(e) => handleResizeStart(e, 'e')}
-                    />
-                    <div
-                        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-nwse-resize"
-                        onMouseDown={(e) => handleResizeStart(e, 'se')}
-                    />
-                    <div
-                        className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-nesw-resize"
-                        onMouseDown={(e) => handleResizeStart(e, 'ne')}
-                    />
-                </>
-            )}
+                ))}
         </div>
     );
 }

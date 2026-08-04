@@ -1,6 +1,7 @@
 import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
 import type {
+    CalendarEvent,
     CalendarEventOccurrence,
     CreateEventInput,
     FreeBusyBlock,
@@ -145,6 +146,31 @@ export function useDeleteEvent(ownerId: string) {
             return response.data;
         },
         onSuccess: () => invalidateEventDeleted(queryClient, ownerId),
+        onError: onMutationError,
+    });
+}
+
+export function useMoveEvent(ownerId: string) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({
+            calendarId,
+            id,
+            targetCalendarId,
+        }: {
+            calendarId: string;
+            id: string;
+            targetCalendarId: string;
+        }): Promise<CalendarEvent> => {
+            const response = await calendarApi({ ownerId })
+                .calendars({ calId: calendarId })
+                .events({ id })
+                .move.put({ targetCalendarId });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
         onError: onMutationError,
     });
 }

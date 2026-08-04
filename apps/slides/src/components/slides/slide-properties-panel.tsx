@@ -81,17 +81,9 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
     const rotation = getMergedValue(objects, (o) => o.rotation);
 
     return (
-        <PropertiesPanel>
-            <div className="px-3 py-2 border-b">
-                <span className="text-sm font-medium">
-                    {objects.length === 1
-                        ? objects[0].type === 'text'
-                            ? 'Text'
-                            : 'Image'
-                        : `${objects.length} objects`}
-                </span>
-            </div>
-
+        <PropertiesPanel
+            title={objects.length === 1 ? (objects[0].type === 'text' ? 'Text' : 'Image') : `${objects.length} objects`}
+        >
             <PropertySection title="Transform">
                 <div className="grid grid-cols-2 gap-2">
                     <PropertyRow label="X">
@@ -614,11 +606,7 @@ export function SlideBackgroundPanel({
     }, [applyTo, background, onUpdateBackground]);
 
     return (
-        <PropertiesPanel>
-            <div className="px-3 py-2 border-b">
-                <span className="text-sm font-medium">Slide</span>
-            </div>
-
+        <PropertiesPanel title="Slide">
             <BackgroundFillBlock
                 value={background}
                 onChange={(next) => onUpdateBackground(next, 'this')}

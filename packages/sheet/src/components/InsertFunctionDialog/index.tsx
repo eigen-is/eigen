@@ -111,7 +111,10 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
                         id="searchFormulaListInput"
                         placeholder={formulaMore.tipInputFunctionName}
                         spellCheck={false}
-                        onChange={(e) => setSearchText(e.target.value)}
+                        onChange={(e) => {
+                            setSearchText(e.target.value);
+                            setSelectedFuncIndex(0);
+                        }}
                     />
                 </div>
                 <div className="space-y-1.5">

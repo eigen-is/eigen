@@ -3,6 +3,7 @@ import { getDriveDownloadUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useCopyFiles, useTextPreview } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
+import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
@@ -66,6 +67,11 @@ export function FilePreview({
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
     useEffect(() => () => downloadTimers.current.forEach(clearTimeout), []);
 
+    // Trap focus in the overlay, but hand it to the save-to-drive picker (a Radix dialog
+    // portaled to body) while that is open.
+    const overlayRef = useRef<HTMLDivElement>(null);
+    useFocusTrap(overlayRef, !locationPickerOpen);
+
     const openUrl = getDriveItemUrl(path);
     // Eigendocs (doc/stickies/slides/sheets/chat) can't be downloaded as raw files — they're
     // containers with internal dbs. The "Open" button takes the user to the app instead.
@@ -97,8 +103,13 @@ export function FilePreview({
 
     return (
         <div
+            ref={overlayRef}
             data-preview-overlay
-            className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-label={fileName}
+            tabIndex={-1}
+            className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in outline-none"
             style={{ pointerEvents: 'auto' }}
             // React synthetic events bubble through the React tree across portals, so a
             // click inside the save-to-drive picker (rendered as a JSX child below) would
@@ -226,10 +237,12 @@ export function FilePreview({
                     confirmLabel="Save here"
                     defaultOwnerId={path.ownerId}
                     defaultMountId={path.mountId}
-                    onConfirm={(location) => {
+                    onConfirm={async (location) => {
                         const pathIds =
                             locationPickerMode === 'all' ? downloadableSiblings.map((s) => s.id) : [path.id];
-                        copyFiles.mutate({
+                        // Await the copy so the picker closes on success and stays open (with the failure
+                        // toast) on error, instead of closing immediately.
+                        await copyFiles.mutateAsync({
                             pathIds,
                             targetOwnerId: location.ownerId,
                             targetMountId: location.mountId,

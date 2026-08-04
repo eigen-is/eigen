@@ -12,7 +12,6 @@ export const Route = createFileRoute('/blog/$id')({
     head: ({ params }) => {
         const post = getBlogPost(params.id);
         if (!post) return { meta: [{ title: 'Post not found - eigen blog' }] };
-        const url = `https://eigen.is/blog/${post.slug}`;
         return {
             meta: [
                 { title: `${post.title} - eigen blog` },
@@ -20,7 +19,6 @@ export const Route = createFileRoute('/blog/$id')({
                 { property: 'og:title', content: post.title },
                 { property: 'og:description', content: post.description },
                 { property: 'og:type', content: 'article' },
-                { property: 'og:url', content: url },
                 { property: 'article:published_time', content: post.date },
             ],
         };

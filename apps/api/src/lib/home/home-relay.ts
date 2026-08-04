@@ -209,6 +209,16 @@ export async function deleteEventAt(
     await home.calendar.deleteEvent(calendarId, eventId, user);
 }
 
+export async function moveEventAt(
+    ownerUserId: string,
+    calendarId: string,
+    eventId: string,
+    targetCalendarId: string,
+): Promise<CalendarEvent> {
+    const home = await getHome(ownerUserId);
+    return home.calendar.moveEvent(calendarId, eventId, targetCalendarId);
+}
+
 export async function pullPendingInvitations(ownerUserId: string, attendeeEmail: string): Promise<CalendarEvent[]> {
     const home = await getHome(ownerUserId);
     return home.calendar.getEventsWithAttendee(attendeeEmail);

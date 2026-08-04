@@ -473,7 +473,11 @@ console.log(`  PTR   (your VPS rDNS)                          -> ${domain}`);
 
 console.log('\n--- Next steps ---');
 console.log('  1. Add the DNS records above');
-console.log('  2. bun install && bun run --sequential --filter "./apps/*" build');
+// Load .env.production before the build the same way update.sh does (scripts/update.sh) — the index
+// prerender reads DOMAIN at build time for canonical/og:url/JSON-LD URLs and sitemap.xml.
+console.log(
+    '  2. bun install && set -a && source .env.production && set +a && bun run --sequential --filter "./apps/*" build',
+);
 console.log('  3. bun --filter "@apps/api" buildfordocker');
 if (useHostProxy) {
     console.log('  4. docker compose --env-file .env.production build       # bakes dist/ into eigen-static');

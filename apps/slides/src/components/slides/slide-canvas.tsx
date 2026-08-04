@@ -5,6 +5,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef } from 'react';
 import { boundingBox } from './arrange';
@@ -88,6 +89,16 @@ export function SlideCanvas({
     const canvasRef = useRef<HTMLDivElement>(null);
     const { vSnaps, hSnaps } = useSnapTargets(objects, selectedObjectIds);
     const objectContextMenu = useContextMenu<SlideObject>();
+
+    // Touch long-press opens the same object menu right-click does (mirrors the slide-panel rail).
+    const openObjectMenuAt = objectContextMenu.openAt;
+    const handleObjectLongPress = useCallback(
+        (obj: SlideObject, x: number, y: number) => {
+            openObjectMenuAt(obj, x, y);
+        },
+        [openObjectMenuAt],
+    );
+    const objectLongPress = useLongPress<SlideObject>(handleObjectLongPress, { disabled: !canWrite });
 
     const selectedObjects = useMemo(
         () => objects.filter((o) => selectedObjectIds.includes(o.id)),
@@ -261,6 +272,7 @@ export function SlideCanvas({
                             onUpdate={onUpdateObject}
                             onDragStart={handleDragStart}
                             onContextMenu={canWrite ? objectContextMenu.handleContextMenu : undefined}
+                            longPressBind={canWrite ? objectLongPress.bind : undefined}
                             onCommentClick={onCommentClick}
                             commentColor={
                                 firstUnresolved?.card.color ??

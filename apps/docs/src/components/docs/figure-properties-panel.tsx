@@ -33,11 +33,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
     const previewUrl = mediaName ? resolveMediaUrl(mediaName) : null;
 
     return (
-        <PropertiesPanel>
-            <div className="px-3 py-2 border-b">
-                <span className="text-sm font-medium">Image</span>
-            </div>
-
+        <PropertiesPanel title="Image">
             {previewUrl && (
                 <div className="px-3 py-3 border-b">
                     <div className="rounded border overflow-hidden">

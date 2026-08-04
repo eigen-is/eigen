@@ -4,9 +4,9 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { useState } from 'react';
 import { en } from '../../state';
+import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 
 const BORDER_STYLES = [
     { text: '1', value: 'Thin', strokeDasharray: '1,0', strokeWidth: '1' },
@@ -33,26 +33,15 @@ export function CustomBorder({ onPick }: Props) {
 
     return (
         <>
-            <DropdownMenuSub>
-                <DropdownMenuSubTrigger>
-                    <div className="flex items-center gap-2 w-full">
-                        <span>{border.borderColor}</span>
-                        <div className="ml-auto h-3 w-6 rounded border" style={{ backgroundColor: changeColor }} />
-                    </div>
-                </DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="p-3">
-                    <ColorPicker
-                        value={changeColor}
-                        showReset={false}
-                        onChange={(color) => {
-                            if (color) {
-                                setChangeColor(color);
-                                onPick(color, changeStyle);
-                            }
-                        }}
-                    />
-                </DropdownMenuSubContent>
-            </DropdownMenuSub>
+            <ColorPickerMenuItem
+                label={border.borderColor}
+                value={changeColor}
+                showReset={false}
+                onChange={(color) => {
+                    setChangeColor(color);
+                    onPick(color, changeStyle);
+                }}
+            />
 
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>

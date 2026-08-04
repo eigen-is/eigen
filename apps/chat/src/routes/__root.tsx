@@ -1,11 +1,7 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { ChatSidebar } from '../components/chat/chat-sidebar';
-
-type MyRouterContext = {
-    auth: AuthContextType;
-};
 
 function ChatRoot() {
     const { user } = useAuth();
@@ -21,6 +17,6 @@ function ChatRoot() {
     );
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext<RouterAppContext>()({
     component: ChatRoot,
 });

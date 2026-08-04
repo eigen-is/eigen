@@ -2157,3 +2157,329 @@ describe('Calendar etag timezone consistency (audit #24)', () => {
         expect(row!.etag).toBe(computeEtag({ ...base, timezone: row!.timezone })); // pre-fix: equalled the no-tz etag
     });
 });
+
+// Finding #1 (P1): moving an event between calendars used to be a FE create-then-delete that dropped
+// timezone/data and, for a linked event, fired a decline at the organizer. The server owns the move now:
+// a calendarId re-home that preserves every field + the row identity, drags exception children along,
+// and never runs deleteEvent's iMIP path.
+describe('Event move across calendars (finding #1)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let sourceCalId: string;
+    let targetCalId: string;
+
+    const eventsUrl = (calId: string) => `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`;
+    const rangeUrl = (calId: string, fromIso: string, toIso: string) =>
+        `/calendar/${ctx.alice.user.id}/calendars/${calId}/event-range/${Math.floor(
+            new Date(fromIso).getTime() / 1000,
+        )}/${Math.floor(new Date(toIso).getTime() / 1000)}`;
+    const moveUrl = (calId: string, id: string) =>
+        `/calendar/${ctx.alice.user.id}/calendars/${calId}/events/${id}/move`;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const mk = async (name: string) => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, color: '#4285f4' }),
+            });
+            return (await assertJson<CalendarItem>(res)).id;
+        };
+        sourceCalId = await mk('Move Source');
+        targetCalId = await mk('Move Target');
+    });
+
+    test('re-homes the event preserving timezone, attendees, reminders and recurrence (same id)', async () => {
+        const createRes = await authedRequest(ctx.alice.user.sessionToken, eventsUrl(sourceCalId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Movable Rich',
+                startTime: '2026-09-01T09:00:00Z',
+                endTime: '2026-09-01T10:00:00Z',
+                allDay: false,
+                timezone: 'America/New_York',
+                rrule: 'FREQ=WEEKLY;BYDAY=TU;COUNT=4',
+                data: {
+                    attendees: [{ email: 'guest@example.com', name: 'Guest', status: 'pending', role: 'required' }],
+                    reminders: [{ type: 'notification', minutes: 15 }],
+                },
+            }),
+        });
+        const created = await assertJson<CalendarEvent>(createRes);
+
+        const moveRes = await authedRequest(ctx.alice.user.sessionToken, moveUrl(sourceCalId, created.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetCalendarId: targetCalId }),
+        });
+        const moved = await assertJson<CalendarEvent>(moveRes);
+        expect(moved.id).toBe(created.id); // UPDATE re-home, not create+delete
+        expect(moved.calendarId).toBe(targetCalId);
+        expect(moved.timezone).toBe('America/New_York');
+        expect(moved.rrule).toBe('FREQ=WEEKLY;BYDAY=TU;COUNT=4');
+        expect(moved.data?.attendees?.[0]?.email).toBe('guest@example.com');
+        expect(moved.data?.reminders?.[0]?.minutes).toBe(15);
+
+        const targetEvents = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                rangeUrl(targetCalId, '2026-09-01T00:00:00Z', '2026-09-30T23:59:59Z'),
+            ),
+        );
+        expect(targetEvents.some((e) => e.id === created.id)).toBe(true);
+        const sourceEvents = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                rangeUrl(sourceCalId, '2026-09-01T00:00:00Z', '2026-09-30T23:59:59Z'),
+            ),
+        );
+        expect(sourceEvents.some((e) => e.id === created.id)).toBe(false);
+    });
+
+    test('brings recurrence-exception children along and leaves no orphan rows in the source', async () => {
+        const createRes = await authedRequest(ctx.alice.user.sessionToken, eventsUrl(sourceCalId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Movable Series',
+                startTime: '2026-10-05T09:00:00Z',
+                endTime: '2026-10-05T10:00:00Z',
+                allDay: false,
+                rrule: 'FREQ=WEEKLY;BYDAY=MO;COUNT=4',
+            }),
+        });
+        const parent = await assertJson<CalendarEvent>(createRes);
+
+        const beforeRange = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                rangeUrl(sourceCalId, '2026-10-01T00:00:00Z', '2026-10-31T23:59:59Z'),
+            ),
+        );
+        const occ = findOrFail(beforeRange, (e) => e.title === 'Movable Series');
+
+        const excRes = await authedRequest(ctx.alice.user.sessionToken, eventsUrl(sourceCalId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Movable Series (modified)',
+                startTime: new Date(new Date(occ.startTime).getTime() + 3600_000),
+                endTime: new Date(new Date(occ.endTime).getTime() + 3600_000),
+                allDay: false,
+                parentEventId: parent.id,
+                recurrenceDate: occ.occurrenceDate,
+            }),
+        });
+        const exception = await assertJson<CalendarEvent>(excRes);
+
+        const moveRes = await authedRequest(ctx.alice.user.sessionToken, moveUrl(sourceCalId, parent.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetCalendarId: targetCalId }),
+        });
+        expect(moveRes.status).toBe(200);
+
+        const home = await getHome(ctx.alice.user.id);
+        const sourceRows = home.calendar.getRawEvents(sourceCalId).filter((e) => e.uid === parent.uid);
+        expect(sourceRows.length).toBe(0);
+        const targetRows = home.calendar.getRawEvents(targetCalId).filter((e) => e.uid === parent.uid);
+        expect(targetRows.length).toBe(2); // master + its exception child
+        expect(targetRows.some((e) => e.id === exception.id && e.parentEventId === parent.id)).toBe(true);
+
+        const targetRange = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                rangeUrl(targetCalId, '2026-10-01T00:00:00Z', '2026-10-31T23:59:59Z'),
+            ),
+        );
+        expect(targetRange.some((e) => e.title === 'Movable Series (modified)')).toBe(true);
+        const sourceRange = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                rangeUrl(sourceCalId, '2026-10-01T00:00:00Z', '2026-10-31T23:59:59Z'),
+            ),
+        );
+        expect(sourceRange.some((e) => e.title.startsWith('Movable Series'))).toBe(false);
+    });
+
+    test('moving a linked (invited) event does not send an iMIP decline', async () => {
+        // A client can't declare itself an invitee (EventDataSchema strips organizer), so seed the linked
+        // copy through the domain. External organizer → the decline path would be a sendMail.
+        const home = await getHome(ctx.alice.user.id);
+        const linked = home.calendar.createEvent(sourceCalId, {
+            title: 'Invited Movable',
+            startTime: new Date('2026-11-02T09:00:00Z'),
+            endTime: new Date('2026-11-02T10:00:00Z'),
+            allDay: false,
+            data: {
+                organizer: { userId: 'external_org@example.com', email: 'org@example.com', name: 'Org' },
+                organizerEventId: 'ext-move-1',
+                attendees: [{ email: ctx.alice.user.email, status: 'accepted', role: 'required' }],
+            },
+        });
+
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear();
+
+        const moveRes = await authedRequest(ctx.alice.user.sessionToken, moveUrl(sourceCalId, linked.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetCalendarId: targetCalId }),
+        });
+        const moved = await assertJson<CalendarEvent>(moveRes);
+        await new Promise((r) => setTimeout(r, 50));
+
+        const declineCalls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === 'org@example.com'));
+        expect(declineCalls.length).toBe(0);
+        spy.mockRestore();
+
+        expect(moved.calendarId).toBe(targetCalId);
+        expect(moved.data?.organizer?.email).toBe('org@example.com'); // link preserved across the move
+    });
+
+    test('rejects an event that does not live in the given source calendar (404 IDOR)', async () => {
+        const createRes = await authedRequest(ctx.alice.user.sessionToken, eventsUrl(targetCalId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Lives In Target',
+                startTime: '2026-12-01T09:00:00Z',
+                endTime: '2026-12-01T10:00:00Z',
+                allDay: false,
+            }),
+        });
+        const created = await assertJson<CalendarEvent>(createRes);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, moveUrl(sourceCalId, created.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetCalendarId: targetCalId }),
+        });
+        expect(res.status).toBe(404);
+    });
+
+    test('rejects a move to a non-existent target calendar (404)', async () => {
+        const createRes = await authedRequest(ctx.alice.user.sessionToken, eventsUrl(sourceCalId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'For Bad Target',
+                startTime: '2026-12-05T09:00:00Z',
+                endTime: '2026-12-05T10:00:00Z',
+                allDay: false,
+            }),
+        });
+        const created = await assertJson<CalendarEvent>(createRes);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, moveUrl(sourceCalId, created.id), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetCalendarId: 'no-such-calendar' }),
+        });
+        expect(res.status).toBe(404);
+    });
+});
+
+// Finding #2: intervals were never validated on any write path — an all-day event with reversed dates
+// (the only UI-reachable case) or a reversed API payload persisted. Enforced once in the domain
+// (createEvent/updateEvent) so REST + CalDAV + iMIP all share it. Zero-duration stays legal (RFC 5545).
+describe('Calendar interval validation (finding #2)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let calId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        calId = findOrFail(
+            await assertJson<CalendarItem[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`),
+            ),
+            (c) => c.isDefault,
+        ).id;
+    });
+
+    const url = () => `/calendar/${ctx.alice.user.id}/calendars/${calId}/events`;
+
+    test('create with endTime before startTime returns 400', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, url(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Reversed',
+                startTime: '2026-09-01T10:00:00Z',
+                endTime: '2026-09-01T09:00:00Z',
+                allDay: false,
+            }),
+        });
+        expect(res.status).toBe(400);
+    });
+
+    test('create all-day event with reversed dates returns 400', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, url(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Reversed All-Day',
+                startTime: '2026-09-16T00:00:00Z',
+                endTime: '2026-09-15T00:00:00Z',
+                allDay: true,
+            }),
+        });
+        expect(res.status).toBe(400);
+    });
+
+    test('update dragging endTime before startTime returns 400', async () => {
+        const createRes = await authedRequest(ctx.alice.user.sessionToken, url(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Draggable',
+                startTime: '2026-09-01T09:00:00Z',
+                endTime: '2026-09-01T10:00:00Z',
+                allDay: false,
+            }),
+        });
+        const created = await assertJson<CalendarEvent>(createRes);
+
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calId}/events/${created.id}`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ endTime: '2026-09-01T08:00:00Z' }),
+            },
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('zero-duration event is accepted (RFC 5545 legal)', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, url(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Instant',
+                startTime: '2026-09-01T09:00:00Z',
+                endTime: '2026-09-01T09:00:00Z',
+                allDay: false,
+            }),
+        });
+        const ev = await assertJson<CalendarEvent>(res);
+        expect(new Date(ev.endTime).getTime()).toBe(new Date(ev.startTime).getTime());
+    });
+
+    test('valid all-day event (exclusive end = start + 1 day) still creates', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, url(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Valid All-Day',
+                startTime: '2026-09-20T00:00:00Z',
+                endTime: '2026-09-21T00:00:00Z',
+                allDay: true,
+            }),
+        });
+        expect(res.status).toBe(200);
+    });
+});

@@ -11,7 +11,6 @@ export const Route = createFileRoute('/support/$section/$article')({
     head: ({ params }) => {
         const article = getSupportArticle(params.section, params.article);
         if (!article) return { meta: [{ title: 'Article not found - Eigen Support' }] };
-        const url = `https://eigen.is/support/${params.section}/${params.article}`;
         return {
             meta: [
                 { title: `${article.title} - Eigen Support` },
@@ -19,7 +18,6 @@ export const Route = createFileRoute('/support/$section/$article')({
                 { property: 'og:title', content: article.title },
                 { property: 'og:description', content: article.description },
                 { property: 'og:type', content: 'article' },
-                { property: 'og:url', content: url },
             ],
         };
     },

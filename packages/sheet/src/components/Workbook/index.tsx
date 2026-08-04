@@ -259,6 +259,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const handleUndo = useCallback(() => {
+            if (context.allowEdit === false) return;
             const history = globalCache.current.undoList.pop();
             if (history) {
                 setContext((ctx_) => {
@@ -313,9 +314,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     return newContext;
                 });
             }
-        }, [emitOp]);
+        }, [emitOp, context.allowEdit]);
 
         const handleRedo = useCallback(() => {
+            if (context.allowEdit === false) return;
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
@@ -339,7 +341,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     return newContext;
                 });
             }
-        }, [emitOp]);
+        }, [emitOp, context.allowEdit]);
 
         useEffect(() => {
             if (context.selections != null) {

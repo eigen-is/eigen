@@ -1,3 +1,4 @@
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -20,7 +21,10 @@ import { OverlayRegion } from './OverlayRegion';
 
 export const RowHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
-    const { onContextMenu, anchor: rowMenuAnchor } = useSheetContextMenu('row');
+    const { onContextMenu, openAtPoint, anchor: rowMenuAnchor } = useSheetContextMenu('row');
+    // Long-press opens the row menu on touch, mirroring the cell area — headers otherwise
+    // have no menu entry where the browser never synthesises a contextmenu. bind carries no item.
+    const longPress = useLongPress<null>((_item, x, y) => openAtPoint(x, y));
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -195,6 +199,7 @@ export const RowHeader: React.FC = () => {
             onMouseDown={onMouseDown}
             onMouseLeave={onMouseLeave}
             onContextMenu={onContextMenu}
+            {...longPress.bind(null)}
         >
             {/* Positioned 2px down so the regions inside live in grid
                 coordinates — the container itself is pulled up 2px

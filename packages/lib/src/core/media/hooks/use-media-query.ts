@@ -34,24 +34,24 @@ export function useMediaQuery(query: string): boolean {
     );
 }
 
-export function useIsMobile() {
+export function useIsMobile(): boolean {
     return useMediaQuery('(max-width: 768px)');
 }
 
-export function useIsTablet() {
+export function useIsTablet(): boolean {
     return useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
 }
 
-export function useIsDesktop() {
+export function useIsDesktop(): boolean {
     return useMediaQuery('(min-width: 1025px)');
 }
 
 // Toolbar density only: below this the editors fold their format rows into dropdowns. Not the
 // 768px system mobile breakpoint that useLayout().isMobile reports.
-export function useIsCompactToolbar() {
+export function useIsCompactToolbar(): boolean {
     return useMediaQuery('(max-width: 1200px)');
 }
 
-export function useIsCoarsePointer() {
+export function useIsCoarsePointer(): boolean {
     return useMediaQuery('(pointer: coarse)');
 }

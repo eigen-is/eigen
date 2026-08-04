@@ -1,16 +1,12 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspace/lib/admin';
-import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useServerSettings } from '@workspace/lib/settings';
 import { LoadingState } from '@workspace/ui';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { AdminSidebar } from '../components/admin/admin-sidebar.tsx';
 import { SetupWizard } from '../components/admin/setup-wizard.tsx';
-
-type MyRouterContext = {
-    auth: AuthContextType;
-};
 
 function AdminRoot() {
     const { data: setupStatus, isLoading: setupLoading } = useSetupStatus();
@@ -73,6 +69,6 @@ function AuthenticatedAdmin() {
     );
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext<RouterAppContext>()({
     component: AdminRoot,
 });

@@ -260,12 +260,15 @@ export const SheetOverlay: React.FC = () => {
     }, [setContext]);
 
     // Warning dialog
-    // biome-ignore lint/correctness/useExhaustiveDependencies: only fires when a new warnDialog message arrives; showDialog from useDialog is stable
+    // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per new warnDialog message; showDialog + setContext are stable
     useEffect(() => {
         if (context.warnDialog) {
-            setTimeout(() => {
-                showDialog(context.warnDialog, 'ok');
-            }, 240);
+            // Consume the event so repeating the same invalid op warns again.
+            const message = context.warnDialog;
+            setTimeout(() => showDialog(message, 'ok'), 240);
+            setContext((ctx) => {
+                ctx.warnDialog = undefined;
+            });
         }
     }, [context.warnDialog]);
 

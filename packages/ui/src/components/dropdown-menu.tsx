@@ -3,7 +3,21 @@ import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, CircleIcon } from 'lucide-react';
 import type * as React from 'react';
-import { Children, createContext, isValidElement, useContext, useEffect, useId, useMemo, useState } from 'react';
+import {
+    Children,
+    createContext,
+    isValidElement,
+    useContext,
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
+
+// After a drill-in transition, which row takes focus: the opened page's back row
+// ('back', on push) or the sub-trigger a pop returned to ('trigger', on pop).
+type FocusTarget = { id: string; role: 'back' | 'trigger' };
 
 // Mobile drill-in state, provided by the root so it survives forceMount close; null on desktop.
 type MobileMenuState = {
@@ -11,6 +25,10 @@ type MobileMenuState = {
     activePage: string | null;
     push: (id: string) => void;
     pop: () => void;
+    // The row to focus after the last push/pop; the matching row focuses itself then clears it,
+    // so an external-keyboard / AT user isn't stranded on a now-hidden row.
+    focusTarget: FocusTarget | null;
+    clearFocus: () => void;
 };
 const MobileMenuContext = createContext<MobileMenuState | null>(null);
 
@@ -42,20 +60,33 @@ function subTriggerLabel(children: React.ReactNode): React.ReactNode {
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
     const isMobile = useIsMobile();
     const [stack, setStack] = useState<string[]>([]);
+    const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
     const value = useMemo<MobileMenuState>(
         () => ({
             stack,
             activePage: stack.at(-1) ?? null,
-            push: (id) => setStack((s) => [...s, id]),
-            pop: () => setStack((s) => s.slice(0, -1)),
+            push: (id) => {
+                setStack((s) => [...s, id]);
+                setFocusTarget({ id, role: 'back' });
+            },
+            pop: () => {
+                const popped = stack.at(-1);
+                setStack((s) => s.slice(0, -1));
+                if (popped) setFocusTarget({ id: popped, role: 'trigger' });
+            },
+            focusTarget,
+            clearFocus: () => setFocusTarget(null),
         }),
-        [stack],
+        [stack, focusTarget],
     );
 
     // A controlled root can close via an external open→false flip that never fires onOpenChange
     // (e.g. context menus whose plain-button rows call close()); reset so the next open is root.
     useEffect(() => {
-        if (props.open === false) setStack((s) => (s.length ? [] : s));
+        if (props.open === false) {
+            setStack((s) => (s.length ? [] : s));
+            setFocusTarget(null);
+        }
     }, [props.open]);
 
     if (!isMobile) {
@@ -70,7 +101,10 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
                 onOpenChange={(open) => {
                     props.onOpenChange?.(open);
                     // Reset on close so reopening lands on root (forceMount keeps Content mounted, so unmount can't).
-                    if (!open) setStack([]);
+                    if (!open) {
+                        setStack([]);
+                        setFocusTarget(null);
+                    }
                 }}
             />
         </MobileMenuContext.Provider>
@@ -276,12 +310,22 @@ function DropdownMenuSubTrigger({
     const menu = useContext(MobileMenuContext);
     const sub = useContext(SubContext);
     const hidden = useRowHidden();
+    const triggerRef = useRef<HTMLDivElement>(null);
+
+    // A pop restores focus here, to the trigger that opened the page we just left.
+    useEffect(() => {
+        if (menu && sub && menu.focusTarget?.id === sub.id && menu.focusTarget.role === 'trigger') {
+            triggerRef.current?.focus();
+            menu.clearFocus();
+        }
+    }, [menu, sub]);
 
     if (menu && sub) {
         // A root-collection Item; opening a page must not close the menu, so preventDefault.
         return (
             <DropdownMenuPrimitive.Item
                 {...props}
+                ref={triggerRef}
                 data-slot="dropdown-menu-sub-trigger"
                 data-inset={inset}
                 onSelect={(event) => {
@@ -317,6 +361,15 @@ function DropdownMenuSubContent({
     const menu = useContext(MobileMenuContext);
     const sub = useContext(SubContext);
     const pageValue = useMemo(() => ({ id: sub?.id ?? null }), [sub?.id]);
+    const pageRef = useRef<HTMLDivElement>(null);
+
+    // A push lands focus on this page's back row (the pushed sub-trigger itself just went hidden).
+    useEffect(() => {
+        if (menu && sub && menu.focusTarget?.id === sub.id && menu.focusTarget.role === 'back') {
+            pageRef.current?.querySelector<HTMLElement>(':scope > [data-slot="dropdown-menu-sub-back"]')?.focus();
+            menu.clearFocus();
+        }
+    }, [menu, sub]);
 
     if (menu && sub) {
         // contents keeps rows flat in the scrolling Content; none hides the whole page (incl. non-item JSX) off-path, while on-path ancestors stay contents so nested pages still show.
@@ -324,6 +377,7 @@ function DropdownMenuSubContent({
         return (
             <PageContext.Provider value={pageValue}>
                 <div
+                    ref={pageRef}
                     data-slot="dropdown-menu-sub-page"
                     className={cn('contents', !menu.stack.includes(sub.id) && 'hidden')}
                 >

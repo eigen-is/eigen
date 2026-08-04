@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-845 primitives across 6 kinds. `packages/sheet` internals are excluded.
+847 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (119)
+## Components (118)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -106,7 +106,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ToolbarSeparator` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-separator.tsx |
 | `ToolbarTitle` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-title.tsx |
 | `TooltipButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
-| `TooltipToggle` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-toggle.tsx |
 | `Topbar` | `@workspace/ui` | packages/ui/src/components/layout/app/topbar.tsx |
 | `UnreadDot` | `@workspace/ui` | packages/ui/src/components/layout/unread-dot.tsx |
 | `UploadContainer` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-container.tsx |
@@ -145,7 +144,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PreviewProvider` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `SSEProvider` | `@workspace/ui/components/layout/sse-provider` | packages/ui/src/components/layout/sse-provider/sse-provider.tsx |
 
-## Contexts, schemas & classes (6)
+## Contexts, schemas & classes (7)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -153,10 +152,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
+| `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (218)
+## Hooks (220)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -201,6 +201,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDeleteEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useDeleteSharedCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useEvents` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
+| `useMoveEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useRsvp` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useSharedCalendars` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
 | `useUpdateCalendar` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/hooks/use-calendar.ts |
@@ -371,6 +372,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
+| `useFocusTrap` | `@workspace/ui/hooks/use-focus-trap` | packages/ui/src/hooks/use-focus-trap.ts |
 | `useKeyboardListNavigation` | `@workspace/ui/hooks/use-keyboard-list-navigation` | packages/ui/src/hooks/use-keyboard-list-navigation.ts |
 | `useListDrag` | `@workspace/ui/hooks/use-list-drag` | packages/ui/src/hooks/use-list-drag.ts |
 | `useListDropTarget` | `@workspace/ui/hooks/use-list-drop-target` | packages/ui/src/hooks/use-list-drop-target.ts |
@@ -385,6 +387,7 @@ rather than inlining `queryClient.invalidateQueries`.
 |------|-------------|------|
 | `AuthContextType` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `AuthUser` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
+| `RouterAppContext` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `LocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
@@ -603,7 +606,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SlashTargetContext` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
 | `StorageData` | `@workspace/ui` | packages/ui/src/components/layout/home/usage.tsx |
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
-| `TooltipToggleProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-toggle.tsx |
 | `UploadItem` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
 | `UserAvatarProps` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItemProps` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |

@@ -48,12 +48,10 @@ export function LabelManager({
 
     const handleDeleteLabel = async () => {
         if (!selectedLabel) return;
-        try {
-            await deleteLabel(selectedLabel.id);
-            setDialogOpen(false);
-        } catch {
-            // Mutation's onError handles the toast; keep dialog open for retry
-        }
+        // Let a rejection propagate to the shared DeleteDialog so it stays open for retry; only close on
+        // success. The mutation's onError already surfaced the toast.
+        await deleteLabel(selectedLabel.id);
+        setDialogOpen(false);
     };
 
     return (
