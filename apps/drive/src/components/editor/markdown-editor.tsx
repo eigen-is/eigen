@@ -178,7 +178,7 @@ export function MarkdownEditor({
     const toolbar = (
         <EditToolbar
             onBack={() => confirmClose(onBack)}
-            onCancel={onCancel}
+            onCancel={() => confirmClose(onCancel)}
             onSave={handleSave}
             isSaving={saveState === 'saving'}
         >
