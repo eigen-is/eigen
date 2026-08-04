@@ -584,8 +584,11 @@ export function insertRowCol(
         id: string;
     },
     changeSelection: boolean = true,
+    // Remote mirror (applyOp): re-derive the data shift even for a read-only viewer.
+    // The permission guard blocks LOCAL viewer-initiated ops only.
+    force: boolean = false,
 ) {
-    if (ctx.allowEdit === false) return;
+    if (!force && ctx.allowEdit === false) return;
     const id = op.id || ctx.currentSheetId;
     if (typeof id !== 'string') return;
 
@@ -898,8 +901,11 @@ export function deleteRowCol(
         end: number;
         id: string;
     },
+    // Remote mirror (applyOp): re-derive the data shift even for a read-only viewer.
+    // The permission guard blocks LOCAL viewer-initiated ops only.
+    force: boolean = false,
 ) {
-    if (ctx.allowEdit === false) return;
+    if (!force && ctx.allowEdit === false) return;
     const id = op.id || ctx.currentSheetId;
     if (typeof id !== 'string') return;
 

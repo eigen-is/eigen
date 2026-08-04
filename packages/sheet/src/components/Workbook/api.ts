@@ -45,14 +45,17 @@ export function generateAPIs(
                     for (const specialOp of specialOps) {
                         if (specialOp.op === 'insertRowCol') {
                             try {
-                                insertRowCol(ctx_, specialOp.value, false);
+                                // force: this is an authoritative remote op — mirror the data shift
+                                // even for read-only viewers, or the grid diverges from the metadata
+                                // patches applied below (api.ts).
+                                insertRowCol(ctx_, specialOp.value, false, true);
                             } catch (e) {
                                 if (!(e instanceof RowColError)) throw e;
                                 console.warn('[sheet] insertRowCol op skipped:', e.code);
                             }
                         } else if (specialOp.op === 'deleteRowCol') {
                             try {
-                                deleteRowCol(ctx_, specialOp.value);
+                                deleteRowCol(ctx_, specialOp.value, true);
                             } catch (e) {
                                 if (!(e instanceof RowColError)) throw e;
                                 console.warn('[sheet] deleteRowCol op skipped:', e.code);

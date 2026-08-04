@@ -46,8 +46,8 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                 </DropdownMenu>
 
                 {/* View / Insert / Format / Data are wholly mutating — hidden for viewers, like
-                    FormatToolbar. Edit stays (Copy / Find gate per-item); comment viewing stays
-                    reachable via the cell context menu. */}
+                    FormatToolbar. Edit stays (Copy / Find gate per-item); viewers still read
+                    comments via the ungated Comments panel toggle. */}
                 {context.allowEdit && (
                     <>
                         <DropdownMenu>
