@@ -25,10 +25,13 @@ export const SlideThumbnail = memo(function SlideThumbnail({
     const { resolveMediaUrl } = useMediaResolver();
 
     return (
+        // select-none + the callout suppression keep a press on the thumbnail from raising iOS's
+        // text selection/loupe (same pairing as .eigen-list-item).
         <button
             onClick={onClick}
             className={cn(
                 'w-full flex items-start gap-2 py-1 px-1 rounded-sm text-left group',
+                'select-none [-webkit-touch-callout:none]',
                 isActive && 'bg-accent',
             )}
         >

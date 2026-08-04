@@ -118,29 +118,29 @@ export function SlidePanel({
                     </DndContext>
                 )}
             </div>
-            {!mobile && (
-                <ContextMenuAnchor contextMenu={slideContextMenu}>
-                    {menuSlideId && (
-                        <>
-                            {onDuplicateSlide && (
-                                <DropdownMenuItem onClick={() => onDuplicateSlide(menuSlideId)}>
-                                    <Copy className="h-4 w-4 mr-2" /> Duplicate
-                                </DropdownMenuItem>
-                            )}
-                            {onDuplicateSlide && onDeleteSlide && <DropdownMenuSeparator />}
-                            {onDeleteSlide && (
-                                <DropdownMenuItem
-                                    variant="destructive"
-                                    disabled={deck.slideOrder.length <= 1}
-                                    onClick={() => onDeleteSlide(menuSlideId)}
-                                >
-                                    <Trash2 className="h-4 w-4 mr-2" /> Delete
-                                </DropdownMenuItem>
-                            )}
-                        </>
-                    )}
-                </ContextMenuAnchor>
-            )}
+            {/* Not gated on !mobile: unmounting it across a breakpoint flip would strand an open
+                menu's item, and it can never open on mobile — nothing binds its triggers there. */}
+            <ContextMenuAnchor contextMenu={slideContextMenu}>
+                {menuSlideId && (
+                    <>
+                        {onDuplicateSlide && (
+                            <DropdownMenuItem onClick={() => onDuplicateSlide(menuSlideId)}>
+                                <Copy className="h-4 w-4 mr-2" /> Duplicate
+                            </DropdownMenuItem>
+                        )}
+                        {onDuplicateSlide && onDeleteSlide && <DropdownMenuSeparator />}
+                        {onDeleteSlide && (
+                            <DropdownMenuItem
+                                variant="destructive"
+                                disabled={deck.slideOrder.length <= 1}
+                                onClick={() => onDeleteSlide(menuSlideId)}
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                        )}
+                    </>
+                )}
+            </ContextMenuAnchor>
         </div>
     );
 }
