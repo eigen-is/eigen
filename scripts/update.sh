@@ -56,9 +56,6 @@ bun install --frozen-lockfile
 echo "Building frontend (sequential)..."
 bun run --sequential --filter './apps/*' build
 
-echo "Building API bundle..."
-bun --filter '@apps/api' buildfordocker
-
 echo "Rebuilding containers..."
 docker compose --env-file .env.production up -d --build
 

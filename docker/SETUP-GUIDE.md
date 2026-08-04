@@ -89,7 +89,6 @@ If you don't, leave them empty for now.
 ```bash
 set -a && source .env.production && set +a
 bun run --sequential --filter './apps/*' build
-bun --filter '@apps/api' buildfordocker
 ```
 
 `--sequential` builds one app at a time so 2–4 GB servers don't run out of memory.
