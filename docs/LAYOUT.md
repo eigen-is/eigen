@@ -237,14 +237,16 @@ publish 1-item selections).
 | `ImageResizeHandles` | `media/image-resize-handles.tsx`   | Resize handles (docs + slides)                 |
 | `MountForm`          | `mount/mount-form.tsx`             | Storage mount configuration form               |
 
-### Properties Panel
+### Side Panels
 
-| Component         | File                                    | Description                |
-|-------------------|-----------------------------------------|----------------------------|
-| `PropertiesPanel` | `properties-panel/properties-panel.tsx` | Right-side panel container |
-| `PropertySection` | `properties-panel/properties-panel.tsx` | Section with title         |
-| `PropertyRow`     | `properties-panel/properties-panel.tsx` | Row with label + content   |
-| `ActivityPanel`   | `drive/activity-panel.tsx`              | File activity side panel (eigendoc editors) |
+| Component           | File                                    | Description                                                                                                 |
+|---------------------|-----------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `PropertiesPanel`   | `properties-panel/properties-panel.tsx` | Right-side panel container                                                                                  |
+| `PropertySection`   | `properties-panel/properties-panel.tsx` | Section with title                                                                                          |
+| `PropertyRow`       | `properties-panel/properties-panel.tsx` | Row with label + content                                                                                    |
+| `CommentPanel`      | `comments/comment-panel.tsx`            | Document comments panel (eigendoc editors); draws its own title row only when the host passes `onClose`     |
+| `ActivityPanel`     | `drive/activity-panel.tsx`              | File activity panel (eigendoc editors); same `onClose` header rule                                          |
+| `MobilePanelColumn` | `comments/mobile-panel-column.tsx`      | Below 768px: full-width `Column` (back arrow, title, comment filter) holding a header-less comments/activity panel. See [COMMENTS.md](COMMENTS.md) |
 
 ### Branding & Auth
 
