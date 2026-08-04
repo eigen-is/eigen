@@ -27,7 +27,7 @@ import { exportDocument, runDocumentExport } from '../lib/export/export-document
 import { collectExportMedia } from '../lib/export/media';
 import { getHome } from '../lib/home/get-home';
 import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
-import { importIntoDocument } from '../lib/import/import-document';
+import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
 import { renderEigendocPreviewBody } from '../lib/preview/eigendoc-render';
@@ -1059,5 +1059,26 @@ describe('document transform (admission)', () => {
             expect(error).toBeInstanceOf(ApiError);
             expect((error as ApiError).status).toBe(503);
         }
+    });
+
+    test('a refused convert never reads the stored file', async () => {
+        const mount = {
+            readFile: () => {
+                throw new Error('a refused convert read the stored file');
+            },
+        } as unknown as Mount;
+        const path = { id: 'refused', parentId: 'parent', name: 'refused.xlsx' } as DrivePath;
+
+        const refuse = refuseAdmissionOnce();
+        let error: unknown;
+        try {
+            await convertToDocument({} as unknown as Drive, mount, path, 'eigensheets');
+        } catch (err) {
+            error = err;
+        } finally {
+            refuse.mockRestore();
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(503);
     });
 });

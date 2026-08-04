@@ -63,6 +63,10 @@ export async function convertToDocument(
 ): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
 
+    // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
+    // is the costliest preparation here. run() rechecks authoritatively.
+    documentTransformRunner.assertAdmissible('foreground');
+
     const file = await mount.readFile(sourcePath.id);
     if (!file) throw new ApiError(404, 'File not found');
     const buffer = Buffer.from(await file.arrayBuffer());
