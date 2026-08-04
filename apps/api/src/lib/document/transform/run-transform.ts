@@ -9,6 +9,8 @@ import type {
     DocumentTransformRequest,
     ExportTransformJob,
     ExportWorkerResult,
+    ExtractTextJob,
+    ExtractTextResult,
     PreviewResult,
     PreviewTransformJob,
     SheetsImportJob,
@@ -19,6 +21,7 @@ import type {
 import {
     documentTransformRunner,
     EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+    EXTRACT_TRANSFORM_DEADLINE_MS,
     PREVIEW_TRANSFORM_DEADLINE_MS,
     type RunOptions,
     type TransformPriority,
@@ -86,10 +89,10 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
     }
 }
 
-// Text results (previews) and binary results (exports). The job kind decides which
-// the Worker returns, and each seam owns the deadline its operation runs under. The
-// runner validated the result pairs with the request (protocol.ts's
-// resultMatchesRequest), so these narrow instead of re-checking.
+// Text results (preview bodies, indexable content) and binary results (exports). The
+// job kind decides which the Worker returns, and each seam owns the deadline its
+// operation runs under. The runner validated the result pairs with the request
+// (protocol.ts's resultMatchesRequest), so these narrow instead of re-checking.
 export async function runTransformToText(
     mount: Mount,
     drivePath: DrivePath,
@@ -104,6 +107,22 @@ export async function runTransformToText(
         opts,
     )) as PreviewResult;
     return result.body;
+}
+
+export async function runTransformToExtractedText(
+    mount: Mount,
+    drivePath: DrivePath,
+    job: ExtractTextJob,
+    opts: TransformOptions,
+): Promise<string> {
+    const result = (await runDocumentTransform(
+        mount,
+        drivePath,
+        job,
+        EXTRACT_TRANSFORM_DEADLINE_MS,
+        opts,
+    )) as ExtractTextResult;
+    return result.text;
 }
 
 export async function runTransformToBytes(

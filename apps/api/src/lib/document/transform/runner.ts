@@ -26,6 +26,9 @@ export const PREVIEW_TRANSFORM_DEADLINE_MS = 30_000;
 // Heavy but user-requested work (exports, imports and conversions); the PDF
 // subprocess keeps its own deadline.
 export const EXPORT_IMPORT_TRANSFORM_DEADLINE_MS = 120_000;
+// Search reindexing: nobody waits on it, but a stuck job must not hold the single
+// active Worker away from user-facing work.
+export const EXTRACT_TRANSFORM_DEADLINE_MS = 30_000;
 
 const MAX_ACTIVE_WORKERS = 1;
 const MAX_QUEUED_JOBS = 16;

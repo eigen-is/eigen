@@ -1,16 +1,12 @@
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { createDefaultSheets, recalcSheets, replaySheetsOps, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
-import { COLLAB_DB_CONFIG } from '../collab/db-config';
-import { loadYjsState } from '../collab/yjs-loader';
-import type { Mount } from '../mount';
 
-// Materialized Yjs doc → Sheet[]. Shared by the main-thread readers below and the
-// document-transform Worker, so replay and recalc behave identically on and off
-// thread. `recalcError` is non-null when recalc fell back to replayed values —
-// the caller decides how to surface it (console.warn here, a TransformWarning in
-// the Worker).
+// Materialized Yjs doc → Sheet[]. Every consumer of a persisted workbook reads it in
+// the document-transform Worker, so there is no Mount-side loader here: capture
+// (collab-source.ts) + materialize (yjs-loader.ts) is the only path in. `recalcError`
+// is non-null when recalc fell back to replayed values — the caller decides how to
+// surface it (a TransformWarning in the Worker).
 export function readSheetsFromDoc(doc: Y.Doc): { sheets: Sheet[]; recalcError: string | null } {
     const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
     const opBatches = doc.getArray<Op[]>('ops').toArray();
@@ -33,20 +29,6 @@ export function readSheetsFromDoc(doc: Y.Doc): { sheets: Sheet[]; recalcError: s
     } catch (e) {
         return { sheets: replayed, recalcError: e instanceof Error ? e.message : String(e) };
     }
-}
-
-// Returns Sheet[] directly (vs. {content, mediaByName} like the doc/slides readers)
-// because the sheets export and preview pipelines fetch media lazily from the mount
-// per-cell rather than bundling it upfront — see lib/export/sheets/{render,to-xlsx}.ts.
-export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Promise<Sheet[]> {
-    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
-    if (!dataDbPath) throw new Error('eigensheets data.db missing');
-
-    const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
-    const { doc } = loadYjsState(managedDb);
-    const { sheets, recalcError } = readSheetsFromDoc(doc);
-    if (recalcError) console.warn('[sheets] server recalc failed, serving replayed values:', recalcError);
-    return sheets;
 }
 
 // The import commit: an already-serialized snapshot goes straight into the live

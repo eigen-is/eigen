@@ -3,8 +3,8 @@ import type { YjsStatePayload } from '../../collab/yjs-loader';
 // Closed request/response unions crossing the document-transform Worker boundary.
 // Only clone-safe primitives, ArrayBuffers and Maps of primitives ride here — never
 // Mount, database, Y.Doc, or other class instances, and never module/function names
-// user input could influence. Phases 2–3 carry every eigensheets/eigendoc/eigenslides preview,
-// every HTML/PDF/XLSX/DOCX export, and the xlsx and docx imports.
+// user input could influence. Phases 2–4 carry every eigensheets/eigendoc/eigenslides preview,
+// every HTML/PDF/XLSX/DOCX export, the xlsx and docx imports, and the search content extraction.
 
 // `pdf-html` is the HTML stage of the PDF export — WeasyPrint stays a main-thread
 // subprocess, so the Worker returns the document it renders from.
@@ -39,6 +39,10 @@ export type ExportTransformJob =
           media: TransformMedia[];
       };
 
+// Search reindexing: the same captured document, read for its body text only. The
+// Worker returns text, never the materialized Sheet[]/deck/ProseMirror JSON.
+export type ExtractTextJob = { kind: 'extract-text'; documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' };
+
 // Pure conversion of uploaded bytes: the Worker learns nothing about the
 // destination — no owner, mount, ACL or path. One arm per supported source format,
 // so an impossible pairing (xlsx into an eigendoc) does not compile.
@@ -46,8 +50,9 @@ export type SheetsImportJob = { kind: 'import'; sourceFormat: 'xlsx'; targetType
 export type DocImportJob = { kind: 'import'; sourceFormat: 'docx'; targetType: 'eigendoc' };
 export type ImportTransformJob = SheetsImportJob | DocImportJob;
 
-// Preview and export read the persisted collaborative document; import does not.
-export type CollabTransformJob = PreviewTransformJob | ExportTransformJob;
+// Preview, export and search extraction read the persisted collaborative document;
+// import does not.
+export type CollabTransformJob = PreviewTransformJob | ExportTransformJob | ExtractTextJob;
 
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
@@ -67,6 +72,9 @@ export type TransformError = {
 };
 
 export type PreviewResult = { body: string };
+// Body text for the content index, already capped by the extractor — a small clone
+// like a preview body.
+export type ExtractTextResult = { text: string };
 // Exports are binary and can be large: they travel as a transferred ArrayBuffer,
 // never as a structured-clone copy.
 export type ExportWorkerResult = { data: ArrayBuffer };
@@ -77,7 +85,12 @@ export type SheetsImportWorkerResult = { snapshotJson: ArrayBuffer };
 // applies the update and writes the media through Mount.
 export type DocImportWorkerResult = { update: ArrayBuffer; images: TransformMedia[] };
 
-export type TransformResult = PreviewResult | ExportWorkerResult | SheetsImportWorkerResult | DocImportWorkerResult;
+export type TransformResult =
+    | PreviewResult
+    | ExtractTextResult
+    | ExportWorkerResult
+    | SheetsImportWorkerResult
+    | DocImportWorkerResult;
 
 export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
@@ -100,8 +113,8 @@ export function transferListOf(request: DocumentTransformRequest): ArrayBuffer[]
     return buffers;
 }
 
-// The Worker's side of the same rule: binary results are transferred, a preview
-// body is a small clone.
+// The Worker's side of the same rule: binary results are transferred, text results
+// (a preview body, extracted content) are small clones.
 export function transferListOfResult(response: DocumentTransformResponse): ArrayBuffer[] {
     if (!response.ok) return [];
     const result = response.result;
@@ -117,11 +130,13 @@ export function transferListOfResult(response: DocumentTransformResponse): Array
 // instead of a silent fallthrough.
 export function resultMatchesRequest(request: DocumentTransformRequest, result: unknown): boolean {
     const r = result as
-        | { body?: unknown; data?: unknown; snapshotJson?: unknown; update?: unknown; images?: unknown }
+        | { body?: unknown; text?: unknown; data?: unknown; snapshotJson?: unknown; update?: unknown; images?: unknown }
         | undefined;
     switch (request.kind) {
         case 'preview':
             return typeof r?.body === 'string';
+        case 'extract-text':
+            return typeof r?.text === 'string';
         case 'export':
             return r?.data instanceof ArrayBuffer;
         case 'import':
@@ -136,6 +151,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
 
 export function resultBytes(result: TransformResult): number {
     if ('body' in result) return Buffer.byteLength(result.body);
+    if ('text' in result) return Buffer.byteLength(result.text);
     if ('data' in result) return result.data.byteLength;
     if ('snapshotJson' in result) return result.snapshotJson.byteLength;
     return result.images.reduce((sum, image) => sum + image.data.byteLength, result.update.byteLength);

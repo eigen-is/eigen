@@ -90,6 +90,12 @@ async function handleRequest(request: DocumentTransformRequest): Promise<Documen
             if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
             return { ok: true, result: { data }, warnings };
         }
+        case 'extract-text': {
+            const { extractCollabText } = await import('../../search/extract-render');
+            const { text, warnings } = extractCollabText(request.documentType, doc);
+            if (blobsSkipped > 0) warnings.push({ code: 'corrupt-blobs-skipped', count: blobsSkipped });
+            return { ok: true, result: { text }, warnings };
+        }
     }
 }
 

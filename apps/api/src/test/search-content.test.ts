@@ -1,6 +1,9 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { SearchResponse } from '@workspace/lib/types/search';
+import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
+import { ApiError } from '../lib/core/errors';
+import { documentTransformRunner } from '../lib/document/transform/runner';
 import {
     assertJson,
     authedRequest,
@@ -228,5 +231,56 @@ describe('Drive content-index', () => {
         expect(hits.some((h) => h.id === docPath.id)).toBe(true);
         // No hit has the container as its parent — data.db / media / chat internals are excluded.
         expect(hits.every((h) => h.parentId !== docPath.id)).toBe(true);
+    });
+
+    // Collab bodies extract inside the transform Worker, so a refused job (503) must fail
+    // that drain row: the dirty bit stays set and the previously indexed body survives
+    // untouched. There is no main-thread fallback to quietly re-extract it.
+    test('a refused Worker extract keeps the sheet dirty and its indexed body unchanged', async () => {
+        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-refused', 'sheets');
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        const writeCell = (text: string) => {
+            const sheets = [
+                {
+                    id: 'sheet-1',
+                    name: 'Sheet1',
+                    order: 0,
+                    config: {},
+                    celldata: [{ r: 0, c: 0, v: { m: text, v: text } }],
+                },
+            ];
+            collab.doc.transact(() => {
+                collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            });
+        };
+
+        writeCell('staleflibber');
+        await home.drive.flushContainerDb(mountId, sheetsPath.id);
+        await home.drive.flushContentReindex();
+        expect((await searchFile('staleflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
+
+        // New body, and the row aged back into the drain window — the 2-min cap would defer it.
+        writeCell('freshflibber');
+        await home.drive.flushContainerDb(mountId, sheetsPath.id);
+        const { mount } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        mount.db.run(sql`UPDATE paths SET contentDirty = 1, contentIndexedAt = 0 WHERE id = ${sheetsPath.id}`);
+
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(() => {
+            throw new ApiError(503, 'The server is busy, please try again in a moment');
+        });
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await home.drive.flushContentReindex();
+        } finally {
+            errorSpy.mockRestore();
+            runSpy.mockRestore();
+        }
+
+        const [row] = mount.db.all(sql`SELECT contentDirty FROM paths WHERE id = ${sheetsPath.id}`) as {
+            contentDirty: number;
+        }[];
+        expect(row.contentDirty).toBe(1);
+        expect((await searchFile('staleflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
+        expect((await searchFile('freshflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(false);
     });
 });

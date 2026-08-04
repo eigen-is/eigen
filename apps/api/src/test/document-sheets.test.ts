@@ -4,10 +4,19 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { sheetsNeedRecalc } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
-import { readSheetsContent, writeSheetsSnapshotToYjs, writeSheetsToYjs } from '../lib/document/sheets';
+import { materializeYjsState } from '../lib/collab/yjs-loader';
+import { readSheetsFromDoc, writeSheetsSnapshotToYjs, writeSheetsToYjs } from '../lib/document/sheets';
+import { captureCollabSource } from '../lib/document/transform/collab-source';
 import { getHome } from '../lib/home/get-home';
 import { importIntoDocument } from '../lib/import/import-document';
+import type { Mount } from '../lib/mount';
 import { driveGet, drivePost, getTestContext } from './setup';
+
+// Persisted workbook → Sheet[], the way every reader gets one now: capture the
+// container's Yjs blobs and materialize them, exactly what the transform Worker does.
+async function readSheets(mount: Mount, path: DrivePath): Promise<Sheet[]> {
+    return readSheetsFromDoc(materializeYjsState(await captureCollabSource(mount, path)).doc).sheets;
+}
 
 describe('document/sheets', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -33,7 +42,7 @@ describe('document/sheets', () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, folder.id);
 
-        await expect(readSheetsContent(mount, path)).rejects.toThrow('eigensheets data.db missing');
+        await expect(readSheets(mount, path)).rejects.toThrow('data.db missing');
     });
 
     test('reads doc with neither snapshot nor ops → returns empty Sheet[]', async () => {
@@ -50,7 +59,7 @@ describe('document/sheets', () => {
         await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result).toEqual([]);
     });
@@ -73,12 +82,12 @@ describe('document/sheets', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result).toEqual(sheets);
     });
 
-    test('write round-trip: writeSheetsToYjs then readSheetsContent returns same sheets', async () => {
+    test('write round-trip: writeSheetsToYjs then a persisted read returns same sheets', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -104,7 +113,7 @@ describe('document/sheets', () => {
         writeSheetsToYjs(collab.doc, sheets);
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result).toEqual(sheets);
     });
@@ -133,7 +142,7 @@ describe('document/sheets', () => {
 
         expect(collab.doc.getArray('ops').length).toBe(0);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        expect(await readSheetsContent(mount, path)).toEqual(sheets);
+        expect(await readSheets(mount, path)).toEqual(sheets);
 
         const viaSheets = new Y.Doc();
         writeSheetsToYjs(viaSheets, sheets);
@@ -199,7 +208,7 @@ describe('document/sheets — patch op replay', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result[0].celldata).toEqual([{ r: 0, c: 0, v: { v: 7 } }]);
     });
@@ -226,7 +235,7 @@ describe('document/sheets — patch op replay', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result).toHaveLength(1);
         expect(result[0].id).toBe('sheet-1');
@@ -259,7 +268,7 @@ describe('document/sheets — patch op replay', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result[0].celldata?.[0].v?.v).toBe(2);
     });
@@ -287,7 +296,7 @@ describe('document/sheets — patch op replay', () => {
         const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-            const result = await readSheetsContent(mount, path);
+            const result = await readSheets(mount, path);
 
             expect(result).toHaveLength(2);
             expect(result[1]).toEqual(newSheet);
@@ -322,7 +331,7 @@ describe('document/sheets — patch op replay', () => {
         const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-            const result = await readSheetsContent(mount, path);
+            const result = await readSheets(mount, path);
 
             expect(result).toHaveLength(1);
             expect(result[0].id).toBe('sheet-2');
@@ -371,7 +380,7 @@ describe('document/sheets — patch op replay', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result).toHaveLength(1);
         expect(result[0].data!.length).toBe(3);
@@ -413,7 +422,7 @@ describe('document/sheets — patch op replay', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result[0].data![0][0]?.v).toBe('after');
         expect(result[0].celldata?.[0]?.v?.v).toBe('after');
@@ -461,7 +470,7 @@ describe('document/sheets — patch op replay', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result[0].data!.length).toBe(2);
         expect(result[0].data![1][0]?.v).toBe('a');
@@ -469,7 +478,7 @@ describe('document/sheets — patch op replay', () => {
 
     test('gate ON: formula cells without a calcChain get engine-computed v/m on read', async () => {
         // Simulates an xlsx-imported-never-opened doc: celldata carries formula
-        // text with no cached value and no calcChain. readSheetsContent must run
+        // text with no cached value and no calcChain. The read must run
         // server recalc and return computed v + m.
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
@@ -498,7 +507,7 @@ describe('document/sheets — patch op replay', () => {
         writeSheetsToYjs(collab.doc, sheets);
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result[0].data![0][1]?.v).toBe(6);
         expect(result[0].data![0][1]?.m).toBe('6');
@@ -538,7 +547,7 @@ describe('document/sheets — patch op replay', () => {
         writeSheetsToYjs(collab.doc, sheets);
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         const b1 = result[0].celldata?.find((e) => e.r === 0 && e.c === 1);
         expect(b1?.v?.v).toBe(999);
@@ -570,7 +579,7 @@ describe('document/sheets — patch op replay', () => {
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         await importIntoDocument(home.drive, mount, path, buffer, home.user);
 
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         const cellAt = (r: number, c: number) => result[0].celldata?.find((e) => e.r === r && e.c === c)?.v;
         expect(cellAt(0, 1)?.f).toBe('=A1+A2');
@@ -614,7 +623,7 @@ describe('document/sheets — patch op replay', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        const result = await readSheetsContent(mount, path);
+        const result = await readSheets(mount, path);
 
         expect(result).toEqual(sheets);
     });

@@ -16,7 +16,11 @@ import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } fro
 import { buildPreviewUrlMap } from '../lib/document/media';
 import { readSheetsFromDoc } from '../lib/document/sheets';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
-import { type DocumentTransformResponse, toTransferableBuffer } from '../lib/document/transform/protocol';
+import {
+    type DocumentTransformRequest,
+    type DocumentTransformResponse,
+    toTransferableBuffer,
+} from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
 import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
 import { exportDocument, runDocumentExport } from '../lib/export/export-document';
@@ -52,6 +56,27 @@ const GARBAGE = Buffer.from([0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4, 5, 6, 7, 8]);
 
 function sha256(data: ArrayBuffer | Buffer | string): string {
     return new Bun.CryptoHasher('sha256').update(data).digest('hex');
+}
+
+// The runner is a process-wide singleton that background search reindexes also drive, so
+// a bare mock can be consumed by an unrelated extract job. Intercept the FIRST job of the
+// kind under test and let every other job run for real.
+function interceptRunOnce(kind: DocumentTransformRequest['kind'], handler: () => Promise<DocumentTransformResponse>) {
+    const real = documentTransformRunner.run.bind(documentTransformRunner);
+    let used = false;
+    return spyOn(documentTransformRunner, 'run').mockImplementation((request, opts) => {
+        if (used || request.kind !== kind) return real(request, opts);
+        used = true;
+        return handler();
+    });
+}
+
+// Same reason, for the tests that count runner calls instead of replacing them.
+function callsOfKind(
+    spy: ReturnType<typeof spyOn<typeof documentTransformRunner, 'run'>>,
+    kind: DocumentTransformRequest['kind'],
+) {
+    return spy.mock.calls.filter(([request]) => request.kind === kind);
 }
 
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -221,7 +246,7 @@ describe('document transform (eigensheets preview)', () => {
             expect(b.status).toBe(200);
             const [bodyA, bodyB] = [await a.json(), await b.json()];
             expect(bodyA.body).toBe(bodyB.body);
-            expect(runSpy).toHaveBeenCalledTimes(1);
+            expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
         } finally {
             runSpy.mockRestore();
         }
@@ -240,8 +265,8 @@ describe('document transform (eigensheets preview)', () => {
             expect(stale.headers.get('cache-control')).toBe('no-store');
 
             // The regeneration was enqueued as background work.
-            expect(runSpy).toHaveBeenCalledTimes(1);
-            expect(runSpy.mock.calls[0][1].priority).toBe('background');
+            expect(callsOfKind(runSpy, 'preview')).toHaveLength(1);
+            expect(callsOfKind(runSpy, 'preview')[0][1].priority).toBe('background');
 
             // It converges: a later request serves the fresh current version.
             let fresh = await previewRequest(sheetsPath.id);
@@ -263,7 +288,7 @@ describe('document transform (eigensheets preview)', () => {
         const firstBody = (await first.json()).body;
         await bumpUpdatedAt(sheetsPath.id);
 
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+        const runSpy = interceptRunOnce('preview', async () => ({
             ok: false as const,
             error: { code: 'crashed' as const, message: 'forced failure' },
         }));
@@ -286,7 +311,7 @@ describe('document transform (eigensheets preview)', () => {
 
     test('runner overload surfaces as 503 on a first-miss preview, not a 404', async () => {
         const sheetsPath = await seedDoc('cache-overload-503');
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(() => {
+        const runSpy = interceptRunOnce('preview', () => {
             throw new ApiError(503, 'The server is busy, please try again in a moment');
         });
         try {
@@ -437,7 +462,7 @@ async function expectFailedImportLeavesTargetUntouched(fixture: ImportFormatFixt
     const before = await fixture.readState(target.id);
     fixture.expectSeeded(before);
 
-    const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+    const runSpy = interceptRunOnce('import', async () => ({
         ok: false as const,
         error: { code: 'crashed' as const, message: 'forced failure' },
     }));
@@ -469,7 +494,7 @@ async function expectFailedConvertCreatesNoDestination(fixture: ImportFormatFixt
         new File([await fixture.build()], sourceName, { type: fixture.mimeType }),
     );
 
-    const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+    const runSpy = interceptRunOnce('import', async () => ({
         ok: false as const,
         error: { code: 'crashed' as const, message: 'forced failure' },
     }));
@@ -541,7 +566,7 @@ describe('document transform (xlsx import)', () => {
             { fileName: 'import-recalc-warning' },
         );
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Warned', order: 0, celldata: [], config: {} }];
-        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementationOnce(async () => ({
+        const runSpy = interceptRunOnce('import', async () => ({
             ok: true as const,
             result: { snapshotJson: new TextEncoder().encode(JSON.stringify(sheets)).buffer as ArrayBuffer },
             warnings: [{ code: 'recalc-failed' as const, message: 'forced' }],
