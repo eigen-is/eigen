@@ -1,5 +1,12 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { BorderInfo, Cell, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
+import type {
+    BorderInfo,
+    Cell,
+    CellWithRowAndCol,
+    ConditionalFormatRule,
+    MergeCell,
+    Sheet,
+} from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
     type CellFormatStyle,
@@ -152,6 +159,30 @@ function buildCfFormulaEvaluator(
     };
 }
 
+// Preview only: a rule may name the whole sheet while the preview renders a small
+// window, and the evaluator visits every coordinate of every range — a formula rule
+// runs the engine once per visited cell. Clipping keeps that work proportional to
+// what is rendered; a rule that misses the window drops out entirely.
+function clipRulesToWindow(
+    rules: ConditionalFormatRule[],
+    firstRow: number,
+    lastRow: number,
+    firstCol: number,
+    lastCol: number,
+): ConditionalFormatRule[] {
+    const clipped: ConditionalFormatRule[] = [];
+    for (const rule of rules) {
+        const cellrange = rule.cellrange
+            .map((range) => ({
+                row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
+                column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],
+            }))
+            .filter((range) => range.row[0] <= range.row[1] && range.column[0] <= range.column[1]);
+        if (cellrange.length > 0) clipped.push({ ...rule, cellrange });
+    }
+    return clipped;
+}
+
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
     const borderMap = buildBorderMap(config.borderInfo);
@@ -190,24 +221,15 @@ function renderSheet(
     // Build a border lookup from borderInfo: "r,c" -> { l?, r?, t?, b? }
     const borderMap = buildBorderMap(config.borderInfo);
 
-    // Conditional formatting — engine produces a "r_c" -> { textColor, cellColor, dataBar } map.
-    // Evaluation needs the dense `data` matrix; loaded snapshots without it skip CF (the canvas
-    // painter does the same fallback). Formula-based rules get a resolver-backed evaluator so
-    // `=A1>10` style rules can fire server-side.
-    const cfMap: ComputeMap | null =
-        sheet.conditionalFormatRules && sheet.data
-            ? evaluateConditionalFormat(sheet.conditionalFormatRules, sheet.data, {
-                  evaluateFormula: buildCfFormulaEvaluator(engine, resolver, sheet.id ?? sheet.name),
-              })
-            : null;
-
     // Find the minimal bounding box containing all visible content
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) {
         return { html: `<div class="sheet"></div>`, truncated: false };
     }
 
-    // Visible columns from the left edge of the used range, clipped to the budget.
+    // The render window comes first: everything below is bounded by what is actually
+    // rendered rather than by what the document declares (a merge or a CF range can
+    // name millions of cells).
     let truncated = false;
     const renderCols: number[] = [];
     for (let c = minCol; c <= maxCol; c++) {
@@ -219,20 +241,41 @@ function renderSheet(
         renderCols.push(c);
     }
 
-    // Build merge lookup: "r,c" -> { rs, cs } for anchor cells
-    const mergeAnchors = new Map<string, { rs: number; cs: number }>();
-    const mergedCells = new Set<string>();
-    if (config.merge) {
-        for (const m of Object.values(config.merge)) {
-            mergeAnchors.set(`${m.r},${m.c}`, { rs: m.rs, cs: m.cs });
-            for (let dr = 0; dr < m.rs; dr++) {
-                for (let dc = 0; dc < m.cs; dc++) {
-                    if (dr === 0 && dc === 0) continue;
-                    mergedCells.add(`${m.r + dr},${m.c + dc}`);
-                }
-            }
+    const renderRows: number[] = [];
+    let cellCount = 0;
+    for (let r = minRow; r <= maxRow; r++) {
+        if (config.rowhidden?.[r]) continue;
+        if (budget && (renderRows.length >= budget.maxRows || cellCount + renderCols.length > budget.maxCells)) {
+            truncated = true;
+            break;
         }
+        cellCount += renderCols.length;
+        renderRows.push(r);
     }
+    const lastRow = renderRows.at(-1) ?? -1;
+    const lastCol = renderCols.at(-1) ?? -1;
+
+    // Conditional formatting — engine produces a "r_c" -> { textColor, cellColor, dataBar } map.
+    // Evaluation needs the dense `data` matrix; loaded snapshots without it skip CF (the canvas
+    // painter does the same fallback). Formula-based rules get a resolver-backed evaluator so
+    // `=A1>10` style rules can fire server-side.
+    const rules =
+        budget && sheet.conditionalFormatRules
+            ? clipRulesToWindow(sheet.conditionalFormatRules, minRow, lastRow, minCol, lastCol)
+            : sheet.conditionalFormatRules;
+    const cfMap: ComputeMap | null =
+        rules && sheet.data
+            ? evaluateConditionalFormat(rules, sheet.data, {
+                  evaluateFormula: buildCfFormulaEvaluator(engine, resolver, sheet.id ?? sheet.name),
+              })
+            : null;
+
+    // Merge lookup. Anchors are one entry per merge, but coverage is tested per rendered
+    // row against the merge list: expanding every merge into a per-cell set first is an
+    // allocation bomb, since one legal merge can span a million rows.
+    const merges = config.merge ? Object.values(config.merge) : [];
+    const mergeAnchors = new Map<string, MergeCell>();
+    for (const m of merges) mergeAnchors.set(`${m.r},${m.c}`, m);
 
     // Build cell lookup: "r,c" -> CellWithRowAndCol
     const cellMap = new Map<string, CellWithRowAndCol>();
@@ -254,22 +297,16 @@ function renderSheet(
 
     // Rows
     const rows: string[] = [];
-    let cellCount = 0;
-    for (let r = minRow; r <= maxRow; r++) {
-        if (config.rowhidden?.[r]) continue;
-        if (budget && (rows.length >= budget.maxRows || cellCount + renderCols.length > budget.maxCells)) {
-            truncated = true;
-            break;
-        }
-        cellCount += renderCols.length;
+    for (const r of renderRows) {
         const h = config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT;
         const cells: string[] = [];
+        const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 
         for (const c of renderCols) {
             const key = `${r},${c}`;
 
-            // Skip non-anchor merged cells
-            if (mergedCells.has(key)) continue;
+            // Skip cells covered by a merge anchored elsewhere
+            if (rowMerges.some((m) => c >= m.c && c < m.c + m.cs && (m.r !== r || m.c !== c))) continue;
 
             const cd = cellMap.get(key);
             const v = cd?.v ?? null;
@@ -278,8 +315,13 @@ function renderSheet(
 
             const attrs: string[] = [];
             if (merge) {
-                if (merge.cs > 1) attrs.push(`colspan="${merge.cs}"`);
-                if (merge.rs > 1) attrs.push(`rowspan="${merge.rs}"`);
+                // A span reaching past the window would claim table cells the preview
+                // never emitted.
+                const cs = budget ? Math.min(merge.cs, lastCol - c + 1) : merge.cs;
+                const rs = budget ? Math.min(merge.rs, lastRow - r + 1) : merge.rs;
+                if (cs !== merge.cs || rs !== merge.rs) truncated = true;
+                if (cs > 1) attrs.push(`colspan="${cs}"`);
+                if (rs > 1) attrs.push(`rowspan="${rs}"`);
             }
 
             const cellStyle = buildCellStyle(v, borderMap.get(key), showGrid, cfStyle);

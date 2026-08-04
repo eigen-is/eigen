@@ -1,5 +1,8 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import type { Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { FormulaEngine } from '@workspace/sheet/engine';
+import { PREVIEW_SHEET_BUDGET, renderSheetsPreviewHtml } from '../lib/export/sheets/render';
 import { getHome } from '../lib/home/get-home';
 import {
     buildGoldenOps,
@@ -134,6 +137,53 @@ describe('eigensheets preview (heavy fixture)', () => {
         // First-row content still renders from the top-left of the used range.
         expect(body).toContain('>HA</td>');
     }, 120_000);
+});
+
+// A document declares merges and conditional-format ranges; the preview renders a
+// 200 × 50 window. The work and the emitted markup must follow the window, not the
+// declaration — one legal merge or CF range covers millions of cells.
+describe('eigensheets preview (declared spans beyond the window)', () => {
+    test('a merge reaching past the window clips its emitted span', () => {
+        const sheet: Sheet = {
+            id: 'merge',
+            name: 'Merge',
+            celldata: [{ r: 0, c: 0, v: { v: 'merged', m: 'merged', ct: { fa: 'General', t: 'g' } } }],
+            config: { merge: { '0_0': { r: 0, c: 0, rs: 5000, cs: 1000 } } },
+        };
+
+        const { html, truncated } = renderSheetsPreviewHtml([sheet]);
+        expect(truncated).toBe(true);
+        expect(html).toContain(`colspan="${PREVIEW_SHEET_BUDGET.maxCols}"`);
+        expect(html).toContain(`rowspan="${PREVIEW_SHEET_BUDGET.maxRows}"`);
+    });
+
+    test('a conditional-format rule reaching past the window is clipped before evaluation', () => {
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const sheet: Sheet = {
+            id: 'cf',
+            name: 'CF',
+            celldata: [{ r: 0, c: 0, v: cell }],
+            data: [[cell]],
+            config: {},
+            conditionalFormatRules: [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 100_000], column: [0, 0] }],
+                    format: { cellColor: '#d1f0d1' },
+                    conditionName: 'formula',
+                    conditionValue: ['=A1>1'],
+                },
+            ],
+        };
+
+        const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
+        const { html } = renderSheetsPreviewHtml([sheet]);
+        const evaluated = evaluate.mock.calls.length;
+        evaluate.mockRestore();
+
+        expect(evaluated).toBe(1); // one rendered cell, one evaluation
+        expect(html).toContain('background:#d1f0d1');
+    });
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
