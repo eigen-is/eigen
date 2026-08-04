@@ -183,8 +183,14 @@ function MailRoute() {
     };
 
     const confirmDeleteEmails = async () => {
-        if (pendingDeleteEmails.length > 0) {
-            await actions.confirmDeleteEmails(pendingDeleteEmails);
+        if (pendingDeleteEmails.length === 0) return;
+        const failed = await actions.confirmDeleteEmails(pendingDeleteEmails);
+        // Reject so the promise-aware DeleteDialog stays open on exactly the still-failed emails; each
+        // failure was already surfaced by onMutationError. Narrowing the retained set first means a
+        // retry re-hits only the failed ids.
+        if (failed.length > 0) {
+            setPendingDeleteEmails(failed);
+            throw new Error('Some emails could not be permanently deleted');
         }
     };
 

@@ -272,6 +272,9 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             if (editing || isDropPlaceholder) return;
             if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault();
+                // Stop the key bubbling to the workbook grid handler (Space would otherwise start editing
+                // the focused cell); mirrors the rename-span handler below.
+                e.stopPropagation();
                 selectSheet();
             }
         },

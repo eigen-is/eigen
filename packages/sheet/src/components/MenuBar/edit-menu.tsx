@@ -36,14 +36,18 @@ export function EditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boole
 
     return (
         <>
-            <DropdownMenuItem disabled={!canUndo} onClick={() => handleUndo()}>
-                {toolbar.undo}
-            </DropdownMenuItem>
-            <DropdownMenuItem disabled={!canRedo} onClick={() => handleRedo()}>
-                {toolbar.redo}
-            </DropdownMenuItem>
+            {context.allowEdit && (
+                <>
+                    <DropdownMenuItem disabled={!canUndo} onClick={() => handleUndo()}>
+                        {toolbar.undo}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={!canRedo} onClick={() => handleRedo()}>
+                        {toolbar.redo}
+                    </DropdownMenuItem>
 
-            <DropdownMenuSeparator />
+                    <DropdownMenuSeparator />
+                </>
+            )}
 
             {context.allowEdit && (
                 <DropdownMenuItem

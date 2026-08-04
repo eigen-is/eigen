@@ -50,27 +50,24 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                 editor &&
                 (isCompact ? (
                     <>
-                        <TooltipButton
-                            icon={Undo}
-                            tooltipText="Undo"
-                            onClick={() => editor.chain().focus().undo().run()}
-                            preventFocusLoss
-                            disabled={!editor.can().undo()}
-                        />
-                        <TooltipButton
-                            icon={Redo}
-                            tooltipText="Redo"
-                            onClick={() => editor.chain().focus().redo().run()}
-                            preventFocusLoss
-                            disabled={!editor.can().redo()}
-                        />
-                        <Separator orientation="vertical" className="h-6 mx-1" />
-
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="ghost">Format</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
+                                <DropdownMenuItem
+                                    disabled={!editor.can().undo()}
+                                    onClick={() => editor.chain().focus().undo().run()}
+                                >
+                                    <Undo className="h-4 w-4 mr-2" /> Undo
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    disabled={!editor.can().redo()}
+                                    onClick={() => editor.chain().focus().redo().run()}
+                                >
+                                    <Redo className="h-4 w-4 mr-2" /> Redo
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger>
                                         <Type className="h-4 w-4 mr-2" /> Text
@@ -141,6 +138,10 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleBlockquote().run()}>
                                     <Quote className="h-4 w-4 mr-2" /> Blockquote
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={onToggleSource}>
+                                    <Code2 className="h-4 w-4 mr-2" /> Source mode
+                                </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
 
@@ -173,7 +174,6 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <Separator orientation="vertical" className="h-6 mx-1" />
                     </>
                 ) : (
                     <>
@@ -303,12 +303,16 @@ export function MarkdownToolbarButtons({ editor, sourceMode, onToggleSource }: M
                         <Separator orientation="vertical" className="h-6 mx-1" />
                     </>
                 ))}
-            <TooltipButton
-                icon={Code2}
-                tooltipText={sourceMode ? 'WYSIWYG mode' : 'Source mode'}
-                onClick={onToggleSource}
-                active={sourceMode}
-            />
+            {/* Compact WYSIWYG folds the Source toggle into the Format menu; keep the standalone button
+                for the wide toolbar and for source mode (where the Format menu isn't rendered). */}
+            {(!isCompact || sourceMode) && (
+                <TooltipButton
+                    icon={Code2}
+                    tooltipText={sourceMode ? 'WYSIWYG mode' : 'Source mode'}
+                    onClick={onToggleSource}
+                    active={sourceMode}
+                />
+            )}
         </>
     );
 }

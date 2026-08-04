@@ -121,7 +121,7 @@ export const SheetTab: React.FC = () => {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent side="top" align="start" collisionPadding={8}>
                     {context.sheets
-                        .slice()
+                        .filter((s) => s.hide !== 1)
                         .sort((s1, s2) => Number(s1.order) - Number(s2.order))
                         .map((singleSheet) => (
                             <DropdownMenuItem
