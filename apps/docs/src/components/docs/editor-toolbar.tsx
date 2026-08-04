@@ -206,7 +206,7 @@ export const EditorToolbar = ({
                             onRedo={() => editor.chain().focus().redo().run()}
                         />
 
-                        {isCompact && (
+                        {isCompact && canWrite && (
                             <>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
