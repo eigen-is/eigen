@@ -31,6 +31,11 @@ export class ContentReindexQueue {
 
     // draining: one loop at a time (concurrent kicks coalesce). closing: one-way teardown gate.
     private draining: Promise<void> | null = null;
+    // Per-path write generation. The drain compares the value it read before the extract with
+    // the one after, so a write landing mid-extract keeps the dirty bit instead of having it
+    // cleared by the older body's success. Entries live only while a path is dirty; a missing
+    // one reads as 0, which after a restart is the safe answer (the bit is still set).
+    private readonly generations = new Map<string, number>();
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     private closing = false;
     // Deadline on close()'s drain await (see REINDEX_CLOSE_TIMEOUT_MS). A field so tests can shrink it.
@@ -40,6 +45,13 @@ export class ContentReindexQueue {
         this.mount = deps.mount;
         this.extract = deps.extract;
         this.label = deps.label;
+    }
+
+    // One row's body just changed: record the write and drain soon. The seam every producer
+    // uses after setting contentDirty = 1 on a specific path.
+    markDirty(pathId: string): void {
+        this.generations.set(pathId, (this.generations.get(pathId) ?? 0) + 1);
+        this.kick();
     }
 
     // A dirty bit was just set (or persisted ones await on open) — drain soon. Coalesces.
@@ -99,13 +111,22 @@ export class ContentReindexQueue {
             if (batch.length === 0) break;
             for (const path of batch) {
                 if (this.closing) return;
+                // Read before the extract: the body this job returns is the document as of now.
+                const generation = this.generations.get(path.id) ?? 0;
                 try {
                     const body = await this.extract(this.mount, path);
                     if (body) this.mount.upsertPathContent(path.id, body);
                     else this.mount.clearPathContent(path.id);
                     // Clear the dirty bit only on a completed extract (empty counts) — a throw below must
-                    // leave it set so a transient failure isn't silently dropped from body search.
-                    this.mount.markContentIndexed(path.id);
+                    // leave it set so a transient failure isn't silently dropped from body search. A write
+                    // that landed while the extract ran keeps it set too: its content is not in this body,
+                    // and the cap window defers the re-extract exactly like a failure.
+                    if ((this.generations.get(path.id) ?? 0) === generation) {
+                        this.generations.delete(path.id);
+                        this.mount.markContentIndexed(path.id);
+                    } else {
+                        this.mount.markContentIndexAttempted(path.id);
+                    }
                 } catch (err) {
                     // The index is regenerable — log and move on so one bad body never stalls the loop.
                     // Stamp the attempt but keep contentDirty = 1: the cap defers the retry to a later

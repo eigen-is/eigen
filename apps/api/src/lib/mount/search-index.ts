@@ -122,5 +122,5 @@ export async function markContainerContentDirty(mount: Mount, dataDbPathId: stri
     const dataDb = await mount.getPath(dataDbPathId);
     if (dataDb?.name !== 'data.db' || !dataDb.parentId) return;
     await mount.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, dataDb.parentId));
-    mount.reindexQueue?.kick();
+    mount.reindexQueue?.markDirty(dataDb.parentId);
 }

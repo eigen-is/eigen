@@ -507,7 +507,7 @@ export class Mount {
         });
 
         await this.invalidateSizesFrom(parentId);
-        if (searchable) this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.markDirty(fileId);
 
         return fileId;
     }
@@ -548,7 +548,7 @@ export class Mount {
         });
 
         await this.invalidateSizesFrom(parentId);
-        if (searchable) this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.markDirty(fileId);
 
         return fileId;
     }
@@ -953,7 +953,7 @@ export class Mount {
             .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
             .where(eq(paths.id, pathId));
         await this.invalidateAncestorsOf(pathId);
-        if (searchable) this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.markDirty(pathId);
         return written;
     }
 
@@ -968,7 +968,7 @@ export class Mount {
             .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
             .where(eq(paths.id, pathId));
         await this.invalidateAncestorsOf(pathId);
-        if (searchable) this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.markDirty(pathId);
     }
 
     getTempPath(pathId: string): string {

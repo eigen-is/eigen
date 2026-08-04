@@ -283,4 +283,67 @@ describe('Drive content-index', () => {
         expect((await searchFile('staleflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
         expect((await searchFile('freshflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(false);
     });
+
+    // The drain captures the document at job start, but queue wait plus the Worker can
+    // take minutes. An edit that syncs inside that window must survive the older body's
+    // success — clearing the bit there leaves the newer content unindexed until some
+    // unrelated future write re-dirties the row.
+    test('an edit during an extract keeps the container dirty until it is re-extracted', async () => {
+        const sheetsPath = await home.drive.create(mountId, rootId, 'reindex-race', 'sheets');
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        const writeCell = (text: string) => {
+            const sheets = [
+                {
+                    id: 'sheet-1',
+                    name: 'Sheet1',
+                    order: 0,
+                    config: {},
+                    celldata: [{ r: 0, c: 0, v: { m: text, v: text } }],
+                },
+            ];
+            collab.doc.transact(() => {
+                collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            });
+        };
+
+        writeCell('raceoldflibber');
+        await home.drive.flushContainerDb(mountId, sheetsPath.id);
+        await home.drive.flushContentReindex();
+
+        const { mount } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const dueNow = () => mount.db.run(sql`UPDATE paths SET contentIndexedAt = 0 WHERE id = ${sheetsPath.id}`);
+        const contentDirty = () =>
+            (
+                mount.db.all(sql`SELECT contentDirty FROM paths WHERE id = ${sheetsPath.id}`) as {
+                    contentDirty: number;
+                }[]
+            )[0].contentDirty;
+
+        mount.db.run(sql`UPDATE paths SET contentDirty = 1, contentIndexedAt = 0 WHERE id = ${sheetsPath.id}`);
+
+        // The runner is a process-wide singleton — scope the interception to the extract.
+        const real = documentTransformRunner.run.bind(documentTransformRunner);
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async (request, opts) => {
+            if (request.kind !== 'extract-text') return real(request, opts);
+            // A newer edit lands and syncs while this extract is in flight.
+            writeCell('racenewflibber');
+            await home.drive.flushContainerDb(mountId, sheetsPath.id);
+            return { ok: true, result: { text: 'racemidflibber' }, warnings: [] };
+        });
+        try {
+            await home.drive.flushContentReindex();
+        } finally {
+            runSpy.mockRestore();
+        }
+
+        // The extracted body landed, but the newer edit's dirty bit is still standing.
+        expect((await searchFile('racemidflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
+        expect(contentDirty()).toBe(1);
+
+        // The cap window deferred the retry; once due, the newer body indexes and clears.
+        dueNow();
+        await home.drive.flushContentReindex();
+        expect((await searchFile('racenewflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
+        expect(contentDirty()).toBe(0);
+    });
 });
