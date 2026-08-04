@@ -40,14 +40,19 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
 
         const nw = imageRef.current.naturalWidth;
         const nh = imageRef.current.naturalHeight;
+        const hasIntrinsicSize = nw > 0 && nh > 0;
+        // Intrinsic dimensions need no layout, so the resize handles get their ratio even from a load
+        // that happens while the editor is hidden.
+        if (hasIntrinsicSize) setAspectRatio(nw / nh);
+
         const maxWidth = getMaxWidth();
         // A hidden editor measures 0 while the padding subtracts, and that negative width would land in
-        // the doc. Don't latch: a later load still gets to size it.
+        // the doc. Load fires once per src, so un-hiding brings no second chance: the width stays unset
+        // until the node view remounts, which max-w-full renders fine.
         if (maxWidth <= 0) return;
         imageProcessed.current = true;
 
-        if (nw > 0 && nh > 0) {
-            setAspectRatio(nw / nh);
+        if (hasIntrinsicSize) {
             if (!node.attrs.width) {
                 updateAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
             }

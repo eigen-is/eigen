@@ -37,8 +37,8 @@ export function ImageResizeHandles({
                 const deltaX = moveEvent.clientX - startX;
                 const isLeft = direction === 'w' || direction === 'nw' || direction === 'sw';
                 const effectiveDelta = isLeft ? -deltaX : deltaX;
-                // Floor last: a maxWidth measured while the surface was hidden is 0 or negative,
-                // and clamping to it would write that width to the document.
+                // Floor last so it wins over maxWidth: a maxWidth measured while the surface was hidden
+                // is 0 or negative, and clamping to it would shrink the image below usable.
                 currentWidth = Math.max(100, Math.min(maxWidth, startWidth + effectiveDelta));
                 setLocalWidth(Math.round(currentWidth));
             };

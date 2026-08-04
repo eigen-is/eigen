@@ -277,7 +277,8 @@ const TiptapEditor = ({
         return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     }, []);
 
-    // Callback refs so each observer dies with its node; a 0×0 write would pin the document at scale(0).
+    // Callback refs so each observer dies with its node; the 0×0 guard keeps the last good width when a
+    // hidden surface (the mobile pane) measures zero, so the page doesn't flip layout on the way back.
     const setScrollContainer = useCallback((el: HTMLDivElement | null) => {
         scrollContainerRef.current = el;
         if (!el) return;
@@ -309,12 +310,14 @@ const TiptapEditor = ({
         };
     }, []);
 
+    // Same split as openCard below: the mobile pane hides the document, so a mark tap only opens the
+    // card dialog over it.
     const handleCommentClick = useCallback(
         (cardId: string) => {
-            openComments();
+            if (!isMobile) openComments();
             setOpenCardId(cardId);
         },
-        [openComments],
+        [isMobile, openComments],
     );
 
     const editor = useEditor(
@@ -832,27 +835,21 @@ const TiptapEditor = ({
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                                     </div>
                                 </div>
-                                {!isMobile && (
-                                    <div
-                                        className={cn(
-                                            'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
-                                            showSidebar ? 'translate-x-0' : 'translate-x-full',
+                                {/* Unmounted when closed: the properties panels key-remount per caret move. */}
+                                {showSidebar && (
+                                    <div className="absolute inset-y-0 right-0">
+                                        {panel ? (
+                                            <PanelColumn activePanel={panel} {...panelProps} />
+                                        ) : lastPanelRef.current === 'figure' ? (
+                                            <FigurePropertiesPanel
+                                                key={editor.state.selection.from}
+                                                editor={editor}
+                                                onReplaceImage={handleReplaceImage}
+                                                onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                            />
+                                        ) : (
+                                            <TablePropertiesPanel editor={editor} />
                                         )}
-                                    >
-                                        {/* Unmounted when closed: the properties panels key-remount per caret move. */}
-                                        {showSidebar &&
-                                            (panel ? (
-                                                <PanelColumn activePanel={panel} {...panelProps} />
-                                            ) : lastPanelRef.current === 'figure' ? (
-                                                <FigurePropertiesPanel
-                                                    key={editor.state.selection.from}
-                                                    editor={editor}
-                                                    onReplaceImage={handleReplaceImage}
-                                                    onReplaceImageFromDrive={handleReplaceImageFromDrive}
-                                                />
-                                            ) : (
-                                                <TablePropertiesPanel editor={editor} />
-                                            ))}
                                     </div>
                                 )}
                             </div>

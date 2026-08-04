@@ -172,8 +172,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     // Data via ref so the handler identity survives edits — a rebuilt observer would re-clear the
     // canvas bitmap, and so repaint the whole grid, per keystroke.
     const resize = useCallback(() => {
-        const sheetData = dataRef.current;
-        if (!sheetData) return;
+        // Visibility first: a falsy-data moment must not swallow the entry that un-hides the surface.
         // 0×0 = detaching or hidden; writing it would pin the canvas blank until the next resize.
         const placeholder = placeholderRef.current;
         if (!placeholder || placeholder.clientWidth === 0 || placeholder.clientHeight === 0) {
@@ -181,6 +180,9 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
             return;
         }
         visibleRef.current = true;
+
+        const sheetData = dataRef.current;
+        if (!sheetData) return;
         setContext((draftCtx) => {
             if (settings.devicePixelRatio === 0) {
                 draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
