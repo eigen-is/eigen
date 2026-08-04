@@ -121,6 +121,7 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
 export async function markContainerContentDirty(mount: Mount, dataDbPathId: string): Promise<void> {
     const dataDb = await mount.getPath(dataDbPathId);
     if (dataDb?.name !== 'data.db' || !dataDb.parentId) return;
+    mount.reindexQueue?.bumpGeneration(dataDb.parentId);
     await mount.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, dataDb.parentId));
-    mount.reindexQueue?.markDirty(dataDb.parentId);
+    mount.reindexQueue?.kick();
 }

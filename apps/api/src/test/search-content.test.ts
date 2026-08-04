@@ -346,4 +346,54 @@ describe('Drive content-index', () => {
         expect((await searchFile('racenewflibber')).file.some((h) => h.id === sheetsPath.id)).toBe(true);
         expect(contentDirty()).toBe(0);
     });
+
+    // The write path sets the bit, awaits ancestor invalidation, then reaches the
+    // queue. The generation must already be bumped when the bit lands: an extract
+    // completing inside that await would otherwise compare equal generations and
+    // clear the bit the newer write just set.
+    test('a file write landing while its extract completes keeps the row dirty', async () => {
+        const file = new File([new TextEncoder().encode('genracestale body')], 'gen-race.txt', {
+            type: 'text/plain',
+        });
+        const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        await home.drive.flushContentReindex();
+
+        const { mount } = await home.drive.resolveFile(mountId, uploaded.id);
+        mount.db.run(sql`UPDATE paths SET contentDirty = 1, contentIndexedAt = 0 WHERE id = ${uploaded.id}`);
+
+        // Hold this path's extract open at its storage read.
+        const realRead = mount.readRange.bind(mount);
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const readSpy = spyOn(mount, 'readRange').mockImplementation(async (pathId, start, end) => {
+            if (pathId !== uploaded.id) return realRead(pathId, start, end);
+            readSpy.mockRestore();
+            await gate;
+            return realRead(pathId, start, end);
+        });
+        const drainP = mount.reindexQueue!.drain();
+
+        // The write lands mid-extract, and the extract completes INSIDE the write's
+        // ancestor-invalidation await — after the bit was set, before the write returns.
+        const realInvalidate = mount.invalidateAncestorsOf.bind(mount);
+        const invalidateSpy = spyOn(mount, 'invalidateAncestorsOf').mockImplementation(async (pathId) => {
+            invalidateSpy.mockRestore();
+            await realInvalidate(pathId);
+            release();
+            await drainP;
+        });
+        try {
+            await mount.writeFile(uploaded.id, Buffer.from('genracefresh body'));
+        } finally {
+            invalidateSpy.mockRestore();
+            readSpy.mockRestore();
+        }
+
+        const [row] = mount.db.all(sql`SELECT contentDirty FROM paths WHERE id = ${uploaded.id}`) as {
+            contentDirty: number;
+        }[];
+        expect(row.contentDirty).toBe(1);
+    });
 });

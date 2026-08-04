@@ -47,11 +47,22 @@ export class ContentReindexQueue {
         this.label = deps.label;
     }
 
-    // One row's body just changed: record the write and drain soon. The seam every producer
-    // uses after setting contentDirty = 1 on a specific path.
+    // One row's body just changed: record the write and drain soon. The seam for rows
+    // CREATED by this write (no extract can be in flight for a fresh id, so ordering
+    // against the insert doesn't matter). Rows that already exist must split the two
+    // calls around their DB write instead — see bumpGeneration.
     markDirty(pathId: string): void {
-        this.generations.set(pathId, (this.generations.get(pathId) ?? 0) + 1);
+        this.bumpGeneration(pathId);
         this.kick();
+    }
+
+    // Fences an overwrite against an in-flight extract of the same path. Call BEFORE
+    // the DB write that sets the bit: an extract completing in between then sees a
+    // generation mismatch and keeps the bit — bumped after, it would compare equal and
+    // clear the newer write. kick() stays after the write, because kicked early a
+    // drain can run before the bit lands, find nothing, and nothing re-drives it.
+    bumpGeneration(pathId: string): void {
+        this.generations.set(pathId, (this.generations.get(pathId) ?? 0) + 1);
     }
 
     // A dirty bit was just set (or persisted ones await on open) — drain soon. Coalesces.
