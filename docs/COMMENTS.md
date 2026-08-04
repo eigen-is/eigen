@@ -306,7 +306,7 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   **Stickies is the fourth host and is desktop-only**: it mounts `PanelColumn` for activity behind
   `!isMobile`, hides nothing and passes no `onOpenChange`, and its toolbar toggle is absent on mobile.
   Giving stickies the mobile pane is recorded as next-round work in
-  [PROPOSAL_MOBILE.md](PROPOSAL_MOBILE.md).
+  [MOBILE.md](MOBILE.md).
 - **Open state**: `useDocumentPanels(isMobile)` (`@workspace/lib/comments`) owns the comments/activity
   pair for docs, slides and sheets — one `panel: 'comments' | 'activity' | null` slot, so the two can
   never both be open. Host-owned like `useCommentFilter`. It also returns `mobilePanelOpen` and the

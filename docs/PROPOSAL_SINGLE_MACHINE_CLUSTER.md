@@ -1,8 +1,9 @@
-# Single-Machine Multi-Process Scaling
+# Proposal: Single-Machine Multi-Process Cluster
 
-How to run multiple API processes on a single multi-CPU server. This extends the single-process
-architecture described in [SCALABILITY.md](SCALABILITY.md) by adding Caddy-routed load balancing
-and cross-process home relay.
+> **TLDR**: **Not implemented.** A concrete plan for running several API processes on one multi-CPU box,
+> sharing `./data`, with Caddy hashing `ownerId` as the only router. None of it exists today: no
+> `cluster.ts`, no `docker-compose.cluster.yml`, no Caddy `map`/`lb_policy header` block, no internal
+> relay endpoints. Extends [SCALABILITY.md](SCALABILITY.md) with load balancing and a cross-process home relay.
 
 ## Architecture Overview
 
@@ -238,6 +239,11 @@ This overlay:
 
 All instances mount the same `./data:/app/data` volume (shared filesystem on one machine).
 
+**Each of the three services needs its own `ulimits: nofile:` block.** The pin currently lives on the
+single `eigen-api` service; the anchor that clones the three cluster services must carry it, or each
+process inherits the Docker default and hits the fd wall described below. See
+[PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md).
+
 ## What Works Without Changes
 
 - **SSE**: Each user subscribes to their own Home's SSE stream (`/sse/:ownerId/events`). Caddy
@@ -249,7 +255,18 @@ All instances mount the same `./data:/app/data` volume (shared filesystem on one
   multiple processes.
 - **Rate limiting**: Per-process (300 req/min/IP each). Total capacity = N x 300. Acceptable for
   a small deployment.
-- **Idle timeout**: Homes auto-destruct after 5 min without `touch()`. Memory is self-limiting.
+- **Idle timeout**: Homes auto-destruct without `touch()` — 5 min for a `UserHome`, 30 min for a
+  `TeamHome`.
+
+### The binding resource is file descriptors, not memory
+
+An earlier version of this doc said the idle timeout makes memory self-limiting. That is the wrong
+resource. A warm Home holds ~30 fds (six SQLite WAL triples plus 12 maildir `fs.watch` handles), and
+an fd burst happens in *seconds* — one ACL fan-out to a 26-member team opens 26 Homes at once — while
+the idle window that releases them is minutes long. So fds, not memory, decide how many Homes one
+process can hold, and exhaustion shows up as `SQLITE_IOERR` in whatever subsystem opens the next file.
+Per-process fd limits are therefore a hard input to any cluster sizing here. Accounting and the
+proposed startup check are in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md).
 
 ## Acceptable Tradeoffs
 
@@ -268,7 +285,8 @@ All instances mount the same `./data:/app/data` volume (shared filesystem on one
    relay for cluster mode
 4. Update `apps/api/src/index.ts` — configurable port, cluster logging
 5. Update `Caddyfile` — `map` + `request_header` + `lb_policy header`, internal `:8080` listener
-6. Create `docker-compose.cluster.yml` — 3 API instances with cluster env vars
+6. Create `docker-compose.cluster.yml` — 3 API instances with cluster env vars and a `ulimits: nofile:`
+   block on each
 7. Verify home-imports lint rule allows `getHome` in `internal.ts` (it's a route file, should pass)
 8. Run `bun run check` to verify single-process mode is unchanged
 9. Docker smoke test with cluster overlay

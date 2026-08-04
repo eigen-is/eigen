@@ -1,6 +1,16 @@
-# Proposal: Mobile Pass — remaining work
+# Mobile — remaining work
 
-> **Status (2026-08-03): Phases 1–5 shipped.** Phases 1–3 (navigation shell, toolbar kebabs,
+> **TLDR**: The mobile pass shipped in five phases (2026-08-04): one shared `PanelColumn` for
+> comments and activity on every viewport, panel open state in one `useDocumentPanels` hook, a
+> sheet engine that re-measures on container resize, and slides view-only on mobile. This file
+> tracks what is left — the next round of mobile work, the drifts that were accepted on purpose,
+> and the real-device checklist that has to pass before the program is called done.
+
+The shipped mechanics are documented where they live: [LAYOUT.md](LAYOUT.md) for the layout
+components and viewport gates, [COMMENTS.md](COMMENTS.md) for panel hosting, `onOpenCard` and
+`useDocumentPanels`.
+
+> **Status (2026-08-04): Phases 1–5 shipped.** Phases 1–3 (navigation shell, toolbar kebabs,
 > dialog + submenu overflow) merged and pushed through `46eb4f61`. Phase 4 (touch affordances —
 > findings 6, 7, 8, 15, 16, 19, 20 + menu-system consolidation) merged through `d9124a2a`: the raw
 > ContextMenu primitive is deleted (all menus now on the singleton), drive row actions and
@@ -8,7 +18,7 @@
 > via the shared `useLongPress` hook, hover-only affordances rest visible on coarse pointers
 > (policy: match the hover value; pattern documented in AGENTS.md), docs gained Insert → Comment,
 > drive trash confirms on coarse pointers only, and the mail cheat-sheet has a toolbar entry
-> point. Phase 5 (structural — findings 5 and 11) is complete on branch `mobile-structural`; what
+> point. Phase 5 (structural — findings 5 and 11) merged through `ede86e72`; what
 > it shipped is listed below. Browser-verified per phase at 390/360/768/1280 (Chromium). This doc
 > now tracks ONLY what remains. Raw audit evidence stays in gitignored
 > `docs/superpowers/mobile-audit/`.
@@ -45,7 +55,7 @@ Findings 5 (panels) and 11 (slides view-only) are closed, with their knock-ons. 
 
 Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting, `onOpenCard`,
 `useDocumentPanels`), [SHEETS.md](SHEETS.md) (container-resize contract) and
-[LAYOUT.md](LAYOUT.md) (component table).
+[LAYOUT.md](LAYOUT.md) (layout patterns; the component index is [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md)).
 
 ## Next round
 
@@ -109,7 +119,7 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   (portalled layers / `overflow:hidden` clip without widening the page) — pixel review is
   mandatory. Full recipe: [VERIFICATION.md](VERIFICATION.md). Long-press needs real CDP touch
   synthesis; account passwords + fresh-cookie recipe live in the phase1-verify helper header.
-- Same-cycle doc updates: LAYOUT.md / AGENTS.md tables when APIs change, and this file per phase.
+- Same-cycle doc updates: LAYOUT.md prose when layout APIs change (`bun run primitives` regenerates the component index), and this file per phase.
 
 ### Real-device spot check (before the program is called done)
 

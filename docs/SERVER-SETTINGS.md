@@ -1,128 +1,120 @@
 # Server Settings
 
-## TLDR
-
-Runtime-configurable server settings stored in `data/server/settings.json` via `JsonStore`. Admins manage quotas and
-defaults through the Admin app settings page. Separate from `config.json` (infrastructure, immutable at runtime).
-
-## JsonStore
-
-Generic JSON persistence with deep-merge updates, used by ServerSettings, UserSettings, and TeamSettings.
-
-- Constructed with a `LocalFilesystem`, filename, and typed defaults
-- `load()` checks if file exists; if so, reads and deep-merges onto defaults (missing keys get default values).
-  On missing file or parse error, keeps defaults
-- `get()` returns the current in-memory state
-- `set(update)` deep-merges the partial update, writes atomically (tmp + rename), rolls back on failure. Returns
-  the merged state
-- File is created on first `set()`, not on `load()`
-
-| File                                  | Purpose                                     |
-|---------------------------------------|---------------------------------------------|
-| `apps/api/src/lib/core/json-store.ts` | `JsonStore<T>` class, `DeepPartial<T>` type |
-
-## ServerSettings Type
-
-```typescript
-type ServerSettings = {
-    quotas: {
-        mailAndContactsMaxMB: number;      // Default: 100
-        defaultMountMaxSizeMB: number;     // Default: 500
-        maxUploadSizeMB: number;           // Default: 35
-    };
-    defaults: {
-        mount: {
-            storageType: 'local-id' | 'local-fullnames' | 's3';
-        };
-    };
-};
-```
-
-Defined in `packages/lib/src/types/settings.ts`. The `storageType` maps to mount-level types via `mapStorageType()`
-(`local-id` -> `local-key`, `local-fullnames` -> `local`, `s3` -> `s3`).
-
-## Server-Side Store
-
-The settings store initializes at module load. On first load, if `settings.json` does not exist and setup is
-completed, it inherits the storage type from `config.json`.
-
-Exported accessors:
-
-| Function                       | Returns                                 |
-|--------------------------------|-----------------------------------------|
-| `getServerSettings()`          | Full `ServerSettings` object            |
-| `updateServerSettings(update)` | Deep-merges partial update, persists    |
-| `getMaxUploadSize()`           | `maxUploadSizeMB * 1024 * 1024` (bytes) |
-
-| File                                         | Purpose                   |
-|----------------------------------------------|---------------------------|
-| `apps/api/src/lib/config/server-settings.ts` | Store instance, accessors |
-
-## Admin API
-
-All endpoints require admin or owner role. Defined in `apps/api/src/routes/settings.ts`.
-
-| Method | Path                     | Description                                  |
-|--------|--------------------------|----------------------------------------------|
-| GET    | `/settings/server`       | Read current server settings                 |
-| PUT    | `/settings/server`       | Update quotas and/or defaults (partial)      |
-| GET    | `/settings/s3config`     | Read S3 storage configuration                |
-| PUT    | `/settings/s3config`     | Update S3 storage configuration              |
-| POST   | `/settings/s3check`      | Test S3 connection with provided credentials |
-| DELETE | `/settings/user/:userId` | Delete a user account (cannot delete self)   |
-
-## Frontend Hooks
-
-| Hook                                      | Purpose                                                      |
-|-------------------------------------------|--------------------------------------------------------------|
-| `useServerSettings()`                     | Fetches server settings (5 min stale time)                   |
-| `useUpdateServerSettings()`               | Mutation to save settings, invalidates cache, shows toast    |
-| `invalidateServerSettings(queryClient)`   | Manual cache invalidation                                    |
-| `useServerS3Config()`                     | Fetches S3 storage configuration (5 min stale time)          |
-| `useUpdateServerS3Config()`               | Mutation to save S3 config, invalidates cache, shows toast   |
-| `invalidateServerS3Config(queryClient)`   | Manual S3 config cache invalidation                          |
-| `useCheckS3Connection()`                  | Mutation to test S3 connectivity with provided credentials   |
-
-Query keys: `['settings', 'server']`, `['settings', 's3config']`
-
-| File                                                          | Purpose                      |
-|---------------------------------------------------------------|------------------------------|
-| `packages/lib/src/core/settings/hooks/use-server-settings.ts` | Server settings hooks + keys |
-| `packages/lib/src/core/settings/hooks/use-s3-config.ts`       | S3 config hooks              |
-| `packages/lib/src/core/settings/hooks/use-s3-check.ts`        | S3 connection test hook      |
-
-## Settings UI
-
-The Admin app has a `/settings` route with the `ServerSettingsPage` component. Contains:
-
-- **Storage Quotas** -- mail/contacts max, default mount max, upload limits
-- **Default Mount Storage Type** -- dropdown for new user mounts
-- **S3 Configuration** -- endpoint, bucket, credentials, connection test
-
-| File                                                    | Purpose            |
-|---------------------------------------------------------|--------------------|
-| `apps/admin/src/routes/_auth.settings.tsx`             | Route definition   |
-| `apps/admin/src/components/admin/server-settings.tsx` | Settings form page |
+> **TLDR**: Runtime-configurable server settings in `data/server/settings.json`, held by a `JsonStore` with typed
+> defaults. Admins edit them from the Admin app. `config.json` is the separate, setup-time identity file — it holds
+> domain, orgName, orgId and secret, and nothing about storage. The storage type and S3 credentials are settings,
+> under `defaults.mount`.
 
 ## config.json vs settings.json
 
-|              | `config.json`                           | `settings.json`             |
-|--------------|-----------------------------------------|-----------------------------|
-| **Path**     | `data/server/config.json`               | `data/server/settings.json` |
-| **Written**  | During setup                            | By admin at runtime         |
-| **Contains** | domain, orgName, orgId, storage, secret | quotas, mount defaults      |
-| **Editable** | No (immutable after setup)              | Yes (admin settings UI)     |
+|              | `config.json`                     | `settings.json`                              |
+|--------------|-----------------------------------|----------------------------------------------|
+| **Path**     | `data/server/config.json`         | `data/server/settings.json`                  |
+| **Written**  | During setup                      | By an admin at runtime                       |
+| **Contains** | domain, orgName, orgId, secret    | quotas, mount defaults, onboarding, guests, landing, notifications |
+| **Editable** | No (immutable after setup)        | Yes (admin settings UI)                      |
 
-## File Reference
+`config.json` has **no** storage field (`apps/api/src/lib/config/server-config.ts`). Storage type and S3
+credentials live in `settings.json` under `defaults.mount`. The settings store is a plain `JsonStore` with a
+hardcoded `'local-fullnames'` default — it does not read anything out of `config.json`.
 
-| File                                                          | Purpose                                                                 |
-|---------------------------------------------------------------|-------------------------------------------------------------------------|
-| `packages/lib/src/types/settings.ts`                          | `ServerSettings`, `UserSettings`, `TeamSettings`, `MountSettings` types |
-| `apps/api/src/lib/core/json-store.ts`                         | `JsonStore<T>` generic persistence                                      |
-| `apps/api/src/lib/config/server-settings.ts`                  | Server settings store and accessors                                     |
-| `apps/api/src/routes/settings.ts`                             | Admin API endpoints                                                     |
-| `packages/lib/src/core/settings/hooks/use-server-settings.ts` | Server settings hooks and query keys                                    |
-| `packages/lib/src/core/settings/hooks/use-s3-config.ts`       | S3 config hooks                                                         |
-| `packages/lib/src/core/settings/hooks/use-s3-check.ts`        | S3 connection test hook                                                 |
-| `apps/admin/src/routes/_auth.settings.tsx`                   | Settings route                                                          |
-| `apps/admin/src/components/admin/server-settings.tsx`       | Settings form UI                                                        |
+## JsonStore
+
+Generic JSON persistence with deep-merge updates (`apps/api/src/lib/core/json-store.ts`), shared by ServerSettings,
+UserSettings and TeamSettings.
+
+- Constructed with a `LocalFilesystem`, a filename, and typed defaults
+- `load()` reads the file and deep-merges it onto the defaults, so keys added later get their default value. A
+  missing file or a parse error leaves the defaults in place
+- `get()` returns the in-memory state; `set(update)` deep-merges a partial, writes atomically (tmp + rename),
+  rolls back on failure, and returns the merged state
+- The file is created on the first `set()`, not on `load()`
+
+## What ServerSettings Holds
+
+The type is defined in `packages/lib/src/types/settings.ts`; the defaults live next to the store in
+`apps/api/src/lib/config/server-settings.ts`. Read those two for the exact shape — the branches are:
+
+**`quotas`** — `mailAndContactsMaxMB` (100), `defaultMountMaxSizeMB` (500), `maxUploadSizeMB` (35), and
+`trashRetentionDays` (30), which is how long `Mount` keeps soft-deleted paths before purging them. See
+[QUOTA.md](QUOTA.md) and [SOFT-DELETE.md](SOFT-DELETE.md).
+
+**`defaults.mount`** — `storageType` (`local-id` | `local-fullnames` | `s3`) and an optional `s3Config`. The
+storage type is the backend given to a **new** user or team drive; existing mounts are never migrated.
+`mapStorageType()` translates it to the mount-level type (`local-id` → `local-key`, `local-fullnames` → `local`,
+`s3` → `s3`), and `UserHome`/`TeamHome` call it when they create a default mount. See [STORAGE.md](STORAGE.md).
+
+**`onboarding`** — `waitlist.enabled` puts the "Join Waitlist" form on the landing page and gates every waitlist
+route (`requireWaitlistEnabled`); `autoAddOwnerContact` seeds a new user's contacts with the org owner;
+`welcomeMail` (enabled, subject, body) goes to a new account; `inviteEmail` (subject, body) is the mail a waitlist
+accept sends. Bodies are HTML with `{name}` / `{orgName}` / `{domain}` / `{inviteLink}` placeholders.
+
+**`guests`** — `openSignup` (any address may request an OTP) and `inactivityDays` (how long a guest survives
+without session activity). See [GUEST-ACCESS.md](GUEST-ACCESS.md).
+
+**`landing.links`** — optional extra buttons on the public landing page, each `{ title, url }`. Served to the
+unauthenticated frontend through the public config route.
+
+### notifications.email
+
+The cross-cutting seam. Each flag turns one *email* on or off; the matching in-app notification always fires
+regardless.
+
+| Flag                   | Default | Fires when                                                          |
+|------------------------|---------|---------------------------------------------------------------------|
+| `guestOnAclAdd`        | `true`  | An address with no account (or a guest) is added to an ACL. This is the guest-onboarding trigger — see [GUEST-ACCESS.md](GUEST-ACCESS.md) |
+| `userOnAclAdd`         | `false` | A registered user is added to an ACL — the bell already covers it    |
+| `userOnCalendarInvite` | `true`  | A user is invited to an event — time-sensitive, matches Google/Outlook |
+| `ownerOnAccessRequest` | `true`  | Someone requests access to an owner's path                          |
+
+The ACL flags are read by `emailNewlyAddedAclEntries` in `apps/api/src/lib/drive/acl-propagation.ts`, the
+access-request flag by `propagateAccessRequest` in `access-request-propagation.ts`. See [ACL.md](ACL.md).
+
+## Server-Side Store
+
+`apps/api/src/lib/config/server-settings.ts` builds the store at module load and awaits one `load()`.
+
+| Function                       | Returns                                             |
+|--------------------------------|-----------------------------------------------------|
+| `getServerSettings()`          | The full `ServerSettings` object                    |
+| `updateServerSettings(update)` | Deep-merges a partial update and persists it        |
+| `getMaxUploadSize()`           | `quotas.maxUploadSizeMB` in bytes                   |
+| `getStorageType()`             | `defaults.mount.storageType`                        |
+| `getS3Config()`                | `defaults.mount.s3Config` (undefined when unset)    |
+
+## Admin API
+
+All endpoints require the org role `admin` or `owner`. Defined in `apps/api/src/routes/settings.ts`.
+
+| Method | Path                      | Description                                                    |
+|--------|---------------------------|----------------------------------------------------------------|
+| GET    | `/settings/server`        | Read current server settings                                   |
+| PUT    | `/settings/server`        | Partial update of any branch                                   |
+| GET    | `/settings/s3config`      | Read the saved S3 configuration                                |
+| PUT    | `/settings/s3config`      | Validate a connection, then write `defaults.mount.s3Config`     |
+| POST   | `/settings/s3check`       | Test an S3 connection without saving                           |
+| GET    | `/settings/users/:filter` | `guest` or `orphan` user list for the admin app                |
+| DELETE | `/settings/user/:userId`  | Delete a user account (cannot delete self)                     |
+
+Both S3 paths refuse a configuration that does not connect: `PUT /settings/s3config` runs `checkS3Connection`
+before saving, and `PUT /settings/server` refuses `storageType: 's3'` unless a saved S3 config exists **and** still
+connects. So the server never ends up defaulting new drives to a bucket it cannot reach.
+
+## Frontend
+
+Hooks in `packages/lib/src/core/settings/hooks/`: `useServerSettings()` / `useUpdateServerSettings()` /
+`invalidateServerSettings()` over query key `['settings', 'server']`, `useServerS3Config()` /
+`useUpdateServerS3Config()` / `invalidateServerS3Config()` over `['settings', 's3config']`, and
+`useCheckS3Connection()` for the test button. Both queries use a 5-minute stale time.
+
+The Admin app's `/settings` route renders `ServerSettingsPage`
+(`apps/admin/src/components/admin/server-settings.tsx`) with four sections:
+
+- **Storage Quotas** — mail/contacts max, default mount max, upload limit, trash retention
+- **Defaults** — the storage type picker, which carries the S3 endpoint/bucket/credentials and the connection test
+  inline (there is no separate S3 section)
+- **Email notifications** — the four `notifications.email` switches
+- **Landing page** — the landing link buttons
+
+Onboarding and guest settings are separate admin pages over the same `PUT /settings/server` route — see
+[ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md).

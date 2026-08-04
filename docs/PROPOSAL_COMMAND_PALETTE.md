@@ -6,8 +6,8 @@
 > The palette does jumps, creates, contacts, smart parses (email / URL), selection-aware
 > actions, mail / file / in-document / comment / help search, prefix scopes
 > (`mail:` / `file:` / `doc:` / `>` / `@` / `?`) and the Tab scope chip. Search depth grows on
-> its own as [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) indexes more content — document **body**
-> hits already flow in through the file provider since its Phase 2 (drive content index)
+> its own as [SEARCH.md](SEARCH.md) indexes more content — document **body**
+> hits already flow in through the file provider since the drive content index
 > shipped, with zero palette changes.
 >
 > This document now lists only what's left to build.
@@ -15,14 +15,14 @@
 | # | Item                                        | Effort | Blocked on                                    |
 |---|---------------------------------------------|--------|-----------------------------------------------|
 | 1 | Sub-action sheet (`→`)                      | S      | — buildable now                               |
-| 2 | `event:` / `chat:` result kinds + prefixes  | S      | PROPOSAL_SEARCH Phases 3–4 (no backend yet)   |
+| 2 | `event:` / `chat:` result kinds + prefixes  | S      | SEARCH.md § Remaining (no backend yet)        |
 | 3 | Per-user recents                            | S      | PROPOSAL_HOME_RECENTS (still a proposal)      |
 | 4 | Content-aware input (paste / drop / image URLs) | M  | — global-helper half buildable now            |
 | 5 | Smart-parser growth (datetime, math, units) | M      | telemetry showing demand                      |
 | 6 | Pinned commands, per-command hotkeys, aliases | L    | 5 (telemetry)                                 |
 
 AI assist ("ask Eigen anything") stays out of palette scope — see
-[PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) § Research.
+[SEARCH.md](SEARCH.md).
 
 ## 1. Sub-action sheet (`→`)
 
@@ -55,8 +55,9 @@ follow.
 
 ## 2. `event:` / `chat:` result kinds + prefixes
 
-Blocked: calendar and chat indexing are PROPOSAL_SEARCH Phases 3–4, still deferred there —
-there is no backend to consume. Once a phase lands, the palette work mirrors the file kind:
+Blocked: calendar and chat indexing sit in [SEARCH.md](SEARCH.md) § Remaining (calendar
+`events_fts`, per-room `messages_fts`), still deferred there — there is no backend to consume.
+Once either lands, the palette work mirrors the file kind:
 
 - New `event` / `chat` variants in the `PaletteResult` union, new sections in the engine.
 - One provider + one row component per kind.

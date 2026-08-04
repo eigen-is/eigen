@@ -1,7 +1,9 @@
 # Proposal: File-descriptor budget — graceful exhaustion
 
 > **Status — Proposal, written 2026-07-05, reconciled 2026-07-06 against the merged
-> storage-audit fixes (AUDIT_STORAGE.md), not started.** Every open Home costs ~30 file
+> storage-audit fixes (AUDIT_STORAGE.md) and 2026-08-04 against the 2026-07-14 home-lifecycle
+> changes (per-type idle windows, collab keepalive `touchHomeIfLoaded`, `peek()` seam) —
+> nothing of this proposal is built.** Every open Home costs ~30 file
 > descriptors (SQLite WAL triples + maildir watchers). A cross-home fan-out under a small
 > `ulimit -n` exhausts them and SQLite starts failing with `SQLITE_IOERR`, which today degrades
 > *silently* (skipped recipients, swallowed watcher errors). The compose deployment pins the
@@ -29,7 +31,13 @@ ulimits:
 ```
 
 But the semaphore bounds *concurrent opens*, not *resident* Homes — each delivered Home stays
-open for its 5-minute idle window — and the compose pin only covers compose. Bare-metal/systemd
+open for its idle window, which is per-type since 2026-07-14: `UserHome` 5 minutes
+(`idleMs` in `apps/api/src/lib/home/home.ts`), `TeamHome` 30 minutes
+(`TEAM_HOME_IDLE_MS`, `apps/api/src/lib/home/team-home.ts`). The longer team window is a
+deliberate trade — team homes have no SSE keep-alive pin — and it **raises** resident-home fd
+pressure: a team home touched once holds its descriptors six times longer than a user home
+(fewer than a warm `UserHome`'s 30 — no mailbox watchers — but held six times as long).
+The compose pin only covers compose. Bare-metal/systemd
 deployments and dev machines still run on distro defaults (1024 soft is common; 256 on macOS),
 where the failure mode is unchanged: no warning, then I/O errors in whatever subsystem happens
 to open the next file.
@@ -113,11 +121,9 @@ notification would re-fire on every boot with no in-app action to take. Log only
   deployments*: anyone running the API outside the bundled compose (host process behind their
   own proxy, future systemd unit) must raise `nofile`, with the `LimitNOFILE=1048576` line.
   The Quick Start path needs nothing — compose pins it.
-- **`docs/SCALABILITY_SINGLE_MACHINE.md`** — two corrections to the capacity story: (1) "Homes
-  auto-destruct after 5 min … memory is self-limiting" is true at minute-scale, but fd bursts
-  happen in seconds, so fds — not memory — are the binding resource for "how many homes can one
-  server hold"; cite the accounting table above. (2) The cluster overlay's `eigen-api-1..3`
-  services replace `eigen-api` and must each carry the same `ulimits` block.
+- **`docs/PROPOSAL_SINGLE_MACHINE_CLUSTER.md`** — both capacity-story corrections (fds, not
+  memory, are the binding resource; each `eigen-api-1..3` service needs the `ulimits` block)
+  are folded into that doc as of 2026-08-04. Nothing left to do here.
 - **Propagate the corrected figures** (one source per fact): the `docker-compose.yml` comment
   block above the `ulimits` pin ("~25-30 fds … ~10 maildir fs.watch handles … ~35 homes")
   updates to the measured 30-fd warm ceiling and 12 watchers. (`ROADMAP.md` already carries
@@ -136,28 +142,34 @@ agreed.
 ### Seam
 
 `getHome` (`apps/api/src/lib/home/get-home.ts`) owns the `homeFactories` map;
-`Home.touch()` already fires on every subsystem access and arms the 5-minute idle destruct.
-The cap adds: a last-touch timestamp per owner (expose `lastTouched` on `Home`, set in
-`touch()`), and after installing a new factory, if `homeFactories.size > N`, evict the
-least-recently-touched homes that pass the safety predicate via the existing `evictHome()` —
-which already does the race-guarded shutdown-then-delete.
+`Home.touch()` already fires on every subsystem access and arms the per-type idle destruct
+(5 min user, 30 min team). The cap adds: a last-touch timestamp per owner (expose `lastTouched`
+on `Home`, set in `touch()`), and after installing a new factory, if `homeFactories.size > N`,
+evict the least-recently-touched homes that pass the safety predicate via the existing
+`evictHome()` — which already does the race-guarded shutdown-then-delete.
+
+The map is typed `Map<string, AsyncSingleton<Home>>` and already exposes the read-only
+`peek()` seam that `touchHomeIfLoaded` uses — it returns the resolved instance without
+triggering the factory. The LRU sweep reuses it as-is: reading `lastTouched` and the safety
+predicate off `peek()` never resurrects a home that is still loading or already gone.
 
 ### Eviction safety
 
 Never evict a home that:
 
 - has SSE listeners attached (expose a `hasClients` accessor over `sseListeners`);
-- hosts a live collab session — an open-connections check over the collab registry's
-  `CollabDocument` connections. This is **not** covered by the other signals: the collab WS
-  route captures the drive/`CollabDocument` into the socket data at `open()` — the only
-  `getHome`→`touch()` moment — and message handlers use the captured instance without
-  re-touching, while editors' SSE streams connect to their *own* homes. So a team home with N
-  live editors can show zero SSE listeners and a stale `lastTouched`, and evicting it runs
-  `Home.destruct` → collab teardown, killing the sessions server-side with no client
-  resubscribe path. (Alternative: make collab subscribe/message handling `touch()` the hosting
-  home.) Today's 5-minute idle destruct has the **same latent hole** — a >5-minute cross-owner
-  editing session with no owner-home HTTP traffic destructs the hosting home today — so this
-  predicate fixes a broken window rather than inheriting a safety argument from it;
+- hosts a live collab session — a **positive** open-connections check over the collab registry's
+  `CollabDocument` connections. The "stale `lastTouched`" half of this argument is outdated: since
+  2026-07-14 the collab keepalive tick calls `touchHomeIfLoaded(ownerId)`
+  (`apps/api/src/lib/home/get-home.ts`, wired from `apps/api/src/routes/collab.ts`), so an open
+  editor keeps the *hosting* home's `lastTouched` live even when the editor's own SSE stream is on
+  a different home — the alternative once floated in this bullet is the thing that shipped, and it
+  closed the >5-minute cross-owner-editing-session hole in the idle destruct too. What `lastTouched`
+  still cannot express is the **tick gap**: between two keepalive ticks a home with N live editors
+  looks idle, and evicting it runs `Home.destruct` → collab teardown, killing the sessions
+  server-side with no client resubscribe path. So the predicate keeps a direct
+  "does this home host any open collab connections?" check; it is now a narrow race guard over a
+  live signal, not a stand-in for a missing one;
 - has a mount with a non-empty `UploadQueue` or a draining `ContentReindexQueue` — like
   `hasClients`/`lastTouched`, these need small accessors: `UploadQueue.pendingCount` is public,
   but the reindex queue's drain state, `Drive`'s mounts, and `Mount`'s queue fields are
@@ -177,7 +189,7 @@ that already resolved it. `getHome` already handles the converse: a cached home 
 `destructing` set is awaited to full teardown (`shutdown()` is idempotent against the in-flight
 `destruct()`) before the entry is dropped and re-created — LRU eviction rides that exact path.
 The residual window — a request holding a `Home` reference across an eviction hits
-`'Database not open'` — exists today with the 5-minute idle destruct; the 30-second min-idle
+`'Database not open'` — exists today with the idle destruct; the 30-second min-idle
 guard makes it rarer, and it fails loud (500 + log), not silent. Two audit fixes (2026-07-06)
 already hardened the close path eviction rides: document-DB open now waits on any in-flight
 close of the same `pathId` (`closingDocumentDbs`, `mount/document-db.ts`), so an eviction
@@ -276,7 +288,7 @@ counting is Linux-only and the three points above cover the honest signal (D3).
 ## Phasing
 
 1. **S — ships immediately:** `checkFdBudget()` at boot + loud warning; `docker/SETUP-GUIDE.md`
-   note for non-compose deploys; `SCALABILITY_SINGLE_MACHINE.md` corrections; the corrected
+   note for non-compose deploys; the corrected
    fd figures in the `docker-compose.yml` comment (`ROADMAP.md` is already corrected); log
    non-ENOENT `fs.watch` failures in `MaildirStore.watch`.
 2. **M — optional, gated on need:** LRU cap over `homeFactories`/`touch()` with the safety

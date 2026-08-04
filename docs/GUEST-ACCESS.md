@@ -1,11 +1,9 @@
 # Guest Access
 
 > **TLDR**: External guests authenticate via Email OTP and get a disk-based `GuestHome` with `shared.db` +
-> `notifications.db` — no mail, contacts, or calendar. Standard Drive inheritance handles ACL propagation.
-> Open signup is on by default; admins can flip it off in **Guest access** to require a pending share. The
-> share registry is durable across guest deletion. Inactive guests (no session activity for
-> `guests.inactivityDays`, default 7) are deleted automatically once a day. Logged-in users without access
-> see a "Request access" screen.
+> `notifications.db` — no mail, contacts or calendar. Standard Drive ACL inheritance handles access, and the
+> share registry survives guest deletion. Open signup is on by default; admins can require a pending share
+> instead, list guests on the admin **Guests** page, and inactive guests are deleted once a day.
 
 ## Three Access States
 
@@ -17,8 +15,8 @@
 
 ## GuestHome
 
-`GuestHome` extends `Home` with minimal services — only Drive (for `shared.db`) and NotificationCenter.
-Mail, contacts, and calendar are left uninitialized.
+`GuestHome` (`apps/api/src/lib/home/guest-home.ts`) extends `Home` with minimal services — only Drive (for
+`shared.db`) and NotificationCenter. Mail, contacts, and calendar are left uninitialized.
 
 ### Disk Layout
 
@@ -55,7 +53,8 @@ if (user.role === 'guest') {
 
 ## Guest Authentication
 
-Two-step OTP flow via custom endpoints (not better-auth's emailOTP plugin):
+Two-step OTP flow via custom endpoints (not better-auth's emailOTP plugin). Logic in
+`apps/api/src/lib/auth/guest-auth.ts` + `otp-rate-limit.ts`, routes in `apps/api/src/routes/guest-auth.ts`.
 
 ### Request OTP
 
@@ -84,13 +83,17 @@ When an authenticated user visits a shared resource they don't have access to:
 
 1. App renders `<RequestAccessView>` instead of a generic access-denied page
 2. User clicks "Request access" → `POST /drive/:ownerId/:mountId/path/:pathId/request-access`
-3. Endpoint sends a notification to the resource owner via `sendToHome()`
+3. The route calls `propagateAccessRequest` (`apps/api/src/lib/drive/access-request-propagation.ts`), which reads
+   the path through the home relay and pushes a notification into the owner's notification center
 4. Notification tag: `access-request:{ownerId}:{mountId}:{pathId}:{email}` (idempotent via tag dedup)
-5. Owner clicks notification → navigates to Drive with share dialog pre-filled with requester's email
-6. Owner grants access → ACL propagation fires → `DRIVE_ACL_SHARED` SSE event → requester's
+5. For a user-owned path it also mails the owner when `notifications.email.ownerOnAccessRequest` is set (default
+   on) — see [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
+6. Owner clicks notification → navigates to Drive with share dialog pre-filled with requester's email
+7. Owner grants access → ACL propagation fires → `DRIVE_ACL_SHARED` SSE event → requester's
    permission query auto-refetches → resource appears
 
-The endpoint always returns 200 regardless of whether the path exists (no existence leak).
+The route skips the SharedDrive facade by design — the caller has no permission yet, which is the point — and
+always returns 200 regardless of whether the path exists (no existence leak).
 
 ### Per-App Integration
 
@@ -124,8 +127,8 @@ Calendar null guards in `reconciliation.ts` (`if (targetHome.hasCalendar)`) and
 
 ## Frontend
 
-**Login page** — two tabs: "Sign in" (password) and "Guest" (OTP). Guest tab: email input → send code →
-6-digit input → verify → reload.
+**Login page** (`packages/ui/src/components/layout/pages/login-page.tsx`) — two tabs: "Sign in" (password) and
+"Guest" (OTP). Guest tab: email input → send code → 6-digit input → verify → reload.
 
 **Topbar** — guest app switcher limited to Drive, Docs, Stickies, Slides, Sheets, Chat. Simplified user
 dropdown (logout only, no settings/profile/theme).
@@ -139,7 +142,10 @@ The registry is a durable projection of "user X shared resource Y with email Z" 
 pending shares. Entries persist across guest creation AND deletion so re-OTP rehydrates `shared.db`
 identically.
 
-1. **Before guest account exists**: share → `resolveACLUserIds` → user not found → registry entry created
+1. **Before guest account exists**: share → `resolveACLUserIds` → user not found → registry entry created, and
+   `emailNewlyAddedAclEntries` (`apps/api/src/lib/drive/acl-propagation.ts`) mails the address. That mail is the
+   guest-onboarding trigger — without it nobody knows to come and OTP in. Gated by
+   `notifications.email.guestOnAclAdd` (default true)
 2. **Guest verifies OTP**: account created → `reconcileSharesForNewUser()` reads (does not delete) from
    registry → idempotently writes to `shared.db` via `Drive.receiveSharedPathChange`
 3. **After guest account exists**: share → `resolveACLUserIds` → user found → `receiveSharedPathChange()` called
@@ -163,12 +169,17 @@ request keeps the guest alive.
 **Skipped**: guests whose home is currently loaded (`atHome(userId) === true`) — protects in-flight
 collaboration sessions; they get cleaned up on the next sweep after the home idles out.
 
-**Deletion path**: `cleanupInactiveGuests` calls `deleteUserCompletely(userId, null)` — system mode that
-bypasses better-auth's admin API and deletes auth rows directly. Home directory removed; share registry
-entries preserved (see above).
+**Deletion path**: `cleanupInactiveGuests` (`apps/api/src/lib/auth/guest-cleanup.ts`) calls
+`deleteUserCompletely(userId, null)` — system mode that bypasses better-auth's admin API and deletes auth rows
+directly. Home directory removed; share registry entries preserved (see above).
 
-The toggle and threshold (`guests.openSignup`, `guests.inactivityDays`) live in admin → **Guest access**
-(`/guest-settings`).
+## Admin
+
+Two pages in `apps/admin/src/routes/`:
+
+- **Guest access** (`/guest-settings`) — the `guests.openSignup` toggle and the `guests.inactivityDays` threshold
+- **Guests** (`/guests`) — every `role: 'guest'` account, from `GET /settings/users/guest` via
+  `useAdminUsers('guest')`, with a detail view and delete
 
 ## Known Limitations
 
@@ -187,29 +198,5 @@ The toggle and threshold (`guests.openSignup`, `guests.inactivityDays`) live in 
   isn't proactively removed (the share might still be reachable via another path). Bounded leak — only
   matters at very long lifetimes / very high revoke rates.
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `apps/api/src/lib/home/guest-home.ts` | GuestHome class |
-| `apps/api/src/lib/config/paths.ts` | `getGuestHomePath()` |
-| `apps/api/src/lib/home/get-home.ts` | Routes guest users to GuestHome |
-| `apps/api/src/lib/auth/guest-auth.ts` | OTP request/verify logic; consults `guests.openSignup` |
-| `apps/api/src/lib/auth/otp-rate-limit.ts` | Per-email/IP sliding-window rate limiter |
-| `apps/api/src/lib/auth/guest-cleanup.ts` | `cleanupInactiveGuests()` system task |
-| `apps/api/src/lib/scheduler/scheduler.ts` | `scheduleInterval` engine |
-| `apps/api/src/lib/scheduler/jobs.ts` | Registers the daily guest-cleanup job |
-| `apps/api/src/routes/guest-auth.ts` | Guest auth endpoints |
-| `apps/api/src/lib/core/access.ts` | `requireNonGuest()` |
-| `apps/api/src/lib/auth/auth.ts` | Guest bypass in databaseHooks |
-| `apps/admin/src/components/admin/guest-settings.tsx` | Admin UI: openSignup + inactivityDays |
-| `apps/admin/src/routes/_auth.guest-settings.tsx` | TanStack route for the page |
-| `apps/api/src/routes/drive.ts` | `POST .../request-access` endpoint |
-| `apps/api/src/lib/share/reconciliation.ts` | Share reconciliation with calendar null guards |
-| `apps/api/src/lib/calendar/share-propagation.ts` | Calendar propagation with guest guard |
-| `packages/ui/src/components/layout/app/request-access-view.tsx` | RequestAccessView component |
-| `packages/ui/src/components/layout/app/topbar.tsx` | Guest app switcher + dropdown |
-| `packages/ui/src/components/layout/pages/loginpage.tsx` | Guest OTP login tab |
-| `packages/lib/src/core/drive/hooks/use-drive.ts` | `useRequestAccess()` hook |
-| `packages/lib/src/core/drive/sse-handlers.ts` | Collab info invalidation on ACL events |
-| `packages/lib/src/core/notification/resolve-link.ts` | Access request notification link resolution |
+See: [ACL.md](ACL.md) for the sharing model, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the `guests` and
+`notifications.email` settings, [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for user deletion

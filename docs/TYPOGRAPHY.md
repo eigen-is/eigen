@@ -37,10 +37,11 @@ These enable Tailwind utilities: `font-sans`, `font-serif`, `font-mono`, `font-h
 ## Font Registry
 
 `EIGEN_FONTS` in `packages/lib/src/constants/fonts.ts` is the single source of truth for available fonts.
-Each entry has `name`, `family` (CSS value with fallbacks), `category`, and `weights`.
+Each entry has `name`, `family` (CSS value with fallbacks), `category`, and `weights`. Inter is first in
+the array; there is no exported default-font constant.
 
-`DEFAULT_FONT` is `EIGEN_FONTS[0]` (Inter). `getFontFamily(fontName)` resolves a font name to its CSS
-`font-family` value, falling back to sans-serif for unknown names.
+`getFontFamily(fontName)` resolves a font name to its CSS `font-family` value, falling back to
+sans-serif for unknown names.
 
 ## FontPicker Component
 
@@ -50,7 +51,10 @@ Each item previews in its own typeface. Props: `value` (font name), `onChange` (
 Used in:
 - **Docs** (`apps/docs/src/components/docs/editor-toolbar.tsx`) -- via Tiptap `FontFamily` extension
 - **Slides** (`apps/slides/src/components/slides/slide-properties-panel.tsx`) -- via `fontFamily` on `TextObject`
-- **Sheets** -- Fortune-sheet locale files define `fontarray` with the four Eigen fonts
+- **Sheets** (`packages/sheet/src/components/MenuBar/format-toolbar.tsx`) -- the same `FontPicker`, straight
+  in the engine's toolbar. The engine's own font lists are derived, not hand-written:
+  `packages/sheet/src/state/locale/en.ts` builds `fontarray` and `fontjson` from `EIGEN_FONTS`
+  (`fontjson` maps lowercased name → index, because a cell's `ff` may be stored as an index into `fontarray`)
 
 ## Adding a New Font
 
@@ -58,7 +62,7 @@ Used in:
 2. Add `@font-face` declaration(s) to `packages/ui/src/styles/fonts.css`
 3. Add an entry to `EIGEN_FONTS` in `packages/lib/src/constants/fonts.ts`
 4. (Optional) Add a `--font-*` token to `globals.css` if the font fills a new category
-5. Update Fortune-sheet locale files (`fontarray`, `fontjson`) if the font should appear in sheets
+5. Nothing to do for sheets -- it picks the font up automatically from `EIGEN_FONTS`
 
 The `FontPicker` automatically picks up new entries from `EIGEN_FONTS`.
 
@@ -72,7 +76,7 @@ The `FontPicker` automatically picks up new entries from `EIGEN_FONTS`.
 | `packages/ui/src/styles/eigen-prose.css`                      | Prose typography (body, headings)     |
 | `packages/lib/src/constants/fonts.ts`                         | `EIGEN_FONTS` registry, `getFontFamily()` |
 | `packages/ui/src/components/layout/media/font-picker.tsx`     | Shared font picker component         |
-| `packages/sheet/src/state/locale/en.ts` (+ locales)  | Sheets font list                     |
+| `packages/sheet/src/state/locale/en.ts`                        | Sheets font list, derived from `EIGEN_FONTS` (the sheet package is English-only, so `en.ts` is the only locale) |
 
 ## Future: CJK Support
 

@@ -119,8 +119,10 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
     container's `data.db`/`comments.db`/`media/*` back into `fixtures/` (the content lives in `data.db`,
     not in `content.ts`). `author-fixtures.ts` must NOT regenerate them.
   - The **stickies board is content-driven**: `author-fixtures.ts` regenerates it from `KANBAN` when the
-    board's title/description/column/creator content changes. Its `creator` keys are rewritten to runtime
-    emails after copy, and each `CardSpec`'s `chat` slug + `chatText`/`chatReplies` become a live chat
+    board's title/description/column/creator content changes (the exact Y.Doc shapes the editors read
+    live in `demo/fixtures-build.ts` `buildStickiesDoc`, which `author-fixtures.ts` calls). Its `creator`
+    keys are rewritten to runtime emails after copy, and each `CardSpec`'s `chat` slug +
+    `chatText`/`chatReplies` become a live chat
     (real personas, same as doc comments) with `color`/`chatName` patched onto the placed board's `tasks`
     Y.Map — so that part needs no fixture regen.
 - **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own
@@ -129,6 +131,10 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   Attribution + licensing in `demo/fixtures/images/CREDITS.md`.
 - **Branding in `branding/`.** `demo/fixtures/branding/*` (the festival logo) uploaded into a
   `branding/` team-drive folder the same way (`content.ts` `BRANDING`).
+- **Portraits in `avatars/`.** `demo/fixtures/avatars/*.jpg` (one per persona plus the admin, keyed by
+  `content.ts` `avatar`, credits in the folder's `CREDITS.md`) go through the real avatar upload +
+  self-update path, so `pushUserProfile` writes `server/avatars/<id>.webp` and sets `user.image` exactly
+  like a user-uploaded avatar. A missing fixture is logged and skipped, never fatal.
 - **Personal notes doc per persona.** Every persona gets a private `my notes.eigendoc` in their OWN
   drive (`content.ts` `NOTES`, same cozy role-agnostic content for all) — one `.docx` built once,
   converted per persona through the shipped importer into their home drive. Not shared.
@@ -221,7 +227,8 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `apps/api/src/scripts/seed-demo.ts` | Offline in-process seeder (mechanics) |
 | `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
 | `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the stickies board fixture (slides/sheets are hand-maintained) |
-| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigensheets` / `.eigenstickies` containers + `images/` site photos (see its `CREDITS.md`) + `branding/` logo |
+| `apps/api/src/scripts/demo/fixtures-build.ts` | `buildStickiesDoc` — the Y.Doc shapes `author-fixtures.ts` writes |
+| `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigensheets` / `.eigenstickies` containers + `images/` site photos + `branding/` logo + `avatars/` portraits (`images/` and `avatars/` carry their own `CREDITS.md`) |
 | `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
 | `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
 | `scripts/systemd/eigen-demo-reset.{service,timer}` | Hourly timer units |
@@ -229,5 +236,3 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `packages/ui/.../pages/login-page.tsx` | Enter-demo entry (app login card) |
 | `apps/index/src/routes/index.tsx` | Enter-demo entry (landing-page button) |
 | `apps/api/src/test/demo-mode.test.ts`, `seed-demo.test.ts` | Contract tests |
-</content>
-</invoke>

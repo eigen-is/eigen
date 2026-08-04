@@ -1,5 +1,11 @@
 # Scalability
 
+> **TLDR**: Every user's data lives in one isolated Home, and every authenticated route carries `:ownerId` as its
+> second path segment — so a load balancer can hash on it and pin a Home to a server. Every cross-home interaction
+> already funnels through `apps/api/src/lib/home/home-relay.ts`, which is the one file sharding has to change.
+> Those three exist today; no sharding does. The concrete first step is
+> [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](PROPOSAL_SINGLE_MACHINE_CLUSTER.md).
+
 Multi-server scaling design for Eigen. The architecture is built around per-user data isolation (the Home
 singleton) and consistent routing by `ownerId`, which together make user-sharding a natural extension of
 the single-server model.
@@ -9,9 +15,10 @@ the single-server model.
 ### Per-User Data Isolation
 
 Every user has an isolated Home with its own SQLite databases, file storage, and SSE broadcast channel.
-There is no shared database for user content — the only server-level databases are `users3.db` (auth) and
-`eigen.db` (share registry). This isolation is the foundation for sharding: a user's Home can live on any
-server without schema changes.
+There is no shared database for user content — the only server-level databases are `users3.db` (auth),
+`eigen.db` (share registry) and `waitlist.db` (waitlist entries + invite tokens, opened lazily on first use by
+`apps/api/src/lib/waitlist/waitlist.ts`). This isolation is the foundation for sharding: a user's Home can live on
+any server without schema changes.
 
 ### ownerId Routing Key
 
@@ -24,43 +31,21 @@ requests for one Home to the same server.
 All cross-home interactions — where one user's action touches another user's Home — flow through a single
 relay module (`apps/api/src/lib/home/home-relay.ts`). This is the sharding seam.
 
-**Push operations** use `sendToHome(targetUserId, message)` with a typed `HomeMessage` discriminated union:
+The module holds three shapes, all keyed by the target's `ownerId`. Read the file for the current inventory —
+enumerating it here rots (it has grown to roughly a dozen pulls and a handful of pushes since this doc was
+written).
 
-| Message type                 | What it does                                  |
-|------------------------------|-----------------------------------------------|
-| `drive:acl-change`           | Propagate ACL change to target's shared.db    |
-| `calendar:share`             | Share/unshare a calendar with target          |
-| `calendar:invitation`        | Deliver a calendar invitation                 |
-| `calendar:invitation-update` | Update an existing invitation                 |
-| `calendar:invitation-removal`| Cancel/remove an invitation                   |
-| `calendar:rsvp`              | Update attendee RSVP on organizer's event     |
-| `broadcast`                  | Send SSE event to target's connected clients  |
-| `notification`               | Persist notification in target's center       |
+- **Pushes** — `sendToHome(targetUserId, message)` with a typed `HomeMessage` discriminated union (ACL changes,
+  calendar shares and invitations, RSVPs, SSE broadcasts, notifications), plus a couple of `push*` helpers for
+  profile and team avatars. Fire-and-forget: no return value
+- **Pulls** — one typed function per cross-home read (`pullSharedPaths`, `pullCalendars`, `pullEventsInRange`,
+  `pullDriveSearch`, team quota/mount lookups, …)
+- **Event mutations** — `createEventAt` / `updateEventAt` / `deleteEventAt`. Writes with return values, so they
+  don't fit the fire-and-forget push shape
 
-**Pull operations** use individual typed functions for cross-home reads:
-
-| Function                  | What it reads                                     |
-|---------------------------|---------------------------------------------------|
-| `pullSharedPaths`         | Drive paths an owner has shared with a user       |
-| `pullCalendarShares`      | Calendars an owner has shared with a user         |
-| `pullPendingInvitations`  | Events where a user is an attendee                |
-| `pullCalendarPermission`  | A user's permission level on an owner's calendar  |
-| `pullCalendars`           | All calendars from an owner's home                |
-| `pullCalendarById`        | A single calendar's metadata from an owner's home |
-| `pullEventsInRange`       | Events in a date range on an owner's calendar     |
-
-**Event mutations** on another user's calendar route through dedicated seam functions (the writes
-have return values, so they don't fit the fire-and-forget `sendToHome` pattern):
-
-| Function          | What it writes                                                   |
-|-------------------|------------------------------------------------------------------|
-| `createEventAt`   | Create an event on an owner's calendar; returns the new event    |
-| `updateEventAt`   | Update an event on an owner's calendar; returns the updated event |
-| `deleteEventAt`   | Delete an event on an owner's calendar                           |
-
-Today these are direct in-process calls via `getHome()`. In a sharded deployment, only `home-relay.ts`
-changes — `sendToHome()` routes to the correct server or enqueues a message, and pull/event functions
-become remote API calls.
+Today all three are direct in-process calls via `getHome()`. In a sharded deployment only `home-relay.ts`
+changes — `sendToHome()` routes to the correct server or enqueues a message, and pull/event functions become
+remote API calls.
 
 ### Self-Contained Receive Methods
 
@@ -69,6 +54,10 @@ internally. This means a single `sendToHome()` message triggers a complete opera
 multi-step coordination needed across servers.
 
 ## Future: Multi-Server Architecture
+
+The first step is smaller than this: several API processes on one box, sharing the filesystem, routed by Caddy.
+That is worked out in [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](PROPOSAL_SINGLE_MACHINE_CLUSTER.md) (also not
+implemented). The picture below is the multi-machine end state.
 
 ```
                            +-------------------+
@@ -106,6 +95,8 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 ```
 
 Pull functions follow the same pattern — check shard locality, call locally or make an API request.
+[PROPOSAL_SINGLE_MACHINE_CLUSTER.md](PROPOSAL_SINGLE_MACHINE_CLUSTER.md) works this through concretely for one
+machine, using Caddy as the only router so the application never hashes an ownerId itself.
 
 ### Shared State That Needs Addressing
 
@@ -113,6 +104,7 @@ Pull functions follow the same pattern — check shard locality, call locally or
 |--------------------|--------------------------------|----------------------------------------------|
 | Auth DB            | `data/server/users3.db`        | Shared database (PostgreSQL or replicated)   |
 | Share registry     | `data/server/eigen.db`         | Shared database or distributed registry      |
+| Waitlist           | `data/server/waitlist.db`      | Same treatment as the share registry — one row set for the whole deployment, written from any node |
 | Yjs documents      | In-memory per server           | Editors connect to document owner's server   |
 | SSE connections    | Per-server                     | Each user connects to their home's server    |
 | Team membership    | Auth DB queries                | Shared auth DB handles this                  |
@@ -128,11 +120,16 @@ pending refactor.
 like `getDrive(user)`, `resolveCalendar(user, ownerId)` — routes just use `home.drive`,
 `home.calendar` directly. Makes wrong code structurally impossible rather than just flagged.
 
+### Delivery Guarantees
+
+Answered and scheduled, not open: [PROPOSAL_HOME_RELAY_OUTBOX.md](PROPOSAL_HOME_RELAY_OUTBOX.md) turns
+`sendToHome` into a durable row in a server-level outbox with a single drain loop, per-target FIFO, retry/backoff
+and replay on boot — and in the sharded future that drain step is the one place that learns about remote shards.
+The ACL fan-out is already bounded-async (`apps/api/src/lib/drive/acl-propagation.ts`: bounded concurrency,
+per-path FIFO), but in-flight deliveries are still lost on a crash. That window is what the outbox closes.
+
 ### Open Design Questions
 
-- **Message delivery guarantees**: Should `sendToHome` be fire-and-forget, at-least-once (queued), or
-  exactly-once? Current propagation code uses try/catch and logs failures — acceptable for single-server,
-  but sharding may need a message queue (Redis Streams, NATS) for reliability.
 - **Yjs collaboration across shards**: When user A edits user B's document, A's WebSocket connects to B's
   server. The load balancer routes the document WebSocket by the *document owner's* ownerId, not the
   editor's. This works naturally with the existing routing key.

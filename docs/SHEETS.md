@@ -12,7 +12,7 @@ packages/sheet/     # Forked React UI + core engine + formula parser (full sourc
 apps/sheets/src/components/sheets/
 ├── hooks/use-sheet.ts          # Yjs integration (op-based sync)
 ├── hooks/use-active-comments.ts # Scan cell matrix for comment IDs + anchor texts
-├── editor.tsx                  # Workbook config + MenuBar left/right items + comment panel/dialog
+├── editor.tsx                  # Workbook config + MenuBar left/right items + comments/activity pane
 └── toolbar.tsx                 # File menu + share/mode + comment toggle buttons (passed as leftItems/rightItems)
 ```
 
@@ -93,16 +93,21 @@ Two invariants importers still must uphold:
 
 Comments anchor to cells via `commentCardIds?: string[]` on the `Cell` type. The upstream fortune-sheet
 built-in comment system (ps field, NotationBoxes, comment module) was fully removed and replaced with the
-shared Eigen comment-card infrastructure (see [`docs/COMMENTS.md`](COMMENTS.md)).
+shared Eigen comment-card infrastructure — see [COMMENTS.md](COMMENTS.md) for the card model, hooks and
+components.
 
 - **Canvas indicator**: triangle (top-right) drawn when `cell.commentCardIds?.length > 0`; color comes
   from the Y.Doc card via `hooks.getCommentInfo(r, c)`
 - **Context menu**: "Add comment" (no comment) or "View comment" / "Delete comment" (has comment), wired via
   `hooks.onAddComment/onViewComment/onDeleteComment` from settings
-- **Comment panel**: `CommentPanel` sidebar toggled via toolbar button
-- **Thread viewing**: `NoteCardDialog` + `CommentThread` popup
+- **Comments/activity pane**: the shared `PanelColumn` — one component for both panels on every viewport,
+  driven by `useDocumentPanels(isMobile)`
+- **Card dialogs**: the shared `CommentLifecycleDialogs` (open card, edit, resolve, delete), fed by
+  `useCommentLifecycle`
 
-See [COMMENTS.md](COMMENTS.md) for the full shared comment architecture.
+On mobile the pane takes the whole width, so `editor.tsx` **hides** the workbook wrapper (`hidden`) instead
+of unmounting it — the engine's `ResizeObserver` re-measures the canvas when it comes back (see the
+container-resize contract above). Hiding that wrapper also takes the floating find bar with it.
 
 ## Headless Formula Engine
 
@@ -110,25 +115,26 @@ A DOM-free formula engine lives in `packages/sheet/src/engine/`. It evaluates fo
 `CellResolver` interface — the same engine powers both the UI (resolver reads from Context) and server-side
 evaluation (resolver reads from Yjs snapshot).
 
+The modules that carry the weight:
+
 ```
 engine/
 ├── formula-engine.ts       # FormulaEngine class (evaluate)
-├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
-├── formula-shift.ts        # functionCopy + functionStrChange (formula relative-ref shifters)
-├── formula-reference-cycle.ts # cycleReferenceAtCaret (F4 relative/absolute ref cycling)
-├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)
-├── replay-ops.ts           # replaySheetsOps (snapshot + ops → Sheet[]; shared by BE + FE initial-load)
-├── dependency-graph.ts     # Topological sort (getCalculationOrder)
-├── recalc.ts               # recalcSheets — server-side gated full recalc (see § Server-side recalc)
-├── cell-resolver.ts        # CellResolver interface + createArrayResolver
-├── format.ts               # Format type inference (uses numfmt for rendering)
-├── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
-├── a1-notation.ts          # A1 ↔ row/col parsing
-├── validation.ts           # Data validation helpers
-├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState (+ re-exports of shared shapes from @workspace/lib/sheets)
 ├── parser/                 # Pure formula parser (JISON + @formulajs/formulajs, zero DOM)
-└── index.ts                # Barrel exports
+├── cell-resolver.ts        # CellResolver interface + createArrayResolver
+├── dependency-graph.ts     # Topological sort (getCalculationOrder)
+├── dependency-index.ts     # Reverse index: which formulas read a given cell (per-cell + block buckets)
+├── recalc.ts               # recalcSheets — server-side gated full recalc (see § Server-side recalc)
+├── replay-ops.ts           # replaySheetsOps (snapshot + ops → Sheet[]; shared by BE + FE initial-load)
+├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)
+├── celldata.ts             # Sparse `celldata` ↔ dense `data` matrix conversions
+└── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
 ```
+
+Smaller pure helpers sit next to them: `a1-notation.ts`, `format.ts`, `validation.ts`, `defaults.ts`
+(canonical empty-grid size), the formula-text shifters (`formula-shift.ts`, `formula-reference-cycle.ts`)
+and `formula-utils.ts`. `types.ts` holds the engine types plus re-exports of the shared shapes from
+`@workspace/lib/sheets`; `index.ts` is the barrel.
 
 **Key capabilities:**
 - `evaluate(formula, sheetId, row, col, resolver)` — single formula evaluation
@@ -185,13 +191,6 @@ destroy Excel's correct cached result at import the cached `v`/`m` is kept and t
 `execFunctionGlobalData` seed is skipped, so downstream cells read the cached value through the resolver
 (same freeze-is-safe direction as volatiles); only a cell with no cached value gets the error sentinel.
 Every cell is guarded, so one poisoned formula never aborts the pass.
-
-Two earlier notes here were wrong and are corrected: the deleted `recalculateAll` was **not** a
-"three-line reintroduction" — it was ~100 lines plus a `getDependencies` extractor (~35) and
-`resetState` (~8), and it never wrote values back into cells. And it built its graph by iterating each
-sheet's `calculationChain`, so a faithful revive would have **silently no-op'd on exactly the
-imported-never-opened docs that are the main target** (they carry no chain). `recalcSheets` scans for
-`f` cells instead.
 
 ## Headless Conditional Formatting
 

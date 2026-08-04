@@ -7,10 +7,10 @@
 ## Running
 
 ```bash
-bun run check              # lint + typecheck + test (all workspaces)
+bun run check              # lint + typecheck + home-import check + primitives:check + test
 bun run test               # tests only (all workspaces)
 bun run test:api           # API tests only
-bun run test:sheet         # sheet package unit tests only
+bun run test:sheet         # sheet package unit tests only (packages/sheet, plain `bun test`, no preload)
 bun run typecheck          # typecheck only
 bun run lint               # lint + format check (biome)
 ```
@@ -23,6 +23,16 @@ bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/
 
 - `--preload ./src/test/preload.ts` registers an `afterAll` hook that calls `cleanup()`
 - `--concurrency 1` required because tests share SQLite via the Home singleton
+
+### One file at a time
+
+`bun test apps/api/src/test/drive.test.ts` from the repo root **fails** with `Setup has already been
+completed`: Bun auto-loads the root `.env`, which collides with the harness's fresh-`EIGEN_DATA_ROOT`
+setup flow. Run it from `apps/api` with the package script's own flags, and `-t` to filter by name:
+
+```bash
+cd apps/api && bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/drive.test.ts -t "rename"
+```
 
 ## Architecture
 
@@ -39,46 +49,18 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 
 ## Test Files
 
-| File                          | Tests                                                      |
-|-------------------------------|------------------------------------------------------------|
-| `acl-bubbling.test.ts`        | Chat invite ACL bubbling to container                      |
-| `auth.test.ts`                | Health, auth required, user access                         |
-| `calendar.test.ts`            | Calendars, events, recurrence, sharing                     |
-| `calendar-invites.test.ts`    | Invite propagation, RSVP, cancellation, linked event guard |
-| `calendar-timezone.test.ts`   | Timezone-aware recurrence expansion                        |
-| `chat.test.ts`                | Messages, whispers, commands, read-only ACL                |
-| `collab.test.ts`              | Yjs operations, storage                                    |
-| `command-validation.test.ts`  | Chat command validation                                    |
-| `comment-index.test.ts`       | Comment index CRUD, mentions                               |
-| `contacts.test.ts`            | CRUD, labels, isolation                                    |
-| `delete-user.test.ts`         | User deletion, admin permissions, data cleanup             |
-| `drive.test.ts`               | Mounts, folders, files, sharing, ACL, docs, stickies       |
-| `editor.test.ts`              | Inline text editing                                        |
-| `effective-members.test.ts`   | Effective member resolution                                |
-| `home.test.ts`                | Size, isolation                                            |
-| `integration.test.ts`         | Cross-domain integration                                   |
-| `json-store.test.ts`          | JsonStore read/write                                       |
-| `mail.test.ts`                | Mailboxes, drafts, moves, deletes, isolation               |
-| `mail-imap.test.ts`           | Maildir format, flags, sync, simulated Dovecot             |
-| `mail-parser.test.ts`         | Email parsing (plain, HTML, multipart, attachments)        |
-| `mount.test.ts`               | Mount storage backends                                     |
-| `org.test.ts`                 | Org, teams, roles                                          |
-| `org-drive.test.ts`           | Team drives, team ACL                                      |
-| `org-home.test.ts`            | Org/team Home lifecycle                                    |
-| `preview.test.ts`             | File preview endpoints                                     |
-| `public.test.ts`              | Public routes, avatars                                     |
-| `settings.test.ts`            | Server settings, admin access control                      |
-| `share-registry.test.ts`      | Share registry push/pull, reconciliation                   |
-| `sharing-restricted.test.ts`  | Sharing restriction enforcement                            |
-| `sse.test.ts`                 | SSE endpoint, events                                       |
-| `storage.test.ts`             | Storage backend operations                                 |
-| `streaming-upload.test.ts`    | Streaming file upload, multi-file upload                   |
-| `team-calendar-share.test.ts` | Team calendar sharing                                      |
+Every API test lives in `apps/api/src/test/`, one `<subject>.test.ts` per subject, plus a `webdav/`
+subdirectory for the WebDAV method suites and a `fixtures/` folder. Coverage spans CalDAV, WebDAV, mail,
+drive, collab, file history, search, import/export, demo mode, upload-queue chaos and more — grep the
+directory rather than assuming an area is untested.
 
 ## Key Details
 
 - **Treaty**: Used for static path routes. `authedRequest()` for dynamic `:mountId` params
 - **Contacts**: `addContact`/`addLabel` return plain UUID strings. Auto-seeds user as contact on first access
+- **One shared auth DB**: `setup.ts` POSTs `/setup/complete` once for the whole run, so every test file
+  sees the same users/orgs table. Exact global count assertions (`users.length === 3`) break as soon as
+  another file creates a user — scope assertions to the entities the test itself created
 
 ## CI
 
@@ -89,7 +71,9 @@ steps:
   - bun install --frozen-lockfile
   - bun run lint
   - bun run typecheck
+  - bun run primitives:check      # Primitives index (docs/SHARED-PRIMITIVES.md is generated + gated)
   - bun --filter '*' test
 ```
 
-The CI job runs on `ubuntu-latest` with a 15-minute timeout.
+The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set
+plus `bun scripts/check-home-imports.ts`: lint → typecheck → home-import check → `primitives:check` → test.

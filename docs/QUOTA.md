@@ -1,10 +1,9 @@
 # Quotas
 
-## TLDR
-
-Two independent quota buckets per user: **mail + contacts** and **drive mount**. Effective quota =
-`max(server default, ...team overrides)` -- teams can only elevate, never restrict. Enforcement happens at upload
-time with a soft limit (no file-level locking).
+> **TLDR**: Two independent quota buckets per user: **mail + contacts** and **drive mount**. Effective quota =
+> `max(server default, ...team overrides)` — teams can only elevate, never restrict. Enforcement happens at
+> upload time with a soft limit (no file-level locking). Exhausting a quota throws **507 Insufficient Storage**;
+> 413 is only the per-file size cap.
 
 ## Quota Buckets
 
@@ -32,7 +31,9 @@ Rules:
 - `undefined` in `TeamSettings.memberOverrides` means "inherit" (no contribution to max)
 - User in no teams gets the server default
 - A mount's own `maxSizeMB` (from `MountConfig`) takes precedence over the server default when set
-- Team homes are always active in memory, so `getHome(teamOwnerId(teamId))` reads settings directly
+- Team overrides are read through `pullTeamQuotaOverrides` (`lib/home/home-relay.ts`), which calls
+  `getTeamHome()`. That opens the team home if it is not cached — a `TeamHome` idles out after 30 minutes
+  like any other home, so it is not guaranteed to be in memory
 
 `ResolvedQuotas` returns values in bytes:
 
@@ -59,29 +60,56 @@ These are independent from the team's own drive storage. A team's own mount quot
 
 ## Enforcement
 
-Two enforcement functions in `enforcement.ts`. Each resolves quotas on the fly (stateless, no cache).
+Everything lives in `apps/api/src/lib/config/enforcement.ts`. Each function resolves quotas on the fly
+(stateless, no cache).
+
+**Two different status codes, and they mean different things:**
+
+- **507 `Insufficient Storage`** — the quota bucket is full. Thrown by every quota check.
+- **413 `File exceeds max upload size`** — the single file is bigger than the server's per-file cap
+  (`maxUploadSizeMB`, default 35 MB). Only `enforceMaxUploadSize` (and `enforceAvatarUpload`, which calls it)
+  throws this.
 
 ### `getUploadMaxSize(ownerId, userId, mountId)`
 
-Returns the maximum allowed upload size in bytes for a single streaming upload. Computes
-`min(maxUploadSizeMB, remainingQuota)` where `remainingQuota = mountMax - currentUsage`. Throws
-`ApiError(413, 'Storage quota exceeded')` if the mount is already at or over quota. The drive route passes this
-max to the streaming upload handler, which enforces it during transfer.
+Returns the maximum allowed upload size in bytes for a single streaming upload:
+`min(maxUploadSize, remainingQuota)` where `remainingQuota = mountMax - currentUsage`. Throws 507 up front if
+the mount is already at or over quota, so a full mount is rejected without reading the request body. The drive
+route passes this max to the streaming upload handler, which enforces it mid-transfer.
+
+### `enforceMountQuota(ownerId, userId, mountId, addBytes, creditExisting)`
+
+Up-front projected-write check for callers that know the byte count before writing. Throws 507 when
+`used + addBytes - creditExisting > max`. `creditExisting` is the size of the file being overwritten, so
+saving a document does not double-count its current bytes.
+
+### `getMailUploadMaxSize(userId)`
+
+The attachment ceiling: `min(maxUploadSize, 25 MB)` intersected with what is left of the mail + contacts
+quota. Throws 507 when that bucket is already full.
 
 ### `enforceAvatarUpload(userId, fileSize)`
 
-Checks file size against `maxUploadSizeMB`, then checks combined mail + contacts usage against
-`mailAndContactsMax`.
+Runs `enforceMaxUploadSize` (413 on an oversized file), then checks combined mail + contacts usage against
+`mailAndContactsMax` (507).
 
-Both throw `ApiError(413, ...)` on violation. Called from `apps/api/src/routes/drive.ts` and
-`apps/api/src/routes/contacts.ts`.
+### `getMountQuotaState(ownerId, userId, mountId)`
+
+Read-only `{ used, max }`. Used for reporting rather than blocking.
+
+**Callers.** Drive uploads and copy go through `routes/drive.ts`; contact avatars through `routes/contacts.ts`;
+team avatars call the bare `enforceMaxUploadSize` in `routes/team.ts` (a team logo must not consume a member's
+personal mail quota). WebDAV `PUT` calls `enforceMountQuota` in `lib/webdav/resource.ts`, and WebDAV `PROPFIND`
+reports quota-used / quota-available from `getMountQuotaState` in `lib/webdav/propfind.ts`. Editor saves call
+`enforceMountQuota` in `routes/editor.ts`, crediting the size of the file being replaced. Mail draft
+attachments and mail-to-drive saves use `getMailUploadMaxSize` / `getUploadMaxSize` in `lib/mail/mail.ts`.
 
 ## Over-Quota Behavior
 
 When an admin lowers a quota below current usage (or team membership changes):
 
 - Existing data is never deleted
-- New uploads are rejected with 413
+- New uploads are rejected with 507
 - UI shows over-quota state
 - User must delete files to get back under quota
 
@@ -110,13 +138,10 @@ type MountSettings = {
 Stamping happens at first `UserHome.init()`, not at signup. If an admin changes defaults between signup and first
 login, the user gets the latest defaults.
 
-## File Reference
+Server settings use a different storage-type vocabulary: `ServerStorageType` is
+`'local-id' | 'local-fullnames' | 's3'`, translated to the `MountSettings` values above by `mapStorageType`
+(`packages/lib/src/types/settings.ts`).
 
-| File                                         | Purpose                                                           |
-|----------------------------------------------|-------------------------------------------------------------------|
-| `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()`, `ResolvedQuotas` type                      |
-| `apps/api/src/lib/config/enforcement.ts`     | `getUploadMaxSize`, `enforceAvatarUpload`                         |
-| `apps/api/src/lib/config/server-settings.ts` | Server defaults, `getMaxUploadSize()`                             |
-| `packages/lib/src/types/settings.ts`         | `ServerSettings`, `MountSettings`, `TeamSettings.memberOverrides` |
-| `apps/api/src/routes/drive.ts`               | Calls enforcement on upload routes                                |
-| `apps/api/src/routes/contacts.ts`            | Calls enforcement on avatar upload                                |
+Quota resolution itself lives in `apps/api/src/lib/config/quota.ts`, server defaults in
+`server-settings.ts`, and the shared types (`ServerSettings`, `MountSettings`,
+`TeamSettings.memberOverrides`) in `packages/lib/src/types/settings.ts`.

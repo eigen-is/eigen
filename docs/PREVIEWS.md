@@ -1,9 +1,9 @@
 # File Preview System
 
-> **TLDR**: Server-side preview generation with tmp-dir cache. Images served as screen-res WebP (max 2560px), text/code/markdown
-> and eigen-native files (eigendoc/slides/sheets, a compact HTML slice) as JSON body snippets rendered client-side with shared
-> `eigen-prose` styles. Video/audio/PDF redirect to embed URL for native playback. Preview overlay in `packages/ui` with keyboard
-> nav and sibling browsing.
+> **TLDR**: Server-side preview generation, cached per file version in a tmp dir. Images become
+> screen-res WebP (max 2560px). Text, code, markdown and eigen-native files become a small HTML body
+> served as JSON and rendered client-side with shared `eigen-prose` styles. Video, audio and PDF
+> redirect to the embed URL. The overlay lives in `packages/ui`, with keyboard and sibling nav.
 
 ## Route Structure
 
@@ -17,13 +17,32 @@
 
 ## Cache Strategy
 
-Everything in `mount.previewsDir` (`tmpDir/previews/`). Cache key: `{pathId}-{updatedAt}.{ext}`.
+Everything in `mount.previewsDir` (`tmpDir/previews/`). The cache key carries the file version, so a
+new version writes a **new file** instead of overwriting one — which is what lets responses use a long
+`max-age`, since the URL carries the same `updatedAt` stamp.
 
 - Image previews: `{pathId}-{updatedAt}.screen.webp`
 - SVG previews: `{pathId}-{updatedAt}.screen.svg` (raw SVG, no conversion)
-- Text previews: `{pathId}-{updatedAt}.json`
+- Text previews: `{pathId}-{updatedAt}.{formatVersion}.json` — bump the renderer format version to
+  force regeneration when the generated HTML changes shape at an unchanged `updatedAt`
 - Cache hit = serve directly, no regeneration
 - Cleanup: files older than 7 days, run at `mount.init()`
+
+Two behaviors follow from the versioned key and define how previews feel:
+
+**`pruneOldVersions`** runs fire-and-forget after every cache write and deletes the path's other
+versions, so `previewsDir` doesn't grow one file per edit. It never touches the file just written, so
+an in-flight prune can't race a concurrent read. The 7-day sweep still covers paths written once and
+never again.
+
+**Stale-while-revalidate.** When the current version isn't cached but an older one is, the route
+serves the older body immediately (marked `stale`, with `Cache-Control: no-store`) and regenerates the
+current one in the background. In-flight generations are shared per cache name, so N tiles of one
+just-added file trigger one generate, not N.
+
+The `/text-preview` route takes `updatedAt` as a query param. It is the cache buster: both the browser
+HTTP cache and the TanStack query key are derived from the URL, so a stale URL would otherwise serve
+stale content after an inline edit.
 
 ## Text Previews
 
@@ -34,16 +53,25 @@ Everything in `mount.previewsDir` (`tmpDir/previews/`). Cache key: `{pathId}-{up
 |----------------|-------------------------------------------------|
 | `markdown`     | `markdown-it` → HTML, sanitized with DOMPurify |
 | `code`         | `lowlight` syntax highlighting → HTML spans     |
-| `plaintext`    | `<pre>` wrapped, HTML-escaped                   |
+| `plaintext`    | prose paragraphs — HTML-escaped `<p>` blocks, single newlines as `<br>` |
 | `eigendoc`     | Yjs → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
 | `eigenslides`  | Yjs → first 8 slides → positioned divs with container-query sizing |
 | `eigensheets`  | Yjs snapshot → first sheet → HTML table (`renderSheetsHtml`, preview mode) |
 
-The `eigendoc`/`eigenslides`/`eigensheets` modes load the file's Yjs document (via `getCollabPreviewData` in
-`preview-cache.ts`) rather than raw file text, and render only a compact slice — see Compact Previews below.
+Plaintext is deliberately **not** `<pre>`: `eigen-prose` paints every `<pre>` as a dark, non-wrapping
+code block, and a `.txt` file should read like rendered markdown instead.
 
-Body is consumed via `useTextPreview()` hook (TanStack Query, 5min staleTime) and rendered with
-`dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM.
+`getTextPreview` (`preview-cache.ts`) is the single entry point. It splits on path type: eigen-native
+containers go to the three `*-preview.ts` generators (`eigendoc-preview.ts`, `eigenslides-preview.ts`,
+`eigensheets-preview.ts`), everything else reads the file as text and calls `generateTextPreview`.
+Both sides go through the same `getOrCacheText` read-through cache, so caching, in-flight sharing and
+stale-while-revalidate behave identically. The eigen-native generators render only a compact slice —
+see Compact Previews below.
+
+Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered with
+`dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM. Its
+`staleTime` is deliberately short — **30 s** — so that when the server hands back a
+stale-while-revalidate body, the next refetch trigger (window focus or remount) picks up the fresh one.
 
 Shared `eigen-prose.css` in `packages/ui/src/styles/` provides prose typography + Catppuccin code highlighting,
 used by both previews and the docs editor.
@@ -136,60 +164,33 @@ preview directly.
 `native-file-editor.tsx` in Drive shows text preview (nicely formatted via `useTextPreview`) in read-only mode.
 Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only when user clicks Edit.
 
-## Files
+## Where the Code Lives
 
-| File                                                                      | Purpose                                          |
-|---------------------------------------------------------------------------|--------------------------------------------------|
-| `apps/api/src/lib/preview/preview-cache.ts`                               | Orchestration: check cache, generate, serve      |
-| `apps/api/src/lib/preview/text-preview.ts`                                | markdown-it + lowlight → HTML body + DOMPurify   |
-| `apps/api/src/lib/preview/exiftool-preview.ts`                            | Embedded JPEG extraction for RAW/PSD/AI/HEIC     |
-| `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + heic-convert + exiftool) |
-| `apps/api/src/lib/shared/video-thumbnail.ts`                              | ffmpeg-based video frame extractor + `isFfmpegAvailable`   |
-| `apps/api/src/lib/preview/video-preview.ts`                               | `isVideoCandidate` MIME gate                               |
-| `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()` |
-| `apps/api/src/lib/drive/drive.ts`                                         | `resolveFile()` → ACL-checked `{ mount, path }` for preview/export/thumb routes |
-| `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
-| `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
-| `packages/ui/src/components/layout/drive/file-preview.tsx`                | Preview overlay component                        |
-| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Context: open/close/navigate previews            |
-| `packages/lib/src/core/drive/hooks/use-drive.ts`                          | `useTextPreview()` hook                          |
-| `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
-| `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
-| `apps/api/src/lib/preview/eigendoc-preview.ts`                            | Eigendoc Yjs → tiptap static HTML (first 20 blocks) |
-| `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides Yjs → positioned HTML divs (first 8 slides)  |
-| `apps/api/src/lib/preview/eigensheets-preview.ts`                         | Sheets Yjs → HTML table (first sheet)               |
-| `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
-| `apps/api/src/lib/export/render-types.ts`                                 | `RenderMode` toggle (export vs preview)             |
+**Server.** `apps/api/src/lib/preview/` holds the whole generation side: `preview-cache.ts`
+(orchestration, cache, stale-while-revalidate), `text-preview.ts` (markdown-it + lowlight + prose
+paragraphs), the three `{eigendoc,eigenslides,eigensheets}-preview.ts` generators, `preview-marker.ts`
+(`renderPreviewTruncatedMarker()`), `exiftool-preview.ts` and `video-preview.ts` (the MIME gates and
+extractors). Shared image work sits in `apps/api/src/lib/shared/` — `thumbnails.ts` (sharp +
+heic-convert + exiftool) and `video-thumbnail.ts` (ffmpeg). Routes are in `apps/api/src/routes/drive.ts`,
+ACL through `Drive.resolveFile()`. `RenderMode` comes from `apps/api/src/lib/export/render-types.ts`.
+
+The eigen-native generators own no loading of their own: they read through `readEigendocContent` /
+`readSlidesContent` / `readSheetsContent` (see [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md))
+and render with the same functions export uses — `doc/render.ts`, `slides/render.ts`, `sheets/html.ts`.
+That sharing is why a preview can never disagree with an export about what the document says. See
+[EXPORT.md](EXPORT.md).
+
+**Shared.** `packages/lib/src/constants/preview.ts` owns `TextPreviewMode`, `getTextPreviewMode()` and
+the exiftool extension gate — used by preview, export and the inline editor alike.
+`useTextPreview()` lives in `packages/lib/src/core/drive/hooks/use-drive.ts`.
+
+**Client.** `packages/ui/src/components/layout/drive/file-preview.tsx` is the overlay,
+`.../preview-provider/preview-provider.tsx` the context, `packages/ui/src/styles/eigen-prose.css` the
+shared typography. Drive's `native-file-editor.tsx` reuses the same text preview for read-only mode.
 
 ## Future
 
-- CSV table rendering (currently treated as code/plaintext)
+- CSV table rendering (currently treated as code/plaintext) — parse server-side and emit a bounded
+  HTML table, so the frontend stays a plain `eigen-prose` container
 - Eigenstickies preview (eigendoc, eigenslides, eigensheets are done)
 - DOCX/XLSX/PPTX preview
-
----
-
-### Phase — CSV Table Rendering
-
-**Goal:** CSV as a scrollable table (generated server-side to keep the frontend clean).
-
-| File                                       | Change                                                                                                                      |
-|--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
-| `apps/api/src/lib/preview/text-preview.ts` | Extend to handle `text/csv` — parse with a lightweight server-side CSV parser, render HTML table (max 500 rows x 50 cols).  |
-
----
-
-### Phase — Eigen Native Types (eigenstickies remaining)
-
-**Goal:** Preview Eigen native files without opening them. eigendoc/eigenslides/eigensheets are done — each
-preview reuses the export render functions (`doc/render.ts`, `slides/render.ts`, `sheets/html.ts`) over the
-shared content loaders in `apps/api/src/lib/document/`.
-
-| Type | Status | Approach |
-|------|--------|----------|
-| eigendoc | **Done** | `readEigendocContent` (Yjs → PM JSON) → tiptap static renderer with `doc/render.ts` node mappings, first 20 blocks |
-| eigenslides | **Done** | `readSlidesContent` → `renderDeckHtml`, first 8 slides |
-| eigensheets | **Done** | `readSheetsContent` → `renderSheetsHtml(…, 'preview')`, first sheet |
-| eigenstickies | Future | Load stickies JSON, render simplified kanban columns as HTML |
-
----

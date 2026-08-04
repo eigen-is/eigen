@@ -104,7 +104,30 @@ file model visible: a drive-created chat starts with exactly the members its loc
 the folder, or none), no people picker in the way. The wizard — with open-don't-duplicate and the `chats`-folder
 default — belongs to the person-first surfaces (chat app, contacts, future profile views) where the intent is "talk
 to someone", not "create a file here".
-Full rationale + messenger prior-art in [PROPOSAL_CHAT_WIZARD.md](PROPOSAL_CHAT_WIZARD.md).
+
+### Design decisions
+
+Why the wizard looks the way it does. Settled 2026-07-19 after a prior-art round on Signal, WhatsApp, Telegram,
+Slack and Google Chat.
+
+- **A chat is a file, so Eigen sits closer to Slack channels than to person-chats.** All five messengers are
+  person-first: the new-chat action is a picker, there is no name step and no location step, and 1:1 duplicates are
+  impossible by design. An Eigen chat structurally has a name and a place in Drive, so it can never be fully
+  person-first. The answer is to show as little file-ness as possible at creation time and to copy Slack's
+  `conversations.open` semantics — open, don't duplicate — instead of warning about a duplicate.
+- **The decisions that shipped**: a person-first wizard with a team mode; open-don't-duplicate on the exact
+  effective member set (member-based, never name-based — renamed chats still match); guest and account-less emails
+  allowed as members, since they become ACL entries exactly like a share; rooms default into the owner's `chats`
+  folder instead of the drive root; the share email is suppressed for chat creation (`suppressShareEmail`) because
+  the first message is the real notification; and the contacts entry point prefers the person's registered address
+  at click time.
+- **Step 1 deliberately mirrors the share dialog.** The design verdict that closed the last round: this is basically
+  an ACL screen, so it should work exactly like one — same `ContactAddRow` with the `+` button, suggestions only
+  after typing, and the "Team chat" dropdown in the spot where the share dialog puts "Share with team". Consistency
+  across the UX beats a bespoke picker.
+- **Open residuals**: an account-less member's avatar logs a benign 404 in the wizard; and the legacy `Chats` →
+  `chats` rename emits no SSE, so open drive lists and shared-mirror rows keep the old name until a refresh or the
+  next rename / ACL touch.
 
 ### The two routes
 
@@ -138,13 +161,11 @@ membership is not a fixed set of people:
 - any **direct** `team_*` ACL entry (dynamic membership),
 - team-owned drives (`ownerId` starts with `team_` = implicit all-team membership).
 
-Own chats are screened by a cheap **direct-ACL subset** pre-filter (every directly-shared email must already be in the
-target set) before paying for the `getEffectiveMembers` breadcrumb + per-team walk that the code flags as costly
-(`chat/chat.ts`); the surviving candidates' walks run concurrently, capped at the `MAX_MEMBER_WALKS = 200`
-most-recently-updated candidates — a match past the cap is missed and the wizard offers create instead (accepted
-caveat). The pre-filter is a subset test with **no size floor**: an inherited-ACL chat carries an empty direct ACL yet
-must still match, so the walk fills in the ancestor members. Shared-with-me candidates skip the walk — the mirror row
-carries only the direct ACL + the owner's id, so their set is `{owner email via getUserById} ∪ direct ACL emails`.
+Own chats are screened by a cheap direct-ACL subset pre-filter before paying for the costly `getEffectiveMembers`
+walk. The surviving walks run concurrently and are capped at the `MAX_MEMBER_WALKS = 200` most-recently-updated
+candidates — a match past the cap is missed and the wizard offers create instead (accepted caveat). Shared-with-me
+candidates skip the walk: the mirror row carries only the direct ACL plus the owner's id, so their set is
+`{owner email} ∪ direct ACL emails`.
 
 Two accepted point-in-time caveats (the panel suggests, it never guards): a foreign chat that gains members purely via
 a shared parent folder can false-positively match, and a `team_*` entry **inherited from an ancestor folder** is not
@@ -160,10 +181,8 @@ resolves it lazily by name each call (`getChildByName`, which folds case), recre
 so the new root child reaches other tabs via SSE; a concurrent-create 409 adopts the winner's folder) and falling back
 to the root if the name is taken by a non-folder — so it stays an ordinary
 folder: renameable, movable, deletable, never pinned by id. A legacy auto-created `Chats` folder is renamed in place to
-lowercase `chats` on the next resolve (same pathId; the case-folded lookup finds it). Two accepted caveats of that
-rename: it emits no SSE, so already-open drive lists show the old name until refresh; and it does not propagate to
-shared-mirror rows (`shared_paths` heals on the next rename or ACL touch). English-only product, literal `chats`, no
-i18n.
+lowercase `chats` on the next resolve (same pathId; the case-folded lookup finds it — see Design decisions for the
+accepted no-SSE caveat). English-only product, literal `chats`, no i18n.
 
 ### Email suppression
 
@@ -194,13 +213,14 @@ team-drive chats (excluded above).
 - **Drive is intentionally not one**: its `+ New` / context-menu "New chat" creates a plain chat file in the
   browsed folder via the generic `DriveCreateEigenDoc`, exactly like every other eigen type (see the product
   decision at the top of this section). Don't re-wire the wizard into Drive.
-- **Contacts**: "Start chat" on a contact toolbar (`contact-detail.tsx`, any contact with an email address except
-  your own card — an address without an account becomes an ACL invite, so there is no registered-user gate) and on
-  a team member (`team-member-detail.tsx`, non-self). `useStartChatWith(emails)` first resolves which of the
-  person's addresses belongs to a registered account (batched public-user lookup, misses cached as null) and
-  prefers it over `email[0]`, which can be a later-added alias; it then fetches the `{me, them}` match once —
-  exactly one writable match opens directly (cross-app `openDocument`, full load), otherwise the caller opens the
-  wizard pre-filled with the chosen address.
+- **Contacts**: "Start chat" in `PersonDetailToolbar`
+  (`apps/contacts/src/components/contacts/person-detail-toolbar.tsx`), the one toolbar both `contact-detail.tsx` and
+  `team-member-detail.tsx` render. Shown for any person with an email address except your own card — an address
+  without an account becomes an ACL invite, so there is no registered-user gate. The toolbar calls
+  `useStartChatWith(emails)`, which first resolves which of the person's addresses belongs to a registered account
+  (batched public-user lookup, misses cached as null) and prefers it over `email[0]`, which can be a later-added
+  alias; it then fetches the `{me, them}` match once — exactly one writable match opens directly (cross-app
+  `openDocument`, full load), otherwise the caller opens the wizard pre-filled with the chosen address.
 
 ## Slash Commands
 
@@ -283,30 +303,12 @@ Messages use `useInfiniteQuery` with cursor-based pagination:
 - **Grouping**: Consecutive messages from the same author within 5 minutes are grouped (no repeated avatar/name)
 - **Attachments**: Shown as chips with thumbnail previews (images) or paperclip icon, clickable to open preview
 
-## Files
+## Where the code lives
 
-| File                                              | Purpose                                        |
-|---------------------------------------------------|------------------------------------------------|
-| `apps/api/src/lib/chat/chat.ts`                   | ChatRoom class                                 |
-| `apps/api/src/lib/chat/schema.ts`                 | Drizzle schemas (messages + read_state)        |
-| `apps/api/src/lib/chat/db-config.ts`              | DB config + migrations                         |
-| `apps/api/src/lib/chat/commands.ts`               | Backend command parsing + emote definitions     |
-| `apps/api/src/lib/chat/mentions.ts`               | `extractMentionedEmails()` for comment index   |
-| `apps/api/src/lib/chat/find-by-members.ts`        | `findChatsByMembers()` — wizard duplicate match |
-| `apps/api/src/lib/chat/comment-schema.ts`         | Comment index Drizzle schema                   |
-| `apps/api/src/lib/chat/comment-db-config.ts`      | Comment index DB config                        |
-| `apps/api/src/lib/chat/comment-index.ts`          | CommentIndex class + helpers                   |
-| `apps/api/src/lib/chat/sse-events.ts`             | SSE builders                                   |
-| `apps/api/src/routes/chat.ts`                     | API routes                                     |
-| `packages/lib/src/types/chat.ts`                  | Shared types (ChatMessage, RoomMember, etc.)   |
-| `packages/lib/src/core/chat/emotes.ts`            | `EMOTE_COMMANDS` definitions (shared FE/BE)    |
-| `packages/lib/src/core/chat/commands.ts`          | FE command handling, `SLASH_COMMANDS`, help     |
-| `packages/lib/src/core/chat/hooks/use-chat.ts`    | Query hooks (messages, post, create, invite) + wizard hooks (`useFindChatByMembers`, `useCreateChatRoom`, `useStartChatWith`) |
-| `packages/lib/src/core/chat/hooks/use-chat-room.ts` | `useChatRoom()` — main room state hook      |
-| `packages/lib/src/core/chat/hooks/use-comments.ts`| Comment index hooks                            |
-| `packages/lib/src/core/chat/sse-handlers.ts`      | SSE event handler                              |
-| `packages/lib/src/validation/command.ts`           | Shared command validation                      |
-| `packages/ui/src/components/layout/chat/`          | Shared chat UI (input, message list, suggests) |
-| `packages/ui/.../chat/chat-create-wizard.tsx`     | `ChatCreateWizard` — new-chat dialog (person + team mode) |
+Backend: `apps/api/src/lib/chat/` (`ChatRoom`, schemas + db-config, command parsing, `findChatsByMembers`, the
+comment index, SSE builders) and `apps/api/src/routes/chat.ts`. Frontend: `packages/lib/src/core/chat/` (query and
+wizard hooks, emotes, FE commands, SSE handler), shared types in `packages/lib/src/types/chat.ts`, shared validation
+in `packages/lib/src/validation/command.ts`, and UI in `packages/ui/src/components/layout/chat/` (input, message
+list, suggests, `ChatCreateWizard`).
 
-See [COMMENTS_IN_DOCS.md](COMMENTS_IN_DOCS.md) for the comment index system.
+See [COMMENTS.md](COMMENTS.md) for the comment index system.

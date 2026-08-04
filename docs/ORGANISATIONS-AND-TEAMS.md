@@ -45,30 +45,21 @@ to the new member's Home.
 - Starts with zero mounts — mounts are added explicitly via "Add Mount" in Admin app
 - Settings stored in `settings.json` (`JsonStore<TeamSettings>`)
 - Calendar can be disabled via `settings.calendar.enabled`
-- Created lazily, auto-destructs after 5min inactivity
+- Created lazily, auto-destructs after 30 min inactivity (`TEAM_HOME_IDLE_MS`, longer than the 5 min a `UserHome`
+  gets — a team drive is opened by many people at irregular intervals)
 
 ### Team Avatars
 
-Teams can have an avatar image, set by org admins from the admin app's team detail page (member-facing/self-serve
-avatar management is out of scope). Storage mirrors the user-avatar pipeline: a single webp in the server-central
-avatars dir, keyed by owner id — `data/server/avatars/team_{teamId}.webp`. File existence is the only source of
-truth; there's no `TeamSettings` pointer or auth-schema column (`pushTeamAvatar` in `home-relay.ts`, next to
-`pushUserProfile`). Deleting a team removes its avatar file (`afterDeleteTeam` hook in `auth.ts`), and serving
-double-checks the team still exists so an orphaned file is never served.
+Org admins set a team avatar from the admin team detail page (`POST`/`DELETE /team/:ownerId/avatar`, gated by
+`requireTeamAdmin`). Storage mirrors the user-avatar pipeline: one webp at `data/server/avatars/team_{teamId}.webp`,
+written via `pushTeamAvatar` in `home-relay.ts`. File existence is the only source of truth — no settings pointer,
+no schema column. Serving goes through `GET /p/avatar/team_{teamId}`, falling back to the deterministic team SVG,
+with the same 24h public `Cache-Control` as user avatars.
 
-- `POST /team/:ownerId/avatar` (body `{ file }`) and `DELETE /team/:ownerId/avatar` — gated by `requireTeamAdmin`,
-  so org admins/owners pass without needing team membership. Upload converts through `generateImagePreview`
-  (512px cover crop, same as user avatars); global max-upload-size check only, not the uploading admin's personal
-  quota
-- **Serving**: `GET /p/avatar/team_{teamId}` (`getAvatarByEmailOrId` in `apps/api/src/lib/space/public.ts`) serves
-  the webp if it exists, falling back to the deterministic team SVG otherwise. `getPublicInfo` already returns
-  this URL for teams, so `UserAvatar`/`UserItem`/`useResolvedUser` pick it up with zero per-surface changes.
-  Responses carry the same 24h public `Cache-Control` as user avatars — no special casing
-- **Freshness**: the team filename is stable (unlike per-upload-UUID user avatars), so the admin team detail
-  page always renders its avatar with a client-generated `?v={timestamp}` (stamped on mount/team switch and
-  after upload/remove) — the editing surface never shows the browser-cached copy. A `?v` value must never be
-  reused across page loads (a repeated value serves a stale cache entry — never use a counter). Other surfaces
-  (sidebar rows, shares) accept up-to-24h staleness, same as user avatars viewed by others
+**Gotcha**: the team filename is stable (unlike per-upload-UUID user avatars), so the editing surface would show
+the browser-cached copy. The admin team detail page appends a client-generated `?v={timestamp}` on mount, on team
+switch, and after upload/remove. A `?v` value must never be reused across page loads — a repeated value serves the
+stale cache entry, so never use a counter. Other surfaces accept up-to-24h staleness.
 
 ### OrgHome
 
@@ -89,8 +80,8 @@ double-checks the team still exists so an orphaned file is never served.
 - `team_` prefix → `TeamHome` (verifies team exists)
 - `org_` prefix → `OrgHome` (verifies org exists)
 
-All Home instances are cached in a factory map and auto-destruct after 5min idle. `evictHome(ownerId)` forces
-immediate shutdown (used during user deletion).
+All Home instances are cached in a factory map and auto-destruct when idle — 5 min by default, 30 min for
+`TeamHome`. `evictHome(ownerId)` forces immediate shutdown (used during user deletion).
 
 ## Prefixed Owner IDs
 
@@ -145,23 +136,11 @@ path owned by the same team).
 
 - **Sidebar**: Team drives appear under "Shared Drives" in Drive app
 - **Share dialog**: `drive-access-list-edit.tsx` supports team picker + team display
-- **Admin hooks** (`packages/lib/src/core/admin/hooks/`): `useMembers(orgId?)`, `useTeams(orgId?)`,
-  `useTeamMembers(orgId?, teamId?)`, `useActiveMember()`
-
-## Files
-
-| File                                          | Purpose                                                   |
-|-----------------------------------------------|-----------------------------------------------------------|
-| `packages/lib/src/types/owner.ts`             | `parseOwnerId`, `teamOwnerId`, `orgOwnerId`, `OwnerType` |
-| `apps/api/src/lib/home/get-home.ts`           | Home factory, dispatches by owner type                    |
-| `apps/api/src/lib/home/team-home.ts`          | TeamHome class (Drive + Calendar)                         |
-| `apps/api/src/lib/home/org-home.ts`           | OrgHome class (filesystem only)                           |
-| `apps/api/src/lib/drive/get-drive.ts`         | `getSharedDrive()` — wraps Home in SharedDrive            |
-| `apps/api/src/lib/drive/acl.ts`               | ACL with team support                                     |
-| `apps/api/src/lib/user/user.ts`               | `getMemberships()`, `getOrgRole()`                        |
-| `apps/api/src/lib/core/access.ts`             | `requireTeamAccess`, `requireTeamAdmin`                   |
-| `apps/api/src/lib/share/reconciliation.ts`    | Share reconciliation on user/team-member creation         |
-| `packages/lib/src/core/admin/hooks/keys.ts`   | Query key definitions for admin hooks                     |
+- **Admin hooks** (`packages/lib/src/core/admin/hooks/`, exported from `@workspace/lib/admin`):
+  `useMembers(orgId?)`, `useTeams(orgId?)`, `useActiveMember()`, `useAdminUsers(filter)`
+- **Team hooks** (`packages/lib/src/core/team/hooks/`, exported from `@workspace/lib/team`):
+  `useTeamMembers(teamId)` — takes the raw team id and wraps it with `teamOwnerId()` itself — plus the team
+  settings/mounts hooks that share `teamKeys`
 
 ## Admin App
 
@@ -176,7 +155,13 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 - **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
   (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default
   mount), set/remove the team avatar (see [Team Avatars](#team-avatars))
-- **Settings**: Server-wide settings — quotas, storage defaults (mount type), S3 configuration
+- **Settings**: Server-wide settings — quotas, storage defaults (incl. S3), email-notification toggles, landing
+  page links. See [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
+- **Guests**: guest accounts, with detail + delete — see [GUEST-ACCESS.md](GUEST-ACCESS.md) (the `/guest-settings`
+  page next to it holds the guest toggles)
+- **Orphans**: users with no org membership, from the same `GET /settings/users/:filter` route
+- **Waitlist**: waitlist entries — accept, reject, resend invite, delete
+- **Onboarding**: the waitlist toggle and the invite / welcome mail templates
 
 ### Access
 
@@ -185,21 +170,29 @@ Route guard in `_auth.tsx`: fetches org members, checks current user has role `a
 
 ### API
 
-Org/team management via `authClient.organization.*` (better-auth client). Team settings and mounts via dedicated
-routes:
+Org/team management via `authClient.organization.*` (better-auth client). Team settings, mounts and avatar go
+through dedicated routes.
 
-| Route                           | Method     | Purpose                      |
-|---------------------------------|------------|------------------------------|
-| `/team/:teamId/settings`       | GET / PUT  | Team settings (calendar, quota overrides) |
-| `/team/:teamId/mounts`         | GET        | List team mounts             |
-| `/team/:teamId/mount`          | POST       | Add mount to team            |
-| `/team/:teamId/mount/:mountId` | PUT        | Update mount settings        |
-| `/settings/user/:userId`       | DELETE     | Delete user completely       |
-| `/settings/server`             | GET / PUT  | Server-wide settings         |
-| `/settings/s3config`           | GET / PUT  | S3 storage configuration     |
-| `/settings/s3check`            | POST       | Test S3 connection           |
+Every team route takes `:ownerId` — the prefixed `team_{teamId}` form, not the bare team id. Pass a bare id and
+`parseOwnerId` reads it as a *user* id, so the route 404s on a missing user (or 400s on a malformed id). Always
+build the segment with `teamOwnerId(teamId)`.
 
-Team settings are stored in `data/team/{teamId}/settings.json` via `TeamHome.settings` (`JsonStore<TeamSettings>`).
+| Route                            | Method     | Purpose                                   |
+|----------------------------------|------------|-------------------------------------------|
+| `/team/:ownerId/members`         | GET        | List team members                         |
+| `/team/:ownerId/settings`        | GET / PUT  | Team settings (calendar, quota overrides) |
+| `/team/:ownerId/mounts`          | GET        | List team mounts                          |
+| `/team/:ownerId/mount`           | POST       | Add mount to team                         |
+| `/team/:ownerId/mount/:mountId`  | PUT        | Update mount settings                     |
+| `/team/:ownerId/avatar`          | POST / DELETE | Set / remove the team avatar           |
+| `/settings/user/:userId`         | DELETE     | Delete user completely                    |
+| `/settings/users/:filter`        | GET        | Guest / orphan user lists                 |
+| `/settings/server`               | GET / PUT  | Server-wide settings                      |
+| `/settings/s3config`             | GET / PUT  | S3 storage configuration                  |
+| `/settings/s3check`              | POST       | Test S3 connection                        |
+
+Routes in `apps/api/src/routes/team.ts` and `apps/api/src/routes/settings.ts`. Team settings are stored in
+`data/team/{teamId}/settings.json` via `TeamHome.settings` (`JsonStore<TeamSettings>`).
 
 ### User Deletion
 

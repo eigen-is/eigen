@@ -1,8 +1,8 @@
 # Database Architecture
 
 > **TLDR**: SQLite via Drizzle ORM. Each domain has its own `db-config.ts` with schema + versioned migrations.
-`ManagedDatabase` handles versioning, WAL mode, auto-sync, and dirty tracking. Databases are singletons per path.
-> Server-level DBs in `data/server/`, user-level in `data/home/{userId}/`.
+> `ManagedDatabase` handles versioning, WAL mode, auto-sync, dirty tracking and snapshots. Databases are
+> singletons per path. Server-level DBs in `data/server/`, user-level in `data/home/{userId}/`.
 
 ## Database Inventory
 
@@ -11,10 +11,10 @@
 | Auth            | `{server}/users3.db`                            | User auth (better-auth managed)                          |
 | Share registry  | `{server}/eigen.db`                             | Share registry ([ACL.md](ACL.md#share-registry))         |
 | Notifications   | `{home}/eigen.notifications/notifications.db`   | Per-user notification history                            |
-| Mount metadata  | `{home}/mounts/{id}/metadata.db`                | Drive file/folder structure                              |
+| Mount metadata  | `{home}/mounts/{id}/metadata.db`                | Drive file/folder structure. Also `pending_uploads` (write-behind S3 queue), `file_events` + `path_watchers` (history/watching) and the `paths_fts` name index (`apps/api/src/lib/mount/schema.ts`) |
 | Shared paths    | `{home}/mounts/shared.db`                       | Files shared with this user                              |
 | Contacts        | `{home}/eigen.contacts/contacts.db`             | Contact data                                             |
-| Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata + FTS5 full-text index (`emails_fts`, v3). See [PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md) |
+| Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata + FTS5 full-text index (`emails_fts`). `MAIL_DB_CONFIG` is at `currentVersion: 4`. See [SEARCH.md](SEARCH.md) |
 | Calendar        | `{home}/eigen.calendar/calendar.db`             | Calendars, events, shared calendars                      |
 | Collab docs     | Via storage backend (`{dataDbPathId}`)           | Yjs snapshots + updates                                  |
 | Chat rooms      | Via storage backend (`{dataDbPathId}`)           | Messages + read state                                    |
@@ -30,7 +30,8 @@ Core database wrapper providing:
 - **WAL mode** for concurrent reads
 - **Dirty tracking** — marks DB dirty after writes for sync
 - **Auto-sync** — periodic sync at configurable interval
-- **Sync callbacks** — `onOpen`, `onSync`, `onClose` for remote storage
+- **Snapshots** — opt-in file versioning, triggered from the sync tick and from close
+- **Sync callbacks** — `onOpen`, `onSync`, `onSnapshot`, `onClose` for remote storage and versioning
 
 ```typescript
 type DatabaseConfig<S extends SchemaType> = {
@@ -38,8 +39,16 @@ type DatabaseConfig<S extends SchemaType> = {
     currentVersion: number;
     schema: S;
     migrations: Migration[];
+    snapshot?: {
+        policy: RetentionPolicy;
+        writesPerSnapshot: number; // snapshot once this many writes have accumulated
+    };
 };
 ```
+
+`snapshot` is what drives file versioning: `snapshotIfDue()` calls `onSnapshot`, which returns `'taken'` or
+`'skipped'` (skipped when the container lock is contended, so a close never parks on it). `onClose` receives a
+`syncFailed` flag — true when the close-time sync threw, meaning the working copy holds bytes storage does not.
 
 ### Lifecycle
 
@@ -96,7 +105,12 @@ test.eigendoc/          (pathId: abc123)
 └── comments.db         (pathId: def456, comment index)
 ```
 
-For remote storage (S3): `Mount.openDatabase()` downloads to temp, syncs periodically, uploads on close.
+For remote storage (S3): `Mount.openDatabase()` downloads the object to a mount temp file and works on that
+copy. Uploads are **write-behind**: sync and close do not PUT. They stage a frozen `VACUUM INTO` copy in the
+mount's `staging/` dir and record a durable `pending_uploads` row in `metadata.db`; a per-mount `UploadQueue`
+(`apps/api/src/lib/mount/upload-queue.ts`) drains those rows in the background with retry and backoff, and
+clears each row only on ack. A slow or failing backend becomes background lag, never a request hang.
+See [SYNC.md](SYNC.md).
 
 ### Singleton pattern
 
@@ -106,5 +120,5 @@ only once.
 ## Schema Tables
 
 See [STORAGE.md](STORAGE.md) for mount metadata/shared schemas. See [CHAT.md](CHAT.md), [CALENDAR.md](CALENDAR.md),
-[COMMENTS_IN_DOCS.md](COMMENTS_IN_DOCS.md), and [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for domain-specific
+[COMMENTS.md](COMMENTS.md), and [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for domain-specific
 schemas.

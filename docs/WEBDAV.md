@@ -1,6 +1,6 @@
 # WebDAV Drive Mount
 
-> **TLDR:** Each mount is exposed at `/webdav/<ownerId>/<mountId>/` over HTTP Basic auth. Class 1 +
+> **TLDR**: Each mount is exposed at `/webdav/<ownerId>/<mountId>/` over HTTP Basic auth. Class 1 +
 > Class 2 (RFC 4918) — `OPTIONS`, `PROPFIND`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `MOVE`, `COPY`,
 > `PROPPATCH`, `LOCK`, `UNLOCK`. Eigen container files (`.eigendoc`, `.eigensheets`, ...) appear as
 > plain folders containing `data.db` + `media/`; reads pass through, writes inside are blocked (423).
@@ -44,7 +44,7 @@ Every mutating method goes through `assertWritable()` (lock check) and the conta
 | `OPTIONS` | – | `apps/api/src/app.ts` | Advertises `DAV: 1, 2` and the `Allow` list. Handled before CORS. |
 | `PROPFIND` | 1 | `Drive.resolvePath`, `Drive.getFolderContents` | Depth 0/1 supported. Depth ∞ returns `403` with `<DAV:propfind-finite-depth>` (RFC 4918 §9.1). |
 | `GET` / `HEAD` | 1 | `Drive.readFile` (or `readRange` for `Range:`) | `bytes=N-M`, open-ended `bytes=N-`, suffix `bytes=-N` all supported. `If-Match` / `If-None-Match` honored in RFC 7232 §6 order. |
-| `PUT` | 1 | `Drive.createFileFromTemp` / `writeFileContent` | Streams to a tmp file before insert. Quota pre-check via `Content-Length`. Thumbnails regenerate on overwrite. |
+| `PUT` | 1 | `Drive.createFileFromData` (new) / `Drive.writeFileContent` (overwrite) | Both stage the body to a tmp file with hashing before the insert. Quota pre-check via `Content-Length`. Thumbnails regenerate on overwrite. |
 | `DELETE` | 1 | `Drive.deletePath` (soft) | Goes to trash. `resolvePath` skips trashed rows so subsequent `GET`/`PROPFIND` returns 404. |
 | `MKCOL` | 1 | `Drive.createFolder` | Bodied `MKCOL` returns `415` (RFC 4918 §9.3.1). |
 | `MOVE` | 1 | `Drive.movePath` + `renamePath` | Same-mount only. `Overwrite: F` → `412` if target exists. |
@@ -111,8 +111,11 @@ apps/api/src/lib/webdav/
   locks.ts              # LOCK / UNLOCK handlers + assertWritable()
   container-guard.ts    # enclosingDocumentContainer() over breadcrumb
   container-overlay.ts  # AppleDouble + Office-tempfile filename filter
-  xml.ts                # multistatus / propstat / encodeHref / computeEtag
+  xml.ts                # multistatus / propstat / encodeHref, prop serialization
 ```
+
+`computeEtag` is not a WebDAV concern — it is imported from `lib/core/http` and shared with the REST routes,
+so the same file reports the same validator on both paths.
 
 Route entry points always go through `getSharedDrive(ownerId, user)`, so cross-owner ACL is enforced
 the same way as the REST API. The drive-side helpers (`resolvePath`, `copyPath`, `readRange`,
@@ -137,8 +140,8 @@ Verified working as of 2026-05:
 | Client | Platform | Notes |
 |---|---|---|
 | **Windows Explorer** ("Add a network drive") | Win 10/11 | Works really well in practice. Requires HTTPS (Basic auth default). 50 MB upload cap unless registry tweak is applied. Service `WebClient` must be running. |
-| **Mountain Duck** | macOS, Win | Recommended commercial pick on macOS — Mountain Duck 5+ uses native File Provider / CfAPI. See [WEBDAV-MOUNTAIN-DUCK.md](WEBDAV-MOUNTAIN-DUCK.md). |
-| **rclone-mount** | macOS, Win, Linux | Recommended free / scriptable pick. User installs FUSE-T (Mac) or WinFsp (Win). See [WEBDAV-RCLONE.md](WEBDAV-RCLONE.md). |
+| **Mountain Duck** | macOS, Win | Recommended commercial pick on macOS — Mountain Duck 5+ uses native File Provider / CfAPI. |
+| **rclone-mount** | macOS, Win, Linux | Recommended free / scriptable pick. User installs FUSE-T (Mac) or WinFsp (Win). |
 | **Cyberduck** | macOS, Win | Browse-and-transfer, no mount; the test bed during development. |
 | **macOS Finder** (`webdavfs`) | macOS | Supported but not blessed — slow on large folders, aggressive metadata caching. Prefer Mountain Duck or rclone. |
 | **Word / Excel** (Mac + Win) | – | LOCK/PUT/MOVE save-dance verified. AutoSave is disabled on WebDAV mounts (Microsoft, M365 v2306+) — saves are manual. |
@@ -146,13 +149,22 @@ Verified working as of 2026-05:
 
 ## Limits
 
+Conformance baseline: Litmus 0.17 scores **101/105** against this server.
+
 - **Per-mount quota**: `MountConfig.maxSizeMB`. Pre-checked against `Content-Length` on `PUT`; `507`
-  on overrun. Chunked PUTs without `Content-Length` are not pre-checked — see [TODO-WEBDAV.md](TODO-WEBDAV.md).
+  on overrun.
 - **Per-user upload size**: `getUploadMaxSize()` — same value the regular Drive route enforces.
 - **PROPFIND/PROPPATCH/LOCK body**: 64 KB.
 - **Lock TTL**: 600 s default, 24 h cap.
-- **Rate limits**: defer to the global Elysia rate limiter; no protocol-specific limits. Litmus runs
-  back-to-back trip the 300 req/min cap — see [TODO-WEBDAV.md](TODO-WEBDAV.md).
+- **Rate limits**: defer to the global Elysia rate limiter; no protocol-specific limits.
+
+Two gaps are known and open:
+
+1. **Unbounded chunked PUT bypasses the quota projection.** A chunked upload sends no `Content-Length`, so
+   there is nothing to pre-check and the mount can be pushed one upload past its cap. The client is
+   authenticated, so this is a noisy-user problem rather than an attack vector.
+2. **Litmus trips the rate cap.** Litmus fires requests back-to-back and hits the global 300 req/min limit, so
+   a full conformance run needs the limiter relaxed first.
 
 ## File reference
 
@@ -164,8 +176,6 @@ Verified working as of 2026-05:
 | `apps/api/src/app.ts` | OPTIONS handler, router mount, DAV header |
 | `apps/space/src/routes/_auth.services.tsx` | per-mount URL listing on the Integrations page |
 | `apps/api/src/test/webdav/*.test.ts` | integration tests |
-| `docs/TODO-WEBDAV.md` | canonical follow-up list + Litmus baseline |
-| `docs/WEBDAV-MOUNTAIN-DUCK.md`, `docs/WEBDAV-RCLONE.md` | client recipes |
 
 ## See also
 

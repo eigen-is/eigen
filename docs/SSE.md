@@ -1,11 +1,8 @@
 # Server-Sent Events (SSE)
 
-> **TLDR**: Real-time cache invalidation. Backend emits events via `home.broadcast()` → SSE stream → frontend handlers
-> invalidate TanStack Query cache. User-facing notifications (toasts) come exclusively from the notification center's
-> SSE event. SSE events carry only the minimum data needed for cache invalidation — no display text, no full domain
-> objects. Add new domain SSE: define types in `packages/lib/src/types/sse.ts`, create builder in
-> `apps/api/src/lib/[domain]/sse-events.ts`, create handler in `packages/lib/src/core/[domain]/sse-handlers.ts`,
-> register in `use-sse.ts`.
+> **TLDR**: Real-time cache invalidation. The backend emits events via `home.broadcast()` → SSE stream → frontend
+> handlers invalidate the TanStack Query cache. Events carry only what invalidation needs — no display text, no full
+> domain objects. Toasts come exclusively from the notification center's own SSE event.
 
 ## Flow
 
@@ -27,23 +24,19 @@ Events fall into two categories:
 
 - **Cache invalidation**: domain events (drive, mail, calendar, chat, contacts) carry only IDs needed for
   `queryClient.invalidateQueries()`. No toasts, no display text
-- **Notification**: `notification:created` carries `title` + optional `body` for the toast. Created by
-  `NotificationCenter.persist()` which also writes to the per-user notifications database
+- **Notification**: `notification:created` carries the toast text plus the tag pair its View link needs (see Event
+  Design). Created by `NotificationCenter.persist()`, which also writes to the per-user notifications database
 
 See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the toast pattern, [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)
 for the notification center architecture.
 
-## File Locations
+## Where the code lives
 
-| Purpose           | Location                                                          |
-|-------------------|-------------------------------------------------------------------|
-| Type definitions  | `packages/lib/src/types/sse.ts`                                   |
-| Event builders    | `apps/api/src/lib/[domain]/sse-events.ts`                         |
-| SSE handlers (FE) | `packages/lib/src/core/[domain]/sse-handlers.ts`                  |
-| useSSE hook       | `packages/lib/src/core/sse/hooks/use-sse.ts`                      |
-| SSE Provider      | `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` |
-| SSE route         | `apps/api/src/routes/sse.ts`                                      |
-| Home.broadcast()  | `apps/api/src/lib/home/home.ts`                                   |
+Types live in `packages/lib/src/types/sse.ts`. Per domain, the backend builder is
+`apps/api/src/lib/[domain]/sse-events.ts` and the frontend handler is
+`packages/lib/src/core/[domain]/sse-handlers.ts`, registered in `packages/lib/src/core/sse/hooks/use-sse.ts` (mounted
+by `packages/ui/src/components/layout/sse-provider/sse-provider.tsx`). The stream itself is
+`apps/api/src/routes/sse.ts` plus `home.broadcast()` in `apps/api/src/lib/home/home.ts`.
 
 ## Event Design
 
@@ -54,9 +47,13 @@ Events are minimal — only what the frontend handler needs for cache invalidati
 - Calendar: `ownerId`
 - Chat: `chat.chatId`, `chat.ownerId`, `chat.mountId`
 - Contacts: `contactId` or `labelId`
-- Notification: `title`, optional `body`
+- Notification: `title`, optional `body`, optional `notificationType` + `tag` — the last two let the toast's **View**
+  action resolve the same deep link the bell uses (`resolveNotificationLink`), without shipping the whole row
 - Space: just the event type
 - Team: `teamId`
+
+`notification:created` has a sibling, `notification:changed` (bare `{type}`), which tells the bell to refetch its
+count and list without toasting — emitted after a read or dismiss.
 
 Type prefixes: `drive:`, `mail:`, `contacts:`, `chat:`, `calendar:`, `notification:`, `space:`, `team:`
 
@@ -71,16 +68,6 @@ Type prefixes: `drive:`, `mail:`, `contacts:`, `chat:`, `calendar:`, `notificati
 
 ## Implemented Domains
 
-| Domain       | sse-events builder | sse-handler | Backend emits |
-|--------------|--------------------|-------------|---------------|
-| Drive        | Yes                | Yes         | Yes           |
-| Mail         | Yes                | Yes         | Yes           |
-| Contacts     | Yes                | Yes         | Yes           |
-| Chat         | Yes                | Yes         | Yes           |
-| Calendar     | Yes                | Yes         | Yes           |
-| Notification | Yes                | Yes         | Yes           |
-| Space        | —                  | Yes         | No            |
-| Team         | —                  | Yes         | No            |
-
-Space and Team have SSE types defined and frontend handlers registered, but no backend code broadcasts these
-events yet. The handlers are wired up in advance so adding the backend emit is all that's needed.
+Drive, Mail, Contacts, Chat, Calendar and Notification are complete: builder, handler, and backend emits. Space and
+Team have types and frontend handlers registered but no builder and no backend emit yet — the handlers are wired up
+in advance, so adding the emit is all that is needed.

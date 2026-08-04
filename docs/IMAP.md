@@ -1,8 +1,9 @@
 # Maildir Storage & Dovecot Compatibility
 
-**TLDR:** Eigen stores email in standard Maildir++ format with Dovecot-compatible filenames, flags, and directory
-layout. The filesystem is the source of truth; `mail.db` is a rebuild-safe read cache. A scan-based sync engine
-reconciles disk state with the DB, enabling seamless coexistence with Dovecot IMAP.
+> **TLDR**: Email is stored in standard Maildir++ with Dovecot-compatible filenames, flags, and directory
+> layout. The filesystem is the source of truth; `mail.db` is a rebuild-safe read cache. A scan-based sync
+> engine reconciles disk against DB in chunks, off the request path. There is no in-repo IMAP server —
+> Dovecot runs as its own container over the same files. App-level mail is in **[MAIL.md](MAIL.md)**.
 
 ## Design Principles
 
@@ -20,21 +21,21 @@ reconciles disk state with the DB, enabling seamless coexistence with Dovecot IM
 
 ## Code Architecture
 
+Everything lives in `apps/api/src/lib/mail/`. The storage half:
+
 | File | Responsibility |
 |------|----------------|
-| `mail-domain.ts` | `Mail` domain class behind `home.mail` -- draft state machine, send pipeline, iMIP coupling, SSE emission, notifications. Backend-independent; holds a `MailStore` |
 | `mail-store.ts` | `MailStore` interface -- the swappable storage contract, plus the `MailStoreEvents` change stream |
 | `maildir-store.ts` | `MaildirStore implements MailStore` -- Maildir filesystem ops (deliver, move, list, rename, watch), the sync engine, and the `mail.db` index. Returns `BunFile` via `getMessageFile()` for lazy reads |
-| `maildb.ts` | CRUD for email metadata in `mail.db` |
+| `maildb.ts` | CRUD + batch upsert for email metadata in `mail.db` |
 | `mail-parse.ts` | Parses `.eml` content into `Email` (accepts `BunFile`), sanitizes HTML via DOMPurify |
 | `mailfile.ts` | Generates RFC 5322 `.eml` content from draft input |
 | `mailutils.ts` | Filename generation, flag parsing, flag rebuild helpers |
-| `sender.ts` | `draftToOutboundMail()` -- converts `EmailDraft` to `OutboundMail` for `sendMail()` |
-| `welcome.ts` | Generates the welcome email delivered on first mailbox init |
-| `mail.ts` | Logic-bearing helpers (`mailboxDeliver`, `messageGet`, `messageMoveToTrash`, `uploadDraftAttachment`, `attachFromDrive`, `saveAttachmentsToDrive`) + `getMailClient` for inline use in routes |
-| `sse-events.ts` | `buildMailEvent()` -- SSE event builder for mail mutations |
-| `schema.ts` | Drizzle ORM schema for `emails`, `emailLabels`, `emailsToLabels` |
-| `constants.ts` | `STANDARD_MAILBOXES`, `PATHS.MAIL` |
+| `schema.ts`, `db-config.ts` | Drizzle schema + versioned migrations for `mail.db` |
+
+`STANDARD_MAILBOXES` and `PATHS.MAIL` come from `lib/core/constants.ts`. The app half on top of the store
+(`mail-domain.ts`, `mail.ts`, `sender.ts`, `welcome.ts`, `sse-events.ts`) is mapped in
+[MAIL.md § Architecture](MAIL.md#architecture).
 
 ## Filename Format
 
@@ -98,7 +99,8 @@ eigen.mail/
 against path traversal and special characters. `canonicalMailbox()` in `mail-domain.ts` normalizes case-insensitive
 input to canonical form.
 
-Labels (`emailLabels` table) provide per-message tagging as an alternative to folder-based organization.
+Mailbox membership is the only organization Eigen has. The `emailLabels`/`emailsToLabels` tables are
+**vestigial** — the v1 `CREATE TABLE` is the only place they appear; no code reads or writes them.
 
 ## Delivery Flow
 
@@ -119,18 +121,24 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
 1. **Move `new/` -> `cur/`** -- standalone mode fallback. Appends `:2,` (empty flags). ENOENT-safe if Dovecot already
    moved the file.
 2. **Build disk state** -- lists all files in `cur/`, builds a `Map<messageId, filename>`.
-3. **Reconcile with DB** -- each discovery is reported through `MailStoreEvents`; the `Mail` domain class turns
-   them into SSE events + notifications:
-   - **New messages** (on disk, not in DB): read file via `getMessageFile()` (returns `BunFile`), parse EML, apply
-     flags from filename, insert into DB, report `received` (`MAIL_RECEIVED` + `home.notifications`).
+3. **Reconcile with DB** -- diff the disk map against `getAllEmails(mailbox)`. Each discovery is reported through
+   `MailStoreEvents`; the `Mail` domain class turns them into SSE events + notifications:
+   - **New messages** (on disk, not in DB): processed in **chunks of 250**. A chunk is parsed first (file via
+     `getMessageFile()` → `BunFile`, `parseEml`, flags applied from the filename), then written by a single
+     `insertEmails` upsert transaction, then its `received` events fire (`MAIL_RECEIVED` +
+     `home.notifications`). One transaction and one SSE burst per chunk, not per message — this is the cold-index
+     win. A message that fails to parse is logged and skipped so one bad `.eml` can't drop the rest of the chunk.
    - **Flag changes** (on disk with different filename than DB): update DB flags + filename, report `flagsChanged`
      (`MAIL_FLAGS_CHANGED`).
    - **Deleted messages** (in DB, not on disk): delete from DB, report `deleted` (`MAIL_DELETED`).
 4. **Deduplication guard** -- `syncingMailboxes` Map prevents redundant concurrent syncs on the same mailbox. If a sync
    is already running, callers await the existing promise.
 
-Sync triggers: API request for mailbox contents (before returning data), filesystem watcher events, and after Eigen
-writes (deliver, copy).
+Sync triggers: filesystem watcher events, Eigen's own writes (deliver, copy), and reads of a mailbox. **A read
+does not wait for the sync**: `listMessages` awaits `syncMailbox()` only when the mailbox has no rows yet (first
+open, so the user sees content immediately); otherwise it returns the DB rows straight away and fires the sync in
+the background with `.catch()`. Anything the background sync finds reaches the client over SSE. See
+[MAIL.md § Performance design](MAIL.md#performance-design).
 
 ## File Watching
 
@@ -162,47 +170,33 @@ so the frontend updates without page refresh. `unwatch()` closes all watchers an
 
 ## Dovecot Configuration Reference
 
+The config is `docker/dovecot/dovecot.conf`. Three settings carry the whole compatibility contract:
+
 ```
-mail_location = maildir:~/Maildir
+mail_location = maildir:~/Maildir      # ~ = data/home/{userId}/eigen.mail/
 
 namespace inbox {
-    inbox = yes
-    separator = .
-
-    mailbox Sent {
+    separator = .                      # Maildir++ dot-prefix: .Sent/, .Drafts/
+    mailbox Sent {                     # one block per standard mailbox
         auto = subscribe
         special_use = \Sent
     }
-    mailbox Drafts {
-        auto = subscribe
-        special_use = \Drafts
-    }
-    mailbox Trash {
-        auto = subscribe
-        special_use = \Trash
-    }
-    mailbox Junk {
-        auto = subscribe
-        special_use = \Junk
-    }
-    mailbox Archive {
-        auto = subscribe
-        special_use = \Archive
-    }
 }
-
-maildir_very_dirty_syncs = no
 ```
 
-`~/Maildir` maps to `data/home/{userId}/eigen.mail/Maildir` in Eigen's data layout.
+`separator = .` is what makes Dovecot's folder names line up with the on-disk `.Mailbox` layout, and the
+`special_use` blocks make clients see the same six mailboxes Eigen exposes. The rest of the file is TLS
+(`ssl = required`, plaintext auth off), the `checkpassword` passdb, running IMAP workers as `vmail` (uid 1000,
+matching the API container), and the SASL listener Postfix uses for submission.
 
 ## Dovecot Deployment
 
 Dovecot runs as a Docker container alongside Eigen. Authentication uses Dovecot's `checkpassword` mechanism:
 Dovecot calls `eigen-checkpassword` (a bash script) which `POST`s to Eigen's `/internal/auth/verify` endpoint.
 The endpoint verifies the password via `verifyProtocolAuth()` — tries app passwords (better-auth API keys) first,
-falls back to primary password (rejected if 2FA is enabled). See [DEPLOYMENT.md](DEPLOYMENT.md) for the full
-Docker architecture.
+falls back to primary password (rejected if 2FA is enabled). The container set and compose files live in
+`docker/`; [CONTRIBUTING.md § Docker](CONTRIBUTING.md#option-2-docker-full-stack) covers running the full stack
+locally.
 
 **Files:** `docker/dovecot/dovecot.conf`, `docker/dovecot/eigen-checkpassword`
 
@@ -210,24 +204,4 @@ Docker architecture.
 
 - **Stale `tmp/` cleanup.** Per Maildir spec, files in `tmp/` older than 36 hours can be safely deleted. No
   housekeeping code exists.
-
-## File Reference
-
-| File | Path |
-|------|------|
-| Domain class (`Mail`) | `apps/api/src/lib/mail/mail-domain.ts` |
-| Store contract (`MailStore`) | `apps/api/src/lib/mail/mail-store.ts` |
-| Maildir store | `apps/api/src/lib/mail/maildir-store.ts` |
-| DB operations | `apps/api/src/lib/mail/maildb.ts` |
-| EML parser | `apps/api/src/lib/mail/mail-parse.ts` |
-| EML generator | `apps/api/src/lib/mail/mailfile.ts` |
-| Filename helpers | `apps/api/src/lib/mail/mailutils.ts` |
-| Send helper | `apps/api/src/lib/mail/sender.ts` |
-| Welcome email | `apps/api/src/lib/mail/welcome.ts` |
-| Route facade | `apps/api/src/lib/mail/mail.ts` |
-| SSE events | `apps/api/src/lib/mail/sse-events.ts` |
-| Routes | `apps/api/src/routes/mail.ts` |
-| DB schema | `apps/api/src/lib/mail/schema.ts` |
-| DB config | `apps/api/src/lib/mail/db-config.ts` |
-| Constants | `apps/api/src/lib/core/constants.ts` |
-| Shared types | `packages/lib/src/types/mail.ts` |
+- **Labels.** The `emailLabels`/`emailsToLabels` tables exist in the v1 migration and nowhere else.

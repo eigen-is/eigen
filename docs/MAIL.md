@@ -219,30 +219,14 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
 - A second `MailStore` backend (JMAP/Stalwart) is proposed only — see
   [PROPOSAL_STALWART_MAIL.md](PROPOSAL_STALWART_MAIL.md).
 
-## Key files
+## Where the code lives
 
-| Area | File |
-|---|---|
-| BE routes | `apps/api/src/routes/mail.ts` |
-| BE route helpers (Drive bridge, deliver) | `apps/api/src/lib/mail/mail.ts` |
-| BE domain (`class Mail`: draft/send/iMIP/SSE/notifs) | `apps/api/src/lib/mail/mail-domain.ts` |
-| BE store interface + change stream | `apps/api/src/lib/mail/mail-store.ts` |
-| BE Maildir store (FS + sync engine) | `apps/api/src/lib/mail/maildir-store.ts` |
-| BE DB layer (CRUD, keyset list, FTS search) | `apps/api/src/lib/mail/maildb.ts` |
-| BE eml parser (DOMPurify) | `apps/api/src/lib/mail/mail-parse.ts` |
-| BE Maildir filename/flag helpers | `apps/api/src/lib/mail/mailutils.ts` |
-| BE schema + versioned migrations (v4) | `apps/api/src/lib/mail/schema.ts`, `db-config.ts` |
-| BE outbound mailer + RFC822 compose | `apps/api/src/lib/core/mailer.ts` |
-| BE welcome mail | `apps/api/src/lib/mail/welcome.ts` |
-| BE shared protocol auth (IMAP/CalDAV/WebDAV) | `apps/api/src/lib/auth/protocol-auth.ts` |
-| FE route (list/detail/compose orchestration) | `apps/mail/src/routes/_auth.$filterType.$filterId.tsx` |
-| FE data hooks + optimistic cache + registry | `packages/lib/src/core/mail/hooks/use-emails.ts` |
-| FE mailboxes + draft hooks | `packages/lib/src/core/mail/hooks/use-mailboxes.ts`, `use-draft.ts` |
-| FE SSE handlers | `packages/lib/src/core/mail/sse-handlers.ts` |
-| FE list state (order/selection/cursor) | `apps/mail/src/components/mail/hooks/use-mail-list.ts` |
-| FE actions + shortcuts | `apps/mail/src/components/mail/hooks/use-mail-actions.ts`, `use-mail-shortcuts.ts` |
-| FE components (list/detail/compose) | `apps/mail/src/components/mail/{email-list,email-detail,email-draft}.tsx` |
-| FE settings (in the space app) | `apps/space/src/components/space/{mail-prefs-section,signature-section}.tsx` |
-| Shared types | `packages/lib/src/types/mail.ts`, `packages/lib/src/types/sse.ts` |
+- **Backend**: `apps/api/src/lib/mail/` — the whole stack in the diagram above (routes are the one exception,
+  `apps/api/src/routes/mail.ts`). Shared with other protocols: `lib/auth/protocol-auth.ts`, `lib/core/mailer.ts`.
+- **Shared**: `packages/lib/src/core/mail/` — hooks (`hooks/use-emails.ts`, `use-mailboxes.ts`, `use-draft.ts`),
+  query keys, optimistic-patch helpers, `sse-handlers.ts`. Types in `packages/lib/src/types/mail.ts`.
+- **Frontend**: `apps/mail/src/components/mail/` — list, detail, composer, plus their `hooks/` (list state,
+  actions, shortcuts). The route wiring sits in `apps/mail/src/routes/`. Mail *settings* live in
+  `apps/space/src/components/space/`.
 
 Storage internals (Maildir layout, flag encoding, sync-engine diff, Dovecot): **[IMAP.md](IMAP.md)**.

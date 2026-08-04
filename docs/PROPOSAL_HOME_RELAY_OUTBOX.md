@@ -414,8 +414,9 @@ staged uploads).
   the coalesce upsert's dead-row revival makes manual replay provably safe (a newer change has
   already reclaimed the key). Say it in a comment on the lane predicate.
 - **Q3 — Delivery concurrency value?** 8 matches `FAN_OUT_CONCURRENCY`. Honest limit: K bounds
-  the *rate* of opens, not the accumulation — delivered homes stay resident for the 5-minute idle
-  window, so a 26-target fan-out through K=8 still ends at 26 × ~30 ≈ 780 resident fds. The
+  the *rate* of opens, not the accumulation — delivered homes stay resident for their idle
+  window (5 min user homes, 30 min team homes), so a 26-target fan-out through K=8 still ends
+  at 26 × ~30 ≈ 780 resident fds. The
   outbox turns the stampede into a queue; *preventing* the `SQLITE_IOERR_VNODE` class under tight
   rlimits is PROPOSAL_FD_BUDGET.md's LRU cap (its phase-2 item). *Recommendation:* start at 8,
   revisit alongside the LRU cap so the two constants are tuned as a pair.

@@ -1,27 +1,24 @@
 # In-Document Search
 
-## TLDR
+> **TLDR**: One shared `⌘F` find bar over six surfaces — the four eigendoc editors (docs, sheets,
+> slides, stickies) and both Drive inline editors (markdown, code). Each implements a small
+> `DocSearchController` over its own live state; `DocSearchProvider` owns the session, the keybinds
+> and the floating `FindReplaceBar`. Everything but slides and stickies also replaces (`⌥⌘F`).
 
-Every eigendoc editor (docs, sheets, slides, stickies) has a `⌘F` find bar that searches **inside
-the open document** — jump to a card, a cell, a heading. Each app implements one small
-`DocSearchController` contract over its own live state; a shared `DocSearchProvider` owns the find
-session (query, options, matches, active index), the keybinds, and the floating `FindReplaceBar`.
 Matches are **plain serialisable data** (`id` + `label` + `context`) revealed by id, never closures —
-so the same controller also feeds the command palette `doc:` scope and the `?q=` deep link. Docs and
-sheets additionally support **replace** (`⌥⌘F`). Comment threads on a board are searched server-side
-through a separate `DocCommentSearch` capability backed by `comments.db`'s `comments_fts`. Core
-contract in `packages/lib/src/types/doc-search.ts`; the bar in
-`packages/ui/src/components/layout/search/`.
+so the same controller also feeds the command palette `doc:` scope and the `?q=` deep link. Comment
+threads on a board are searched server-side through a separate `DocCommentSearch` capability backed
+by `comments.db`'s `comments_fts`. Core contract in `packages/lib/src/types/doc-search.ts`; the bar
+and the shared controllers in `packages/ui/src/components/layout/search/`.
 
 This is **finding a location inside the document you already have open**. Finding *which* document
-contains a term (drive-wide body search) is a different system — see
-[PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md).
+contains a term (drive-wide body search) is a different system — see [SEARCH.md](SEARCH.md).
 
 ## The Controller Contract
 
-Each eigendoc app implements `DocSearchController` once over its live state (the ProseMirror tree,
-the workbook, the Y.Doc board). It is the single notion of "a match" shared by the find bar, the
-palette `doc:` scope, and the `?q=` landing.
+Each surface implements `DocSearchController` once over its live state (the ProseMirror tree, the
+workbook, the Y.Doc board, the CodeMirror view). It is the single notion of "a match" shared by the
+find bar, the palette `doc:` scope, and the `?q=` landing.
 
 ```typescript
 type DocSearchOptions = { matchCase: boolean; wholeWord: boolean; regex: boolean };
@@ -38,7 +35,7 @@ type DocSearchController = {
     highlightAll(matches: DocSearchMatch[]): void;                    // paint all; [] clears
     reveal(matchId: string): void;                                    // scroll-to + flash
 
-    // v1.5 — replace (docs + sheets only; slides/stickies leave these unset)
+    // replace — docs, sheets, the Drive inline editors; slides/stickies leave these unset
     canReplace?: boolean;
     replace?(matchId, query, replacement, opts, preserveCase): DocSearchMatch[];
     replaceAll?(query, replacement, opts, preserveCase): { replaced: number; matches: DocSearchMatch[] };
@@ -94,14 +91,20 @@ the same:
 | `.eigen-search-ring`, `.eigen-search-ring-active` | object-outline highlight (stickies cards) |
 | `.eigen-search-flash` | one-shot reveal pulse (the `eigen-search-ring-flash` keyframe) |
 
-## Per-App Controllers
+## Per-Surface Controllers
 
-| App | Controller | Strategy | Replace |
+| Surface | Controller | Strategy | Replace |
 |---|---|---|---|
-| Docs | `apps/docs/src/components/docs/use-doc-search-controller.ts` | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
+| Docs | `useProseMirrorSearchController` (`packages/ui/.../layout/search/prosemirror-search-controller.ts`) | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
 | Sheets | `apps/sheets/src/components/sheets/hooks/use-search-controller.ts` | adapter over `packages/sheet` `collectMatches`, iterating **all tabs**; `reveal` reuses scroll-and-select | ✓ |
 | Slides | `apps/slides/src/components/slides/hooks/use-slides-doc-search.ts` | in-memory scan of the deck | — |
 | Stickies | `apps/stickies/src/components/stickies/hooks/use-stickies-doc-search.ts` | Y.Doc scan of `tasks` / `columns`; `reveal` scrolls to + flashes the card | — |
+| Drive markdown editor | `useProseMirrorSearchController` + `use-codemirror-search-controller.ts` (`apps/drive/src/components/editor/`) | the shared PM controller in WYSIWYG mode, the CodeMirror one in source mode | ✓ |
+| Drive code editor | `apps/drive/src/components/editor/use-codemirror-search-controller.ts` | `buildSearchRegex` over the plain CodeMirror doc; `reveal` selects + scrolls the range | ✓ |
+
+The ProseMirror controller lives in `packages/ui` precisely because two apps need it — the docs
+eigendoc editor and Drive's inline markdown editor share one implementation. Both PM and CodeMirror
+controllers take a `canWrite` flag that becomes `canReplace`, so a read-only file gets search only.
 
 Slides and stickies leave the replace members unset and stay search-only; no v1 caller changes shape.
 
@@ -156,8 +159,7 @@ type DocCommentMatch = { id: string; label: string; context?: string };  // id =
   card; docs: open the comments panel + scroll).
 
 Standalone chat history (an `.eigenchat` file opened on its own) is **not** covered here — a per-room
-`messages_fts` over full chat history is future work, tracked as Phase 3 in
-[PROPOSAL_SEARCH.md](PROPOSAL_SEARCH.md).
+`messages_fts` over full chat history is future work, tracked in [SEARCH.md](SEARCH.md).
 
 ## Shared Utilities
 
@@ -168,21 +170,8 @@ Standalone chat history (an `.eigenchat` file opened on its own) is **not** cove
 - `preserve-case.ts` — `applyPreserveCase(...)` reapplies the source token's case to a literal
   replacement (a replace-only concern `search()` never reads).
 
-## File Reference
+## See also
 
-| File | Purpose |
-|---|---|
-| `packages/lib/src/types/doc-search.ts` | `DocSearchController` / `DocSearchMatch` / `DocSearchOptions` / `DocSearchSession` / `DocCommentSearch` / `DocCommentMatch` |
-| `packages/lib/src/doc-search/` | `buildSearchRegex`, `applyPreserveCase` (shared DOM-free helpers) |
-| `packages/ui/src/components/layout/search/doc-search-provider.tsx` | find session, keybinds, palette publication (`usePaletteDocSearch`) |
-| `packages/ui/src/components/layout/search/find-replace-bar.tsx` | the floating bar UI |
-| `packages/ui/src/components/layout/search/find-in-document-button.tsx` | toolbar `⌕` trigger |
-| `packages/ui/src/hooks/use-eigen-doc-editor-route.ts` | `useLatchedDocSearchTerm` (`?q=` landing) |
-| `packages/ui/src/styles/globals.css` | `.eigen-search-*` highlight classes |
-| `packages/lib/src/core/command-palette/providers/doc-search.ts` | `doc:` scope → `doc-hit` results |
-| `packages/lib/src/core/command-palette/providers/doc-comment-search.ts` | In Comments → `doc-comment-hit` results |
-| `packages/lib/src/core/command-palette/hooks/use-palette-doc-search.ts` | app publishes its controller/capability |
-| `apps/{docs,sheets,slides,stickies}/…` | per-app `DocSearchController` implementations (see table) |
-| `apps/api/src/lib/chat/comment-db-config.ts` | `comments.db` v3 — `recentText` + `comments_fts` |
-| `apps/api/src/lib/chat/comment-index.ts` | `CommentIndex.searchComments` |
-| `apps/api/src/routes/collab.ts` | `GET …/comments/search` |
+- [INLINE-EDITING.md](INLINE-EDITING.md) — the Drive markdown / code editors that host the bar
+- [SEARCH.md](SEARCH.md) — drive-wide and mail content search (finding *which* document)
+- [COMMENTS.md](COMMENTS.md) — comment cards and threads behind `DocCommentSearch`
