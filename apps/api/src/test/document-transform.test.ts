@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { ImageObject, TextObject } from '@workspace/lib/slides';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
 import ExcelJS from 'exceljs';
@@ -22,15 +22,18 @@ import {
 } from '../lib/document/transform/protocol';
 import { runTransformToBytes, runTransformToExtractedText } from '../lib/document/transform/run-transform';
 import { documentTransformRunner, TRANSFORM_LIMITS } from '../lib/document/transform/runner';
+import type { Drive } from '../lib/drive';
 import { exportDocument, runDocumentExport } from '../lib/export/export-document';
 import { collectExportMedia } from '../lib/export/media';
 import { getHome } from '../lib/home/get-home';
 import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
+import { importIntoDocument } from '../lib/import/import-document';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
 import { renderEigendocPreviewBody } from '../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../lib/preview/eigenslides-render';
+import type { User } from '../lib/user';
 import {
     buildGoldenDeck,
     buildGoldenDocJson,
@@ -1007,5 +1010,54 @@ describe('document transform (admission)', () => {
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(503);
+    });
+
+    test('a refused export never collects its media', async () => {
+        // Doc and slides exports pay Mount I/O plus a screen preview per image before
+        // the transform seam is reached — a 503'd export must pay for neither.
+        const mount = {
+            getChildByName: () => {
+                throw new Error('a refused export collected its media');
+            },
+        } as unknown as Mount;
+        const path = { id: 'refused', name: 'refused.eigendoc' } as DrivePath;
+
+        const refuse = refuseAdmissionOnce();
+        let error: unknown;
+        try {
+            await runDocumentExport({ documentType: 'eigendoc', format: 'html' }, mount, path);
+        } catch (err) {
+            error = err;
+        } finally {
+            refuse.mockRestore();
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(503);
+    });
+
+    test('a refused import never copies the upload', async () => {
+        // Any read of the upload means toTransferableBuffer copied it before admission.
+        const upload = new Proxy(Buffer.alloc(0), {
+            get: () => {
+                throw new Error('a refused import copied the upload');
+            },
+        });
+        const drive = {} as unknown as Drive;
+        const mount = {} as unknown as Mount;
+        const user = {} as unknown as User;
+
+        for (const mimeType of [DRIVE_MIME_SHEETS, DRIVE_MIME_DOC]) {
+            const refuse = refuseAdmissionOnce();
+            let error: unknown;
+            try {
+                await importIntoDocument(drive, mount, { id: 'refused', mimeType } as DrivePath, upload, user);
+            } catch (err) {
+                error = err;
+            } finally {
+                refuse.mockRestore();
+            }
+            expect(error).toBeInstanceOf(ApiError);
+            expect((error as ApiError).status).toBe(503);
+        }
     });
 });

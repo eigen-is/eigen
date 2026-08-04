@@ -3,6 +3,7 @@ import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive'
 import { ApiError } from '../core/errors';
 import type { DocumentExportFormat, EigendocExportFormat, SheetExportFormat } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
+import { documentTransformRunner } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { collectExportMedia } from './media';
 import { htmlToPdf } from './weasyprint';
@@ -107,6 +108,11 @@ export async function runDocumentExport(
         const title = stripEigenExtension(path.name);
         return runTransformToBytes(mount, path, { kind: 'export', ...job, title }, { signal });
     }
+
+    // Refuse before the prep: media collection is Mount I/O plus a screen preview per
+    // image, and a job the runner will not admit must not pay for it. run() rechecks
+    // authoritatively — this is only the early exit.
+    documentTransformRunner.assertAdmissible('foreground');
 
     const prepStart = performance.now();
     const media = await collectExportMedia(mount, path);

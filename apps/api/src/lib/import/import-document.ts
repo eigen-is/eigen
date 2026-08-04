@@ -10,6 +10,7 @@ import {
     toTransferableBuffer,
 } from '../document/transform/protocol';
 import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
+import { documentTransformRunner } from '../document/transform/runner';
 import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
@@ -21,13 +22,16 @@ const DOCX_TO_DOC: DocImportJob = { kind: 'import', sourceFormat: 'docx', target
 // thread only commits what it returns — the snapshot for sheets, a ready Yjs update
 // plus extracted media for documents. Nothing is created or mutated before the Worker
 // succeeds, so a failed import leaves source and target untouched.
-// The upload Buffer can be a view over a larger pool, and a transfer hands over
-// the WHOLE backing buffer — copy into an exact standalone one first.
+// Refuse before the copy: the upload is copied whole (a transfer hands over the WHOLE
+// backing buffer, and the Buffer can be a view over a larger pool), so a job the runner
+// will not admit must not pay for it. run() rechecks authoritatively.
 function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<string> {
+    documentTransformRunner.assertAdmissible('foreground');
     return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
 }
 
 function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
+    documentTransformRunner.assertAdmissible('foreground');
     return runImportToDocumentUpdate(DOCX_TO_DOC, toTransferableBuffer(buffer), { signal });
 }
 
