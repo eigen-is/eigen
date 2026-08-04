@@ -111,12 +111,22 @@ function isValidResponse(response: unknown, request: DocumentTransformRequest): 
         ok?: unknown;
         result?: unknown;
         warnings?: unknown;
-        error?: { code?: unknown; message?: unknown };
+        error?: { code?: unknown; message?: unknown; status?: unknown };
     };
     if (r.ok === true) {
         return Array.isArray(r.warnings) && r.warnings.every(isValidWarning) && resultMatchesRequest(request, r.result);
     }
-    if (r.ok === false) return typeof r.error?.code === 'string' && typeof r.error?.message === 'string';
+    if (r.ok === false) {
+        // `status` becomes the HTTP status the main thread throws (run-transform.ts) —
+        // only an error-range integer may cross.
+        const status = r.error?.status;
+        return (
+            typeof r.error?.code === 'string' &&
+            typeof r.error?.message === 'string' &&
+            (status === undefined ||
+                (typeof status === 'number' && Number.isInteger(status) && status >= 400 && status <= 599))
+        );
+    }
     return false;
 }
 

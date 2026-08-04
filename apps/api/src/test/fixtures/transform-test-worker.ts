@@ -16,6 +16,7 @@ type TestDirective = {
         | 'malformed-warnings'
         | 'echo-buffers'
         | 'document-error'
+        | 'document-error-bad-status'
         | 'export-ok'
         | 'export-echo-media'
         | 'export-warn'
@@ -117,6 +118,15 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
                 response: { ok: false, error: { code: 'transform-failed', status: 422, message: 'bad document' } },
             };
             postMessage(response);
+            return;
+        }
+        case 'document-error-bad-status': {
+            // status rides into `throw new ApiError(status, …)` on the main thread —
+            // a non-HTTP value must be refused at the boundary, not thrown as-is.
+            postMessage({
+                jobId,
+                response: { ok: false, error: { code: 'transform-failed', status: '413', message: 'bad status' } },
+            });
             return;
         }
         default:

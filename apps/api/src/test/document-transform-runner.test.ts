@@ -338,6 +338,14 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    test('a document error with a non-HTTP status is a malformed response', async () => {
+        const runner = makeRunner();
+        const failed = await runner.run(makeRequest({ behavior: 'document-error-bad-status' }), PREVIEW_OPTIONS);
+        expect(failed.ok).toBe(false);
+        if (!failed.ok) expect(failed.error.code).toBe('invalid-response');
+        await runner.close();
+    });
+
     test('input buffers transfer (detach) to the worker and arrive intact', async () => {
         const runner = makeRunner();
         const buffer = new Uint8Array([1, 2, 3, 4, 5]).buffer;
