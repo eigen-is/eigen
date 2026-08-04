@@ -1,13 +1,8 @@
 import { describe, expect, mock, test } from 'bun:test';
 import * as engine from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import {
-    CONTENT_INDEX_MAX_BYTES,
-    collectProseMirrorText,
-    collectSheetsText,
-    collectSlidesText,
-    extractCollabText,
-} from '../lib/search/extract-render';
+import { extractCollabText } from '../lib/search/extract-render';
+import { CONTENT_INDEX_MAX_BYTES } from '../lib/search/limits';
 import { buildGoldenDeck, buildGoldenDocJson, seedEigendoc, seedSlidesDoc } from './fixtures/golden-documents';
 import {
     buildGoldenOps,
@@ -20,65 +15,15 @@ import {
 // The Worker-pure search extractor: per-type body text off a materialized Y.Doc.
 // Behavior lives here (no Worker spawns) — search-content.test.ts pins the plumbing.
 
-describe('content collectors', () => {
-    test('collectProseMirrorText pulls all text nodes', () => {
-        const json = {
-            type: 'doc',
-            content: [
-                { type: 'paragraph', content: [{ type: 'text', text: 'hello' }] },
-                { type: 'paragraph', content: [{ type: 'text', text: 'world' }] },
-            ],
-        };
-        expect(collectProseMirrorText(json, CONTENT_INDEX_MAX_BYTES)).toContain('hello');
-        expect(collectProseMirrorText(json, CONTENT_INDEX_MAX_BYTES)).toContain('world');
-    });
-
-    test('collectProseMirrorText honours the cap', () => {
-        const json = {
-            type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'x'.repeat(50) }] }],
-        };
-        expect(collectProseMirrorText(json, 10).length).toBeLessThanOrEqual(50);
-    });
-
-    test('collectSheetsText uses display value (m ?? v) of sparse celldata', () => {
-        const sheets = [
-            {
-                id: 's1',
-                name: 'Sheet1',
-                order: 0,
-                config: {},
-                celldata: [
-                    { r: 0, c: 0, v: { m: 'Revenue', v: 'Revenue' } },
-                    { r: 5, c: 2, v: { v: 42 } },
-                ],
-            },
-        ];
-        const text = collectSheetsText(sheets as never, CONTENT_INDEX_MAX_BYTES);
-        expect(text).toContain('Revenue');
-        expect(text).toContain('42');
-    });
-
-    test('collectSlidesText concatenates text objects across slides in order', () => {
-        const deck = {
-            slideOrder: ['s1'],
-            slides: { s1: { id: 's1', objectIds: ['o1', 'o2'], background: null } },
-            objects: {
-                o1: { id: 'o1', type: 'text', text: 'Title slide' },
-                o2: { id: 'o2', type: 'image' },
-            },
-        };
-        const text = collectSlidesText(deck as never, CONTENT_INDEX_MAX_BYTES);
-        expect(text).toContain('Title slide');
-    });
-});
+// Never produced by the fixtures' formulas, so it can only come from the raw value.
+const VALUE_ONLY_CELL = 424_242;
 
 describe('extractCollabText', () => {
-    test('eigendoc: every text node of the golden document, past the preview cap', () => {
+    test('eigendoc: every text node of the golden document, past the preview cap', async () => {
         const doc = new Y.Doc();
         seedEigendoc(doc, buildGoldenDocJson());
 
-        const { text, warnings } = extractCollabText('eigendoc', doc);
+        const { text, warnings } = await extractCollabText('eigendoc', doc);
         expect(text).toContain('Quarterly Report');
         // Table cells, task items and code blocks are indexed like any other text node.
         expect(text).toContain('const total');
@@ -89,11 +34,11 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    test('eigenslides: text objects in slide order, image objects skipped', () => {
+    test('eigenslides: text objects in slide order, image objects skipped', async () => {
         const doc = new Y.Doc();
         seedSlidesDoc(doc, buildGoldenDeck());
 
-        const { text, warnings } = extractCollabText('eigenslides', doc);
+        const { text, warnings } = await extractCollabText('eigenslides', doc);
         expect(text).toContain('Deck <strong>title</strong>');
         expect(text).toContain('Background image');
         expect(text).not.toContain('pixel.png');
@@ -101,12 +46,17 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    test('eigensheets: replayed ops and recalculated formulas are indexed', () => {
+    test('eigensheets: replayed ops and recalculated formulas are indexed', async () => {
         const doc = new Y.Doc();
-        seedSheetsDoc(doc, buildGoldenSheets(), buildGoldenOps());
+        const sheets = buildGoldenSheets();
+        // A cell with a raw value and no display string, so the extracted body proves
+        // the m ?? v fallback.
+        sheets[0].data![1][7] = { v: VALUE_ONLY_CELL };
+        seedSheetsDoc(doc, sheets, buildGoldenOps());
 
-        const { text, warnings } = extractCollabText('eigensheets', doc);
+        const { text, warnings } = await extractCollabText('eigensheets', doc);
         expect(text).toContain('Region 1');
+        expect(text).toContain(String(VALUE_ONLY_CELL));
         // The ops batch is replayed before extraction...
         expect(text).toContain(GOLDEN_OPS_EDIT);
         // ...and formula cells carry their recalculated display value.
@@ -117,7 +67,7 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    test('eigensheets: a recalc failure indexes the replayed values with a warning', () => {
+    test('eigensheets: a recalc failure indexes the replayed values with a warning', async () => {
         const original = { ...engine };
         mock.module('@workspace/sheet/engine', () => ({
             ...original,
@@ -129,7 +79,7 @@ describe('extractCollabText', () => {
             const doc = new Y.Doc();
             seedSheetsDoc(doc, buildGoldenSheets(), []);
 
-            const { text, warnings } = extractCollabText('eigensheets', doc);
+            const { text, warnings } = await extractCollabText('eigensheets', doc);
             expect(warnings).toEqual([{ code: 'recalc-failed', message: 'forced recalc failure' }]);
             // Stale but valid: the literal cells are still indexed, the uncomputed formula is not.
             expect(text).toContain('Region 1');
@@ -140,13 +90,13 @@ describe('extractCollabText', () => {
         }
     });
 
-    test('the cap bounds the extracted body', () => {
+    test('the cap bounds the extracted body', async () => {
         const doc = new Y.Doc();
         const cell = 'z'.repeat(1000);
         const celldata = Array.from({ length: 500 }, (_, i) => ({ r: i, c: 0, v: { m: cell, v: cell } }));
         seedSheetsDoc(doc, [{ id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata }], []);
 
-        const { text } = extractCollabText('eigensheets', doc);
+        const { text } = await extractCollabText('eigensheets', doc);
         expect(text.length).toBeGreaterThan(CONTENT_INDEX_MAX_BYTES);
         // The collectors stop at the first cell that crosses the cap, so the overshoot is
         // bounded by one cell rather than by the document size.

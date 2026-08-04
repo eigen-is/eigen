@@ -2,20 +2,17 @@ import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DeckData } from '@workspace/lib/slides';
 import type * as Y from 'yjs';
-import { readEigendocFromDoc } from '../document/doc';
-import { readSheetsFromDoc } from '../document/sheets';
-import { readDeckFromDoc } from '../document/slides';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
+import { CONTENT_INDEX_MAX_BYTES } from './limits';
 
 // Materialized doc → indexable body text. Runs inside the transform Worker
 // (worker.ts owns execution; the main-thread dispatch lives in extract-text.ts).
-// This module must not reach the Mount or the transform seam — the Worker imports
-// it, and the sheet engine it pulls in must stay out of the main process. Stickies,
-// chat and plain-text bodies are light reads and stay on the main thread.
+// This module must not reach the Mount or the transform seam. Each reader loads
+// through a dynamic import, the same shape as worker.ts's renderPreview, so an
+// eigendoc extract never evaluates the sheet engine. Stickies, chat and plain-text
+// bodies are light reads and stay on the main thread.
 
-export const CONTENT_INDEX_MAX_BYTES = 100_000;
-
-export function collectProseMirrorText(node: JSONContent, cap: number): string {
+function collectProseMirrorText(node: JSONContent, cap: number): string {
     const parts: string[] = [];
     let total = 0;
     const walk = (n: JSONContent): boolean => {
@@ -36,7 +33,7 @@ export function collectProseMirrorText(node: JSONContent, cap: number): string {
     return parts.join(' ');
 }
 
-export function collectSlidesText(deck: DeckData, cap: number): string {
+function collectSlidesText(deck: DeckData, cap: number): string {
     const parts: string[] = [];
     let total = 0;
     for (const slideId of deck.slideOrder) {
@@ -54,7 +51,7 @@ export function collectSlidesText(deck: DeckData, cap: number): string {
     return parts.join(' ');
 }
 
-export function collectSheetsText(sheets: Sheet[], cap: number): string {
+function collectSheetsText(sheets: Sheet[], cap: number): string {
     const parts: string[] = [];
     let total = 0;
     for (const sheet of sheets) {
@@ -75,16 +72,21 @@ export function collectSheetsText(sheets: Sheet[], cap: number): string {
 // Body text for one collab document, capped at ~100 KB. Recalc failure indexes the
 // replayed values with a warning, mirroring the preview renderer — a stale body beats
 // no body at all.
-export function extractCollabText(
+export async function extractCollabText(
     documentType: ExtractTextJob['documentType'],
     doc: Y.Doc,
-): { text: string; warnings: TransformWarning[] } {
+): Promise<{ text: string; warnings: TransformWarning[] }> {
     switch (documentType) {
-        case 'eigendoc':
+        case 'eigendoc': {
+            const { readEigendocFromDoc } = await import('../document/doc');
             return { text: collectProseMirrorText(readEigendocFromDoc(doc), CONTENT_INDEX_MAX_BYTES), warnings: [] };
-        case 'eigenslides':
+        }
+        case 'eigenslides': {
+            const { readDeckFromDoc } = await import('../document/slides');
             return { text: collectSlidesText(readDeckFromDoc(doc), CONTENT_INDEX_MAX_BYTES), warnings: [] };
+        }
         case 'eigensheets': {
+            const { readSheetsFromDoc } = await import('../document/sheets');
             const { sheets, recalcError } = readSheetsFromDoc(doc);
             const warnings: TransformWarning[] = recalcError ? [{ code: 'recalc-failed', message: recalcError }] : [];
             return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings };

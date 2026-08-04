@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { CONTENT_INDEX_MAX_BYTES } from '../lib/search/extract-render';
 import { collectStickiesText } from '../lib/search/extract-text';
+import { CONTENT_INDEX_MAX_BYTES } from '../lib/search/limits';
 
 // The main-thread half of search extraction — stickies, chat and plain files are light
 // reads. The three collab types extract in the Worker (extract-render.test.ts).
