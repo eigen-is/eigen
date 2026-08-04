@@ -625,14 +625,14 @@ export function ChatMessageList({
                     confirmLabel="Save here"
                     defaultOwnerId={ownerId}
                     defaultMountId={mountId}
-                    onConfirm={(location) => {
+                    onConfirm={async (location) => {
                         if (!saveAttachmentsMsg?.attachments) return;
                         const pathIds = saveAttachmentsMsg.attachments
                             .filter((a): a is string => typeof a === 'string')
                             .map((name) => findByName(name)?.id)
                             .filter((id): id is string => !!id);
                         if (pathIds.length === 0) return;
-                        return copyFiles.mutateAsync({
+                        await copyFiles.mutateAsync({
                             pathIds,
                             targetOwnerId: location.ownerId,
                             targetMountId: location.mountId,
