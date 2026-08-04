@@ -159,10 +159,18 @@ function buildCfFormulaEvaluator(
     };
 }
 
+// A formula rule keeps its range start: the anchor is the range's top-left, and the
+// engine shifts relative refs by target-minus-anchor — moving the start would
+// re-anchor the rule and recolor the visible cells. Targets evaluate independently,
+// so end-clipping alone bounds the common case; the ceiling catches a range whose
+// kept area is still enormous (content far below a rule anchored at the top).
+const PREVIEW_CF_FORMULA_MAX_CELLS = 50_000;
+
 // Preview only: a rule may name the whole sheet while the preview renders a small
 // window, and the evaluator visits every coordinate of every range — a formula rule
 // runs the engine once per visited cell. Clipping keeps that work proportional to
-// what is rendered; a rule that misses the window drops out entirely.
+// what is rendered; a rule that misses the window (or trips the formula ceiling)
+// drops out entirely.
 function clipRulesToWindow(
     rules: ConditionalFormatRule[],
     firstRow: number,
@@ -172,12 +180,23 @@ function clipRulesToWindow(
 ): ConditionalFormatRule[] {
     const clipped: ConditionalFormatRule[] = [];
     for (const rule of rules) {
+        const keepStart = rule.type === 'default' && rule.conditionName === 'formula';
         const cellrange = rule.cellrange
             .map((range) => ({
-                row: [Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
-                column: [Math.max(range.column[0], firstCol), Math.min(range.column[1], lastCol)],
+                row: [keepStart ? range.row[0] : Math.max(range.row[0], firstRow), Math.min(range.row[1], lastRow)],
+                column: [
+                    keepStart ? range.column[0] : Math.max(range.column[0], firstCol),
+                    Math.min(range.column[1], lastCol),
+                ],
             }))
-            .filter((range) => range.row[0] <= range.row[1] && range.column[0] <= range.column[1]);
+            .filter(
+                (range) =>
+                    range.row[0] <= range.row[1] &&
+                    range.column[0] <= range.column[1] &&
+                    (!keepStart ||
+                        (range.row[1] - range.row[0] + 1) * (range.column[1] - range.column[0] + 1) <=
+                            PREVIEW_CF_FORMULA_MAX_CELLS),
+            );
         if (cellrange.length > 0) clipped.push({ ...rule, cellrange });
     }
     return clipped;

@@ -184,6 +184,63 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
         expect(evaluated).toBe(1); // one rendered cell, one evaluation
         expect(html).toContain('background:#d1f0d1');
     });
+
+    test('a formula rule anchored above the window keeps its anchor', () => {
+        // Content starts at row 2, the rule's range at row 0 — its anchor. The engine
+        // shifts relative refs by target-minus-anchor, so target (2,0) must evaluate
+        // =A3>1 (its own row); a clip that moved the range start would re-anchor the
+        // rule and evaluate =A1>1 against the empty row 0 instead.
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const sheet: Sheet = {
+            id: 'cf-anchor',
+            name: 'CFAnchor',
+            celldata: [{ r: 2, c: 0, v: cell }],
+            data: [undefined as never, undefined as never, [cell]],
+            config: {},
+            conditionalFormatRules: [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 10], column: [0, 0] }],
+                    format: { cellColor: '#d1f0d1' },
+                    conditionName: 'formula',
+                    conditionValue: ['=A1>1'],
+                },
+            ],
+        };
+
+        const { html } = renderSheetsPreviewHtml([sheet]);
+        expect(html).toContain('background:#d1f0d1');
+    });
+
+    test('a formula rule whose kept range stays enormous is dropped, not evaluated', () => {
+        const cell = { v: 5, m: '5', ct: { fa: 'General', t: 'n' } };
+        const data: Sheet['data'] = [];
+        data[1_000_000] = [cell];
+        const sheet: Sheet = {
+            id: 'cf-drop',
+            name: 'CFDrop',
+            celldata: [{ r: 1_000_000, c: 0, v: cell }],
+            data,
+            config: {},
+            conditionalFormatRules: [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 10_000_000], column: [0, 0] }],
+                    format: { cellColor: '#d1f0d1' },
+                    conditionName: 'formula',
+                    conditionValue: ['=A1>1'],
+                },
+            ],
+        };
+
+        const evaluate = spyOn(FormulaEngine.prototype, 'evaluate');
+        const { html } = renderSheetsPreviewHtml([sheet]);
+        const evaluated = evaluate.mock.calls.length;
+        evaluate.mockRestore();
+
+        expect(evaluated).toBe(0);
+        expect(html).toContain('>5</td>');
+    });
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
