@@ -1,11 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { API_HOST } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
-import {
-    useAppPasswords,
-    useCreateAppPassword,
-    useDeleteAppPassword,
-} from '@workspace/lib/core/auth/hooks/use-app-passwords';
+import { useAppPasswords, useAuth, useCreateAppPassword, useDeleteAppPassword } from '@workspace/lib/auth';
 import { formatDate } from '@workspace/lib/date';
 import { useMounts } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';

@@ -1,5 +1,5 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type AuthContextType, useAuth, useIsGuest } from '@workspace/lib/auth';
+import { type RouterAppContext, useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
@@ -11,10 +11,6 @@ import { DriveNewMenu } from '../components/drive/drive-new-menu';
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
 });
-
-type MyRouterContext = {
-    auth: AuthContextType;
-};
 
 function DriveRoot() {
     const { user } = useAuth();
@@ -83,6 +79,6 @@ function AuthenticatedDriveRoot() {
     );
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext<RouterAppContext>()({
     component: DriveRoot,
 });

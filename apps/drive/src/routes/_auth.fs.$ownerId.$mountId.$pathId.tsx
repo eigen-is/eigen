@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
+import { AppError } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
-import { AppError } from '@workspace/lib/core/api-error';
 import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
 import {
     type DrivePath,

@@ -9,6 +9,7 @@ import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import { uploadWithProgress } from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
 import { Textarea } from '@workspace/ui/components/textarea';
@@ -60,7 +61,7 @@ type ContactEditToolbarProps = {
 export function ContactEditToolbar({ isNew }: ContactEditToolbarProps) {
     return (
         <Toolbar>
-            <h1 className="font-medium">{isNew ? 'Create Contact' : 'Edit Contact'}</h1>
+            <ToolbarTitle>{isNew ? 'Create Contact' : 'Edit Contact'}</ToolbarTitle>
         </Toolbar>
     );
 }

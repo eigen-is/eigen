@@ -1,5 +1,5 @@
 import { setupApi } from '@workspace/lib/api';
-import { AppError } from '@workspace/lib/core/api-error';
+import { AppError } from '@workspace/lib/api-error';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';

@@ -1,11 +1,7 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { CalendarSidebar } from '../components/calendar-sidebar';
-
-type MyRouterContext = {
-    auth: AuthContextType;
-};
 
 function CalendarRoot() {
     const { user } = useAuth();
@@ -29,6 +25,6 @@ function CalendarRoot() {
     );
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext<RouterAppContext>()({
     component: CalendarRoot,
 });

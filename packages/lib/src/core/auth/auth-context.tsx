@@ -21,6 +21,9 @@ export type AuthContextType = {
     logout: () => Promise<void>;
 };
 
+// Router context every app's createRootRouteWithContext shares.
+export type RouterAppContext = { auth: AuthContextType };
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({

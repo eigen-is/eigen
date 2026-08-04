@@ -47,7 +47,8 @@ bun serve:mail         # Single app + API
 bun run lint           # Lint + format check (biome)
 bun run lint:fix       # Auto-fix lint + format issues
 bun run typecheck      # Type check all packages
-bun run test           # API integration tests
+bun run test           # All workspace tests (api + sheet + lib + index)
+bun run test:api       # API integration tests only
 bun run check          # lint + typecheck + test
 ```
 
@@ -74,8 +75,8 @@ bun run check          # lint + typecheck + test
   `toast.error()` in app components — all error handling lives in hooks using `onMutationError`.
   See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
 - **Package dependency direction is one-way: `sheet → lib` and `ui → lib`, never the reverse — `lib`
-  imports neither.** `packages/lib` is shared FE+BE; `packages/sheet` and `packages/ui` have React peer
-  dependencies and DOM-coupled modules. If lib imported either, the BE would transitively pull React in
+  imports neither.** `packages/lib` is shared FE+BE; `packages/sheet` declares React peer dependencies, and
+  both `packages/sheet` and `packages/ui` are React/DOM-coupled modules. If lib imported either, the BE would transitively pull React in
   at module-eval time (a biome rule enforces it). Shared sheet types (`Cell`, `Sheet`, `Op`,
   `CellMatrix`, `Range`, `SingleRange`, `ConditionalFormatRule`, …) live in `packages/lib/src/sheets/types.ts`;
   the sheet package's `engine/types.ts` and `state/types.ts` re-export them. Sheet utilities that need to be importable
@@ -405,7 +406,7 @@ is set to `external_{email}` (e.g. `external_alice@example.com`). Same prefix co
 
 ## Testing
 
-Tests are in `apps/api/src/test/`. Run the suite with `bun run test`. A single file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/[file].test.ts`.
+The API integration tests are in `apps/api/src/test/`. `bun run test` runs every workspace's tests (api + sheet + lib + index); `bun run test:api` runs the API suite alone. A single file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/[file].test.ts`.
 
 **Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`:
 - `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients
