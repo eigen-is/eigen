@@ -47,7 +47,7 @@ export function RecurringActionDialog({ open, onOpenChange, title, onConfirm, op
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog open={open} onOpenChange={(o) => (o || !pending) && onOpenChange(o)}>
             <DialogContent size="xs">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>

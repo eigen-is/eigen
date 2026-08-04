@@ -129,7 +129,11 @@ function withMeta(html: string, m: PageMeta): string {
         .replaceAll(`content="${DEFAULT_DESCRIPTION}"`, `content="${d}"`)
         .replace('content="website"', `content="${m.type}"`);
     const ogUrl = m.url ? `<meta property="og:url" content="${escapeHtml(m.url)}"/>` : '';
-    return page.replace('</head>', `${ogUrl}</head>`);
+    // OG scrapers ignore relative og:image URLs — absolutize when the origin is known.
+    const absolutized = PUBLIC_ORIGIN
+        ? page.replace('content="/eigen-space-logo.svg', `content="${PUBLIC_ORIGIN}/eigen-space-logo.svg`)
+        : page;
+    return absolutized.replace('</head>', `${ogUrl}</head>`);
 }
 
 // Minimal Article JSON-LD for article pages (SEO). A safe, always-valid schema.
