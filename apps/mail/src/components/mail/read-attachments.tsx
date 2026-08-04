@@ -78,15 +78,15 @@ export function ReadAttachments({ emailId, attachments }: ReadAttachmentsProps) 
                 mode="folder"
                 title={saveIndexes.length === 1 ? 'Save attachment' : 'Save attachments'}
                 confirmLabel="Save here"
-                onConfirm={({ ownerId, mountId, folderId }) =>
-                    saveMutation.mutateAsync({
+                onConfirm={async ({ ownerId, mountId, folderId }) => {
+                    await saveMutation.mutateAsync({
                         messageId: emailId,
                         indexes: saveIndexes,
                         targetOwnerId: ownerId,
                         targetMountId: mountId,
                         targetParentId: folderId,
-                    })
-                }
+                    });
+                }}
                 onDownloadInstead={() => {
                     setSavePickerOpen(false);
                     handleDownloadAll(saveIndexes);
