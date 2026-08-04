@@ -90,6 +90,9 @@ describe('extractCollabText', () => {
         }
     });
 
+    // The cap is a byte budget: the extracted body is cloned to the main thread and
+    // inserted into FTS, so it must hold for one huge leaf and for text where a
+    // character is not a byte.
     test('the cap bounds the extracted body', async () => {
         const doc = new Y.Doc();
         const cell = 'z'.repeat(1000);
@@ -97,10 +100,33 @@ describe('extractCollabText', () => {
         seedSheetsDoc(doc, [{ id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata }], []);
 
         const { text } = await extractCollabText('eigensheets', doc);
-        expect(text.length).toBeGreaterThan(CONTENT_INDEX_MAX_BYTES);
-        // The collectors stop at the first cell that crosses the cap, so the overshoot is
-        // bounded by one cell rather than by the document size.
-        expect(text.length).toBeLessThan(CONTENT_INDEX_MAX_BYTES + cell.length + 1);
+        expect(Buffer.byteLength(text)).toBeLessThanOrEqual(CONTENT_INDEX_MAX_BYTES);
+        expect(text.startsWith(`${cell} ${cell}`)).toBe(true);
+        doc.destroy();
+    });
+
+    test('a single leaf larger than the cap is cut to it', async () => {
+        const doc = new Y.Doc();
+        const huge = 'z'.repeat(CONTENT_INDEX_MAX_BYTES * 3);
+        seedEigendoc(doc, { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: huge }] }] });
+
+        const { text } = await extractCollabText('eigendoc', doc);
+        expect(Buffer.byteLength(text)).toBeLessThanOrEqual(CONTENT_INDEX_MAX_BYTES);
+        doc.destroy();
+    });
+
+    test('multi-byte text is capped in bytes without splitting a code point', async () => {
+        const doc = new Y.Doc();
+        // CJK costs 3 UTF-8 bytes per UTF-16 unit, the clef 4 bytes per surrogate pair —
+        // counting units against a byte cap overshoots by 3-4x.
+        const leaf = '漢字𝄞'.repeat(5_000);
+        const celldata = Array.from({ length: 10 }, (_, i) => ({ r: i, c: 0, v: { m: leaf, v: leaf } }));
+        seedSheetsDoc(doc, [{ id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata }], []);
+
+        const { text } = await extractCollabText('eigensheets', doc);
+        expect(Buffer.byteLength(text)).toBeLessThanOrEqual(CONTENT_INDEX_MAX_BYTES);
+        // A half surrogate pair would encode as U+FFFD and break the round-trip.
+        expect(Buffer.from(text, 'utf-8').toString('utf-8')).toBe(text);
         doc.destroy();
     });
 });
