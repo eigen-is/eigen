@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../lib/core';
@@ -209,6 +209,54 @@ describe('Eigendoc docx import/convert', () => {
             await importIntoDocument(bobDrive, mount, path, buffer, bob!);
         } catch (e) {
             error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(403);
+        expect((error as ApiError).message).toBe('No write permission');
+        expect(await readDocJson(docPath.id)).toEqual(before);
+    }, 60_000);
+
+    test('write revoked during the collab-document lookup blocks the commit', async () => {
+        // The recheck only closes the race if it is the LAST await before the write:
+        // resolving the collab document is itself an await, read-checked only.
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'acl-race-lookup-target' },
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, docPath.id);
+        seedEigendoc(collab.doc, {
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'PRIOR CONTENT' }] }],
+        });
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docPath.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: true }],
+        });
+
+        const bob = await getUserById(ctx.bob.user.id);
+        const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
+        const { mount, path } = await bobDrive.resolveFile(mountId, docPath.id);
+
+        const realGet = bobDrive.getCollabDocument.bind(bobDrive);
+        const getSpy = spyOn(bobDrive, 'getCollabDocument').mockImplementation(async (id, pathId) => {
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docPath.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: false }],
+            });
+            return realGet(id, pathId);
+        });
+
+        const before = await readDocJson(docPath.id);
+        const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
+        let error: unknown;
+        try {
+            await importIntoDocument(bobDrive, mount, path, buffer, bob!);
+        } catch (e) {
+            error = e;
+        } finally {
+            getSpy.mockRestore();
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(403);

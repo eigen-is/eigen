@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { update } from '@workspace/sheet/engine';
@@ -437,6 +437,45 @@ describe('Sheets xlsx import/convert', () => {
             await importIntoDocument(bobDrive, mount, path, replacement, bob!);
         } catch (e) {
             error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(403);
+        expect((error as ApiError).message).toBe('No write permission');
+        expect(await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual(before);
+    }, 60_000);
+
+    test('write revoked during the collab-document lookup blocks the commit', async () => {
+        // The recheck only closes the race if it is the LAST await before the write:
+        // resolving the collab document is itself an await, read-checked only.
+        const sheetsDoc = await uploadAndConvert(
+            await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]),
+            'acl-race-lookup.xlsx',
+        );
+        await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
+            add: [{ id: ctx.bob.user.email, read: true, write: true }],
+        });
+
+        const bob = await getUserById(ctx.bob.user.id);
+        const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
+        const { mount, path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
+
+        const realGet = bobDrive.getCollabDocument.bind(bobDrive);
+        const getSpy = spyOn(bobDrive, 'getCollabDocument').mockImplementation(async (id, pathId) => {
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
+                add: [{ id: ctx.bob.user.email, read: true, write: false }],
+            });
+            return realGet(id, pathId);
+        });
+
+        const before = await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id);
+        const replacement = Buffer.from(await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]));
+        let error: unknown;
+        try {
+            await importIntoDocument(bobDrive, mount, path, replacement, bob!);
+        } catch (e) {
+            error = e;
+        } finally {
+            getSpy.mockRestore();
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(403);

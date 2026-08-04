@@ -37,7 +37,8 @@ function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImpo
 
 // The route checked write before buffering, but the job can queue and transform for
 // minutes — long enough for the share to be revoked. `getCollabDocument` re-checks
-// read only, so the commit needs its own write check.
+// read only, so the commit needs its own write check — as the LAST await before the
+// synchronous write, or a revocation landing during the lookup still commits.
 async function requireWritePermission(drive: Drive | SharedDrive, path: DrivePath, user: User): Promise<void> {
     if (!(await drive.canWrite(path.mountId, path.id, user))) throw new ApiError(403, 'No write permission');
 }
@@ -104,16 +105,16 @@ export async function importIntoDocument(
 ): Promise<void> {
     if (path.mimeType === DRIVE_MIME_SHEETS) {
         const snapshotJson = await importXlsxSnapshot(buffer, signal);
-        await requireWritePermission(drive, path, user);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
+        await requireWritePermission(drive, path, user);
         writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
         return;
     }
 
     if (path.mimeType === DRIVE_MIME_DOC) {
         const { update, images } = await importDocxUpdate(buffer, signal);
-        await requireWritePermission(drive, path, user);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
+        await requireWritePermission(drive, path, user);
         writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
         await saveDocImages(mount, path, images);
         return;
