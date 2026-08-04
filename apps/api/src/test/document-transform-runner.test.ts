@@ -53,6 +53,18 @@ function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = ne
     return request as unknown as DocumentTransformRequest;
 }
 
+// The only result arm with a nested payload of its own: the extracted docx images.
+function makeDocImportRequest(directive: TestDirective = {}) {
+    const request = {
+        kind: 'import',
+        sourceFormat: 'docx',
+        targetType: 'eigendoc',
+        data: new ArrayBuffer(0),
+        test: directive,
+    };
+    return request as unknown as DocumentTransformRequest;
+}
+
 // The production limits per kind. Tests about lifecycle rather than admission run
 // under them unchanged.
 const PREVIEW_OPTIONS = { ...TRANSFORM_LIMITS.preview, priority: 'foreground' } as const;
@@ -230,6 +242,33 @@ describe('DocumentTransformRunner', () => {
         const halfValid = await runner.run(makeRequest({ behavior: 'malformed-ok' }), PREVIEW_OPTIONS);
         expect(halfValid.ok).toBe(false);
         if (!halfValid.ok) expect(halfValid.error.code).toBe('invalid-response');
+        await runner.close();
+    });
+
+    // Nested junk inside a valid envelope: settle() reads warning codes and image byte
+    // lengths after the job left `active`, so a throw there would strand the requester
+    // and leave the queue unstarted. The follow-up job proves the queue still drains.
+    test('a response with malformed warnings resolves instead of hanging', async () => {
+        const runner = makeRunner();
+        const malformed = runner.run(makeRequest({ behavior: 'malformed-warnings' }), PREVIEW_OPTIONS);
+        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
+
+        const [first, second] = await Promise.all([malformed, queued]);
+        expect(first.ok).toBe(false);
+        if (!first.ok) expect(first.error.code).toBe('invalid-response');
+        expect(second.ok).toBe(true);
+        await runner.close();
+    });
+
+    test('a docx import response with malformed images resolves instead of hanging', async () => {
+        const runner = makeRunner();
+        const malformed = runner.run(makeDocImportRequest({ behavior: 'import-doc-malformed-images' }), EXPORT_OPTIONS);
+        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
+
+        const [first, second] = await Promise.all([malformed, queued]);
+        expect(first.ok).toBe(false);
+        if (!first.ok) expect(first.error.code).toBe('invalid-response');
+        expect(second.ok).toBe(true);
         await runner.close();
     });
 

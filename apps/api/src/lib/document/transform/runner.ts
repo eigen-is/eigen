@@ -5,6 +5,7 @@ import {
     resultBytes,
     resultMatchesRequest,
     type TransformError,
+    type TransformWarning,
     transferListOf,
     type WorkerResponseEnvelope,
 } from './protocol';
@@ -83,6 +84,23 @@ function errorResponse(code: TransformError['code'], message: string): DocumentT
     return { ok: false, error: { code, message } };
 }
 
+// Each arm of the closed warning union carries exactly one payload field; settle()
+// renders them after the job left `active`, so an unknown code or a missing payload
+// has to be refused here rather than throw with nobody left to settle the request.
+function isValidWarning(warning: unknown): boolean {
+    const w = warning as Partial<TransformWarning> | undefined;
+    switch (w?.code) {
+        case 'recalc-failed':
+            return typeof w.message === 'string';
+        case 'corrupt-blobs-skipped':
+            return typeof w.count === 'number';
+        case 'byte-guard-truncated':
+            return typeof w.bytes === 'number';
+        default:
+            return false;
+    }
+}
+
 // Full shape check at the trust boundary: a half-valid response (`{ok: true}`
 // with no result, or a result that doesn't match the request kind) must become a
 // structured invalid-response, not a throw inside settle that leaves the
@@ -95,7 +113,9 @@ function isValidResponse(response: unknown, request: DocumentTransformRequest): 
         warnings?: unknown;
         error?: { code?: unknown; message?: unknown };
     };
-    if (r.ok === true) return Array.isArray(r.warnings) && resultMatchesRequest(request, r.result);
+    if (r.ok === true) {
+        return Array.isArray(r.warnings) && r.warnings.every(isValidWarning) && resultMatchesRequest(request, r.result);
+    }
     if (r.ok === false) return typeof r.error?.code === 'string' && typeof r.error?.message === 'string';
     return false;
 }

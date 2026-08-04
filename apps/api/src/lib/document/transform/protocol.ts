@@ -124,6 +124,16 @@ export function transferListOfResult(response: DocumentTransformResponse): Array
     return [];
 }
 
+// Nested payloads count as shape: resultBytes() sums image byte lengths after the
+// runner has already released the job, so junk in here would throw with nobody left
+// to settle the request.
+function isTransformMedia(value: unknown): boolean {
+    const media = value as Partial<TransformMedia> | undefined;
+    return (
+        typeof media?.name === 'string' && typeof media.contentType === 'string' && media.data instanceof ArrayBuffer
+    );
+}
+
 // Which result member pairs with which request — the runner checks this at the trust
 // boundary, so every seam past it narrows without re-checking. Exhaustive over kind
 // (and, for imports, over the type produced), so a future union arm is a compile error
@@ -142,7 +152,9 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
         case 'import':
             switch (request.targetType) {
                 case 'eigendoc':
-                    return r?.update instanceof ArrayBuffer && Array.isArray(r.images);
+                    return (
+                        r?.update instanceof ArrayBuffer && Array.isArray(r.images) && r.images.every(isTransformMedia)
+                    );
                 case 'eigensheets':
                     return r?.snapshotJson instanceof ArrayBuffer;
             }

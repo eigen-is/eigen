@@ -13,13 +13,15 @@ type TestDirective = {
         | 'exit'
         | 'malformed'
         | 'malformed-ok'
+        | 'malformed-warnings'
         | 'echo-buffers'
         | 'document-error'
         | 'export-ok'
         | 'export-echo-media'
         | 'export-malformed'
         | 'import-ok'
-        | 'import-malformed';
+        | 'import-malformed'
+        | 'import-doc-malformed-images';
     ms?: number;
 };
 
@@ -47,6 +49,10 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
         case 'malformed-ok':
             // Right discriminant, missing payload — must not hang the requester.
             postMessage({ jobId, response: { ok: true } });
+            return;
+        case 'malformed-warnings':
+            // Valid envelope and result, junk inside the warnings array.
+            postMessage({ jobId, response: { ok: true, result: { body: '{}' }, warnings: [null] } });
             return;
         case 'sleep':
             await Bun.sleep(directive.ms ?? 100);
@@ -86,6 +92,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
             // Right discriminant, result missing the snapshot payload.
             postMessage({ jobId, response: { ok: true, result: {}, warnings: [] } });
             return;
+        case 'import-doc-malformed-images': {
+            // A docx import's update is there, but the images array holds junk.
+            const update = new Uint8Array([1, 2]).buffer as ArrayBuffer;
+            postMessage({ jobId, response: { ok: true, result: { update, images: [{}] }, warnings: [] } }, [update]);
+            return;
+        }
         case 'document-error': {
             const response: WorkerResponseEnvelope = {
                 jobId,
