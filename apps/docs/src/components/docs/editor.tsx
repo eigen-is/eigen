@@ -104,8 +104,13 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
 
 const lowlight = createLowlight(common);
 
-// PropertiesPanel is w-64; the find bar's right-68 inset below is that width plus its gutter.
-const SIDE_PANEL_WIDTH_PX = 256;
+// How far the w-64 panel reaches into the scroll box's content box: everything but that box's p-4
+// gutter. The panel is an absolute overlay, so the content box never shrinks by itself.
+const PANEL_INTRUSION_PX = 256 - 16;
+const PAGE_MARGIN_PX = 75.6; // p-[2cm] at 96dpi
+// The page's right margin may tuck under the panel — it always has at desktop widths. Only the text
+// column has to stay clear, so this is the page-relative edge every fit below is measured against.
+const TEXT_COLUMN_RIGHT_PX = A4_WIDTH_PX - PAGE_MARGIN_PX;
 
 export const CollaborativeEditor = ({
     path,
@@ -690,10 +695,18 @@ const TiptapEditor = ({
         !isMobile &&
         (activePanel === 'comments' || activePanel === 'activity' || (access.canWrite && activePanel !== 'document'));
 
-    // The panel is an absolute overlay, so the scroll container keeps its full width — subtract the
-    // strip it covers, or the page would run underneath it once the viewport drops below ~1080px.
-    const availableWidth = containerWidth - (showSidebar ? SIDE_PANEL_WIDTH_PX : 0);
-    const canvasScale = containerWidth === 0 ? 1 : Math.min(1, availableWidth / A4_WIDTH_PX);
+    // Shift, then scale. The centred page runs under the open panel as soon as its text column
+    // reaches past the panel's left edge, so slide the page left by exactly that overlap: no reflow,
+    // no scroll jump, and the shift is 0 whenever the container is wide enough — which is why wide
+    // desktop is untouched by construction. Only once the page sits at the left content edge and
+    // still runs under the panel does it have to shrink, and then by the same positional rule.
+    const centredSlack = Math.max(0, (containerWidth - A4_WIDTH_PX) / 2);
+    const panelLeft = containerWidth - PANEL_INTRUSION_PX;
+    const panelOverlap = showSidebar ? Math.max(0, centredSlack + TEXT_COLUMN_RIGHT_PX - panelLeft) : 0;
+    const canShift = containerWidth > 0 && panelOverlap <= centredSlack;
+    const canvasShift = canShift ? panelOverlap : 0;
+    const scaleCeiling = canShift || !showSidebar ? 1 : panelLeft / TEXT_COLUMN_RIGHT_PX;
+    const canvasScale = containerWidth === 0 ? 1 : Math.min(1, containerWidth / A4_WIDTH_PX, scaleCeiling);
     const needsScale = canvasScale < 1;
 
     const handleScrollToComment = (cardId: string) => {
@@ -786,7 +799,9 @@ const TiptapEditor = ({
                                                       transformOrigin: 'top left',
                                                       marginBottom: -(1 - canvasScale) * docHeight,
                                                   }
-                                                : undefined
+                                                : canvasShift > 0
+                                                  ? { transform: `translateX(${-canvasShift}px)` }
+                                                  : undefined
                                         }
                                     >
                                         <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
