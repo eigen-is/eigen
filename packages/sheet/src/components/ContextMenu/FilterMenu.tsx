@@ -206,6 +206,10 @@ export const FilterMenu: React.FC = () => {
         [data.flattenValues],
     );
 
+    // Cancel a pending search when the column (and thus this debounce) changes or on
+    // unmount, so a stale column's timer can't overwrite the new column's values.
+    useEffect(() => searchValues.cancel, [searchValues]);
+
     const selectAll = useCallback(() => {
         setDatesUncheck([]);
         setValuesUncheck([]);

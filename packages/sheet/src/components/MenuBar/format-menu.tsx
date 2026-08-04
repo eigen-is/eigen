@@ -369,11 +369,9 @@ function FillColorItem() {
                     value=""
                     resetLabel="Default"
                     onChange={(color) => {
-                        if (color) {
-                            setContext((ctx) => {
-                                handleTextBackground(ctx, refs.cellInput.current!, color);
-                            });
-                        }
+                        setContext((ctx) => {
+                            handleTextBackground(ctx, refs.cellInput.current!, color);
+                        });
                     }}
                 />
             </DropdownMenuSubContent>

@@ -585,6 +585,7 @@ export function insertRowCol(
     },
     changeSelection: boolean = true,
 ) {
+    if (ctx.allowEdit === false) return;
     const id = op.id || ctx.currentSheetId;
     if (typeof id !== 'string') return;
 
@@ -898,6 +899,7 @@ export function deleteRowCol(
         id: string;
     },
 ) {
+    if (ctx.allowEdit === false) return;
     const id = op.id || ctx.currentSheetId;
     if (typeof id !== 'string') return;
 

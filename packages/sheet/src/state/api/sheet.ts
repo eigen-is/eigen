@@ -35,6 +35,7 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet):
 }
 
 export function hideSheet(ctx: Context, sheetId: string) {
+    if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
     ctx.sheets[index].hide = 1;
@@ -44,6 +45,7 @@ export function hideSheet(ctx: Context, sheetId: string) {
 }
 
 export function showSheet(ctx: Context, sheetId: string) {
+    if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
     ctx.sheets[index].hide = undefined;
@@ -98,6 +100,7 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
 }
 
 export function copySheet(ctx: Context, sheetId: string) {
+    if (ctx.allowEdit === false) return;
     const index = getSheetIndex(ctx, sheetId);
     if (index == null) return;
     const order = ctx.sheets[index].order! + 1;

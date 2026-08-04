@@ -111,53 +111,53 @@ export const SheetTab: React.FC = () => {
                     <Plus width={16} height={16} aria-hidden="true" />
                 </button>
             )}
-            {context.allowEdit && (
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <button type="button" className={iconButtonClass} aria-label="All sheets">
-                            <LayoutGrid width={16} height={16} aria-hidden="true" />
-                        </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent side="top" align="start" collisionPadding={8}>
-                        {context.sheets
-                            .slice()
-                            .sort((s1, s2) => Number(s1.order) - Number(s2.order))
-                            .map((singleSheet) => (
-                                <DropdownMenuItem
-                                    key={singleSheet.id}
-                                    onClick={() => {
-                                        setContext((draftCtx) => {
-                                            draftCtx.sheetScrollRecord[draftCtx.currentSheetId] = {
-                                                scrollLeft: draftCtx.scrollLeft,
-                                                scrollTop: draftCtx.scrollTop,
-                                                selectionActive: draftCtx.selectionActive,
-                                                selections: draftCtx.selections,
-                                                formulaRangeSelections: draftCtx.formulaRangeSelections,
-                                            };
-                                            draftCtx.currentSheetId = singleSheet.id!;
-                                            cancelActiveImgItem(draftCtx, refs.globalCache);
-                                            cancelNormalSelected(draftCtx);
-                                        });
-                                    }}
-                                >
-                                    <span className="inline-flex w-5 items-center">
-                                        {singleSheet.id === context.currentSheetId && (
-                                            <Check width={14} height={14} aria-hidden="true" />
-                                        )}
-                                    </span>
-                                    {!!singleSheet.color && (
-                                        <span
-                                            className="mr-1 size-2.5 shrink-0 rounded-full"
-                                            style={{ backgroundColor: singleSheet.color }}
-                                            aria-hidden="true"
-                                        />
+            {/* Pure navigation (saves scroll + sets currentSheetId) — available to viewers too,
+                since on mobile the tab strip is hidden and this is the only way to switch sheets. */}
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <button type="button" className={iconButtonClass} aria-label="All sheets">
+                        <LayoutGrid width={16} height={16} aria-hidden="true" />
+                    </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" collisionPadding={8}>
+                    {context.sheets
+                        .slice()
+                        .sort((s1, s2) => Number(s1.order) - Number(s2.order))
+                        .map((singleSheet) => (
+                            <DropdownMenuItem
+                                key={singleSheet.id}
+                                onClick={() => {
+                                    setContext((draftCtx) => {
+                                        draftCtx.sheetScrollRecord[draftCtx.currentSheetId] = {
+                                            scrollLeft: draftCtx.scrollLeft,
+                                            scrollTop: draftCtx.scrollTop,
+                                            selectionActive: draftCtx.selectionActive,
+                                            selections: draftCtx.selections,
+                                            formulaRangeSelections: draftCtx.formulaRangeSelections,
+                                        };
+                                        draftCtx.currentSheetId = singleSheet.id!;
+                                        cancelActiveImgItem(draftCtx, refs.globalCache);
+                                        cancelNormalSelected(draftCtx);
+                                    });
+                                }}
+                            >
+                                <span className="inline-flex w-5 items-center">
+                                    {singleSheet.id === context.currentSheetId && (
+                                        <Check width={14} height={14} aria-hidden="true" />
                                     )}
-                                    {singleSheet.name}
-                                </DropdownMenuItem>
-                            ))}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            )}
+                                </span>
+                                {!!singleSheet.color && (
+                                    <span
+                                        className="mr-1 size-2.5 shrink-0 rounded-full"
+                                        style={{ backgroundColor: singleSheet.color }}
+                                        aria-hidden="true"
+                                    />
+                                )}
+                                {singleSheet.name}
+                            </DropdownMenuItem>
+                        ))}
+                </DropdownMenuContent>
+            </DropdownMenu>
 
             <div className="hidden min-w-0 flex-1 gap-0.5 sm:flex">
                 <div className="relative flex min-w-0 flex-1">

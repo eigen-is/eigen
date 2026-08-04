@@ -45,16 +45,18 @@ export function EditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boole
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem
-                onClick={() => {
-                    setContext((draftCtx) => {
-                        handleCut(draftCtx);
-                        flushPendingCopy();
-                    });
-                }}
-            >
-                Cut
-            </DropdownMenuItem>
+            {context.allowEdit && (
+                <DropdownMenuItem
+                    onClick={() => {
+                        setContext((draftCtx) => {
+                            handleCut(draftCtx);
+                            flushPendingCopy();
+                        });
+                    }}
+                >
+                    Cut
+                </DropdownMenuItem>
+            )}
             <DropdownMenuItem
                 onClick={() => {
                     setContext((draftCtx) => {
@@ -65,85 +67,89 @@ export function EditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boole
             >
                 Copy
             </DropdownMenuItem>
-            <DropdownMenuItem
-                onClick={async () => {
-                    const text = await readClipboardText();
-                    setContext((draftCtx) => {
-                        handlePasteByClick(draftCtx, text);
-                    });
-                }}
-            >
-                Paste
-            </DropdownMenuItem>
-            <DropdownMenuItem
-                onClick={() => {
-                    setContext((draftCtx) => {
-                        handleFormatPainter(draftCtx);
-                    });
-                }}
-            >
-                {toolbar.paintFormat}
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuSub>
-                <DropdownMenuSubTrigger>{button.delete}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            {context.allowEdit && (
+                <>
                     <DropdownMenuItem
-                        onClick={() => {
+                        onClick={async () => {
+                            const text = await readClipboardText();
                             setContext((draftCtx) => {
-                                const error = clearSelectedContents(draftCtx);
-                                if (error) showAlert(error, 'ok');
+                                handlePasteByClick(draftCtx, text);
                             });
                         }}
                     >
-                        Clear contents
+                        Paste
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
-                            const row = selection?.row_focus;
-                            if (row == null) return;
-                            const deleteRowColOp = {
-                                type: 'row' as const,
-                                start: row,
-                                end: row,
-                                id: context.currentSheetId,
-                            };
-                            setContext(
-                                (draftCtx) => {
-                                    const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
-                                    if (error) showAlert(error, 'ok');
-                                },
-                                { deleteRowColOp },
-                            );
+                            setContext((draftCtx) => {
+                                handleFormatPainter(draftCtx);
+                            });
                         }}
                     >
-                        Row
+                        {toolbar.paintFormat}
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            const col = selection?.column_focus;
-                            if (col == null) return;
-                            const deleteRowColOp = {
-                                type: 'column' as const,
-                                start: col,
-                                end: col,
-                                id: context.currentSheetId,
-                            };
-                            setContext(
-                                (draftCtx) => {
-                                    const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
-                                    if (error) showAlert(error, 'ok');
-                                },
-                                { deleteRowColOp },
-                            );
-                        }}
-                    >
-                        Column
-                    </DropdownMenuItem>
-                </DropdownMenuSubContent>
-            </DropdownMenuSub>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>{button.delete}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setContext((draftCtx) => {
+                                        const error = clearSelectedContents(draftCtx);
+                                        if (error) showAlert(error, 'ok');
+                                    });
+                                }}
+                            >
+                                Clear contents
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    const row = selection?.row_focus;
+                                    if (row == null) return;
+                                    const deleteRowColOp = {
+                                        type: 'row' as const,
+                                        start: row,
+                                        end: row,
+                                        id: context.currentSheetId,
+                                    };
+                                    setContext(
+                                        (draftCtx) => {
+                                            const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
+                                            if (error) showAlert(error, 'ok');
+                                        },
+                                        { deleteRowColOp },
+                                    );
+                                }}
+                            >
+                                Row
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    const col = selection?.column_focus;
+                                    if (col == null) return;
+                                    const deleteRowColOp = {
+                                        type: 'column' as const,
+                                        start: col,
+                                        end: col,
+                                        id: context.currentSheetId,
+                                    };
+                                    setContext(
+                                        (draftCtx) => {
+                                            const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
+                                            if (error) showAlert(error, 'ok');
+                                        },
+                                        { deleteRowColOp },
+                                    );
+                                }}
+                            >
+                                Column
+                            </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                </>
+            )}
 
             <DropdownMenuSeparator />
 

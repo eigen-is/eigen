@@ -216,6 +216,8 @@ export function clearFilter(ctx: Context) {
 }
 
 export function createFilter(ctx: Context) {
+    const allowEdit = isAllowEdit(ctx);
+    if (!allowEdit) return;
     if (size(ctx.selections) > 1) {
         return;
     }

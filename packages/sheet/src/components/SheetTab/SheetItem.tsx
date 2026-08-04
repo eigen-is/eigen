@@ -329,7 +329,12 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                     <DropdownMenuTrigger asChild>
                         <span
                             className="ml-0.5 inline-flex text-muted-foreground hover:text-foreground"
-                            onClick={(e) => e.stopPropagation()}
+                            // Select this tab before opening its menu (like the right-click path), so
+                            // color and every other action target this sheet, not the active one.
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                selectSheet();
+                            }}
                             tabIndex={0}
                             aria-label={info.sheetOptions}
                         >
