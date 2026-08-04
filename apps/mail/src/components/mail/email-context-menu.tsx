@@ -95,24 +95,28 @@ export function EmailContextMenu({
                 </>
             )}
 
-            <DropdownMenuItem
-                onClick={() => {
-                    onArchive?.(messageIds);
-                    onClose();
-                }}
-            >
-                <Archive className="mr-2" />
-                {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
-            </DropdownMenuItem>
-            <DropdownMenuItem
-                onClick={() => {
-                    onReportSpam?.(messageIds);
-                    onClose();
-                }}
-            >
-                <AlertTriangle className="mr-2" />
-                Report Spam
-            </DropdownMenuItem>
+            {currentMailboxId !== 'Archive' && (
+                <DropdownMenuItem
+                    onClick={() => {
+                        onArchive?.(messageIds);
+                        onClose();
+                    }}
+                >
+                    <Archive className="mr-2" />
+                    {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
+                </DropdownMenuItem>
+            )}
+            {currentMailboxId !== 'Junk' && (
+                <DropdownMenuItem
+                    onClick={() => {
+                        onReportSpam?.(messageIds);
+                        onClose();
+                    }}
+                >
+                    <AlertTriangle className="mr-2" />
+                    Report Spam
+                </DropdownMenuItem>
+            )}
             <DropdownMenuItem
                 onClick={() => {
                     onDelete?.(messageIds);
@@ -146,12 +150,12 @@ export function EmailContextMenu({
                 <DropdownMenuSubTrigger>Move to folder</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-48">
                     {mailboxes
-                        .filter((mailbox) => mailbox.name !== currentMailboxId)
+                        .filter((mailbox) => mailbox.path !== currentMailboxId)
                         .map((mailbox) => (
                             <DropdownMenuItem
-                                key={ucfirst(mailbox.name)}
+                                key={mailbox.path}
                                 onClick={() => {
-                                    onMoveToFolder?.(messageIds, mailbox.name === 'INBOX' ? '' : mailbox.name);
+                                    onMoveToFolder?.(messageIds, mailbox.path);
                                     onClose();
                                 }}
                             >

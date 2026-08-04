@@ -169,30 +169,37 @@ export function useMailActions() {
 
     const confirmDeleteEmails = async (pendingEmails: Email[]) => {
         if (pendingEmails.length > 0) {
-            await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
-            navigateToList();
+            const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
+            if (results.some((r) => r.status === 'fulfilled')) navigateToList();
         }
     };
 
+    // Fan-out batch: build the success toast, Undo slot and navigation from the FULFILLED results only.
+    // Each mutation reports its own failure via onMutationError, so a partial failure must not claim the
+    // full count nor offer to undo items that never moved; none-succeeded → no toast, no undo, no nav.
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
         const trashEmails = emails.filter((e) => e.mailbox === 'Trash');
         const nonTrashEmails = emails.filter((e) => e.mailbox !== 'Trash');
 
+        let moved: Email[] = [];
         if (nonTrashEmails.length > 0) {
-            await Promise.allSettled(nonTrashEmails.map((mail) => deleteMail.mutateAsync(mail)));
-            const action: Undoable = {
-                kind: 'move',
-                items: nonTrashEmails.map((e) => ({ emailId: e.id, from: e.mailbox })),
-                to: 'Trash',
-            };
-            lastAction.current = action;
-            undoToast(`${nonTrashEmails.length} moved to Trash`, action);
+            const results = await Promise.allSettled(nonTrashEmails.map((mail) => deleteMail.mutateAsync(mail)));
+            moved = nonTrashEmails.filter((_, i) => results[i].status === 'fulfilled');
+            if (moved.length > 0) {
+                const action: Undoable = {
+                    kind: 'move',
+                    items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
+                    to: 'Trash',
+                };
+                lastAction.current = action;
+                undoToast(`${moved.length} moved to Trash`, action);
+            }
         }
         if (trashEmails.length > 0) {
             return { needsConfirmation: true as const, emails: trashEmails };
         }
-        if (nonTrashEmails.length > 0) {
+        if (moved.length > 0) {
             navigateToList();
         }
         return { needsConfirmation: false as const };
@@ -205,38 +212,46 @@ export function useMailActions() {
 
     const handleMoveEmailsToFolderByIds = async (emailIds: string[], folderId: string) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: folderId })));
-        navigateToList();
+        const results = await Promise.allSettled(
+            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: folderId })),
+        );
+        if (results.some((r) => r.status === 'fulfilled')) navigateToList();
     };
 
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Archive' })));
-        if (emails.length > 0) {
+        const results = await Promise.allSettled(
+            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Archive' })),
+        );
+        const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
+        if (moved.length > 0) {
             const action: Undoable = {
                 kind: 'move',
-                items: emails.map((e) => ({ emailId: e.id, from: e.mailbox })),
+                items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
                 to: 'Archive',
             };
             lastAction.current = action;
-            undoToast(`${emails.length} archived`, action);
+            undoToast(`${moved.length} archived`, action);
+            navigateToList();
         }
-        navigateToList();
     };
 
     const handleReportSpamByIds = async (emailIds: string[]) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })));
-        if (emails.length > 0) {
+        const results = await Promise.allSettled(
+            emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })),
+        );
+        const moved = emails.filter((_, i) => results[i].status === 'fulfilled');
+        if (moved.length > 0) {
             const action: Undoable = {
                 kind: 'move',
-                items: emails.map((e) => ({ emailId: e.id, from: e.mailbox })),
+                items: moved.map((e) => ({ emailId: e.id, from: e.mailbox })),
                 to: 'Junk',
             };
             lastAction.current = action;
-            undoToast(`${emails.length} reported as spam`, action);
+            undoToast(`${moved.length} reported as spam`, action);
+            navigateToList();
         }
-        navigateToList();
     };
 
     // Mutation-only variants (no navigateToList) for the open-conversation + cursored-row paths —

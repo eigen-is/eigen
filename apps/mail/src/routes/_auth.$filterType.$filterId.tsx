@@ -115,6 +115,11 @@ function MailRoute() {
     } = useEmails(filterId);
     const { data: selectedEmail = null } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
+    // Canonical mailbox identity for the list context menu — resolve the URL filterId ('inbox'/'sent'/…)
+    // to the mailbox's canonical `path` (inbox = ''), the same identity EmailSummary.mailbox carries and
+    // that emailKeys.list normalizes. Lets the menu hide the current box as a move target and drop the
+    // already-satisfied Archive/Spam actions instead of offering no-op self-moves.
+    const currentFolderId = mailboxes.find((m) => (m.path === '' ? 'inbox' : m.path.toLowerCase()) === filterId)?.path;
     const { data: spaceSettings } = useSpaceSettings();
     const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html;
 
@@ -341,6 +346,7 @@ function MailRoute() {
                             onRowClick={actions.handleRowClick}
                             activeRowId={mailId}
                             mailboxes={mailboxes}
+                            currentFolderId={currentFolderId}
                             onDelete={handleDeleteEmailsByIds}
                             onArchive={actions.handleArchiveEmailsByIds}
                             onReportSpam={actions.handleReportSpamByIds}
