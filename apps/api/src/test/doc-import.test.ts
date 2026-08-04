@@ -131,6 +131,27 @@ describe('Eigendoc docx import/convert', () => {
         expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(TEST_PNG_BYTES));
     }, 120_000);
 
+    test('a repeat .docx import overwrites the previous import media', async () => {
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'repeat-import-target' },
+        );
+        const first = await importRequest(docPath.id, await buildGoldenDocx(TEST_PNG_BYTES));
+        expect((await assertJson<{ success: boolean }>(first)).success).toBe(true);
+
+        // The second import extracts the same deterministic media names — it must
+        // overwrite them, not 409 after the content was already replaced.
+        const altBytes = new Uint8Array([...TEST_PNG_BYTES, 0]);
+        const second = await importRequest(docPath.id, await buildGoldenDocx(altBytes));
+        expect((await assertJson<{ success: boolean }>(second)).success).toBe(true);
+
+        expect(nodeTypes(await readDocJson(docPath.id))).toEqual(['heading', 'paragraph', 'bulletList', 'paragraph']);
+        expect(await readDocMedia(docPath.id, GOLDEN_DOCX_IMAGE_NAME)).toEqual(Buffer.from(altBytes));
+    }, 120_000);
+
     test('convert rejects non-.docx files', async () => {
         const uploaded = await upload('not a document', 'notes.txt', 'text/plain');
         const res = await convertRequest(uploaded.id);

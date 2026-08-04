@@ -49,7 +49,12 @@ async function saveDocImages(mount: Mount, docPath: DrivePath, images: Transform
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
     for (const image of images) {
         const data = Buffer.from(image.data);
-        await mount.createFile(mediaFolder.id, image.name, image.contentType, data.byteLength, data);
+        // Extracted names are deterministic (image-0.png, …), so a repeat import
+        // references the same names — overwrite them instead of 409ing after the
+        // content already committed. Names the new import doesn't produce stay.
+        const existing = await mount.getChildByName(mediaFolder.id, image.name);
+        if (existing) await mount.writeFile(existing.id, data);
+        else await mount.createFile(mediaFolder.id, image.name, image.contentType, data.byteLength, data);
     }
 }
 
