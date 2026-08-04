@@ -18,6 +18,7 @@ import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { ConfirmDialog } from '@workspace/ui/components/layout/confirm-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
@@ -90,6 +91,7 @@ export function EditEventDialog({
     const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [selectedCalKey, setSelectedCalKey] = useState('');
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+    const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
     const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
     const calendarChanged = event
@@ -142,9 +144,21 @@ export function EditEventDialog({
     const isRecurring = !!event.rrule;
     const isLinkedEvent = !!event.data?.organizer;
 
+    // A cross-Home move recreates the event in the other Home and deletes the source — which fires
+    // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that
+    // (same precedence as deleteEvent: invitee-decline over organizer-cancel).
+    const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== eventOwnerId;
+    const moveLossReasons: string[] = [];
+    if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
+    else if (event.data?.attendees?.length)
+        moveLossReasons.push('guests will be notified it was cancelled and re-invited');
+    if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
+
     const handleSaveClick = () => {
         if (!title.trim()) return;
-        if (isRecurring && !calendarChanged) {
+        if (crossHomeMove && moveLossReasons.length > 0) {
+            setShowMoveConfirm(true);
+        } else if (isRecurring && !calendarChanged) {
             setShowRecurringDialog(true);
         } else {
             doSave('all');
@@ -250,7 +264,7 @@ export function EditEventDialog({
 
     return (
         <>
-            <Dialog open={open && !showRecurringDialog} onOpenChange={onOpenChange}>
+            <Dialog open={open && !showRecurringDialog && !showMoveConfirm} onOpenChange={onOpenChange}>
                 <DialogContent size="md">
                     <DialogHeader>
                         <DialogTitle>Edit Event</DialogTitle>
@@ -437,6 +451,15 @@ export function EditEventDialog({
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
                 onConfirm={doSave}
+            />
+
+            <ConfirmDialog
+                open={showMoveConfirm}
+                onOpenChange={setShowMoveConfirm}
+                title="Move to another calendar owner?"
+                description={`Moving this event to a calendar owned by someone else recreates it there, so ${moveLossReasons.join(', and ')}.`}
+                confirmText="Move"
+                onConfirm={() => doSave('all')}
             />
         </>
     );
