@@ -118,7 +118,7 @@ export function FileMenu({
                     )}
 
                     {/* Section 2: Export & Rename */}
-                    <DropdownMenuSeparator />
+                    {(onExport || canWrite) && <DropdownMenuSeparator />}
                     {onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>

@@ -404,7 +404,13 @@ export function ChatMessageList({
                     (hasFileAttachments && !!ownerId && !!mountId) || (isOwn && (!!onEditMessage || !!onDeleteMessage));
                 const actionProps = hasActions
                     ? {
-                          onContextMenu: (e: React.MouseEvent) => contextMenu.handleContextMenu(e, message),
+                          onContextMenu: (e: React.MouseEvent) => {
+                              // Leave links and selected text to the browser's native copy menu.
+                              const selection = window.getSelection();
+                              if ((e.target as HTMLElement).closest('a') || (selection && !selection.isCollapsed))
+                                  return;
+                              contextMenu.handleContextMenu(e, message);
+                          },
                           ...longPress.bind(message),
                       }
                     : {};

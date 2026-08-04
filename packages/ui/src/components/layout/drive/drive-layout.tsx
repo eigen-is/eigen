@@ -462,7 +462,10 @@ export function DriveLayout({
 
             <DriveLocationPicker
                 open={dialogs.copyMove.open}
-                onOpenChange={dialogs.copyMove.setOpen}
+                onOpenChange={(open) => {
+                    if (!open) dialogs.copyMove.closeDialog();
+                    else dialogs.copyMove.setOpen(open);
+                }}
                 mode="folder"
                 title={dialogs.copyMove.mode === 'move' ? 'Move to' : 'Copy to'}
                 confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}

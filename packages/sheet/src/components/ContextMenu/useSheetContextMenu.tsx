@@ -306,7 +306,7 @@ function ImageItem() {
     );
 }
 
-function CommentItems({ close }: { close: () => void }) {
+function CommentItems() {
     const { context, settings } = useContext(WorkbookContext);
     const {
         getCommentInfo,
@@ -338,34 +338,18 @@ function CommentItems({ close }: { close: () => void }) {
             item={info ? { card: info.card, entry: info.entry } : null}
             onAddComment={onAddComment && (() => onAddComment(row, col))}
             onOpen={onViewComment && (() => onViewComment(row, col))}
-            onChangeColor={
-                onCommentColor &&
-                ((_cardId: string, color: string) => {
-                    // The color swatches are plain buttons, not menu items, so Radix
-                    // doesn't close the menu for them.
-                    close();
-                    onCommentColor(row, col, color);
-                })
-            }
+            onChangeColor={onCommentColor && ((_cardId: string, color: string) => onCommentColor(row, col, color))}
             onResolve={onCommentResolve}
             onReopen={onCommentReopen}
             members={commentMembers}
             currentUserEmail={currentUserEmail}
-            onAssign={
-                onCommentAssign &&
-                ((chatName: string, email: string | null, title?: string) => {
-                    // The assignee rows are plain buttons, not menu items, so Radix
-                    // doesn't close the menu for them.
-                    close();
-                    onCommentAssign(chatName, email, title);
-                })
-            }
+            onAssign={onCommentAssign}
             onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
         />
     );
 }
 
-function CellMenu({ close }: { close: () => void }) {
+function CellMenu() {
     return (
         <>
             <CutItem />
@@ -384,7 +368,7 @@ function CellMenu({ close }: { close: () => void }) {
             <DropdownMenuSeparator />
             <LinkItem />
             <ImageItem />
-            <CommentItems close={close} />
+            <CommentItems />
         </>
     );
 }
@@ -490,7 +474,7 @@ export function useSheetContextMenu(area: SheetMenuArea) {
                     refs.cellInput.current?.focus();
                 }}
             >
-                {area === 'cell' && <CellMenu close={contextMenu.close} />}
+                {area === 'cell' && <CellMenu />}
                 {area === 'row' && <RowMenu />}
                 {area === 'column' && <ColumnMenu />}
             </ContextMenuAnchor>
