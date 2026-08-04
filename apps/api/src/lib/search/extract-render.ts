@@ -86,9 +86,9 @@ function collectSheetsText(sheets: Sheet[], cap: number): string {
     return out.parts.join(' ');
 }
 
-// Body text for one collab document, capped at ~100 KB. Recalc failure indexes the
-// replayed values with a warning, mirroring the preview renderer — a stale body beats
-// no body at all.
+// Body text for one collab document, capped at ~100 KB. Sheets index stored values
+// only — like the preview renderer, the read never recalcs (SHEETS.md § Server-side
+// recalc), so a valueless formula cell contributes nothing.
 export async function extractCollabText(
     documentType: ExtractTextJob['documentType'],
     doc: Y.Doc,

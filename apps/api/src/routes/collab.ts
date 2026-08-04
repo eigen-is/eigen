@@ -193,6 +193,15 @@ export const collabRouter = new Elysia({
                     return;
                 }
 
+                // Speak before any await: y-websocket closes after 30s of silence and
+                // retries, re-paying a cold open per attempt (the reconnect spiral).
+                // Cold Home init inside getSharedDrive is the slowest phase, so the
+                // heartbeat must precede it; the frame is a constant empty awareness
+                // update, so nothing leaks before the ACL check.
+                const rawWs = toRawWs(ws);
+                stopHeartbeat = startLoadingHeartbeat(rawWs);
+                const loadStart = performance.now();
+
                 const { ownerId, mountId, pathId } = data.params;
                 const drive = await getSharedDrive(ownerId, user);
                 if (!drive || !(await drive.canRead(mountId, pathId, user))) {
@@ -200,11 +209,6 @@ export const collabRouter = new Elysia({
                     return;
                 }
 
-                const rawWs = toRawWs(ws);
-                // Speak before the load: y-websocket closes after 30s of silence and
-                // retries, re-paying a cold load per attempt (the reconnect spiral).
-                stopHeartbeat = startLoadingHeartbeat(rawWs);
-                const loadStart = performance.now();
                 const document = await drive.getCollabDocument(mountId, pathId);
                 document.subscribe(user, rawWs);
                 console.log(
