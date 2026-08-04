@@ -80,6 +80,32 @@
 > worst-case foreground connection hold under adversarially slow jobs widens from ~2–4 min to ~8–10 min
 > (each job's deadline still kills runaways; 503-not-hang holds). The sheets→slides warm-Worker pathology
 > is recorded above for any future pooling discussion.
+>
+> - **External review round (2026-08-04).** An outside review of the branch produced 3 P1 / 5 P2 / 1 P3;
+>   verified verdicts and fixes: nested Worker response shapes (warnings/images/error-status) validated at
+>   the trust boundary; a synchronous Worker-start or `postMessage` throw settles `crashed` instead of
+>   wedging the slot; the preview window now bounds declared merges and CF ranges (spans clipped, formula
+>   rules keep their anchor with a 50k-cell ceiling — preview format bumped to `f4`); the extract body cap
+>   enforces UTF-8 bytes at a code-point boundary; a write landing during an in-flight extract keeps the
+>   dirty bit (per-path in-memory generation, bumped before the bit-setting write); the import write recheck
+>   is the last await before the Yjs commit; admission is checked before export media prep, upload copies and
+>   the convert source read; job logs gained `format=`, `startupMs=`, warning payloads and refused-admission
+>   records.
+>
+> **Accepted drifts (external review round):**
+> - § Runner's "the queue should hold small job descriptors or preparation closures" is not built: queued
+>   jobs retain their payloads (captured Yjs blobs, upload copies, export media). Bounded in practice — ~5
+>   foreground exports + 8 background admit, each payload capped by upload quota / document size — and
+>   admission now runs before every expensive preparation. The closure refactor is parked on the ROADMAP
+>   (P3 — Defer) with its trigger.
+> - Preview CF aggregate rules (data bars, color scales, top-10, above-average, duplicates) compute their
+>   extremes over the render window, not the full declared range — inherent to bounding the work; the editor
+>   canvas stays the fidelity reference (see PREVIEWS.md § Compact Previews).
+> - § Observability's "Worker termination/restart count" is not logged: one-shot Workers terminate exactly
+>   once per job, so the per-job outcome record already carries it; restarts do not exist.
+> - § Build's built-output smoke check resolved to source: production executes `src/index.ts` (the bundle
+>   was retired from the deploy path on main, 2026-08-04; `buildfordocker` remains a Worker-graph
+>   verification tool), so the automated suite exercises exactly the artifact that ships.
 
 ## Summary
 

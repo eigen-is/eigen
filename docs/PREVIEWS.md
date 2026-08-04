@@ -73,6 +73,14 @@ dropped, each render module appends a shared `renderPreviewTruncatedMarker()`
 (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the
 document `<head>`.
 
+The sheet window bounds *declared* spans too, not just emitted cells — one legal merge or conditional-format
+range can name millions of cells. Merge `colspan`/`rowspan` clip to the window edge (sets the truncated
+marker); CF rules evaluate only over the window, so aggregate rules (data bars, color scales, top-10,
+above-average, duplicates) compute their extremes over the visible slice rather than the full declared range —
+the editor canvas remains the fidelity reference. Formula rules keep their range start (it anchors the rule's
+relative references) with ends clipped, and a rule whose kept area still exceeds 50,000 cells is dropped from
+the preview outright. Exports render declarations in full.
+
 All three then run their body through `applyPreviewByteGuard()` from that same module: the caps count blocks,
 slides and cells, so one enormous block sails through all of them. A body over 8MB is replaced by the
 truncated marker — never a partially sliced string — and surfaces a `byte-guard-truncated` warning.
