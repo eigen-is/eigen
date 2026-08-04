@@ -1,30 +1,30 @@
-import { useAuth } from '@workspace/lib/auth';
-import type { useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
-import type { ActiveComments } from '@workspace/lib/types/comments';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { useCommentFilter } from '@workspace/lib/comments';
+import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { ActiveComments, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
+import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { Column } from '../app/column-layout';
 import type { useContextMenu } from '../context-menu';
-import { ActivityPanel } from '../drive/activity-panel';
 import { ToolbarTitle } from '../toolbar/toolbar-title';
+import { ActivityPanel } from './activity-panel';
 import { CommentFilterButton } from './comment-filter-button';
 import type { CommentContextMenuItem } from './comment-menu-items';
 import { CommentPanel } from './comment-panel';
 
-// The mobile comments/activity pane, identical across docs, slides and sheets: a full-width Column
-// carrying the back arrow, the title and (for comments) the filter, so the panel drops its header.
-// Mount it outside any <ColumnLayout mobileColumn="…">: a Column self-hides when its id doesn't
-// match, so a host that wraps this one gets no pane at all, silently.
+// The mobile comments/activity pane shared by docs, slides and sheets: a full-width Column carrying
+// the chrome the panels drop. Mount it OUTSIDE any <ColumnLayout mobileColumn="…"> — a Column whose id
+// doesn't match self-hides, so a host that wraps this one gets no pane at all, silently.
 type MobilePanelColumnProps = {
-    activePanel: 'comments' | 'activity';
+    activePanel: DocumentPanel;
     onBack: () => void;
     path: DrivePath;
-    lifecycle: ReturnType<typeof useCommentLifecycle>;
-    activeComments: ActiveComments;
+    cards: Record<string, CommentCard>;
+    entries: CommentEntry[];
+    members: EffectiveMember[];
+    currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
+    activeComments: ActiveComments;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
-    // Comment rows and activity rows both do the same thing here: open the card, leave the pane where
-    // it is. The editor is hidden while this pane is up, so revealing an anchor there — or switching
-    // panes out from under the tap — would drive a view nobody can see.
+    // Rows only open the card: the editor is hidden behind this pane, so revealing an anchor is unseen.
     onOpenCard: (cardId: string) => void;
 };
 
@@ -32,14 +32,15 @@ export function MobilePanelColumn({
     activePanel,
     onBack,
     path,
-    lifecycle,
-    activeComments,
+    cards,
+    entries,
+    members,
+    currentUserEmail,
     filter,
+    activeComments,
     commentContextMenu,
     onOpenCard,
 }: MobilePanelColumnProps) {
-    const { user } = useAuth();
-    const { cards, allComments, members } = lifecycle;
     const showComments = activePanel === 'comments';
 
     return (
@@ -55,9 +56,8 @@ export function MobilePanelColumn({
                             <CommentFilterButton
                                 filter={filter}
                                 members={members}
-                                currentUserEmail={user!.email}
-                                // Touch target, matching the back arrow's TooltipButton; the panel
-                                // header's own 24px button is a desktop density.
+                                currentUserEmail={currentUserEmail}
+                                // Touch target, matching the back arrow; the header's 24px is desktop density.
                                 className="h-8 w-8"
                             />
                         </div>
@@ -70,10 +70,10 @@ export function MobilePanelColumn({
             {showComments ? (
                 <CommentPanel
                     cards={cards}
-                    entries={allComments}
+                    entries={entries}
                     activeCardIds={activeComments.ids}
                     anchorTexts={activeComments.anchorTexts}
-                    currentUserEmail={user!.email}
+                    currentUserEmail={currentUserEmail}
                     filter={filter}
                     members={members}
                     className="w-full border-l-0"

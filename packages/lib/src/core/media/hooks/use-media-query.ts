@@ -46,6 +46,12 @@ export function useIsDesktop() {
     return useMediaQuery('(min-width: 1025px)');
 }
 
+// Toolbar density only: below this the editors fold their format rows into dropdowns. Not the
+// 768px system mobile breakpoint that useLayout().isMobile reports.
+export function useIsCompactToolbar() {
+    return useMediaQuery('(max-width: 1200px)');
+}
+
 export function useIsCoarsePointer() {
     return useMediaQuery('(pointer: coarse)');
 }

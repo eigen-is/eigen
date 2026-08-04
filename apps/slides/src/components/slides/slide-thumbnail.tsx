@@ -25,8 +25,7 @@ export const SlideThumbnail = memo(function SlideThumbnail({
     const { resolveMediaUrl } = useMediaResolver();
 
     return (
-        // select-none + the callout suppression keep a press on the thumbnail from raising iOS's
-        // text selection/loupe (same pairing as .eigen-list-item).
+        // select-none + callout suppression keep a long press off iOS's loupe (as .eigen-list-item does).
         <button
             onClick={onClick}
             className={cn(

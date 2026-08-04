@@ -3,18 +3,17 @@ import { useFileHistory } from '@workspace/lib/drive';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Activity, X } from 'lucide-react';
+import { ActivityEventList } from '../drive/activity-event-list';
 import { PropertiesPanel } from '../properties-panel';
 import { TooltipButton } from '../toolbar/tooltip-button';
-import { ActivityEventList } from './activity-event-list';
 
 type ActivityPanelProps = {
     path: DrivePath;
-    // Only read to resolve a row's chatName to a cardId; without it those rows stay inert.
-    cards?: Record<string, CommentCard>;
+    cards: Record<string, CommentCard>;
     // Absent = the host draws its own chrome, so the panel renders no header.
     onClose?: () => void;
     // Opens the card a row references in-doc; other rows stay inert (see ActivityEventList).
-    onOpenCard?: (cardId: string) => void;
+    onOpenCard: (cardId: string) => void;
     className?: string;
 };
 
@@ -41,14 +40,10 @@ export function ActivityPanel({ path, cards, onClose, onOpenCard, className }: A
                     <ActivityEventList
                         path={path}
                         events={events}
-                        onOpenCard={
-                            onOpenCard &&
-                            (({ cardId, chatName }) => {
-                                const id =
-                                    cardId ?? (cards && chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                if (id) onOpenCard(id);
-                            })
-                        }
+                        onOpenCard={({ cardId, chatName }) => {
+                            const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
+                            if (id) onOpenCard(id);
+                        }}
                     />
                 </div>
             )}

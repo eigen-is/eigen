@@ -41,9 +41,8 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
         const nw = imageRef.current.naturalWidth;
         const nh = imageRef.current.naturalHeight;
         const maxWidth = getMaxWidth();
-        // A hidden editor (the mobile pane) measures 0 while the page padding still subtracts, so
-        // maxWidth comes out negative — and this width goes straight into the collaborative doc.
-        // Same guard table-width-clamp.ts uses; don't latch, so a later load still gets to size it.
+        // A hidden editor measures 0 while the padding subtracts, and that negative width would land in
+        // the doc. Don't latch: a later load still gets to size it.
         if (maxWidth <= 0) return;
         imageProcessed.current = true;
 
@@ -98,7 +97,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                     <ImageResizeHandles
                         width={width}
                         aspectRatio={aspectRatio}
-                        maxWidth={getMaxWidth()}
+                        getMaxWidth={getMaxWidth}
                         onResize={(w) => updateAttributes({ width: w })}
                         selected={selected}
                         editable={isEditable}

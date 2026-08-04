@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -110,9 +110,7 @@ export const EditorToolbar = ({
     const { exportDocument, isExporting } = useExportDocument();
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
-    // Toolbar density only: below this the format controls fold into dropdowns. Not the 768px
-    // system mobile breakpoint that useLayout().isMobile reports.
-    const isCompact = useMediaQuery('(max-width: 1200px)');
+    const isCompact = useIsCompactToolbar();
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {

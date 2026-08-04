@@ -26,7 +26,6 @@ import {
     CardFormDialog,
     Column,
     ColumnLayout,
-    type CommentContextMenuItem,
     CommentLifecycleDialogs,
     CommentPanel,
     EmptyState,
@@ -34,6 +33,7 @@ import {
     MobilePanelColumn,
     useLayout,
 } from '@workspace/ui';
+import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
@@ -221,17 +221,23 @@ function SlideEditorInner({
     }, []);
 
     const auth = useAuth();
-    const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, closePanels } =
-        useDocumentPanels();
-    // The find bar rides with the canvas, which the mobile pane hides — a session opened from over
-    // the pane (⌘F, a palette in-document hit) would be invisible. Reveal the canvas instead; the
-    // pane is one toolbar tap away. The layered Escape still needs the plain open flag.
+    const {
+        panel,
+        commentPanelOpen,
+        activityPanelOpen,
+        mobilePanelOpen,
+        toggleComments,
+        toggleActivity,
+        closePanels,
+        onSearchOpenChange,
+    } = useDocumentPanels(isMobile);
+    // The layered Escape below still needs the plain open flag.
     const handleSearchOpenChange = useCallback(
         (open: boolean) => {
             setSearchOpen(open);
-            if (open && isMobile) closePanels();
+            onSearchOpenChange(open);
         },
-        [isMobile, closePanels],
+        [onSearchOpenChange],
     );
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
@@ -284,28 +290,25 @@ function SlideEditorInner({
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
 
-    // Present is a read-only view of a live deck: every editing keybind below stays gated on
-    // !isPresenting, or a stray key mutates the slide the audience is looking at.
-    useYjsUndoHotkeys(undoManager, canWrite && !isPresenting);
+    // Present is a read-only view of a live deck, or a stray key mutates the slide the audience sees.
+    const canEdit = canWrite && !isPresenting;
+
+    useYjsUndoHotkeys(undoManager, canEdit);
     useHotkey(
         'Delete',
         () => {
-            if (hasSelection && canWrite) {
-                deleteObjects(selectedObjectIds);
-                setSelectedObjectIds([]);
-            }
+            deleteObjects(selectedObjectIds);
+            setSelectedObjectIds([]);
         },
-        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'Backspace',
         () => {
-            if (hasSelection && canWrite) {
-                deleteObjects(selectedObjectIds);
-                setSelectedObjectIds([]);
-            }
+            deleteObjects(selectedObjectIds);
+            setSelectedObjectIds([]);
         },
-        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     // Layered Escape (amendment 12): present → text-edit → bar → deselect. This is a capture-phase
     // document listener (NOT useHotkey): the find bar's own Escape runs in the bubble phase and closes
@@ -378,7 +381,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(-1, 0);
         },
-        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowRight',
@@ -386,7 +389,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(1, 0);
         },
-        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowUp',
@@ -394,7 +397,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(0, -1);
         },
-        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowDown',
@@ -402,7 +405,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(0, 1);
         },
-        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     const handleImageFile = useCallback(
         async (file: File) => {
@@ -758,10 +761,6 @@ function SlideEditorInner({
     // active slide and the user can write (or comments are open) — inset the find bar clear of it.
     const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || activityPanelOpen || canWrite);
 
-    // Below the mobile breakpoint that sibling has no room, so mobile hosts the same panels in a
-    // full-width Column instead.
-    const mobilePanelOpen = isMobile && panel !== null;
-
     if (!isSynced) return <LoadingState />;
 
     if (isPresenting && activeSlide) {
@@ -807,8 +806,7 @@ function SlideEditorInner({
                     title="Exit present (Esc)"
                     aria-label="Exit present"
                     tabIndex={presentControlsVisible ? undefined : -1}
-                    // The slide covers the overlay, hence the chip; hidden means gone, so a tap in
-                    // this corner still advances.
+                    // Hidden means gone, so a tap in this corner still advances the deck.
                     className={cn(
                         'absolute top-4 right-4 rounded-full bg-black/50 p-2.5 pointer-coarse:p-3 text-white transition-opacity hover:bg-black/70',
                         !presentControlsVisible && 'pointer-events-none opacity-0',
@@ -826,13 +824,13 @@ function SlideEditorInner({
 
     return (
         <ColumnLayout>
-            {/* Hiding takes the find bar with it: the bar floats inside this wrapper, outside the
-                pane's Column, and would otherwise paint over the pane. */}
+            {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
             <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
                 <DocSearchProvider
                     controller={docSearchController}
                     initialSearchTerm={initialSearchTerm}
                     onOpenChange={handleSearchOpenChange}
+                    // right-68 = panel width + the bar's own gutter.
                     barClassName={cn('top-14', rightPanelShown && 'right-68')}
                 >
                     <Column
@@ -850,8 +848,7 @@ function SlideEditorInner({
                                 onAddImage={() => setImagePickerOpen(true)}
                                 onAddSlide={() => addSlide()}
                                 onPresent={handlePresent}
-                                // Both toggles are always offered: the panels render as the right
-                                // sibling above the breakpoint and as the mobile Column below it.
+                                // Always offered: desktop draws the side panel, mobile the Column.
                                 onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
                                 onToggleActivityPanel={toggleActivity}
@@ -987,17 +984,19 @@ function SlideEditorInner({
                 </DocSearchProvider>
             </div>
 
-            {mobilePanelOpen && (
+            {mobilePanelOpen && panel && (
                 <MobilePanelColumn
                     activePanel={panel}
                     onBack={closePanels}
                     path={path}
-                    lifecycle={lifecycle}
-                    activeComments={activeComments}
+                    cards={cards}
+                    entries={allComments}
+                    members={members}
+                    currentUserEmail={auth.user!.email}
                     filter={commentFilter}
+                    activeComments={activeComments}
                     commentContextMenu={commentContextMenu}
-                    // Plain setOpenCardId, not openCommentCard: the canvas is hidden here, so its
-                    // slide + object reveal would drive a view nobody can see.
+                    // Not openCommentCard: the canvas is hidden here, so its reveal would go unseen.
                     onOpenCard={setOpenCardId}
                 />
             )}

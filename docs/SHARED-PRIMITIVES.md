@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-841 primitives across 6 kinds. `packages/sheet` internals are excluded.
+845 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -17,7 +17,7 @@ rather than inlining `queryClient.invalidateQueries`.
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
 | `AccessDenied` | `@workspace/ui` | packages/ui/src/components/layout/app/access-denied.tsx |
-| `ActivityPanel` | `@workspace/ui` | packages/ui/src/components/layout/drive/activity-panel.tsx |
+| `ActivityPanel` | `@workspace/ui` | packages/ui/src/components/layout/comments/activity-panel.tsx |
 | `ActivityRow` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
@@ -156,7 +156,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (217)
+## Hooks (218)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -323,6 +323,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateDraft` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `useUploadDraftAttachment` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `useIsCoarsePointer` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
+| `useIsCompactToolbar` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `useIsDesktop` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `useIsMobile` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
 | `useIsTablet` | `@workspace/lib/media` | packages/lib/src/core/media/hooks/use-media-query.ts |
@@ -378,7 +379,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (233)
+## Types (234)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -565,6 +566,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CommentCard` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
+| `DocumentPanel` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `DocCommentMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocCommentSearch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchController` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
@@ -616,7 +618,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (261)
+## Utilities & constants (263)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -779,6 +781,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
+| `PAGE_MARGIN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
 | `defaultDriveSort` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
@@ -880,4 +883,5 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STICKIES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `uploadWithProgress` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-with-progress.tsx |
 | `alphaGroupKey` | `@workspace/ui/components/layout/alphabetical-list` | packages/ui/src/components/layout/alphabetical-list.tsx |
+| `PROPERTIES_PANEL_WIDTH_PX` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/properties-panel.tsx |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |

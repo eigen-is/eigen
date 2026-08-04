@@ -161,6 +161,8 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     dataRef.current = data;
 
     const rafIdRef = useRef(0);
+    // Latched by the 0×0 guards below so the rAF redraw skips a hidden surface.
+    const visibleRef = useRef(true);
 
     const rowlenKey = useStableJson(context.config?.rowlen);
     const columnlenKey = useStableJson(context.config?.columnlen);
@@ -172,10 +174,13 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const resize = useCallback(() => {
         const sheetData = dataRef.current;
         if (!sheetData) return;
-        // 0×0 = detaching or hidden; writing it pins the canvas blank until the next resize, so
-        // wait for the real box the observer reports on un-hide.
+        // 0×0 = detaching or hidden; writing it would pin the canvas blank until the next resize.
         const placeholder = placeholderRef.current;
-        if (!placeholder || placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
+        if (!placeholder || placeholder.clientWidth === 0 || placeholder.clientHeight === 0) {
+            visibleRef.current = false;
+            return;
+        }
+        visibleRef.current = true;
         setContext((draftCtx) => {
             if (settings.devicePixelRatio === 0) {
                 draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
@@ -185,9 +190,8 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         });
     }, [refs.canvas, setContext, settings.devicePixelRatio]);
 
-    // Window resize also covers devicePixelRatio changes, which leave the box alone; the observer
-    // covers container-only resizes (side panels, layout switches, un-hiding). No feedback loop:
-    // the placeholder is sized by its flex parent, canvas and overlay are absolute.
+    // Window resize covers devicePixelRatio changes, the observer container-only ones (panels, un-hiding).
+    // No feedback loop: the placeholder is sized by its flex parent, canvas and overlay are absolute.
     useEffect(() => {
         window.addEventListener('resize', resize);
         const observer = new ResizeObserver(resize);
@@ -205,11 +209,11 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
     }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, setContext]);
 
-    // Init canvas sizing, before the observer's first delivery. Same 0×0 skip as resize(): a Workbook
-    // remounted (snapshotVersion) while its wrapper is hidden would otherwise pin a blank canvas.
+    // Init sizing, before the observer's first delivery. Same 0×0 skip: a remount while hidden would pin blank.
     useEffect(() => {
         const placeholder = placeholderRef.current!;
-        if (placeholder.clientWidth === 0 || placeholder.clientHeight === 0) return;
+        visibleRef.current = placeholder.clientWidth > 0 && placeholder.clientHeight > 0;
+        if (!visibleRef.current) return;
         setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder));
     }, [refs.canvas, setContext]);
 
@@ -231,6 +235,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const scheduleRedraw = useCallback(() => {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = requestAnimationFrame(() => {
+            if (!visibleRef.current) return;
             const ctx = contextRef.current;
             if (ctx.groupValuesRefreshData.length > 0) return;
             if (!refs.canvas.current) return;

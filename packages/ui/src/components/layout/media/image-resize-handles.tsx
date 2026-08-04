@@ -3,7 +3,8 @@ import { useCallback, useState } from 'react';
 type ImageResizeHandlesProps = {
     width: number | null;
     aspectRatio: number | null;
-    maxWidth: number;
+    // Called at drag start, not per render: measuring it costs a forced layout.
+    getMaxWidth: () => number;
     onResize: (width: number) => void;
     children: React.ReactNode;
     selected?: boolean;
@@ -13,7 +14,7 @@ type ImageResizeHandlesProps = {
 export function ImageResizeHandles({
     width,
     aspectRatio,
-    maxWidth,
+    getMaxWidth,
     onResize,
     children,
     selected = false,
@@ -29,6 +30,7 @@ export function ImageResizeHandles({
 
             const startX = e.clientX;
             const startWidth = width || 300;
+            const maxWidth = getMaxWidth();
             let currentWidth = startWidth;
 
             const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -51,7 +53,7 @@ export function ImageResizeHandles({
             document.addEventListener('mousemove', handleMouseMove);
             document.addEventListener('mouseup', handleMouseUp);
         },
-        [width, aspectRatio, maxWidth, onResize],
+        [width, aspectRatio, getMaxWidth, onResize],
     );
 
     const displayWidth = localWidth ?? width;

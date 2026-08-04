@@ -45,9 +45,7 @@ export function SlidePanel({
     // Read-only viewers get no handlers, so the menu would open empty — don't arm its triggers.
     const hasSlideActions = !!onDuplicateSlide || !!onDeleteSlide;
 
-    // Desktop layout only: SortableSlide composes this in so a coarse-pointer press (iPad) reaches the
-    // same menu the mouse gets by right-click. bind(slideId) carries the pressed slide, which is why the
-    // instance lives at panel level. Mobile thumbnails are view-only — they bind nothing.
+    // One instance at panel level: bind(slideId) is what carries the pressed slide into the menu.
     const { openAt: openSlideMenuAt } = slideContextMenu;
     const handleSlideLongPress = useCallback(
         (slideId: string, x: number, y: number) => {
@@ -65,6 +63,7 @@ export function SlidePanel({
 
         const thumbnail = (
             <SlideThumbnail
+                key={slideId}
                 slide={slide}
                 objects={objects}
                 index={index}
@@ -74,7 +73,7 @@ export function SlidePanel({
             />
         );
 
-        if (mobile) return <div key={slideId}>{thumbnail}</div>;
+        if (mobile) return thumbnail;
 
         const onContextMenu = hasSlideActions
             ? (e: React.MouseEvent) => slideContextMenu.handleContextMenu(e, slideId)
@@ -118,26 +117,21 @@ export function SlidePanel({
                     </DndContext>
                 )}
             </div>
-            {/* Not gated on !mobile: unmounting it across a breakpoint flip would strand an open
-                menu's item, and it can never open on mobile — nothing binds its triggers there. */}
+            {/* Not gated on !mobile: unmounting across a breakpoint flip would strand an open menu's item. */}
             <ContextMenuAnchor contextMenu={slideContextMenu}>
                 {menuSlideId && (
                     <>
-                        {onDuplicateSlide && (
-                            <DropdownMenuItem onClick={() => onDuplicateSlide(menuSlideId)}>
-                                <Copy className="h-4 w-4 mr-2" /> Duplicate
-                            </DropdownMenuItem>
-                        )}
-                        {onDuplicateSlide && onDeleteSlide && <DropdownMenuSeparator />}
-                        {onDeleteSlide && (
-                            <DropdownMenuItem
-                                variant="destructive"
-                                disabled={deck.slideOrder.length <= 1}
-                                onClick={() => onDeleteSlide(menuSlideId)}
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
-                            </DropdownMenuItem>
-                        )}
+                        <DropdownMenuItem onClick={() => onDuplicateSlide?.(menuSlideId)}>
+                            <Copy className="h-4 w-4 mr-2" /> Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                            variant="destructive"
+                            disabled={deck.slideOrder.length <= 1}
+                            onClick={() => onDeleteSlide?.(menuSlideId)}
+                        >
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete
+                        </DropdownMenuItem>
                     </>
                 )}
             </ContextMenuAnchor>

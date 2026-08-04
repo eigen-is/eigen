@@ -80,8 +80,19 @@ function SheetEditorInner({
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
-    const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, closePanels } =
-        useDocumentPanels();
+    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
+    // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
+    const { isMobile } = useLayout();
+    const {
+        panel,
+        commentPanelOpen,
+        activityPanelOpen,
+        mobilePanelOpen,
+        toggleComments,
+        toggleActivity,
+        closePanels,
+        onSearchOpenChange,
+    } = useDocumentPanels(isMobile);
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
@@ -247,21 +258,6 @@ function SheetEditorInner({
         ],
     );
 
-    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
-    // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
-    const { isMobile } = useLayout();
-    const mobilePanelOpen = isMobile && panel !== null;
-
-    // The find bar rides with the workbook, which the pane hides — a session opened from over the
-    // pane (⌘F, a palette in-document hit) would be invisible. Reveal the workbook instead; the
-    // pane is one toolbar tap away.
-    const handleSearchOpenChange = useCallback(
-        (open: boolean) => {
-            if (open && isMobile) closePanels();
-        },
-        [isMobile, closePanels],
-    );
-
     if (!synced || !initialData) {
         return <LoadingState />;
     }
@@ -280,13 +276,12 @@ function SheetEditorInner({
                 />
             )}
             <div className="flex h-full w-full overflow-hidden">
-                {/* Hiding takes the find bar with it: the bar floats inside this wrapper, outside the
-                    pane's Column, and would otherwise paint over the pane. */}
+                {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
                 <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'hidden')}>
                     <DocSearchProvider
                         controller={searchController}
                         initialSearchTerm={initialSearchTerm}
-                        onOpenChange={handleSearchOpenChange}
+                        onOpenChange={onSearchOpenChange}
                         barClassName="top-20"
                         onUndo={() => workbookRef.current?.undo()}
                         onRedo={() => workbookRef.current?.redo()}
@@ -376,40 +371,38 @@ function SheetEditorInner({
                         />
                     </DocSearchProvider>
                 </div>
-                {mobilePanelOpen ? (
+                {mobilePanelOpen && panel ? (
                     <MobilePanelColumn
                         activePanel={panel}
                         onBack={closePanels}
                         path={path}
-                        lifecycle={lifecycle}
-                        activeComments={activeComments}
+                        cards={cards}
+                        entries={allComments}
+                        members={members}
+                        currentUserEmail={auth.user!.email}
                         filter={commentFilter}
+                        activeComments={activeComments}
                         commentContextMenu={commentContextMenu}
                         onOpenCard={setOpenCardId}
                     />
-                ) : (
-                    <>
-                        {commentPanelOpen && (
-                            <CommentPanel
-                                cards={cards}
-                                entries={allComments}
-                                activeCardIds={activeComments.ids}
-                                anchorTexts={activeComments.anchorTexts}
-                                currentUserEmail={auth.user!.email}
-                                filter={commentFilter}
-                                members={members}
-                                onClose={closePanels}
-                                onCommentClick={setOpenCardId}
-                                onCommentContextMenu={(e, card, entry) =>
-                                    commentContextMenu.handleContextMenu(e, { card, entry })
-                                }
-                            />
-                        )}
-                        {activityPanelOpen && (
-                            <ActivityPanel path={path} cards={cards} onClose={closePanels} onOpenCard={setOpenCardId} />
-                        )}
-                    </>
-                )}
+                ) : commentPanelOpen ? (
+                    <CommentPanel
+                        cards={cards}
+                        entries={allComments}
+                        activeCardIds={activeComments.ids}
+                        anchorTexts={activeComments.anchorTexts}
+                        currentUserEmail={auth.user!.email}
+                        filter={commentFilter}
+                        members={members}
+                        onClose={closePanels}
+                        onCommentClick={setOpenCardId}
+                        onCommentContextMenu={(e, card, entry) =>
+                            commentContextMenu.handleContextMenu(e, { card, entry })
+                        }
+                    />
+                ) : activityPanelOpen ? (
+                    <ActivityPanel path={path} cards={cards} onClose={closePanels} onOpenCard={setOpenCardId} />
+                ) : null}
             </div>
 
             <CardFormDialog

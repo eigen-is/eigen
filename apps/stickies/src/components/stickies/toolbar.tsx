@@ -1,7 +1,7 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { CenteredToolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -50,9 +50,7 @@ export function Toolbar({
     activityPanelOpen,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
-    // Toolbar density only, not the 768px system mobile breakpoint: ≤1200px the center dot row
-    // doesn't fit, so the Filter menu is the only entry point there.
-    const isCompact = useMediaQuery('(max-width: 1200px)');
+    const isCompact = useIsCompactToolbar();
     // Controlled so assignee/status/clear picks can dismiss the menu; color toggles keep it open.
     const [filterOpen, setFilterOpen] = useState(false);
 

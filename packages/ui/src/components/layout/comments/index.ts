@@ -1,3 +1,4 @@
+export { ActivityPanel } from './activity-panel';
 export { AssigneeMenuItems } from './assignee-menu-items';
 export { AssigneePicker } from './assignee-picker';
 export { CommentContextMenu } from './comment-context-menu';

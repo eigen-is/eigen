@@ -2,6 +2,9 @@ import { ScrollArea } from '@workspace/ui/components/scroll-area';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
 
+// The w-64 below, for hosts that have to lay out around this panel.
+export const PROPERTIES_PANEL_WIDTH_PX = 256;
+
 type PropertiesPanelProps = {
     children: ReactNode;
     className?: string;
