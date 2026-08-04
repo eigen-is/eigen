@@ -67,9 +67,9 @@ document. The cap keeps the cached preview body small. Each type compacts by its
 | eigenslides | first 8 slides            | `renderEigenslidesPreviewBody` slices `deck.slideOrder` (slides/objects maps stay whole) |
 | eigendoc    | first 20 top-level blocks | `renderEigendocPreviewBody` slices `json.content` before rendering        |
 
-Every preview generator slices its own input (`renderSheetsPreviewHtml` for sheets, the generators for
-slides/eigendoc), leaving the full-document export renderers untouched. When content is actually dropped,
-each generator appends a shared `renderPreviewTruncatedMarker()`
+Every preview render module slices its own input (`renderSheetsPreviewHtml` for sheets, the render modules
+themselves for slides/eigendoc), leaving the full-document export renderers untouched. When content is actually
+dropped, each render module appends a shared `renderPreviewTruncatedMarker()`
 (`apps/api/src/lib/preview/preview-marker.ts`) — inline-styled because preview HTML is embedded without the
 document `<head>`.
 
@@ -84,25 +84,30 @@ op replay, recalc, HTML rendering, and sanitization never block the API event lo
 (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phases 1–3 as-built). Every export rides the same runner
 through the same seam — see [EXPORT.md](EXPORT.md):
 
-1. The main thread keeps ACL, cache lookup/dedupe, and captures the document's compressed Yjs blobs in a
-   short SELECT-only transaction (`readYjsStatePayload` via `captureCollabSource`). Every transform goes
-   through `runTransformToText` / `runTransformToBytes` (`lib/document/transform/run-transform.ts`), the one
-   main-thread seam that owns capture timing, admission, warning surfacing, and failure mapping.
+1. The main thread keeps ACL, cache lookup/dedupe, builds the media URL map for doc and slides, and captures
+   the document's compressed Yjs blobs in a short SELECT-only transaction (`readYjsStatePayload` via
+   `captureCollabSource`).
+   That main-thread half is one thin wrapper per type (`preview/eigen{doc,slides,sheets}-preview.ts`); every
+   transform then goes through `runTransformToText` / `runTransformToBytes`
+   (`lib/document/transform/run-transform.ts`), the one main-thread seam that owns capture timing, the
+   operation's deadline, admission, warning surfacing, and failure mapping.
 2. `DocumentTransformRunner` (`lib/document/transform/runner.ts`) admits the job: one active Worker, queue of
    16 with foreground (first cache miss) and background (stale regeneration) priorities, foreground admission
    additionally bounded by predicted wait. Overload rejects with `503` (surfaced to the client); background
    overflow is dropped — a later request re-enqueues it. There is **never** a main-thread fallback.
 3. The Worker (`lib/document/transform/worker.ts`) materializes the payload and dispatches on document type
-   through dynamic imports, so a doc preview never evaluates the sheet engine: sheets replay ops and recalc
-   when the gate fires (a recalc failure serves replayed values with a `recalc-failed` warning) and render the
-   bounded first-sheet view; doc/slides convert the Yjs roots and render their capped slice with media resolved
-   from a name → URL map the main thread prepared (`buildPreviewUrlMap` — the Worker never sees a Mount). All
+   through dynamic imports into the Worker-pure render modules (`preview/eigen{doc,slides,sheets}-render.ts`,
+   which reach neither the Mount nor the transform seam), so a doc preview never evaluates the sheet engine:
+   sheets replay ops and recalc when the gate fires (a recalc failure serves replayed values with a
+   `recalc-failed` warning) and render the bounded first-sheet view; doc/slides convert the Yjs roots and
+   render their capped slice with media resolved from a name → URL map the main thread prepared
+   (`buildPreviewUrlMap` — the Worker never sees a Mount). All
    three sanitize with DOMPurify (`FORCE_BODY` only — the preview config, distinct from `sanitizeExportHtml`)
    and return the body plus warnings over a typed, closed protocol (`protocol.ts`). Corrupt blobs are skipped
    with warnings, matching the live-read behavior.
 4. The main thread writes the usual `{ body, mode }` cache envelope. One-shot Workers are terminated after
-   every outcome (success, timeout at 30s, crash, cancellation, shutdown); `gracefulShutdown` closes the
-   runner before mount teardown.
+   every outcome (success, timeout at the 30s `PREVIEW_TRANSFORM_DEADLINE_MS`, crash, cancellation, shutdown);
+   `gracefulShutdown` (`src/index.ts`) closes the runner before mount teardown.
 
 The runner logs one observability line per job (queue depth/wait, main-thread capture/media-prep ms,
 input/output bytes, transform/total ms, outcome, warning codes). `src/test/transform-benchmark.ts` measures end-to-end latency, event-loop delay,

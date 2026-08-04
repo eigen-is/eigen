@@ -1,62 +1,70 @@
 # Proposal: Off-thread Document Transforms
 
-> **Status:** Phases 0–3 implemented (branch `transform-workers`, 2026-08-03); Phase 4 open
+> **Status:** Phases 0–3 implemented, reviewed and gated (branch `transform-workers`, 2026-08-03); Phase 4 open
 > **Date:** 2026-08-03
 > **Scope:** Server-side preview generation first, then reuse for document exports and imports
 >
-> **As-built notes (Phases 0–1):** eigensheets preview runs off-thread as specified; as-built docs in
-> PREVIEWS.md. Measured on the reference dev machine: cold heavy preview went from a 14.1s event-loop stall
-> to a 9ms worst delay (health p95 0.3ms) with the body bounded 7.6MB → 1.0MB. One finding for the Phase 4
-> warm-pool decision: each terminated one-shot Worker that evaluated the heavy sheet module graph retains
-> ~7MB RSS under Bun 1.3 (trivial Workers plateau; the identical pipeline run on-thread is flat), so
-> sustained cold-preview churn favors recycling Workers after N jobs.
+> **As-built, per phase** (docs: [PREVIEWS.md](PREVIEWS.md), [EXPORT.md](EXPORT.md),
+> [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)):
 >
-> **As-built notes (Phase 2, exports):** sheet HTML/XLSX exports and the HTML stage of PDF export run in the
-> same Worker; WeasyPrint stays a main-thread subprocess. Route contracts are unchanged and pinned
-> (`sheets-export-route.test.ts`); the HTML and pdf-html documents are byte-identical to the pre-move pipeline
-> (hashes in `document-transform.test.ts`). Every transform — preview and export — now goes through one
-> main-thread seam, `lib/document/transform/run-transform.ts`, so a Phase 3 operation is a thin wrapper plus a
-> pure renderer. As-built docs in EXPORT.md.
+> - **Phases 0–1 — runner + eigensheets preview.** Yjs capture split from materialization
+>   (`readYjsStatePayload` / `materializeYjsState`), typed closed protocol, bounded runner, one-shot Worker,
+>   Worker build entry, the first-sheet row/col/cell budget and the output byte guard; preview cache format
+>   bumped. Cold heavy preview: 14.1s event-loop stall → 9ms worst delay, health p95 0.3ms, body 7.6MB → 1.0MB.
+> - **Phase 2 — sheet exports and xlsx import.** HTML/XLSX exports and the HTML stage of PDF, plus the xlsx
+>   import/convert guards, parse, mapping, recalc and snapshot serialization, all in the same Worker; WeasyPrint
+>   stays a main-thread subprocess; the main thread only commits the returned snapshot
+>   (`writeSheetsSnapshotToYjs`), and `/convert` gained its missing 413 source-size bound. Every transform now
+>   goes through one main-thread seam (`run-transform.ts`). xlsx export worst event-loop delay 519.4ms → 3.4ms;
+>   documents and snapshot byte-identical to the pre-move pipeline (hashes in `document-transform.test.ts`),
+>   route contracts pinned (`sheets-export-route.test.ts`, `sheets-import.test.ts`).
+> - **Phase 3 — eigendoc, eigenslides, docx.** doc/slides previews and HTML/PDF-HTML exports, docx export
+>   (Turbodocx loaded by dynamic import inside the Worker) and docx import (returns a ready Yjs update plus the
+>   extracted images, committed with `writeEigendocUpdateToYjs`) on the same seam — a thin main-thread wrapper
+>   plus a pure renderer per operation, zero new orchestration. Preview media rides as a name → URL map
+>   (`buildPreviewUrlMap`), export media as transferred screen-preview buffers (`collectExportMedia`) turned
+>   into data URIs in the Worker (`toDataUriMap`). Bodies and documents byte-identical (no cache format bump
+>   needed); routes pinned in `document-export-route.test.ts` + `doc-import.test.ts`; mammoth and Turbodocx stay
+>   out of every other operation's chunk closure (verified on `buildfordocker` output).
 >
-> **As-built notes (Phase 2, imports):** xlsx import (`/import`, `/import-from-drive`) and xlsx→sheets
-> conversion (`/convert/:targetType`) run their ZIP/cell guards, parse, mapping, recalc and snapshot
-> serialization in the same Worker, through the capture-free half of the shared seam
-> (`runImportToSnapshotJson`); the main thread only commits the returned UTF-8 snapshot with
-> `writeSheetsSnapshotToYjs`, so nothing is created or mutated before the Worker succeeds. Route statuses and
-> bodies are unchanged and pinned at route level (`sheets-import.test.ts`), and the snapshot is byte-identical
-> to the pre-move pipeline (hash in `document-transform.test.ts`). `/convert` gained the missing source-size
-> bound (413 `Source file too large`). The 120s deadline constant now covers both directions
-> (`EXPORT_IMPORT_TRANSFORM_DEADLINE_MS`). As-built docs in EXPORT.md § Sheets Import.
-
-> **As-built notes (Phase 3, eigendoc + eigenslides):** doc/slides previews and HTML/PDF-HTML exports run in the
-> same Worker through the same seam — a thin main-thread wrapper (media prep + `runTransformToText` /
-> `runTransformToBytes`) plus a pure renderer per operation, no new orchestration. Media stays on the Mount side:
-> previews carry a name → preview-URL map (`buildPreviewUrlMap`), exports transfer the exact screen-preview
-> buffers (`collectExportMedia`) and the Worker builds the base64 data URIs (`toDataUriMap`). The media-free
-> readers (`readEigendocFromDoc`, `readDeckFromDoc`) mirror `readSheetsFromDoc`. Preview bodies and export
-> documents are byte-identical to the pre-move pipeline (hashes in `document-transform.test.ts`) so no preview
-> cache format bump was needed; route contracts are pinned in `document-export-route.test.ts`. `exportDocument`
-> now passes the abort signal for doc/slides too, and the runner logs `prepMs` next to `captureMs`. One
-> structural constraint worth keeping: a module the Worker imports must never statically reach
-> `preview/preview-cache.ts`, or every document Worker would evaluate sharp and the sheet engine — hence the
-> split between `document/media.ts` (light, both sides) and `export/media.ts` (screen previews, main thread),
-> and between `export/<type>/transform.ts` (Worker) and `export/<type>/{html,pdf,docx}.ts` (main thread).
+> **Gate results.** Each phase closed on an independent cold review (spec, then quality) plus — for the Phase 3
+> gate, over every file touched on the branch — one `/simplify` pass, applied and re-gated. 0 Critical, 0
+> Important; 3 Minors, all fixed: a stale PREVIEWS.md row, a missing write-permission recheck at the import
+> commit seam, and the sheets export seam being shaped unlike doc/slides. The 8MB preview byte guard was
+> extended to doc and slides in the same wave. `bun run check` green (2074 pass / 0 fail). Benchmark at the
+> final head: xlsx export loop-max 5.2ms, xlsx import loop-max 22.7ms, cold preview health p95 0.3ms /
+> loop-p99 4.0ms — every gate passes (health p95 < 150ms, loop p99 < 100ms, no delay > 250ms).
 >
-> **As-built notes (Phase 3, DOCX):** docx export is one more format on the eigendoc export seam — the Worker
-> renders the same document the HTML download serves and feeds it to `@turbodocx/html-to-docx` there, loaded by
-> dynamic import from runtime `node_modules` (proven by a real-Worker round trip in
-> `document-transform.test.ts`); the docx `title` property keeps the stripped container name as before.
-> Docx import mirrors the xlsx shape: `import/doc/transform.ts` runs mammoth, sanitization, the ProseMirror
-> conversion AND the ProseMirror → Yjs encoding in the Worker, and returns a ready update plus the extracted
-> images through `runImportToDocumentUpdate`. The main thread only applies the update
-> (`writeEigendocUpdateToYjs`, extracted from `writeEigendocToYjs` — it clears the fragment first, so an import
-> replaces rather than appends) and writes the media through Mount, so nothing is created or mutated before the
-> Worker succeeds. The import job/result unions gained one arm each with the impossible pairings typed away
-> (`SheetsImportJob`/`DocImportJob`), and `ExportMedia` became `TransformMedia` now that media crosses in both
-> directions. Route statuses and bodies are pinned in `doc-import.test.ts`; the committed document and the image
-> bytes are pinned against the pre-move pipeline in `document-transform.test.ts`. The chunk graph keeps mammoth
-> and Turbodocx out of every other operation's static closure (verified on `buildfordocker` output). As-built
-> docs in EXPORT.md § Docx Import.
+> **Phase 3 as-built deltas.** Structural decisions from the simplify pass:
+> - The export envelope lives once: `EXPORT_ENVELOPES` (worker format, content type, extension) plus one
+>   `runDocumentExport` in `export/export-document.ts`. The eight hollow per-format main-thread wrappers
+>   (`export/<type>/{html,pdf,xlsx,docx}.ts`) are deleted; per type the layout is now uniformly
+>   `export/<type>/{render,transform}.ts` (+ `sheets/to-xlsx.ts`).
+> - Preview renderers are Worker-pure modules (`preview/eigen<type>-render.ts`) behind thin main-thread
+>   wrappers (`preview/eigen<type>-preview.ts`). Measured saving on the API process: 619ms of module
+>   evaluation and 72MB RSS no longer paid on the main thread.
+> - Preview media crosses as a `Map<string, string>`; each seam function in `run-transform.ts` owns its
+>   operation's deadline; result-vs-request pairing and result sizing live in `protocol.ts`
+>   (`resultMatchesRequest`, `resultBytes`); `htmlToPdf` accepts the Worker's UTF-8 bytes directly.
+>
+> Accepted drifts:
+> - A module-**load** failure of a converter now surfaces `500`, not `400`: the dynamic import moved out of the
+>   "Not a valid docx file" mapping into the Worker's operation dispatch. A broken install is not a bad upload,
+>   and the change is outside the pinned route contracts (a malformed upload still gets its `400`/`413`).
+> - Previews land as a per-type pair under `preview/` (`eigen<type>-{preview,render}.ts`) rather than the
+>   single preview module the § Expected Code Changes sketch listed. The structural constraint that forced the
+>   split is worth keeping: a module the Worker imports must never statically reach `preview/preview-cache.ts`, or every
+>   document Worker would evaluate sharp and the sheet engine — the same reason `document/media.ts` (light,
+>   both sides) and `export/media.ts` (screen previews, main thread) stay separate. Verified by bundling each
+>   Worker entry: the render modules carry no runner, capture or screen-preview references.
+>
+> **Phase 4 stays open**, with these recorded inputs: each terminated heavy one-shot Worker retains ~7MB RSS
+> under Bun 1.3 (trivial Workers plateau; the same pipeline on-thread is flat), and a docx import pays ~800ms
+> of Worker module evaluation (mammoth + JSDOM + tiptap) — both argue for recycling Workers after N jobs, and
+> both show up as API test-suite time (~97s → ~169s from one-shot startups). Also parked there: foreground
+> admission is tight by construction (the 120s deadline equals the predicted-wait bound, so one active plus one
+> queued export saturates it), search extraction still calls `readSheetsContent` on the main thread, and the
+> benchmark harness is still sheets-only.
 
 ## Summary
 

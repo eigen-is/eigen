@@ -24,7 +24,8 @@ main-thread subprocess on top of the Worker's HTML.
 apps/api/src/lib/export/
   export-document.ts             # Entry point: (mime, format) dispatch, the format->envelope table,
                                  #   media prep and the transform seam (runDocumentExport)
-  weasyprint.ts                  # Generic: htmlToPdf(html) -> Buffer via subprocess
+  weasyprint.ts                  # Generic: htmlToPdf(html | UTF-8 bytes) -> Buffer via subprocess
+  sanitize.ts                    # sanitizeExportHtml: DOMPurify + the call-scoped data-refs-only SSRF hook
   modules.d.ts                   # Type declarations for untyped npm packages
   render-types.ts                # Shared contracts: SizeUnit, *ImgSrcResolver
   fonts.ts                       # Embedded WOFF2 @font-face CSS (Inter, Source Serif 4, JetBrains Mono, Excalifont)
@@ -51,9 +52,11 @@ apps/api/src/lib/export/
   never reach `preview/preview-cache.ts` (it would drag the screen-preview pipeline, sharp and the sheet engine
   into every document Worker), which is why `document/media.ts` (light) and `export/media.ts` (screen previews)
   are separate
-- **content loaders** (`apps/api/src/lib/document/{doc,slides,sheets}.ts`): shared Yjs -> PM JSON / DeckData /
-  `Sheet[]` + media map loaders (`readEigendocContent`, `readSlidesContent`, `readSheetsContent`), used by both
-  export and preview
+- **content loaders** (`apps/api/src/lib/document/{doc,slides,sheets}.ts`): every type ships a media-free reader
+  over an already-materialized `Y.Doc` (`readEigendocFromDoc`, `readDeckFromDoc`, `readSheetsFromDoc`) — that is
+  what export and preview call inside the Worker — plus a Mount-side loader that adds the media map
+  (`readEigendocContent`, `readSlidesContent`, `readSheetsContent`), now used by search extraction
+  (`lib/search/extract-text.ts`)
 - **`export-document.ts`**: routes `(mount, path, format)` through the format->envelope table to one
   `runDocumentExport`. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
 - **`doc/transform.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
@@ -81,12 +84,14 @@ const result = await exportDocument(mount, path, params.format, request.signal);
 
 Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only), 503 when the transform runner
 is saturated. `request.signal` is threaded through so a disconnected export drops its queued job or terminates
-its Worker.
+its Worker. The transform runs under the 120s export/import deadline
+(`EXPORT_IMPORT_TRANSFORM_DEADLINE_MS`, applied by the seam in `run-transform.ts`); WeasyPrint keeps its own
+60s subprocess timeout (504 on expiry).
 
 ## HTML Pipeline
 
 ```
-main thread: listDocumentMedia() + collectExportMedia() -> { name, contentType, bytes }[]
+main thread: collectExportMedia() (listDocumentMedia + screen previews) -> TransformMedia[]
         |
         |  transferred to the Worker with the compressed Yjs blobs
         v
@@ -99,7 +104,7 @@ renderToHTMLString() with custom nodeMappings:
   - figure: base64 data URIs (export) or embed URLs (preview)
         |
         v
-DOMPurify.sanitize() (with ADD_DATA_URI_TAGS for img)
+sanitizeExportHtml() (export/sanitize.ts, with ADD_DATA_URI_TAGS for img)
         |
         v
 wrapInDocument() -> full HTML with:
@@ -121,9 +126,10 @@ bytes transferred back to the main thread
 ```
 
 `runDocumentExport(job, mount, path, signal?)` (`export-document.ts`) is the single main-thread entry every
-type and format shares: it prepares the media, then calls `runTransformToBytes` — the same seam sheets previews
-and exports use. `html` and `pdf-html` produce the identical document today (WeasyPrint renders exactly what the
-download serves), and `docx` is that same document converted in the Worker. The `<title>` keeps the UNstripped
+type and format shares: it derives the title, prepares the media for doc and slides (sheets embed none), then
+calls `runTransformToBytes` — the same seam the previews use. `html` and `pdf-html` produce the identical
+document today (WeasyPrint renders exactly what the download serves), and `docx` is that same document
+converted in the Worker. The `<title>` keeps the UNstripped
 container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx
 document property keeps the stripped name (`Report`).
 
@@ -173,7 +179,8 @@ Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onEx
 - **Missing media**: skip image (`collectExportMedia` omits non-image results, so `renderFigureNode` emits no
   img tag)
 - **WeasyPrint not installed**: return 501 with install instructions
-- **Corrupt Yjs state**: `loadYjsState()` handles this with try/catch
+- **Corrupt Yjs state**: `materializeYjsState()` skips the unreadable blob in the Worker and the export comes
+  back with a `corrupt-blobs-skipped` warning (logged with the job), never a failure — same behavior as a live read
 - **Large docs with many images**: images loaded in parallel via `Promise.all`
 - **Code blocks without language**: `lowlight.highlightAuto()` auto-detects the language. Don't remove this
   thinking it's unnecessary — users rarely set a language on code blocks, so auto-detection provides all
@@ -259,6 +266,7 @@ apps/api/src/lib/export/sheets/
   render.ts      # Sheet[] → HTML (renderSheetsHtml full export, renderSheetsPreviewHtml budgeted preview,
                  #   renderSheetsExportDocument + renderSheetsPdfDocument standalone documents)
   to-xlsx.ts     # Sheet[] → XLSX buffer via ExcelJS
+  range-borders.ts # expandBorderInfo: config.borderInfo (cell + toolbar range) → per-cell sides, for to-xlsx.ts
   fonts.ts       # FONT_ARRAY + resolveFontFamily (numeric/string ff → family name)
 # content loader: apps/api/src/lib/document/sheets.ts (Yjs snapshot → Sheet[])
 ```

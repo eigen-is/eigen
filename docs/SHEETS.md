@@ -136,7 +136,7 @@ engine/
   (`DEFAULT_SHEET_ROW_COUNT` × `DEFAULT_SHEET_COLUMN_COUNT`, engine `defaults.ts`) so ops recorded
   against a never-flushed doc resolve; a batch that still cannot apply is rolled back and skipped
   with a warning instead of making the doc unreadable. `createDefaultSheets()` (same module) is the
-  canonical no-snapshot base for the FE hook and `readSheetsContent`.
+  canonical no-snapshot base for the FE hook and `readSheetsFromDoc`.
 - `applySheetsInsertRowCol<S extends Sheet>(sheets, op)` / `applySheetsDeleteRowCol<S extends Sheet>(sheets, op)`
   — pure data shifts for row/col ops over lib.Sheet-typed fields (`data`, `config.merge`, `config.rowhidden`,
   `conditionalFormatRules`, cross-sheet formula refs). Generic over `S` so the editor's wider
@@ -150,8 +150,9 @@ directly.
 
 ### Server-side recalc
 
-`readSheetsContent()` recomputes formula cells through our own engine before returning, so exports,
-preview, and the search index serve engine-verified `v`/`m` rather than whatever value was last cached
+`readSheetsFromDoc()` recomputes formula cells through our own engine before returning — inside the
+transform Worker for exports and previews, on the main thread for the search index via
+`readSheetsContent()` — so all three serve engine-verified `v`/`m` rather than whatever value was last cached
 in the snapshot. The recompute is a single pure engine function, `recalcSheets(Sheet[]) → Sheet[]`
 (`engine/recalc.ts`, barrel-exported), and it runs **gated** — only where staleness can actually exist.
 
@@ -162,8 +163,9 @@ never opened in an editor, and crash/race divergence between formula text and ca
 `recalcSheets` therefore fires only when `sheetsNeedRecalc` sees a sheet with `f` cells but no populated
 `calcChain` (editor-flushed snapshots carry the chain; imported ones don't), and any recalc failure
 falls back to the replayed stale-but-valid `Sheet[]` — an export must never 500 because recalc
-hiccuped. The xlsx importer (`import/import-document.ts`) also runs `recalcSheets` once at import, so the
-persisted snapshot carries computed values (and a `calcChain`) and the read gate never fires for it.
+hiccuped. The xlsx importer (`import/sheets/transform.ts`, in the same Worker) also runs `recalcSheets` once
+at import, so the persisted snapshot carries computed values (and a `calcChain`) and the read gate never
+fires for it.
 
 What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over
 null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f`
@@ -229,7 +231,7 @@ Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `Formul
 threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produces the
 `evaluateFormula` callback. This CF pass reads `cell.v` — it doesn't recompute the sheet's own
 formulas, only the CF rule's formula against existing values. The cell values it reads are already
-engine-fresh, though: `readSheetsContent` runs the gated `recalcSheets` (see § Server-side recalc)
+engine-fresh, though: `readSheetsFromDoc` runs the gated `recalcSheets` (see § Server-side recalc)
 before the sheets reach any exporter.
 
 Webpage hyperlinks render as `target="_blank" rel="noopener noreferrer"` anchors, scheme-gated
