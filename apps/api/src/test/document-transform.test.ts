@@ -21,14 +21,8 @@ import {
     type DocumentTransformResponse,
     toTransferableBuffer,
 } from '../lib/document/transform/protocol';
-import { runTransformToBytes } from '../lib/document/transform/run-transform';
-import {
-    documentTransformRunner,
-    EXPORT_IMPORT_ADMISSION_COST_MS,
-    EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-    PREVIEW_ADMISSION_COST_MS,
-    PREVIEW_TRANSFORM_DEADLINE_MS,
-} from '../lib/document/transform/runner';
+import { runTransformToBytes, runTransformToExtractedText } from '../lib/document/transform/run-transform';
+import { documentTransformRunner, TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import { exportDocument, runDocumentExport } from '../lib/export/export-document';
 import { collectExportMedia } from '../lib/export/media';
 import { getHome } from '../lib/home/get-home';
@@ -60,18 +54,10 @@ import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestC
 
 const GARBAGE = Buffer.from([0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4, 5, 6, 7, 8]);
 
-// The production limits — deadline plus admission cost — for the runner calls this
-// suite makes directly, in place of the route seams.
-const PREVIEW_OPTIONS = {
-    priority: 'foreground',
-    deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS,
-    admissionCostMs: PREVIEW_ADMISSION_COST_MS,
-} as const;
-const EXPORT_OPTIONS = {
-    priority: 'foreground',
-    deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-    admissionCostMs: EXPORT_IMPORT_ADMISSION_COST_MS,
-} as const;
+// The production limits for the runner calls this suite makes directly, in place of
+// the route seams.
+const PREVIEW_OPTIONS = { ...TRANSFORM_LIMITS.preview, priority: 'foreground' } as const;
+const EXPORT_OPTIONS = { ...TRANSFORM_LIMITS.export, priority: 'foreground' } as const;
 
 function sha256(data: ArrayBuffer | Buffer | string): string {
     return new Bun.CryptoHasher('sha256').update(data).digest('hex');
@@ -87,6 +73,18 @@ function interceptRunOnce(kind: DocumentTransformRequest['kind'], handler: () =>
         if (used || request.kind !== kind) return real(request, opts);
         used = true;
         return handler();
+    });
+}
+
+// Same reason, one admission refusal only: a concurrent background reindex must not
+// be caught in the window.
+function refuseAdmissionOnce() {
+    const real = documentTransformRunner.assertAdmissible.bind(documentTransformRunner);
+    let used = false;
+    return spyOn(documentTransformRunner, 'assertAdmissible').mockImplementation((priority) => {
+        if (used) return real(priority);
+        used = true;
+        throw new ApiError(503, 'The server is busy, please try again in a moment');
     });
 }
 
@@ -975,4 +973,34 @@ describe('document transform (docx import)', () => {
     test('a failed convert Worker creates no destination document', async () => {
         await expectFailedConvertCreatesNoDestination(DOCX_FIXTURE);
     }, 120_000);
+});
+
+describe('document transform (admission)', () => {
+    test('a refused job never reads the source document', async () => {
+        // Admission is checked before captureCollabSource, so a 503'd job pays nothing:
+        // a reindex drain under load was reading every dirty row's blobs to be refused.
+        const mount = {
+            getChildByName: () => {
+                throw new Error('a refused job captured its source');
+            },
+        } as unknown as Mount;
+        const path = { id: 'refused', name: 'refused.eigendoc' } as DrivePath;
+
+        const refuse = refuseAdmissionOnce();
+        let error: unknown;
+        try {
+            await runTransformToExtractedText(
+                mount,
+                path,
+                { kind: 'extract-text', documentType: 'eigendoc' },
+                { priority: 'background' },
+            );
+        } catch (err) {
+            error = err;
+        } finally {
+            refuse.mockRestore();
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(503);
+    });
 });

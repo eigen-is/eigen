@@ -22,19 +22,23 @@ import {
 
 export type TransformPriority = 'foreground' | 'background';
 
-export const PREVIEW_TRANSFORM_DEADLINE_MS = 30_000;
-// Heavy but user-requested work (exports, imports and conversions); the PDF
-// subprocess keeps its own deadline.
-export const EXPORT_IMPORT_TRANSFORM_DEADLINE_MS = 120_000;
-// Search reindexing: nobody waits on it, but a stuck job must not hold the single
-// active Worker away from user-facing work.
-export const EXTRACT_TRANSFORM_DEADLINE_MS = 30_000;
-
-// What a job is expected to cost the queue: ~10–20× the worst measured end-to-end
-// time, deliberately decoupled from the deadlines above, which bound runaways rather
-// than typical wait. Extract-text jobs reuse the preview cost.
-export const PREVIEW_ADMISSION_COST_MS = 15_000;
-export const EXPORT_IMPORT_ADMISSION_COST_MS = 30_000;
+// What each operation runs under: `deadlineMs` is the kill deadline that bounds
+// runaways, `admissionCostMs` what the job is expected to cost the queue (~10–20× the
+// worst measured end-to-end time, deliberately decoupled from the deadline, which
+// bounds runaways rather than typical wait).
+export const TRANSFORM_LIMITS: Record<
+    DocumentTransformRequest['kind'],
+    Pick<RunOptions, 'deadlineMs' | 'admissionCostMs'>
+> = {
+    preview: { deadlineMs: 30_000, admissionCostMs: 15_000 },
+    // Heavy but user-requested work (exports, imports and conversions); the PDF
+    // subprocess keeps its own deadline.
+    export: { deadlineMs: 120_000, admissionCostMs: 30_000 },
+    import: { deadlineMs: 120_000, admissionCostMs: 30_000 },
+    // Search reindexing: nobody waits on it, but a stuck job must not hold the single
+    // active Worker away from user-facing work. It reuses the preview cost.
+    'extract-text': { deadlineMs: 30_000, admissionCostMs: 15_000 },
+};
 
 const MAX_ACTIVE_WORKERS = 1;
 const MAX_QUEUED_JOBS = 16;
@@ -117,16 +121,23 @@ export class DocumentTransformRunner {
         this.closeGraceMs = opts.closeGraceMs ?? CLOSE_GRACE_MS;
     }
 
-    // Throws ApiError(503) synchronously when the job cannot be admitted; the
-    // returned promise always resolves with a DocumentTransformResponse.
-    run(request: DocumentTransformRequest, opts: RunOptions): Promise<DocumentTransformResponse> {
+    // Throws ApiError(503) synchronously when the job cannot be admitted. Callable
+    // ahead of run() so a caller can refuse before paying for an expensive input
+    // (run-transform.ts checks it before capturing the document).
+    assertAdmissible(priority: TransformPriority): void {
         if (this.closing) throw new ApiError(503, BUSY_MESSAGE);
         if (this.foreground.length + this.background.length >= this.maxQueued) throw new ApiError(503, BUSY_MESSAGE);
-        if (opts.priority === 'foreground') {
+        if (priority === 'foreground') {
             let predictedWaitMs = this.foreground.reduce((sum, job) => sum + job.admissionCostMs, 0);
             for (const active of this.active.values()) predictedWaitMs += active.admissionCostMs;
             if (predictedWaitMs > this.maxPredictedWaitMs) throw new ApiError(503, BUSY_MESSAGE);
         }
+    }
+
+    // Throws ApiError(503) synchronously when the job cannot be admitted; the
+    // returned promise always resolves with a DocumentTransformResponse.
+    run(request: DocumentTransformRequest, opts: RunOptions): Promise<DocumentTransformResponse> {
+        this.assertAdmissible(opts.priority);
 
         return new Promise((resolve) => {
             if (opts.signal?.aborted) {

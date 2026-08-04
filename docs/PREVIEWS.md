@@ -106,7 +106,7 @@ through the same seam — see [EXPORT.md](EXPORT.md):
    and return the body plus warnings over a typed, closed protocol (`protocol.ts`). Corrupt blobs are skipped
    with warnings, matching the live-read behavior.
 4. The main thread writes the usual `{ body, mode }` cache envelope. One-shot Workers are terminated after
-   every outcome (success, timeout at the 30s `PREVIEW_TRANSFORM_DEADLINE_MS`, crash, cancellation, shutdown);
+   every outcome (success, timeout at the 30s preview deadline in `TRANSFORM_LIMITS`, crash, cancellation, shutdown);
    `gracefulShutdown` (`src/index.ts`) closes the runner before mount teardown.
 
 The runner logs one observability line per job (queue depth/wait, main-thread capture/media-prep ms,

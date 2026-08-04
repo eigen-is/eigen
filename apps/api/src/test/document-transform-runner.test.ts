@@ -1,13 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ApiError } from '../lib/core/errors';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../lib/document/transform/protocol';
-import {
-    DocumentTransformRunner,
-    EXPORT_IMPORT_ADMISSION_COST_MS,
-    EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-    PREVIEW_ADMISSION_COST_MS,
-    PREVIEW_TRANSFORM_DEADLINE_MS,
-} from '../lib/document/transform/runner';
+import { DocumentTransformRunner, TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import { exportBytes, importSnapshot, previewBody } from './fixtures/transform-results';
 
 // Runner behavior suite (proposal § Runner tests), driven through the scriptable
@@ -59,18 +53,10 @@ function makeImportRequest(directive: TestDirective = {}, data: ArrayBuffer = ne
     return request as unknown as DocumentTransformRequest;
 }
 
-// The production pairings — each operation's kill deadline with what it costs foreground
-// admission. Tests about lifecycle rather than admission run under them unchanged.
-const PREVIEW_OPTIONS = {
-    priority: 'foreground',
-    deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS,
-    admissionCostMs: PREVIEW_ADMISSION_COST_MS,
-} as const;
-const EXPORT_OPTIONS = {
-    priority: 'foreground',
-    deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
-    admissionCostMs: EXPORT_IMPORT_ADMISSION_COST_MS,
-} as const;
+// The production limits per kind. Tests about lifecycle rather than admission run
+// under them unchanged.
+const PREVIEW_OPTIONS = { ...TRANSFORM_LIMITS.preview, priority: 'foreground' } as const;
+const EXPORT_OPTIONS = { ...TRANSFORM_LIMITS.export, priority: 'foreground' } as const;
 const BACKGROUND_OPTIONS = { ...PREVIEW_OPTIONS, priority: 'background' } as const;
 
 function makeRunner(opts: ConstructorParameters<typeof DocumentTransformRunner>[0] = {}) {

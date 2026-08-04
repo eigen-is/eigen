@@ -85,7 +85,7 @@ const result = await exportDocument(mount, path, params.format, request.signal);
 Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only), 503 when the transform runner
 is saturated. `request.signal` is threaded through so a disconnected export drops its queued job or terminates
 its Worker. The transform runs under the 120s export/import deadline
-(`EXPORT_IMPORT_TRANSFORM_DEADLINE_MS`, applied by the seam in `run-transform.ts`); WeasyPrint keeps its own
+(`TRANSFORM_LIMITS` in `runner.ts`, looked up per job kind by the seam in `run-transform.ts`); WeasyPrint keeps its own
 60s subprocess timeout (504 on expiry).
 
 ## HTML Pipeline
