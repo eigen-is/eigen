@@ -7,17 +7,12 @@ import {
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
+    useMoveEvent,
     useSharedCalendars,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
-import type {
-    Attendee,
-    CalendarEventOccurrence,
-    CalendarItem,
-    CreateEventInput,
-    SharedCalendar,
-} from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -104,7 +99,9 @@ export function EditEventDialog({
     const updateEvent = useUpdateEvent(eventOwnerId);
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
-    const saving = updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending;
+    const moveEvent = useMoveEvent(eventOwnerId);
+    const saving =
+        updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending || moveEvent.isPending;
 
     useEffect(() => {
         if (event && open) {
@@ -154,21 +151,6 @@ export function EditEventDialog({
         }
     };
 
-    const moveEvent = async (updates: Omit<CreateEventInput, 'calendarId'>) => {
-        if (!selectedCal) return;
-        await createEvent.mutateAsync({
-            calendarId: selectedCal.id,
-            title: updates.title,
-            startTime: updates.startTime,
-            endTime: updates.endTime,
-            allDay: Boolean(updates.allDay),
-            description: updates.description,
-            location: updates.location,
-            rrule: updates.rrule,
-        });
-        await deleteEventOnSource.mutateAsync({ id: event.parentEventId || event.id, calendarId: event.calendarId });
-    };
-
     const doSave = async (action: RecurringAction) => {
         let start: Date;
         let end: Date;
@@ -196,10 +178,26 @@ export function EditEventDialog({
             data: Object.values(data).some((v) => v !== undefined) ? data : null,
         };
 
-        if (calendarChanged) {
-            await moveEvent(updates);
+        const targetId = event.parentEventId || event.id;
+
+        if (calendarChanged && selectedCal) {
+            if (selectedCal.ownerId === eventOwnerId) {
+                // Same Home: apply the edits in place, then the server-owned atomic move re-homes the master
+                // and its exception children, preserving the organizer link, timezone, and data a client can't
+                // re-send — and never firing deleteEvent's decline.
+                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
+                await moveEvent.mutateAsync({
+                    calendarId: event.calendarId,
+                    id: targetId,
+                    targetCalendarId: selectedCal.id,
+                });
+            } else {
+                // Cross-Home move can't be atomic (the calendars live in different Homes): recreate the event
+                // in the target Home and delete the source. Organizer link and exception overrides don't cross Homes.
+                await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
+                await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId });
+            }
         } else if (action === 'all') {
-            const targetId = event.parentEventId || event.id;
             await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
         } else if (action === 'this') {
             await createEvent.mutateAsync({
@@ -207,15 +205,14 @@ export function EditEventDialog({
                 ...updates,
                 allDay: Boolean(allDay),
                 rrule: null,
-                parentEventId: event.parentEventId || event.id,
+                parentEventId: targetId,
                 recurrenceDate: occurrenceDateToString(event.occurrenceDate),
             });
         } else if (action === 'this-and-following') {
-            const parentId = event.parentEventId || event.id;
             const occDate = parseOccurrenceDate(event.occurrenceDate);
             if (event.rrule) {
                 const truncated = truncateRRule(event.rrule, occDate);
-                await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
+                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, rrule: truncated });
             }
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
@@ -229,12 +226,19 @@ export function EditEventDialog({
 
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
-        const newEnd = addMinutes(newStart, 30);
-        setEndTime(newEnd);
-        const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
-        const d = new Date(`${startDate}T00:00`);
-        if (wraps) d.setDate(d.getDate() + 1);
-        setEndDate(toLocalDateString(d));
+
+        const minEnd = addMinutes(newStart, 15);
+        const currentEndMinutes = timeToMinutes(endTime);
+        const minEndMinutes = timeToMinutes(minEnd);
+
+        if (currentEndMinutes < minEndMinutes) {
+            const newEnd = addMinutes(newStart, 30);
+            setEndTime(newEnd);
+            const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
+            const d = new Date(`${startDate}T00:00`);
+            if (wraps) d.setDate(d.getDate() + 1);
+            setEndDate(toLocalDateString(d));
+        }
     };
 
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
@@ -271,13 +275,17 @@ export function EditEventDialog({
                                         <Input
                                             type="date"
                                             value={startDate}
-                                            onChange={(e) => setStartDate(e.target.value)}
+                                            onChange={(e) => {
+                                                setStartDate(e.target.value);
+                                                if (endDate < e.target.value) setEndDate(e.target.value);
+                                            }}
                                             className="flex-1 min-w-fit h-8 text-sm"
                                         />
                                         <span className="text-muted-foreground text-sm">to</span>
                                         <Input
                                             type="date"
                                             value={endDate}
+                                            min={startDate}
                                             onChange={(e) => setEndDate(e.target.value)}
                                             className="flex-1 min-w-fit h-8 text-sm"
                                         />
