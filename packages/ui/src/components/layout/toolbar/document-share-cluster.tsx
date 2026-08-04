@@ -1,5 +1,5 @@
 import { useIsMobile } from '@workspace/lib/media';
-import { Activity, Check, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
+import { Activity, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
 import { CountBadge } from '../count-badge';
 import { FindInDocumentButton, FindInDocumentMenuItem, useFindBarRefocus } from '../search/find-in-document-button';
@@ -74,17 +74,16 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
 }
 
 // Mobile kebab, split out so its DocSearchBar subscription (via useFindBarRefocus) stays off the
-// desktop cluster. No read-only Eye marker here (settled decision).
+// desktop cluster. No read-only Eye marker here, and no open-state cue on the panel items: an open
+// panel takes over the viewport, so the lit state is unreachable on every surface (settled decisions).
 function MobileClusterKebab({
     canWrite,
     onAccessDialogOpen,
     onRename,
     onToggleCommentPanel,
-    commentPanelOpen,
     unresolvedCommentCount,
     watchTarget,
     onToggleActivityPanel,
-    activityPanelOpen,
 }: DocumentShareClusterProps) {
     const { focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
 
@@ -105,7 +104,6 @@ function MobileClusterKebab({
                         <DropdownMenuItem onClick={onToggleActivityPanel}>
                             <Activity className="mr-2" />
                             Activity
-                            {activityPanelOpen && <Check className="h-4 w-4 ml-auto" />}
                         </DropdownMenuItem>
                     )}
                     {watchTarget && <WatchMenuItem {...watchTarget} />}
@@ -113,7 +111,6 @@ function MobileClusterKebab({
                         <DropdownMenuItem onClick={onToggleCommentPanel}>
                             <MessageSquare className="mr-2" />
                             {unresolvedCommentCount ? `Comments (${unresolvedCommentCount})` : 'Comments'}
-                            {commentPanelOpen && <Check className="h-4 w-4 ml-auto" />}
                         </DropdownMenuItem>
                     )}
                     {canWrite && (
