@@ -15,7 +15,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { isExternalOwnerId, parseOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { and, count, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, count, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RRule } from 'rrule';
 import { ApiError, PATHS } from '../core';
@@ -196,6 +196,9 @@ export class Calendar {
                 throw new ApiError(400, 'Recurring event start time is out of range');
             }
         }
+        // Reject reversed intervals on every write path (REST/CalDAV/iMIP funnel here). Zero-duration
+        // stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the CalDAV/iMIP importers rely on it.
+        if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
         const timezone = normalizeTimezone(input.timezone);
         const status = input.status ?? 'confirmed';
         const etag = computeEtag({
@@ -484,6 +487,9 @@ export class Calendar {
         const sequence = input.sequence ?? existing.sequence;
         const data = input.data !== undefined ? input.data : existing.data;
 
+        // Same interval invariant as createEvent, on the resolved (possibly dragged) times.
+        if (endTime < startTime) throw new ApiError(400, 'Event end time cannot be before start time');
+
         const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
         if (rruleStr && input.rrule !== undefined) {
             try {
@@ -616,6 +622,68 @@ export class Calendar {
         this.home.broadcast(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+    }
+
+    // Re-home an event (and its recurrence-exception children) to another calendar in this same Home.
+    // A pure calendarId UPDATE: it preserves the row identity, timezone, data (organizer/attendees/
+    // reminders), status and recurrence, and never runs deleteEvent's iMIP decline path — so moving a
+    // linked invite doesn't decline it for the organizer. Source-side CalDAV clients drop the resource
+    // via a tombstone; the target surfaces it as a changed event. Cross-owner moves are impossible: both
+    // calendars are resolved inside one Home.
+    public moveEvent(calendarId: string, id: string, targetCalendarId: string): CalendarEvent {
+        const existing = this.getEventById(id);
+        // 404 (not 403) on calendar mismatch — mirrors updateEvent/deleteEvent so a share on one calendar
+        // can't oracle event ids in another.
+        if (!existing || existing.calendarId !== calendarId) throw new ApiError(404, 'Event not found');
+        if (existing.parentEventId) throw new ApiError(400, 'Cannot move a single recurrence occurrence');
+
+        if (targetCalendarId === calendarId) {
+            const { eventCtag: _same, ...unchanged } = existing;
+            return unchanged;
+        }
+        const target = this.getCalendarById(targetCalendarId);
+        if (!target) throw new ApiError(404, 'Calendar not found');
+
+        this.db.transaction((tx) => {
+            // Source loses the resource: bump its ctag + tombstone the master uri so CalDAV clients drop it.
+            tx.update(schema.calendars)
+                .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
+                .where(eq(schema.calendars.id, calendarId))
+                .run();
+            const sourceCtag = tx
+                .select({ ctag: schema.calendars.ctag })
+                .from(schema.calendars)
+                .where(eq(schema.calendars.id, calendarId))
+                .get()!.ctag;
+            tx.insert(schema.eventTombstones)
+                .values({ uri: existing.uri, calendarId, deletedAtCtag: sourceCtag })
+                .run();
+
+            // Target gains it: bump its ctag + re-home the master and its exception children in one update.
+            tx.update(schema.calendars)
+                .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
+                .where(eq(schema.calendars.id, targetCalendarId))
+                .run();
+            const targetCtag = tx
+                .select({ ctag: schema.calendars.ctag })
+                .from(schema.calendars)
+                .where(eq(schema.calendars.id, targetCalendarId))
+                .get()!.ctag;
+            tx.update(schema.events)
+                .set({ calendarId: targetCalendarId, eventCtag: targetCtag, updatedAt: sql`unixepoch()` })
+                .where(or(eq(schema.events.id, id), eq(schema.events.parentEventId, id)))
+                .run();
+        });
+
+        const source = this.getCalendarById(calendarId);
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
+        this.home.broadcast(sseEvent);
+        if (source) notifySharedCalendarUsers(this.home, source, sseEvent).catch(() => {});
+        notifySharedCalendarUsers(this.home, target, sseEvent).catch(() => {});
+
+        const moved = this.getEventById(id)!;
+        const { eventCtag: _ctag, ...movedEvent } = moved;
+        return movedEvent;
     }
 
     public getEventsInRange(from: Date, to: Date, calendarId?: string): CalendarEventOccurrence[] {

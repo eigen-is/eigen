@@ -1,4 +1,5 @@
 import type {
+    CalendarEvent,
     CalendarEventOccurrence,
     CalendarItem,
     CalendarShare,
@@ -13,6 +14,7 @@ import { getHome } from '../lib/home';
 import {
     createEventAt,
     deleteEventAt,
+    moveEventAt,
     pullCalendarById,
     pullCalendarShares,
     pullEventsInRange,
@@ -93,6 +95,10 @@ const UpdateEventSchema = t.Object({
     timezone: t.Optional(t.Nullable(t.String())),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
+});
+
+const MoveEventSchema = t.Object({
+    targetCalendarId: t.String(),
 });
 
 const UpdateSharedCalendarSchema = t.Object({
@@ -242,6 +248,22 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             return { success: true };
         },
         { auth: true },
+    )
+
+    // Atomic cross-calendar move — write on both source (:calId) and target calendar required. Server-owned
+    // so it preserves the organizer link + timezone + data a client can't re-send (EventDataSchema strips
+    // organizer) and never fires deleteEvent's decline. Both calendars belong to :ownerId's Home.
+    .put(
+        '/calendar/:ownerId/calendars/:calId/events/:id/move',
+        async ({ params, body, user }): Promise<CalendarEvent> => {
+            requireNonGuest(user);
+            const { permission } = await checkCalendarAccess(user, params.ownerId, params.calId);
+            if (permission !== 'write') throw new ApiError(403, 'Write permission required');
+            const target = await checkCalendarAccess(user, params.ownerId, body.targetCalendarId);
+            if (target.permission !== 'write') throw new ApiError(403, 'Write permission required');
+            return moveEventAt(params.ownerId, params.calId, params.id, body.targetCalendarId);
+        },
+        { body: MoveEventSchema, auth: true },
     )
 
     // --- RSVP ---

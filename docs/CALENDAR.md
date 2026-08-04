@@ -155,6 +155,22 @@ occurrence-by-occurrence from dtstart to the query window on the single shared e
 `startTime`/`endTime` are midnight UTC. `endTime` is exclusive (day after last day). Frontend must use UTC date portion,
 never convert to local time.
 
+## Interval validation
+
+`createEvent`/`updateEvent` reject `endTime < startTime` with `ApiError(400)` — one domain check covering every
+write path (REST + CalDAV + iMIP). Zero-duration (`endTime == startTime`) stays legal (RFC 5545 §3.6.1; CalDAV/iMIP
+importers synthesize it). Because all-day uses an exclusive end (a valid all-day event is always ≥ `start + 1 day`),
+the single invariant covers timed and all-day alike — no all-day special-casing.
+
+## Moving events
+
+`Calendar.moveEvent(sourceCalId, eventId, targetCalId)` (route `PUT .../events/:id/move`, write on both calendars)
+re-homes an event to another calendar in the same Home as a pure `calendarId` UPDATE, in one transaction. It preserves
+the row identity, timezone, `data` (organizer/attendees/reminders), status and recurrence, and drags the recurrence
+exception children (`parentEventId` rows) along. It never runs the `deleteEvent` iMIP path, so moving a linked invite
+doesn't decline it for the organizer. For CalDAV: the source gets a tombstone for the master uri (clients drop it) and
+the target sees a changed event. Moving a lone recurrence occurrence (an exception row) is rejected.
+
 ## API Routes
 
 `apps/api/src/routes/calendar.ts`, `ownerId` can be user ID or `team_{teamId}`:
@@ -169,6 +185,7 @@ GET    /calendar/:ownerId/calendars/:calId/event-range/:from/:to
 POST   /calendar/:ownerId/calendars/:calId/events
 PUT    /calendar/:ownerId/calendars/:calId/events/:id
 DELETE /calendar/:ownerId/calendars/:calId/events/:id
+PUT    /calendar/:ownerId/calendars/:calId/events/:id/move   (re-home to {targetCalendarId})
 PUT    /calendar/:ownerId/calendars/:calId/events/:id/rsvp   (attendee RSVP)
 GET    /calendar/:ownerId/calendars/:calId/access
 GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syncs team calendars)
