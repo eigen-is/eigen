@@ -17,7 +17,7 @@ export function PropertiesPanel({ title, children, className }: PropertiesPanelP
     return (
         <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
             {title && (
-                <div className="h-12 flex items-center px-3 shrink-0 border-b">
+                <div className="h-12 flex items-center app-gutter-x shrink-0 border-b">
                     <ToolbarTitle>{title}</ToolbarTitle>
                 </div>
             )}
