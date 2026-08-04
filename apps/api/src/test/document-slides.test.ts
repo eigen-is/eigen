@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
-import { readSlidesContent } from '../lib/document/slides';
+import { readDeckFromDoc } from '../lib/document/slides';
+import { captureCollabSource } from '../lib/document/transform/collab-source';
 import { getHome } from '../lib/home/get-home';
+import { readPersistedDoc } from './fixtures/transform-results';
 import { driveGet, drivePost, getTestContext } from './setup';
 
 describe('document/slides', () => {
@@ -53,21 +55,22 @@ describe('document/slides', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, slidesPath.id);
-        const content = await readSlidesContent(mount, path);
+        const persisted = await readPersistedDoc(mount, path);
+        const deck = readDeckFromDoc(persisted);
 
-        expect(content.deck.slideOrder).toEqual(['slide-1']);
-        expect(content.deck.slides['slide-1']).toMatchObject({
+        expect(deck.slideOrder).toEqual(['slide-1']);
+        expect(deck.slides['slide-1']).toMatchObject({
             id: 'slide-1',
             objectIds: ['obj-1'],
             background: { type: 'solid', color: '#112233' },
         });
-        expect(content.deck.objects['obj-1']).toMatchObject({
+        expect(deck.objects['obj-1']).toMatchObject({
             id: 'obj-1',
             slideId: 'slide-1',
             type: 'text',
             text: 'Hello slides',
         });
-        expect(content.mediaByName).toBeInstanceOf(Map);
+        persisted.destroy();
     });
 
     test('throws when data.db is missing', async () => {
@@ -82,6 +85,6 @@ describe('document/slides', () => {
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, folder.id);
 
-        await expect(readSlidesContent(mount, path)).rejects.toThrow('eigenslides data.db missing');
+        await expect(captureCollabSource(mount, path)).rejects.toThrow('data.db missing');
     });
 });

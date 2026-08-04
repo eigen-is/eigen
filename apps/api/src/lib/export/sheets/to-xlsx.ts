@@ -10,7 +10,6 @@ import type {
     SingleRange,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import {
     columnIndexToLabel,
     iscelldata,
@@ -30,11 +29,12 @@ import type {
     Cell as XlsxCell,
 } from 'exceljs';
 import JSZip from 'jszip';
-import { readSheetsContent } from '../../document/sheets';
-import type { Mount } from '../../mount';
-import type { ExportResult } from '../export-document';
 import { resolveFontFamily } from './fonts';
 import { type CellBorderSides, expandBorderInfo } from './range-borders';
+
+// Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
+// execution; the main-thread orchestration lives in export-document.ts). This module
+// must not reach the Mount or the main-thread transform seam — the Worker imports it.
 
 // Excel's date epoch is 1899-12-30 (Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -72,18 +72,6 @@ const REVERSE_BORDER_STYLE: Record<number, NonNullable<Border['style']>> = {
 
 function hexToArgb(hex: string): string {
     return `FF${hex.replace('#', '')}`;
-}
-
-export async function exportSheetsToXlsx(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const sheets = await readSheetsContent(mount, drivePath);
-    const buffer = await sheetsToXlsx(sheets);
-    const title = stripEigenExtension(drivePath.name);
-
-    return {
-        data: buffer,
-        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        fileName: `${title}.xlsx`,
-    };
 }
 
 export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {

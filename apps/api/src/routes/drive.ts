@@ -186,10 +186,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/export/:format',
-        async ({ params, user, set }) => {
+        async ({ params, request, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            const result = await exportDocument(mount, path, params.format);
+            // A disconnected export has no cached value — the signal lets the runner
+            // drop the queued job or terminate its Worker.
+            const result = await exportDocument(mount, path, params.format, request.signal);
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
             return result.data;
@@ -198,13 +200,20 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-        async ({ params, user }) => {
+        async ({ params, request, user }) => {
             if (params.targetType !== 'eigensheets' && params.targetType !== 'eigendoc') {
                 throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
             }
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            return await convertToDocument(drive, mount, path, params.targetType, user);
+            // The stored file is buffered whole for parsing, and the upload limit that
+            // applied when it landed may have been higher — bound it here too.
+            if (path.size > (await getUploadMaxSize(params.ownerId, user.id, params.mountId))) {
+                throw new ApiError(413, 'Source file too large');
+            }
+            // A disconnected conversion has no value — the signal lets the runner drop
+            // the queued job or terminate its Worker.
+            return await convertToDocument(drive, mount, path, params.targetType, user, request.signal);
         },
         { auth: true },
     )
@@ -225,14 +234,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             const buffer = Buffer.from(await request.arrayBuffer());
             if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
-            await importIntoDocument(drive, mount, path, buffer);
+            await importIntoDocument(drive, mount, path, buffer, user, request.signal);
             return { success: true };
         },
         { auth: true, parse: 'none' },
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
-        async ({ params, body, user }) => {
+        async ({ params, body, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
@@ -246,7 +255,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const sourceFile = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!sourceFile) throw new ApiError(404, 'Source file not found');
             const buffer = Buffer.from(await sourceFile.arrayBuffer());
-            await importIntoDocument(drive, mount, path, buffer);
+            await importIntoDocument(drive, mount, path, buffer, user, request.signal);
             return { success: true };
         },
         {

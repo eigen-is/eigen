@@ -119,6 +119,12 @@ HTML and PDF export available from the File menu in the slides editor and from t
 them (a "Preview truncated" marker is appended when the deck has more). Server-side rendering reuses the same
 `renderSlideHtml` function as export, with embed URLs instead of base64 data URIs for images.
 
-Server-side files: `apps/api/src/lib/document/slides.ts` (Yjs → `DeckData` + media map),
-`apps/api/src/lib/export/slides/` (`render.ts` slide → HTML, `html.ts`, `pdf.ts`) and
-`apps/api/src/lib/preview/eigenslides-preview.ts`.
+### Files
+
+| File | Purpose |
+|------|---------|
+| `apps/api/src/lib/document/slides.ts` | Yjs → DeckData + media map (shared with export + preview) |
+| `apps/api/src/lib/export/slides/render.ts` | Slide/object → HTML (SizeUnit abstraction) |
+| `apps/api/src/lib/export/slides/transform.ts` | Worker-side: deck + media → standalone HTML (screen or PDF mode) |
+| `apps/api/src/lib/export/export-document.ts` | Main thread: HTML and PDF download envelopes |
+| `apps/api/src/lib/preview/eigenslides-render.ts` | Quick preview HTML body (Worker-side) |

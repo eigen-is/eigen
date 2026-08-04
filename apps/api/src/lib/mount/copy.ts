@@ -49,7 +49,7 @@ export async function copyPath(
         // body. Plain folders have no body and stay unmarked.
         if (isEigenDoc) {
             await mount.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, newId)).run();
-            mount.reindexQueue?.kick();
+            mount.reindexQueue?.markDirty(newId);
         }
         const created = await mount.getPath(newId);
         if (!created) throw new ApiError(500, 'Failed to copy folder');

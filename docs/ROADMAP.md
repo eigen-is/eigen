@@ -67,6 +67,7 @@ Large net-new builds or low value-per-effort today.
 | **AI integration** ([proposal](PROPOSAL_AI.md)) | 0% | XL | Needs a GPU sidecar the host lacks; its flagship semantic search is superseded by the FTS5 plan. Keep as grant narrative, not a build. |
 | **Stalwart mail backend** ([proposal](PROPOSAL_STALWART_MAIL.md)) | 0% | XL | The proposal's own decision section says **don't build it** until a user asks for JMAP. The `MailStore` seam it would plug into exists since 2026-07-03. |
 | **Async `MailStore.search`** | Interface landed 2026-07-03; `size()` is already async, only `search()` is sync | S | Only needed once a second (remote) mail backend exists — widen the type together with that backend. |
+| **Transform queue → preparation closures** | Accepted drift, recorded in [the proposal](PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md)'s status header (2026-08-04) | M | Queued transform jobs retain their full payloads (captured Yjs blobs, upload copies, export media) instead of the proposal §Runner's "small job descriptors or preparation closures". Bounded in practice (~5 foreground exports + 8 background admit; payloads capped by upload quota / doc size), and admission is now checked before capture and media prep. Refactor to closures (capture/prep when the job starts) only if queued-payload memory shows up in production — it reworks the reviewed runner seam (prepare-error propagation, abort-during-prepare, the whole runner suite). |
 
 ## Cheap wins (broken-window fixes)
 

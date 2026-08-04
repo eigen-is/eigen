@@ -83,20 +83,25 @@ mount indexes, so recency is the cross-mount tiebreak.
 read by every folder listing. An `AFTER DELETE ON paths` trigger drops the content row with its
 path, so lifecycle is automatic.
 
-**Extraction.** `apps/api/src/lib/search/extract-text.ts` dispatches on mime type over the shared
-readers of the [document content layer](DOCUMENT-CONTENT-LAYER.md) — `readEigendocContent`,
-`readSlidesContent`, `readSheetsContent`, `readStickiesContent`, `readChatContent` — so search's
-idea of "document text" cannot drift from preview and export. Thin collectors flatten each shape
-(ProseMirror JSON → text, slide text objects, the **sparse** `celldata` display values, card titles
-and descriptions), capped at `CONTENT_INDEX_MAX_BYTES` (~100 KB). Chat is relational, not Yjs, and
-takes the **newest** ~100 KB by paging backwards on `createdAt`. Plain files are eligible via the
-canonical `isSearchableTextFile` and read through `mount.readRange` so a huge file is never slurped.
-The preview generators and the export pipeline are both avoided on purpose: the first emits capped
-HTML, the second embeds media and can densify a sparse sheet.
+**Extraction.** `apps/api/src/lib/search/extract-text.ts` dispatches on mime type. The three collab
+types (doc, slides, sheets) extract inside the one-shot document-transform Worker — the background
+`extract-text` op runs `lib/search/extract-render.ts` over the same `*FromDoc` readers of the
+[document content layer](DOCUMENT-CONTENT-LAYER.md) that preview and export use, so search's idea of
+"document text" cannot drift from them, and a heavy extraction never blocks the event loop (own 30 s
+deadline, background queue quota — see PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md). Thin collectors
+flatten each shape (ProseMirror JSON → text, slide text objects, the **sparse** `celldata` display
+values), cut to the `CONTENT_INDEX_MAX_BYTES` UTF-8 byte budget (~100 KB) at a code-point boundary.
+Stickies and chat stay light main-thread reads (`readStickiesContent`, `readChatContent` — card and
+column text; chat is relational, not Yjs, and takes the **newest** ~100 KB by paging backwards on
+`createdAt`). Plain files are eligible via the canonical `isSearchableTextFile` and read through
+`mount.readRange` so a huge file is never slurped. The preview generators and the export pipeline are
+both avoided on purpose: the first emits capped HTML, the second embeds media and can densify a
+sparse sheet.
 
 **Queue.** The `contentDirty` bit on `paths` *is* the queue — no side table, no staged copy, since a
 reindex re-reads live state and the bit coalesces many edits into one extract. Producers set it and
-call `kick()`:
+tell the queue (`markDirty` — or, for rows that already exist, a generation bump *before* the
+bit-setting write plus `kick()` after it):
 
 - containers, from the storage-agnostic `onSync` callback in `mount/document-db.ts` (fires for
   `local`, `local-key` and `s3` alike — hooking the S3-only upload queue would silently skip local
@@ -111,9 +116,11 @@ the S3 `UploadQueue`: one drain loop per mount, batches of 100, self-timed to wh
 capped row comes due — no process-wide poll. A container is re-extracted at most once per
 `CONTENT_REINDEX_CAP_SECONDS` (120 s), which is what stops a two-hour edit session or an
 append-heavy chat re-indexing a big body on every 30-second sync. A successful extract upserts
-`path_content` and clears the bit; a throw is logged, stamps `contentIndexedAt` and **keeps** the
-bit, so a transient storage hiccup retries after the cap instead of dropping the doc from body
-search. Mount teardown awaits the in-flight extract with a bounded timeout; leftover dirty rows
+`path_content` and clears the bit — unless a write landed while the extract ran: a per-path in-memory
+generation, bumped by every producer before the bit-setting write, fences the clear, so the newer
+content keeps the bit and re-extracts after the cap window. A throw is logged, stamps
+`contentIndexedAt` and **keeps** the bit, so a transient storage hiccup retries after the cap instead
+of dropping the doc from body search. Mount teardown awaits the in-flight extract with a bounded timeout; leftover dirty rows
 replay on the next mount open.
 
 ## Route and frontend

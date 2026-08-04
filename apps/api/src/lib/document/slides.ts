@@ -1,15 +1,6 @@
 import type { DeckData, SlideObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import type * as Y from 'yjs';
-import { COLLAB_DB_CONFIG } from '../collab/db-config';
-import { loadYjsState } from '../collab/yjs-loader';
-import type { Mount } from '../mount';
-
-export type SlidesContent = {
-    deck: DeckData;
-    mediaByName: Map<string, DrivePath>;
-};
 
 const OBJECT_FIELDS = [
     'id',
@@ -56,18 +47,14 @@ function yMapToSlideObject(yMap: Y.Map<unknown>): SlideObject {
     return obj as SlideObject;
 }
 
-export async function readSlidesContent(mount: Mount, drivePath: DrivePath): Promise<SlidesContent> {
-    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
-    if (!dataDbPath) throw new Error('eigenslides data.db missing');
-
-    // Open (or reuse) the database — don't close it, as a collab session may share
-    // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
-    const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
-    const { doc: ydoc } = loadYjsState(managedDb);
-
-    const slidesMap = ydoc.getMap('slides');
-    const objectsMap = ydoc.getMap('objects');
-    const slideOrderArray = ydoc.getArray('slideOrder');
+// Materialized Yjs doc → DeckData. Media-free, so it runs identically on the main
+// thread and inside the document-transform Worker (which has no Mount). Every consumer
+// of a persisted deck reads it in the Worker, so the Mount-side loader is gone: capture
+// (collab-source.ts) + materialize (yjs-loader.ts) is the only path in.
+export function readDeckFromDoc(doc: Y.Doc): DeckData {
+    const slidesMap = doc.getMap('slides');
+    const objectsMap = doc.getMap('objects');
+    const slideOrderArray = doc.getArray('slideOrder');
 
     const deck: DeckData = { slides: {}, objects: {}, slideOrder: slideOrderArray.toArray() as string[] };
 
@@ -87,9 +74,5 @@ export async function readSlidesContent(mount: Mount, drivePath: DrivePath): Pro
         deck.objects[objId] = yMapToSlideObject(objMapValue as Y.Map<unknown>);
     }
 
-    const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
-    const mediaChildren = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
-    const mediaByName = new Map(mediaChildren.map((f) => [f.name, f]));
-
-    return { deck, mediaByName };
+    return deck;
 }

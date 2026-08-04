@@ -8,7 +8,7 @@ import type {
 } from '@workspace/lib/sheets';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { sheetsToXlsx } from '../lib/export/sheets/xlsx';
+import { sheetsToXlsx } from '../lib/export/sheets/to-xlsx';
 import { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 
 async function exportAndReload(sheets: Sheet[]): Promise<ExcelJS.Workbook> {

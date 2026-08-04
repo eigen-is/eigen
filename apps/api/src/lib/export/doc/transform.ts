@@ -1,17 +1,51 @@
+/// <reference path="../modules.d.ts" />
+import type { JSONContent } from '@tiptap/core';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import { common, createLowlight } from 'lowlight';
-import { readEigendocContent } from '../../document/doc';
-import type { Mount } from '../../mount';
-import type { ExportResult } from '../export-document';
+import type * as Y from 'yjs';
+import { readEigendocFromDoc } from '../../document/doc';
+import { toDataUriMap } from '../../document/media';
+import {
+    type EigendocExportFormat,
+    type TransformMedia,
+    type TransformWarning,
+    toTransferableBuffer,
+    toTransferableText,
+} from '../../document/transform/protocol';
 import { getFontCSS } from '../fonts';
-import { buildDataUriMap } from '../media';
 import { sanitizeExportHtml } from '../sanitize';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
+
+// Materialized doc + prepared media → export bytes. Runs inside the transform Worker
+// (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
+// This module must not reach the Mount or the preview cache — the Worker imports it.
+//
+// Every format renders the same document by design: WeasyPrint and Turbodocx both
+// consume exactly what the HTML download serves. Turbodocx loads lazily — it is an
+// externalized dependency, and an HTML export must not evaluate it.
+export async function renderEigendocExport(
+    doc: Y.Doc,
+    format: EigendocExportFormat,
+    title: string,
+    media: TransformMedia[],
+): Promise<{ data: ArrayBuffer; warnings: TransformWarning[] }> {
+    const html = renderEigendocDocument(readEigendocFromDoc(doc), toDataUriMap(media), title);
+    if (format !== 'docx') return { data: toTransferableText(html), warnings: [] };
+
+    const HTMLtoDOCX = (await import('@turbodocx/html-to-docx')).default;
+    // The HTML <title> keeps the full container name (frozen output); the docx
+    // document property carries the stripped one, as it always has.
+    const docx = await HTMLtoDOCX(html, undefined, {
+        title: stripEigenExtension(title),
+        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+    });
+    return { data: toTransferableBuffer(new Uint8Array(docx)), warnings: [] };
+}
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
@@ -23,19 +57,7 @@ function getProseCSS() {
     return (_proseCSS ??= flattenEigenProseCSS(eigenProseCSSRaw as string));
 }
 
-export async function exportEigendocToHtml(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const html = await generateExportHtml(mount, drivePath);
-    return {
-        data: Buffer.from(html, 'utf-8'),
-        contentType: 'text/html; charset=utf-8',
-        fileName: `${stripEigenExtension(drivePath.name)}.html`,
-    };
-}
-
-export async function generateExportHtml(mount: Mount, drivePath: DrivePath): Promise<string> {
-    const { json, mediaByName } = await readEigendocContent(mount, drivePath);
-    const dataUriMap = await buildDataUriMap(mount, mediaByName);
-
+function renderEigendocDocument(json: JSONContent, dataUriMap: Map<string, string>, title: string): string {
     const bodyHtml = renderToHTMLString({
         content: json,
         extensions,
@@ -51,8 +73,7 @@ export async function generateExportHtml(mount: Mount, drivePath: DrivePath): Pr
         },
     });
 
-    const sanitized = sanitizeExportHtml(bodyHtml, { ADD_DATA_URI_TAGS: ['img'] });
-    return wrapInDocument(drivePath.name, sanitized);
+    return wrapInDocument(title, sanitizeExportHtml(bodyHtml, { ADD_DATA_URI_TAGS: ['img'] }));
 }
 
 function wrapInDocument(title: string, bodyHtml: string): string {

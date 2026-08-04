@@ -26,7 +26,8 @@ import type {
 } from 'exceljs';
 import he from 'he';
 import JSZip from 'jszip';
-import { ApiError } from '../../core';
+import { ApiError } from '../../core/errors';
+import { assertDecompressedSizeWithinBounds } from '../zip-size-guard';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -114,53 +115,24 @@ const BORDER_STYLE_MAP: Record<string, number> = {
 
 type ThemePalette = string[];
 
-// The upload route only bounds the COMPRESSED xlsx (getUploadMaxSize, default 35 MB /
-// mount quota), so a decompression bomb — a few KB of highly compressible bytes — expands
-// to many GB in memory and OOM-kills the process, dropping every Home on the box. Two
-// consistent caps run BEFORE exceljs inflates anything.
-//
-// Byte cap: total inflated bytes across all zip entries. A legit DENSE sheet at MAX_CELLS
-// decompresses to ~140 MB (measured ~35 bytes per populated cell of worksheet + deduped
-// sharedStrings XML — numeric ~31, styled+repeated-strings ~34; an all-unique-strings dump
-// runs ~73 but that isn't a real spreadsheet), comfortably under 200 MB. So the CELL cap —
-// not the byte cap — is the binding limit for a real spreadsheet, and neither cap rejects a
-// sheet the other would allow. The byte cap independently catches a LOW-cell-count bomb
-// (repeated bytes in one entry, or a forged xl/media/* blob) the cell cap can't see, and
-// 200 MB sits far below the ~36 GB an honest 35 MB-compressed bomb declares.
-const MAX_DECOMPRESSED_BYTES = 200 * 1024 * 1024;
 // Belt against a tiny file DECLARING an enormous grid (far-apart cells span the full Excel
 // bounding box): walking rowCount×columnCount to build the Sheet output would blow up, and
 // exceljs's fully-materialized in-memory model (~hundreds of bytes per cell) is itself the
 // dominant memory term. 4 M cells (e.g. 40k rows × 100 cols) exceeds any realistic import
 // while keeping that model to ~1–2 GB — survivable, unlike a 10 M-cell model (~2–4 GB).
+// A dense sheet at this cap decompresses to ~140 MB, well under the shared byte cap: the
+// CELL cap, not the byte cap, is the binding limit for a real spreadsheet, and neither
+// rejects a sheet the other would allow. The byte cap independently catches a LOW-cell-count
+// bomb (repeated bytes in one entry, or a forged xl/media/* blob) the cell cap can't see.
 const MAX_CELLS = 4_000_000;
 
-// JSZip records each entry's declared uncompressed size (from the zip central directory)
-// on a private `_data`; reading it does NOT decompress. Public typings omit it.
-type JSZipEntryInternals = { _data?: { uncompressedSize?: number } };
-
-// internalStream decompresses lazily and emits the ACTUAL bytes in ~16 KB chunks; pausing
-// propagates upstream to the source worker, stopping pako mid-inflate (public typings omit
-// both). The streaming belt below relies on that pause for backpressure.
-type JSZipByteStream = {
-    on(event: 'data', handler: (chunk: Uint8Array) => void): JSZipByteStream;
-    on(event: 'end', handler: () => void): JSZipByteStream;
-    on(event: 'error', handler: (err: unknown) => void): JSZipByteStream;
-    pause(): JSZipByteStream;
-    resume(): JSZipByteStream;
-};
-type JSZipStreamable = { internalStream(type: 'uint8array'): JSZipByteStream };
-
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
-    // One JSZip pass, reused for both size guards AND the hyperlink read below. loadAsync
-    // reads the central directory without decompressing, so the guards can run BEFORE
+    // One JSZip pass, reused for the size guard AND the hyperlink read below. loadAsync
+    // reads the central directory without decompressing, so the guard can run BEFORE
     // exceljs's xlsx.load — the OOM a bomb triggers happens inside load() and is not
-    // catchable, so a post-load check would never fire. Declared-size is a fast reject (an
-    // honest bomb dies with ZERO decompression); the streaming pass is the belt that closes
-    // the forged-central-directory case before exceljs re-inflates the entries.
+    // catchable, so a post-load check would never fire.
     const zip = await JSZip.loadAsync(buffer);
-    assertDeclaredSizeWithinBounds(zip);
-    await assertActualSizeWithinBounds(zip);
+    await assertDecompressedSizeWithinBounds(zip, 'Spreadsheet too large');
 
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
@@ -175,55 +147,6 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
         sheets.push(worksheetToSheet(worksheet, index, theme, locationLinks.get(worksheet.name)));
     }
     return sheets;
-}
-
-function assertDeclaredSizeWithinBounds(zip: JSZip): void {
-    let total = 0;
-    for (const entry of Object.values(zip.files)) {
-        if (entry.dir) continue;
-        total += (entry as unknown as JSZipEntryInternals)._data?.uncompressedSize ?? 0;
-        if (total > MAX_DECOMPRESSED_BYTES) throw new ApiError(413, 'Spreadsheet too large');
-    }
-}
-
-// The declared-size guard trusts the central-directory uncompressedSize, which an attacker
-// can forge SMALL while the DEFLATE stream actually inflates to tens of GB — exceljs would
-// then inflate the entry unconditionally inside xlsx.load (→ uncatchable OOM). Stream-
-// decompress every entry, keep a running total of ACTUAL bytes across the whole workbook,
-// discard each chunk (memory stays ~one chunk), and reject the moment the total crosses the
-// cap. Pausing stops the upstream source worker (backpressure), so pako inflates no further
-// — memory stays flat even against a 36 GB bomb. Entries are processed sequentially so the
-// running total is exact and only one entry inflates at a time.
-async function assertActualSizeWithinBounds(zip: JSZip): Promise<void> {
-    let total = 0;
-    for (const entry of Object.values(zip.files)) {
-        if (entry.dir) continue;
-        const stream = (entry as unknown as JSZipStreamable).internalStream('uint8array');
-        await new Promise<void>((resolve, reject) => {
-            let settled = false;
-            stream
-                .on('data', (chunk) => {
-                    if (settled) return;
-                    total += chunk.length;
-                    if (total > MAX_DECOMPRESSED_BYTES) {
-                        settled = true;
-                        stream.pause();
-                        reject(new ApiError(413, 'Spreadsheet too large'));
-                    }
-                })
-                .on('error', (err) => {
-                    if (settled) return;
-                    settled = true;
-                    reject(err);
-                })
-                .on('end', () => {
-                    if (settled) return;
-                    settled = true;
-                    resolve();
-                })
-                .resume();
-        });
-    }
 }
 
 function assertCellCountWithinBounds(workbook: Workbook): void {

@@ -1,64 +1,60 @@
-import type { Sheet } from '@workspace/lib/sheets';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
-import { recalcSheets } from '@workspace/sheet/engine';
-import { ApiError } from '../core';
-import { writeEigendocToYjs } from '../document/doc';
-import { writeSheetsToYjs } from '../document/sheets';
+import { ApiError } from '../core/errors';
+import { writeEigendocUpdateToYjs } from '../document/doc';
+import { writeSheetsSnapshotToYjs } from '../document/sheets';
+import {
+    type DocImportJob,
+    type DocImportWorkerResult,
+    type SheetsImportJob,
+    type TransformMedia,
+    toTransferableBuffer,
+} from '../document/transform/protocol';
+import { runImportToDocumentUpdate, runImportToSnapshotJson } from '../document/transform/run-transform';
+import { documentTransformRunner } from '../document/transform/runner';
 import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
 import type { User } from '../user';
-import type { DocxImage } from './doc/from-docx';
-import { xlsxToSheets } from './sheets/from-xlsx';
 
-// xlsx and docx are zip-based formats — the parsers need the full file in memory to read
-// the central directory and extract parts. Callers are expected to size-check before passing.
-async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
-    try {
-        return await xlsxToSheets(buffer);
-    } catch (err) {
-        if (err instanceof ApiError) throw err;
-        throw new ApiError(400, 'Not a valid xlsx file');
-    }
+const XLSX_TO_SHEETS: SheetsImportJob = { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets' };
+const DOCX_TO_DOC: DocImportJob = { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc' };
+
+// Parsing, guards, recalc and serialization run in the transform Worker; the main
+// thread only commits what it returns — the snapshot for sheets, a ready Yjs update
+// plus extracted media for documents. Nothing is created or mutated before the Worker
+// succeeds, so a failed import leaves source and target untouched.
+// Refuse before the copy: the upload is copied whole (a transfer hands over the WHOLE
+// backing buffer, and the Buffer can be a view over a larger pool), so a job the runner
+// will not admit must not pay for it. run() rechecks authoritatively.
+function importXlsxSnapshot(buffer: Buffer, signal?: AbortSignal): Promise<string> {
+    documentTransformRunner.assertAdmissible('foreground');
+    return runImportToSnapshotJson(XLSX_TO_SHEETS, toTransferableBuffer(buffer), { signal });
 }
 
-// Recompute formula cells through our engine once at import so the persisted
-// snapshot carries engine-verified v/m (and a calcChain, so the read-path gate
-// never fires for imported docs). The importer's cached values are usually
-// Excel's own, so this mainly reconciles divergence; a recalc failure must not
-// block the import, so fall back to the parsed sheets. recalcSheets returns a
-// dense `data` matrix, but the importer persists sparse `celldata` only (the
-// computed values are synced into it) — drop `data` so a large import doesn't
-// bloat the snapshot; the read path re-materializes it.
-function recalcImportedSheets(sheets: Sheet[]): Sheet[] {
-    try {
-        return recalcSheets(sheets).map((sheet) => {
-            const lean = { ...sheet };
-            delete lean.data;
-            return lean;
-        });
-    } catch (err) {
-        console.warn('[import] server recalc of imported sheets failed, persisting parsed values:', err);
-        return sheets;
-    }
+function importDocxUpdate(buffer: Buffer, signal?: AbortSignal): Promise<DocImportWorkerResult> {
+    documentTransformRunner.assertAdmissible('foreground');
+    return runImportToDocumentUpdate(DOCX_TO_DOC, toTransferableBuffer(buffer), { signal });
 }
 
-async function parseDocxOrThrow(buffer: Buffer) {
-    try {
-        const { docxToPmJson, docSchema } = await import('./doc/from-docx');
-        const result = await docxToPmJson(buffer);
-        return { ...result, schema: docSchema };
-    } catch (err) {
-        if (err instanceof ApiError) throw err;
-        throw new ApiError(400, 'Not a valid docx file');
-    }
+// The route checked write before buffering, but the job can queue and transform for
+// minutes — long enough for the share to be revoked. `getCollabDocument` re-checks
+// read only, so the commit needs its own write check — as the LAST await before the
+// synchronous write, or a revocation landing during the lookup still commits.
+async function requireWritePermission(drive: Drive | SharedDrive, path: DrivePath, user: User): Promise<void> {
+    if (!(await drive.canWrite(path.mountId, path.id, user))) throw new ApiError(403, 'No write permission');
 }
 
-async function saveDocImages(mount: Mount, docPath: DrivePath, images: DocxImage[]): Promise<void> {
+async function saveDocImages(mount: Mount, docPath: DrivePath, images: TransformMedia[]): Promise<void> {
     if (images.length === 0) return;
     const mediaFolder = await mount.getChildByName(docPath.id, 'media');
     if (!mediaFolder) throw new ApiError(500, 'Document media folder not found');
     for (const image of images) {
-        await mount.createFile(mediaFolder.id, image.name, image.contentType, image.data.byteLength, image.data);
+        const data = Buffer.from(image.data);
+        // Extracted names are deterministic (image-0.png, …), so a repeat import
+        // references the same names — overwrite them instead of 409ing after the
+        // content already committed. Names the new import doesn't produce stay.
+        const existing = await mount.getChildByName(mediaFolder.id, image.name);
+        if (existing) await mount.writeFile(existing.id, data);
+        else await mount.createFile(mediaFolder.id, image.name, image.contentType, data.byteLength, data);
     }
 }
 
@@ -68,8 +64,13 @@ export async function convertToDocument(
     sourcePath: DrivePath,
     targetType: 'eigensheets' | 'eigendoc',
     user?: User,
+    signal?: AbortSignal,
 ): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
+
+    // Refuse before the stored-file read: buffering the source (possibly an S3 GET)
+    // is the costliest preparation here. run() rechecks authoritatively.
+    documentTransformRunner.assertAdmissible('foreground');
 
     const file = await mount.readFile(sourcePath.id);
     if (!file) throw new ApiError(404, 'File not found');
@@ -79,11 +80,11 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.xlsx')) {
             throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
         }
-        const sheets = await parseXlsxOrThrow(buffer);
+        const snapshotJson = await importXlsxSnapshot(buffer, signal);
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeSheetsToYjs(collabDoc.doc, recalcImportedSheets(sheets));
+        writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
         return newPath;
     }
 
@@ -91,11 +92,11 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
             throw new ApiError(400, 'Only .docx files can be converted to documents');
         }
-        const { json, images, schema } = await parseDocxOrThrow(buffer);
+        const { update, images } = await importDocxUpdate(buffer, signal);
         const name = sourcePath.name.replace(/\.docx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeEigendocToYjs(collabDoc.doc, json, schema);
+        writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
         await saveDocImages(mount, newPath, images);
         return newPath;
     }
@@ -108,18 +109,22 @@ export async function importIntoDocument(
     mount: Mount,
     path: DrivePath,
     buffer: Buffer,
+    user: User,
+    signal?: AbortSignal,
 ): Promise<void> {
     if (path.mimeType === DRIVE_MIME_SHEETS) {
-        const sheets = await parseXlsxOrThrow(buffer);
+        const snapshotJson = await importXlsxSnapshot(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeSheetsToYjs(collabDoc.doc, recalcImportedSheets(sheets));
+        await requireWritePermission(drive, path, user);
+        writeSheetsSnapshotToYjs(collabDoc.doc, snapshotJson);
         return;
     }
 
     if (path.mimeType === DRIVE_MIME_DOC) {
-        const { json, images, schema } = await parseDocxOrThrow(buffer);
+        const { update, images } = await importDocxUpdate(buffer, signal);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeEigendocToYjs(collabDoc.doc, json, schema);
+        await requireWritePermission(drive, path, user);
+        writeEigendocUpdateToYjs(collabDoc.doc, new Uint8Array(update));
         await saveDocImages(mount, path, images);
         return;
     }

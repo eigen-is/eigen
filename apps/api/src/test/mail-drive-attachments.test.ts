@@ -1,7 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
 import type { EmailDraft } from '@workspace/lib/types/mail';
-import { assertJson, authedRequest, driveGet, driveGetList, driveUpload, getTestContext } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    driveGet,
+    driveGetList,
+    driveUpload,
+    getTestContext,
+    setMaxUploadSizeMB,
+} from './setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -169,16 +177,7 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
                 file,
             );
 
-            const setQuota = async (mb: number) => {
-                const r = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
-                });
-                expect(r.status).toBe(200);
-            };
-
-            await setQuota(1);
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
             try {
                 const res = await attachFromDrive(ctx.alice.user.sessionToken, ctx.alice.user.id, {
                     sourceOwnerId: source.ownerId,
@@ -187,7 +186,7 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
                 });
                 expect(res.status).toBe(413);
             } finally {
-                await setQuota(35);
+                await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
             }
         });
     });
@@ -287,16 +286,7 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
             const bigMsg = inbox.find((m) => m.subject === 'Big-attachment');
             expect(bigMsg).toBeDefined();
 
-            const setQuota = async (mb: number) => {
-                const r = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
-                });
-                expect(r.status).toBe(200);
-            };
-
-            await setQuota(1);
+            await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 1);
             try {
                 const res = await saveAttachmentsToDrive(ctx.alice.user.sessionToken, ctx.alice.user.id, bigMsg!.id, {
                     indexes: [0],
@@ -306,7 +296,7 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
                 });
                 expect(res.status).toBe(413);
             } finally {
-                await setQuota(35);
+                await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
             }
         });
 

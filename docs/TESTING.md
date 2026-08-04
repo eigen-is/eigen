@@ -54,6 +54,9 @@ subdirectory for the WebDAV method suites and a `fixtures/` folder. Coverage spa
 drive, collab, file history, search, import/export, demo mode, upload-queue chaos and more — grep the
 directory rather than assuming an area is untested.
 
+Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for
+document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see PREVIEWS.md).
+
 ## Key Details
 
 - **Treaty**: Used for static path routes. `authedRequest()` for dynamic `:mountId` params

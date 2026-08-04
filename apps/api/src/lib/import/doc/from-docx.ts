@@ -4,6 +4,8 @@ import { DOMParser as PmDOMParser } from '@tiptap/pm/model';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import DOMPurify from 'isomorphic-dompurify';
 import { JSDOM } from 'jsdom';
+import JSZip from 'jszip';
+import { assertDecompressedSizeWithinBounds } from '../zip-size-guard';
 
 export type DocxImage = {
     name: string;
@@ -18,6 +20,11 @@ const parser = PmDOMParser.fromSchema(schema);
 export { schema as docSchema };
 
 export async function docxToPmJson(buffer: Buffer): Promise<{ json: JSONContent; images: DocxImage[] }> {
+    // loadAsync reads the central directory without decompressing, so the size guard runs
+    // BEFORE mammoth inflates the package — the OOM a bomb triggers inside the parser is not
+    // catchable. A non-zip buffer fails here and surfaces as the caller's 400.
+    await assertDecompressedSizeWithinBounds(await JSZip.loadAsync(buffer), 'Document too large');
+
     const mammoth = (await import('mammoth')).default;
     const images: DocxImage[] = [];
     let imageIndex = 0;

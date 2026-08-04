@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, ConditionalFormatRule, Sheet } from '@workspace/lib/sheets';
-import { getSheetContentSize, renderSheetsHtml } from '../lib/export/sheets/html';
+import { getSheetContentSize, renderSheetsHtml } from '../lib/export/sheets/render';
 
 // Build a Sheet with both `data` (matrix form, required by the CF engine) and `celldata`
 // (sparse form, what the renderer iterates). The sheet Workbook keeps both

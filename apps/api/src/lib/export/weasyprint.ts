@@ -1,4 +1,4 @@
-import { ApiError } from '../core';
+import { ApiError } from '../core/errors';
 
 let cachedAvailable: boolean | null = null;
 
@@ -19,7 +19,9 @@ export async function isWeasyPrintAvailable(): Promise<boolean> {
     return cachedAvailable;
 }
 
-export async function htmlToPdf(html: string): Promise<Buffer> {
+// Accepts the UTF-8 bytes the transform Worker returns as well as a plain string —
+// Bun's stdin sink writes both, and weasyprint already reads `--encoding utf-8`.
+export async function htmlToPdf(html: string | Uint8Array): Promise<Buffer> {
     if (!(await isWeasyPrintAvailable())) {
         throw new ApiError(501, 'PDF export requires WeasyPrint. Install with: pip install weasyprint');
     }

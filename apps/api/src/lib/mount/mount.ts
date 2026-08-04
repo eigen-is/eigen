@@ -507,7 +507,7 @@ export class Mount {
         });
 
         await this.invalidateSizesFrom(parentId);
-        if (searchable) this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.markDirty(fileId);
 
         return fileId;
     }
@@ -548,7 +548,7 @@ export class Mount {
         });
 
         await this.invalidateSizesFrom(parentId);
-        if (searchable) this.reindexQueue?.kick();
+        if (searchable) this.reindexQueue?.markDirty(fileId);
 
         return fileId;
     }
@@ -948,6 +948,7 @@ export class Mount {
 
         const hash = await this.computeHash(data);
         const searchable = await this.isSearchableRow(pathId);
+        if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         await this.db
             .update(paths)
             .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })
@@ -963,6 +964,7 @@ export class Mount {
         const storageKey = await this.getStorageKey(pathId);
         await this.uploadFromTemp(storageKey, tempId);
         const searchable = await this.isSearchableRow(pathId);
+        if (searchable) this.reindexQueue?.bumpGeneration(pathId);
         await this.db
             .update(paths)
             .set({ size, hash, updatedAt: new Date(), contentDirty: searchable ? 1 : 0 })

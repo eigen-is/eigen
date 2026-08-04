@@ -1,13 +1,18 @@
 import { escapeHtml } from '@workspace/lib/html';
-import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DeckData } from '@workspace/lib/slides';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import slideTextCSSRaw from '@workspace/ui/styles/slide-text.css' with { type: 'text' };
-import { readSlidesContent } from '../../document/slides';
-import type { Mount } from '../../mount';
-import type { ExportResult } from '../export-document';
+import type * as Y from 'yjs';
+import { toDataUriMap } from '../../document/media';
+import { readDeckFromDoc } from '../../document/slides';
+import {
+    type DocumentExportFormat,
+    type TransformMedia,
+    type TransformWarning,
+    toTransferableText,
+} from '../../document/transform/protocol';
 import { getFontCSS } from '../fonts';
-import { buildDataUriMap } from '../media';
-import type { SizeUnit, SlideImgSrcResolver } from '../render-types';
+import type { SizeUnit } from '../render-types';
 import { sanitizeExportHtml } from '../sanitize';
 import { fixedSizeUnit, renderDeckHtml, responsiveSizeUnit } from './render';
 
@@ -15,41 +20,41 @@ import { fixedSizeUnit, renderDeckHtml, responsiveSizeUnit } from './render';
 const PAGE_WIDTH_PX = 960;
 const PAGE_HEIGHT_PX = 540;
 
-export async function exportSlidesToHtml(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const html = await generateSlidesExportHtml(mount, drivePath, 'html');
-    return {
-        data: Buffer.from(html, 'utf-8'),
-        contentType: 'text/html; charset=utf-8',
-        fileName: `${stripEigenExtension(drivePath.name)}.html`,
-    };
+// Materialized doc + prepared media → export bytes. Runs inside the transform Worker
+// (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
+// This module must not reach the Mount or the preview cache — the Worker imports it.
+export function renderEigenslidesExport(
+    doc: Y.Doc,
+    format: DocumentExportFormat,
+    title: string,
+    media: TransformMedia[],
+): { data: ArrayBuffer; warnings: TransformWarning[] } {
+    const html = renderDeckDocument(readDeckFromDoc(doc), toDataUriMap(media), title, format);
+    return { data: toTransferableText(html), warnings: [] };
 }
 
-export async function generateSlidesExportHtml(
-    mount: Mount,
-    drivePath: DrivePath,
-    mode: 'html' | 'pdf',
-): Promise<string> {
-    const title = stripEigenExtension(drivePath.name);
-    const { deck, mediaByName } = await readSlidesContent(mount, drivePath);
-    const dataUriMap = await buildDataUriMap(mount, mediaByName);
-    const resolveImgSrc: SlideImgSrcResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
-
-    const isPdf = mode === 'pdf';
+function renderDeckDocument(
+    deck: DeckData,
+    dataUriMap: Map<string, string>,
+    title: string,
+    format: DocumentExportFormat,
+): string {
+    const isPdf = format === 'pdf-html';
     const sizeUnit: SizeUnit = isPdf ? fixedSizeUnit(PAGE_WIDTH_PX, PAGE_HEIGHT_PX) : responsiveSizeUnit;
     const slideOptions = isPdf
         ? { fillPage: true, pageWidthPx: PAGE_WIDTH_PX, pageHeightPx: PAGE_HEIGHT_PX }
         : undefined;
-    const slidesHtml = renderDeckHtml(deck, sizeUnit, resolveImgSrc, slideOptions);
-    // Sanitize the assembled body exactly like the preview surface (eigenslides-preview.ts) —
+    const slidesHtml = renderDeckHtml(deck, sizeUnit, (mediaName) => dataUriMap.get(mediaName) ?? null, slideOptions);
+    // Sanitize the assembled body exactly like the preview surface (eigenslides-render.ts) —
     // defence in depth over render.ts's per-value escaping, so the download/print surface is
     // as guarded as the preview.
     const sanitized = sanitizeExportHtml(slidesHtml);
 
-    return wrapInDocument(title, sanitized, mode);
+    return wrapInDocument(title, sanitized, isPdf);
 }
 
-function wrapInDocument(title: string, slidesHtml: string, mode: 'html' | 'pdf'): string {
-    const css = mode === 'pdf' ? PDF_CSS : SCREEN_CSS;
+function wrapInDocument(title: string, slidesHtml: string, isPdf: boolean): string {
+    const css = isPdf ? PDF_CSS : SCREEN_CSS;
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -58,7 +63,7 @@ function wrapInDocument(title: string, slidesHtml: string, mode: 'html' | 'pdf')
     <style>${getFontCSS()}${css}${slideTextCSSRaw}</style>
 </head>
 <body>
-    ${mode === 'html' ? `<div class="deck">${slidesHtml}</div>` : slidesHtml}
+    ${isPdf ? slidesHtml : `<div class="deck">${slidesHtml}</div>`}
 </body>
 </html>`;
 }
