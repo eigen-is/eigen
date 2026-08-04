@@ -252,6 +252,16 @@ function SheetEditorInner({
     const { isMobile } = useLayout();
     const mobilePanelOpen = isMobile && panel !== null;
 
+    // The find bar rides with the workbook, which the pane hides — a session opened from over the
+    // pane (⌘F, a palette in-document hit) would be invisible. Reveal the workbook instead; the
+    // pane is one toolbar tap away.
+    const handleSearchOpenChange = useCallback(
+        (open: boolean) => {
+            if (open && isMobile) closePanels();
+        },
+        [isMobile, closePanels],
+    );
+
     if (!synced || !initialData) {
         return <LoadingState />;
     }
@@ -276,6 +286,7 @@ function SheetEditorInner({
                     <DocSearchProvider
                         controller={searchController}
                         initialSearchTerm={initialSearchTerm}
+                        onOpenChange={handleSearchOpenChange}
                         barClassName="top-20"
                         onUndo={() => workbookRef.current?.undo()}
                         onRedo={() => workbookRef.current?.redo()}

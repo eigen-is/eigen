@@ -50,8 +50,9 @@ export function Toolbar({
     activityPanelOpen,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
-    // ≤1200px the center dot row doesn't fit — the Filter menu is the only entry point there.
-    const isMobile = useMediaQuery('(max-width: 1200px)');
+    // Toolbar density only, not the 768px system mobile breakpoint: ≤1200px the center dot row
+    // doesn't fit, so the Filter menu is the only entry point there.
+    const isCompact = useMediaQuery('(max-width: 1200px)');
     // Controlled so assignee/status/clear picks can dismiss the menu; color toggles keep it open.
     const [filterOpen, setFilterOpen] = useState(false);
 
@@ -102,7 +103,7 @@ export function Toolbar({
                 </div>
             }
             center={
-                isMobile ? null : (
+                isCompact ? null : (
                     <div className="flex items-center gap-1.5">
                         {EIGEN_STICKIES_COLORS[0].map((c) => {
                             const active = filter.filter.colors?.has(c.value) ?? false;

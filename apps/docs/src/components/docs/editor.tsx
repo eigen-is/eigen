@@ -686,6 +686,16 @@ const TiptapEditor = ({
 
     const { isMobile } = useLayout();
 
+    // The find bar rides with the editor, which the mobile pane hides — a session opened from over
+    // the pane (⌘F, a palette in-document hit) would be invisible. Reveal the editor instead; the
+    // pane is one toolbar tap away.
+    const handleSearchOpenChange = useCallback(
+        (open: boolean) => {
+            if (open && isMobile) closePanels();
+        },
+        [isMobile, closePanels],
+    );
+
     if (!editor) return null;
 
     // Below the mobile breakpoint the side panel has no room, so mobile hosts the same panels in a
@@ -743,6 +753,7 @@ const TiptapEditor = ({
                         controller={docSearchController}
                         commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
+                        onOpenChange={handleSearchOpenChange}
                         barClassName={cn('top-14', showSidebar && 'right-68')}
                         // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
                         onUndo={() => editor.commands.undo()}

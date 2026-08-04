@@ -35,7 +35,9 @@ export function ImageResizeHandles({
                 const deltaX = moveEvent.clientX - startX;
                 const isLeft = direction === 'w' || direction === 'nw' || direction === 'sw';
                 const effectiveDelta = isLeft ? -deltaX : deltaX;
-                currentWidth = Math.min(maxWidth, Math.max(100, startWidth + effectiveDelta));
+                // Floor last: a maxWidth measured while the surface was hidden is 0 or negative,
+                // and clamping to it would write that width to the document.
+                currentWidth = Math.max(100, Math.min(maxWidth, startWidth + effectiveDelta));
                 setLocalWidth(Math.round(currentWidth));
             };
 

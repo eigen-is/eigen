@@ -52,7 +52,14 @@ export function MobilePanelColumn({
                     <>
                         <ToolbarTitle>Comments</ToolbarTitle>
                         <div className="ml-auto">
-                            <CommentFilterButton filter={filter} members={members} currentUserEmail={user!.email} />
+                            <CommentFilterButton
+                                filter={filter}
+                                members={members}
+                                currentUserEmail={user!.email}
+                                // Touch target, matching the back arrow's TooltipButton; the panel
+                                // header's own 24px button is a desktop density.
+                                className="h-8 w-8"
+                            />
                         </div>
                     </>
                 ) : (

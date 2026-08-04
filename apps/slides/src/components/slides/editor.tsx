@@ -223,6 +223,16 @@ function SlideEditorInner({
     const auth = useAuth();
     const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, closePanels } =
         useDocumentPanels();
+    // The find bar rides with the canvas, which the mobile pane hides — a session opened from over
+    // the pane (⌘F, a palette in-document hit) would be invisible. Reveal the canvas instead; the
+    // pane is one toolbar tap away. The layered Escape still needs the plain open flag.
+    const handleSearchOpenChange = useCallback(
+        (open: boolean) => {
+            setSearchOpen(open);
+            if (open && isMobile) closePanels();
+        },
+        [isMobile, closePanels],
+    );
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetObjId, setAddTargetObjId] = useState<string | null>(null);
@@ -822,7 +832,7 @@ function SlideEditorInner({
                 <DocSearchProvider
                     controller={docSearchController}
                     initialSearchTerm={initialSearchTerm}
-                    onOpenChange={setSearchOpen}
+                    onOpenChange={handleSearchOpenChange}
                     barClassName={cn('top-14', rightPanelShown && 'right-68')}
                 >
                     <Column
