@@ -59,7 +59,7 @@ function convertRequest(pathId: string, targetType = 'eigendoc'): Promise<Respon
     );
 }
 
-function importRequest(pathId: string, body: BodyInit): Promise<Response> {
+function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
     return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
         method: 'POST',
         body,
@@ -167,7 +167,7 @@ describe('Eigendoc docx import/convert', () => {
             { fileName: 'bomb-import-target' },
         );
         const bomb = await buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
-        const res = await importRequest(docPath.id, new Uint8Array(bomb));
+        const res = await importRequest(docPath.id, toTransferableBuffer(bomb));
         expect(res.status).toBe(413);
         expect(await res.text()).toBe('Document too large');
     }, 60_000);

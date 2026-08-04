@@ -32,6 +32,32 @@ const GOLDEN_DOC_LINK = 'https://example.com/report';
 // codeBlock node cannot be written into the Yjs document.
 const docSchema = getSchema(getDocExtensions({ lowlight: createLowlight(common) }));
 
+// The node shapes both builders lay out — a plain text block, and the list/table
+// walks the renderers pay most for.
+function paragraph(text: string): JSONContent {
+    return { type: 'paragraph', content: [{ type: 'text', text }] };
+}
+
+function bulletList(items: string[]): JSONContent {
+    return { type: 'bulletList', content: items.map((item) => ({ type: 'listItem', content: [paragraph(item)] })) };
+}
+
+function table(headers: string[], rows: string[][]): JSONContent {
+    return {
+        type: 'table',
+        content: [
+            {
+                type: 'tableRow',
+                content: headers.map((label) => ({ type: 'tableHeader', content: [paragraph(label)] })),
+            },
+            ...rows.map((cells) => ({
+                type: 'tableRow',
+                content: cells.map((cell) => ({ type: 'tableCell', content: [paragraph(cell)] })),
+            })),
+        ],
+    };
+}
+
 export function buildGoldenDocJson(): JSONContent {
     const content: JSONContent[] = [
         { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Quarterly Report' }] },
@@ -72,51 +98,19 @@ export function buildGoldenDocJson(): JSONContent {
         {
             type: 'taskList',
             content: [
-                {
-                    type: 'taskItem',
-                    attrs: { checked: true },
-                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Collect the numbers' }] }],
-                },
-                {
-                    type: 'taskItem',
-                    attrs: { checked: false },
-                    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Publish the report' }] }],
-                },
+                { type: 'taskItem', attrs: { checked: true }, content: [paragraph('Collect the numbers')] },
+                { type: 'taskItem', attrs: { checked: false }, content: [paragraph('Publish the report')] },
             ],
         },
-        {
-            type: 'blockquote',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Growth is compounding.' }] }],
-        },
-        {
-            type: 'bulletList',
-            content: ['North', 'South', 'East'].map((region) => ({
-                type: 'listItem',
-                content: [{ type: 'paragraph', content: [{ type: 'text', text: region }] }],
-            })),
-        },
-        {
-            type: 'table',
-            content: [
-                {
-                    type: 'tableRow',
-                    content: ['Region', 'Total'].map((label) => ({
-                        type: 'tableHeader',
-                        content: [{ type: 'paragraph', content: [{ type: 'text', text: label }] }],
-                    })),
-                },
-                ...[
-                    ['North', '48'],
-                    ['South', '65'],
-                ].map((cells) => ({
-                    type: 'tableRow',
-                    content: cells.map((cell) => ({
-                        type: 'tableCell',
-                        content: [{ type: 'paragraph', content: [{ type: 'text', text: cell }] }],
-                    })),
-                })),
+        { type: 'blockquote', content: [paragraph('Growth is compounding.')] },
+        bulletList(['North', 'South', 'East']),
+        table(
+            ['Region', 'Total'],
+            [
+                ['North', '48'],
+                ['South', '65'],
             ],
-        },
+        ),
         {
             // Hostile content: a literal script string plus a blocked link scheme.
             type: 'paragraph',
@@ -132,11 +126,11 @@ export function buildGoldenDocJson(): JSONContent {
     ];
 
     for (let i = 1; i <= 11; i++) {
-        content.push({ type: 'paragraph', content: [{ type: 'text', text: `Section ${i} — recurring text.` }] });
+        content.push(paragraph(`Section ${i} — recurring text.`));
     }
     // Past the 20-block preview cap: present in exports, absent from previews.
     for (let i = 1; i <= 4; i++) {
-        content.push({ type: 'paragraph', content: [{ type: 'text', text: `${GOLDEN_BEYOND_CAP} ${i}` }] });
+        content.push(paragraph(`${GOLDEN_BEYOND_CAP} ${i}`));
     }
 
     return { type: 'doc', content };
@@ -184,34 +178,15 @@ export function buildHeavyDocJson(sections = 300): JSONContent {
             });
         }
         if (i % 5 === 0) {
-            content.push({
-                type: 'bulletList',
-                content: ['North', 'South', 'East', 'West'].map((region) => ({
-                    type: 'listItem',
-                    content: [{ type: 'paragraph', content: [{ type: 'text', text: `${region} ${i}` }] }],
-                })),
-            });
+            content.push(bulletList(['North', 'South', 'East', 'West'].map((region) => `${region} ${i}`)));
         }
         if (i % 10 === 0) {
-            content.push({
-                type: 'table',
-                content: [
-                    {
-                        type: 'tableRow',
-                        content: ['Region', 'Total'].map((label) => ({
-                            type: 'tableHeader',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: label }] }],
-                        })),
-                    },
-                    ...['North', 'South', 'East'].map((region, row) => ({
-                        type: 'tableRow',
-                        content: [region, String(i * 10 + row)].map((cell) => ({
-                            type: 'tableCell',
-                            content: [{ type: 'paragraph', content: [{ type: 'text', text: cell }] }],
-                        })),
-                    })),
-                ],
-            });
+            content.push(
+                table(
+                    ['Region', 'Total'],
+                    ['North', 'South', 'East'].map((region, row) => [region, String(i * 10 + row)]),
+                ),
+            );
         }
     }
     return { type: 'doc', content };
@@ -219,16 +194,6 @@ export function buildHeavyDocJson(sections = 300): JSONContent {
 
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     writeEigendocToYjs(doc, json, docSchema);
-}
-
-// A follow-up edit in its own transaction, the way an editor session writes one, so
-// data.db carries a real update-row history instead of a single consolidated blob.
-export function appendGoldenDocParagraph(doc: Y.Doc, text: string): void {
-    doc.transact(() => {
-        const paragraph = new Y.XmlElement('paragraph');
-        paragraph.insert(0, [new Y.XmlText(text)]);
-        doc.getXmlFragment('default').push([paragraph]);
-    });
 }
 
 function textObject(id: string, slideId: string, overrides: Partial<TextObject>): TextObject {
@@ -380,8 +345,8 @@ export function seedSlidesDoc(doc: Y.Doc, deck: DeckData): void {
     });
 }
 
-// A follow-up edit in its own transaction — the deck's equivalent of
-// appendGoldenDocParagraph.
+// A follow-up edit in its own transaction, the way an editor session writes one, so
+// data.db carries a real update-row history instead of a single consolidated blob.
 export function editGoldenDeckTitle(doc: Y.Doc, text: string): void {
     doc.transact(() => {
         const title = doc.getMap('objects').get('obj-1') as Y.Map<unknown>;

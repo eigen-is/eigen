@@ -10,7 +10,6 @@ import JSZip from 'jszip';
 import * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import * as collabSchema from '../lib/collab/schema';
-import { materializeYjsState } from '../lib/collab/yjs-loader';
 import { ApiError } from '../lib/core/errors';
 import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../lib/document/doc';
 import { buildPreviewUrlMap } from '../lib/document/media';
@@ -44,7 +43,13 @@ import {
 } from './fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from './fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from './fixtures/heavy-sheets';
-import { exportBytes, importDocUpdate, importSnapshot, previewBody } from './fixtures/transform-results';
+import {
+    exportBytes,
+    importDocUpdate,
+    importSnapshot,
+    previewBody,
+    readPersistedDoc,
+} from './fixtures/transform-results';
 import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from './setup';
 
 // End-to-end validation of the off-thread eigensheets preview and exports: Worker
@@ -164,7 +169,9 @@ describe('document transform (eigensheets preview)', () => {
 
         // Main-thread execution of the exact Worker pipeline (capture → materialize
         // → render/sanitize), against the Worker execution via the real runner.
-        const direct = renderEigensheetsPreviewBody(materializeYjsState(await captureCollabSource(mount, path)).doc);
+        const persisted = await readPersistedDoc(mount, path);
+        const direct = renderEigensheetsPreviewBody(persisted);
+        persisted.destroy();
 
         const response = await documentTransformRunner.run(
             { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
@@ -666,10 +673,9 @@ describe('document transform (eigendoc)', () => {
         const mediaUrls = await buildPreviewUrlMap(mount, path);
         // Main-thread execution of the exact Worker pipeline (capture → materialize
         // → render/sanitize), against the Worker execution via the real runner.
-        const direct = renderEigendocPreviewBody(
-            materializeYjsState(await captureCollabSource(mount, path)).doc,
-            mediaUrls,
-        );
+        const persisted = await readPersistedDoc(mount, path);
+        const direct = renderEigendocPreviewBody(persisted, mediaUrls);
+        persisted.destroy();
 
         const response = await documentTransformRunner.run(
             { kind: 'preview', documentType: 'eigendoc', mediaUrls, source: await captureCollabSource(mount, path) },
@@ -797,10 +803,9 @@ describe('document transform (eigenslides)', () => {
     test('Worker preview equals the main thread and matches the pinned golden hash', async () => {
         const { mount, path } = golden;
         const mediaUrls = await buildPreviewUrlMap(mount, path);
-        const direct = renderEigenslidesPreviewBody(
-            materializeYjsState(await captureCollabSource(mount, path)).doc,
-            mediaUrls,
-        );
+        const persisted = await readPersistedDoc(mount, path);
+        const direct = renderEigenslidesPreviewBody(persisted, mediaUrls);
+        persisted.destroy();
 
         const response = await documentTransformRunner.run(
             { kind: 'preview', documentType: 'eigenslides', mediaUrls, source: await captureCollabSource(mount, path) },

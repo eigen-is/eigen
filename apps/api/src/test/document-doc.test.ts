@@ -4,10 +4,10 @@ import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
-import { materializeYjsState } from '../lib/collab/yjs-loader';
 import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../lib/document/doc';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
 import { getHome } from '../lib/home/get-home';
+import { readPersistedDoc } from './fixtures/transform-results';
 import { driveGet, drivePost, getTestContext } from './setup';
 
 const extensions = getDocExtensions();
@@ -47,7 +47,7 @@ describe('document/doc', () => {
         writeEigendocToYjs(collab.doc, json, schema);
 
         const { mount, path } = await home.drive.resolveFile(mountId, docPath.id);
-        const persisted = materializeYjsState(await captureCollabSource(mount, path)).doc;
+        const persisted = await readPersistedDoc(mount, path);
 
         expect(readEigendocFromDoc(persisted)).toMatchObject(json);
         persisted.destroy();

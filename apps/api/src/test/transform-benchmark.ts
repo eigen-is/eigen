@@ -14,6 +14,7 @@
 // benchmark): health p95 < 150 ms, event-loop p99 < 100 ms, no delay > 250 ms.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type * as Y from 'yjs';
 
 // './setup' must evaluate before any lib module so EIGEN_DATA_ROOT points at the
 // test dir — the same job --preload does for the test suite. Dynamic imports keep
@@ -40,6 +41,7 @@ const ctx = await getTestContext();
 const token = ctx.alice.user.sessionToken;
 const ownerId = ctx.alice.user.id;
 const mountId = 'default';
+const home = await getHome(ownerId);
 
 type Stats = { n: number; p50: number; p95: number; p99: number; max: number };
 
@@ -105,7 +107,6 @@ async function coldPreview(pathId: string): Promise<{ bytes: number; cacheBytes:
     const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/text-preview`);
     if (res.status !== 200) throw new Error(`text-preview failed: ${res.status}`);
     const { body } = (await res.json()) as { body: string };
-    const home = await getHome(ownerId);
     const { mount } = await home.drive.resolveFile(mountId, pathId);
     const cacheFile = fs
         .readdirSync(mount.previewsDir)
@@ -150,39 +151,48 @@ async function importScenario(label: string, xlsx: ArrayBuffer) {
     console.log(`import bytes ${xlsx.byteLength}`);
 }
 
-// Scenario 1: deterministic synthetic heavy sheet (same generator the tests use).
-{
-    const doc = await createDocument('bench-synthetic', 'sheets');
-    const home = await getHome(ownerId);
-    const collab = await home.drive.getCollabDocument(mountId, doc.id);
-    const seedStart = performance.now();
-    seedSheetsDoc(collab.doc, buildHeavySheets(ROWS, COLS), buildHeavyOps(60, 25, ROWS, COLS));
-    console.log(`seeded synthetic ${ROWS}x${COLS} in ${(performance.now() - seedStart).toFixed(0)}ms`);
-    const exported = await runScenario(`synthetic ${ROWS}x${COLS}`, doc.id, 'xlsx');
-    await importScenario(`synthetic ${ROWS}x${COLS}`, exported);
-}
+// One heavy document per collab type, under the same probes, so a doc- or deck-render
+// regression shows up next to the sheets numbers. The generators are the ones the tests
+// use, so the fixtures stay deterministic.
+const scenarios: {
+    label: string;
+    fileName: string;
+    type: 'sheets' | 'doc' | 'slides';
+    seed: (doc: Y.Doc) => void;
+    format: 'xlsx' | 'html';
+}[] = [
+    {
+        label: `synthetic ${ROWS}x${COLS}`,
+        fileName: 'bench-synthetic',
+        type: 'sheets',
+        seed: (doc) => seedSheetsDoc(doc, buildHeavySheets(ROWS, COLS), buildHeavyOps(60, 25, ROWS, COLS)),
+        format: 'xlsx',
+    },
+    {
+        label: `doc ${SECTIONS} sections`,
+        fileName: 'bench-doc',
+        type: 'doc',
+        seed: (doc) => seedEigendoc(doc, buildHeavyDocJson(SECTIONS)),
+        format: 'html',
+    },
+    {
+        label: `deck ${SLIDES}x${OBJECTS}`,
+        fileName: 'bench-deck',
+        type: 'slides',
+        seed: (doc) => seedSlidesDoc(doc, buildHeavyDeck(SLIDES, OBJECTS)),
+        format: 'html',
+    },
+];
 
-// Scenario 2: heavy eigendoc — the same probes as the sheet scenario, so a doc-render
-// regression shows up next to the sheets numbers.
-{
-    const doc = await createDocument('bench-doc', 'doc');
-    const home = await getHome(ownerId);
-    const collab = await home.drive.getCollabDocument(mountId, doc.id);
+for (const { label, fileName, type, seed, format } of scenarios) {
+    const created = await createDocument(fileName, type);
+    const collab = await home.drive.getCollabDocument(mountId, created.id);
     const seedStart = performance.now();
-    seedEigendoc(collab.doc, buildHeavyDocJson(SECTIONS));
-    console.log(`seeded doc ${SECTIONS} sections in ${(performance.now() - seedStart).toFixed(0)}ms`);
-    await runScenario(`doc ${SECTIONS} sections`, doc.id, 'html');
-}
-
-// Scenario 3: heavy eigenslides deck.
-{
-    const deck = await createDocument('bench-deck', 'slides');
-    const home = await getHome(ownerId);
-    const collab = await home.drive.getCollabDocument(mountId, deck.id);
-    const seedStart = performance.now();
-    seedSlidesDoc(collab.doc, buildHeavyDeck(SLIDES, OBJECTS));
-    console.log(`seeded deck ${SLIDES}x${OBJECTS} in ${(performance.now() - seedStart).toFixed(0)}ms`);
-    await runScenario(`deck ${SLIDES}x${OBJECTS}`, deck.id, 'html');
+    seed(collab.doc);
+    console.log(`seeded ${label} in ${(performance.now() - seedStart).toFixed(0)}ms`);
+    const exported = await runScenario(label, created.id, format);
+    // Only the sheet export can go back in through /import.
+    if (format === 'xlsx') await importScenario(label, exported);
 }
 
 // Memory pass (proposal § Memory benchmark): repeat the heavy preview through
@@ -190,7 +200,6 @@ async function importScenario(label: string, xlsx: ArrayBuffer) {
 if (args.includes('--memory')) {
     const { generateDocumentPreview } = await import('../lib/preview/preview-document');
     const doc = await createDocument('bench-memory', 'sheets');
-    const home = await getHome(ownerId);
     const collab = await home.drive.getCollabDocument(mountId, doc.id);
     seedSheetsDoc(collab.doc, buildHeavySheets(600, 45), buildHeavyOps(40, 25, 600, 45));
     const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
@@ -207,11 +216,10 @@ if (args.includes('--memory')) {
     }
 }
 
-// Scenario 4: a real workbook, if provided (kept out of the repo).
+// A real workbook, if provided (kept out of the repo).
 const xlsxPath = process.env['EIGEN_BENCH_XLSX'];
 if (xlsxPath && fs.existsSync(xlsxPath)) {
     const doc = await createDocument('bench-real-xlsx', 'sheets');
-    const home = await getHome(ownerId);
     const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
     const buffer = Buffer.from(fs.readFileSync(xlsxPath));
     await measure(`real xlsx: import (${buffer.byteLength} bytes)`, () =>

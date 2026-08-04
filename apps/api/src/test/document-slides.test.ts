@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
-import { materializeYjsState } from '../lib/collab/yjs-loader';
 import { readDeckFromDoc } from '../lib/document/slides';
 import { captureCollabSource } from '../lib/document/transform/collab-source';
 import { getHome } from '../lib/home/get-home';
+import { readPersistedDoc } from './fixtures/transform-results';
 import { driveGet, drivePost, getTestContext } from './setup';
 
 describe('document/slides', () => {
@@ -55,7 +55,7 @@ describe('document/slides', () => {
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, slidesPath.id);
-        const persisted = materializeYjsState(await captureCollabSource(mount, path)).doc;
+        const persisted = await readPersistedDoc(mount, path);
         const deck = readDeckFromDoc(persisted);
 
         expect(deck.slideOrder).toEqual(['slide-1']);
