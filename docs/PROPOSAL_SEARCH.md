@@ -776,12 +776,14 @@ and `lib/search/` holds only body-extraction helpers, not a search-index abstrac
   sync job. The closing `INSERT INTO <fts> SELECT ... FROM <source>` in each migration is the
   backfill for pre-existing rows — no separate backfill step.
 - **Content extraction reuses the shared content loaders** — collaborative text is pulled from the
-  `lib/document/` loaders (`readEigendocContent` / `readSheetsContent` / `readSlidesContent`, plus
-  new `readStickiesContent` / `readChatContent`) that preview and export already sit on — *not* a
-  separate Yjs walker, and *not* the capped HTML the preview generators emit — by a thin text
-  collector, run off the request path via a dirty-flag + sweep worker on the storage-agnostic
-  `onSync` seam. Stickies and chat are in Phase 2 (chat = latest ~100 KB of messages); only binary
-  docs and semantic search are deferred.
+  same `lib/document/` readers that preview and export sit on — *not* a separate Yjs walker, and
+  *not* the capped HTML the preview generators emit — by a thin text collector, run off the request
+  path via a dirty-flag + sweep worker on the storage-agnostic `onSync` seam. (As built 2026-08:
+  the three collab types extract inside the document-transform Worker — `lib/search/extract-render.ts`
+  behind the background `extract-text` op, over the `*FromDoc` readers; the Mount-side `read*Content`
+  loaders were deleted. Stickies/chat stay light main-thread reads via `readStickiesContent` /
+  `readChatContent`.) Stickies and chat are in Phase 2 (chat = latest ~100 KB of messages); only
+  binary docs and semantic search are deferred.
 - **Response grouped by kind** — a separate ranked, capped array per kind, mirroring the
   palette's sections; each group holds the canonical domain type for that kind (so per-app
   in-app search can reuse the endpoint); non-serialisable presentation stays off the wire.

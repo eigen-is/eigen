@@ -54,9 +54,9 @@ apps/api/src/lib/export/
   are separate
 - **content loaders** (`apps/api/src/lib/document/{doc,slides,sheets}.ts`): every type ships a media-free reader
   over an already-materialized `Y.Doc` (`readEigendocFromDoc`, `readDeckFromDoc`, `readSheetsFromDoc`) — that is
-  what export and preview call inside the Worker — plus a Mount-side loader that adds the media map
-  (`readEigendocContent`, `readSlidesContent`, `readSheetsContent`), now used by search extraction
-  (`lib/search/extract-text.ts`)
+  what export, preview and search extraction (`lib/search/extract-render.ts`, the `extract-text` op) call inside
+  the Worker. There is no Mount-side read path: callers capture compressed blobs (`captureCollabSource`) and the
+  Worker materializes them; media maps come from `document/media.ts` on the main thread
 - **`export-document.ts`**: routes `(mount, path, format)` through the format->envelope table to one
   `runDocumentExport`. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
 - **`doc/transform.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
@@ -218,7 +218,7 @@ are imported via `with { type: 'text' }` from `transform.ts` so canvas and expor
 apps/api/src/lib/export/slides/
   render.ts      # Slide/object → HTML strings (SizeUnit abstraction), shared with the preview
   transform.ts   # Worker-side: materialized deck + media → standalone HTML bytes (screen or PDF mode)
-# content loader: apps/api/src/lib/document/slides.ts (readDeckFromDoc + readSlidesContent)
+# content loader: apps/api/src/lib/document/slides.ts (readDeckFromDoc)
 ```
 
 ## Sheets Export

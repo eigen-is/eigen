@@ -151,9 +151,8 @@ directly.
 ### Server-side recalc
 
 `readSheetsFromDoc()` recomputes formula cells through our own engine before returning — inside the
-transform Worker for exports and previews, on the main thread for the search index via
-`readSheetsContent()` — so all three serve engine-verified `v`/`m` rather than whatever value was last cached
-in the snapshot. The recompute is a single pure engine function, `recalcSheets(Sheet[]) → Sheet[]`
+transform Worker for exports, previews and the search index (the `extract-text` op) alike — so all three
+serve engine-verified `v`/`m` rather than whatever value was last cached in the snapshot. The recompute is a single pure engine function, `recalcSheets(Sheet[]) → Sheet[]`
 (`engine/recalc.ts`, barrel-exported), and it runs **gated** — only where staleness can actually exist.
 
 Why gated, not on every read: a doc edited live in a browser is already fresh. The client's dependent

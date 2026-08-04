@@ -1,43 +1,45 @@
 # Document Content Layer
 
 > **TLDR:** Thin per-type module under `apps/api/src/lib/document/` — a media-free reader over a
-> materialized `Y.Doc`, a Mount-side reader that adds the media map, and (where it exists) one writer
-> per Eigen container type. The `*FromDoc` readers are what the document-transform Worker calls; the
-> Mount-side readers wrap `loadYjsState()`; writers do direct Yjs mutations. Used by export, preview,
-> import, and search extraction. Stickies and chat have no module —
-> they read from their own SQLite tables. **Sheet and Doc writers are unsafe against live
-> editors:** they snapshot-replace + clear pending ops, so any unflushed client edit is lost.
+> materialized `Y.Doc` and (where it exists) one writer per Eigen container type. The `*FromDoc`
+> readers are what the document-transform Worker calls for export, preview, import round-trips and
+> search extraction; nothing reads a persisted document on the main thread anymore — callers capture
+> compressed blobs (`captureCollabSource`) and the Worker materializes them. Writers do direct Yjs
+> mutations. Stickies and chat have no module — they read from their own SQLite tables. **Sheet and
+> Doc writers are unsafe against live editors:** they snapshot-replace + clear pending ops, so any
+> unflushed client edit is lost.
 
 ## Module surface
 
 ```
 apps/api/src/lib/document/
   doc.ts      # readEigendocFromDoc(ydoc) → JSONContent
-              #   + readEigendocContent(mount, path)  + writeEigendocToYjs(doc, json, schema)
+              #   + writeEigendocToYjs(doc, json, schema)
               #   + writeEigendocUpdateToYjs(doc, update) — commits a prepared Yjs update
   sheets.ts   # readSheetsFromDoc(ydoc) → { sheets, recalcError }
-              #   + readSheetsContent(mount, path) → Sheet[] + writeSheetsToYjs(doc, sheets)
+              #   + writeSheetsToYjs(doc, sheets)
               #   + writeSheetsSnapshotToYjs(doc, snapshotJson) — commits already-serialized JSON
-  slides.ts   # readDeckFromDoc(ydoc) → DeckData
-              #   + readSlidesContent(mount, path)    [no writer]
+  slides.ts   # readDeckFromDoc(ydoc) → DeckData    [no writer]
   media.ts    # listDocumentMedia / buildPreviewUrlMap (main thread) + toDataUriMap (Worker side)
+  collab-types.ts  # COLLAB_DOCUMENT_TYPES — drive MIME → transform documentType (one map)
 ```
 
-| Type | Y.Doc reader | Mount reader | Writer | Mount reader returns |
-|---|---|---|---|---|
-| `.eigendoc` | `readEigendocFromDoc` | `readEigendocContent` | `writeEigendocToYjs` / `writeEigendocUpdateToYjs` | `{ json: JSONContent, mediaByName: Map<string, DrivePath> }` |
-| `.eigensheets` | `readSheetsFromDoc` | `readSheetsContent` | `writeSheetsToYjs` / `writeSheetsSnapshotToYjs` | `Sheet[]` (replayed — see below) |
-| `.eigenslides` | `readDeckFromDoc` | `readSlidesContent` | – | `{ deck: DeckData, mediaByName }` |
-| `.eigenstickies` | – | – | – | reads its own `data.db` via app-specific code |
-| `.eigenchat` | – | – | – | reads SQLite rows via `ChatRoom` |
+| Type | Y.Doc reader | Reader returns | Writer |
+|---|---|---|---|
+| `.eigendoc` | `readEigendocFromDoc` | `JSONContent` | `writeEigendocToYjs` / `writeEigendocUpdateToYjs` |
+| `.eigensheets` | `readSheetsFromDoc` | `{ sheets, recalcError }` (replayed — see below) | `writeSheetsToYjs` / `writeSheetsSnapshotToYjs` |
+| `.eigenslides` | `readDeckFromDoc` | `DeckData` | – |
+| `.eigenstickies` | – | reads its own `data.db` via app-specific code | – |
+| `.eigenchat` | – | reads SQLite rows via `ChatRoom` | – |
 
-The `*FromDoc` readers take an already-materialized `Y.Doc` and touch no Mount, so they run identically
-on the main thread and inside the document-transform Worker (which materializes the captured blobs with
-`materializeYjsState`). Every Mount reader follows the same recipe on top:
-`mount.getChildByName(path.id, 'data.db')` → `mount.openDatabase(COLLAB_DB_CONFIG, …)` → `loadYjsState()`
-(`lib/collab/yjs-loader.ts`) → the `*FromDoc` reader (+ `listDocumentMedia` where a media map is part of
-the result). The managed DB is **not** closed on return — a live collab session may share the instance;
-`Mount.closeAllDatabases` handles cleanup on shutdown.
+The `*FromDoc` readers take an already-materialized `Y.Doc` and touch no Mount. There is no Mount-side
+read path anymore (the `read*Content` readers were deleted in Phase 4): whoever needs a persisted
+document goes `mount.getChildByName(path.id, 'data.db')` → `mount.openDatabase(COLLAB_DB_CONFIG, …)` →
+`readYjsStatePayload()` (`captureCollabSource`, a short blob copy) and hands the payload to the
+document-transform Worker, which runs `materializeYjsState` → the `*FromDoc` reader. Media, where a
+result needs it, is prepared on the main thread via `listDocumentMedia`. The managed DB is **not**
+closed after capture — a live collab session may share the instance; `Mount.closeAllDatabases` handles
+cleanup on shutdown. Tests use the same pipeline through the `readPersistedDoc` fixture.
 
 ACL is enforced upstream by callers (`getSharedDrive(ownerId, user)` in routes); the module
 itself takes a resolved `Mount`/`DrivePath` pair and assumes the caller already checked.
@@ -100,8 +102,8 @@ when the target file has active editors — and ideally the route should refuse 
 | Surface | Files |
 |---|---|
 | Export (HTML/PDF/DOCX/XLSX) | Worker: `lib/export/{doc,sheets,slides}/transform.ts` (calls the `*FromDoc` readers); main thread: `lib/export/export-document.ts` |
-| Preview generation | Worker: `lib/preview/eigen{doc,sheets,slides}-render.ts` (calls the `*FromDoc` readers); main thread: `lib/preview/eigen{doc,sheets,slides}-preview.ts` |
-| Search extraction | `lib/search/extract-text.ts` — the only remaining caller of the Mount-side `read*Content` readers |
+| Preview generation | Worker: `lib/preview/eigen{doc,sheets,slides}-render.ts` (calls the `*FromDoc` readers); main thread: `lib/preview/preview-document.ts` |
+| Search extraction | Worker: `lib/search/extract-render.ts` (the `extract-text` op, calls the `*FromDoc` readers); main thread: `lib/search/extract-text.ts` — mime dispatch plus the stickies/chat/plain-file arms |
 | Import dispatcher | `lib/import/import-document.ts` (calls writers) |
 | Pure converters | `lib/import/{doc/{from-docx,transform}.ts, sheets/{from-xlsx,transform}.ts}` |
 
@@ -120,8 +122,9 @@ Export has a matching dispatcher: `lib/export/export-document.ts` owns the whole
 - **Op-push primitive for sheets writes** (replaces snapshot-replace) — unblocks safe XLSX
   import into open documents and any future scripting / batch tools.
 - **Live-safe doc writer** — same idea via y-prosemirror.
-- **Stickies + chat readers** — useful when search indexing lands; both currently require app-
-  specific code rather than going through this layer.
+- **Stickies + chat readers** — search indexing reads both through app-specific code in
+  `lib/search/extract-text.ts` (light SQLite reads, main thread); a shared reader here only pays
+  off if a second consumer appears.
 - **No `writeSlidesToYjs`** — slides import / round-trip not yet supported.
 
 ## See also

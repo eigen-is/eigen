@@ -1,6 +1,6 @@
 # Proposal: Off-thread Document Transforms
 
-> **Status:** Phases 0–3 implemented, reviewed and gated (branch `transform-workers`, 2026-08-03); Phase 4 open
+> **Status:** Phases 0–4 implemented, reviewed and gated (branch `transform-workers`, 2026-08-04)
 > **Date:** 2026-08-03
 > **Scope:** Server-side preview generation first, then reuse for document exports and imports
 >
@@ -58,13 +58,28 @@
 >   both sides) and `export/media.ts` (screen previews, main thread) stay separate. Verified by bundling each
 >   Worker entry: the render modules carry no runner, capture or screen-preview references.
 >
-> **Phase 4 stays open**, with these recorded inputs: each terminated heavy one-shot Worker retains ~7MB RSS
-> under Bun 1.3 (trivial Workers plateau; the same pipeline on-thread is flat), and a docx import pays ~800ms
-> of Worker module evaluation (mammoth + JSDOM + tiptap) — both argue for recycling Workers after N jobs, and
-> both show up as API test-suite time (~97s → ~169s from one-shot startups). Also parked there: foreground
-> admission is tight by construction (the 120s deadline equals the predicted-wait bound, so one active plus one
-> queued export saturates it), search extraction still calls `readSheetsContent` on the main thread, and the
-> benchmark harness is still sheets-only.
+> - **Phase 4 — measurement-driven tuning (2026-08-04).** The audit measured the recorded inputs first:
+>   Worker spawn is 2–4ms — the real one-shot cost is module evaluation (0.3–0.8s per job); one-shot churn
+>   retains ~5MB RSS per terminated Worker while a reused Worker stays flat; and a mixed-op warm Worker
+>   exposed a pathological sheets-preview → slides-preview interaction (127s render, +10.6GB RSS — suspect
+>   shared isomorphic-dompurify jsdom state; unreachable one-shot). Decision (Reinder): **no warm pool** —
+>   the runner keeps its one-shot lifecycle, and the suite-time regression was removed in the tests instead
+>   (route round-trips only where they pin contracts: 96 → 41 Worker spawns, sheets-import 43s → 17.5s).
+>   Shipped: background `extract-text` on the same seam for all three collab types (the Mount-side
+>   `read*Content` readers are deleted; `contentDirty` clears only on Worker success); per-kind admission
+>   costs decoupled from the kill deadlines (`TRANSFORM_LIMITS` — five exports admit before a 503 instead
+>   of two, and previews keep flowing beside an export queue); admission checked before capture; a
+>   background queue quota (8 of 16 slots) so mass reindexing cannot starve foreground admission; the docx
+>   decompressed-size guard (shared `zip-size-guard.ts`, 413 before mammoth); heavy-eigendoc and deck
+>   benchmark scenarios (all gates pass — loop-max ≤ 6.6ms cold); and a Worker-graph purity fix (ApiError
+>   from `core/errors`, never the core barrel: Worker bundle 10.3MB → 4.7MB, the auth/home-relay/ExifTool
+>   chunks gone).
+>
+> **Accepted drifts (Phase 4):** § Runner and Decision Point 2 proposed predicting wait from summed
+> deadlines; as built, the prediction sums per-kind admission costs. Consequence stated honestly: the
+> worst-case foreground connection hold under adversarially slow jobs widens from ~2–4 min to ~8–10 min
+> (each job's deadline still kills runaways; 503-not-hang holds). The sheets→slides warm-Worker pathology
+> is recorded above for any future pooling discussion.
 
 ## Summary
 
@@ -302,7 +317,9 @@ size check; a later streaming change could spool accepted uploads to a temp file
 Admission is bounded by predicted wait, not only queue length. These routes stay synchronous, so a queued request
 holds its HTTP connection open; with one active Worker and 120-second deadlines, the last job in a full queue of
 sixteen could wait roughly half an hour, which looks like a hung server. Reject new foreground work with `503` when
-the queue is full or when the summed deadlines of active plus queued foreground jobs exceed 120 seconds. The `503`
+the queue is full or when the summed deadlines of active plus queued foreground jobs exceed 120 seconds. (As built
+in Phase 4: the prediction sums per-kind admission costs — `TRANSFORM_LIMITS` — instead of kill deadlines, and
+background jobs may hold at most half the queue; see the accepted drifts in the status header.) The `503`
 body must be a short human-readable message ("The server is busy, please try again in a moment") because
 `useExportDocument` shows the raw response text in its error toast. `Retry-After` may be set for API callers, but
 browsers ignore it on `fetch()`, so no client behavior may depend on it. Stale preview regeneration can be dropped
@@ -666,7 +683,8 @@ Recommended decisions for implementation sign-off:
 
 1. **Execution model:** bounded runner plus one-shot Bun Workers.
 2. **Initial concurrency:** one active document transform, queue length sixteen, foreground admission additionally
-   bounded by predicted wait (120 seconds of summed deadlines).
+   bounded by predicted wait (120 seconds of summed deadlines; as built in Phase 4: summed per-kind admission
+   costs, with background work capped at eight queue slots).
 3. **Source boundary:** compressed persisted Yjs blobs captured in a short main-thread transaction.
 4. **First delivery:** eigensheets preview, including a bounded first-sheet view.
 5. **Failure policy:** controlled error or stale preview; never main-thread fallback.
