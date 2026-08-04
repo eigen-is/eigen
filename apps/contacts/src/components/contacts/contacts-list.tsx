@@ -19,10 +19,11 @@ import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { Toolbar } from '@workspace/ui/index';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowUpDown, Pencil, Trash2 } from 'lucide-react';
-import { useMemo, useRef } from 'react';
+import { ArrowUpDown, MoreVertical, Pencil, Trash2 } from 'lucide-react';
+import { useCallback, useMemo, useRef } from 'react';
 
 type ContactsListToolbarProps = {
     searchQuery: string;
@@ -136,6 +137,23 @@ export function ContactsList({
         contextMenu.handleContextMenu(e, contact);
     };
 
+    // Touch long-press and the coarse/hover ⋮ open the same singleton menu right-click does.
+    const openMenuAt = contextMenu.openAt;
+    const handleLongPress = useCallback(
+        (contact: Contact, x: number, y: number) => {
+            if (!selection.isSelected(contact.id)) selection.select(contact.id);
+            openMenuAt(contact, x, y);
+        },
+        [selection, openMenuAt],
+    );
+    const longPress = useLongPress(handleLongPress);
+
+    const openMenuFromButton = (el: HTMLElement, contact: Contact) => {
+        if (!selection.isSelected(contact.id)) selection.select(contact.id);
+        const rect = el.getBoundingClientRect();
+        openMenuAt(contact, rect.left, rect.bottom);
+    };
+
     const contextItems = contextMenu.item
         ? selection.selectedCount > 1
             ? selection.selectedItems
@@ -163,7 +181,7 @@ export function ContactsList({
                         renderItem={(contact, flatIndex) => (
                             <div
                                 className={cn(
-                                    'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                                    'flex items-center gap-3 px-6 py-3 eigen-list-item group',
                                     (activeContactId === contact.id || selectedIndex === flatIndex) &&
                                         'eigen-list-item-active',
                                     selection.isSelected(contact.id) && 'eigen-list-item-selected',
@@ -176,6 +194,7 @@ export function ContactsList({
                                 }}
                                 onContextMenu={(e) => handleContextMenu(e, contact)}
                                 {...drag.getDragProps(contact)}
+                                {...longPress.bind(contact)}
                             >
                                 <UserItem
                                     name={
@@ -187,6 +206,17 @@ export function ContactsList({
                                     imageUrl={contact.avatar}
                                     className="flex-1"
                                 />
+                                <button
+                                    type="button"
+                                    aria-label="More actions"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        openMenuFromButton(e.currentTarget, contact);
+                                    }}
+                                    className="invisible flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground group-hover:visible pointer-coarse:visible hover:bg-accent"
+                                >
+                                    <MoreVertical className="h-4 w-4" />
+                                </button>
                             </div>
                         )}
                     />
