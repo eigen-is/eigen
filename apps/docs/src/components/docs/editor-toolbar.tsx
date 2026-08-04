@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -110,7 +110,7 @@ export const EditorToolbar = ({
     const { exportDocument, isExporting } = useExportDocument();
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
-    const isMobile = useMediaQuery('(max-width: 1200px)');
+    const isCompact = useIsCompactToolbar();
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -206,7 +206,7 @@ export const EditorToolbar = ({
                             onRedo={() => editor.chain().focus().redo().run()}
                         />
 
-                        {isMobile && (
+                        {isCompact && canWrite && (
                             <>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -262,6 +262,21 @@ export const EditorToolbar = ({
                                                     <Strikethrough className="h-4 w-4 mr-2" /> Strikethrough
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
+                                                    onClick={() => editor.chain().focus().toggleCode().run()}
+                                                >
+                                                    <Code className="h-4 w-4 mr-2" /> Inline code
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={() => editor.chain().focus().toggleSuperscript().run()}
+                                                >
+                                                    <Superscript className="h-4 w-4 mr-2" /> Superscript
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={() => editor.chain().focus().toggleSubscript().run()}
+                                                >
+                                                    <Subscript className="h-4 w-4 mr-2" /> Subscript
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
                                                     onClick={() => editor.chain().focus().toggleSmall().run()}
                                                 >
                                                     <ALargeSmall className="h-4 w-4 mr-2" /> Small
@@ -306,6 +321,28 @@ export const EditorToolbar = ({
                                                     }
                                                 >
                                                     <Heading4 className="mr-2 h-4 w-4" /> Heading 4
+                                                </DropdownMenuItem>
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <AlignLeft className="h-4 w-4 mr-2" /> Align
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                <DropdownMenuItem
+                                                    onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                                                >
+                                                    <AlignLeft className="h-4 w-4 mr-2" /> Left
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                                                >
+                                                    <AlignCenter className="h-4 w-4 mr-2" /> Center
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                    onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                                                >
+                                                    <AlignRight className="h-4 w-4 mr-2" /> Right
                                                 </DropdownMenuItem>
                                             </DropdownMenuSubContent>
                                         </DropdownMenuSub>
@@ -396,7 +433,7 @@ export const EditorToolbar = ({
                 }
                 center={
                     canWrite &&
-                    !isMobile && (
+                    !isCompact && (
                         <div className="flex">
                             <ToolbarSeparator />
 

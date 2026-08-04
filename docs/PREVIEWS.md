@@ -1,10 +1,11 @@
 # File Preview System
 
-> **TLDR**: Server-side preview generation with tmp-dir cache. Images served as screen-res WebP (max 2560px), text/code/markdown
-> and eigen-native files (eigendoc/slides/sheets, a compact HTML slice) as JSON body snippets rendered client-side with shared
-> `eigen-prose` styles. Eigen-native previews are generated off-thread in a one-shot document-transform Worker
-> (bounded first-sheet / 20-block / 8-slide budgets); text previews serve stale-while-revalidate. Video/audio/PDF redirect to embed URL for native playback.
-> Preview overlay in `packages/ui` with keyboard nav and sibling browsing.
+> **TLDR**: Server-side preview generation, cached per file version in a tmp dir. Images become
+> screen-res WebP (max 2560px). Text, code, markdown and eigen-native files become a small HTML body
+> served as JSON and rendered client-side with shared `eigen-prose` styles. Eigen-native previews render
+> off-thread in a one-shot document-transform Worker (bounded first-sheet / 20-block / 8-slide budgets);
+> text previews serve stale-while-revalidate. Video, audio and PDF redirect to the embed URL. The overlay
+> lives in `packages/ui`, with keyboard and sibling nav.
 
 ## Route Structure
 
@@ -18,12 +19,14 @@
 
 ## Cache Strategy
 
-Everything in `mount.previewsDir` (`tmpDir/previews/`). Cache key: `{pathId}-{updatedAt}.{ext}`.
+Everything in `mount.previewsDir` (`tmpDir/previews/`). The cache key carries the file version, so a
+new version writes a **new file** instead of overwriting one — which is what lets responses use a long
+`max-age`, since the URL carries the same `updatedAt` stamp.
 
 - Image previews: `{pathId}-{updatedAt}.screen.webp`
 - SVG previews: `{pathId}-{updatedAt}.screen.svg` (raw SVG, no conversion)
 - Text previews: `{pathId}-{updatedAt}.{format}.json` — `format` is the renderer format tag (`TEXT_FORMAT` in
-  `preview-cache.ts`, currently `f3`); bumping it invalidates cached bodies whose `updatedAt` didn't change
+  `preview-cache.ts`, currently `f4`); bumping it invalidates cached bodies whose `updatedAt` didn't change
 - Cache hit = serve directly, no regeneration
 - Prior versions are pruned fire-and-forget after each write (`pruneOldVersions`); cleanup of files older than
   7 days runs at `mount.init()`
@@ -32,6 +35,22 @@ Everything in `mount.previewsDir` (`tmpDir/previews/`). Cache key: `{pathId}-{up
 prior body is served immediately (marked `Cache-Control: no-store`) while one deduplicated background
 regeneration produces the current version; a failed regeneration leaves the stale file in place. Concurrent
 first-ever misses share a single generation (`inFlightFirstText`), mirroring image previews.
+
+Two behaviors follow from the versioned key and define how previews feel:
+
+**`pruneOldVersions`** runs fire-and-forget after every cache write and deletes the path's other
+versions, so `previewsDir` doesn't grow one file per edit. It never touches the file just written, so
+an in-flight prune can't race a concurrent read. The 7-day sweep still covers paths written once and
+never again.
+
+**Stale-while-revalidate.** When the current version isn't cached but an older one is, the route
+serves the older body immediately (marked `stale`, with `Cache-Control: no-store`) and regenerates the
+current one in the background. In-flight generations are shared per cache name, so N tiles of one
+just-added file trigger one generate, not N.
+
+The `/text-preview` route takes `updatedAt` as a query param. It is the cache buster: both the browser
+HTTP cache and the TanStack query key are derived from the URL, so a stale URL would otherwise serve
+stale content after an inline edit.
 
 ## Text Previews
 
@@ -42,16 +61,28 @@ first-ever misses share a single generation (`inFlightFirstText`), mirroring ima
 |----------------|-------------------------------------------------|
 | `markdown`     | `markdown-it` → HTML, sanitized with DOMPurify |
 | `code`         | `lowlight` syntax highlighting → HTML spans     |
-| `plaintext`    | `<pre>` wrapped, HTML-escaped                   |
+| `plaintext`    | prose paragraphs — HTML-escaped `<p>` blocks, single newlines as `<br>` |
 | `eigendoc`     | Yjs blobs → transform Worker → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
 | `eigenslides`  | Yjs blobs → transform Worker → first 8 slides → positioned divs with container-query sizing |
 | `eigensheets`  | Yjs blobs → transform Worker → bounded first-sheet HTML table (`renderSheetsPreviewHtml`) |
 
+Plaintext is deliberately **not** `<pre>`: `eigen-prose` paints every `<pre>` as a dark, non-wrapping
+code block, and a `.txt` file should read like rendered markdown instead.
+
 The `eigendoc`/`eigenslides`/`eigensheets` modes load the file's Yjs document (via `getCollabPreview` in
 `preview-cache.ts`) rather than raw file text, and render only a compact slice — see Compact Previews below.
 
-Body is consumed via `useTextPreview()` hook (TanStack Query, 5min staleTime) and rendered with
-`dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM.
+`getTextPreview` (`preview-cache.ts`) is the single entry point. It splits on path type: eigen-native
+containers go to the three `*-preview.ts` generators (`eigendoc-preview.ts`, `eigenslides-preview.ts`,
+`eigensheets-preview.ts`), everything else reads the file as text and calls `generateTextPreview`.
+Both sides go through the same `getOrCacheText` read-through cache, so caching, in-flight sharing and
+stale-while-revalidate behave identically. The eigen-native generators render only a compact slice —
+see Compact Previews below.
+
+Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered with
+`dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM. Its
+`staleTime` is deliberately short — **30 s** — so that when the server hands back a
+stale-while-revalidate body, the next refetch trigger (window focus or remount) picks up the fresh one.
 
 Shared `eigen-prose.css` in `packages/ui/src/styles/` provides prose typography + Catppuccin code highlighting,
 used by both previews and the docs editor.
@@ -194,7 +225,7 @@ preview directly.
 `native-file-editor.tsx` in Drive shows text preview (nicely formatted via `useTextPreview`) in read-only mode.
 Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only when user clicks Edit.
 
-## Files
+## Where the Code Lives
 
 | File                                                                      | Purpose                                          |
 |---------------------------------------------------------------------------|--------------------------------------------------|
@@ -225,7 +256,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 
 ## Future
 
-- CSV table rendering (currently treated as code/plaintext)
+- CSV table rendering (currently treated as code/plaintext) — parse server-side and emit a bounded
+  HTML table, so the frontend stays a plain `eigen-prose` container
 - Eigenstickies preview (eigendoc, eigenslides, eigensheets are done)
 - DOCX/XLSX/PPTX preview
 

@@ -9,11 +9,7 @@ type TablePropertiesPanelProps = {
 
 export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
     return (
-        <PropertiesPanel>
-            <div className="px-3 py-2 border-b">
-                <span className="text-sm font-medium">Table</span>
-            </div>
-
+        <PropertiesPanel title="Table">
             <PropertySection title="Columns">
                 <div className="grid grid-cols-2 gap-1.5">
                     <Button

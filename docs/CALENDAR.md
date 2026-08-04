@@ -1,9 +1,9 @@
 # Calendar App
 
-> **TLDR**: Per-user SQLite calendar at `{home}/eigen.calendar/calendar.db`. RRULE strings stored as-is (RFC 5545).
-> Sharing via push-based propagation (like Drive ACL). Team calendars in TeamHome. Three permission levels: `free-busy`,
-> `read`, `write`. Recurrence exceptions are regular events with `parentEventId` + `recurrenceDate`. Timezone-aware
-> recurrence expansion via `timezone` column on events.
+> **TLDR**: Per-user SQLite calendar at `{home}/eigen.calendar/calendar.db`. RRULE stored as-is (RFC 5545) and
+> expanded in memory per query; exceptions are events with `parentEventId` + `recurrenceDate`. Sharing is
+> push-based (like Drive ACL) at `free-busy`/`read`/`write`; team calendars are off until an admin enables them.
+> The same store speaks **CalDAV** (RFC 4791, `/dav/calendars/`) and **iMIP** (RFC 6047) for off-server invites.
 
 ## Storage
 
@@ -16,62 +16,31 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 
 ## Schema
 
-### calendars
+Four tables, Drizzle definitions in `apps/api/src/lib/calendar/schema.ts`. Only the columns that carry meaning
+are listed — UUID primary keys and `createdAt`/`updatedAt` are on every table.
 
-| Column      | Type    | Description                                    |
-|-------------|---------|------------------------------------------------|
-| `id`        | TEXT PK | UUID                                           |
-| `name`      | TEXT    | Display name                                   |
-| `color`     | TEXT    | Hex color                                      |
-| `isDefault` | INTEGER | Primary calendar (auto-created, cannot delete) |
-| `visible`   | INTEGER | Toggle visibility in UI (default true)         |
-| `ctag`      | INTEGER | Increments on any event change (CalDAV-ready)  |
-| `shares`    | TEXT    | JSON `CalendarShare[]`                         |
-| `createdAt` | INTEGER | Timestamp                                      |
-| `updatedAt` | INTEGER | Timestamp                                      |
+**`calendars`** — `name`, `color`, `isDefault` (the auto-created primary, cannot be deleted), `visible` (UI
+toggle), `shares` (JSON `CalendarShare[]`), and `ctag`, which increments on any event change and is the CalDAV
+collection tag.
 
-### events
+**`events`** — the iCalendar identity (`uid`, `uri`, `etag`, `sequence`), the times (`startTime`, `endTime`,
+`allDay`, plus `rrule` and `timezone`, the IANA zone recurrence expansion runs in), `status`
+(`confirmed`/`tentative`/`cancelled`), `title`/`description`/`location`, `data` (JSON: reminders, attendees,
+organizer, url, notes, color), the recurrence-exception link (`parentEventId` + `recurrenceDate`, the ISO date
+of the replaced occurrence), the invitation link (`organizerEventId` + `organizerUserId`), and `eventCtag` —
+the calendar's ctag at the time of the last write to this row. `icsBlob` is **vestigial**: never written,
+never read.
 
-| Column             | Type    | Description                                       |
-|--------------------|---------|---------------------------------------------------|
-| `id`               | TEXT PK | UUID                                              |
-| `calendarId`       | TEXT FK | → calendars.id                                    |
-| `uid`              | TEXT    | iCalendar UID (CalDAV-ready)                      |
-| `title`            | TEXT    | Summary                                           |
-| `description`      | TEXT    | Nullable                                          |
-| `location`         | TEXT    | Nullable                                          |
-| `startTime`        | INTEGER | Unix timestamp                                    |
-| `endTime`          | INTEGER | Unix timestamp                                    |
-| `allDay`           | INTEGER | Boolean                                           |
-| `rrule`            | TEXT    | RFC 5545 RRULE string (nullable)                  |
-| `timezone`         | TEXT    | IANA timezone for recurrence expansion (nullable) |
-| `uri`              | TEXT    | iCalendar URI (CalDAV-ready)                      |
-| `parentEventId`    | TEXT FK | Recurrence exception parent                       |
-| `recurrenceDate`   | TEXT    | ISO date of replaced occurrence                   |
-| `status`           | TEXT    | `confirmed` / `tentative` / `cancelled`           |
-| `etag`             | TEXT    | Change hash (CalDAV-ready)                        |
-| `data`             | TEXT    | JSON: reminders, attendees, url, notes, color     |
-| `organizerEventId` | TEXT    | Linked copy → organizer's event ID (nullable)     |
-| `organizerUserId`  | TEXT    | Linked copy → organizer's user ID (nullable)      |
-| `sequence`         | INTEGER | CalDAV SEQUENCE — bumped on organizer updates     |
-| `createByUserId`   | TEXT    | User who created the event                        |
-| `createdAt`        | INTEGER | Timestamp                                         |
-| `updatedAt`        | INTEGER | Timestamp                                         |
+**`event_tombstones`** — `(uri, calendarId, deletedAtCtag)`. Event rows are hard-deleted, so this is the only
+surviving trace that a resource existed.
 
-### shared_calendars (recipient-side)
+`eventCtag` and the tombstones exist for one reason: the CalDAV **sync-collection REPORT**. Given a client's
+sync token, `getChangedEventsSince()` selects rows with a higher `eventCtag` and `getDeletedEventsSince()`
+reads tombstones past the same mark, so a client that has been offline learns about deletions it never saw.
 
-| Column          | Type    | Description                    |
-|-----------------|---------|--------------------------------|
-| `id`            | TEXT PK | UUID                           |
-| `ownerUserId`   | TEXT    | Calendar owner                 |
-| `calendarId`    | TEXT    | ID in owner's DB               |
-| `calendarName`  | TEXT    | Cached name                    |
-| `calendarColor` | TEXT    | Owner's color                  |
-| `permission`    | TEXT    | `free-busy` / `read` / `write` |
-| `color`         | TEXT    | Local override (nullable)      |
-| `visible`       | INTEGER | Toggle visibility              |
-| `createdAt`     | INTEGER | Timestamp                      |
-| `updatedAt`     | INTEGER | Timestamp                      |
+**`shared_calendars`** (recipient side) — `ownerUserId` + `calendarId` point back at the owner's row,
+`calendarName`/`calendarColor` are cached copies, `permission` is the resolved level, and `color`/`visible`
+are the recipient's local overrides.
 
 ## Sharing
 
@@ -80,14 +49,18 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 Push-based propagation — when shares change, `share-propagation.ts` resolves targets and writes to recipient's
 `shared_calendars`. See [ACL.md](ACL.md#share-propagation).
 
-**Team calendars**: Auto-synced into the user's `shared_calendars` table (with `ownerUserId = 'team_{teamId}'`) when
-`GET /calendar/:ownerId/shared` is called. Can be disabled via `settings.json` in the team home dir
-(`calendar.enabled: false`). Default member permission is `read`. To grant `write` or `free-busy`, set shares on the
-team's default calendar: `{targetId: 'team_{teamId}', permission: 'write'}`. Permission is resolved via
-`checkPermission()` and synced on every fetch. When disabled, the `TeamHome.calendar` getter throws a 404, so
-`syncTeamCalendars` catches the error and removes entries from members' `shared_calendars`.
-Displayed in a separate "Team Calendars" section in the sidebar, using the same `SharedCalendar` infrastructure for
-visibility/color prefs. Managed in the Admin app team detail page (via `PUT /team/:teamId/settings`).
+**Team calendars**: **opt-in, not opt-out.** A `TeamHome` is constructed with settings defaulting to
+`{ calendar: { enabled: false } }`, and the `TeamHome.calendar` getter throws 404 while that flag is false —
+so a fresh team has no calendar until an admin turns it on from the Admin app team detail page (via
+`PUT /team/:teamId/settings`).
+
+Once enabled, the team calendar is auto-synced into each member's `shared_calendars` table (with
+`ownerUserId = 'team_{teamId}'`) when `GET /calendar/:ownerId/shared` is called. Default member permission is
+`read`. To grant `write` or `free-busy`, set shares on the team's default calendar:
+`{targetId: 'team_{teamId}', permission: 'write'}`. Permission is resolved via `checkPermission()` and synced on
+every fetch. While disabled, `syncTeamCalendars` catches the 404 and removes any stale entries from members'
+`shared_calendars`. Displayed in a separate "Team Calendars" section in the sidebar, using the same
+`SharedCalendar` infrastructure for visibility/color prefs.
 
 ## Invitations
 
@@ -162,10 +135,45 @@ Shared calendar users are also notified via `notifySharedCalendarUsers()` when e
   modified occurrence renders with the exception's STORED `recurrenceDate` — never the UTC date of
   its (possibly moved) startTime — so the FE can round-trip `occurrenceDate` into `scope='this'` RSVPs
 
+### Recurrence limits
+
+`recurrence-limits.ts` bounds what expansion can be asked to do, because `rrule.between` walks
+occurrence-by-occurrence from dtstart to the query window on the single shared event loop:
+
+- **Sub-daily rules are rejected.** `HOURLY`/`MINUTELY`/`SECONDLY` are refused at the API write boundary with a
+  `400` (this is why an HOURLY rule fails to save) and silently stripped at the untrusted-ICS boundary, where a
+  hard error would be the wrong answer. A `SECONDLY` rule starting a year before its window measured ~74s. No
+  mainstream client emits sub-daily recurrence.
+- **Recurring dtstart must fall in 1900–2200.** Same two seams, same reasoning: a pathological dtstart stalls
+  the walk even at `DAILY`. Worst case inside the range is ~110k steps.
+- **Materialised occurrences cap** at `MAX_OCCURRENCES` (10 000) per expansion.
+- **Query windows are clamped**, not rejected, to a 5-year span — wide enough for any real view, and it stops
+  a year-9999 range request.
+
 ## All-Day Events
 
 `startTime`/`endTime` are midnight UTC. `endTime` is exclusive (day after last day). Frontend must use UTC date portion,
 never convert to local time.
+
+## Interval validation
+
+`createEvent`/`updateEvent` reject `endTime < startTime` with `ApiError(400)`. REST and CalDAV PUT both funnel through
+these two methods, so both are covered — interactive protocols where a 400 is actionable. Inbound iMIP bypasses them
+(the `receive*` methods write rows directly), so it instead **clamps** a reversed interval to zero-duration at the
+parse boundary (`imip.ts`): an emailed invite is fire-and-forget, so dropping it over a malformed interval is worse
+than showing a zero-length event — the same degrade-don't-reject policy the parser applies to a malformed rrule/tzid.
+Zero-duration (`endTime == startTime`) stays legal (RFC 5545 §3.6.1; CalDAV/iMIP importers synthesize it). Because
+all-day uses an exclusive end (a valid all-day event is always ≥ `start + 1 day`), the single invariant covers timed
+and all-day alike — no all-day special-casing.
+
+## Moving events
+
+`Calendar.moveEvent(sourceCalId, eventId, targetCalId)` (route `PUT .../events/:id/move`, write on both calendars)
+re-homes an event to another calendar in the same Home as a pure `calendarId` UPDATE, in one transaction. It preserves
+the row identity, timezone, `data` (organizer/attendees/reminders), status and recurrence, and drags the recurrence
+exception children (`parentEventId` rows) along. It never runs the `deleteEvent` iMIP path, so moving a linked invite
+doesn't decline it for the organizer. For CalDAV: the source gets a tombstone for the master uri (clients drop it) and
+the target sees a changed event. Moving a lone recurrence occurrence (an exception row) is rejected.
 
 ## API Routes
 
@@ -181,6 +189,7 @@ GET    /calendar/:ownerId/calendars/:calId/event-range/:from/:to
 POST   /calendar/:ownerId/calendars/:calId/events
 PUT    /calendar/:ownerId/calendars/:calId/events/:id
 DELETE /calendar/:ownerId/calendars/:calId/events/:id
+PUT    /calendar/:ownerId/calendars/:calId/events/:id/move   (re-home to {targetCalendarId})
 PUT    /calendar/:ownerId/calendars/:calId/events/:id/rsvp   (attendee RSVP)
 GET    /calendar/:ownerId/calendars/:calId/access
 GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syncs team calendars)
@@ -225,7 +234,6 @@ All hooks in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
 | `useUpdateCalendar(ownerId)`  | Update calendar mutation (name/color/shares/visible) |
 | `useDeleteCalendar(ownerId)`  | Delete calendar mutation                   |
 | `useEvents(ownerId, from, to)` | All events in time range (all calendars)  |
-| `useCalendarEvents(ownerId, calId, from, to)` | Events for a single calendar |
 | `useCreateEvent(ownerId)`     | Create event mutation                      |
 | `useUpdateEvent(ownerId)`     | Update event mutation                      |
 | `useDeleteEvent(ownerId)`     | Delete event mutation                      |
@@ -252,7 +260,7 @@ iMIP enables calendar invitations between Eigen users and external parties via e
 
 ### Inbound flow (external → Eigen)
 
-- **Mail delivery hook**: `apps/api/src/lib/mail/mail.ts` — after `mailboxDeliver`, checks for `text/calendar` attachments (fire-and-forget with `.catch()`). If found, calls `processInboundImip(home, parsedMail)`.
+- **Mail delivery hook**: inside `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts`). Once the raw bytes are appended to INBOX, the message is parsed and scanned for a `text/calendar` attachment; if there is one, `processInboundImip(home, parsedMail)` runs. This is **blocking on purpose** — "blocking so event exists before client queries" — so a client that reacts to the new-mail SSE already finds the event in its calendar. The surrounding `try`/`catch` only logs: a malformed invite never fails the delivery.
 - **`METHOD:REQUEST`**: creates a linked event in the recipient's calendar via `calendar.receiveInvitation()`. If a linked event with the same `uid` already exists, updates it via `calendar.receiveInvitationUpdate()`. A single-occurrence REQUEST (one carrying a `RECURRENCE-ID`) instead attaches/updates an exception on the linked series via `calendar.receiveInvitationException()`, so a rescheduled instance doesn't collapse the whole series.
 - **`METHOD:CANCEL`**: removes the linked event via `calendar.removeInvitation()`. A single-occurrence CANCEL (carrying a `RECURRENCE-ID`) instead cancels just that instance via `calendar.cancelInvitationOccurrence()`, which applies the same RFC 5546 SEQUENCE replay guard as the REQUEST path (strictly-older CANCELs are dropped; the cancelled exception records the CANCEL's SEQUENCE).
 - **`METHOD:REPLY`**: updates attendee status on the organizer's event via `calendar.updateAttendeeStatus()`. A single-occurrence REPLY (carrying a `RECURRENCE-ID`) instead lands the sender's PARTSTAT on that instance's exception via `calendar.rsvpForOccurrence()`, so declining one occurrence doesn't mark the whole series. Only invited attendees are processed (exception-aware: an occurrence-only invitee lives on the exception's attendee list), and a REPLY never resurrects an occurrence the organizer deleted — it moves PARTSTAT only.
@@ -326,21 +334,15 @@ round-trips, TZ-pinned floating tests), `vtimezone.test.ts` (generator vs Intl),
 `calendar-timezone.test.ts` (occurrence keying), `ical-imip.test.ts` (iMIP scoping),
 `caldav-client-sync.test.ts` (client-faithful sync flows against web-created events).
 
-## Files
+## Where the code lives
 
-| File                                             | Purpose                   |
-|--------------------------------------------------|---------------------------|
-| `apps/api/src/lib/calendar/calendar.ts`          | Calendar class            |
-| `apps/api/src/lib/calendar/recurrence.ts`        | Pure recurrence expansion + timezone math (`expandRecurrence`, `computeOccurrenceTimes`, `constrainRRule`) |
-| `apps/api/src/lib/calendar/mappers.ts`           | Pure row→domain mappers + `computeEtag` |
-| `apps/api/src/lib/calendar/get-calendar.ts`      | Access resolution (like Drive's `get-drive.ts`) |
-| `apps/api/src/lib/calendar/schema.ts`            | Drizzle schema            |
-| `apps/api/src/lib/calendar/types.ts`             | BE-internal types (`CalendarEventRow`, relay payloads, event args) |
-| `apps/api/src/lib/calendar/db-config.ts`         | DB config + migrations    |
-| `apps/api/src/lib/calendar/share-propagation.ts`  | Push shares to recipients |
-| `apps/api/src/lib/calendar/invite-propagation.ts` | Push invites to attendees (internal + iMIP outbound) |
-| `apps/api/src/lib/calendar/imip.ts`              | iMIP email composers + inbound dispatcher |
-| `apps/api/src/lib/calendar/sse-events.ts`         | SSE builders              |
-| `apps/api/src/routes/calendar.ts`                 | API routes (thin)         |
-| `packages/lib/src/types/calendar.ts`             | Shared types              |
-| `packages/lib/src/core/calendar/`                | FE hooks + SSE handlers   |
+- **`apps/api/src/lib/calendar/`** — the domain. `calendar.ts` is the `Calendar` class; around it sit the pure
+  helpers (`recurrence.ts` + `timezone.ts` for expansion and zone math, `recurrence-limits.ts` for the guards,
+  `mappers.ts` for row→domain + `computeEtag`), the storage layer (`schema.ts`, `db-config.ts`, `types.ts`), access
+  resolution (`get-calendar.ts`, the Drive `get-drive.ts` analogue), the two propagators
+  (`share-propagation.ts`, `invite-propagation.ts`), `imip.ts`, and `sse-events.ts`.
+- **`apps/api/src/lib/caldav/`** — the protocol layer: router, REPORT handlers, `ical-serialize.ts`,
+  `ical-parse.ts`, `vtimezone.ts`, `resource.ts`.
+- **`apps/api/src/routes/calendar.ts`** — thin route bindings.
+- **`packages/lib/src/core/calendar/`** — FE hooks + SSE handlers; shared types in
+  `packages/lib/src/types/calendar.ts`.

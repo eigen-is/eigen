@@ -8,133 +8,84 @@ Sheets), add a BroadcastChannel bus for cut coordination and large payloads, and
 content converters incrementally. The current system is a solid foundation -- this is an evolution, not
 a rewrite.
 
----
+**As built (v1):** the shipped clipboard -- `EigenClipboardData`, the `data-eigen-clipboard` HTML
+marker, the `application/eigen-clipboard` MIME, and the cross-document media re-upload path -- is
+documented in [CLIPBOARD.md](CLIPBOARD.md). Read that first; this proposal only covers what v2 adds
+on top, plus the one v1 residual in Phase 0.
 
-## Summary of Research Findings
+## Design rationale
 
-The research document (`docs/RESEARCH_COPY_PASTE.md`) covers clipboard APIs, competitor analysis, a proposed
-data format, cross-app mapping, cut coordination, drag-and-drop, mobile considerations, and edge cases. Key
-findings:
+The four arguments the v2 shape rests on:
 
-1. **The current system works but is inconsistent.** Docs uses the sync-only custom MIME path (data lost on
-   cross-tab). Sheets correctly writes both custom MIME and HTML-embedded marker. Slides uses async for
-   context menu, sync for Ctrl+C. Only Sheets cross-tab actually works reliably.
+1. **Three representations per copy.** Every payload carries plain text, visual HTML, and structured
+   JSON. Plain text and HTML make Eigen content paste usefully into any external app; the JSON makes
+   Eigen-to-Eigen paste lossless. This is what Google Docs, Notion, and Linear do.
+2. **HTML attribute smuggling is the universal transport.** Custom MIME types are stripped by the
+   system clipboard on the way between browser sessions, and the `web ` MIME prefix is Chromium-only.
+   `text/html` carrying a `data-*` attribute survives everywhere. Eigen already does this in the async
+   path and in Sheets -- v2 makes every path do it.
+3. **BroadcastChannel for cross-tab coordination.** Same-origin, synchronous, purpose-built, and
+   unused elsewhere in the codebase, so no conflicts. It carries cut coordination and the >100KB
+   payloads that do not belong in an HTML attribute.
+4. **A typed content taxonomy, not a bag.** `richtext`, `cells`, `slideobjects`, `image`, `file`,
+   `card` cover the current apps; `calendarevent`, `contact`, `chatmessages`, `vectorelements` and
+   `chart` are added with the app that needs them. The `EigenStyle` shared style vocabulary from the
+   original research is deliberately **not** part of this -- no app produces or consumes it, and the
+   HTML preview serves the same purpose with less coupling.
 
-2. **HTML attribute smuggling is the correct universal transport.** Custom MIME types are stripped by the
-   system clipboard. The `web ` prefix (Chromium-only) is not cross-browser. `text/html` with a `data-*`
-   attribute survives everywhere. This is what Google Docs, Notion, and Linear do. Eigen already does this
-   in the async path and in Sheets -- it just needs to do it consistently.
+## Known constraints
 
-3. **BroadcastChannel is the right tool for cross-tab coordination.** It is same-origin, synchronous, and
-   purpose-built. No existing BroadcastChannel usage in the codebase, so no conflicts.
+- **The sheet engine has its own internal clipboard.** `luckysheet_copy_save` in the context object
+  handles internal copy/paste (formulas, formatting, merge info) separately from the system
+  clipboard. The eigen clipboard integration sits **on top of** it, not inside it. Consequences: the
+  `cells` content type carries display values, formatting, merge info and dimensions -- not the
+  internal `Cell` state (calculation results, dependency graphs), which is neither serializable nor
+  meaningful in another sheet. Formulas travel as strings, with references that will be wrong in a
+  different sheet context. Undo behaviour after a paste into Sheets depends on whether the engine's
+  paste handler wraps the operation in a single `setContextWithProduce` update -- verify during
+  implementation, not design.
+- **Sheets-to-Docs table paste is lossy.** Tiptap has `@tiptap/extension-table` configured with
+  `resizable: true`, so a pasted sheet table does become a Tiptap table node. But the engine emits
+  `<table data-type="fortune-copy-action-table">` with pixel-valued inline styles, which Tiptap's
+  resizable column model may not respect; background colours, borders and font formatting survive
+  only partially through `transformPastedHTML`; and formula content flattens to display values.
+  Acceptable for Phase 2, but document it as lossy rather than promising fidelity.
+- **Clipboard permission modes differ per browser.** `navigator.clipboard.write()` may need a
+  permission grant on Firefox and only works inside a user gesture on iOS Safari, so the async path
+  can fail silently. The sync `copy`-event path is the primary one; the async path exists for
+  context-menu and button copies and must keep the `write()` call inside the click handler and show
+  a toast on failure. Related, lower-severity: browser extensions (password/clipboard managers) may
+  rewrite clipboard contents, so a malformed `data-eigen-clipboard` attribute must degrade to
+  "treat as external HTML", never throw. Incognito needs no special handling -- both
+  BroadcastChannel and `navigator.clipboard` work there.
 
-4. **The proposed content type taxonomy is sound.** `richtext`, `cells`, `slideobjects`, `image`, `file`,
-   `card`, `calendarevent`, `contact`, `chatmessages` cover all current and planned apps. The `vectorelements`
-   and `chart` types are forward-looking but well-scoped.
-
-5. **Fortune-sheet has its own internal clipboard.** It uses `luckysheet_copy_save` in the context object for
-   internal copy/paste (which preserves formulas, formatting, merge info). This is separate from the system
-   clipboard. The eigen clipboard integration sits on top, not inside sheet.
-
-6. **Tiptap already supports table nodes.** The Docs editor has `@tiptap/extension-table` configured with
-   `resizable: true`. Pasting an HTML table from Sheets into Docs via the standard Tiptap paste path will
-   produce a Tiptap table node -- this has been verified by the extension setup in `editor.tsx`.
-
----
-
-## Critical Evaluation
-
-### What the Research Gets Right
-
-- The three-representation strategy (plain text, visual HTML, structured JSON) is exactly correct and matches
-  industry practice.
-- The phased approach is sensible. Phase 0 (fix cross-tab consistency) is genuinely a one-line change.
-- The BroadcastChannel cut coordination design is simple and correct.
-- The edge case analysis (large payloads, sanitized HTML, clipboard permissions) is thorough.
-
-### Where the Research Has Blind Spots or Oversells
-
-1. **Sheets-to-Docs table paste is not as clean as implied.** The research assumes sheet's HTML table
-   output will paste cleanly into Tiptap. In reality, sheet generates a `<table data-type="fortune-copy-action-table">` with inline styles for dimensions. Tiptap's table extension will parse this, but cell
-   widths expressed in pixels may not respect Tiptap's resizable column model. Styling (background colors,
-   borders, font formatting) will be partially preserved through `transformPastedHTML`, but formula content
-   will be flattened to display values. This is acceptable for Phase 2 but should be documented as lossy.
-
-2. **The `EigenStyle` shared vocabulary (Strategy 2) is overengineered for the current need.** No app
-   currently produces or consumes this abstraction. The HTML preview serves the same purpose with less
-   coupling. Recommendation: drop `EigenStyle` from the proposal. If a shared style vocabulary is needed
-   later, it can be added as a concern of individual converters.
-
-3. **Undo after cross-app paste is trickier than stated.** The research correctly notes that Tiptap uses
-   `editor.chain()...run()` for atomic undo. But for Sheets, sheet's undo stack is managed internally
-   through `setContextWithProduce`. Pasting eigen data into Sheets currently creates a synthetic paste event
-   that goes through sheet's paste handler -- the undo behavior depends on whether that handler wraps
-   the operation in a single context update. This needs verification during implementation, not design.
-
-4. **The `cells` content type proposes including the full `CellMatrix`.** Fortune-sheet's Cell type contains
-   internal state (calculation results, dependency graphs) that is not serializable or meaningful outside the
-   source sheet. The clipboard should include: display values, formatting (bold, italic, color, background,
-   borders, number format), merge info, and column/row dimensions. Formulas should be included as strings
-   but with the understanding that cell references will be wrong in a different sheet context.
-
-5. **The research does not address clipboard permissions being denied.** On Firefox, `navigator.clipboard.write()`
-   may require a permission grant. On iOS Safari, it only works inside a user gesture. The async path
-   (`writeEigenClipboardAsync`) could fail silently. The proposal should specify fallback behavior: if the
-   async write fails, show a toast telling the user to use Ctrl+C instead.
-
-6. **Incognito mode and private browsing.** BroadcastChannel works in incognito (same-origin, same profile).
-   `navigator.clipboard` works in incognito. No special handling needed.
-
-7. **Browser extensions intercepting clipboard.** Extensions like password managers or clipboard managers may
-   modify clipboard contents. The `data-eigen-clipboard` attribute is unlikely to be targeted, but the read
-   path should gracefully degrade to treating the content as external HTML if the attribute is malformed.
-
-8. **Very large clipboard payloads (10,000+ cells).** The research proposes a 100KB threshold for the
-   token+bus approach. This is reasonable. A 10,000-cell range with formatting could easily be 500KB+
-   of JSON, which URI-encoded would be 1.5MB+ in an HTML attribute. The BroadcastChannel in-memory path
-   handles this. For cross-session (clipboard read from a fresh tab), the HTML preview (the actual table
-   HTML) is the fallback -- it is lossy but functional.
-
-9. **Concurrent paste in collaborative editing.** Two users pasting simultaneously into the same Yjs document
-   is handled by Yjs's CRDT merge -- each paste creates a Yjs transaction, and Yjs resolves conflicts at the
-   character/node level. This is not a clipboard concern; it is a Yjs concern, and it already works for
-   regular typing. For sheet (which is also Yjs-backed), the same applies.
+Concurrent paste in a collaborative document is not a clipboard concern: each paste is a Yjs
+transaction and the CRDT merge resolves it, exactly as it already does for typing.
 
 ---
 
 ## Integration Proposal
 
-### Phase 0: Fix Cross-Tab Consistency (1 session)
+### Phase 0: Add the custom MIME to the async write (S)
 
-**Goal:** Make the sync clipboard path write HTML-embedded data, so cross-tab works for Docs and Slides.
+Phase 0 as originally written -- make the **sync** path write the HTML-embedded marker -- **shipped**:
+`writeEigenClipboard` in `packages/lib/src/core/clipboard/clipboard.ts` already writes
+`application/eigen-clipboard`, the `data-eigen-clipboard` HTML marker and the plain-text fallback.
 
-**Changes:**
+What is left is the mirror-image residual on the **async** path (the ROADMAP P2 row):
 
 | File | Change |
 |---|---|
-| `packages/lib/src/core/clipboard/clipboard.ts` | In `writeEigenClipboard()`, add `text/html` write with embedded JSON attribute. Accept optional `html` parameter for the visible HTML representation. |
+| `packages/lib/src/core/clipboard/clipboard.ts` | `writeEigenClipboardAsync` writes only `text/html` + `text/plain`. Add an `application/eigen-clipboard` blob to the `ClipboardItem`, matching the sync path. |
 
-**Implementation:**
+The async path is used by Slides' context-menu / button copy
+(`apps/slides/src/components/slides/editor.tsx`). Without the custom MIME, a same-tab paste has to
+fall back to parsing the HTML marker, which is the lossy route -- adding the MIME makes Slides
+button-copy lossless. One caveat to check while implementing: browsers reject unrecognised MIME types
+in `ClipboardItem` on the async API, so if `application/eigen-clipboard` is refused, keep the write in
+a `try`/`catch` and let the existing HTML marker carry the payload.
 
-In `writeEigenClipboard`, after the existing custom MIME write, add:
-
-```typescript
-export function writeEigenClipboard(e: ClipboardEvent, data: EigenClipboardData, plainText?: string, html?: string) {
-    e.clipboardData?.setData(EIGEN_CLIPBOARD_MIME, JSON.stringify(data));
-    const encoded = encodeURIComponent(JSON.stringify(data));
-    const marker = `<span data-eigen-clipboard="${encoded}"></span>`;
-    e.clipboardData?.setData('text/html', html ? marker + html : marker);
-    if (plainText) {
-        e.clipboardData?.setData('text/plain', plainText);
-    }
-}
-```
-
-No changes needed in any app code -- the existing Docs and Slides copy handlers call `writeEigenClipboard`
-and will now automatically produce cross-tab-safe clipboard data. The read path (`readEigenClipboard`)
-already handles the HTML attribute fallback.
-
-**Verify:** `bun run typecheck && bun run test`
+**Verify:** `bun run typecheck && bun run test`, then a manual Slides copy-then-paste round trip.
 
 ---
 
@@ -462,7 +413,7 @@ can be added iteratively.
 
 The migration is non-breaking because:
 
-1. **Phase 0 only adds behavior** to the existing `writeEigenClipboard` -- no data model change.
+1. **Phase 0 only adds a MIME type** to the existing `writeEigenClipboardAsync` -- no data model change.
 2. **Phase 1 adds v2 alongside v1.** The `readEigenPayload` function includes a `upgradeV1ToV2` path that
    wraps v1 data in a v2 envelope. Old clipboard data written by code not yet migrated will still be readable.
 3. **Apps are migrated one at a time.** During migration, one app may write v2 while another still writes v1.
@@ -511,7 +462,7 @@ The migration is non-breaking because:
 |---|---|---|
 | **HTML attribute sanitization differs across browsers.** Some browser versions may strip `data-*` attributes in specific contexts. | Medium | Test on Chrome, Firefox, Safari, Edge. The `data-eigen-clipboard` attribute on `<span>` is safe in all current browsers. If a browser strips it, the content degrades to external HTML paste (not a crash). |
 | **Fortune-sheet cell serialization is complex.** The internal Cell type has many fields; deciding which to include in the clipboard is non-trivial. | Medium | Start with display values + basic formatting (bold, italic, color, background, number format, merge). Add more fields as needed. Formulas as strings, with a comment that references will be wrong. |
-| **Tiptap `insertContent(tiptapJson)` may not handle all node types from a different document.** Custom extensions (resizable images, comments) in the source doc may not exist in the target. | Low | Tiptap silently drops unknown node types. Comments should be stripped during copy (they are document-specific). Images use the standard resizableImage extension which is present in all Docs instances. |
+| **Tiptap `insertContent(tiptapJson)` may not handle all node types from a different document.** Custom extensions (resizable images, comments) in the source doc may not exist in the target. | Low | Tiptap silently drops unknown node types. Comments should be stripped during copy (they are document-specific). Images use the standard `figure` node (`mediaName` attribute), present in all Docs instances. |
 | **URI-encoded JSON in HTML attributes could be very large.** | Medium | The 100KB threshold with BroadcastChannel fallback handles this. For cross-browser-session paste of very large payloads, the HTML table/text fallback is lossy but functional. |
 | **Async clipboard write fails on iOS Safari outside user gesture.** | Medium | The sync path (`writeEigenPayload` in a `copy` event handler) is the primary path. The async path is only used for context menu buttons. For these, ensure the `navigator.clipboard.write()` call is synchronous within the click handler. Show a toast on failure. |
 | **Drag-and-drop does not work on mobile.** | Low | This is a known platform limitation. Document it. Mobile users use copy-paste. |
@@ -524,7 +475,7 @@ The migration is non-breaking because:
 
 | Phase | Scope | Effort |
 |---|---|---|
-| Phase 0 | Fix cross-tab consistency | 1 session |
+| Phase 0 | Custom MIME on the async write | S |
 | Phase 1 | v2 protocol + app migration (Docs, Sheets, Slides) | 2-3 sessions |
 | Phase 2 | Cross-app converters + external content classification | 2-3 sessions |
 | Phase 3 | Non-document apps + cut + drag-and-drop | 3-4 sessions |

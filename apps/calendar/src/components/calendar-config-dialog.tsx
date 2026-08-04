@@ -92,7 +92,6 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
     const handleDelete = async () => {
         if (!calendar) return;
         await deleteCalendar.mutateAsync(calendar.id);
-        setShowDeleteConfirmation(false);
         onOpenChange(false);
     };
 

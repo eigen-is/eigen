@@ -35,7 +35,7 @@ type LabelDialogProps = {
     onOpenChange: (open: boolean) => void;
     selectedLabel: Label | null;
     onSubmit: (data: LabelFormValues) => Promise<void>;
-    onDelete: () => void;
+    onDelete: () => void | Promise<void>;
     labelCount?: number;
 };
 
@@ -192,11 +192,7 @@ export function LabelDialog({
                 title="Delete Label"
                 description="Are you sure you want to delete this label"
                 itemName={selectedLabel?.name}
-                onDelete={() => {
-                    onDelete();
-                    setShowDeleteConfirmation(false);
-                    onOpenChange(false);
-                }}
+                onDelete={onDelete}
             />
         </>
     );

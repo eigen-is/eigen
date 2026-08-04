@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from './../../button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './../../dialog';
 
@@ -7,7 +8,7 @@ export type DeleteDialogProps = {
     title: string;
     description: string;
     itemName?: string;
-    onDelete: () => void;
+    onDelete: () => void | Promise<void>;
     cancelText?: string;
     deleteText?: string;
 };
@@ -22,10 +23,29 @@ export function DeleteDialog({
     cancelText = 'Cancel',
     deleteText = 'Delete',
 }: DeleteDialogProps) {
+    const [pending, setPending] = useState(false);
+
+    // Own the async lifecycle: disable both actions in-flight (no double-submit), close only after
+    // the callback fulfils, and stay open on rejection so the caller's error toast reads with the retry.
+    const handleDelete = async () => {
+        if (pending) return;
+        setPending(true);
+        try {
+            await onDelete();
+            onOpenChange(false);
+        } catch {
+            // Stay open for retry; the mutation's onMutationError already surfaced the toast.
+        } finally {
+            setPending(false);
+        }
+    };
+
     // Confirmation prompts read as questions; append "?" unless the caller already terminated the sentence.
     const terminator = /[.?!]$/.test(description) ? '' : '?';
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        // While pending, ignore every close path (Escape/backdrop/X) so the retry surface survives;
+        // opening is always allowed.
+        <Dialog open={open} onOpenChange={(o) => (o || !pending) && onOpenChange(o)}>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
@@ -41,10 +61,10 @@ export function DeleteDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                         {cancelText}
                     </Button>
-                    <Button variant="destructive" onClick={onDelete}>
+                    <Button variant="destructive" onClick={handleDelete} disabled={pending}>
                         {deleteText}
                     </Button>
                 </DialogFooter>

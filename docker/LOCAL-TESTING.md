@@ -42,7 +42,6 @@ cd /path/to/eigen
 bun install
 set -a && source .env.production && set +a
 bun run --sequential --filter './apps/*' build
-bun --filter '@apps/api' buildfordocker
 ```
 
 ### 4. Start the stack

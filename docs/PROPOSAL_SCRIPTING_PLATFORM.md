@@ -715,7 +715,7 @@ export async function executeSDKMethod(
         if (e instanceof ApiError) {
             const code = e.status === 404 ? SDK_ERROR.NOT_FOUND
                 : e.status === 403 ? SDK_ERROR.RESOURCE_PERMISSION_DENIED
-                : e.status === 413 ? SDK_ERROR.QUOTA_EXCEEDED
+                : e.status === 507 ? SDK_ERROR.QUOTA_EXCEEDED
                 : SDK_ERROR.INTERNAL;
             return errorResponse(code, e.message);
         }

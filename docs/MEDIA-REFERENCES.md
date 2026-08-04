@@ -13,7 +13,9 @@ UUIDs, references in the copy resolve correctly against the copy's own files. No
 Two guarantees make this safe:
 
 1. **Names are unique per folder** — `Mount.assertUniqueName()` enforces case-insensitive uniqueness. Upload conflicts
-   are handled by `getUniqueFileName()` which appends `#1`, `#2`, etc.
+   are handled by `getUniqueFileName()` (`apps/api/src/lib/drive/naming.ts`), which appends ` (2)`, ` (3)`, … before
+   the extension (`photo.png` → `photo (2).png`). It is extension-aware, case-insensitive, and re-uses an existing
+   ` (n)` suffix as its starting counter instead of stacking a second one.
 2. **Folder structure is fixed** — media files are always in `{doc}/media/`, chats in `{doc}/chat/`, chat attachments
    in `{chat}/media/`.
 
@@ -21,12 +23,19 @@ Two guarantees make this safe:
 
 | App | Yjs/SQLite Field | Stores | Example |
 |-----|-----------------|--------|---------|
-| **eigendoc** | `resizableImage.mediaName` | Image file name | `photo.png` |
-| **eigendoc** | `commentMark.chatName` | Chat folder name | `comment-1710523456.eigenchat` |
+| **eigendoc** | `figure.mediaName` | Image file name | `photo.png` |
+| **eigendoc** | `comments` card `.chatName` | Chat folder name | `comment-1710523456.eigenchat` |
 | **eigenslides** | `ImageObject.mediaName` | Image file name | `photo.png` |
-| **eigenslides** | `SlideItem.backgroundMediaName` | Background image name | `bg.jpg` |
-| **eigenstickies** | `CardItem.chatName` | Chat folder name | `task-1710523456.eigenchat` |
+| **eigenslides** | `SlideItem.background` (image variant) | Background image name | `{ type: 'image', mediaName: 'bg.jpg', fit: 'cover' }` |
+| **eigenstickies** | `tasks` card `.chatName` | Chat folder name | `task-1710523456.eigenchat` |
 | **eigenchat** | `messages.attachments` | JSON array of file names | `["photo.png","doc.pdf"]` |
+
+The eigendoc image node is `figure` (`packages/lib/src/docs/eigendoc/nodes/figure.ts`) — an inline
+atom whose `mediaName` attribute is the only durable reference; `src` is filled in at render time.
+Slide and slide-text backgrounds are a `BackgroundFill` union (`packages/lib/src/types/background.ts`)
+of `solid` / `gradient` / `image`, and only the `image` variant carries a `mediaName`. Comment
+anchors are the exception to the name rule: the eigendoc `comment` mark stores a `cardId`, and the
+card itself (in the doc's Yjs `comments` map) carries the `chatName`.
 
 ## Resolution at Render Time
 
@@ -39,8 +48,27 @@ a collaborator uploads a file and Yjs propagates the name before the query cache
 - `resolveMediaPath(name)` — returns DrivePath or undefined
 - `resolveChatId(name)` — returns pathId or null
 - `mediaFolderId` — the media folder's pathId (used by clipboard for `needsReUpload()` comparison)
+- `startUpload(file)` — returns `{ pendingName, promise }` and starts the upload
 
-Used by: eigendoc editor (wraps `TiptapEditor`), eigenslides editor, eigenstickies board.
+Used by: eigendoc editor (wraps `TiptapEditor`), eigenslides editor, eigensheets editor
+(`apps/sheets/src/components/sheets/editor.tsx`), eigenstickies board.
+
+### The `pending:` optimistic-name protocol
+
+`startUpload(file)` hands back a synthetic name — `pending:<uuid>`, recognised by
+`isPendingMediaName()` — and registers a local `URL.createObjectURL(file)` blob for it. The caller
+writes that name into Yjs immediately, so `resolveMediaUrl()` returns the blob URL and the image
+renders on the very next frame. This is how insert and paste feel instant.
+
+When the upload settles, the caller swaps every node still holding the pending name over to the real
+file name (`swapFigureMediaName` in the docs editor, its equivalents in slides and sheets); a failed
+upload resolves to `null` and the caller removes the node instead. The provider preloads the server
+preview URL (`probe.decode()`) before revoking the blob and defers the revoke by a macrotask, so the
+`<img src>` swap has no flash. Pending entries live in a ref, not state — the context value stays
+stable, so an upload does not re-render every image in the document.
+
+A `pending:` name that outlives its tab (closed or reloaded mid-upload) is a zombie: nothing can
+resolve it any more. Sheets sweeps those on mount; the other surfaces do not yet.
 
 For **chat attachments**, resolution happens differently: `ChatMessageList` receives `mediaFolderId` from `useChatRoom`,
 and `AttachmentChip` calls `useFolderContent` on that folder to resolve attachment names.

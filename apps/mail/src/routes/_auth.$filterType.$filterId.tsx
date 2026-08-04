@@ -115,6 +115,11 @@ function MailRoute() {
     } = useEmails(filterId);
     const { data: selectedEmail = null } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
+    // Canonical mailbox identity for the list context menu — resolve the URL filterId ('inbox'/'sent'/…)
+    // to the mailbox's canonical `path` (inbox = ''), the same identity EmailSummary.mailbox carries and
+    // that emailKeys.list normalizes. Lets the menu hide the current box as a move target and drop the
+    // already-satisfied Archive/Spam actions instead of offering no-op self-moves.
+    const currentFolderId = mailboxes.find((m) => (m.path === '' ? 'inbox' : m.path.toLowerCase()) === filterId)?.path;
     const { data: spaceSettings } = useSpaceSettings();
     const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html;
 
@@ -178,10 +183,14 @@ function MailRoute() {
     };
 
     const confirmDeleteEmails = async () => {
-        if (pendingDeleteEmails.length > 0) {
-            await actions.confirmDeleteEmails(pendingDeleteEmails);
-            setDeleteDialogOpen(false);
-            setPendingDeleteEmails([]);
+        if (pendingDeleteEmails.length === 0) return;
+        const failed = await actions.confirmDeleteEmails(pendingDeleteEmails);
+        // Reject so the promise-aware DeleteDialog stays open on exactly the still-failed emails; each
+        // failure was already surfaced by onMutationError. Narrowing the retained set first means a
+        // retry re-hits only the failed ids.
+        if (failed.length > 0) {
+            setPendingDeleteEmails(failed);
+            throw new Error('Some emails could not be permanently deleted');
         }
     };
 
@@ -341,6 +350,7 @@ function MailRoute() {
                             onRowClick={actions.handleRowClick}
                             activeRowId={mailId}
                             mailboxes={mailboxes}
+                            currentFolderId={currentFolderId}
                             onDelete={handleDeleteEmailsByIds}
                             onArchive={actions.handleArchiveEmailsByIds}
                             onReportSpam={actions.handleReportSpamByIds}

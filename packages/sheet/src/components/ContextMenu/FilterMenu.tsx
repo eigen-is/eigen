@@ -206,6 +206,10 @@ export const FilterMenu: React.FC = () => {
         [data.flattenValues],
     );
 
+    // Cancel a pending search when the column (and thus this debounce) changes or on
+    // unmount, so a stale column's timer can't overwrite the new column's values.
+    useEffect(() => searchValues.cancel, [searchValues]);
+
     const selectAll = useCallback(() => {
         setDatesUncheck([]);
         setValuesUncheck([]);
@@ -320,14 +324,16 @@ export const FilterMenu: React.FC = () => {
                         return (
                             <Popover key={name} open={showSubMenu} onOpenChange={setShowSubMenu}>
                                 <PopoverAnchor asChild>
-                                    <div
-                                        className={cn(menuItemClass, 'justify-between gap-2')}
+                                    <button
+                                        type="button"
+                                        className={cn(menuItemClass, 'w-full justify-between gap-2')}
                                         onMouseEnter={openSubMenu}
                                         onMouseLeave={closeSubMenu}
+                                        onClick={openSubMenu}
                                     >
                                         <span>{filter.filterByColor}</span>
                                         <ChevronRight className="size-3.5" aria-hidden="true" />
-                                    </div>
+                                    </button>
                                 </PopoverAnchor>
                                 <PopoverContent
                                     side="right"

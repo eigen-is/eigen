@@ -20,3 +20,5 @@ export type ActiveComments = {
     ids: Set<string>;
     anchorTexts: Map<string, string>;
 };
+
+export type DocumentPanel = 'comments' | 'activity';

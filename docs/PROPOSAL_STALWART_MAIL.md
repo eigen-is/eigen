@@ -2,7 +2,7 @@
 
 > **TLDR**: Add Stalwart Mail Server as an **opt-in alternative** to Eigen's current
 > Maildir+Dovecot+Postfix stack. Eigen's BE keeps the same `/mail/*` HTTP routes; behind them, a
-> small `MailBackend` interface dispatches either to the existing `Maildir` class or to a new
+> small `MailStore` interface (shipped 2026-07-03) dispatches either to the existing `MaildirStore` class or to a new
 > `StalwartMail` class that talks **JMAP over HTTP** to a co-deployed Stalwart instance. The FE
 > never sees the difference. Net wins: JMAP for native clients, server-side full-text search,
 > inbound DMARC/SPF/ARC verification, inbound spam filtering, Sieve filters. Existing wins we'd
@@ -94,15 +94,16 @@ Full architecture in [IMAP.md](IMAP.md); summary here for context.
                    Postfix MTA
                        │ POST /mail/deliver/:to (multipart EML)
                        ▼
-   ┌────────────────────────────────────────┐
-   │ Elysia API (apps/api)                  │
-   │   routes/mail.ts                       │
-   │   lib/mail/mail.ts  (facade)           │
-   │   lib/mail/maildir.ts  (Maildir class) │──┐
-   │   lib/mail/maildb.ts   (SQLite cache)  │  │ writes
-   └────────────────────────────────────────┘  │
-                       ▲ reads/writes          │
-                       │                       ▼
+   ┌──────────────────────────────────────────────┐
+   │ Elysia API (apps/api)                        │
+   │   routes/mail.ts                             │
+   │   lib/mail/mail-domain.ts  (Mail facade)     │
+   │   lib/mail/maildir-store.ts  (MaildirStore,  │──┐
+   │        behind the MailStore interface)       │  │
+   │   lib/mail/maildb.ts   (SQLite cache)        │  │ writes
+   └──────────────────────────────────────────────┘  │
+                       ▲ reads/writes                │
+                       │                             ▼
               data/home/{userId}/eigen.mail/Maildir/{new,cur,tmp}
                                   │
                                   │ shared filesystem
@@ -118,7 +119,7 @@ Key facts that constrain any swap:
 
 - **Routes are thin.** `routes/mail.ts` only calls the `mail.ts` facade. None of the routes look
   at filenames, Maildir paths, or SQLite columns. The seam is already at facade level.
-- **`Maildir` is the only implementation today.** Everything specific to Maildir filenames,
+- **`MaildirStore` is the only implementation today.** Everything specific to Maildir filenames,
   `cur/`/`new/` semantics, `:2,RS` flag suffixes, and the SQLite mirror lives inside the
   `Maildir` class in `apps/api/src/lib/mail/maildir.ts`. Nothing outside that file deals with
   on-disk Maildir format.
@@ -451,8 +452,10 @@ event per affected id with the right type. Routine bookkeeping, ~80 LOC.
 
 ## Search (incidental win)
 
-Today: no full-text search on mail. The `PROPOSAL_SEARCH.md` design includes mail but only
-indexes `subject`, `fromShort`, `textShort` — the trimmed summaries stored in `mail.db`.
+Today: mail full-text search has shipped — an `emails_fts` FTS5 table in `mail.db`, kept in sync
+by triggers and queried through `MailDB.searchMail` (see [SEARCH.md](SEARCH.md)). But it indexes
+only what `mail.db` stores: `subject`, `fromShort`/`fromAddress`, `toShort`/`toAddress`,
+`recipientsAll`, `textShort` — the trimmed summaries, not full message bodies.
 
 JMAP includes `Email/query` with a `text` filter that runs against Stalwart's built-in FTS
 across full bodies. If Stalwart mode is enabled, a `useMailSearch(query)` hook becomes trivial

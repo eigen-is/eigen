@@ -1,44 +1,70 @@
 # Slides App
 
-> **TLDR**: Collaborative presentations using Yjs. `.eigenslides` Drive folders. Pixel-based coordinates (0-1920 x
-> 0-1080), converted to percentages for rendering via `pxToPercent()`. 16:9 aspect ratio. Yjs data: `slideOrder` (
-> Y.Array), `slides` (Y.Map), `objects` (Y.Map). Object types: text, image.
+> **TLDR**: Collaborative presentations using Yjs. `.eigenslides` Drive folders, 16:9. Pixel coordinate
+> space (0-1920 × 0-1080), rendered as percentages via `pxToPercent()`. Yjs data: `slideOrder` (Y.Array),
+> `slides` (Y.Map), `objects` (Y.Map). Object types: text, image. The canonical types live in
+> `packages/lib/src/slides/`, shared by the app and the API.
 
 ## Yjs Data Model
 
 ```
 Y.Array<string>  "slideOrder"  → ordered slide IDs
-Y.Map            "slides"      → slideId → Y.Map { id, backgroundColor, backgroundMediaName, objectIds: Y.Array<string> }
+Y.Map            "slides"      → slideId → Y.Map { id, objectIds: Y.Array<string>, background }
 Y.Map            "objects"     → objectId → Y.Map { id, slideId, type, x, y, w, h, rotation, ... }
 ```
 
-**Coordinates**: Stored as absolute pixels (0-1920 for x/w, 0-1080 for y/h). Converted to percentages for rendering via
-`pxToPercent(val, axis)` in `types.ts`. This makes layout resolution-independent. `percentToPx(val, axis)` converts
-back.
+**Where the types live**: `SlideItem`, `SlideObject`, `DeckData`, `pxToPercent`, `SLIDE_ASPECT_RATIO`,
+`SLIDE_BASE_WIDTH`/`SLIDE_BASE_HEIGHT` and `BORDER_RADIUS_ROUND` are all in `packages/lib/src/slides/`, so
+the editor, the exporters and the preview renderer agree on one shape. The app's
+`apps/slides/src/components/slides/types.ts` only re-exports them and adds its own `DEFAULT_TEXT_OBJECT` /
+`DEFAULT_IMAGE_OBJECT` literals plus the `ApplyTo` union.
 
-**Dimensions**: Font sizes, border widths, border radii, and letter spacing use CSS container query units (`cqh`/`cqw`)
-relative to the slide container (which has `container-type: size`). This ensures all dimensions scale with the slide
-container rather than the browser viewport. The helpers `pxToPercentHeight(val)` and `pxToPercentWidth(val)` in
-`slide-object.tsx` convert from the 1920x1080 coordinate space to `cqh`/`cqw` units.
+**Coordinates**: stored as absolute pixels (0-1920 for x/w, 0-1080 for y/h) and converted to percentages at
+render time with `pxToPercent(val, axis)`. That keeps layout resolution-independent. There is no inverse
+helper — pointer math scales against the measured canvas size instead.
+
+**Dimensions**: font sizes, border widths, border radii and letter spacing use CSS container query units
+(`cqh`/`cqw`) relative to the slide container (which has `container-type: size`). So every dimension scales
+with the slide container rather than the browser viewport. `slide-object.tsx` converts from the 1920×1080
+coordinate space into those units.
 
 ### Object Types
 
 **Text**: `text` (TipTap HTML — edited via the shared `LightEditor`; use `htmlToPlainText` from
 `@workspace/lib/html` for plain-text previews like comment anchors and OS-clipboard text), `fontFamily`,
 `fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`, `color`,
-`letterSpacing`, `lineHeight`, `highlightColor`, `backgroundColor`
+`letterSpacing`, `lineHeight`, `highlightColor`, `background`
 **Image**: `mediaName` (file name, resolved at render time), `objectFit`
 **Common (BaseObject)**: `x`, `y`, `w`, `h`, `rotation`, `borderColor`, `borderWidth`, `borderRadius`,
 `commentCardIds` (plain string array — Y.Map card IDs linking to entries in the `comments` Y.Map)
 
 ### Slide Properties
 
-**SlideItem**: `id`, `objectIds`, `backgroundColor`, `backgroundMediaName`
+**SlideItem**: `id`, `objectIds`, `background`
 
-Background color and image can be applied to a single slide, all following slides, or all slides via the
-`SlideBackgroundPanel` in the properties panel.
+## Backgrounds
 
-### Shared Rendering
+Slides and text objects both carry `background: BackgroundFill | null`. The fill type is shared across the
+suite (`packages/lib/src/types/background.ts`):
+
+```ts
+type BackgroundFill =
+    | { type: 'solid'; color: string }
+    | { type: 'gradient'; from: string; to: string; angle: number }
+    | { type: 'image'; mediaName: string; fit: 'cover' | 'contain' };
+```
+
+`getBackgroundStyle(fill, resolveMediaUrl?)` from `@workspace/lib/background` turns a fill into CSS:
+gradients render as `linear-gradient(<angle>deg in oklab, from, to)`, images as a `background-image` sized
+`cover` or `contain`. `isSameFill` backs the "mixed" state when a multi-selection disagrees.
+
+Editing UI is the shared `BackgroundFillBlock`
+(`packages/ui/src/components/layout/properties-panel/background-fill-block.tsx`): none / solid / gradient /
+image segments, with a 3×3 arrow grid for the gradient angle. Slide backgrounds allow all three fill types;
+text objects allow solid and gradient only. `SlideBackgroundPanel` adds the apply scope — this slide, this
+and following, or all slides.
+
+## Shared Rendering
 
 `slide-object.tsx` exports shared helpers used by the editor canvas, presentation mode, and thumbnails:
 
@@ -55,31 +81,30 @@ drag; resizing a rotated object is rotation-aware (the opposite corner stays
 pinned). Alt/Opt-drag an object (or a multi-selection) drops a duplicate and
 leaves the original in place.
 
+## Comments & Mobile
+
+Comments anchor to objects via `commentCardIds`. The comments and activity panes are the shared
+`PanelColumn`, opened through `useDocumentPanels(isMobile)` — see [COMMENTS.md](COMMENTS.md) for the card
+model and [LAYOUT.md](LAYOUT.md) for the column chrome.
+
+On mobile, slides is **view-only**: `editor.tsx` renders the slide panel full width (thumbnails as a
+scrollable list) and skips the canvas and the properties panel entirely. Present mode still works. The
+panel column takes over the screen when a pane is open, the same as the other document apps.
+
 ## File Structure
 
-```
-apps/slides/src/components/slides/
-├── types.ts                      # SlideItem, SlideObject, DeckData, pxToPercent, percentToPx, defaults
-├── normalize-deck.ts             # Yjs normalization (dedup objects, set default fontFamily)
-├── editor.tsx                    # Main editor + presentation mode + clipboard
-├── toolbar.tsx                   # File menu, undo/redo, insert, present
-├── slide-panel.tsx               # Left panel (draggable thumbnails)
-├── slide-canvas.tsx              # Main editing area (scaled 16:9)
-├── slide-object.tsx              # Object rendering + shared style helpers
-├── slide-thumbnail.tsx           # Thumbnail preview
-├── slide-properties-panel.tsx    # Right panel (transform, text, image, border, slide background)
-├── slide-selection-chrome.tsx    # Canvas-level overlay: ring + resize handles + rotate handle
-├── transform-geometry.ts         # Pure: rotated-resize math + angle helpers
-├── hooks/
-│   ├── use-deck.ts               # Yjs document management (incl. addCommentToObject/removeCommentFromObject)
-│   ├── use-active-comments.ts    # Scan objects for comment IDs + anchor texts
-│   ├── use-slide-dnd.ts          # Slide reorder (dnd-kit)
-│   ├── use-object-drag.ts        # Canvas drag/resize/rotate (+ alt-drag duplicate)
-│   ├── use-snap-lines.ts         # Alignment snapping
-│   └── use-marquee-select.ts     # Drag-to-select multiple objects
-```
+`apps/slides/src/components/slides/` holds the editor. The pieces worth naming:
 
-Shared: `packages/ui/src/components/layout/media/image-resize-handles.tsx` (used by docs + slides)
+- `editor.tsx` — main editor, presentation mode, clipboard, panel wiring
+- `slide-canvas.tsx` + `slide-object.tsx` — editing surface and object rendering
+- `slide-selection-chrome.tsx` + `transform-geometry.ts` — selection overlay and the pure rotated-resize math
+- `slide-panel.tsx` / `slide-properties-panel.tsx` — left thumbnails, right properties + slide background
+- `normalize-deck.ts` — Yjs normalization (dedup objects, default fontFamily)
+- `hooks/` — `use-deck.ts` (Yjs document + comment links), `use-object-drag.ts` (drag/resize/rotate +
+  alt-drag duplicate), `use-snap-lines.ts`, `use-marquee-select.ts`, `use-slide-dnd.ts`,
+  `use-active-comments.ts`
+
+Shared: `packages/ui/src/components/layout/media/image-resize-handles.tsx` (used by docs + slides).
 
 ## Export & Preview
 

@@ -76,11 +76,7 @@ export function RestoreVersionDialog({
             confirmText="Restore"
             onConfirm={() => {
                 if (!snapshot) return;
-                // Close before firing so a double-click can't trigger a second
-                // restore (ConfirmDialog has no in-flight disable). Errors surface
-                // through the mutation's onMutationError toast.
-                onClose();
-                restore.mutate(snapshot.name);
+                return restore.mutateAsync(snapshot.name);
             }}
         />
     );

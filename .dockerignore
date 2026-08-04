@@ -14,3 +14,5 @@ node_modules
 # (data/home alone is >1GB and would ship to the daemon on every build).
 data/
 apps/api/data
+# The image runs the API from source; never ship a stale local bundle.
+apps/api/build

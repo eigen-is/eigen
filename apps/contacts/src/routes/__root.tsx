@@ -1,12 +1,8 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { ContactsSidebar } from '../components/contacts/contacts-sidebar';
-
-type MyRouterContext = {
-    auth: AuthContextType;
-};
 
 function ContactsRoot() {
     const { user } = useAuth();
@@ -54,6 +50,6 @@ function AuthenticatedContactsRoot() {
     );
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext<RouterAppContext>()({
     component: ContactsRoot,
 });

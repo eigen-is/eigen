@@ -26,7 +26,7 @@ export type FileEventType = 'created' | 'edited' | 'trashed' | 'restored' | 'del
 // Only types with a real emitter AND human-meaningful content (a card name) live here.
 // Lower-signal structural verbs (slide reorder/add/remove, sheet row/col ops, doc edits)
 // are deferred to the in-doc history feature that consumes them — see
-// docs/PROPOSAL_FILE_HISTORY.md. Until then those changes surface as the generic 'edited'.
+// docs/FILE-HISTORY.md. Until then those changes surface as the generic 'edited'.
 export const CLIENT_FILE_EVENT_TYPES = [
     'sticky-added',
     'sticky-moved',

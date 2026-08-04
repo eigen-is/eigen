@@ -16,8 +16,9 @@ Home (per-user singleton)
 ```
 
 **Home** (`apps/api/src/lib/home/home.ts`): Manages DB connections, SSE broadcasting, domain class lifecycle.
-Lazy-initializes services via `init()`. Auto-destructs after 5min inactivity via `touch()` — awaits graceful
-shutdown before removing from factory cache.
+Lazy-initializes services via `init()`. Auto-destructs after inactivity via `touch()` — 5 min for `UserHome`,
+30 min for `TeamHome` (`TEAM_HOME_IDLE_MS`, `apps/api/src/lib/home/team-home.ts`: team homes have no SSE
+keep-alive pin, so they need the longer window). Awaits graceful shutdown before removing from factory cache.
 
 **Subclasses**: `UserHome` (full services: Drive, Mail, Contacts, Calendar, Notifications),
 `TeamHome` (Drive + Calendar), `OrgHome` (minimal — filesystem only).
@@ -51,6 +52,7 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 | Method      | Returns             | Notes                                        |
 |-------------|---------------------|----------------------------------------------|
 | `read`      | `StorageFile`       | Lazy reference (BunFile or S3File)           |
+| `readRange?`| `StorageFile`       | Optional — byte range `[start, end)` for ranged serving |
 | `write`     | `Promise<number>`   | Accepts Buffer, Uint8Array, ArrayBuffer, BunFile |
 | `delete`    | `Promise<boolean>`  |                                               |
 | `exists`    | `Promise<boolean>`  |                                               |
@@ -71,16 +73,21 @@ A Mount bundles Drive file storage (`apps/api/src/lib/mount/mount.ts`):
 |------------------|-------------------------------------------------|
 | `metadata.db`    | Paths, labels (Drizzle ORM)                     |
 | `data/`          | File storage via StorageBackend                 |
-| `thumbs/`        | Thumbnails (always local, WebP/JPEG)            |
+| `thumbs/`        | Thumbnails (always local, WebP)                 |
 | `tmp/`           | Temp files for remote sync + interrupted uploads |
+| `staging/`       | Frozen `VACUUM INTO` upload payloads, S3 mounts only. Deliberately outside `tmp/` so the stale sweep can't purge an un-acked copy |
 | `data/.trash/`   | Soft-deleted files (path-based storage only)     |
 | `tmp/previews/`  | Cached file previews (cleaned after 7 days)      |
 
+Eigen containers keep one more directory of their own: `versions/`, inside the container, holding the
+file-level snapshots described below. Both collab docs and chats opt into it.
+
 **Document types**: `folder`, `file`, `doc`, `stickies`, `slides`, `sheets`, `chat`
 
-**Thumbnails** (`apps/api/src/lib/shared/thumbnails.ts`): Generated on upload for image formats via sharp.
-Supports JPEG, PNG, WebP, GIF, TIFF, HEIC (via heic-convert fallback), and exiftool embedded preview extraction.
-Stored as WebP (default) or JPEG.
+**Thumbnails** (`apps/api/src/lib/shared/thumbnails.ts`): Generated on upload for images **and videos** (video
+frame grab), each in a Worker that loads sharp, capped by a semaphore so a large export can't spawn one worker
+per file. Supports JPEG, PNG, WebP, GIF, TIFF, HEIC (via heic-convert fallback), and exiftool embedded preview
+extraction. Stored as WebP.
 
 ## User Data Layout
 
@@ -92,6 +99,7 @@ data/home/{userId}/
 │   │   ├── metadata.db
 │   │   ├── data/
 │   │   ├── thumbs/
+│   │   ├── staging/          (S3 mounts only)
 │   │   └── tmp/
 │   │       └── previews/
 │   └── shared.db

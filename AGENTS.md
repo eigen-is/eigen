@@ -47,7 +47,8 @@ bun serve:mail         # Single app + API
 bun run lint           # Lint + format check (biome)
 bun run lint:fix       # Auto-fix lint + format issues
 bun run typecheck      # Type check all packages
-bun run test           # API integration tests
+bun run test           # All workspace tests (api + sheet + lib + index)
+bun run test:api       # API integration tests only
 bun run check          # lint + typecheck + test
 ```
 
@@ -73,9 +74,10 @@ bun run check          # lint + typecheck + test
   more apps need it, it belongs in `packages/`. Never put `useQuery`, `useMutation`, error toasts, or `try/catch` +
   `toast.error()` in app components — all error handling lives in hooks using `onMutationError`.
   See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
-- **Package dependency direction is one-way: `sheet → lib`, never the reverse.** `packages/lib` is shared
-  FE+BE; `packages/sheet` has React peer dependencies and DOM-coupled modules. If lib imported sheet,
-  the BE would transitively pull React in at module-eval time. Shared sheet types (`Cell`, `Sheet`, `Op`,
+- **Package dependency direction is one-way: `sheet → lib` and `ui → lib`, never the reverse — `lib`
+  imports neither.** `packages/lib` is shared FE+BE; `packages/sheet` declares React peer dependencies, and
+  both `packages/sheet` and `packages/ui` are React/DOM-coupled modules. If lib imported either, the BE would transitively pull React in
+  at module-eval time (a biome rule enforces it). Shared sheet types (`Cell`, `Sheet`, `Op`,
   `CellMatrix`, `Range`, `SingleRange`, `ConditionalFormatRule`, …) live in `packages/lib/src/sheets/types.ts`;
   the sheet package's `engine/types.ts` and `state/types.ts` re-export them. Sheet utilities that need to be importable
   by both FE and BE (e.g. `opToPatchOnSheets`) live in `packages/lib/src/sheets/`
@@ -211,7 +213,7 @@ change must be indistinguishable from the code around it.
 | **Upload pipeline**   | `apps/api/src/lib/mount/upload-queue.ts` + `lib/sync/` | Write-behind S3 uploads: `isRemote` mounts stage + enqueue in `metadata.db`, a per-mount `UploadQueue` drains with retry/backoff; `local`/`local-key` stay synchronous. See [SYNC.md](docs/SYNC.md) |
 | **Versioning**        | `apps/api/src/lib/versioning/`               | Opt-in file-level snapshots in `<container>/versions/`; snapshot/restore mechanics + locking in [STORAGE.md § File Versioning](docs/STORAGE.md#file-versioning) |
 | **Copy / move**       | `apps/api/src/lib/drive/copy-across.ts`      | Move stays in-mount; copy picks the same-storage fast path or the cross-mount bridge, containers copy safely by design. See [STORAGE.md § Copy / Move](docs/STORAGE.md#copy--move) |
-| **File history + watch** | `apps/api/src/lib/drive/history.ts`       | `FileHistory` on `Mount` (`file_events` + `path_watchers`): typed events when an actor is threaded, read-gated watcher notifications via home-relay, shared `describeFileEvent` phrasing, live refresh via `drive:file-history-updated` SSE. See [PROPOSAL_FILE_HISTORY.md](docs/PROPOSAL_FILE_HISTORY.md) (phase 1 + as-built deltas) and [ACTIVITY-ROWS.md](docs/ACTIVITY-ROWS.md) |
+| **File history + watch** | `apps/api/src/lib/drive/history.ts`       | `FileHistory` on `Mount` (`file_events` + `path_watchers`): typed events when an actor is threaded, read-gated watcher notifications via home-relay, shared `describeFileEvent` phrasing, live refresh via `drive:file-history-updated` SSE. See [FILE-HISTORY.md](docs/FILE-HISTORY.md) and [ACTIVITY-ROWS.md](docs/ACTIVITY-ROWS.md) |
 
 #### Drive Architecture
 
@@ -258,7 +260,7 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Routing**        | `apps/[name]/src/routes/`                             | TanStack Router, file-based. `_auth.tsx` guards            |
 | **Command palette**| `packages/lib/src/core/command-palette/` + `packages/ui/src/components/layout/app/command-palette/` | `Mod+K` dialog mounted by `AppShell.PaletteRunner`, gated via `useOptionalCommandPalette` so apps without the provider don't crash. See [PROPOSAL_COMMAND_PALETTE.md](docs/PROPOSAL_COMMAND_PALETTE.md); the `doc:` scope handoff is in [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md) |
 | **In-document search** | `packages/lib/src/doc-search/` + `packages/ui/src/components/layout/search/` + per-app controllers | ⌘F find bar (+ replace) in every eigendoc editor — one shared 3-method `DocSearchController` contract, `DocSearchProvider` session + keybinds, `?q=` deep links, phase-2 comment search. See [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md) |
-| **Search**         | `apps/api/src/lib/mount/search-index.ts` + `apps/api/src/routes/search.ts` + `packages/lib/src/core/search/` | Per-scope inline FTS5 — mail (`MailDB.searchMail`) + drive name/content indexes with a per-mount reindex queue; FE `useSearch` hook. See [PROPOSAL_SEARCH.md](docs/PROPOSAL_SEARCH.md) |
+| **Search**         | `apps/api/src/lib/mount/search-index.ts` + `apps/api/src/routes/search.ts` + `packages/lib/src/core/search/` | Per-scope inline FTS5 — mail (`MailDB.searchMail`) + drive name/content indexes with a per-mount reindex queue; FE `useSearch` hook. See [SEARCH.md](docs/SEARCH.md) |
 | **Contact suggestions** | `packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts` | Single canonical hook merging personal contacts + team members, used by mail compose, calendar share/attendees, drive share, chat @-mention, and the command palette. `ContactSuggestion` shape in `packages/lib/src/types/contact.ts` |
 | **New-chat wizard** | `packages/lib/src/core/chat/hooks/use-chat.ts` + `packages/ui/src/components/layout/chat/chat-create-wizard.tsx` | `ChatCreateWizard` — two-step "New chat" dialog (person + team mode) with open-don't-duplicate matching and server-side create + share. See [CHAT.md](docs/CHAT.md#new-chat-wizard) |
 | **Mail shortcuts** | `apps/mail/src/components/mail/hooks/use-mail-shortcuts.ts` | Opt-in Gmail-style keyboard shortcuts; `?` in Mail opens the cheat-sheet. See [MAIL.md](docs/MAIL.md) |
@@ -331,7 +333,7 @@ Before building custom UI, check these exist in `packages/ui/src/components/layo
 | `FileMenu`      | `toolbar/file-menu.tsx`      | File dropdown (rename, delete, etc.) |
 | `RequestAccessView` | `app/request-access-view.tsx` | "Request access" screen for shared resources (hides sidebar) |
 
-Full component list: [LAYOUT.md](docs/LAYOUT.md)
+Full component list: [SHARED-PRIMITIVES.md](docs/SHARED-PRIMITIVES.md) (generated, CI-gated); layout patterns in [LAYOUT.md](docs/LAYOUT.md)
 
 ### Query Keys Pattern
 
@@ -405,7 +407,7 @@ is set to `external_{email}` (e.g. `external_alice@example.com`). Same prefix co
 
 ## Testing
 
-Tests are in `apps/api/src/test/`. Run with `bun run test` or `bun test apps/api/src/test/[file].test.ts`.
+The API integration tests are in `apps/api/src/test/`. `bun run test` runs every workspace's tests (api + sheet + lib + index); `bun run test:api` runs the API suite alone. A single file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/[file].test.ts`.
 
 **Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`:
 - `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients

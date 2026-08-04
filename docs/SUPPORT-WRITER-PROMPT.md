@@ -1,8 +1,11 @@
 # Eigen Support — Per-Article Writer Prompt
 
-The prompt template given to each article-writing subagent (one subagent per article). The campaign workflow
-fills in the `{placeholders}` from the worklist and runs one agent per article. Kept here so the template is
-reviewable and reusable.
+> **TLDR**: Reusable prompt template for writing one help-center article. Fill the `{placeholders}` by hand;
+> the prose rules live in [SUPPORT-STYLE-GUIDE.md](SUPPORT-STYLE-GUIDE.md).
+
+The prompt template given to each article-writing subagent (one subagent per article). Fill in the
+`{placeholders}` by hand when you dispatch a writer: the bulk campaign that once generated them is finished, and
+there is no harness left that fills them for you. Kept here so the template is reviewable and reusable.
 
 ---
 
@@ -28,9 +31,12 @@ Contacts, Chat, Stickies, plus Space for account settings and Admin).
 - **Type:** `{type}`
 - **Scope:** {scope}
 - **Where the feature probably lives:** {hint}
-- **Frontmatter to set:** `type: {type}`, `order: {order}`, `updated: 2026-06-08`, `crossSections: {cross}`,
-  plus a one-sentence `description`, a few lowercase `tags`, and `related` if there's an obvious sibling.
-- **Already written (do NOT duplicate — link to these instead):** {existing}
+- **Frontmatter to set:** `type: {type}`, `order: {order}`, `updated:` today's date in `YYYY-MM-DD`,
+  `crossSections: {cross}`, plus a one-sentence `description`, a few lowercase `tags`, and `related` if there's
+  an obvious sibling.
+- **Already written (do NOT duplicate — link to these instead):** every article already in
+  `apps/index/src/data/support/{section}/`. List that directory and read the titles before you start; your
+  article must not overlap with one that exists.
 
 ## How to work
 

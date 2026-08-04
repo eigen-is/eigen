@@ -15,7 +15,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard } from '@workspace/ui';
+import { CardFormDialog, CommentLifecycleDialogs, LoadingState, NoteCard, PanelColumn } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
@@ -444,7 +444,6 @@ export function StickiesBoard({
                                                     details: { card: removed?.title ?? '', cardId: deleteCardId },
                                                 });
                                             }
-                                            setDeleteCardId(null);
                                         }}
                                     />
 
@@ -459,15 +458,17 @@ export function StickiesBoard({
                                     />
                                 </div>
                                 {!isMobile && activityPanelOpen && (
-                                    <ActivityPanel
-                                        path={path}
+                                    <PanelColumn
+                                        activePanel="activity"
                                         onClose={() => setActivityPanelOpen(false)}
-                                        onOpenCard={({ cardId, chatName }) => {
-                                            const id =
-                                                cardId ??
-                                                (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                            if (id) setOpenCardId(id);
-                                        }}
+                                        path={path}
+                                        cards={cards}
+                                        entries={allComments}
+                                        members={members}
+                                        currentUserEmail={currentUserEmail}
+                                        filter={commentFilter}
+                                        commentContextMenu={cardContextMenu}
+                                        onOpenCard={setOpenCardId}
                                     />
                                 )}
                             </div>

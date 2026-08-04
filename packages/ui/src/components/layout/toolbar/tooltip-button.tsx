@@ -46,14 +46,9 @@ export const TooltipButton = ({
                     form={form}
                     // Icon-only buttons have no text content — the tooltip text is the name.
                     aria-label={label ? undefined : tooltipText}
-                    {...(preventFocusLoss
-                        ? {
-                              onMouseDown: (e: React.MouseEvent) => {
-                                  e.preventDefault();
-                                  onClick?.();
-                              },
-                          }
-                        : { onClick })}
+                    onClick={onClick}
+                    // preventDefault blocks pointer focus transfer without canceling the click, so keyboard activation still fires.
+                    onMouseDown={preventFocusLoss ? (e: React.MouseEvent) => e.preventDefault() : undefined}
                 >
                     <Icon className="h-4 w-4" />
                     {label}

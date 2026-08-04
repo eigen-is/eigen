@@ -6,7 +6,7 @@ import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
 import { ImageResizeHandles } from '@workspace/ui/components/layout/media/image-resize-handles';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps) {
     const imageRef = useRef<HTMLImageElement>(null);
@@ -27,6 +27,12 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     const layout = (node.attrs.layout || 'block') as FigureLayout;
     const isWrapping = layout === 'wrap-left' || layout === 'wrap-right';
 
+    // Re-arm the one-shot loader when the source changes so the author's width reset recomputes the ratio.
+    useEffect(() => {
+        imageProcessed.current = false;
+        setAspectRatio(null);
+    }, [mediaName]);
+
     const getMaxWidth = useCallback(() => {
         const container = containerRef.current?.closest('[data-document]');
         if (!container) return Infinity;
@@ -37,14 +43,22 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
-        imageProcessed.current = true;
 
         const nw = imageRef.current.naturalWidth;
         const nh = imageRef.current.naturalHeight;
-        const maxWidth = getMaxWidth();
+        const hasIntrinsicSize = nw > 0 && nh > 0;
+        // Intrinsic dimensions need no layout, so the resize handles get their ratio even from a load
+        // that happens while the editor is hidden.
+        if (hasIntrinsicSize) setAspectRatio(nw / nh);
 
-        if (nw > 0 && nh > 0) {
-            setAspectRatio(nw / nh);
+        const maxWidth = getMaxWidth();
+        // A hidden editor measures 0 while the padding subtracts, and that negative width would land in
+        // the doc. Load fires once per src, so un-hiding brings no second chance: the width stays unset
+        // until the node view remounts, which max-w-full renders fine.
+        if (maxWidth <= 0) return;
+        imageProcessed.current = true;
+
+        if (hasIntrinsicSize) {
             if (!node.attrs.width) {
                 updateAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
             }
@@ -94,7 +108,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                     <ImageResizeHandles
                         width={width}
                         aspectRatio={aspectRatio}
-                        maxWidth={getMaxWidth()}
+                        getMaxWidth={getMaxWidth}
                         onResize={(w) => updateAttributes({ width: w })}
                         selected={selected}
                         editable={isEditable}

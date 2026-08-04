@@ -1,10 +1,12 @@
 # Activity Rows
 
-The topbar notification bell, the Drive *Recent activity* panel, and the eigendoc editors'
-*Activity* side panel (`ActivityPanel`, toggled from `DocumentShareCluster`) render the same row
-anatomy through one shared component and one shared phrasing layer. This doc is the reference for what
-every row says and where it links. The notification pipeline itself (storage, coalescing, SSE,
-routes) is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
+> **TLDR**: The reference for what every activity row says and where it links. The bell, Drive's
+> *Recent activity* panel and the editors' *Activity* panel all render one `ActivityRow` through one
+> shared phrasing layer (`describeFileEvent` / `describeNotification`). The pipeline behind it
+> (storage, coalescing, SSE, routes) is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
+
+The three surfaces are the topbar notification bell, the Drive *Recent activity* panel, and the
+eigendoc editors' *Activity* side panel (`ActivityPanel`, toggled from `DocumentShareCluster`).
 
 ## Anatomy
 
@@ -22,8 +24,10 @@ routes) is [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md).
   avatar (`notification-badge.tsx`: app color + glyph from `EIGEN_DOC_ICONS`/`colorVar`,
   `--app-*-color` vars); panel rows don't — their context is already one item.
 - Unread (bell only): `bg-primary/5` tint, `font-medium` primary.
-- Bell and toast links open a **new tab** (`noopener`); panel links navigate in place like the
-  rest of Drive.
+- Bell rows navigate in the **same tab** (`window.location.assign` in `notification-bell.tsx`), like
+  the panels. Only the toast's **View** action opens a new tab (`window.open(url, '_blank',
+  'noopener')` in `packages/lib/src/core/notification/sse-handlers.ts`) — a toast can land while you
+  are working, so it must not take you away.
 
 ## Action-line rules
 
@@ -110,3 +114,7 @@ limitation — resolving would cost a fetch per row).
   the read shape — old rows lack it), `commented` carries `chatName`.
 - Old rows degrade: no `details` → action + body only; missing `cardId`/`chatName` → the
   container-level link. Never blank, never a crash.
+- In-editor mode: the host passes `ActivityPanel` its lifecycle `cards` and an
+  `onOpenCard(cardId)`; the panel resolves a row's `cardId`/`chatName` to one id itself. Drive's
+  *Recent activity* mounts `ActivityEventList` directly, with no `onOpenCard`, so its rows keep
+  their deep links.

@@ -65,6 +65,7 @@ next-env.d.ts
 .claude/worktrees/
 .claude/data/
 .env.eigen
+.vscode/
 /docs/superpowers/
 /docs/plans/
 /data/guest/

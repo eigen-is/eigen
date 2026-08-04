@@ -22,7 +22,6 @@ export const Route = createFileRoute('/blog/')({
                     'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
             },
             { property: 'og:type', content: 'website' },
-            { property: 'og:url', content: 'https://eigen.is/blog' },
         ],
     }),
 });

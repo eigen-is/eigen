@@ -42,10 +42,13 @@ Full architecture in [IMAP.md](IMAP.md). The relevant facts:
   → `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts:130`), which **always** does
   `store.append('', message)` — INBOX. The message is already `simpleParser`-parsed there for
   iMIP detection.
-- **"Report Spam" is a pure folder move.** `handleReportSpamById`
-  (`apps/mail/src/components/mail/hooks/use-mail-actions.ts:142`) → `PUT
-  /mail/:ownerId/message/move` → `Mail.messageMove` (`mail-domain.ts:207`) → Maildir rename +
+- **"Report Spam" is a pure folder move.** `handleReportSpamByIds`
+  (`apps/mail/src/components/mail/hooks/use-mail-actions.ts`) → `PUT
+  /mail/:ownerId/message/move` → `Mail.messageMove` (`mail-domain.ts`) → Maildir rename +
   DB update. No flag, no header, no learning.
+- **Mail has a single-slot undo (`z`)** that reverses a spam report by moving the message back to
+  its previous mailbox through the same `PUT /mail/:ownerId/message/move` — so it rides the
+  server-side `messageMove` training hook automatically, un-learning the spam it just learned.
 - **Junk is already a first-class mailbox**: in `STANDARD_MAILBOXES`
   (`apps/api/src/lib/core/constants.ts:33`), mapped to IMAP `\Junk`
   (`apps/api/src/lib/mail/mailutils.ts:12`), excluded from search

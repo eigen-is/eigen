@@ -6,7 +6,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { Check } from 'lucide-react';
 import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -34,6 +33,7 @@ import {
     handleVerticalAlign,
     updateFormat,
 } from '../../state';
+import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 import { ConditionRules } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
@@ -99,6 +99,7 @@ function NumberFormatSubmenu() {
 function TextSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
     const { toolbar, fontarray } = en;
+    const textColor = useAnchorCell()?.fc ?? '';
 
     return (
         <DropdownMenuSub>
@@ -161,20 +162,16 @@ function TextSubmenu() {
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
 
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>{toolbar['font-color']}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel p-3">
-                        <ColorPicker
-                            value=""
-                            resetLabel="Default"
-                            onChange={(color) => {
-                                setContext((ctx) => {
-                                    handleTextColor(ctx, refs.cellInput.current!, color);
-                                });
-                            }}
-                        />
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                <ColorPickerMenuItem
+                    label={toolbar['font-color']}
+                    value={textColor}
+                    resetLabel="Default"
+                    onChange={(color) => {
+                        setContext((ctx) => {
+                            handleTextColor(ctx, refs.cellInput.current!, color);
+                        });
+                    }}
+                />
             </DropdownMenuSubContent>
         </DropdownMenuSub>
     );
@@ -360,24 +357,19 @@ function FontSizeSubmenu() {
 
 function FillColorItem() {
     const { setContext, refs } = useContext(WorkbookContext);
+    const fillColor = useAnchorCell()?.bg ?? '';
 
     return (
-        <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Fill color</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel p-3">
-                <ColorPicker
-                    value=""
-                    resetLabel="Default"
-                    onChange={(color) => {
-                        if (color) {
-                            setContext((ctx) => {
-                                handleTextBackground(ctx, refs.cellInput.current!, color);
-                            });
-                        }
-                    }}
-                />
-            </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        <ColorPickerMenuItem
+            label="Fill color"
+            value={fillColor}
+            resetLabel="Default"
+            onChange={(color) => {
+                setContext((ctx) => {
+                    handleTextBackground(ctx, refs.cellInput.current!, color);
+                });
+            }}
+        />
     );
 }
 

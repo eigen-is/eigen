@@ -1,4 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
+import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
+import { useRef } from 'react';
 
 type MediaPreviewProps = {
     src: string;
@@ -10,9 +12,17 @@ type MediaPreviewProps = {
 export function MediaPreview({ src, type, caption, onClose }: MediaPreviewProps) {
     useHotkey('Escape', () => onClose());
 
+    const overlayRef = useRef<HTMLDivElement>(null);
+    useFocusTrap(overlayRef);
+
     return (
         <div
-            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center animate-in fade-in"
+            ref={overlayRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={caption || 'Media preview'}
+            tabIndex={-1}
+            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center animate-in fade-in outline-none"
             onClick={onClose}
             style={{ cursor: 'zoom-out' }}
         >

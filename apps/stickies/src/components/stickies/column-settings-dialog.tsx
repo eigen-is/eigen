@@ -64,7 +64,6 @@ export function ColumnSettingsDialog({
             columnsMap.delete(columnId);
         });
 
-        setIsDeleteDialogOpen(false);
         onClose();
     };
 

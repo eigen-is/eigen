@@ -196,7 +196,7 @@ Architecture docs live in `docs/`:
 | Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md) |
 | Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [Testing](docs/TESTING.md) |
 | Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
-| Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATIONS.md), [IMAP](docs/IMAP.md) |
+| Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md) |
 | Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |
 | Operations | [Quota](docs/QUOTA.md), [Server Settings](docs/SERVER-SETTINGS.md), [Export](docs/EXPORT.md), [Organizations](docs/ORGANISATIONS-AND-TEAMS.md) |
 

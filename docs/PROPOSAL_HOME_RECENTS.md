@@ -8,11 +8,11 @@
 > collab-doc open), cross-home via `home-relay` — the FE only reads. No SSE, no
 > settings toggles in v1 (per-kind *Clear* instead). Auto-pruned from the per-Home
 > lifecycle. Viewer-side sibling of the owner-side activity timeline in
-> [PROPOSAL_FILE_HISTORY.md](PROPOSAL_FILE_HISTORY.md).
+> [FILE-HISTORY.md](FILE-HISTORY.md).
 >
 > *Revised 2026-06-12 after code verification + adversarial review: corrected the
 > derive-vs-store argument (`emails.recipientsAll` exists) and the method names
-> (`Maildir.messageSend`, `Drive.updateACL`), fixed the ACL/team relay wiring, moved
+> (`Mail.messageSend`, `Drive.updateACL`), fixed the ACL/team relay wiring, moved
 > the file-open write server-side, dropped the SSE event, the settings toggles, the
 > `context`/`firstUsedAt` columns, useCount on files, and the v1 Drive Recent view.*
 
@@ -34,8 +34,8 @@
 - **Cross-user recents.** Each user has their own. Team-context writes touch the
   *typing user's* recents via the relay, never the team's.
 - **Audit logging.** Recents is best-effort, lossy, prunable. The audit-shaped
-  timeline is `file_events` ([PROPOSAL_FILE_HISTORY.md](PROPOSAL_FILE_HISTORY.md)).
-- **Full-text search across recents.** See `PROPOSAL_SEARCH.md`.
+  timeline is `file_events` ([FILE-HISTORY.md](FILE-HISTORY.md)).
+- **Full-text search across recents.** See `SEARCH.md`.
 - **Settings toggles in v1.** Per-kind *Clear* covers the privacy story; an
   `UserSettings.recents` enable flag is an additive JSON field on the existing
   per-user `settings.json` store later, if asked — no migration.
@@ -117,8 +117,8 @@ The FE never writes recents. Each touch happens on the canonical commit path:
 
 | Source | Where | Path to the actor's home |
 |---|---|---|
-| Mail send | `Maildir.messageSend()`, after sendmail succeeds (failed sends don't pollute) | direct — own home |
-| ACL grant | `Drive.updateACL()` added-entries diff | **relay** — runs in the owner's (possibly team) home. Needs the actor as a full `User`: the existing `actor` param is `{ name, email } \| null` with no userId, so the actor's home can't be addressed today. The File-History work threads exactly this (`file_events.actorUserId`); recents rides the same change |
+| Mail send | `Mail.messageSend()` (`apps/api/src/lib/mail/mail-domain.ts`), after sendmail succeeds (failed sends don't pollute) | direct — own home |
+| ACL grant | `Drive.updateACL()` added-entries diff | **relay** — runs in the owner's (possibly team) home. The actor is available as a full `User`: `Drive.updateACL` takes `actor?: User \| null` (`apps/api/src/lib/drive/drive.ts`) and `file_events` carries `actorUserId` / `actorEmail` (`apps/api/src/lib/mount/schema.ts`), so recents reads `actorUserId` directly to address the actor's home. No prerequisite left |
 | Chat mention commit | `ChatRoom.postMessage` mention extraction (`chat.ts`); the actor's user id arrives from the chat route | **relay** |
 | Collab doc open | the `GET /collab/:ownerId/:mountId/:pathId/info` handler, after its `canRead` check — the one seam all four eigendoc editors share (`useEigenDocEditorRoute` → `useCollabDocumentInfo`; its 60 s `staleTime` gives open-debouncing for free) | **relay** (`sendToHome(user.id, …)`) — zero FE code; future eigendoc apps are covered automatically |
 
@@ -165,8 +165,11 @@ the event together with that view, not before.
 
 ## Pruning
 
-From the per-Home lifecycle — homes idle-evict after 5 minutes and there is no
-global home registry, so no scheduler tick:
+From the per-Home lifecycle — homes idle-evict on a per-type window (`UserHome`
+5 minutes, `TeamHome` 30 minutes via `TEAM_HOME_IDLE_MS`,
+`apps/api/src/lib/home/team-home.ts`) and there is no global home registry, so no
+scheduler tick. Recents lives on `UserHome` only, so the 5-minute window is the
+one that paces pruning:
 
 - On `UserHome.init()`, fire-and-forget per kind: drop rows older than `maxAge`,
   then LRU-trim to `maxRows` by `lastUsedAt`.
@@ -187,9 +190,10 @@ Siblings sharing write moments, opposite directions — kept separate by design:
 
 The same commit path often writes both: an ACL grant records owner-side
 `'acl-changed'` (timeline + watchers) *and* an actor-side email-recent touch
-(autosuggest). Different facts — no one-source-of-truth violation. Shared
-dependency: the actor-as-`User` threading through `Drive` lands with File History;
-recents reuses it.
+(autosuggest). Different facts — no one-source-of-truth violation. The shared
+dependency is already satisfied: the actor-as-`User` threading through `Drive`
+landed with File History, so recents reuses `actor` / `file_events.actorUserId`
+as-is.
 
 ## Resolved questions
 
@@ -212,7 +216,7 @@ recents reuses it.
 | `apps/api/src/lib/home/home.ts` / `user-home.ts`                  | `hasRecents` flag; UserHome wiring                             |
 | `apps/api/src/lib/home/home-relay.ts`                             | `recents:touch` `HomeMessage` variant, guarded by `hasRecents` |
 | `apps/api/src/lib/mail/mail-domain.ts`                            | Touch recipients after `messageSend` success                   |
-| `apps/api/src/lib/drive/drive.ts`                                 | `updateACL` added-entries diff → relay touch (rides the File-History actor threading) |
+| `apps/api/src/lib/drive/drive.ts`                                 | `updateACL` added-entries diff → relay touch (reuses the landed `actor: User` threading) |
 | `apps/api/src/lib/chat/chat.ts`                                   | Mention commit → relay touch                                   |
 | `apps/api/src/routes/collab.ts`                                   | `info` handler → relay touch after `canRead`                   |
 | `apps/api/src/routes/recents.ts`                                  | GET/DELETE per kind, `requireSelf` + `requireNonGuest`         |

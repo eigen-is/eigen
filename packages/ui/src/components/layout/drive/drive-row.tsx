@@ -79,18 +79,30 @@ export function DriveRow({
                 isActive && 'eigen-list-item-active',
                 isSelected && 'eigen-list-item-selected',
                 dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
-                disabled && 'opacity-40 pointer-events-none',
+                // No pointer-events-none: a disabled row must still be the contextmenu hit target so the
+                // interceptor below can suppress the background menu (its handlers below stay inert).
+                disabled && 'opacity-40',
             )}
             onClick={(e) => {
+                if (disabled) return;
                 selection.handleItemClick(item.id, e);
                 if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
                     onItemClick?.(item);
                 }
             }}
-            onContextMenu={hideActions ? undefined : (e) => handleContextMenu(e, item)}
+            onContextMenu={
+                hideActions
+                    ? (e) => {
+                          // Picker rows have no actions, but the event must not bubble to DriveBrowser's
+                          // background New-folder menu (which would offer to create a sibling of this row).
+                          e.preventDefault();
+                          e.stopPropagation();
+                      }
+                    : (e) => handleContextMenu(e, item)
+            }
             {...(disabled || hideActions ? {} : longPressBind(item))}
-            {...drag.getDragProps(item)}
-            {...getDropProps(item)}
+            {...(disabled ? {} : drag.getDragProps(item))}
+            {...(disabled ? {} : getDropProps(item))}
         >
             <div className="pr-2 py-1.5 flex items-center min-w-0">
                 <div className="relative mr-2 flex-shrink-0">

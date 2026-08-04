@@ -280,6 +280,37 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   a summary strip (status label always leads) + "n hidden · Clear filters" footer; the empty state
   offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
   All/For-you tabs + status Select are gone.
+- **Hosting**: `CommentPanel` and `ActivityPanel` are list bodies with no chrome. Docs, slides and sheets
+  mount the same `PanelColumn` (`packages/ui/src/components/layout/comments/panel-column.tsx`)
+  on every viewport: one `Column` with
+  id `panel` whose toolbar carries `ToolbarTitle`, `CommentFilterButton` in comments mode, and the close
+  affordance — `Column`'s own back arrow below the breakpoint, an X above it. `Column` also sizes the
+  pane: full width on mobile, a `PROPERTIES_PANEL_WIDTH_PX` sibling with `border-l` on desktop, so hosts
+  drop their own width. Mount it outside any `<ColumnLayout mobileColumn="…">` — a `Column` self-hides
+  when its id doesn't match, so a host that wraps it gets no pane at all, silently. Props are pure
+  projection plus one `onOpenCard(cardId)`. On mobile every host passes plain `setOpenCardId`: the editor
+  is hidden while the pane is up, so scroll-to-mark (docs) and the slide + object reveal (slides) would
+  drive a view nobody can see, and an activity row's card opens over the Activity pane rather than
+  switching it to Comments under the dialog. On desktop docs and slides pass their reveal, and docs'
+  activity tap still switches to Comments. `activeComments` is the one optional prop — an activity-only
+  host (stickies) never renders the comments body.
+  Those three hide the editor (a `hidden` wrapper) rather than unmounting it and mount the
+  pane's `Column` as a sibling, so tiptap node views, slide thumbnails, scroll position and selection
+  survive a pane visit — that is also why docs' two resize observers and the sheet engine's skip 0×0
+  boxes (`display: none` measures zero) and why docs' figure node view refuses to size an image off a
+  0-width page. Hiding takes the find bar with it, so each of the three passes
+  `DocSearchProvider`'s `onOpenChange` and closes the pane when a session opens below the breakpoint
+  (⌘F, a palette in-document hit) — the bar would open inside the hidden editor otherwise. Desktop keeps
+  its layout: slides and sheets mount the pane as a right-hand sibling, docs inside its absolute
+  right-edge overlay.
+  **Stickies is the fourth host and is desktop-only**: it mounts `PanelColumn` for activity behind
+  `!isMobile`, hides nothing and passes no `onOpenChange`, and its toolbar toggle is absent on mobile.
+  Giving stickies the mobile pane is recorded as next-round work in
+  [MOBILE.md](MOBILE.md).
+- **Open state**: `useDocumentPanels(isMobile)` (`@workspace/lib/comments`) owns the comments/activity
+  pair for docs, slides and sheets — one `panel: 'comments' | 'activity' | null` slot, so the two can
+  never both be open. Host-owned like `useCommentFilter`. It also returns `mobilePanelOpen` and the
+  `onSearchOpenChange` handler every host hands to `DocSearchProvider`.
 
 ### Comment filters (`packages/lib/src/core/comments/filter.ts` + filter UI)
 
@@ -410,7 +441,7 @@ The Y.Doc is the source of truth for which cards are "active":
 | `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
 | `packages/ui/src/components/layout/cards/`                          | Shared CardFormDialog + CardDialog |
-| `packages/ui/src/components/layout/comments/`                       | CommentPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
+| `packages/ui/src/components/layout/comments/`                       | PanelColumn + CommentPanel + ActivityPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
 | `packages/ui/src/components/layout/notes/`                          | NoteCard + NoteCardDialog                     |
 | `apps/docs/src/components/docs/editor.tsx`                          | Docs editor integration                       |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`          | ProseMirror plugins (interaction + decorations) |

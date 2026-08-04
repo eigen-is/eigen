@@ -1,14 +1,10 @@
 # ACL System
 
-> **TLDR**: Additive ACL inheritance — permissions flow down the folder tree. `canReadFromAncestors`/
-> `canWriteFromAncestors` check local ACL entries across a pre-fetched breadcrumb. No deny mechanism. Supports user
-> emails and `team_` prefixed group IDs. Visibility: `private`, `public-read`, `public-write`. The ACL route takes
-> **deltas** (`{add, remove}`) merged server-side, so concurrent sharers can't revert each other. Push-based share
-> propagation writes to recipient DBs — **asynchronously** (off the request path, bounded concurrency, per-path
-> FIFO ordering; enforcement is always owner-side, so recipient mirrors are display-only). A share registry handles
-> targets that don't exist yet. Chat invites bubble ACL to the outermost container document via
-> `findContainerFromAncestors()`. A per-path `sharingRestricted` flag lets owners lock down who can manage access
-> without removing edit rights. Core logic in `apps/api/src/lib/drive/acl.ts`.
+> **TLDR**: Additive ACL inheritance down the folder tree — no deny, no org-level entries; IDs are user emails or
+> `team_` group IDs. The ACL route takes a **delta** (`{add, remove}`) merged server-side, so concurrent sharers
+> can't revert each other. Share propagation to recipient DBs is push-based and **asynchronous** — enforcement
+> stays owner-side. Per-path `sharingRestricted` locks access management to the owner.
+> Core logic: `apps/api/src/lib/drive/acl.ts`.
 
 ## Types
 
@@ -145,6 +141,14 @@ On user deletion (`deleteUserCompletely`), share registry entries are cleaned up
 
 When ACLs change, `apps/api/src/lib/drive/acl-propagation.ts` updates each affected user's `shared.db`.
 
+### Share Emails
+
+`emailNewlyAddedAclEntries` (`apps/api/src/lib/drive/acl-propagation.ts`) mails every email address newly added to
+an ACL. The gate is per recipient: `notifications.email.guestOnAclAdd` when the address has no account or belongs
+to a guest, `notifications.email.userOnAclAdd` when it is a registered user. Callers that send their own invite
+pass `suppressShareEmail`, which only suppresses mail to registered users — an account-less address still gets the
+invite, because that mail is the only way in. Both settings live in [SERVER-SETTINGS.md](SERVER-SETTINGS.md).
+
 ### Pull Routes
 
 ```
@@ -157,39 +161,9 @@ inserts complete in milliseconds with Bun + SQLite. Non-issue for typical deploy
 
 ## Chat Invite Bubbling
 
-When inviting someone to an embedded chat (inside an eigendoc/stickies/slides/sheets), ACL is set on the container
-document — not on the chat itself. A dedicated invite endpoint resolves the outermost container via
-`findContainerPath()`, merges the new ACL entry server-side, and delegates to `Drive.inviteToChat()`. The generic
-`Drive.updateACL()` is not involved.
-
-### Why Not Set ACL on the Chat Directly
-
-The generic `PUT /drive/.../acl` endpoint replaces the entire ACL array. The frontend builds that array from the
-current path's ACL. An embedded chat typically has no direct ACL (it inherits from the container), so the built array
-would contain only the new entry — overwriting the container's existing ACL entries. Server-side resolution and merging
-avoids this data loss.
-
-### findContainerFromAncestors()
-
-**File**: `apps/api/src/lib/drive/acl.ts`
-
-Takes a pre-fetched breadcrumb (root-first) and walks it to find the outermost `DrivePath` whose type passes
-`isCollabType()` (doc, stickies, slides, sheets). Returns `null` if none is found (standalone chat).
-
-`Drive.findContainerPath(mountId, pathId)` fetches the breadcrumb via `mount.getBreadcrumb()` and delegates to this
-function.
-
-```
-chat/General.eigenchat  → not collab
-my-doc.eigendoc         → IS collab → container
-Projects/               → folder
-root                    → stop
-→ returns my-doc.eigendoc
-```
-
-Used by `Drive.inviteToChat()` and `SharedDrive.inviteToChat()`.
-
-### Invite Endpoint
+Inviting someone to an embedded chat (one living inside an eigendoc/stickies/slides/sheets) sets ACL on the
+**container document**, not on the chat. A dedicated endpoint resolves the container server-side and merges the
+entry there:
 
 ```
 POST /chat/:ownerId/:mountId/:chatId/invite
@@ -197,94 +171,54 @@ Body: { email: string }
 Returns: { alreadyHasAccess: boolean, targetPathId: string }
 ```
 
-Route in `apps/api/src/routes/chat.ts`. Delegates to `drive.inviteToChat(mountId, chatId, email)`.
+Route in `apps/api/src/routes/chat.ts`, delegating to `drive.inviteToChat(mountId, chatId, email, user)` — the
+actor is passed through so propagation can attribute the share and send the invite mail.
 
-### Drive.inviteToChat()
+### Why Not Set ACL on the Chat Directly
 
-**File**: `apps/api/src/lib/drive/drive.ts`
+An embedded chat usually has no ACL of its own; it inherits from the container. Granting access on the chat would
+put the entry on the wrong path, and a client cannot reliably see (or safely rewrite) the container's ACL. Resolving
+the container server-side puts the entry where inheritance actually reads it. This is the same failure class the
+delta [ACL route](#acl-route) fixes for the generic path.
 
-1. Finds the chat path
-2. Calls `findContainerPath()` to locate the outermost container
-3. If embedded: sets ACL on the container document
-4. If standalone: sets ACL on the chat itself
-5. Lowercases the email before adding to ACL
-6. Returns `{ alreadyHasAccess, targetPathId }`
+### findContainerFromAncestors()
 
-### SharedDrive.inviteToChat() Override
+In `apps/api/src/lib/drive/acl.ts`. Walks a pre-fetched breadcrumb (root-first) and returns the **outermost**
+`DrivePath` whose type passes `isCollabType()` (doc, stickies, slides, sheets), or `null` for a standalone chat.
+`Drive.findContainerPath()` fetches the breadcrumb and delegates. Used by `Drive.inviteToChat()` and
+`SharedDrive.inviteToChat()`.
 
-**File**: `apps/api/src/lib/drive/sharedDrive.ts`
+### Rules
 
-Adds permission checks before delegating to the underlying drive:
-
-1. Verifies write permission on the chat
-2. Finds container via `findContainerPath()`
-3. Verifies write permission on the container (if present)
-4. Checks `sharingRestricted` flag — blocks non-owners from inviting
-5. Delegates to underlying drive
+- Standalone chat → ACL lands on the chat itself; embedded or nested → on the outermost container
+- Target already in the effective ACL → `alreadyHasAccess: true`, no ACL write
+- `SharedDrive.inviteToChat()` requires write on the chat **and** on the container — otherwise 403
+- `sharingRestricted` on the container blocks editors; the owner (or a team member on a team path) passes
+- Emails are lowercased before comparison and storage; invalid email → 400; self-invite is allowed
 
 ### Frontend
 
-The `/invite` slash command in chat calls `useInviteToChat()`, which posts to the invite endpoint and invalidates
-`driveKeys.path()` on success.
-
-**Hook**: `useInviteToChat()` in `packages/lib/src/core/chat/hooks/use-chat.ts`
-**Command handler**: `use-chat-room.ts` — the `/invite` case calls `inviteToChat.mutateAsync({ email })`
-
-### Edge Cases
-
-| Case                              | Behavior                                                  |
-|-----------------------------------|-----------------------------------------------------------|
-| Standalone chat                   | `findContainerPath()` returns `null` → ACL on chat itself |
-| Embedded chat                     | ACL on outermost container document                       |
-| Nested (chat in folder in doc)    | ACL on outermost container                                |
-| Already has access                | Returns `alreadyHasAccess: true`, no ACL change           |
-| Chat write but no container write | 403                                                       |
-| `sharingRestricted` on container  | Blocks editors, owner bypasses                            |
-| Invalid email                     | 400                                                       |
-| No write permission               | 403                                                       |
-| Case-insensitive emails           | Email lowercased before comparison and storage            |
-| Self-invite                       | Allowed                                                   |
+The `/invite` slash command calls `useInviteToChat()` (`packages/lib/src/core/chat/hooks/use-chat.ts`), which posts
+to the endpoint and invalidates `driveKeys.path()` on success. Command handling lives in `use-chat-room.ts`.
 
 ## Re-Share Prevention
 
-Per-path `sharingRestricted` flag that limits ACL and visibility changes to the owner (or team members for team
-drives). Editors keep full read/write access to content but cannot add/remove people or change visibility. Default:
-`false` (editors can share, matching pre-flag behaviour).
+Per-path `sharingRestricted` flag: only the owner — or a team member on a team-owned path — may change ACL or
+visibility. Editors keep full read/write on content. Default `false`, matching pre-flag behaviour.
 
-### Why
+The ACL model treats "can edit content" and "can manage access" as one permission. Without the flag, sharing a
+document with a contractor hands them full sharing power: add anyone, change permissions, flip to public, remove
+people. The flag separates the two without adding a third permission level.
 
-The ACL model treats "can edit content" and "can manage access" as the same permission. Without this flag, sharing a
-document with a contractor gives them full sharing power — they can add anyone, change permissions, flip visibility to
-public, or remove people. The `sharingRestricted` flag separates these concerns without adding a third permission
-level.
+**Schema**: `sharingRestricted INTEGER NOT NULL DEFAULT 0` on `paths` (`apps/api/src/lib/mount/schema.ts`) and on
+`shared_paths` (`apps/api/src/lib/drive/sharedschema.ts`); `sharingRestricted: boolean` on `DrivePath`.
 
-### Schema
-
-Both `paths` (mount DB) and `shared_paths` (drive DB) have the column:
-
-```sql
-sharingRestricted INTEGER NOT NULL DEFAULT 0
-```
-
-Drizzle schemas: `apps/api/src/lib/mount/schema.ts`, `apps/api/src/lib/drive/sharedschema.ts`.
-TypeScript type: `sharingRestricted: boolean` on `DrivePath` in `packages/lib/src/types/drive.ts`.
-
-### Backend Enforcement
-
-**`SharedDrive.updateACLDelta()`** (`apps/api/src/lib/drive/sharedDrive.ts`) checks the flag after verifying write
-permission:
-
-1. `withWritePermission()` — non-editors get 403 "no write permission" (viewers never see the restriction error)
-2. `isEffectiveOwnerSync()` — returns `true` if the path is team-owned and the caller is a team member
-3. If `sharingRestricted && !effectiveOwner` — 403 "Sharing is restricted by the owner"
-4. The `sharingRestricted` parameter itself is only passed through to `Drive.updateACLDelta()` when the caller is an
-   effective owner; for all other callers it is silently dropped
-
-The owner's own `Drive.updateACLDelta()` is unaffected — it operates on the Home's synthetic user who always passes
-ownership checks.
-
-Chat `/invite` goes through `SharedDrive.inviteToChat()`, which applies the same `sharingRestricted` check before
-delegating.
+**Enforcement**: `SharedDrive.updateACLDelta()` checks write permission first, so viewers get the generic "no write
+permission" 403 and never learn a restriction exists. Then `isEffectiveOwnerSync()` (owner, or team member on a
+team path) decides: a restricted non-owner gets 403, and their `sharingRestricted` value is silently dropped rather
+than applied. Chat `/invite` runs the same check. The owner's own `Drive.updateACLDelta()` is unaffected — it runs
+as the Home's synthetic user. `receiveSharedPathChange()` mirrors the flag into `shared_paths`, so recipients see
+the current restriction state.
 
 ### ACL Route
 
@@ -303,69 +237,28 @@ entries a concurrent sharer just added (the same failure class chat-invite bubbl
 dialog (`DriveAccessListEdit`) diffs its edited list against the initial one and sends only the delta.
 Defined in `apps/api/src/routes/drive.ts`.
 
-### Propagation
-
-`receiveSharedPathChange()` in `shared-with-me.ts` mirrors `sharingRestricted` to `shared_paths` alongside all other
-`DrivePath` fields, so recipients see the current restriction state in their shared-with-me view.
-
 ### Frontend
 
-**Share dialog** (`packages/ui/src/components/layout/drive/drive-access-dialog.tsx`):
-
-- `useIsEffectiveOwner()` (from `packages/lib/src/core/drive/hooks/use-drive-access.ts`) determines if the caller is
-  the owner or a team member
-- When `sharingRestricted && !isEffectiveOwner`, the dialog renders the read-only `DriveAccessList` instead of
-  `DriveAccessListEdit`
-
-**Edit view** (`packages/ui/src/components/layout/drive/drive-access-list-edit.tsx`):
-
-- Shows an "Editors can share" checkbox, visible only to effective owners
-- Checked (default) = `sharingRestricted: false`; unchecked = `sharingRestricted: true`
-- The `sharingRestricted` value is only included in the save payload when the caller is an effective owner
+`useIsEffectiveOwner()` (`packages/lib/src/core/drive/hooks/use-drive-access.ts`) decides what the share dialog
+renders: a restricted non-owner gets the read-only `DriveAccessList`, everyone else `DriveAccessListEdit` with its
+"Editors can share" checkbox (checked = not restricted). The flag is only included in the save payload for effective
+owners. Both components sit in `packages/ui/src/components/layout/drive/`.
 
 ### Design Decisions
 
-**No inheritance.** The flag is per-path, not inherited from parent folders. Creating a subfolder inside a restricted
-folder does not restrict it. Matches Google Drive's behaviour.
+**No inheritance.** Per-path, not inherited from parent folders. A subfolder inside a restricted folder is not
+restricted. Matches Google Drive.
 
-**No self-removal exception.** When restricted, editors cannot modify the ACL at all — including removing themselves.
-To "leave" a share, hide it client-side or ask the owner. A dedicated `DELETE .../acl/me` endpoint can be added later
-if needed.
+**No self-removal exception.** A restricted editor cannot touch the ACL at all, including removing themselves. Hide
+the share client-side or ask the owner. A `DELETE .../acl/me` endpoint can be added later if needed.
 
-**Visibility blocked too.** The flag blocks both ACL and visibility changes. An editor cannot flip a restricted file to
-`public-read`. Both go through the same ACL route and the same check.
+**Visibility blocked too.** An editor cannot flip a restricted file to `public-read` — same route, same check.
 
-**Team members are co-owners.** Team members always go through `SharedDrive` (no team user logs in).
-`isEffectiveOwnerSync()` uses `parseOwnerId()` + pre-fetched `memberships.teamIds` to grant team members full ACL
-control on team paths, including toggling the flag itself.
+**Team members are co-owners.** No team user logs in, so team members always arrive through `SharedDrive`.
+`isEffectiveOwnerSync()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control
+on team paths, including toggling the flag itself.
 
-## Files
+Integration tests: `apps/api/src/test/acl-bubbling.test.ts`, `apps/api/src/test/sharing-restricted.test.ts`.
 
-| File                                                                 | Purpose                                                                 |
-|----------------------------------------------------------------------|-------------------------------------------------------------------------|
-| `packages/lib/src/types/drive.ts`                                    | `DriveACL`, `DriveACLDelta`, `DriveVisibility`, `sharingRestricted` on `DrivePath` |
-| `apps/api/src/lib/drive/acl.ts`                                      | `canReadFromAncestors`, `canWriteFromAncestors`, `matchesACL`, `mergeACLDelta`, `normalizeACL`, `filterRedundantACL`, `findContainerFromAncestors` |
-| `apps/api/src/lib/drive/acl-propagation.ts`                          | `propagateSharedPathChange`, `drainACLFanOuts`, `resolveACLUserIds`, `resolveACLToEmails`, `EffectiveMember` |
-| `apps/api/src/lib/drive/drive.ts`                                    | `canRead`, `canWrite`, `findContainerPath`, `getEffectiveMembers`, `inviteToChat`, `updateACLDelta`, `updateACL` (internal) |
-| `apps/api/src/lib/drive/shared-with-me.ts`                           | `receiveSharedPathChange` + shared-with-me listings over the `shared_paths` mirror |
-| `apps/api/src/lib/drive/sharedDrive.ts`                              | Permission checks, `isEffectiveOwnerSync()`, `inviteToChat()`/`updateACLDelta()` overrides |
-| `apps/api/src/lib/mount/schema.ts`                                   | `sharingRestricted` column on `paths` table                             |
-| `apps/api/src/lib/drive/sharedschema.ts`                             | `sharingRestricted` column on `shared_paths` table                      |
-| `apps/api/src/lib/share/schema.ts`                                   | Share registry Drizzle schema                                           |
-| `apps/api/src/lib/share/db-config.ts`                                | Registry DatabaseConfig + migration                                     |
-| `apps/api/src/lib/share/db.ts`                                       | `getEigenDb()` server-level DB singleton                                |
-| `apps/api/src/lib/share/registry.ts`                                 | Registry CRUD operations                                                |
-| `apps/api/src/lib/share/reconciliation.ts`                           | Pull logic for new users/team members                                   |
-| `apps/api/src/lib/calendar/share-propagation.ts`                     | Calendar-specific propagation + registry                                |
-| `apps/api/src/routes/drive.ts`                                       | ACL route with optional `sharingRestricted`                             |
-| `apps/api/src/routes/chat.ts`                                        | `POST /chat/:ownerId/:mountId/:chatId/invite` route                     |
-| `packages/lib/src/core/drive/hooks/use-drive.ts`                     | `useEffectiveMembers()` hook                                            |
-| `packages/lib/src/core/drive/hooks/use-drive-access.ts`              | `useIsEffectiveOwner()` hook                                            |
-| `packages/lib/src/core/chat/hooks/use-chat.ts`                       | `useInviteToChat()` mutation hook                                       |
-| `packages/lib/src/core/chat/hooks/use-chat-room.ts`                  | `/invite` command handler                                               |
-| `packages/ui/src/components/layout/drive/drive-access-dialog.tsx`    | Share dialog, read-only fallback when restricted                        |
-| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog edit view, "Editors can share" checkbox                    |
-| `apps/api/src/test/acl-bubbling.test.ts`                             | ACL bubbling integration tests                                          |
-| `apps/api/src/test/sharing-restricted.test.ts`                       | Sharing restriction integration tests                                   |
-
-See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat system
+See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat
+system, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the email-notification settings

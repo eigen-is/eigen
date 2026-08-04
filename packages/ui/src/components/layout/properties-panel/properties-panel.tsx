@@ -1,15 +1,26 @@
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar/toolbar-title';
 import { ScrollArea } from '@workspace/ui/components/scroll-area';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
 
+// The w-64 below, for hosts that have to lay out around this panel.
+export const PROPERTIES_PANEL_WIDTH_PX = 256;
+
 type PropertiesPanelProps = {
     children: ReactNode;
+    // Fixed title bar, pixel-matched to the comments/activity Column toolbar (h-12 + ToolbarTitle).
+    title?: ReactNode;
     className?: string;
 };
 
-export function PropertiesPanel({ children, className }: PropertiesPanelProps) {
+export function PropertiesPanel({ title, children, className }: PropertiesPanelProps) {
     return (
         <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
+            {title && (
+                <div className="h-12 flex items-center app-gutter-x shrink-0 border-b">
+                    <ToolbarTitle>{title}</ToolbarTitle>
+                </div>
+            )}
             {/* Radix wraps viewport children in display:table (min-width:100%), which sizes to content and defeats truncate in this fixed-width panel — force block. */}
             <ScrollArea className="flex-1 h-full [&_[data-slot=scroll-area-viewport]>div]:!block">
                 {children}

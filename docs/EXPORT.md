@@ -1,5 +1,10 @@
 # Document Export: DOCX, PDF, HTML
 
+> **TLDR**: One route exports eigendocs, slides and sheets. Each type renders standalone HTML with
+> embedded fonts and base64 images; PDF is that HTML through a WeasyPrint subprocess, DOCX through
+> `@turbodocx/html-to-docx`, XLSX straight from `Sheet[]` via ExcelJS. Every HTML body goes through
+> `sanitizeExportHtml` — DOMPurify plus a data-URI-only rule that closes SSRF against WeasyPrint.
+
 ## Overview
 
 Export eigendoc documents as DOCX, PDF, and HTML. A single HTML pipeline generates standalone HTML with embedded
@@ -86,7 +91,7 @@ Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only), 
 is saturated. `request.signal` is threaded through so a disconnected export drops its queued job or terminates
 its Worker. The transform runs under the 120s export/import deadline
 (`TRANSFORM_LIMITS` in `runner.ts`, looked up per job kind by the seam in `run-transform.ts`); WeasyPrint keeps its own
-60s subprocess timeout (504 on expiry).
+60s subprocess timeout (504 on expiry), and a non-zero WeasyPrint exit is a 500 with its stderr in the message.
 
 ## HTML Pipeline
 
@@ -104,7 +109,7 @@ renderToHTMLString() with custom nodeMappings:
   - figure: base64 data URIs (export) or embed URLs (preview)
         |
         v
-sanitizeExportHtml() (export/sanitize.ts, with ADD_DATA_URI_TAGS for img)
+sanitizeExportHtml() (export/sanitize.ts) — DOMPurify + data:-only url()/<img src>, ADD_DATA_URI_TAGS for img
         |
         v
 wrapInDocument() -> full HTML with:
@@ -133,6 +138,24 @@ converted in the Worker. The `<title>` keeps the UNstripped
 container name (`Report.eigendoc`) — frozen output, pinned by `document-export-route.test.ts`; the docx
 document property keeps the stripped name (`Report`).
 
+### Sanitization and SSRF
+
+Every HTML pipeline — doc and slides (`{doc,slides}/transform.ts`) and the sheets document builders
+(`sheets/render.ts`) — routes its assembled body through `sanitizeExportHtml()`
+(`apps/api/src/lib/export/sanitize.ts`) inside the Worker, before it is wrapped or handed to a
+converter. DOCX and the PDFs inherit it, because they are built from that same sanitized HTML.
+
+On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute and every `<img src>`
+must be a `data:` URI**; anything else is stripped. That is the SSRF guard. Export embeds all its
+resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT
+string (a slide text run, a sheet cell). WeasyPrint fetches such references server-side while
+rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the
+restriction has to happen here. `<a href>` is deliberately left alone: link targets are not fetched
+during render, and docs and sheets carry legitimate http(s) hyperlinks.
+
+The hook is added and removed around each synchronous `DOMPurify.sanitize()` call, so it never leaks
+to other DOMPurify users in the process. Regression tests: `apps/api/src/test/export-pdf-ssrf.test.ts`.
+
 ### CSS Handling
 
 The export HTML includes three CSS layers:
@@ -142,11 +165,16 @@ The export HTML includes three CSS layers:
 
 ### Build Configuration
 
-The `buildfordocker` script externalizes `@turbodocx/*` to prevent it from being bundled (it's 1.7MB
-and changes the module evaluation order, breaking `PATHS.MAIL` initialization in the mail module).
+Production does not run a bundle. `docker/api/Dockerfile` starts the API from TypeScript source
+(`bun run src/index.ts`) with a full `bun install`, so the export dependencies —
+`@turbodocx/html-to-docx`, `sharp`, `jsdom`, `isomorphic-dompurify` — are ordinary `@apps/api`
+dependencies; nothing needs installing separately.
 
-`@turbodocx/html-to-docx` must be installed in the deployment directory alongside `sharp` and
-`isomorphic-dompurify`.
+The `buildfordocker` script (`apps/api/package.json`) is a verification build, not a deploy
+artifact: it bundles the API and Worker entries to inspect what lands in a Worker's module graph.
+It externalizes `sharp`, `jsdom` and `@turbodocx/*` (bundling `@turbodocx` — 1.7MB — changes module
+evaluation order and breaks `PATHS.MAIL` initialization in the mail module); `isomorphic-dompurify`
+bundles fine and stays in.
 
 ## Frontend
 
@@ -187,7 +215,8 @@ Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onEx
   syntax highlighting in practice
 - **Task lists**: custom `taskItem` nodeMapping preserves checked/unchecked state
 - **Export during active collab**: loads last persisted state (may lag a few seconds)
-- **DOMPurify + data URIs**: `ADD_DATA_URI_TAGS: ['img']` preserves base64 image sources
+- **DOMPurify + data URIs**: the doc pipeline passes `ADD_DATA_URI_TAGS: ['img']` to
+  `sanitizeExportHtml` so base64 image sources survive
 
 ## Slides Export
 
@@ -242,6 +271,10 @@ shared with the sheets preview. Inside the Worker,
 requested format's renderer, so an HTML export never evaluates ExcelJS. A recalc failure or an unreadable Yjs
 blob comes back as a warning, never as a failed export. There is no main-thread fallback: an overloaded runner
 returns `503` and any other transform failure throws.
+
+All three formats materialize through `readSheetsFromDoc`, which may recalc the workbook inside the Worker —
+an xlsx import nobody ever opened still exports computed values rather than blanks. See
+[DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md).
 
 The XLSX conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
 same ExcelJS library. Round-tripped: cell values, formulas, rich-text runs (`ct.s`), styles (font, fill,

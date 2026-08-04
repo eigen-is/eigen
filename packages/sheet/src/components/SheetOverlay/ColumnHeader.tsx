@@ -1,3 +1,4 @@
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,7 +25,10 @@ import { OverlayRegion } from './OverlayRegion';
 
 export const ColumnHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
-    const { onContextMenu, anchor: columnMenuAnchor } = useSheetContextMenu('column');
+    const { onContextMenu, openAtPoint, anchor: columnMenuAnchor } = useSheetContextMenu('column');
+    // Long-press opens the column menu on touch, mirroring the cell area — headers otherwise
+    // have no menu entry where the browser never synthesises a contextmenu. bind carries no item.
+    const longPress = useLongPress<null>((_item, x, y) => openAtPoint(x, y));
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const colChangeSizeRef = useRef<HTMLDivElement>(null);
@@ -217,6 +221,7 @@ export const ColumnHeader: React.FC = () => {
             onMouseDown={onMouseDown}
             onMouseLeave={onMouseLeave}
             onContextMenu={onContextMenu}
+            {...longPress.bind(null)}
         >
             {/* Selected highlights are passive: render into every region in pure
                 content coordinates; each region's clip shows exactly its portion. */}
@@ -262,7 +267,19 @@ export const ColumnHeader: React.FC = () => {
                         }}
                     >
                         {allowEditRef.current && (
-                            <span className="header-arrow" onClick={onContextMenu} tabIndex={0}>
+                            <span
+                                className="header-arrow"
+                                role="button"
+                                aria-label="Column options"
+                                tabIndex={0}
+                                onClick={onContextMenu}
+                                onKeyDown={(e) => {
+                                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                                    e.preventDefault();
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    openAtPoint(rect.left, rect.bottom);
+                                }}
+                            >
                                 <ChevronDown
                                     width={12}
                                     height={12}

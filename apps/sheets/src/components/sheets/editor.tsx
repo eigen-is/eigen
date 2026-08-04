@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
     isPendingMediaName,
@@ -10,12 +10,13 @@ import {
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel, LoadingState } from '@workspace/ui';
+import { CardFormDialog, CommentLifecycleDialogs, LoadingState, PanelColumn, useLayout } from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
@@ -71,8 +72,19 @@ function SheetEditorInner({
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl, startUpload } = useMediaResolver();
-    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
+    // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
+    const { isMobile } = useLayout();
+    const {
+        panel,
+        commentPanelOpen,
+        activityPanelOpen,
+        mobilePanelOpen,
+        toggleComments,
+        toggleActivity,
+        closePanels,
+        onSearchOpenChange,
+    } = useDocumentPanels(isMobile);
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
@@ -218,15 +230,9 @@ function SheetEditorInner({
             <DocumentShareCluster
                 canWrite={canWrite}
                 onAccessDialogOpen={onAccessDialogOpen}
-                onToggleCommentPanel={() => {
-                    setActivityPanelOpen(false);
-                    setCommentPanelOpen((v) => !v);
-                }}
+                onToggleCommentPanel={toggleComments}
                 commentPanelOpen={commentPanelOpen}
-                onToggleActivityPanel={() => {
-                    setCommentPanelOpen(false);
-                    setActivityPanelOpen((v) => !v);
-                }}
+                onToggleActivityPanel={toggleActivity}
                 activityPanelOpen={activityPanelOpen}
                 unresolvedCommentCount={unresolvedCount}
                 watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
@@ -262,10 +268,12 @@ function SheetEditorInner({
                 />
             )}
             <div className="flex h-full w-full overflow-hidden">
-                <div className="flex-1 overflow-hidden">
+                {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
+                <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'hidden')}>
                     <DocSearchProvider
                         controller={searchController}
                         initialSearchTerm={initialSearchTerm}
+                        onOpenChange={onSearchOpenChange}
                         barClassName="top-20"
                         onUndo={() => workbookRef.current?.undo()}
                         onRedo={() => workbookRef.current?.redo()}
@@ -355,30 +363,19 @@ function SheetEditorInner({
                         />
                     </DocSearchProvider>
                 </div>
-                {commentPanelOpen && (
-                    <CommentPanel
+                {panel && (
+                    <PanelColumn
+                        activePanel={panel}
+                        onClose={closePanels}
+                        path={path}
                         cards={cards}
                         entries={allComments}
-                        activeCardIds={activeComments.ids}
-                        anchorTexts={activeComments.anchorTexts}
+                        members={members}
                         currentUserEmail={auth.user!.email}
                         filter={commentFilter}
-                        members={members}
-                        onClose={() => setCommentPanelOpen(false)}
-                        onCommentClick={(cardId) => setOpenCardId(cardId)}
-                        onCommentContextMenu={(e, card, entry) =>
-                            commentContextMenu.handleContextMenu(e, { card, entry })
-                        }
-                    />
-                )}
-                {activityPanelOpen && (
-                    <ActivityPanel
-                        path={path}
-                        onClose={() => setActivityPanelOpen(false)}
-                        onOpenCard={({ cardId, chatName }) => {
-                            const id = cardId ?? (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                            if (id) setOpenCardId(id);
-                        }}
+                        activeComments={activeComments}
+                        commentContextMenu={commentContextMenu}
+                        onOpenCard={setOpenCardId}
                     />
                 )}
             </div>

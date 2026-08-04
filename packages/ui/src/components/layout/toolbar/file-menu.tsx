@@ -118,7 +118,7 @@ export function FileMenu({
                     )}
 
                     {/* Section 2: Export & Rename */}
-                    <DropdownMenuSeparator />
+                    {(onExport || canWrite) && <DropdownMenuSeparator />}
                     {onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
@@ -133,9 +133,11 @@ export function FileMenu({
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
                     )}
-                    <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                        <Pencil className="h-4 w-4 mr-2" /> Rename
-                    </DropdownMenuItem>
+                    {canWrite && (
+                        <DropdownMenuItem onClick={() => setRenameOpen(true)}>
+                            <Pencil className="h-4 w-4 mr-2" /> Rename
+                        </DropdownMenuItem>
+                    )}
 
                     {/* Section 3: Share */}
                     <DropdownMenuSeparator />

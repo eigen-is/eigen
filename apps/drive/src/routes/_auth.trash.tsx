@@ -123,9 +123,8 @@ function TrashRoute() {
                 onOpenChange={setEmptyTrashOpen}
                 title="Empty trash"
                 description="Are you sure you want to permanently delete all items in trash? This action cannot be undone."
-                onDelete={() => {
-                    emptyTrash.mutate();
-                    setEmptyTrashOpen(false);
+                onDelete={async () => {
+                    await emptyTrash.mutateAsync();
                 }}
                 deleteText="Empty trash"
             />
@@ -142,9 +141,8 @@ function TrashRoute() {
                         : 'Are you sure you want to permanently delete'
                 }
                 itemName={deleteItems.length === 1 ? deleteItems[0].name : undefined}
-                onDelete={() => {
-                    for (const item of deleteItems) permanentlyDelete.mutate(item.id);
-                    setDeleteItems([]);
+                onDelete={async () => {
+                    await Promise.all(deleteItems.map((item) => permanentlyDelete.mutateAsync(item.id)));
                 }}
                 deleteText="Delete permanently"
             />

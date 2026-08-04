@@ -7,26 +7,22 @@ import {
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
+    useMoveEvent,
     useSharedCalendars,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
-import type {
-    Attendee,
-    CalendarEventOccurrence,
-    CalendarItem,
-    CreateEventInput,
-    SharedCalendar,
-} from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { ConfirmDialog } from '@workspace/ui/components/layout/confirm-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
 import type { CalendarOption } from './calendar-utils';
 import { resolveCalendarName } from './calendar-utils';
@@ -95,6 +91,15 @@ export function EditEventDialog({
     const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [selectedCalKey, setSelectedCalKey] = useState('');
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+    const [showMoveConfirm, setShowMoveConfirm] = useState(false);
+
+    // A cross-Home move creates the destination event then deletes the source. If the delete fails the
+    // dialog stays open; remember that the destination already exists so a retry only re-runs the delete
+    // instead of creating a second event (and re-fanning-out invitations). Reset each time the dialog opens.
+    const createdDestRef = useRef(false);
+    useEffect(() => {
+        if (open) createdDestRef.current = false;
+    }, [open]);
 
     const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
     const calendarChanged = event
@@ -104,7 +109,9 @@ export function EditEventDialog({
     const updateEvent = useUpdateEvent(eventOwnerId);
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
     const deleteEventOnSource = useDeleteEvent(eventOwnerId);
-    const saving = updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending;
+    const moveEvent = useMoveEvent(eventOwnerId);
+    const saving =
+        updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending || moveEvent.isPending;
 
     useEffect(() => {
         if (event && open) {
@@ -145,28 +152,25 @@ export function EditEventDialog({
     const isRecurring = !!event.rrule;
     const isLinkedEvent = !!event.data?.organizer;
 
+    // A cross-Home move recreates the event in the other Home and deletes the source — which fires
+    // deleteEvent's iMIP side effects and can't carry exception children. Warn honestly before that
+    // (same precedence as deleteEvent: invitee-decline over organizer-cancel).
+    const crossHomeMove = calendarChanged && !!selectedCal && selectedCal.ownerId !== eventOwnerId;
+    const moveLossReasons: string[] = [];
+    if (isLinkedEvent) moveLossReasons.push('the invitation link will be removed (the organizer will see a decline)');
+    else if (event.data?.attendees?.length)
+        moveLossReasons.push('guests will be notified it was cancelled and re-invited');
+    if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
+
     const handleSaveClick = () => {
         if (!title.trim()) return;
-        if (isRecurring && !calendarChanged) {
+        if (crossHomeMove && moveLossReasons.length > 0) {
+            setShowMoveConfirm(true);
+        } else if (isRecurring && !calendarChanged) {
             setShowRecurringDialog(true);
         } else {
             doSave('all');
         }
-    };
-
-    const moveEvent = async (updates: Omit<CreateEventInput, 'calendarId'>) => {
-        if (!selectedCal) return;
-        await createEvent.mutateAsync({
-            calendarId: selectedCal.id,
-            title: updates.title,
-            startTime: updates.startTime,
-            endTime: updates.endTime,
-            allDay: Boolean(updates.allDay),
-            description: updates.description,
-            location: updates.location,
-            rrule: updates.rrule,
-        });
-        await deleteEventOnSource.mutateAsync({ id: event.parentEventId || event.id, calendarId: event.calendarId });
     };
 
     const doSave = async (action: RecurringAction) => {
@@ -196,10 +200,32 @@ export function EditEventDialog({
             data: Object.values(data).some((v) => v !== undefined) ? data : null,
         };
 
-        if (calendarChanged) {
-            await moveEvent(updates);
+        const targetId = event.parentEventId || event.id;
+
+        if (calendarChanged && selectedCal) {
+            if (selectedCal.ownerId === eventOwnerId) {
+                // Same Home: apply the edits in place, then the server-owned atomic move re-homes the master
+                // and its exception children, preserving the organizer link, timezone, and data a client can't
+                // re-send — and never firing deleteEvent's decline.
+                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
+                await moveEvent.mutateAsync({
+                    calendarId: event.calendarId,
+                    id: targetId,
+                    targetCalendarId: selectedCal.id,
+                });
+            } else {
+                // Cross-Home move can't be atomic (the calendars live in different Homes): recreate the event
+                // in the target Home and delete the source. Organizer link and exception overrides don't cross Homes.
+                // The ref keeps the move retry-safe — skip re-creation if a prior attempt already created the
+                // destination and only the source delete failed.
+                if (!createdDestRef.current) {
+                    await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
+                    createdDestRef.current = true;
+                }
+                await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId });
+                createdDestRef.current = false;
+            }
         } else if (action === 'all') {
-            const targetId = event.parentEventId || event.id;
             await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
         } else if (action === 'this') {
             await createEvent.mutateAsync({
@@ -207,15 +233,14 @@ export function EditEventDialog({
                 ...updates,
                 allDay: Boolean(allDay),
                 rrule: null,
-                parentEventId: event.parentEventId || event.id,
+                parentEventId: targetId,
                 recurrenceDate: occurrenceDateToString(event.occurrenceDate),
             });
         } else if (action === 'this-and-following') {
-            const parentId = event.parentEventId || event.id;
             const occDate = parseOccurrenceDate(event.occurrenceDate);
             if (event.rrule) {
                 const truncated = truncateRRule(event.rrule, occDate);
-                await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
+                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, rrule: truncated });
             }
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
@@ -229,12 +254,19 @@ export function EditEventDialog({
 
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
-        const newEnd = addMinutes(newStart, 30);
-        setEndTime(newEnd);
-        const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
-        const d = new Date(`${startDate}T00:00`);
-        if (wraps) d.setDate(d.getDate() + 1);
-        setEndDate(toLocalDateString(d));
+
+        const minEnd = addMinutes(newStart, 15);
+        const currentEndMinutes = timeToMinutes(endTime);
+        const minEndMinutes = timeToMinutes(minEnd);
+
+        if (currentEndMinutes < minEndMinutes) {
+            const newEnd = addMinutes(newStart, 30);
+            setEndTime(newEnd);
+            const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
+            const d = new Date(`${startDate}T00:00`);
+            if (wraps) d.setDate(d.getDate() + 1);
+            setEndDate(toLocalDateString(d));
+        }
     };
 
     const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
@@ -246,7 +278,7 @@ export function EditEventDialog({
 
     return (
         <>
-            <Dialog open={open && !showRecurringDialog} onOpenChange={onOpenChange}>
+            <Dialog open={open && !showRecurringDialog && !showMoveConfirm} onOpenChange={onOpenChange}>
                 <DialogContent size="md">
                     <DialogHeader>
                         <DialogTitle>Edit Event</DialogTitle>
@@ -271,13 +303,17 @@ export function EditEventDialog({
                                         <Input
                                             type="date"
                                             value={startDate}
-                                            onChange={(e) => setStartDate(e.target.value)}
+                                            onChange={(e) => {
+                                                setStartDate(e.target.value);
+                                                if (endDate < e.target.value) setEndDate(e.target.value);
+                                            }}
                                             className="flex-1 min-w-fit h-8 text-sm"
                                         />
                                         <span className="text-muted-foreground text-sm">to</span>
                                         <Input
                                             type="date"
                                             value={endDate}
+                                            min={startDate}
                                             onChange={(e) => setEndDate(e.target.value)}
                                             className="flex-1 min-w-fit h-8 text-sm"
                                         />
@@ -429,6 +465,15 @@ export function EditEventDialog({
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
                 onConfirm={doSave}
+            />
+
+            <ConfirmDialog
+                open={showMoveConfirm}
+                onOpenChange={setShowMoveConfirm}
+                title="Move to another calendar owner?"
+                description={`Moving this event to a calendar owned by someone else recreates it there, so ${moveLossReasons.join(', and ')}.`}
+                confirmText="Move"
+                onConfirm={() => doSave('all')}
             />
         </>
     );

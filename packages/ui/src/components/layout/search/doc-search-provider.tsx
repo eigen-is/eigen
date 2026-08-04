@@ -48,9 +48,9 @@ export type DocSearchProviderProps = {
     // a surface passes offsets to clear its own chrome (docs insets it below the toolbar + clear of
     // the side panel). Merged over the default via cn, so later utilities win.
     barClassName?: string;
-    // Notifies a surface whose Escape is layered (slides: present → edit → bar → deselect) when the
-    // bar opens/closes, so its own document-level Escape can defer to the bar-close instead of running
-    // its default action. The bar owns closing itself; this is read-only awareness.
+    // Notifies the host when the bar opens/closes. Slides uses it for layered-Escape awareness (present
+    // → edit → bar → deselect); docs, sheets and slides also use it to close the mobile pane, so a
+    // session never opens inside the hidden editor. The bar owns closing itself.
     onOpenChange?: (open: boolean) => void;
     // The surface's own undo/redo, routed out of the bar's inputs (⌘Z / ⇧⌘Z) so Replace stays
     // undoable without leaving the bar. Passed straight to FindReplaceBar; omitted by search-only

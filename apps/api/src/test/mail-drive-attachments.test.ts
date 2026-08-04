@@ -1,7 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
 import type { EmailDraft } from '@workspace/lib/types/mail';
-import { assertJson, authedRequest, driveGet, driveUpload, getTestContext, setMaxUploadSizeMB } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    driveGet,
+    driveGetList,
+    driveUpload,
+    getTestContext,
+    setMaxUploadSizeMB,
+} from './setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -59,6 +67,37 @@ function buildEmlWithAttachment(to: string, subject: string, attachmentContent: 
         'Content-Transfer-Encoding: base64',
         '',
         base64,
+        '--test-boundary--',
+    ].join('\r\n');
+}
+
+function buildEmlWithTwoAttachments(
+    to: string,
+    subject: string,
+    first: { content: string; filename: string },
+    second: { content: string; filename: string },
+) {
+    const part = (att: { content: string; filename: string }) => [
+        '--test-boundary',
+        'Content-Type: application/octet-stream',
+        `Content-Disposition: attachment; filename="${att.filename}"`,
+        'Content-Transfer-Encoding: base64',
+        '',
+        Buffer.from(att.content).toString('base64'),
+    ];
+    return [
+        'From: sender@example.com',
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        'Content-Type: multipart/mixed; boundary="test-boundary"',
+        '',
+        '--test-boundary',
+        'Content-Type: text/plain',
+        '',
+        'See attached.',
+        ...part(first),
+        ...part(second),
         '--test-boundary--',
     ].join('\r\n');
 }
@@ -259,6 +298,58 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
             } finally {
                 await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
             }
+        });
+
+        test('rejects a partial-invalid multi-save without persisting the earlier valid attachment', async () => {
+            const bigContent = 'x'.repeat(2 * 1024 * 1024);
+            const eml = buildEmlWithTwoAttachments(
+                ctx.alice.user.email,
+                'Partial-save',
+                { content: 'first-valid-content', filename: 'first-valid.bin' },
+                { content: bigContent, filename: 'second-oversized.bin' },
+            );
+            const deliverRes = await deliverEml(ctx, ctx.alice.user.email, eml);
+            expect(deliverRes.status).toBe(200);
+
+            const inboxRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/inbox`,
+            );
+            const inbox = await assertJson<Array<{ id: string; subject: string }>>(inboxRes);
+            const msg = inbox.find((m) => m.subject === 'Partial-save');
+            expect(msg).toBeDefined();
+
+            const setQuota = async (mb: number) => {
+                const r = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
+                });
+                expect(r.status).toBe(200);
+            };
+
+            await setQuota(1);
+            try {
+                const res = await saveAttachmentsToDrive(ctx.alice.user.sessionToken, ctx.alice.user.id, msg!.id, {
+                    indexes: [0, 1],
+                    targetOwnerId: ctx.alice.user.id,
+                    targetMountId: mountId,
+                    targetParentId: aliceRootId,
+                });
+                expect(res.status).toBe(413);
+            } finally {
+                await setQuota(35);
+            }
+
+            // The valid first attachment must NOT have been written before the second failed validation.
+            const children = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                'folder',
+                aliceRootId,
+            );
+            expect(children.some((c) => c.name === 'first-valid.bin')).toBe(false);
         });
     });
 

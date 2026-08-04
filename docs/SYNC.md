@@ -81,24 +81,28 @@ fix (Phase 1a) · §2 upload pipeline (Phase 1b) · §3 staging + consistent ver
 
 ## Concurrency
 
-One `Semaphore` **per S3 destination** (`endpoint+bucket`), not one per process
-(`lib/sync/index.ts` → `getUploadSemaphore`). A slow/down provider only backs up its own uploads and
-never blocks uploads to other destinations — important once team mounts + user-owned endpoints point at
-different buckets. Each PUT is raced against a **~120 s client-side ceiling** (`S3Storage` can't abort);
-a timeout counts as a failure, so backoff takes over instead of a black-holed request parking the drain
-and its semaphore. The timed-out request may still land server-side later, so the queue tracks it as an
-**in-process orphan** (`trackOrphan`): an ack while an orphan is unsettled retains the acked bytes in
-memory and re-uploads them through the guarded path once the orphan settles — without this the late
-landing would regress the object **permanently if no further sync occurs** — and a cancel re-issues the
-object delete on settlement (invariant 7 holds through timeouts, whichever of cancel and timeout comes
-first). An ack whose orphans all settled while its own PUT was in flight distrusts its commit order and
-re-PUTs immediately. Residual: an orphan whose fully-transmitted body the server commits after process
-death or queue teardown lands unrepaired (logged when detectable; bucket versioning is the recovery).
-A staged copy that fails the SQLite magic check (`isSqliteFile`) is dropped loudly before PUT — the
-object stays last-good instead of acking garbage. Failed uploads back off (full-jitter, capped) and the
-queue **self-schedules** its own retry — there is no global registry or sweep. The only process-global
-state is the destination→semaphore map (infra strings, no per-user data), the backoff function, and the
-shutdown deadline.
+- **One `Semaphore` per S3 destination** (`endpoint+bucket`), not one per process (`lib/sync/index.ts` →
+  `getUploadSemaphore`). A slow or down provider only backs up its own uploads and never blocks uploads to
+  other destinations — important once team mounts and user-owned endpoints point at different buckets.
+  Each PUT is raced against a **~120 s client-side ceiling** (`S3Storage` can't abort); a timeout counts as
+  a failure, so backoff takes over instead of a black-holed request parking the drain and its semaphore.
+
+- **Orphan repair.** A timed-out request may still land server-side later, so the queue tracks it as an
+  **in-process orphan** (`trackOrphan`). An ack while an orphan is unsettled retains the acked bytes in
+  memory and re-uploads them through the guarded path once the orphan settles — without this the late
+  landing would regress the object **permanently if no further sync occurs**. A cancel re-issues the object
+  delete on settlement, so invariant 7 holds through timeouts whichever of cancel and timeout comes first.
+  Residual: an orphan whose fully-transmitted body the server commits after process death or queue teardown
+  lands unrepaired (logged when detectable; bucket versioning is the recovery).
+
+- **Commit order is distrusted.** An ack whose orphans all settled while its own PUT was in flight re-PUTs
+  immediately. A staged copy that fails the SQLite magic check (`isSqliteFile`) is dropped loudly before the
+  PUT — the object stays last-good instead of acking garbage.
+
+- **Backoff is local.** Failed uploads back off (full-jitter, capped) and the queue **self-schedules** its
+  own retry — there is no global registry or sweep. The only process-global state is the
+  destination→semaphore map (infra strings, no per-user data), the backoff function, and the shutdown
+  deadline.
 
 ## Teardown
 

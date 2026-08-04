@@ -8,12 +8,16 @@ import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { UserNameCard } from '@workspace/ui/components/layout/user-name-card';
 import { Check, Download, Pencil, Trash2, X } from 'lucide-react';
+import type React from 'react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useLongPress } from '../../../hooks/use-long-press';
 import { cn } from '../../../lib/utils';
+import { DropdownMenuItem } from '../../dropdown-menu';
 import { LoadingState } from '../app/loading-state';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { EigenLoader } from '../braket/eigen-loader.tsx';
+import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveLocationPicker } from '../drive/drive-location-picker';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserAvatar } from '../user-avatar';
@@ -213,19 +217,31 @@ export function ChatMessageList({
     const { findByName } = useFolderLookup(ownerId ?? '', mountId ?? '', mediaFolderId ?? '');
     const copyFiles = useCopyFiles(ownerId ?? '', mountId ?? '');
 
-    // Single floating action bar — tracks which message is hovered
-    const [hoveredMsg, setHoveredMsg] = useState<{ message: ChatMessage; top: number } | null>(null);
     const [saveAttachmentsMsg, setSaveAttachmentsMsg] = useState<ChatMessage | null>(null);
 
-    const handleMsgMouseEnter = useCallback(
-        (message: ChatMessage, el: HTMLElement) => {
-            if (message.type === 'system') return;
-            const isOwn = message.authorId === currentUserId;
-            const hasAttachments = !!message.attachments?.length;
-            if (!isOwn && !hasAttachments) return;
-            setHoveredMsg({ message, top: el.offsetTop });
+    // Message actions (Save attachments / Edit / Delete) reach the singleton context menu via right-click and touch long-press.
+    const contextMenu = useContextMenu<ChatMessage>();
+    const openMenuAt = contextMenu.openAt;
+    const handleLongPress = useCallback(
+        (message: ChatMessage, x: number, y: number) => {
+            openMenuAt(message, x, y);
         },
-        [currentUserId],
+        [openMenuAt],
+    );
+    const longPress = useLongPress(handleLongPress);
+
+    // One gating source shared by the hover bar and the context menu so the two action sets never drift.
+    const getMessageActions = useCallback(
+        (message: ChatMessage) => {
+            const isOwn = message.authorId === currentUserId;
+            const hasFileAttachments = !!message.attachments?.some((a) => typeof a === 'string');
+            return {
+                canSaveAttachments: hasFileAttachments && !!ownerId && !!mountId,
+                canEdit: isOwn && !!onEditMessage,
+                canDelete: isOwn && !!onDeleteMessage,
+            };
+        },
+        [currentUserId, ownerId, mountId, onEditMessage, onDeleteMessage],
     );
 
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -350,52 +366,11 @@ export function ChatMessageList({
         );
     }
 
-    const hoveredIsOwn = hoveredMsg?.message.authorId === currentUserId;
-    const hoveredHasFileAttachments = !!hoveredMsg?.message.attachments?.some((a) => typeof a === 'string');
-    const showActionBar =
-        hoveredMsg && (hoveredHasFileAttachments || (hoveredIsOwn && (onEditMessage || onDeleteMessage)));
+    const menuMessage = contextMenu.item;
+    const menuActions = menuMessage ? getMessageActions(menuMessage) : null;
 
     return (
-        <div
-            ref={scrollRef}
-            className={cn('flex-1 overflow-y-auto relative', className)}
-            onMouseLeave={() => setHoveredMsg(null)}
-        >
-            {showActionBar && hoveredMsg && (
-                <div
-                    className="absolute right-3 z-10 flex items-center rounded-md border bg-background shadow-sm"
-                    style={{ top: hoveredMsg.top + 4 }}
-                    onMouseEnter={() => setHoveredMsg(hoveredMsg)}
-                >
-                    {hoveredHasFileAttachments && ownerId && mountId && (
-                        <TooltipButton
-                            icon={Download}
-                            tooltipText="Save attachments"
-                            className="h-7 w-7"
-                            preventFocusLoss
-                            onClick={() => setSaveAttachmentsMsg(hoveredMsg.message)}
-                        />
-                    )}
-                    {hoveredIsOwn && onEditMessage && (
-                        <TooltipButton
-                            icon={Pencil}
-                            tooltipText="Edit"
-                            className="h-7 w-7"
-                            preventFocusLoss
-                            onClick={() => onEditMessage(hoveredMsg.message)}
-                        />
-                    )}
-                    {hoveredIsOwn && onDeleteMessage && (
-                        <TooltipButton
-                            icon={Trash2}
-                            tooltipText="Delete"
-                            className="h-7 w-7"
-                            preventFocusLoss
-                            onClick={() => onDeleteMessage(hoveredMsg.message)}
-                        />
-                    )}
-                </div>
-            )}
+        <div ref={scrollRef} className={cn('flex-1 overflow-y-auto relative', className)}>
             {isFetchingOlderMessages && (
                 <div className="flex justify-center py-3">
                     <EigenLoader />
@@ -407,7 +382,6 @@ export function ChatMessageList({
                 const isSystem = message.type === 'system';
                 const isDeleted = !!message.deletedAt;
                 if (isDeleted) return null;
-                const isHovered = hoveredMsg?.message.id === message.id;
                 const prev = i > 0 ? messages[i - 1] : null;
                 const grouped =
                     prev &&
@@ -436,16 +410,62 @@ export function ChatMessageList({
                     );
                 }
 
+                const actions = getMessageActions(message);
+                const hasActions = actions.canSaveAttachments || actions.canEdit || actions.canDelete;
+                const actionProps = hasActions
+                    ? {
+                          onContextMenu: (e: React.MouseEvent) => {
+                              // Leave links and selected text to the browser's native copy menu.
+                              const selection = window.getSelection();
+                              if ((e.target as HTMLElement).closest('a') || (selection && !selection.isCollapsed))
+                                  return;
+                              contextMenu.handleContextMenu(e, message);
+                          },
+                          ...longPress.bind(message),
+                      }
+                    : {};
+                // Desktop-only hover affordance (fine pointer); touch has none — long-press opens the same menu.
+                const hoverActions = hasActions ? (
+                    <div className="absolute right-2 top-1 z-10 flex items-center rounded-md border bg-background shadow-sm invisible pointer-fine:group-hover:visible">
+                        {actions.canSaveAttachments && (
+                            <TooltipButton
+                                icon={Download}
+                                tooltipText="Save attachments"
+                                className="h-7 w-7"
+                                preventFocusLoss
+                                onClick={() => setSaveAttachmentsMsg(message)}
+                            />
+                        )}
+                        {actions.canEdit && onEditMessage && (
+                            <TooltipButton
+                                icon={Pencil}
+                                tooltipText="Edit"
+                                className="h-7 w-7"
+                                preventFocusLoss
+                                onClick={() => onEditMessage(message)}
+                            />
+                        )}
+                        {actions.canDelete && onDeleteMessage && (
+                            <TooltipButton
+                                icon={Trash2}
+                                tooltipText="Delete"
+                                className="h-7 w-7"
+                                preventFocusLoss
+                                onClick={() => onDeleteMessage(message)}
+                            />
+                        )}
+                    </div>
+                ) : null;
+
                 if (isEmote) {
                     return (
                         <div
                             key={message.id}
                             className={cn(
-                                'flex gap-3 app-gutter-x hover:bg-muted/50 transition-colors',
+                                'group relative flex gap-3 app-gutter-x hover:bg-muted/50 transition-colors',
                                 grouped ? 'py-1' : 'pt-3',
-                                isHovered && 'bg-muted/50',
                             )}
-                            onMouseEnter={(e) => handleMsgMouseEnter(message, e.currentTarget)}
+                            {...actionProps}
                         >
                             <div className="w-9 shrink-0 pt-0.5">
                                 {!grouped ? (
@@ -479,6 +499,7 @@ export function ChatMessageList({
                                 />
                                 {renderAttachments(message)}
                             </div>
+                            {hoverActions}
                         </div>
                     );
                 }
@@ -488,11 +509,10 @@ export function ChatMessageList({
                         <div
                             key={message.id}
                             className={cn(
-                                'flex gap-3 app-gutter-x hover:bg-primary/10 transition-colors bg-primary/5',
+                                'group relative flex gap-3 app-gutter-x hover:bg-primary/10 transition-colors bg-primary/5',
                                 grouped ? 'pt-0.5' : 'pt-3',
-                                isHovered && 'bg-primary/10',
                             )}
-                            onMouseEnter={(e) => handleMsgMouseEnter(message, e.currentTarget)}
+                            {...actionProps}
                         >
                             <div className="w-9 shrink-0 pt-0.5">
                                 {!grouped && (
@@ -523,6 +543,7 @@ export function ChatMessageList({
                                 />
                                 {renderAttachments(message)}
                             </div>
+                            {hoverActions}
                         </div>
                     );
                 }
@@ -531,11 +552,10 @@ export function ChatMessageList({
                     <div
                         key={message.id}
                         className={cn(
-                            'flex gap-3 app-gutter-x hover:bg-muted/50 transition-colors',
+                            'group relative flex gap-3 app-gutter-x hover:bg-muted/50 transition-colors',
                             grouped ? 'pt-0.5' : 'pt-3',
-                            isHovered && 'bg-muted/50',
                         )}
-                        onMouseEnter={(e) => handleMsgMouseEnter(message, e.currentTarget)}
+                        {...actionProps}
                     >
                         <div className="w-9 shrink-0 pt-0.5">
                             {!grouped && (
@@ -578,10 +598,48 @@ export function ChatMessageList({
                                 </>
                             )}
                         </div>
+                        {hoverActions}
                     </div>
                 );
             })}
             <div className="h-3" />
+            <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[180px]">
+                {menuMessage && (
+                    <>
+                        {menuActions?.canSaveAttachments && (
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setSaveAttachmentsMsg(menuMessage);
+                                    contextMenu.close();
+                                }}
+                            >
+                                <Download className="h-4 w-4 mr-2" /> Save attachments
+                            </DropdownMenuItem>
+                        )}
+                        {menuActions?.canEdit && onEditMessage && (
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onEditMessage(menuMessage);
+                                    contextMenu.close();
+                                }}
+                            >
+                                <Pencil className="h-4 w-4 mr-2" /> Edit
+                            </DropdownMenuItem>
+                        )}
+                        {menuActions?.canDelete && onDeleteMessage && (
+                            <DropdownMenuItem
+                                variant="destructive"
+                                onClick={() => {
+                                    onDeleteMessage(menuMessage);
+                                    contextMenu.close();
+                                }}
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                            </DropdownMenuItem>
+                        )}
+                    </>
+                )}
+            </ContextMenuAnchor>
             {ownerId && (
                 <DriveLocationPicker
                     open={!!saveAttachmentsMsg}
@@ -593,20 +651,19 @@ export function ChatMessageList({
                     confirmLabel="Save here"
                     defaultOwnerId={ownerId}
                     defaultMountId={mountId}
-                    onConfirm={(location) => {
+                    onConfirm={async (location) => {
                         if (!saveAttachmentsMsg?.attachments) return;
                         const pathIds = saveAttachmentsMsg.attachments
                             .filter((a): a is string => typeof a === 'string')
                             .map((name) => findByName(name)?.id)
                             .filter((id): id is string => !!id);
-                        if (pathIds.length > 0) {
-                            copyFiles.mutate({
-                                pathIds,
-                                targetOwnerId: location.ownerId,
-                                targetMountId: location.mountId,
-                                targetParentId: location.folderId,
-                            });
-                        }
+                        if (pathIds.length === 0) return;
+                        await copyFiles.mutateAsync({
+                            pathIds,
+                            targetOwnerId: location.ownerId,
+                            targetMountId: location.mountId,
+                            targetParentId: location.folderId,
+                        });
                     }}
                     onDownloadInstead={handleDownloadLocally}
                 />

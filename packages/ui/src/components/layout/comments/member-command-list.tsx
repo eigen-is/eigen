@@ -96,7 +96,8 @@ export function MemberCommandList({
             {showSearch && <CommandInput placeholder="Find person…" />}
             {header}
             <CommandList className="max-h-56 overflow-y-auto">
-                <CommandEmpty>No people found.</CommandEmpty>
+                {/* Anyone/Me/Unassigned live in the header, so an empty member list is normal — only a real search miss (list non-empty) warrants the message. */}
+                {listed.length > 0 && <CommandEmpty>No people found.</CommandEmpty>}
                 {listed.map((m) => {
                     const displayName = users[m.email]?.name || m.email.split('@')[0];
                     return (

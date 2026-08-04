@@ -1,14 +1,9 @@
 # Streaming Uploads for Drive
 
-> **Status**: Implemented
-
-## TLDR
-
-File uploads previously buffered entire files in memory ~3x (Elysia File + ArrayBuffer + Buffer copy). Now all file
-uploads (single and multi-file) go through a single endpoint using our own streaming multipart parser
-(`apps/api/src/lib/multipart/`). Each file streams from the network to a mount temp file in constant memory —
-body bytes are hashed and written chunk-by-chunk as they arrive on the wire — then moved to storage. The old
-buffered endpoint and the separate multi-file endpoint (`/files/:pathId`) have been removed.
+> **TLDR**: All file uploads (single and multi-file) go through one endpoint and our own streaming multipart
+> parser (`apps/api/src/lib/multipart/`). Each file streams from the network to a mount temp file in constant
+> memory — body bytes are hashed and written chunk-by-chunk as they arrive on the wire — then moved to storage.
+> Memory use is independent of file size; `maxUploadSizeMB` is a policy knob, not a memory knob.
 
 ## Architecture
 
@@ -34,18 +29,13 @@ Drive.uploadFiles():
   → return DrivePath[]
 ```
 
-### Key Files
+### Where the code lives
 
-| File | Role |
-|------|------|
-| `apps/api/src/lib/multipart/` | Streaming multipart parser — yields `part`/`chunk`/`end` events |
-| `apps/api/src/lib/drive/streaming.ts` | `streamFilesToTemp()` — consumes parser events, writes temp files |
-| `apps/api/src/lib/drive/drive.ts` | `uploadFiles()` — parent + permission checks, per-batch watcher fan-out |
-| `apps/api/src/lib/drive/upload.ts` | `finalizeUpload()` — dedupe → `createFileFromTemp` → SSE/history + thumbnail kick |
-| `apps/api/src/lib/drive/sharedDrive.ts` | `uploadFiles()` — delegates to underlying `Drive` after ACL write permission check |
-| `apps/api/src/lib/mount/mount.ts` | `createFileFromTemp()` + stale temp cleanup on init |
-| `apps/api/src/lib/config/enforcement.ts` | `getUploadMaxSize()` — returns min(maxUploadSize, remainingQuota) |
-| `apps/api/src/routes/drive.ts` | Thin route: 3 lines |
+The route is a thin handler in `apps/api/src/routes/drive.ts`; the upload path itself lives in
+`apps/api/src/lib/drive/` (`streaming.ts` streams parts to temp, `drive.ts`/`sharedDrive.ts` do the parent and
+ACL checks, `upload.ts` finalizes each file) on top of the parser in `apps/api/src/lib/multipart/` and
+`createFileFromTemp()` plus stale-temp cleanup in `apps/api/src/lib/mount/`. Quota and size limits come from
+`apps/api/src/lib/config/enforcement.ts`.
 
 ### Size Enforcement
 
@@ -71,15 +61,6 @@ partial uploads behind.
 `createFileFromTemp()` calls `mount.uploadFromTemp(storageKey, tempId)` which calls
 `storage.write(storageKey, Bun.file(tempPath))`. The `StorageBackend.write()` interface accepts
 `Buffer | Uint8Array | ArrayBuffer | BunFile` on all backends. No new interface methods needed.
-
-## What Was Removed
-
-- `POST /drive/:ownerId/:mountId/files/:pathId` — separate multi-file endpoint (merged into `/file/:pathId`)
-- `Drive.uploadFile()` / `Drive.uploadFileStreaming()` — replaced by single `Drive.uploadFiles()`
-- `SharedDrive.uploadFile()` / `SharedDrive.uploadFileStreaming()` — replaced by single `SharedDrive.uploadFiles()`
-- `enforceFileUpload()` / `enforceBatchUpload()` — replaced by `getUploadMaxSize()`
-- `getMaxBatchUploadSize()` — no longer needed (one limit for all uploads)
-- `getDriveFilesUploadUrl()` — frontend no longer branches on file count
 
 ## Parser
 

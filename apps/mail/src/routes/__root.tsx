@@ -1,13 +1,9 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { useEmailById, useMailboxes, useMoveEmail } from '@workspace/lib/mail';
 import type { Email } from '@workspace/lib/types/mail';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { EmailSidebar } from '../components/mail/email-sidebar';
-
-type MyRouterContext = {
-    auth: AuthContextType;
-};
 
 function MailRoot() {
     const { user } = useAuth();
@@ -52,6 +48,6 @@ function AuthenticatedMailRoot() {
     );
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRouteWithContext<RouterAppContext>()({
     component: MailRoot,
 });

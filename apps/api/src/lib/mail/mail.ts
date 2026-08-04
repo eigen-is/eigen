@@ -98,8 +98,9 @@ export async function saveAttachmentsToDrive(
         if (index >= attachments.length) throw new ApiError(404, `Attachment ${index} not found`);
     }
 
-    const results: DrivePath[] = [];
-    for (const index of indexes) {
+    // Validate + materialize every selected attachment BEFORE the first write, so a late invalid or
+    // oversized attachment can't leave earlier files persisted (a retry would then duplicate them).
+    const prepared = indexes.map((index) => {
         const att = attachments[index];
         const filename = att.filename || `attachment-${index}`;
         // Attachment.content is typed unknown (parser origin); narrow to Uint8Array at this boundary.
@@ -111,15 +112,14 @@ export async function saveAttachmentsToDrive(
             const limitMB = Math.floor(maxSize / (1024 * 1024));
             throw new ApiError(413, `Attachment "${filename}" exceeds ${limitMB}MB drive limit`);
         }
-        const result = await drive.createFileFromData(
-            targetMountId,
-            targetParentId,
-            filename,
-            att.contentType,
-            content,
-            user,
+        return { filename, contentType: att.contentType, content };
+    });
+
+    const results: DrivePath[] = [];
+    for (const { filename, contentType, content } of prepared) {
+        results.push(
+            await drive.createFileFromData(targetMountId, targetParentId, filename, contentType, content, user),
         );
-        results.push(result);
     }
     return results;
 }

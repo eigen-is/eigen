@@ -37,7 +37,7 @@ export function CommentFilterButton({ filter, members, currentUserEmail }: Comme
                             variant="ghost"
                             size="icon"
                             aria-pressed={filter.isActive}
-                            className="h-6 w-6 aria-pressed:bg-primary/15 aria-pressed:text-primary aria-pressed:hover:bg-primary/20 aria-pressed:hover:text-primary"
+                            className="h-8 w-8 aria-pressed:bg-primary/15 aria-pressed:text-primary aria-pressed:hover:bg-primary/20 aria-pressed:hover:text-primary"
                         >
                             <ListFilter className="h-4 w-4" />
                         </Button>

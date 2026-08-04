@@ -4,7 +4,7 @@ Single source of truth for all remaining sheets work (`packages/sheet`, `apps/sh
 import/export). Everything below is open backlog.
 Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two agree.
 
-## 3. xlsx round-trip fidelity backlog
+## xlsx round-trip fidelity backlog
 
 - [ ] filter **criteria** import/export (`customFilters`/`top10`/`dynamicFilter`/`colorFilter`):
       the condition model exists (`FilterEntry.byCondition`) but exceljs only exposes the
@@ -41,7 +41,7 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
       (`engine/formula-utils.ts`); F4-cycling a whole-row ref sticks after one step
       (pinned in `formula-reference-cycle.test.ts`)
 
-## 5. Rendering
+## Rendering
 
 - [ ] sheet dark mode — future dark pass, chrome-side only. The workbook surface (canvas + headers +
       overlays) is already pinned light and renders pixel-identically in light/dark via the
@@ -50,9 +50,9 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
       the `--warning` search highlights) still flip in dark mode. Needs its own pixel gate (changes
       docs dark search-highlights)
 
-## 6. Code debt (opportunistic — fix when touching the area)
+## Code debt (opportunistic — fix when touching the area)
 
-- [ ] es-toolkit migration half-done: all 54 imports use `es-toolkit/compat`, zero use core —
+- [ ] es-toolkit migration half-done: all 52 imports use `es-toolkit/compat`, zero use core —
       finish or drop the ambition
 - [ ] non-null-assertion hotspots (~450): `paste.ts`, `DataVerification/index.tsx`, `rowcol.ts`,
       `drop-cell.ts`, `SheetOverlay/index.tsx` — tighten alongside future work there
@@ -82,7 +82,10 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
       calendar markers). Rendering is provably unaffected (numfmt classifies case-insensitively);
       worst case is a mislabeled dialog chip — align the port if exactness ever matters
 
-## 7. App / architecture
+## App / architecture
 
 - [ ] move the sheets toolbar onto the shared `ColumnLayout` chrome (currently the engine's own
       MenuBar; the one app not on the shared layout)
+- [ ] find-and-replace dialog z-index clash (moved here from LAYOUT.md)
+- [ ] formula "learn more" dialog is broken (moved here from LAYOUT.md)
+- [ ] tab color via context menu needs a submenu (moved here from LAYOUT.md)

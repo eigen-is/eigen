@@ -77,12 +77,21 @@ export async function reUploadImage(
     _targetMountId: string,
     fileName: string,
 ): Promise<{ mediaName: string; pathId: string; parentId: string } | null> {
+    let file: File;
     try {
         const downloadUrl = getDriveDownloadUrl(sourceOwnerId, sourceMountId, sourcePathId);
         const response = await fetch(downloadUrl, { credentials: 'include' });
-        if (!response.ok) return null;
+        if (!response.ok) throw new Error(`Download failed (${response.status})`);
         const blob = await response.blob();
-        const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+        file = new File([blob], fileName, { type: blob.type || 'image/png' });
+    } catch (e) {
+        // The source fetch isn't a mutation, so surface it here; upload-leg failures
+        // already toast via useUploadFile's onMutationError.
+        console.error('Image re-upload download failed:', e);
+        toast.error('Could not load the pasted image');
+        return null;
+    }
+    try {
         const result = await uploadFn({ parentId: mediaFolderId, file });
         if (result) {
             return {
@@ -91,8 +100,8 @@ export async function reUploadImage(
                 parentId: mediaFolderId,
             };
         }
-    } catch (e) {
-        console.error('Re-upload failed:', e);
+    } catch {
+        // Upload failure already toasts via useUploadFile's onMutationError.
     }
     return null;
 }

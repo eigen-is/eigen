@@ -74,7 +74,7 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
 }
 
 // Mobile kebab, split out so its DocSearchBar subscription (via useFindBarRefocus) stays off the
-// desktop cluster. No read-only Eye marker here (settled decision).
+// desktop cluster. No Eye marker and no open-state cue: an open panel takes the viewport (settled).
 function MobileClusterKebab({
     canWrite,
     onAccessDialogOpen,

@@ -2,7 +2,8 @@ import { useMediaQuery } from '@workspace/lib/media';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import { useFindBarRefocus } from '@workspace/ui/components/layout/search/find-in-document-button';
 import { cn } from '@workspace/ui/lib/utils';
-import type { ReactNode } from 'react';
+import { type ReactNode, useContext } from 'react';
+import { WorkbookContext } from '../../context';
 import { DataMenu } from './data-menu';
 import { EditMenu } from './edit-menu';
 import { FormatMenu } from './format-menu';
@@ -23,6 +24,7 @@ const triggerClass = cn('px-3 h-8 text-sm rounded-sm', 'hover:bg-muted focus-vis
 // Below FormatToolbar's own seam nothing needs centering, so the side columns give way:
 // the menu row scrolls in the leftover space and the right icons keep their width on-screen.
 export function MenuBar({ leftItems, rightItems }: Props) {
+    const { context } = useContext(WorkbookContext);
     const { focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
     const centered = useMediaQuery(formatToolbarQuery);
     return (
@@ -43,33 +45,40 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger className={triggerClass}>View</DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
-                        <ViewMenu />
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                {/* View / Insert / Format / Data are wholly mutating — hidden for viewers, like
+                    FormatToolbar. Edit stays (Copy / Find gate per-item); viewers still read
+                    comments via the ungated Comments panel toggle. */}
+                {context.allowEdit && (
+                    <>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className={triggerClass}>View</DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
+                                <ViewMenu />
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger className={triggerClass}>Insert</DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
-                        <InsertMenu />
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className={triggerClass}>Insert</DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
+                                <InsertMenu />
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger className={triggerClass}>Format</DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-64 luckysheet-mousedown-cancel">
-                        <FormatMenu />
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className={triggerClass}>Format</DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-64 luckysheet-mousedown-cancel">
+                                <FormatMenu />
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger className={triggerClass}>Data</DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
-                        <DataMenu />
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger className={triggerClass}>Data</DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
+                                <DataMenu />
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </>
+                )}
             </div>
 
             <div className="flex justify-center">

@@ -118,10 +118,6 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
         setEndDate(toLocalDateString(d));
     };
 
-    const getMinEndTime = () => {
-        return addMinutes(startTime, 15);
-    };
-
     const handleSubmit = async () => {
         if (!title.trim() || !selectedCal) return;
 
@@ -178,13 +174,17 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                                     <Input
                                         type="date"
                                         value={startDate}
-                                        onChange={(e) => setStartDate(e.target.value)}
+                                        onChange={(e) => {
+                                            setStartDate(e.target.value);
+                                            if (endDate < e.target.value) setEndDate(e.target.value);
+                                        }}
                                         className="flex-1 min-w-fit h-8 text-sm"
                                     />
                                     <span className="text-muted-foreground text-sm">to</span>
                                     <Input
                                         type="date"
                                         value={endDate}
+                                        min={startDate}
                                         onChange={(e) => setEndDate(e.target.value)}
                                         className="flex-1 min-w-fit h-8 text-sm"
                                     />
@@ -206,7 +206,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                                         value={endTime}
                                         onChange={handleEndTimeChange}
                                         referenceTime={startTime}
-                                        minTime={getMinEndTime()}
+                                        minTime={addMinutes(startTime, 15)}
                                     />
                                 </div>
                             )}

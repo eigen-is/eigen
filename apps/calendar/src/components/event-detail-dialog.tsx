@@ -75,74 +75,71 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const hasAttendees = (event.data?.attendees?.length ?? 0) > 0;
 
     const handleDelete = async (action: RecurringAction) => {
-        try {
-            if (isLinkedEvent && isPartOfSeries) {
-                const eventId = event.parentEventId || event.id;
-                if (action === 'this') {
-                    await rsvp.mutateAsync({
+        if (isLinkedEvent && isPartOfSeries) {
+            const eventId = event.parentEventId || event.id;
+            if (action === 'this') {
+                await rsvp.mutateAsync({
+                    calendarId: event.calendarId,
+                    eventId,
+                    status: 'declined',
+                    scope: 'this',
+                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                    remove: true,
+                });
+            } else if (action === 'this-and-following') {
+                await rsvp.mutateAsync({
+                    calendarId: event.calendarId,
+                    eventId,
+                    status: 'declined',
+                    scope: 'this-and-following',
+                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                    remove: true,
+                });
+            } else {
+                await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId });
+            }
+        } else {
+            if (action === 'this') {
+                if (isException) {
+                    await updateEvent.mutateAsync({
+                        id: event.id,
                         calendarId: event.calendarId,
-                        eventId,
-                        status: 'declined',
-                        scope: 'this',
-                        recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                        remove: true,
+                        status: 'cancelled',
                     });
-                } else if (action === 'this-and-following') {
-                    await rsvp.mutateAsync({
+                } else if (isRecurring) {
+                    await createEvent.mutateAsync({
                         calendarId: event.calendarId,
-                        eventId,
-                        status: 'declined',
-                        scope: 'this-and-following',
+                        title: event.title,
+                        startTime: event.startTime,
+                        endTime: event.endTime,
+                        allDay: Boolean(event.allDay),
+                        parentEventId: event.id,
                         recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                        remove: true,
+                        status: 'cancelled',
                     });
                 } else {
-                    await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId });
+                    await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
                 }
-            } else {
-                if (action === 'this') {
-                    if (isException) {
-                        await updateEvent.mutateAsync({
-                            id: event.id,
-                            calendarId: event.calendarId,
-                            status: 'cancelled',
-                        });
-                    } else if (isRecurring) {
-                        await createEvent.mutateAsync({
-                            calendarId: event.calendarId,
-                            title: event.title,
-                            startTime: event.startTime,
-                            endTime: event.endTime,
-                            allDay: Boolean(event.allDay),
-                            parentEventId: event.id,
-                            recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                            status: 'cancelled',
-                        });
-                    } else {
-                        await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
-                    }
-                } else if (action === 'this-and-following') {
-                    const parentId = event.parentEventId || event.id;
-                    const occDate = parseOccurrenceDate(event.occurrenceDate);
-                    const rrule = event.rrule || (isException && event.parentEventId ? null : null);
-                    if (rrule) {
-                        const truncated = truncateRRule(rrule, occDate);
-                        await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
-                    }
-                } else if (action === 'all') {
-                    const targetId = event.parentEventId || event.id;
-                    await deleteEvent.mutateAsync({ id: targetId, calendarId: event.calendarId });
+            } else if (action === 'this-and-following') {
+                const parentId = event.parentEventId || event.id;
+                const occDate = parseOccurrenceDate(event.occurrenceDate);
+                const rrule = event.rrule || (isException && event.parentEventId ? null : null);
+                if (rrule) {
+                    const truncated = truncateRRule(rrule, occDate);
+                    await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
                 }
+            } else if (action === 'all') {
+                const targetId = event.parentEventId || event.id;
+                await deleteEvent.mutateAsync({ id: targetId, calendarId: event.calendarId });
             }
-        } finally {
-            setShowRecurringDeleteDialog(false);
-            onOpenChange(false);
         }
+        // Close the detail view only after the awaited work resolves (matching handleNonRecurringDelete):
+        // on rejection the nested confirm DeleteDialog stays open for retry instead of being torn down.
+        onOpenChange(false);
     };
 
     const handleNonRecurringDelete = async () => {
         await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
-        setShowDeleteDialog(false);
         onOpenChange(false);
     };
 
@@ -164,8 +161,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         if (pendingDeleteAction) {
             await handleDelete(pendingDeleteAction);
         }
-        setShowRecurringDeleteConfirm(false);
-        setPendingDeleteAction(null);
     };
 
     const recurrenceText = event.rrule ? rruleToText(event.rrule) : null;

@@ -1,9 +1,9 @@
 # Notification Center
 
-> **TLDR**: Persistent notification bell/dropdown in topbar. `NotificationCenter` is a Home domain service (like
-> Calendar, Contacts) with per-user SQLite database. `home.notify()` renamed to `home.broadcast()` (SSE push). Toast
-> notifications removed from individual SSE handlers — toasts now come exclusively from the notification SSE handler
-> when a new notification arrives. SSE events stripped to minimal cache-invalidation payloads across all domains.
+> **TLDR**: `NotificationCenter` is a Home domain service (like Calendar, Contacts) backed by a per-user SQLite
+> database. Producers call `home.notifications.persist({...})`, which upserts on `tag` (so repeats coalesce into one
+> refreshed row) and broadcasts a `notification:created` SSE event. The frontend renders the stored rows in the
+> topbar bell and toasts the SSE event. Row strings and link targets: [ACTIVITY-ROWS.md](ACTIVITY-ROWS.md).
 
 ## Architecture
 
@@ -23,37 +23,9 @@ Home
 **User-only** — notifications live in `UserHome`, not `TeamHome`. Team actions generate notifications in each affected
 user's Home.
 
-### SSE Rename: `home.notify()` → `home.broadcast()`
-
-The old `home.notify()` name was ambiguous — it broadcasts SSE events for cache invalidation, not user-facing
-notifications. Renamed to `home.broadcast()` to clarify that it pushes events to SSE listeners.
-
-The new flow for cross-user events:
-
-```
-1. Something happens (e.g., drive share)
-2. home.notifications.persist({...})   → writes to notifications.db + broadcasts notification SSE event
-3. home.broadcast(domainEvent)         → existing SSE push for cache invalidation
-```
-
-### SSE Event Slim-Down
-
-All SSE events stripped to carry only the minimum data needed for frontend cache invalidation. No more `title`, `body`,
-`tag`, `link`, `SSEventNotification` mixin, or full domain objects (`DrivePath`, `ChatMessage`, etc.) on SSE events.
-The notification SSE event carries only `title` and optional `body` for the toast.
-
-### Toast Migration
-
-**Before**: 7 toast calls scattered across 3 SSE handlers (drive, mail, calendar).
-**After**: One `handleNotificationSSEvent()` handler shows toasts when `notification:created` arrives.
-
-Removed toast calls:
-
-| Handler                    | Events                                                             |
-|----------------------------|--------------------------------------------------------------------|
-| `drive/sse-handlers.ts`    | `DRIVE_ACL_SHARED`, `DRIVE_ACL_UNSHARED`                           |
-| `mail/sse-handlers.ts`     | `MAIL_RECEIVED`                                                    |
-| `calendar/sse-handlers.ts` | `CALENDAR_SHARED`, `CALENDAR_UNSHARED`, `CALENDAR_INVITE_RECEIVED` |
+A cross-user event does two separate things: `home.notifications.persist({...})` writes the row and broadcasts the
+`notification:created` SSE event (toast + bell), while `home.broadcast(domainEvent)` pushes the domain event that
+invalidates query caches. Toasts come only from the notification handler — domain SSE handlers never toast.
 
 ## Storage
 
@@ -148,10 +120,14 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Chat activity          | `ChatRoom.postMessage()` (regular msg)   | `chat-message`              | `chat-message:{ownerId}:{mountId}:{chatId}`         |
 | Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}:{name}` |
 | Comment assignment     | assignee PATCH route (`routes/collab.ts`) | `assigned`                 | `assigned:{ownerId}:{mountId}:{pathId}:{chatName}` — only on a real change to a registered non-self assignee |
-| Access request         | `POST .../request-access` route          | `access-request`            | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
+| Access request         | `propagateAccessRequest()` (`lib/drive/access-request-propagation.ts`; the route delegates) | `access-request` | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 | File event (watch)     | `FileHistory.notifyWatchers()` via relay | `file-event`                | `file-event:{ownerId}:{mountId}:{pathId}` — burst events (`created`/`uploaded`/`copied`) tag the parent folder; always sent with `coalesce: true`. See [AGENTS.md § File history + watch](../AGENTS.md) |
 
 `actorEmail` is set on all sources — the sharer, organizer, mail sender, mention author, or access requester.
+
+What deliberately does NOT create a notification: your own actions (every source skips the actor), and plain
+collaborator edits — they would be too spammy, so document changes only surface through watches (`file-event`)
+and the activity panel.
 
 ## Frontend
 
@@ -208,10 +184,6 @@ per type (chat → chat glyph, share/file-event → folder on `--app-drive-color
 
 `handleNotificationSSEvent()` listens for `notification:created` → shows toast + invalidates notification queries.
 
-### Future: Space Page
-
-A full notification page in Space app can be added later with search, filtering, and pagination.
-
 ## SSE Event
 
 ```typescript
@@ -231,24 +203,10 @@ open it in a new tab. Still minimal — no full row, no `details` (so the View l
 sibling `SSEventNotificationChanged` (`notification:changed`, bare `{ type }`) tells the bell to refetch its
 count/list without toasting (e.g. after a read or dismiss).
 
-## Files
+## Where the code lives
 
-| File                                                            | Purpose                          |
-|-----------------------------------------------------------------|----------------------------------|
-| `packages/lib/src/types/notification.ts`                        | `Notification` type, `NotificationType` union, `NotificationDetailsMap` |
-| `packages/lib/src/types/file-history.ts`                        | `describeFileEvent` — file-event phrasing (action/primary/secondary) |
-| `packages/lib/src/types/drive.ts`                               | `stripEigenExtension()` utility  |
-| `packages/lib/src/core/date.ts`                                 | `formatTimeAgo()` utility        |
-| `apps/api/src/lib/notification-center/schema.ts`                | Drizzle schema (incl. `details`) |
-| `apps/api/src/lib/notification-center/db-config.ts`             | DatabaseConfig + migrations (v2 `details`) |
-| `apps/api/src/lib/notification-center/notification-center.ts`   | Domain service class (persist + coalesce + `details`) |
-| `apps/api/src/lib/notification-center/sse-events.ts`            | SSE event builder                |
-| `apps/api/src/routes/notification.ts`                           | API routes                       |
-| `packages/lib/src/core/notification/hooks/use-notifications.ts` | Query + mutation hooks           |
-| `packages/lib/src/core/notification/sse-handlers.ts`            | SSE handler (toast + invalidate) |
-| `packages/lib/src/core/notification/resolve-link.ts`            | Notification `type`+`tag`+`details` → deep link |
-| `packages/lib/src/core/notification/describe.ts`                | `describeNotification` — client row-content mirror |
-| `packages/ui/src/components/layout/activity-row.tsx`            | Shared row for bell + Recent activity panel |
-| `packages/ui/src/components/layout/app/notification-bell.tsx`   | Topbar bell + popover            |
-| `packages/ui/src/components/layout/app/notification-badge.tsx`  | Bell avatar app badge            |
-| `packages/ui/src/components/layout/user-avatar.tsx`            | Actor avatar in notification item |
+Backend: `apps/api/src/lib/notification-center/` (schema, db-config with the v2 `details` migration, the
+`NotificationCenter` service, SSE builder) and `apps/api/src/routes/notification.ts`. Frontend:
+`packages/lib/src/core/notification/` (hooks, SSE handler, `resolve-link.ts`, `describe.ts`), shared types in
+`packages/lib/src/types/notification.ts`, and the bell + shared row in
+`packages/ui/src/components/layout/` (`activity-row.tsx`, `app/notification-bell.tsx`, `app/notification-badge.tsx`).

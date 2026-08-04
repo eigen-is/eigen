@@ -4,6 +4,7 @@ import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
+import type { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo } from 'react';
 import {
@@ -133,6 +134,8 @@ type SlideObjectViewProps = {
         rotation: number,
     ) => void;
     onContextMenu?: (e: React.MouseEvent, obj: SlideObject) => void;
+    // Stable bind hoisted in SlideCanvas — spread onto the object so a touch long-press opens the menu.
+    longPressBind?: ReturnType<typeof useLongPress<SlideObject>>['bind'];
     commentColor?: string | null;
     onCommentClick?: (cardId: string) => void;
     firstCommentCardId?: string | null;
@@ -151,6 +154,7 @@ export const SlideObjectView = memo(function SlideObjectView({
     onUpdate,
     onDragStart,
     onContextMenu,
+    longPressBind,
     commentColor,
     onCommentClick,
     firstCommentCardId,
@@ -196,6 +200,7 @@ export const SlideObjectView = memo(function SlideObjectView({
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
             onContextMenu={onContextMenu ? (e) => onContextMenu(e, obj) : undefined}
+            {...(longPressBind && !editing ? longPressBind(obj) : {})}
         >
             {obj.type === 'text' && !editing && (
                 <div

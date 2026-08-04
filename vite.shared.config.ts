@@ -1,8 +1,52 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, mergeConfig, type Plugin, type UserConfig } from 'vite';
+
+const sharedWebAssetDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), 'apps/index/public');
+const sharedWebAssets = [
+    ['app-icon.svg', 'image/svg+xml'],
+    ['favicon.svg', 'image/svg+xml'],
+    ['safari-pinned-tab.svg', 'image/svg+xml'],
+    ['site.webmanifest', 'application/manifest+json'],
+] as const;
+
+function webAppMetadataPlugin(): Plugin {
+    return {
+        name: 'eigen-web-app-metadata',
+        configureServer(server) {
+            server.middlewares.use((request, response, next) => {
+                const pathname = request.url?.split('?')[0];
+                const asset = sharedWebAssets.find(([fileName]) => pathname === `/${fileName}`);
+                if (!asset) return next();
+
+                const [fileName, contentType] = asset;
+                response.setHeader('Content-Type', contentType);
+                response.end(readFileSync(path.join(sharedWebAssetDirectory, fileName)));
+            });
+        },
+        transformIndexHtml(html) {
+            const withoutExistingIcons = html.replace(/\s*<link[^>]+href="[^"]*\/favicon\.(?:svg|ico)"[^>]*>/g, '');
+            return withoutExistingIcons.replace(
+                '</head>',
+                `    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/app-icon.svg">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#111827">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Eigen">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)">
+</head>`,
+            );
+        },
+    };
+}
 
 // Keep in sync with applyTheme/getCachedTheme in theme-provider.tsx
 function themeFlashPlugin(): Plugin {
@@ -40,6 +84,7 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
         base: basePath,
         envDir: './../../',
         plugins: [
+            webAppMetadataPlugin(),
             themeFlashPlugin(),
             tanstackRouter({
                 target: 'react',

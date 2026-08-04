@@ -7,7 +7,7 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/compo
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type CreateUserDialogProps = {
     open: boolean;
@@ -24,6 +24,19 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
     const { data: config } = usePublicConfig();
     const createUser = useCreateUser(config?.orgId);
 
+    // Reset the draft (incl. password) whenever the dialog closes. Keying off `open` covers every
+    // close path — submit, Cancel, Escape, overlay — since a controlled Radix Dialog doesn't
+    // re-fire its own onOpenChange when the parent flips `open` externally.
+    useEffect(() => {
+        if (!open) {
+            setName('');
+            setUsername('');
+            setPassword('');
+            setRole('user');
+            setUsernameError('');
+        }
+    }, [open]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!config) return;
@@ -39,11 +52,6 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
 
         await createUser.mutateAsync({ name, email, password, role });
         onOpenChange(false);
-        setName('');
-        setUsername('');
-        setPassword('');
-        setRole('user');
-        setUsernameError('');
     };
 
     return (
