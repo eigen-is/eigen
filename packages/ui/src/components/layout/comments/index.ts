@@ -1,3 +1,4 @@
+export { ActivityPanel } from './activity-panel';
 export { AssigneeMenuItems } from './assignee-menu-items';
 export { AssigneePicker } from './assignee-picker';
 export { CommentContextMenu } from './comment-context-menu';
@@ -10,3 +11,4 @@ export { CommentThread } from './comment-thread';
 export { CreatedByMeta } from './created-by-meta';
 export { MemberAvatar } from './member-avatar';
 export { MemberCommandList } from './member-command-list';
+export { PanelColumn } from './panel-column';

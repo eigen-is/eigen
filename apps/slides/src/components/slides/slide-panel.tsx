@@ -42,10 +42,10 @@ export function SlidePanel({
     const { resolveMediaUrl } = useMediaResolver();
     const slideContextMenu = useContextMenu<string>();
 
-    // Mobile thumbnails render bare (no SortableSlide, no per-item component to hang a hook on), so
-    // one panel-level useLongPress carries the pressed slide via bind(slideId). Both layouts share this
-    // instance: mobile spreads it on the bare thumbnail, desktop composes it into SortableSlide (below)
-    // so a coarse-pointer press reaches the menu there too; desktop mouse keeps its onContextMenu right-click.
+    // Read-only viewers get no handlers, so the menu would open empty — don't arm its triggers.
+    const hasSlideActions = !!onDuplicateSlide || !!onDeleteSlide;
+
+    // One instance at panel level: bind(slideId) is what carries the pressed slide into the menu.
     const { openAt: openSlideMenuAt } = slideContextMenu;
     const handleSlideLongPress = useCallback(
         (slideId: string, x: number, y: number) => {
@@ -54,7 +54,7 @@ export function SlidePanel({
         [openSlideMenuAt],
     );
     // dragActiveId cancels an armed press the moment a drag starts (same mechanism as stickies cards).
-    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId });
+    const slideLongPress = useLongPress(handleSlideLongPress, { disabled: !!dragActiveId || !hasSlideActions });
 
     const slideList = deck.slideOrder.map((slideId, index) => {
         const slide = deck.slides[slideId];
@@ -63,6 +63,7 @@ export function SlidePanel({
 
         const thumbnail = (
             <SlideThumbnail
+                key={slideId}
                 slide={slide}
                 objects={objects}
                 index={index}
@@ -72,20 +73,15 @@ export function SlidePanel({
             />
         );
 
-        if (mobile)
-            return (
-                <div
-                    key={slideId}
-                    onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}
-                    {...slideLongPress.bind(slideId)}
-                >
-                    {thumbnail}
-                </div>
-            );
+        if (mobile) return thumbnail;
+
+        const onContextMenu = hasSlideActions
+            ? (e: React.MouseEvent) => slideContextMenu.handleContextMenu(e, slideId)
+            : undefined;
 
         return (
             <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false} longPressBind={slideLongPress.bind}>
-                <div onContextMenu={(e) => slideContextMenu.handleContextMenu(e, slideId)}>{thumbnail}</div>
+                <div onContextMenu={onContextMenu}>{thumbnail}</div>
             </SortableSlide>
         );
     });
@@ -121,7 +117,7 @@ export function SlidePanel({
                     </DndContext>
                 )}
             </div>
-            {/* Rendered on mobile too — long-press is the only way to reach it there. */}
+            {/* Not gated on !mobile: unmounting across a breakpoint flip would strand an open menu's item. */}
             <ContextMenuAnchor contextMenu={slideContextMenu}>
                 {menuSlideId && (
                     <>

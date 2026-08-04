@@ -38,6 +38,10 @@ state/render/
 └── filter-ui.ts    # Autofilter range border + buttons (lazy Path2D glyphs — module eval is DOM-free)
 ```
 
+Container-resize contract (app code may rely on it): `Sheet` keeps a `ResizeObserver` on its
+placeholder and skips 0×0 boxes, so a hidden workbook re-measures its canvas when it is shown
+again — `apps/sheets` hides the workbook rather than unmounting it for the mobile comments pane.
+
 ## Yjs Sync
 
 | Key     | Type    | Purpose                                   |

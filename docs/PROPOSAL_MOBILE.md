@@ -1,41 +1,75 @@
 # Proposal: Mobile Pass — remaining work
 
-> **Status (2026-08-02): Phases 1–4 shipped.** Phases 1–3 (navigation shell, toolbar kebabs,
+> **Status (2026-08-03): Phases 1–5 shipped.** Phases 1–3 (navigation shell, toolbar kebabs,
 > dialog + submenu overflow) merged and pushed through `46eb4f61`. Phase 4 (touch affordances —
-> findings 6, 7, 8, 15, 16, 19, 20 + menu-system consolidation) complete on branch
-> `mobile-touch-affordances`: the raw ContextMenu primitive is deleted (all menus now on the
-> singleton), drive row actions and Move/Copy are touch-reachable, long-press opens the context
-> menus on all five audited surfaces via the shared `useLongPress` hook, hover-only affordances
-> rest visible on coarse pointers (policy: match the hover value; pattern documented in
-> AGENTS.md), docs gained Insert → Comment (sheets already had it), drive trash confirms on
-> coarse pointers only, and the mail cheat-sheet has a toolbar entry point. Browser-verified
-> 21/21 at 390/360/768/1280 (Chromium). This doc now tracks ONLY what remains. Raw audit
-> evidence stays in gitignored `docs/superpowers/mobile-audit/`.
+> findings 6, 7, 8, 15, 16, 19, 20 + menu-system consolidation) merged through `d9124a2a`: the raw
+> ContextMenu primitive is deleted (all menus now on the singleton), drive row actions and
+> Move/Copy are touch-reachable, long-press opens the context menus on all five audited surfaces
+> via the shared `useLongPress` hook, hover-only affordances rest visible on coarse pointers
+> (policy: match the hover value; pattern documented in AGENTS.md), docs gained Insert → Comment,
+> drive trash confirms on coarse pointers only, and the mail cheat-sheet has a toolbar entry
+> point. Phase 5 (structural — findings 5 and 11) is complete on branch `mobile-structural`; what
+> it shipped is listed below. Browser-verified per phase at 390/360/768/1280 (Chromium). This doc
+> now tracks ONLY what remains. Raw audit evidence stays in gitignored
+> `docs/superpowers/mobile-audit/`.
 
-## Phase 5 — structural
+## Phase 5 — shipped (structural)
 
-- **Mobile presentation for comment/activity panels** (finding 5's remaining half): full-width
-  overlay instead of the `w-64` side panel — unlocks docs comments/activity below 1200px for the
-  first time. Then also: restore the docs mobile kebab's Comments item + CountBadge (deliberately
-  omitted while the panel can't render), give kebab menu items an open-state cue (desktop buttons
-  had `active`), and let the palette comment-reveal open the card dialog on mobile (today it only
-  scrolls to the mark below 1200px).
-- **Calendar week view** (finding 13): ~55px columns, one-letter titles, no time grid. *Open
-  decision:* redesign as an agenda/day list on mobile vs accept degraded.
-- **Slides on mobile** (finding 11): editor is structurally view-only < 768px (no canvas, no
-  add-slide, no per-slide menu). *Open decision:* bless view-only and remove the dead affordances
-  so it doesn't lie, vs invest in mobile editing. Present-mode already works well. New inputs
-  from phase 4: thumbnail long-press now offers Duplicate/Delete to writers on mobile (the two
-  operations that don't need a canvas — decide whether that lone edit affordance stays), and
-  read-only viewers see those items as inert no-ops (pre-existing on desktop right-click,
-  mirrored on mobile) — fix the gating with whatever this decision lands on.
-- **Sheet tabs below 640px** (finding 17): tab strip hidden — only "+" and the all-sheets
-  dropdown; no rename/reorder/recolor.
-- **Tap-target pass** (finding 21): recurring 24–36px icon buttons vs the ~44px guideline
-  (stickies column-header 24px, chat message actions 28px, toolbar/topbar 32–36px).
-- Observation for this phase (from phase-4 verification): drive multi-select has no pure-touch
-  affordance (modifier-click only), so the multi-item menus are effectively
-  keyboard-assisted-only on touch.
+- One shared comments/activity pane, `PanelColumn`, on every viewport in docs, slides and sheets
+  (stickies hosts it for activity, desktop-only — see Next round). Its `Column` toolbar draws the
+  title, the filter and the close affordance — back arrow on mobile, X on desktop — so
+  `CommentPanel` and `ActivityPanel` are plain list bodies. On mobile the editors hide under the
+  pane, they never unmount, so scroll position, selection and node views survive a visit. Panel open state lives in one `useDocumentPanels(isMobile)`
+  hook. Comment rows and activity rows share one `onOpenCard` prop, and the mobile pane stays put when
+  a card opens.
+- The sheet engine re-measures on container resize, not just on window resize. That also fixes the
+  desktop panel-clip bug: the grid now resizes to the panel edge and the scrollbar stays
+  reachable.
+- Docs comment and activity panels render from 768px. The old 1200px `isWide` gate is gone. The
+  page shifts left before it scales, so the text column always clears the panel. The figure and
+  table properties panels ride the same gate — intentional: from 768px up, selecting a figure or a
+  table auto-opens its panel for writers.
+- Slides on mobile is view-only for everyone. Thumbnail long-press and the thumbnail context menu
+  are desktop and iPad-desktop-layout only. The kebab open-state cue was dropped again: it is
+  unreachable under the takeover pane.
+- Present mode has a transient exit X, a `fullscreenchange` sync and a `.catch` on
+  `requestFullscreen`. Esc now exits fullscreen too, and editing is inert while presenting (object
+  nudge and delete, Cmd+Z, copy and paste are all gated).
+- The docs mobile kebab has Comments (with count) and Activity back, and the palette
+  comment-reveal opens the card dialog on every viewport.
+- Opening a find session while the pane is up (⌘F, a palette in-document hit) closes the pane in
+  all three editors. The bar rides with the editor, so it used to open inside the hidden one.
+
+Findings 5 (panels) and 11 (slides view-only) are closed, with their knock-ons. Finding 13
+(calendar week view) was reviewed on 2026-08-03: it is fine on mobile for now, no work planned.
+
+Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting, `onOpenCard`,
+`useDocumentPanels`), [SHEETS.md](SHEETS.md) (container-resize contract) and
+[LAYOUT.md](LAYOUT.md) (component table).
+
+## Next round
+
+- **Sheet tabs below 640px** (finding 17): the tab strip is hidden, so there is only "+" and the
+  all-sheets dropdown. No rename, reorder or recolor.
+- **Tap-target pass** (finding 21): recurring 24–36px icon buttons against the ~44px guideline
+  (stickies column header 24px, chat message actions 28px, toolbar and topbar 32–36px).
+- **Session-open actions run while the surface is hidden**: opening a find session closes the pane,
+  but everything that session does on open — the reveal scroll and the bar's own input focus — fires
+  in the same tick, before the editor is back. Neither works on a `display: none` subtree, so a match
+  outside the current scroll window stays off-screen and the bar can open unfocused (verified at
+  390×420 — bar reads "1 of 1", the document does not move). Highlights and the count are correct.
+  Fix seam: a `surfaceHidden` prop on `DocSearchProvider` that parks the pending reveal and replays it
+  from a layout effect once the surface is visible again.
+- Same family: Mod+F while the pane covers an already open find session only refocuses the
+  hidden input, so nothing visible happens. Closing the session when the pane opens fixes it.
+- **Stickies Activity below 768px**: stickies mounts the shared `PanelColumn` behind `!isMobile` and
+  gates its toolbar toggle the same way, so mobile Activity is unreachable. Giving it the mobile pane
+  means adopting the other three editors' shape: hide the board under a `hidden` wrapper and pass
+  `DocSearchProvider`'s `onOpenChange`.
+- **Drive touch multi-select**: picking more than one item needs a modifier click today, so the
+  multi-item menus are keyboard-assisted only on touch. Leading candidate: a "Select mode" entry
+  in the long-press menu and the kebab that turns on checkboxes and reuses the existing
+  multi-select actions.
 
 ## Accepted drifts (decided — don't re-flag, don't fix)
 
@@ -57,6 +91,15 @@
   verified working on touch). Not converted to always-visible; the 28px targets are finding 21.
 - Beyond the audit's five long-press surfaces, some context menus remain right-click-only by
   scope: contacts list rows, slides canvas objects, sheet row/column headers.
+- Slides keeps document-level keydown hooks (Delete, arrows), so a hardware keyboard can act on
+  the hidden canvas while the pane is open. Pre-existing body-level listeners — the same
+  hidden-surface family as the session-open residual under Next round.
+- Flipping a desktop viewport to mobile with the thumbnail menu open leaves a menu on screen once.
+  It dismisses on tap. Strictly better than the stranded reopen it replaced.
+- Pane rows show the anchor text while the card dialog shows the title. A glance mismatch, product
+  polish for later.
+- Docs desktop `ActivityPanel` still switches to the comments panel when a card is tapped. It is
+  the only surface that does; all three mobile panes stay put.
 
 ## Verification (every phase)
 
@@ -66,8 +109,21 @@
   (portalled layers / `overflow:hidden` clip without widening the page) — pixel review is
   mandatory. Full recipe: [VERIFICATION.md](VERIFICATION.md). Long-press needs real CDP touch
   synthesis; account passwords + fresh-cookie recipe live in the phase1-verify helper header.
-- Real-device spot check before calling the program done (all Chromium-only so far): sheets
-  touch-scroll; native date inputs in iOS Safari; and from phase 4 — long-press on the five
-  surfaces under real iOS (timer path + link-callout suppression on drive rows/tiles + no
-  first-menu-item activation on finger lift).
 - Same-cycle doc updates: LAYOUT.md / AGENTS.md tables when APIs change, and this file per phase.
+
+### Real-device spot check (before the program is called done)
+
+Everything so far is Chromium-only. Open on a real phone and tablet:
+
+- Sheets touch-scroll, and native date inputs in iOS Safari.
+- Long-press on the five phase-4 surfaces under real iOS: the timer path, link-callout
+  suppression on drive rows and tiles, and no first-menu-item activation on finger lift.
+- The sheets pane while the iOS URL bar collapses, and the sheets pane with cards in it.
+- Present mode: the exit X on real iOS (no fullscreen API there) and the Android back-gesture
+  exit. Check the 2s fade window when the fullscreen transition is slow.
+- Slides thumbnail callout suppression. `[-webkit-touch-callout:none]` as a TSX arbitrary property
+  is the first of its kind here, so confirm it on a fresh build (stale-JIT gotcha).
+- Docs between 768 and 830px: page legibility at scale ~0.6 with a panel open. Wide tables and
+  full-bleed figures may tuck under the panel in the shift band. That is by design, so eyeball it.
+- Docs figure click at 900px (the properties panel opens through the shift; code-verified only)
+  and the mobile mark-tap path (the card dialog opens over the document and closes back into it).

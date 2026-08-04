@@ -67,7 +67,7 @@
       }
     },
     {
-      // Dependency direction is one-way: sheet -> lib, never the reverse (would pull React into the backend).
+      // Dependency direction is one-way: sheet/ui -> lib, never the reverse (would pull React into the backend).
       "includes": ["packages/lib/**"],
       "linter": {
         "rules": {
@@ -77,8 +77,8 @@
               "options": {
                 "patterns": [
                   {
-                    "group": ["@workspace/sheet", "@workspace/sheet/**"],
-                    "message": "lib must not import sheet (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
+                    "group": ["@workspace/sheet", "@workspace/sheet/**", "@workspace/ui", "@workspace/ui/**"],
+                    "message": "lib must not import sheet or ui (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
                   }
                 ]
               }

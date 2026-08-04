@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Eigen",
+  "short_name": "Eigen",
+  "description": "Your personal workspace in the cloud.",
+  "start_url": "/space/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -9,7 +9,7 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -21,14 +21,22 @@ import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ActivityPanel, CardFormDialog, CommentLifecycleDialogs, CommentPanel } from '@workspace/ui';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import {
+    CardFormDialog,
+    Column,
+    ColumnLayout,
+    CommentLifecycleDialogs,
+    EmptyState,
+    LoadingState,
+    PanelColumn,
+    useLayout,
+} from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
-import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
 import { cn } from '@workspace/ui/lib/utils';
+import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type ArrangeOp, computeArrange } from './arrange';
 import { useActiveComments } from './hooks/use-active-comments';
@@ -183,9 +191,52 @@ function SlideEditorInner({
         if (isPresenting) clearHighlights();
     }, [isPresenting, clearHighlights]);
 
+    // Present chrome: the exit X shows on entry and on any pointer activity, then fades away again.
+    const [presentControlsVisible, setPresentControlsVisible] = useState(false);
+    const presentControlsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const revealPresentControls = useCallback(() => {
+        setPresentControlsVisible(true);
+        clearTimeout(presentControlsTimerRef.current);
+        presentControlsTimerRef.current = setTimeout(() => setPresentControlsVisible(false), 2000);
+    }, []);
+    useEffect(() => {
+        if (isPresenting) revealPresentControls();
+        return () => clearTimeout(presentControlsTimerRef.current);
+    }, [isPresenting, revealPresentControls]);
+
+    const exitPresent = useCallback(() => {
+        setIsPresenting(false);
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }, []);
+
+    // Fullscreen also ends outside our control (Esc, Android back gesture) — leave present with it.
+    useEffect(() => {
+        const onFullscreenChange = () => {
+            if (!document.fullscreenElement) setIsPresenting(false);
+        };
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    }, []);
+
     const auth = useAuth();
-    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
+    const {
+        panel,
+        commentPanelOpen,
+        activityPanelOpen,
+        mobilePanelOpen,
+        toggleComments,
+        toggleActivity,
+        closePanels,
+        onSearchOpenChange,
+    } = useDocumentPanels(isMobile);
+    // The layered Escape below still needs the plain open flag.
+    const handleSearchOpenChange = useCallback(
+        (open: boolean) => {
+            setSearchOpen(open);
+            onSearchOpenChange(open);
+        },
+        [onSearchOpenChange],
+    );
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetObjId, setAddTargetObjId] = useState<string | null>(null);
@@ -231,32 +282,45 @@ function SlideEditorInner({
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
+    const panelProps = {
+        onClose: closePanels,
+        path,
+        cards,
+        entries: allComments,
+        members,
+        currentUserEmail: auth.user!.email,
+        filter: commentFilter,
+        activeComments,
+        commentContextMenu,
+        // The mobile pane hides the canvas, so its slide + object reveal would go unseen there.
+        onOpenCard: isMobile ? setOpenCardId : openCommentCard,
+    };
+
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
 
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
 
-    useYjsUndoHotkeys(undoManager, canWrite);
+    // Present is a read-only view of a live deck, or a stray key mutates the slide the audience sees.
+    const canEdit = canWrite && !isPresenting;
+
+    useYjsUndoHotkeys(undoManager, canEdit);
     useHotkey(
         'Delete',
         () => {
-            if (hasSelection && canWrite) {
-                deleteObjects(selectedObjectIds);
-                setSelectedObjectIds([]);
-            }
+            deleteObjects(selectedObjectIds);
+            setSelectedObjectIds([]);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'Backspace',
         () => {
-            if (hasSelection && canWrite) {
-                deleteObjects(selectedObjectIds);
-                setSelectedObjectIds([]);
-            }
+            deleteObjects(selectedObjectIds);
+            setSelectedObjectIds([]);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     // Layered Escape (amendment 12): present → text-edit → bar → deselect. This is a capture-phase
     // document listener (NOT useHotkey): the find bar's own Escape runs in the bubble phase and closes
@@ -274,7 +338,7 @@ function SlideEditorInner({
             const { isPresenting: presenting, isEditing: editing, searchOpen: barOpen } = escStateRef.current;
             if (presenting) {
                 e.stopPropagation();
-                setIsPresenting(false);
+                exitPresent();
             } else if (editing) {
                 e.stopPropagation();
                 setEditingObjectId(null);
@@ -285,7 +349,7 @@ function SlideEditorInner({
         };
         document.addEventListener('keydown', onKeyDown, true);
         return () => document.removeEventListener('keydown', onKeyDown, true);
-    }, []);
+    }, [exitPresent]);
     const moveSelected = useCallback(
         (dx: number, dy: number) => {
             if (!yjsDoc) return;
@@ -329,7 +393,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(-1, 0);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowRight',
@@ -337,7 +401,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(1, 0);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowUp',
@@ -345,7 +409,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(0, -1);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowDown',
@@ -353,7 +417,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(0, 1);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canEdit && hasSelection && !isEditing },
     );
     const handleImageFile = useCallback(
         async (file: File) => {
@@ -395,6 +459,7 @@ function SlideEditorInner({
     );
 
     useEffect(() => {
+        if (isPresenting) return;
         const handleCopy = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
             if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable)
@@ -524,6 +589,7 @@ function SlideEditorInner({
         deck.objects,
         activeSlideId,
         canWrite,
+        isPresenting,
         addObject,
         handleImageFile,
         resolveMediaPath,
@@ -655,10 +721,9 @@ function SlideEditorInner({
 
     const handlePresent = useCallback(() => {
         setEditingObjectId(null);
-        const el = document.documentElement;
-        if (el.requestFullscreen) {
-            el.requestFullscreen().then(() => setIsPresenting(true));
-        }
+        setIsPresenting(true);
+        // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
+        document.documentElement.requestFullscreen?.().catch(() => {});
     }, []);
 
     const handleAddComment = useCallback(
@@ -713,14 +778,18 @@ function SlideEditorInner({
     if (isPresenting && activeSlide) {
         return (
             <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black cursor-none"
+                className={cn(
+                    'fixed inset-0 z-50 flex items-center justify-center bg-black',
+                    !presentControlsVisible && 'cursor-none',
+                )}
+                onPointerMove={revealPresentControls}
                 onClick={() => {
+                    revealPresentControls();
                     const currentIdx = deck.slideOrder.indexOf(activeSlideId!);
                     if (currentIdx < deck.slideOrder.length - 1) {
                         setActiveSlideId(deck.slideOrder[currentIdx + 1]);
                     } else {
-                        setIsPresenting(false);
-                        if (document.fullscreenElement) document.exitFullscreen();
+                        exitPresent();
                     }
                 }}
                 onContextMenu={(e) => {
@@ -744,17 +813,36 @@ function SlideEditorInner({
                         <ReadOnlySlideObject key={obj.id} obj={obj} />
                     ))}
                 </div>
+                <button
+                    type="button"
+                    title="Exit present (Esc)"
+                    aria-label="Exit present"
+                    tabIndex={presentControlsVisible ? undefined : -1}
+                    // Hidden means gone, so a tap in this corner still advances the deck.
+                    className={cn(
+                        'absolute top-4 right-4 rounded-full bg-black/50 p-2.5 pointer-coarse:p-3 text-white transition-opacity hover:bg-black/70',
+                        !presentControlsVisible && 'pointer-events-none opacity-0',
+                    )}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        exitPresent();
+                    }}
+                >
+                    <X className="size-5" />
+                </button>
             </div>
         );
     }
 
     return (
-        <ColumnLayout mobileColumn="editor">
-            <div className="flex-1 min-w-0 h-full">
+        <ColumnLayout>
+            {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
+            <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
                 <DocSearchProvider
                     controller={docSearchController}
                     initialSearchTerm={initialSearchTerm}
-                    onOpenChange={setSearchOpen}
+                    onOpenChange={handleSearchOpenChange}
+                    // right-68 = panel width + the bar's own gutter.
                     barClassName={cn('top-14', rightPanelShown && 'right-68')}
                 >
                     <Column
@@ -772,25 +860,10 @@ function SlideEditorInner({
                                 onAddImage={() => setImagePickerOpen(true)}
                                 onAddSlide={() => addSlide()}
                                 onPresent={handlePresent}
-                                // Only offer the toggles where the panels can render (!isMobile), else
-                                // they're enabled no-ops. DocumentShareCluster hides them when absent.
-                                onToggleCommentPanel={
-                                    !isMobile
-                                        ? () => {
-                                              setActivityPanelOpen(false);
-                                              setCommentPanelOpen((v) => !v);
-                                          }
-                                        : undefined
-                                }
+                                // Always offered: desktop draws the side panel, mobile the Column.
+                                onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
-                                onToggleActivityPanel={
-                                    !isMobile
-                                        ? () => {
-                                              setCommentPanelOpen(false);
-                                              setActivityPanelOpen((v) => !v);
-                                          }
-                                        : undefined
-                                }
+                                onToggleActivityPanel={toggleActivity}
                                 activityPanelOpen={activityPanelOpen}
                                 unresolvedCommentCount={unresolvedCount}
                             />
@@ -862,32 +935,8 @@ function SlideEditorInner({
                                                 </span>
                                             </div>
                                         </div>
-                                        {commentPanelOpen ? (
-                                            <CommentPanel
-                                                cards={cards}
-                                                entries={allComments}
-                                                activeCardIds={activeComments.ids}
-                                                anchorTexts={activeComments.anchorTexts}
-                                                currentUserEmail={auth.user!.email}
-                                                filter={commentFilter}
-                                                members={members}
-                                                onClose={() => setCommentPanelOpen(false)}
-                                                onCommentClick={openCommentCard}
-                                                onCommentContextMenu={(e, card, entry) =>
-                                                    commentContextMenu.handleContextMenu(e, { card, entry })
-                                                }
-                                            />
-                                        ) : activityPanelOpen ? (
-                                            <ActivityPanel
-                                                path={path}
-                                                onClose={() => setActivityPanelOpen(false)}
-                                                onOpenCard={({ cardId, chatName }) => {
-                                                    const id =
-                                                        cardId ??
-                                                        (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                                    if (id) openCommentCard(id);
-                                                }}
-                                            />
+                                        {panel ? (
+                                            <PanelColumn activePanel={panel} {...panelProps} />
                                         ) : selectedObjects.length > 0 && canWrite ? (
                                             <SlidePropertiesPanel
                                                 objects={selectedObjects}
@@ -926,6 +975,8 @@ function SlideEditorInner({
                     </Column>
                 </DocSearchProvider>
             </div>
+
+            {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
 
             <CardFormDialog
                 open={addOpen}

@@ -69,6 +69,7 @@
     "./components/layout/braket": "./src/components/layout/braket/index.ts",
     "./components/layout/chat": "./src/components/layout/chat/index.ts",
     "./components/layout/collab": "./src/components/layout/collab/index.ts",
+    "./components/layout/comments": "./src/components/layout/comments/index.ts",
     "./components/layout/contacts": "./src/components/layout/contacts/index.ts",
     "./components/layout/context-menu": "./src/components/layout/context-menu/index.ts",
     "./components/layout/delete": "./src/components/layout/delete/index.ts",

@@ -2,6 +2,7 @@ export { useCardIdFromChatName } from './use-card-id-from-chat-name';
 export { readCards, useCommentCards } from './use-comment-cards';
 export { useCommentLifecycle } from './use-comment-lifecycle';
 export { useCreateCommentCard, writeCardToDoc } from './use-create-comment-card';
+export { useDocumentPanels } from './use-document-panels';
 export { useOpenCardById } from './use-open-card-by-id';
 export { useOpenCommentCard } from './use-open-comment-card';
 export { useResolveCardAttachments } from './use-resolve-card-attachments';

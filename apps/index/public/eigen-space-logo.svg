@@ -1,17 +1,30 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" width="400" height="100">
     <style>
-        .logo-text {
+        text {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans',
         'Helvetica Neue', sans-serif;
         font-size: 24px;
-        font-weight: 600;
-        fill: #14b8a6; /* Tailwind teal-500 */
-        dominant-baseline: middle;
-        text-anchor: middle;
+        }
+        .eigen {
+        font-weight: 500;
+        fill: #020618; /* --foreground (Tailwind slate-950) */
+        }
+        .app {
+        font-weight: 400;
+        fill: #009689; /* --app-space-color (Tailwind teal-600) */
+        }
+        .braket {
+        fill: none;
+        stroke: #009689;
+        stroke-width: 1.36; /* 1.25 units */
+        stroke-linecap: round;
+        stroke-linejoin: round;
         }
     </style>
-    <text x="100" y="25" class="logo-text">
-        eigen<tspan dx="-2" dy="0.5">|</tspan>space
-        <tspan dx="2">&gt;</tspan>
-    </text>
+    <text x="86.7" y="32" text-anchor="end" class="eigen">eigen</text>
+    <!-- Bar: path "m4 0 0 16" in a 7-unit-wide box starting at x=86.7 -->
+    <path class="braket" d="M 91.06 16.73 L 91.06 34.18" />
+    <text x="94.34" y="32" text-anchor="start" class="app">space</text>
+    <!-- Ket: path "m3 0 4 7.5 -4 7.5" in a 14-unit-wide box after "space" (62.3px wide) -->
+    <path class="braket" d="M 159.91 16.73 L 164.28 24.91 L 159.91 33.09" />
 </svg>

@@ -37,14 +37,22 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
-        imageProcessed.current = true;
 
         const nw = imageRef.current.naturalWidth;
         const nh = imageRef.current.naturalHeight;
-        const maxWidth = getMaxWidth();
+        const hasIntrinsicSize = nw > 0 && nh > 0;
+        // Intrinsic dimensions need no layout, so the resize handles get their ratio even from a load
+        // that happens while the editor is hidden.
+        if (hasIntrinsicSize) setAspectRatio(nw / nh);
 
-        if (nw > 0 && nh > 0) {
-            setAspectRatio(nw / nh);
+        const maxWidth = getMaxWidth();
+        // A hidden editor measures 0 while the padding subtracts, and that negative width would land in
+        // the doc. Load fires once per src, so un-hiding brings no second chance: the width stays unset
+        // until the node view remounts, which max-w-full renders fine.
+        if (maxWidth <= 0) return;
+        imageProcessed.current = true;
+
+        if (hasIntrinsicSize) {
             if (!node.attrs.width) {
                 updateAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
             }
@@ -94,7 +102,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                     <ImageResizeHandles
                         width={width}
                         aspectRatio={aspectRatio}
-                        maxWidth={getMaxWidth()}
+                        getMaxWidth={getMaxWidth}
                         onResize={(w) => updateAttributes({ width: w })}
                         selected={selected}
                         editable={isEditable}

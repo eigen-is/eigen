@@ -157,31 +157,52 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const contextRef = useRef(context);
     contextRef.current = context;
 
+    const dataRef = useRef(data);
+    dataRef.current = data;
+
     const rafIdRef = useRef(0);
+    // Latched by the 0×0 guards below so the rAF redraw skips a hidden surface.
+    const visibleRef = useRef(true);
 
     const rowlenKey = useStableJson(context.config?.rowlen);
     const columnlenKey = useStableJson(context.config?.columnlen);
     const rowhiddenKey = useStableJson(context.config?.rowhidden);
     const colhiddenKey = useStableJson(context.config?.colhidden);
 
-    // Resize handler
-    useEffect(() => {
-        function resize() {
-            if (!data) return;
-            setContext((draftCtx) => {
-                if (settings.devicePixelRatio === 0) {
-                    draftCtx.devicePixelRatio = (
-                        typeof globalThis !== 'undefined' ? globalThis : window
-                    ).devicePixelRatio;
-                }
-                updateContextWithSheetData(draftCtx, data);
-                updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholderRef.current!);
-            });
+    // Data via ref so the handler identity survives edits — a rebuilt observer would re-clear the
+    // canvas bitmap, and so repaint the whole grid, per keystroke.
+    const resize = useCallback(() => {
+        // Visibility first: a falsy-data moment must not swallow the entry that un-hides the surface.
+        // 0×0 = detaching or hidden; writing it would pin the canvas blank until the next resize.
+        const placeholder = placeholderRef.current;
+        if (!placeholder || placeholder.clientWidth === 0 || placeholder.clientHeight === 0) {
+            visibleRef.current = false;
+            return;
         }
+        visibleRef.current = true;
 
+        const sheetData = dataRef.current;
+        if (!sheetData) return;
+        setContext((draftCtx) => {
+            if (settings.devicePixelRatio === 0) {
+                draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
+            }
+            updateContextWithSheetData(draftCtx, sheetData);
+            updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder);
+        });
+    }, [refs.canvas, setContext, settings.devicePixelRatio]);
+
+    // Window resize covers devicePixelRatio changes, the observer container-only ones (panels, un-hiding).
+    // No feedback loop: the placeholder is sized by its flex parent, canvas and overlay are absolute.
+    useEffect(() => {
         window.addEventListener('resize', resize);
-        return () => window.removeEventListener('resize', resize);
-    }, [data, refs.canvas, setContext, settings.devicePixelRatio]);
+        const observer = new ResizeObserver(resize);
+        observer.observe(placeholderRef.current!);
+        return () => {
+            window.removeEventListener('resize', resize);
+            observer.disconnect();
+        };
+    }, [resize]);
 
     // Recalculate row/col info when data or config dimensions change
     // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from context.config; the source object refs would re-fire on identity churn
@@ -190,9 +211,12 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
     }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, setContext]);
 
-    // Init canvas sizing
+    // Init sizing, before the observer's first delivery. Same 0×0 skip: a remount while hidden would pin blank.
     useEffect(() => {
-        setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholderRef.current!));
+        const placeholder = placeholderRef.current!;
+        visibleRef.current = placeholder.clientWidth > 0 && placeholder.clientHeight > 0;
+        if (!visibleRef.current) return;
+        setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholder));
     }, [refs.canvas, setContext]);
 
     // Recalculate freeze data when sheet or freeze config changes
@@ -213,6 +237,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     const scheduleRedraw = useCallback(() => {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = requestAnimationFrame(() => {
+            if (!visibleRef.current) return;
             const ctx = contextRef.current;
             if (ctx.groupValuesRefreshData.length > 0) return;
             if (!refs.canvas.current) return;

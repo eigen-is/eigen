@@ -8,9 +8,14 @@ import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { findCardIdByChatName, useCommentFilter, useCommentLifecycle } from '@workspace/lib/comments';
+import {
+    findCardIdByChatName,
+    useCommentFilter,
+    useCommentLifecycle,
+    useDocumentPanels,
+} from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
-import { A4_WIDTH_PX, getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { A4_WIDTH_PX, getDocExtensions, PAGE_MARGIN_PX } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
     MediaResolverProvider,
@@ -18,7 +23,6 @@ import {
     useMediaResolver,
     useUploadFile,
 } from '@workspace/lib/drive';
-import { useMediaQuery } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -26,13 +30,13 @@ import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspac
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    ActivityPanel,
     CardFormDialog,
     Column,
     CommentLifecycleDialogs,
     CommentMenuItems,
-    CommentPanel,
     LoadingState,
+    PanelColumn,
+    useLayout,
 } from '@workspace/ui';
 import {
     DropdownMenuItem,
@@ -43,12 +47,13 @@ import {
 import { renderPresenceCaret } from '@workspace/ui/components/layout/collab';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/layout/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/layout/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/layout/search/prosemirror-search-highlight';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { EditorToolbar } from './editor-toolbar';
@@ -97,6 +102,13 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
 }
 
 const lowlight = createLowlight(common);
+
+// The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
+const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
+// Only the text column has to stay clear of the panel; the page's right margin may tuck under it.
+const TEXT_COLUMN_RIGHT_PX = A4_WIDTH_PX - PAGE_MARGIN_PX;
+// Above this the panel clears the centred page outright: every value below is pinned, so stop storing width.
+const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - A4_WIDTH_PX;
 
 export const CollaborativeEditor = ({
     path,
@@ -234,11 +246,23 @@ const TiptapEditor = ({
     const { resolveMediaPath, startUpload } = useMediaResolver();
     const [addOpen, setAddOpen] = useState(false);
     const [pendingMarkRange, setPendingMarkRange] = useState<{ from: number; to: number; text: string } | null>(null);
-    const [canvasScale, setCanvasScale] = useState(1);
+    const { isMobile } = useLayout();
+    const {
+        panel,
+        commentPanelOpen,
+        activityPanelOpen,
+        mobilePanelOpen,
+        toggleComments,
+        toggleActivity,
+        openComments,
+        closePanels,
+        onSearchOpenChange,
+    } = useDocumentPanels(isMobile);
+    const [containerWidth, setContainerWidth] = useState(0);
     const [docHeight, setDocHeight] = useState(0);
-    const needsScale = canvasScale < 1;
-    const documentRef = useRef<HTMLDivElement>(null);
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const needsScaleRef = useRef(false);
+    const documentRef = useRef<HTMLDivElement | null>(null);
+    const scrollContainerRef = useRef<HTMLDivElement | null>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
@@ -253,29 +277,48 @@ const TiptapEditor = ({
         return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     }, []);
 
-    useEffect(() => {
-        const el = scrollContainerRef.current;
+    // Callback refs so each observer dies with its node; the 0×0 guard keeps the last good width when a
+    // hidden surface (the mobile pane) measures zero, so the page doesn't flip layout on the way back.
+    const setScrollContainer = useCallback((el: HTMLDivElement | null) => {
+        scrollContainerRef.current = el;
         if (!el) return;
         const ro = new ResizeObserver(([entry]) => {
-            setCanvasScale(Math.min(1, entry.contentRect.width / A4_WIDTH_PX));
+            if (entry.contentRect.width === 0) return;
+            setContainerWidth(Math.min(entry.contentRect.width, PANEL_CLEAR_WIDTH_PX));
         });
         ro.observe(el);
-        return () => ro.disconnect();
+        return () => {
+            scrollContainerRef.current = null;
+            ro.disconnect();
+        };
     }, []);
 
-    useEffect(() => {
-        const el = documentRef.current;
+    const setDocumentEl = useCallback((el: HTMLDivElement | null) => {
+        documentRef.current = el;
         if (!el) return;
-        const ro = new ResizeObserver(() => setDocHeight(el.offsetHeight));
+        const ro = new ResizeObserver(() => {
+            // Only the scaled branch reads docHeight; the effect below seeds it on the way in.
+            if (!needsScaleRef.current) return;
+            const height = el.offsetHeight;
+            if (height === 0) return;
+            setDocHeight(height);
+        });
         ro.observe(el);
-        return () => ro.disconnect();
+        return () => {
+            documentRef.current = null;
+            ro.disconnect();
+        };
     }, []);
 
-    const handleCommentClick = useCallback((cardId: string) => {
-        setActivityPanelOpen(false);
-        setOpenCardId(cardId);
-        setCommentPanelOpen(true);
-    }, []);
+    // Same split as openCard below: the mobile pane hides the document, so a mark tap only opens the
+    // card dialog over it.
+    const handleCommentClick = useCallback(
+        (cardId: string) => {
+            if (!isMobile) openComments();
+            setOpenCardId(cardId);
+        },
+        [isMobile, openComments],
+    );
 
     const editor = useEditor(
         {
@@ -299,7 +342,7 @@ const TiptapEditor = ({
                         selectionContextMenu.handleContextMenu(event as unknown as React.MouseEvent, true);
                     },
                     onAddComment: () => handleAddCommentRef.current?.(),
-                    onToggleCommentPanel: () => setCommentPanelOpen((v) => !v),
+                    onToggleCommentPanel: toggleComments,
                 }),
                 Collaboration.configure({
                     document: yDoc,
@@ -548,8 +591,6 @@ const TiptapEditor = ({
     const lastPanelRef = useRef<'figure' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
 
-    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
-    const [activityPanelOpen, setActivityPanelOpen] = useState(false);
     const activeComments = useActiveComments(editor);
     const lifecycle = useCommentLifecycle({
         ownerId: path.ownerId,
@@ -654,14 +695,27 @@ const TiptapEditor = ({
     const docSearchController = useProseMirrorSearchController(editor, access.canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const isWide = !useMediaQuery('(max-width: 1200px)');
+    const showSidebar = !isMobile && (panel !== null || (access.canWrite && sidebarContext !== 'document'));
+
+    // Slide the centred page left by its overlap with the panel; only shrink once the slack runs out.
+    const centredSlack = Math.max(0, (containerWidth - A4_WIDTH_PX) / 2);
+    const panelLeft = containerWidth - PANEL_INTRUSION_PX;
+    const panelOverlap = showSidebar ? Math.max(0, centredSlack + TEXT_COLUMN_RIGHT_PX - panelLeft) : 0;
+    const canShift = containerWidth > 0 && panelOverlap <= centredSlack;
+    const canvasShift = canShift ? panelOverlap : 0;
+    const canvasScale =
+        containerWidth === 0
+            ? 1
+            : Math.min(1, containerWidth / A4_WIDTH_PX, canShift ? 1 : panelLeft / TEXT_COLUMN_RIGHT_PX);
+    const needsScale = canvasScale < 1;
+
+    // The document observer stays quiet while unscaled, so seed the height on the way in.
+    useLayoutEffect(() => {
+        needsScaleRef.current = needsScale;
+        if (needsScale && documentRef.current) setDocHeight(documentRef.current.offsetHeight);
+    }, [needsScale]);
 
     if (!editor) return null;
-
-    const activePanel = commentPanelOpen ? 'comments' : activityPanelOpen ? 'activity' : sidebarContext;
-    const showSidebar =
-        isWide &&
-        (activePanel === 'comments' || activePanel === 'activity' || (access.canWrite && activePanel !== 'document'));
 
     const handleScrollToComment = (cardId: string) => {
         const positions = findCommentMarkPositions(editor.state.doc, cardId);
@@ -670,162 +724,141 @@ const TiptapEditor = ({
         }
     };
 
-    // Palette IN COMMENTS capability — reveal resolves chatName → cardId client-side, opens the
-    // panel, scrolls to the mark, and opens the card (the panel's own click pair). Plain object per
-    // render; usePaletteDocSearch stabilises it, so the closure sees the current cardsRef.
+    // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
+    // the editor, so it just opens the card.
+    const openCard = (cardId: string) => {
+        if (!isMobile) {
+            openComments();
+            handleScrollToComment(cardId);
+        }
+        setOpenCardId(cardId);
+    };
+
+    const panelProps = {
+        onClose: closePanels,
+        path,
+        cards,
+        entries: allComments,
+        members,
+        currentUserEmail: auth.user!.email,
+        filter: commentFilter,
+        activeComments,
+        commentContextMenu,
+        onOpenCard: openCard,
+    };
+
+    // Plain object per render; usePaletteDocSearch stabilises it, so reveal sees the current cards.
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
-            // Below the panel's isWide gate a reveal can only scroll to the mark.
-            if (isWide) {
-                setActivityPanelOpen(false);
-                setCommentPanelOpen(true);
-            }
-            handleScrollToComment(cardId);
-            if (isWide) setOpenCardId(cardId);
+            openComments();
+            // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
+            if (!isMobile) handleScrollToComment(cardId);
+            setOpenCardId(cardId);
         },
     };
 
     return (
         <>
-            <DocSearchProvider
-                controller={docSearchController}
-                commentSearch={commentSearch}
-                initialSearchTerm={initialSearchTerm}
-                barClassName={cn('top-14', showSidebar && 'right-68')}
-                // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
-                onUndo={() => editor.commands.undo()}
-                onRedo={() => editor.commands.redo()}
-            >
-                <Column
-                    id={'doc-editor'}
-                    width={'w-full'}
-                    toolbarBorder="always"
-                    toolbar={
-                        <EditorToolbar
-                            editor={editor}
-                            path={path}
-                            canWrite={access.canWrite}
-                            canUndo={canUndo}
-                            canRedo={canRedo}
-                            onAccessDialogOpen={onAccessDialogOpen}
-                            // Only offer these toggles where the panel can actually render (isWide),
-                            // else the button is an enabled no-op. DocumentShareCluster hides it when absent.
-                            onToggleCommentPanel={
-                                isWide
-                                    ? () => {
-                                          setActivityPanelOpen(false);
-                                          setCommentPanelOpen((v) => !v);
-                                      }
-                                    : undefined
+            <div className="flex h-full w-full overflow-hidden">
+                {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
+                <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
+                    <DocSearchProvider
+                        controller={docSearchController}
+                        commentSearch={commentSearch}
+                        initialSearchTerm={initialSearchTerm}
+                        onOpenChange={onSearchOpenChange}
+                        // right-68 = panel width + the bar's own gutter.
+                        barClassName={cn('top-14', showSidebar && 'right-68')}
+                        // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
+                        onUndo={() => editor.commands.undo()}
+                        onRedo={() => editor.commands.redo()}
+                    >
+                        <Column
+                            id={'doc-editor'}
+                            width={'w-full'}
+                            toolbarBorder="always"
+                            toolbar={
+                                <EditorToolbar
+                                    editor={editor}
+                                    path={path}
+                                    canWrite={access.canWrite}
+                                    canUndo={canUndo}
+                                    canRedo={canRedo}
+                                    onAccessDialogOpen={onAccessDialogOpen}
+                                    // Always offered: desktop draws the side panel, mobile the Column.
+                                    onToggleCommentPanel={toggleComments}
+                                    commentPanelOpen={commentPanelOpen}
+                                    onToggleActivityPanel={toggleActivity}
+                                    activityPanelOpen={activityPanelOpen}
+                                    unresolvedCommentCount={unresolvedCount}
+                                    onImageUpload={mediaFolderId ? handleImageUpload : undefined}
+                                    onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
+                                    onAddComment={chatFolderId ? handleAddComment : undefined}
+                                />
                             }
-                            commentPanelOpen={commentPanelOpen}
-                            onToggleActivityPanel={
-                                isWide
-                                    ? () => {
-                                          setCommentPanelOpen(false);
-                                          setActivityPanelOpen((v) => !v);
-                                      }
-                                    : undefined
-                            }
-                            activityPanelOpen={activityPanelOpen}
-                            unresolvedCommentCount={unresolvedCount}
-                            onImageUpload={mediaFolderId ? handleImageUpload : undefined}
-                            onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
-                            onAddComment={chatFolderId ? handleAddComment : undefined}
-                        />
-                    }
-                >
-                    <div className="h-full relative overflow-hidden">
-                        <div
-                            ref={scrollContainerRef}
-                            className={cn(
-                                'h-full w-full overflow-y-scroll bg-muted p-4',
-                                needsScale && 'overflow-x-hidden',
-                            )}
-                            onClick={(e) => {
-                                if (e.target === scrollContainerRef.current) {
-                                    editor.commands.blur();
-                                }
-                            }}
                         >
-                            <div
-                                data-document="true"
-                                className={cn(
-                                    'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
-                                    !needsScale && 'min-h-full m-auto',
-                                )}
-                                ref={documentRef}
-                                style={
-                                    needsScale
-                                        ? {
-                                              transform: `scale(${canvasScale})`,
-                                              transformOrigin: 'top left',
-                                              marginBottom: -(1 - canvasScale) * docHeight,
-                                          }
-                                        : undefined
-                                }
-                            >
-                                <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
-                            </div>
-                        </div>
-                        {isWide && (
-                            <div
-                                className={cn(
-                                    'absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out',
-                                    showSidebar ? 'translate-x-0' : 'translate-x-full',
-                                )}
-                            >
-                                {activePanel === 'comments' ? (
-                                    <CommentPanel
-                                        cards={cards}
-                                        entries={allComments}
-                                        activeCardIds={activeComments.ids}
-                                        anchorTexts={activeComments.anchorTexts}
-                                        currentUserEmail={auth.user!.email}
-                                        filter={commentFilter}
-                                        members={members}
-                                        onClose={() => setCommentPanelOpen(false)}
-                                        onCommentClick={(cardId) => {
-                                            handleScrollToComment(cardId);
-                                            setOpenCardId(cardId);
-                                        }}
-                                        onCommentContextMenu={(e, card, entry) => {
-                                            commentContextMenu.handleContextMenu(e, { card, entry });
-                                        }}
-                                    />
-                                ) : activePanel === 'activity' ? (
-                                    <ActivityPanel
-                                        path={path}
-                                        onClose={() => setActivityPanelOpen(false)}
-                                        onOpenCard={({ cardId, chatName }) => {
-                                            const id =
-                                                cardId ??
-                                                (chatName ? findCardIdByChatName(cards, chatName) : undefined);
-                                            if (!id) return;
-                                            setActivityPanelOpen(false);
-                                            setCommentPanelOpen(true);
-                                            handleScrollToComment(id);
-                                            setOpenCardId(id);
-                                        }}
-                                    />
-                                ) : lastPanelRef.current === 'figure' ? (
-                                    <FigurePropertiesPanel
-                                        key={editor.state.selection.from}
-                                        editor={editor}
-                                        onReplaceImage={handleReplaceImage}
-                                        onReplaceImageFromDrive={handleReplaceImageFromDrive}
-                                    />
-                                ) : (
-                                    <TablePropertiesPanel editor={editor} />
+                            <div className="h-full relative overflow-hidden">
+                                <div
+                                    ref={setScrollContainer}
+                                    className={cn(
+                                        'h-full w-full overflow-y-scroll bg-muted p-4',
+                                        needsScale && 'overflow-x-hidden',
+                                    )}
+                                    onClick={(e) => {
+                                        if (e.target === scrollContainerRef.current) {
+                                            editor.commands.blur();
+                                        }
+                                    }}
+                                >
+                                    <div
+                                        data-document="true"
+                                        className={cn(
+                                            'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
+                                            !needsScale && 'min-h-full m-auto',
+                                        )}
+                                        ref={setDocumentEl}
+                                        style={
+                                            needsScale
+                                                ? {
+                                                      transform: `scale(${canvasScale})`,
+                                                      transformOrigin: 'top left',
+                                                      marginBottom: -(1 - canvasScale) * docHeight,
+                                                  }
+                                                : canvasShift > 0
+                                                  ? { transform: `translateX(${-canvasShift}px)` }
+                                                  : undefined
+                                        }
+                                    >
+                                        <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
+                                    </div>
+                                </div>
+                                {/* Unmounted when closed: the properties panels key-remount per caret move. */}
+                                {showSidebar && (
+                                    <div className="absolute inset-y-0 right-0">
+                                        {panel ? (
+                                            <PanelColumn activePanel={panel} {...panelProps} />
+                                        ) : lastPanelRef.current === 'figure' ? (
+                                            <FigurePropertiesPanel
+                                                key={editor.state.selection.from}
+                                                editor={editor}
+                                                onReplaceImage={handleReplaceImage}
+                                                onReplaceImageFromDrive={handleReplaceImageFromDrive}
+                                            />
+                                        ) : (
+                                            <TablePropertiesPanel editor={editor} />
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                        )}
-                    </div>
-                </Column>
-            </DocSearchProvider>
+                        </Column>
+                    </DocSearchProvider>
+                </div>
+
+                {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
+            </div>
 
             <CardFormDialog
                 open={addOpen}

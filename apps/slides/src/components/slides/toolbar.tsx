@@ -1,6 +1,6 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useExportDocument } from '@workspace/lib/drive';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -52,7 +52,7 @@ export function Toolbar({
     const { exportDocument, isExporting } = useExportDocument();
     const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
-    const isMobile = useMediaQuery('(max-width: 1200px)');
+    const isCompact = useIsCompactToolbar();
     // Below the 768px system breakpoint the slide canvas unmounts (view-only), so editing entries
     // (undo/redo, Insert) disappear there. isCanvasHidden mirrors the editor's useLayout().isMobile gate.
     const { isMobile: isCanvasHidden } = useLayout();
@@ -98,7 +98,7 @@ export function Toolbar({
                 }
                 center={
                     <>
-                        {canWrite && !isMobile && (
+                        {canWrite && !isCompact && (
                             <>
                                 <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide} />
                                 <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText} />

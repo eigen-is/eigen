@@ -3,7 +3,7 @@ import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
-import { useMediaQuery } from '@workspace/lib/media';
+import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -110,7 +110,7 @@ export const EditorToolbar = ({
     const { exportDocument, isExporting } = useExportDocument();
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
-    const isMobile = useMediaQuery('(max-width: 1200px)');
+    const isCompact = useIsCompactToolbar();
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -206,7 +206,7 @@ export const EditorToolbar = ({
                             onRedo={() => editor.chain().focus().redo().run()}
                         />
 
-                        {isMobile && (
+                        {isCompact && (
                             <>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -396,7 +396,7 @@ export const EditorToolbar = ({
                 }
                 center={
                     canWrite &&
-                    !isMobile && (
+                    !isCompact && (
                         <div className="flex">
                             <ToolbarSeparator />
 

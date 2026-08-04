@@ -71,13 +71,15 @@ omit the palette stack — `PaletteRunner` exits early via `useOptionalCommandPa
 
 | Column Prop | Type                        | Description                                       |
 |-------------|-----------------------------|---------------------------------------------------|
-| `id`        | `string`                    | Must match `mobileColumn` to be visible on mobile |
+| `id`        | `string`                    | Must match `mobileColumn`, when one is set        |
 | `width`     | `string`                    | CSS width or `"flex"`                             |
 | `toolbar`   | `ReactNode`                 | h-12 bar above content                            |
 | `onBack`    | `(() => void) \| 'sidebar'` | Shows ← button on mobile                          |
 
 **Desktop**: All columns visible side-by-side.
-**Mobile**: Only `mobileColumn` visible. `onBack` provides back navigation. A function navigates
+**Mobile**: Only `mobileColumn` visible — the id gate only applies when a `ColumnLayout` sets
+`mobileColumn`; without it (or outside a `ColumnLayout`) every `Column` renders, which is how the
+editors mount a full-width pane as a sibling. `onBack` provides back navigation. A function navigates
 up a level (detail → list); the `'sidebar'` sentinel goes on FIRST columns and shows the sidebar
 as a full column — it self-gates on `sidebarMode === 'collapsible'`, so sidebar-less surfaces
 (editors, RequestAccessView) never render a dead arrow.
@@ -237,14 +239,16 @@ publish 1-item selections).
 | `ImageResizeHandles` | `media/image-resize-handles.tsx`   | Resize handles (docs + slides)                 |
 | `MountForm`          | `mount/mount-form.tsx`             | Storage mount configuration form               |
 
-### Properties Panel
+### Side Panels
 
-| Component         | File                                    | Description                |
-|-------------------|-----------------------------------------|----------------------------|
-| `PropertiesPanel` | `properties-panel/properties-panel.tsx` | Right-side panel container |
-| `PropertySection` | `properties-panel/properties-panel.tsx` | Section with title         |
-| `PropertyRow`     | `properties-panel/properties-panel.tsx` | Row with label + content   |
-| `ActivityPanel`   | `drive/activity-panel.tsx`              | File activity side panel (eigendoc editors) |
+| Component           | File                                    | Description                                                                                                 |
+|---------------------|-----------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `PropertiesPanel`   | `properties-panel/properties-panel.tsx` | Right-side panel container                                                                                  |
+| `PropertySection`   | `properties-panel/properties-panel.tsx` | Section with title                                                                                          |
+| `PropertyRow`       | `properties-panel/properties-panel.tsx` | Row with label + content                                                                                    |
+| `CommentPanel`      | `comments/comment-panel.tsx`            | Document comments list body — no chrome of its own                                                          |
+| `ActivityPanel`     | `comments/activity-panel.tsx`           | File activity list body — no chrome of its own                                                              |
+| `PanelColumn`       | `comments/panel-column.tsx`             | The comments/activity pane on every viewport: a `Column` whose toolbar holds the title, the filter and the close affordance (back arrow on mobile, X on desktop) around one of the two bodies. See [COMMENTS.md](COMMENTS.md) |
 
 ### Branding & Auth
 
