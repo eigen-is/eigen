@@ -86,9 +86,9 @@ function collectSheetsText(sheets: Sheet[], cap: number): string {
     return out.parts.join(' ');
 }
 
-// Body text for one collab document, capped at ~100 KB. Recalc failure indexes the
-// replayed values with a warning, mirroring the preview renderer — a stale body beats
-// no body at all.
+// Body text for one collab document, capped at ~100 KB. Sheets index stored values
+// only — like the preview renderer, the read never recalcs (SHEETS.md § Server-side
+// recalc), so a valueless formula cell contributes nothing.
 export async function extractCollabText(
     documentType: ExtractTextJob['documentType'],
     doc: Y.Doc,
@@ -104,9 +104,10 @@ export async function extractCollabText(
         }
         case 'eigensheets': {
             const { readSheetsFromDoc } = await import('../document/sheets');
-            const { sheets, recalcError } = readSheetsFromDoc(doc);
-            const warnings: TransformWarning[] = recalcError ? [{ code: 'recalc-failed', message: recalcError }] : [];
-            return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings };
+            // No recalc: the index serves stored values — a legacy never-computed
+            // workbook must not cost a full recalc inside the 30s extract deadline.
+            const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+            return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings: [] };
         }
     }
 }

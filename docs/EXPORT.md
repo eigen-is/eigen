@@ -273,8 +273,10 @@ blob comes back as a warning, never as a failed export. There is no main-thread 
 returns `503` and any other transform failure throws.
 
 All three formats materialize through `readSheetsFromDoc`, which may recalc the workbook inside the Worker —
-an xlsx import nobody ever opened still exports computed values rather than blanks. See
-[DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md).
+an xlsx import nobody ever opened still exports computed values rather than blanks. Export is the only read
+that still recalcs (preview and search extract pass `{ recalc: false }` — SHEETS.md § Server-side recalc);
+a legacy workbook whose recalc would exceed the 120s export deadline fails the export, an accepted residual.
+See [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md).
 
 The XLSX conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
 same ExcelJS library. Round-tripped: cell values, formulas, rich-text runs (`ct.s`), styles (font, fill,

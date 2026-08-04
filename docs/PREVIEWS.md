@@ -137,8 +137,10 @@ through the same seam — see [EXPORT.md](EXPORT.md):
 3. The Worker (`lib/document/transform/worker.ts`) materializes the payload and dispatches on document type
    through dynamic imports into the Worker-pure render modules (`preview/eigen{doc,slides,sheets}-render.ts`,
    which reach neither the Mount nor the transform seam), so a doc preview never evaluates the sheet engine:
-   sheets replay ops and recalc when the gate fires (a recalc failure serves replayed values with a
-   `recalc-failed` warning) and render the bounded first-sheet view; doc/slides convert the Yjs roots and
+   sheets replay ops — never recalc: stored values render as-is and a valueless formula cell stays blank,
+   because a legacy never-computed workbook can cost an unbounded recalc (~39s measured) that the 30s
+   deadline would kill on every attempt; only the export read recalcs (SHEETS.md § Server-side recalc) —
+   and render the bounded first-sheet view; doc/slides convert the Yjs roots and
    render their capped slice with media resolved from a name → URL map the main thread prepared
    (`buildPreviewUrlMap` — the Worker never sees a Mount). All
    three sanitize with DOMPurify (`FORCE_BODY` only — the preview config, distinct from `sanitizeExportHtml`)

@@ -49,6 +49,7 @@ export class CollabRegistry {
         this.documents.delete(key);
         const doc = await documentFn();
         doc.destruct();
+        console.log(`[collab] teardown path=${pathId}`);
         // Only tear down the shared data.db if no concurrent reopen re-registered this doc — the
         // reopened doc now owns the db lifecycle.
         if (doc.dataDbPathId && !this.documents.has(key)) {

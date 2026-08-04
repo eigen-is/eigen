@@ -545,6 +545,37 @@ describe('document/sheets — patch op replay', () => {
         expect(b1?.v?.v).toBe(999);
     });
 
+    test('recalc:false — formula cells keep their stored values and the gate never runs', () => {
+        // Preview and search extraction read with { recalc: false }: a legacy
+        // never-computed workbook recalced ~39s on prod and the 30s Worker deadline
+        // killed every preview forever. Stored values are served as-is; only the
+        // export read still recalcs (under its 120s deadline).
+        const doc = new Y.Doc();
+        const sheets = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                config: {},
+                celldata: [
+                    { r: 0, c: 0, v: { v: 5, m: '5', ct: { fa: 'General', t: 'n' } } },
+                    { r: 0, c: 1, v: { f: '=A1+1' } },
+                    { r: 0, c: 2, v: { f: '=A1+2', v: 999, m: '999', ct: { fa: 'General', t: 'n' } } },
+                ],
+            },
+        ] as unknown as Sheet[];
+        writeSheetsToYjs(doc, sheets);
+
+        const { sheets: result, recalcError } = readSheetsFromDoc(doc, { recalc: false });
+
+        const cellAt = (c: number) => result[0].celldata?.find((e) => e.r === 0 && e.c === c)?.v;
+        expect(cellAt(1)?.v).toBeUndefined();
+        expect(cellAt(1)?.m).toBeUndefined();
+        expect(cellAt(2)?.v).toBe(999);
+        expect(recalcError).toBeNull();
+        doc.destroy();
+    });
+
     test('xlsx import e2e: formula-only cells get engine-computed v/m persisted; volatile stays empty', async () => {
         // Generator-blank case: exceljs writes formula-only cells (no cached
         // result) when `result` is omitted. Driven through the real import seam

@@ -5,6 +5,7 @@ import { Elysia, t } from 'elysia';
 import { getCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type CollabDocument from '../lib/collab/collabDocument';
+import { startLoadingHeartbeat } from '../lib/collab/loading-heartbeat';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type Drive from '../lib/drive/drive';
@@ -184,12 +185,22 @@ export const collabRouter = new Elysia({
                 resolve = r;
             });
 
+            let stopHeartbeat: (() => void) | undefined;
             try {
                 const user = data.user;
                 if (!user) {
                     ws.close(1008, 'Authentication failed');
                     return;
                 }
+
+                // Speak before any await: y-websocket closes after 30s of silence and
+                // retries, re-paying a cold open per attempt (the reconnect spiral).
+                // Cold Home init inside getSharedDrive is the slowest phase, so the
+                // heartbeat must precede it; the frame is a constant empty awareness
+                // update, so nothing leaks before the ACL check.
+                const rawWs = toRawWs(ws);
+                stopHeartbeat = startLoadingHeartbeat(rawWs);
+                const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = data.params;
                 const drive = await getSharedDrive(ownerId, user);
@@ -199,8 +210,11 @@ export const collabRouter = new Elysia({
                 }
 
                 const document = await drive.getCollabDocument(mountId, pathId);
-                const rawWs = toRawWs(ws);
                 document.subscribe(user, rawWs);
+                console.log(
+                    `[collab] open path=${pathId} loadMs=${(performance.now() - loadStart).toFixed(0)} ` +
+                        `connections=${document.connectionCount}`,
+                );
 
                 data.drive = drive;
                 data.collabDocument = document;
@@ -215,6 +229,7 @@ export const collabRouter = new Elysia({
                 console.error('Error opening collab session:', err);
                 ws.close(1008, 'Failed to open document');
             } finally {
+                stopHeartbeat?.();
                 resolve!();
             }
         },
@@ -241,9 +256,13 @@ export const collabRouter = new Elysia({
             }
         },
 
-        async close(ws) {
+        async close(ws, code) {
             const data = ws.data as unknown as CollabWsData;
             if (data.opened) await data.opened;
+            const remaining = data.collabDocument ? data.collabDocument.connectionCount - 1 : null;
             cleanupSession(data, toRawWs(ws));
+            if (remaining !== null) {
+                console.log(`[collab] close path=${data.params.pathId} code=${code} connections=${remaining}`);
+            }
         },
     });

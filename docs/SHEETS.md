@@ -160,10 +160,14 @@ directly.
 
 ### Server-side recalc
 
-`readSheetsFromDoc()` recomputes formula cells through our own engine before returning — inside the
-transform Worker for exports, previews and the search index (the `extract-text` op) alike — so all three
-serve engine-verified `v`/`m` rather than whatever value was last cached in the snapshot. The recompute is a single pure engine function, `recalcSheets(Sheet[]) → Sheet[]`
-(`engine/recalc.ts`, barrel-exported), and it runs **gated** — only where staleness can actually exist.
+`readSheetsFromDoc()` can recompute formula cells through our own engine before returning — but only
+the **export** read asks for it. Preview and the search index (the `extract-text` op) pass
+`{ recalc: false }` and serve the replayed values as-is, valueless formula cells staying empty: a legacy
+never-computed workbook costs an unbounded full recalc (~39s measured on a 2.3MB-xlsx-derived doc),
+past the 30s preview/extract Worker deadline — which killed every preview of such a doc forever
+(2026-08-04 prod incident). Exports keep the recompute under their 120s deadline, because a flat
+deliverable with blank formula cells is wrong output. The recompute is a single pure engine function, `recalcSheets(Sheet[]) → Sheet[]`
+(`engine/recalc.ts`, barrel-exported), and where it runs it is **gated** — only where staleness can actually exist.
 
 Why gated, not on every read: a doc edited live in a browser is already fresh. The client's dependent
 recompute runs inside the op-emitting `produce`, so recomputed `v` **and** `m` persist as Yjs ops and

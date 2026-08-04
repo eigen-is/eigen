@@ -25,6 +25,7 @@ import { documentTransformRunner, TRANSFORM_LIMITS } from '../lib/document/trans
 import type { Drive } from '../lib/drive';
 import { exportDocument, runDocumentExport } from '../lib/export/export-document';
 import { collectExportMedia } from '../lib/export/media';
+import { renderEigensheetsExport } from '../lib/export/sheets/transform';
 import { getHome } from '../lib/home/get-home';
 import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
@@ -206,7 +207,7 @@ describe('document transform (eigensheets preview)', () => {
         }
     }, 60_000);
 
-    test('recalc failure serves replayed values with a warning, never a failed preview', async () => {
+    test('recalc policy: only the export read recalcs; its failure serves replayed values with a warning', async () => {
         const original = { ...engine };
         mock.module('@workspace/sheet/engine', () => ({
             ...original,
@@ -230,12 +231,18 @@ describe('document transform (eigensheets preview)', () => {
             ];
             doc.getMap('state').set('snapshot', JSON.stringify(sheets));
 
+            // Default read (the export path) attempts recalc and falls back.
             const fromDoc = readSheetsFromDoc(doc);
             expect(fromDoc.recalcError).toBe('forced recalc failure');
             expect(fromDoc.sheets[0].celldata?.[0]?.v?.v).toBe('replayed-value');
 
+            const exported = await renderEigensheetsExport(doc, 'html', 'Warned');
+            expect(exported.warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
+            expect(new TextDecoder().decode(exported.data)).toContain('replayed-value');
+
+            // The preview read never invokes recalc, so the forced failure is unreachable.
             const { body, warnings } = renderEigensheetsPreviewBody(doc);
-            expect(warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
+            expect(warnings).toEqual([]);
             expect(body).toContain('replayed-value');
         } finally {
             mock.module('@workspace/sheet/engine', () => original);

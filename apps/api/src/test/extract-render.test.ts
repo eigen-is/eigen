@@ -1,5 +1,4 @@
-import { describe, expect, mock, test } from 'bun:test';
-import * as engine from '@workspace/sheet/engine';
+import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { extractCollabText } from '../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../lib/search/limits';
@@ -46,7 +45,7 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    test('eigensheets: replayed ops and recalculated formulas are indexed', async () => {
+    test('eigensheets: replayed ops and stored values are indexed — formulas stay uncomputed', async () => {
         const doc = new Y.Doc();
         const sheets = buildGoldenSheets();
         // A cell with a raw value and no display string, so the extracted body proves
@@ -59,35 +58,13 @@ describe('extractCollabText', () => {
         expect(text).toContain(String(VALUE_ONLY_CELL));
         // The ops batch is replayed before extraction...
         expect(text).toContain(GOLDEN_OPS_EDIT);
-        // ...and formula cells carry their recalculated display value.
-        expect(text).toContain(String(GOLDEN_ROW1_TOTAL));
+        // ...but the index never recalcs: a valueless formula cell contributes
+        // nothing rather than a full-workbook recalc inside the extract deadline.
+        expect(text).not.toContain(String(GOLDEN_ROW1_TOTAL));
         // Every sheet is indexed, not just the first one the preview renders.
         expect(text).toContain('SHEET2-ONLY-CONTENT');
         expect(warnings).toEqual([]);
         doc.destroy();
-    });
-
-    test('eigensheets: a recalc failure indexes the replayed values with a warning', async () => {
-        const original = { ...engine };
-        mock.module('@workspace/sheet/engine', () => ({
-            ...original,
-            recalcSheets: () => {
-                throw new Error('forced recalc failure');
-            },
-        }));
-        try {
-            const doc = new Y.Doc();
-            seedSheetsDoc(doc, buildGoldenSheets(), []);
-
-            const { text, warnings } = await extractCollabText('eigensheets', doc);
-            expect(warnings).toEqual([{ code: 'recalc-failed', message: 'forced recalc failure' }]);
-            // Stale but valid: the literal cells are still indexed, the uncomputed formula is not.
-            expect(text).toContain('Region 1');
-            expect(text).not.toContain(String(GOLDEN_ROW1_TOTAL));
-            doc.destroy();
-        } finally {
-            mock.module('@workspace/sheet/engine', () => original);
-        }
     });
 
     // The cap is a byte budget: the extracted body is cloned to the main thread and

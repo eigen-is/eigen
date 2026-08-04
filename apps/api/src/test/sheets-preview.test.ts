@@ -2,8 +2,10 @@ import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { FormulaEngine } from '@workspace/sheet/engine';
+import * as Y from 'yjs';
 import { PREVIEW_SHEET_BUDGET, renderSheetsPreviewHtml } from '../lib/export/sheets/render';
 import { getHome } from '../lib/home/get-home';
+import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-render';
 import {
     buildGoldenOps,
     buildGoldenSheets,
@@ -59,12 +61,13 @@ describe('eigensheets preview (golden)', () => {
         body = preview.body;
     });
 
-    test('renders first-sheet content with computed formulas', () => {
+    test('renders first-sheet content from stored values — formulas stay uncomputed', () => {
         expect(body).toContain('Region 1');
-        // `=SUM(B2:E2)` over num(1,1..4) — the server-side recalc gate must have run.
-        expect(body).toContain(`>${GOLDEN_ROW1_TOTAL}</td>`);
-        // `=IF(F2>1500,…)` computed off the recalced total.
-        expect(body).toContain('>low</td>');
+        // The preview read never recalcs (a legacy never-computed workbook costs
+        // ~39s, past the 30s deadline), so the fixture's valueless `=SUM(B2:E2)`
+        // and `=IF(F2>1500,…)` cells render empty instead of computed.
+        expect(body).not.toContain(`>${GOLDEN_ROW1_TOTAL}</td>`);
+        expect(body).not.toContain('>low</td>');
         // Edits from the pending-ops array are replayed on top of the snapshot.
         expect(body).toContain(GOLDEN_OPS_EDIT);
         expect(body).toContain(GOLDEN_OPS_PARTIAL_EDIT);
@@ -94,6 +97,19 @@ describe('eigensheets preview (golden)', () => {
     test('body matches the pinned golden hash', () => {
         const hash = new Bun.CryptoHasher('sha256').update(body).digest('hex');
         expect(hash).toBe(GOLDEN_BODY_SHA256);
+    });
+});
+
+describe('eigensheets preview (read policy)', () => {
+    test('formula cells without stored values render empty — the preview never recalcs', () => {
+        const doc = new Y.Doc();
+        seedSheetsDoc(doc, buildGoldenSheets(), []);
+
+        const { body: rendered, warnings } = renderEigensheetsPreviewBody(doc);
+        expect(rendered).toContain('Region 1');
+        expect(rendered).not.toContain(`>${GOLDEN_ROW1_TOTAL}</td>`);
+        expect(warnings).toEqual([]);
+        doc.destroy();
     });
 });
 
@@ -244,5 +260,6 @@ describe('eigensheets preview (declared spans beyond the window)', () => {
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change.
-const GOLDEN_BODY_SHA256 = 'a2a43870af39674bf78b0356955b0ecf5497547bbc1b15c4353cd9207a4c9182';
+// an intentional renderer or preview-budget change. Last move: the preview read no
+// longer recalcs, so the fixture's valueless formula cells render empty (2026-08-04).
+const GOLDEN_BODY_SHA256 = '30976a0476b211d6695e14d2506a824cd9f965f8d00572d6b313ff27e49fa410';
