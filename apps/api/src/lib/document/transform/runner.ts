@@ -90,15 +90,16 @@ function errorResponse(code: TransformError['code'], message: string): DocumentT
 // Keyed by the union so a future arm is a compile error here — a switch default
 // would silently turn every success carrying the new warning into invalid-response.
 const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, unknown>) => boolean> = {
-    'recalc-failed': (w) => typeof w.message === 'string',
-    'corrupt-blobs-skipped': (w) => typeof w.count === 'number',
-    'byte-guard-truncated': (w) => typeof w.bytes === 'number',
+    'recalc-failed': (w) => typeof w['message'] === 'string',
+    'corrupt-blobs-skipped': (w) => typeof w['count'] === 'number',
+    'byte-guard-truncated': (w) => typeof w['bytes'] === 'number',
 };
 
 function isValidWarning(warning: unknown): boolean {
     if (!warning || typeof warning !== 'object') return false;
     const w = warning as Record<string, unknown>;
-    const validate = typeof w.code === 'string' && WARNING_VALIDATORS[w.code as TransformWarning['code']];
+    const code = w['code'];
+    const validate = typeof code === 'string' && WARNING_VALIDATORS[code as TransformWarning['code']];
     return validate ? validate(w) : false;
 }
 
