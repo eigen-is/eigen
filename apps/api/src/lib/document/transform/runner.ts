@@ -238,14 +238,14 @@ export class DocumentTransformRunner {
         // Summed before postMessage — the transfer detaches these buffers.
         const inputBytes = transferList.reduce((sum, buffer) => sum + buffer.byteLength, 0);
         const startedAt = Date.now();
-        const worker = new Worker(this.workerUrl);
+        let worker: Worker | undefined;
         let transformMs: number | undefined;
 
         const settle = (response: DocumentTransformResponse) => {
             if (!this.active.has(job.id)) return;
             this.active.delete(job.id);
             clearTimeout(timer);
-            worker.terminate();
+            worker?.terminate();
             const totalMs = Date.now() - startedAt;
             const outcome = response.ok ? 'success' : response.error.code;
             const outputBytes = response.ok ? resultBytes(response.result) : 0;
@@ -267,22 +267,32 @@ export class DocumentTransformRunner {
             () => settle(errorResponse('timeout', 'Document transform timed out')),
             job.deadlineMs,
         );
-        worker.onmessage = (event: MessageEvent) => {
-            const envelope = event.data as Partial<WorkerResponseEnvelope> | null;
-            const response = envelope?.response;
-            if (!isValidResponse(response, job.request)) {
-                settle(errorResponse('invalid-response', 'Worker returned a malformed response'));
-                return;
-            }
-            transformMs = typeof envelope?.transformMs === 'number' ? envelope.transformMs : undefined;
-            settle(response);
-        };
-        worker.onerror = (event) => {
-            console.error(`[transform] job=${job.id} worker error:`, event.message || event);
+        // Spawning and posting can throw synchronously (a failed spawn under resource
+        // exhaustion, a DataCloneError on a detached transfer buffer). Unhandled, that
+        // holds the only Worker slot until the deadline and escapes into run()'s
+        // executor — rejecting a promise that is documented to always resolve.
+        try {
+            worker = new Worker(this.workerUrl);
+            worker.onmessage = (event: MessageEvent) => {
+                const envelope = event.data as Partial<WorkerResponseEnvelope> | null;
+                const response = envelope?.response;
+                if (!isValidResponse(response, job.request)) {
+                    settle(errorResponse('invalid-response', 'Worker returned a malformed response'));
+                    return;
+                }
+                transformMs = typeof envelope?.transformMs === 'number' ? envelope.transformMs : undefined;
+                settle(response);
+            };
+            worker.onerror = (event) => {
+                console.error(`[transform] job=${job.id} worker error:`, event.message || event);
+                settle(errorResponse('crashed', 'Document transform failed'));
+            };
+            worker.addEventListener('close', () => settle(errorResponse('crashed', 'Document transform failed')));
+            worker.postMessage({ jobId: job.id, request: job.request }, transferList);
+        } catch (err) {
+            console.error(`[transform] job=${job.id} worker start failed:`, err);
             settle(errorResponse('crashed', 'Document transform failed'));
-        };
-        worker.addEventListener('close', () => settle(errorResponse('crashed', 'Document transform failed')));
-        worker.postMessage({ jobId: job.id, request: job.request }, transferList);
+        }
     }
 }
 

@@ -221,6 +221,24 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    test('a worker that cannot be started resolves a structured error and releases the slot', async () => {
+        const runner = makeRunner();
+        // A detached buffer makes postMessage's transfer throw synchronously, the same
+        // shape as a Worker spawn failure under resource exhaustion.
+        const detached = new Uint8Array([1, 2, 3]).buffer;
+        structuredClone(detached, { transfer: [detached] });
+
+        const start = Date.now();
+        const failed = await runner.run(makeMediaExportRequest({ behavior: 'export-ok' }, [detached]), EXPORT_OPTIONS);
+        expect(Date.now() - start).toBeLessThan(1000); // not held until the kill deadline
+        expect(failed.ok).toBe(false);
+        if (!failed.ok) expect(failed.error.code).toBe('crashed');
+
+        const next = await runner.run(makeRequest(), PREVIEW_OPTIONS);
+        expect(next.ok).toBe(true);
+        await runner.close();
+    });
+
     test('a worker that exits without replying resolves a structured error', async () => {
         const runner = makeRunner();
         const exited = await runner.run(makeRequest({ behavior: 'exit' }), PREVIEW_OPTIONS);
