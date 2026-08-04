@@ -166,6 +166,21 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
+    test('background work stops at its queue share while foreground still admits', async () => {
+        const runner = makeRunner();
+        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 150 }), PREVIEW_OPTIONS);
+        await Bun.sleep(10); // let the first job occupy the worker slot
+        const queued = Array.from({ length: 8 }, () => runner.run(makeRequest(), BACKGROUND_OPTIONS));
+
+        expect(() => runner.run(makeRequest(), BACKGROUND_OPTIONS)).toThrow(ApiError);
+        // The eight background rows are far below the 16-job bound, so a preview still runs.
+        const foreground = await runner.run(makeRequest(), PREVIEW_OPTIONS);
+        expect(foreground.ok).toBe(true);
+
+        await Promise.all([active, ...queued]);
+        await runner.close();
+    });
+
     test('timeout terminates the worker, resolves a structured error, and releases the slot', async () => {
         const runner = makeRunner();
         const start = Date.now();

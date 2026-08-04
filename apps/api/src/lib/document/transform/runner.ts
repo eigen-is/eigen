@@ -42,6 +42,10 @@ export const TRANSFORM_LIMITS: Record<
 
 const MAX_ACTIVE_WORKERS = 1;
 const MAX_QUEUED_JOBS = 16;
+// Background extracts hold no connection and are drop-safe (the contentDirty bit
+// re-queues them), so they may hold only part of the queue: many mounts draining at
+// once must not 503 the previews and exports someone is waiting for.
+const MAX_QUEUED_BACKGROUND = 8;
 // A queued request holds its HTTP connection open, so foreground admission is
 // bounded by predicted wait (summed admission costs), not queue length alone.
 const MAX_PREDICTED_WAIT_MS = 120_000;
@@ -127,6 +131,9 @@ export class DocumentTransformRunner {
     assertAdmissible(priority: TransformPriority): void {
         if (this.closing) throw new ApiError(503, BUSY_MESSAGE);
         if (this.foreground.length + this.background.length >= this.maxQueued) throw new ApiError(503, BUSY_MESSAGE);
+        if (priority === 'background' && this.background.length >= MAX_QUEUED_BACKGROUND) {
+            throw new ApiError(503, BUSY_MESSAGE);
+        }
         if (priority === 'foreground') {
             let predictedWaitMs = this.foreground.reduce((sum, job) => sum + job.admissionCostMs, 0);
             for (const active of this.active.values()) predictedWaitMs += active.admissionCostMs;
