@@ -274,7 +274,9 @@ function SlideEditorInner({
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
 
-    useYjsUndoHotkeys(undoManager, canWrite);
+    // Present is a read-only view of a live deck: every editing keybind below stays gated on
+    // !isPresenting, or a stray key mutates the slide the audience is looking at.
+    useYjsUndoHotkeys(undoManager, canWrite && !isPresenting);
     useHotkey(
         'Delete',
         () => {
@@ -283,7 +285,7 @@ function SlideEditorInner({
                 setSelectedObjectIds([]);
             }
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
     );
     useHotkey(
         'Backspace',
@@ -293,7 +295,7 @@ function SlideEditorInner({
                 setSelectedObjectIds([]);
             }
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
     );
     // Layered Escape (amendment 12): present → text-edit → bar → deselect. This is a capture-phase
     // document listener (NOT useHotkey): the find bar's own Escape runs in the bubble phase and closes
@@ -366,7 +368,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(-1, 0);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
     );
     useHotkey(
         'ArrowRight',
@@ -374,7 +376,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(1, 0);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
     );
     useHotkey(
         'ArrowUp',
@@ -382,7 +384,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(0, -1);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
     );
     useHotkey(
         'ArrowDown',
@@ -390,7 +392,7 @@ function SlideEditorInner({
             e.preventDefault();
             moveSelected(0, 1);
         },
-        { enabled: canWrite && hasSelection && !isEditing },
+        { enabled: canWrite && hasSelection && !isEditing && !isPresenting },
     );
     const handleImageFile = useCallback(
         async (file: File) => {
@@ -432,6 +434,7 @@ function SlideEditorInner({
     );
 
     useEffect(() => {
+        if (isPresenting) return;
         const handleCopy = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
             if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable)
@@ -561,6 +564,7 @@ function SlideEditorInner({
         deck.objects,
         activeSlideId,
         canWrite,
+        isPresenting,
         addObject,
         handleImageFile,
         resolveMediaPath,
@@ -792,10 +796,11 @@ function SlideEditorInner({
                     type="button"
                     title="Exit present (Esc)"
                     aria-label="Exit present"
+                    tabIndex={presentControlsVisible ? undefined : -1}
                     // The slide covers the overlay, hence the chip; hidden means gone, so a tap in
                     // this corner still advances.
                     className={cn(
-                        'absolute top-4 right-4 rounded-full bg-black/50 p-2.5 text-white transition-opacity hover:bg-black/70',
+                        'absolute top-4 right-4 rounded-full bg-black/50 p-2.5 pointer-coarse:p-3 text-white transition-opacity hover:bg-black/70',
                         !presentControlsVisible && 'pointer-events-none opacity-0',
                     )}
                     onClick={(e) => {
