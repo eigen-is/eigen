@@ -28,9 +28,7 @@ import type { Mount } from '../lib/mount';
 import { renderEigendocPreviewBody } from '../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../lib/preview/eigenslides-render';
-import { generateDocumentPreview } from '../lib/preview/preview-document';
 import {
-    appendGoldenDocParagraph,
     buildGoldenDeck,
     buildGoldenDocJson,
     editGoldenDeckTitle,
@@ -135,6 +133,8 @@ describe('document transform (eigensheets preview)', () => {
     }, 60_000);
 
     test('a corrupt update blob surfaces as a warning, not a failed preview', async () => {
+        // Every documentType skips corrupt blobs on one shared worker.ts path — this
+        // covers the preview side of it, the eigenslides export test the export side.
         const sheetsPath = await seedDoc('worker-corrupt-update');
         const home = await getHome(ctx.alice.user.id);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
@@ -341,32 +341,6 @@ describe('document transform (eigensheets export)', () => {
         expect(dashboard?.getCell('B2').value).toBe(48);
         // Recalc ran in the Worker before ExcelJS built the workbook.
         expect(dashboard?.getCell('F2').value).toMatchObject({ formula: 'SUM(B2:E2)', result: GOLDEN_ROW1_TOTAL });
-    }, 120_000);
-
-    test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
-        const sheetsPath = await seedDoc('worker-export-corrupt');
-        const home = await getHome(ctx.alice.user.id);
-        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-
-        await corruptNewestUpdate(mount, path);
-
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const response = await documentTransformRunner.run(
-                {
-                    kind: 'export',
-                    documentType: 'eigensheets',
-                    format: 'html',
-                    title: stripEigenExtension(path.name),
-                    source: await captureCollabSource(mount, path),
-                },
-                { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
-            );
-            expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
-            expect(exportBytes(response).byteLength).toBeGreaterThan(0);
-        } finally {
-            errorSpy.mockRestore();
-        }
     }, 120_000);
 });
 
@@ -645,8 +619,24 @@ describe('document transform (eigendoc)', () => {
         golden = await seedGoldenDocument('golden-doc', 'doc');
     });
 
-    test('preview body matches the pinned golden hash', async () => {
-        const body = await generateDocumentPreview('eigendoc', golden.mount, golden.path);
+    test('Worker preview equals the main thread and matches the pinned golden hash', async () => {
+        const { mount, path } = golden;
+        const mediaUrls = await buildPreviewUrlMap(mount, path);
+        // Main-thread execution of the exact Worker pipeline (capture → materialize
+        // → render/sanitize), against the Worker execution via the real runner.
+        const direct = renderEigendocPreviewBody(
+            materializeYjsState(await captureCollabSource(mount, path)).doc,
+            mediaUrls,
+        );
+
+        const response = await documentTransformRunner.run(
+            { kind: 'preview', documentType: 'eigendoc', mediaUrls, source: await captureCollabSource(mount, path) },
+            { priority: 'foreground', deadlineMs: 30_000 },
+        );
+        const body = previewBody(response);
+        expect(body).toBe(direct.body);
+        expect(response.ok && response.warnings).toEqual(direct.warnings);
+
         // A glance, not the document: the first 20 blocks with the truncated marker,
         // media as an embed URL, hostile content defanged.
         expect(body).toContain('Quarterly Report');
@@ -681,53 +671,6 @@ describe('document transform (eigendoc)', () => {
             golden.path,
         );
         expect(sha256(html)).toBe(GOLDEN_DOC_EXPORT_PDF_HTML_SHA256);
-    }, 120_000);
-
-    test('Worker preview equals the same pipeline run on the main thread', async () => {
-        const { mount, path } = golden;
-        const mediaUrls = await buildPreviewUrlMap(mount, path);
-        const direct = renderEigendocPreviewBody(
-            materializeYjsState(await captureCollabSource(mount, path)).doc,
-            mediaUrls,
-        );
-
-        const response = await documentTransformRunner.run(
-            {
-                kind: 'preview',
-                documentType: 'eigendoc',
-                mediaUrls,
-                source: await captureCollabSource(mount, path),
-            },
-            { priority: 'foreground', deadlineMs: 30_000 },
-        );
-        expect(previewBody(response)).toBe(direct.body);
-        expect(response.ok && response.warnings).toEqual(direct.warnings);
-    }, 120_000);
-
-    test('a corrupt update blob surfaces as a warning, not a failed preview', async () => {
-        const { mount, path } = await seedGoldenDocument('worker-doc-corrupt', 'doc', (doc) =>
-            appendGoldenDocParagraph(doc, 'a later edit'),
-        );
-        await corruptNewestUpdate(mount, path);
-
-        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
-        try {
-            const response = await documentTransformRunner.run(
-                {
-                    kind: 'preview',
-                    documentType: 'eigendoc',
-                    mediaUrls: await buildPreviewUrlMap(mount, path),
-                    source: await captureCollabSource(mount, path),
-                },
-                { priority: 'foreground', deadlineMs: 30_000 },
-            );
-            expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
-            // The skipped edit is gone, the base write still renders.
-            expect(previewBody(response)).toContain('Quarterly Report');
-            expect(previewBody(response)).not.toContain('a later edit');
-        } finally {
-            errorSpy.mockRestore();
-        }
     }, 120_000);
 
     test('a figure naming a prototype key renders without an image, not a crash', () => {
@@ -809,8 +752,22 @@ describe('document transform (eigenslides)', () => {
         golden = await seedGoldenDocument('golden-deck', 'slides');
     });
 
-    test('preview body matches the pinned golden hash', async () => {
-        const body = await generateDocumentPreview('eigenslides', golden.mount, golden.path);
+    test('Worker preview equals the main thread and matches the pinned golden hash', async () => {
+        const { mount, path } = golden;
+        const mediaUrls = await buildPreviewUrlMap(mount, path);
+        const direct = renderEigenslidesPreviewBody(
+            materializeYjsState(await captureCollabSource(mount, path)).doc,
+            mediaUrls,
+        );
+
+        const response = await documentTransformRunner.run(
+            { kind: 'preview', documentType: 'eigenslides', mediaUrls, source: await captureCollabSource(mount, path) },
+            { priority: 'foreground', deadlineMs: 30_000 },
+        );
+        const body = previewBody(response);
+        expect(body).toBe(direct.body);
+        expect(response.ok && response.warnings).toEqual(direct.warnings);
+
         // First 8 slides with the truncated marker, media as an embed URL.
         expect(body).toContain('Deck <strong>title</strong>');
         expect(body).not.toContain(GOLDEN_BEYOND_CAP);
@@ -845,27 +802,6 @@ describe('document transform (eigenslides)', () => {
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
 
-    test('Worker preview equals the same pipeline run on the main thread', async () => {
-        const { mount, path } = golden;
-        const mediaUrls = await buildPreviewUrlMap(mount, path);
-        const direct = renderEigenslidesPreviewBody(
-            materializeYjsState(await captureCollabSource(mount, path)).doc,
-            mediaUrls,
-        );
-
-        const response = await documentTransformRunner.run(
-            {
-                kind: 'preview',
-                documentType: 'eigenslides',
-                mediaUrls,
-                source: await captureCollabSource(mount, path),
-            },
-            { priority: 'foreground', deadlineMs: 30_000 },
-        );
-        expect(previewBody(response)).toBe(direct.body);
-        expect(response.ok && response.warnings).toEqual(direct.warnings);
-    }, 120_000);
-
     test('an image object naming a prototype key renders empty, not a crash', () => {
         // mediaName is document data — an unknown name must resolve to null, never to
         // something off Object.prototype.
@@ -891,6 +827,8 @@ describe('document transform (eigenslides)', () => {
     }, 60_000);
 
     test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
+        // The export side of the shared worker.ts blob-skip path (preview side: the
+        // eigensheets preview test).
         const { mount, path } = await seedGoldenDocument('worker-deck-corrupt', 'slides', (doc) =>
             editGoldenDeckTitle(doc, 'a later edit'),
         );
