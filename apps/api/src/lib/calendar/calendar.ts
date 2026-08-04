@@ -196,8 +196,10 @@ export class Calendar {
                 throw new ApiError(400, 'Recurring event start time is out of range');
             }
         }
-        // Reject reversed intervals on every write path (REST/CalDAV/iMIP funnel here). Zero-duration
-        // stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the CalDAV/iMIP importers rely on it.
+        // Reject reversed intervals. REST and CalDAV PUT funnel through here, so both are covered; both are
+        // interactive protocols where a 400 is actionable. Inbound iMIP bypasses createEvent/updateEvent and
+        // clamps instead (imip.ts) — dropping an emailed invite is worse than a zero-length event. Zero
+        // duration stays legal — RFC 5545 §3.6.1 permits DTEND == DTSTART, and the importers rely on it.
         if (input.endTime < input.startTime) throw new ApiError(400, 'Event end time cannot be before start time');
         const timezone = normalizeTimezone(input.timezone);
         const status = input.status ?? 'confirmed';

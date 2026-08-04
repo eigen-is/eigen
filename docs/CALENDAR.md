@@ -157,10 +157,14 @@ never convert to local time.
 
 ## Interval validation
 
-`createEvent`/`updateEvent` reject `endTime < startTime` with `ApiError(400)` — one domain check covering every
-write path (REST + CalDAV + iMIP). Zero-duration (`endTime == startTime`) stays legal (RFC 5545 §3.6.1; CalDAV/iMIP
-importers synthesize it). Because all-day uses an exclusive end (a valid all-day event is always ≥ `start + 1 day`),
-the single invariant covers timed and all-day alike — no all-day special-casing.
+`createEvent`/`updateEvent` reject `endTime < startTime` with `ApiError(400)`. REST and CalDAV PUT both funnel through
+these two methods, so both are covered — interactive protocols where a 400 is actionable. Inbound iMIP bypasses them
+(the `receive*` methods write rows directly), so it instead **clamps** a reversed interval to zero-duration at the
+parse boundary (`imip.ts`): an emailed invite is fire-and-forget, so dropping it over a malformed interval is worse
+than showing a zero-length event — the same degrade-don't-reject policy the parser applies to a malformed rrule/tzid.
+Zero-duration (`endTime == startTime`) stays legal (RFC 5545 §3.6.1; CalDAV/iMIP importers synthesize it). Because
+all-day uses an exclusive end (a valid all-day event is always ≥ `start + 1 day`), the single invariant covers timed
+and all-day alike — no all-day special-casing.
 
 ## Moving events
 

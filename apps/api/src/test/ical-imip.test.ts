@@ -350,6 +350,64 @@ describe('iMIP Inbound Processing (integration)', () => {
         const match = events.find((e) => e.uid === 'external-invite-uid-1@external.com');
         expect(match).toBeUndefined();
     });
+
+    // A malformed external invite (DTEND < DTSTART) must still land — clamped to zero-duration, never a
+    // negative-duration row and never silently dropped (finding #2, iMIP inbound path).
+    test('delivering a REQUEST with a reversed interval clamps it to zero-duration', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'PRODID:-//External//Calendar//EN',
+            'BEGIN:VEVENT',
+            'UID:external-reversed-uid-1@external.com',
+            'SUMMARY:Reversed External',
+            'DTSTART:20260420T130000Z',
+            'DTEND:20260420T120000Z',
+            'SEQUENCE:0',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="External Org":mailto:organizer@external.com',
+            `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;CN="Alice":mailto:${ctx.alice.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const email = [
+            'From: organizer@external.com',
+            `To: ${ctx.alice.user.email}`,
+            'Subject: Invitation: Reversed External',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="rev-boundary"',
+            '',
+            '--rev-boundary',
+            'Content-Type: text/plain',
+            '',
+            'You have been invited to Reversed External.',
+            '--rev-boundary',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            'Content-Disposition: attachment; filename="invite.ics"',
+            '',
+            ics,
+            '--rev-boundary--',
+        ].join('\r\n');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(email).buffer,
+        });
+        expect(res.status).toBe(200);
+
+        const from = Math.floor(new Date('2026-04-19').getTime() / 1000);
+        const to = Math.floor(new Date('2026-04-21').getTime() / 1000);
+        const events = await assertJson<CalendarEventOccurrence[]>(
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+            ),
+        );
+        const landed = findOrFail(events, (e) => e.uid === 'external-reversed-uid-1@external.com');
+        expect(new Date(landed.endTime).getTime()).toBe(new Date(landed.startTime).getTime());
+    });
 });
 
 describe('iMIP Outbound via Invite Propagation (integration)', () => {

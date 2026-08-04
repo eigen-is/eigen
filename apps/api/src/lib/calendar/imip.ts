@@ -186,6 +186,13 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
     const calendar = home.calendar;
 
     for (const parsed of events) {
+        // Untrusted external ICS: clamp a reversed interval to zero-duration rather than reject the whole
+        // invite (mirrors the parser degrading a malformed rrule/tzid). iMIP is fire-and-forget email —
+        // there's no synchronous 400 to return, so dropping the invitation would be worse for the user than
+        // showing a zero-length event. The receive* writes bypass the createEvent/updateEvent guard, so this
+        // is where the domain's interval invariant is enforced for the inbound path.
+        if (parsed.endTime < parsed.startTime) parsed.endTime = parsed.startTime;
+
         if (method === 'REQUEST') {
             const existing = calendar.getEventsByUid(parsed.uid);
             const linked = existing.find((e) => e.data?.organizer && e.data?.organizerEventId);
