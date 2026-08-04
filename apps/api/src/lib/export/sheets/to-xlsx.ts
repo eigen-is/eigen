@@ -33,8 +33,8 @@ import { resolveFontFamily } from './fonts';
 import { type CellBorderSides, expandBorderInfo } from './range-borders';
 
 // Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
-// execution; the main-thread wrapper lives in sheets/xlsx.ts). This module must not
-// reach the Mount or the main-thread transform seam — the Worker imports it.
+// execution; the main-thread orchestration lives in export-document.ts). This module
+// must not reach the Mount or the main-thread transform seam — the Worker imports it.
 
 // Excel's date epoch is 1899-12-30 (Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);

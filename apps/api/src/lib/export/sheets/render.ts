@@ -18,7 +18,7 @@ import { resolveFontFamily } from './fonts';
 
 // Sheet[] -> HTML: the full-workbook export document, the budgeted preview body and
 // the fixed-size PDF document. Runs inside the transform Worker (worker.ts owns
-// execution; the main-thread wrappers live in sheets/{html,pdf,xlsx}.ts). This
+// execution; the main-thread orchestration lives in export-document.ts). This
 // module must not reach the Mount or the main-thread transform seam - the Worker
 // imports it.
 
