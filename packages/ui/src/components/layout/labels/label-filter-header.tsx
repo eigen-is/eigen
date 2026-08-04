@@ -40,14 +40,9 @@ export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
     };
 
     const handleDeleteLabel = async () => {
-        try {
-            if (selectedLabel) {
-                await deleteLabel(selectedLabel.id);
-                setDialogOpen(false);
-            }
-        } catch {
-            // Mutation's onError handles the toast; keep dialog open for retry
-        }
+        if (!selectedLabel) return;
+        await deleteLabel(selectedLabel.id);
+        setDialogOpen(false);
     };
 
     return label ? (
