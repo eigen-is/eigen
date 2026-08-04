@@ -1,7 +1,7 @@
 import { parseQuery, useCommandPalette, useCommandResults } from '@workspace/lib/command-palette';
 import type { CommandContext, PaletteResult, PaletteScope, Sections } from '@workspace/lib/types/command-palette';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandList } from '@workspace/ui/components/command';
-import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import type { KeyboardEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -137,6 +137,9 @@ export function CommandPalette({ ctx }: Props) {
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="overflow-hidden p-0 max-w-xl">
+                {/* Radix requires a title for the dialog to be accessible; both are visually hidden. */}
+                <DialogTitle className="sr-only">Command palette</DialogTitle>
+                <DialogDescription className="sr-only">Search and jump to anything across your apps.</DialogDescription>
                 <Command
                     shouldFilter={false}
                     value={selectedValue}

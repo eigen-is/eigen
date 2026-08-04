@@ -1,9 +1,9 @@
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, MessageSquare, MessageSquarePlus, Palette, RotateCcw, Trash2 } from 'lucide-react';
 import type { ElementType } from 'react';
-import { ColorSwatchRow } from '../notes/color-swatch-row';
 import { AssigneeMenuItems } from './assignee-menu-items';
 
 export type CommentContextMenuItem = { card: CommentCard; entry: CommentEntry | undefined };
@@ -73,16 +73,22 @@ export function CommentMenuItems({
                         <Palette className="h-4 w-4" /> {Noun} color
                     </SubTrigger>
                     <SubContent>
-                        <ColorSwatchRow
-                            currentColor={card.color}
-                            onChangeColor={(color) => onChangeColor(card.id, color)}
-                        />
+                        {EIGEN_STICKIES_COLORS[0].map((c) => (
+                            <Item key={c.value} onClick={() => onChangeColor(card.id, c.value)}>
+                                <span
+                                    className="h-4 w-4 shrink-0 rounded-full border border-border/50"
+                                    style={{ backgroundColor: c.value }}
+                                />
+                                <span className="flex-1">{c.label}</span>
+                                {card.color === c.value && <Check className="h-4 w-4 shrink-0" />}
+                            </Item>
+                        ))}
                     </SubContent>
                 </Sub>
             )}
             {onAssign && members && currentUserEmail && entry && (
                 <AssigneeMenuItems
-                    primitives={{ Sub, SubTrigger, SubContent }}
+                    primitives={{ Item, Sub, SubTrigger, SubContent }}
                     members={members}
                     currentUserEmail={currentUserEmail}
                     assignee={entry.assignee}

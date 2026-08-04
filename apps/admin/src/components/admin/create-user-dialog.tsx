@@ -39,15 +39,24 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
 
         await createUser.mutateAsync({ name, email, password, role });
         onOpenChange(false);
-        setName('');
-        setUsername('');
-        setPassword('');
-        setRole('user');
-        setUsernameError('');
     };
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <Dialog
+            open={open}
+            // Reset the draft (incl. password) whenever the dialog closes, so a cancelled or
+            // submitted create never leaks its inputs into the next open.
+            onOpenChange={(v) => {
+                onOpenChange(v);
+                if (!v) {
+                    setName('');
+                    setUsername('');
+                    setPassword('');
+                    setRole('user');
+                    setUsernameError('');
+                }
+            }}
+        >
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Create User</DialogTitle>
