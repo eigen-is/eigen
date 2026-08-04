@@ -30,14 +30,12 @@ import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspac
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    ActivityPanel,
     CardFormDialog,
     Column,
     CommentLifecycleDialogs,
     CommentMenuItems,
-    CommentPanel,
     LoadingState,
-    MobilePanelColumn,
+    PanelColumn,
     useLayout,
 } from '@workspace/ui';
 import {
@@ -694,7 +692,6 @@ const TiptapEditor = ({
     const docSearchController = useProseMirrorSearchController(editor, access.canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const activePanel = panel ?? sidebarContext;
     const showSidebar = !isMobile && (panel !== null || (access.canWrite && sidebarContext !== 'document'));
 
     // Slide the centred page left by its overlap with the panel; only shrink once the slack runs out.
@@ -722,6 +719,29 @@ const TiptapEditor = ({
         if (positions.length > 0) {
             editor.chain().focus().setTextSelection(positions[0].pos).scrollIntoView().run();
         }
+    };
+
+    // Desktop reveals the anchor and switches an activity tap over to comments; the mobile pane hides
+    // the editor, so it just opens the card.
+    const openCard = (cardId: string) => {
+        if (!isMobile) {
+            openComments();
+            handleScrollToComment(cardId);
+        }
+        setOpenCardId(cardId);
+    };
+
+    const panelProps = {
+        onClose: closePanels,
+        path,
+        cards,
+        entries: allComments,
+        members,
+        currentUserEmail: auth.user!.email,
+        filter: commentFilter,
+        activeComments,
+        commentContextMenu,
+        onOpenCard: openCard,
     };
 
     // Plain object per render; usePaletteDocSearch stabilises it, so reveal sees the current cards.
@@ -821,35 +841,8 @@ const TiptapEditor = ({
                                     >
                                         {/* Unmounted when closed: the properties panels key-remount per caret move. */}
                                         {showSidebar &&
-                                            (activePanel === 'comments' ? (
-                                                <CommentPanel
-                                                    cards={cards}
-                                                    entries={allComments}
-                                                    activeCardIds={activeComments.ids}
-                                                    anchorTexts={activeComments.anchorTexts}
-                                                    currentUserEmail={auth.user!.email}
-                                                    filter={commentFilter}
-                                                    members={members}
-                                                    onClose={closePanels}
-                                                    onCommentClick={(cardId) => {
-                                                        handleScrollToComment(cardId);
-                                                        setOpenCardId(cardId);
-                                                    }}
-                                                    onCommentContextMenu={(e, card, entry) => {
-                                                        commentContextMenu.handleContextMenu(e, { card, entry });
-                                                    }}
-                                                />
-                                            ) : activePanel === 'activity' ? (
-                                                <ActivityPanel
-                                                    path={path}
-                                                    cards={cards}
-                                                    onClose={closePanels}
-                                                    onOpenCard={(cardId) => {
-                                                        openComments();
-                                                        handleScrollToComment(cardId);
-                                                        setOpenCardId(cardId);
-                                                    }}
-                                                />
+                                            (panel ? (
+                                                <PanelColumn activePanel={panel} {...panelProps} />
                                             ) : lastPanelRef.current === 'figure' ? (
                                                 <FigurePropertiesPanel
                                                     key={editor.state.selection.from}
@@ -867,22 +860,7 @@ const TiptapEditor = ({
                     </DocSearchProvider>
                 </div>
 
-                {mobilePanelOpen && panel && (
-                    <MobilePanelColumn
-                        activePanel={panel}
-                        onBack={closePanels}
-                        path={path}
-                        cards={cards}
-                        entries={allComments}
-                        members={members}
-                        currentUserEmail={auth.user!.email}
-                        filter={commentFilter}
-                        activeComments={activeComments}
-                        commentContextMenu={commentContextMenu}
-                        // Not the desktop reveal: the editor is hidden here, so it would scroll unseen.
-                        onOpenCard={setOpenCardId}
-                    />
-                )}
+                {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
             </div>
 
             <CardFormDialog

@@ -244,9 +244,9 @@ publish 1-item selections).
 | `PropertiesPanel`   | `properties-panel/properties-panel.tsx` | Right-side panel container                                                                                  |
 | `PropertySection`   | `properties-panel/properties-panel.tsx` | Section with title                                                                                          |
 | `PropertyRow`       | `properties-panel/properties-panel.tsx` | Row with label + content                                                                                    |
-| `CommentPanel`      | `comments/comment-panel.tsx`            | Document comments panel (eigendoc editors); draws its own title row only when the host passes `onClose`     |
-| `ActivityPanel`     | `drive/activity-panel.tsx`              | File activity panel (eigendoc editors); same `onClose` header rule                                          |
-| `MobilePanelColumn` | `comments/mobile-panel-column.tsx`      | Below 768px: full-width `Column` (back arrow, title, comment filter) holding a header-less comments/activity panel. See [COMMENTS.md](COMMENTS.md) |
+| `CommentPanel`      | `comments/comment-panel.tsx`            | Document comments list body — no chrome of its own                                                          |
+| `ActivityPanel`     | `comments/activity-panel.tsx`           | File activity list body — no chrome of its own                                                              |
+| `PanelColumn`       | `comments/panel-column.tsx`             | The comments/activity pane on every viewport: a `Column` whose toolbar holds the title, the filter and the close affordance (back arrow on mobile, X on desktop) around one of the two bodies. See [COMMENTS.md](COMMENTS.md) |
 
 ### Branding & Auth
 

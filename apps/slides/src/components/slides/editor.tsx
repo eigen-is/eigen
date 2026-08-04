@@ -22,15 +22,13 @@ import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/type
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
-    ActivityPanel,
     CardFormDialog,
     Column,
     ColumnLayout,
     CommentLifecycleDialogs,
-    CommentPanel,
     EmptyState,
     LoadingState,
-    MobilePanelColumn,
+    PanelColumn,
     useLayout,
 } from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
@@ -283,6 +281,20 @@ function SlideEditorInner({
     // Host-owned so the filter survives panel close/reopen.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
+
+    const panelProps = {
+        onClose: closePanels,
+        path,
+        cards,
+        entries: allComments,
+        members,
+        currentUserEmail: auth.user!.email,
+        filter: commentFilter,
+        activeComments,
+        commentContextMenu,
+        // The mobile pane hides the canvas, so its slide + object reveal would go unseen there.
+        onOpenCard: isMobile ? setOpenCardId : openCommentCard,
+    };
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
@@ -923,28 +935,8 @@ function SlideEditorInner({
                                                 </span>
                                             </div>
                                         </div>
-                                        {commentPanelOpen ? (
-                                            <CommentPanel
-                                                cards={cards}
-                                                entries={allComments}
-                                                activeCardIds={activeComments.ids}
-                                                anchorTexts={activeComments.anchorTexts}
-                                                currentUserEmail={auth.user!.email}
-                                                filter={commentFilter}
-                                                members={members}
-                                                onClose={closePanels}
-                                                onCommentClick={openCommentCard}
-                                                onCommentContextMenu={(e, card, entry) =>
-                                                    commentContextMenu.handleContextMenu(e, { card, entry })
-                                                }
-                                            />
-                                        ) : activityPanelOpen ? (
-                                            <ActivityPanel
-                                                path={path}
-                                                cards={cards}
-                                                onClose={closePanels}
-                                                onOpenCard={openCommentCard}
-                                            />
+                                        {panel ? (
+                                            <PanelColumn activePanel={panel} {...panelProps} />
                                         ) : selectedObjects.length > 0 && canWrite ? (
                                             <SlidePropertiesPanel
                                                 objects={selectedObjects}
@@ -984,22 +976,7 @@ function SlideEditorInner({
                 </DocSearchProvider>
             </div>
 
-            {mobilePanelOpen && panel && (
-                <MobilePanelColumn
-                    activePanel={panel}
-                    onBack={closePanels}
-                    path={path}
-                    cards={cards}
-                    entries={allComments}
-                    members={members}
-                    currentUserEmail={auth.user!.email}
-                    filter={commentFilter}
-                    activeComments={activeComments}
-                    commentContextMenu={commentContextMenu}
-                    // Not openCommentCard: the canvas is hidden here, so its reveal would go unseen.
-                    onOpenCard={setOpenCardId}
-                />
-            )}
+            {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
 
             <CardFormDialog
                 open={addOpen}

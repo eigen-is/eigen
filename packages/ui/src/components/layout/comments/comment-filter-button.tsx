@@ -13,8 +13,6 @@ type CommentFilterButtonProps = {
     filter: ReturnType<typeof useCommentFilter>;
     members: EffectiveMember[];
     currentUserEmail: string;
-    // Sizing for hosts outside the panel header — the mobile pane's toolbar needs a touch target.
-    className?: string;
 };
 
 function GroupLabel({ children }: { children: string }) {
@@ -25,7 +23,7 @@ function GroupLabel({ children }: { children: string }) {
     );
 }
 
-export function CommentFilterButton({ filter, members, currentUserEmail, className }: CommentFilterButtonProps) {
+export function CommentFilterButton({ filter, members, currentUserEmail }: CommentFilterButtonProps) {
     const { assignee, colors, status } = filter.filter;
     const memberSelected = typeof assignee === 'object' ? assignee.email : null;
 
@@ -39,10 +37,7 @@ export function CommentFilterButton({ filter, members, currentUserEmail, classNa
                             variant="ghost"
                             size="icon"
                             aria-pressed={filter.isActive}
-                            className={cn(
-                                'h-6 w-6 aria-pressed:bg-primary/15 aria-pressed:text-primary aria-pressed:hover:bg-primary/20 aria-pressed:hover:text-primary',
-                                className,
-                            )}
+                            className="h-8 w-8 aria-pressed:bg-primary/15 aria-pressed:text-primary aria-pressed:hover:bg-primary/20 aria-pressed:hover:text-primary"
                         >
                             <ListFilter className="h-4 w-4" />
                         </Button>

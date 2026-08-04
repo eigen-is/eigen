@@ -10,15 +10,7 @@ import {
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import {
-    ActivityPanel,
-    CardFormDialog,
-    CommentLifecycleDialogs,
-    CommentPanel,
-    LoadingState,
-    MobilePanelColumn,
-    useLayout,
-} from '@workspace/ui';
+import { CardFormDialog, CommentLifecycleDialogs, LoadingState, PanelColumn, useLayout } from '@workspace/ui';
 import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
 import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
@@ -371,10 +363,10 @@ function SheetEditorInner({
                         />
                     </DocSearchProvider>
                 </div>
-                {mobilePanelOpen && panel ? (
-                    <MobilePanelColumn
+                {panel && (
+                    <PanelColumn
                         activePanel={panel}
-                        onBack={closePanels}
+                        onClose={closePanels}
                         path={path}
                         cards={cards}
                         entries={allComments}
@@ -385,24 +377,7 @@ function SheetEditorInner({
                         commentContextMenu={commentContextMenu}
                         onOpenCard={setOpenCardId}
                     />
-                ) : commentPanelOpen ? (
-                    <CommentPanel
-                        cards={cards}
-                        entries={allComments}
-                        activeCardIds={activeComments.ids}
-                        anchorTexts={activeComments.anchorTexts}
-                        currentUserEmail={auth.user!.email}
-                        filter={commentFilter}
-                        members={members}
-                        onClose={closePanels}
-                        onCommentClick={setOpenCardId}
-                        onCommentContextMenu={(e, card, entry) =>
-                            commentContextMenu.handleContextMenu(e, { card, entry })
-                        }
-                    />
-                ) : activityPanelOpen ? (
-                    <ActivityPanel path={path} cards={cards} onClose={closePanels} onOpenCard={setOpenCardId} />
-                ) : null}
+                )}
             </div>
 
             <CardFormDialog

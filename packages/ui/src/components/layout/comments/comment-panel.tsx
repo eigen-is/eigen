@@ -1,14 +1,11 @@
 import { matchesCommentFilter, type useCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { MessageSquareOff, X } from 'lucide-react';
+import { MessageSquareOff } from 'lucide-react';
 import { useMemo } from 'react';
 import { useAttachmentMeta } from '../attachment/use-attachment-meta';
 import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
-import { TooltipButton } from '../toolbar/tooltip-button';
-import { CommentFilterButton } from './comment-filter-button';
 import { FilterSummary } from './comment-filter-summary';
 
 // Row component so each card gets its own useAttachmentMeta call (hooks can't run in the map).
@@ -49,9 +46,6 @@ type CommentPanelProps = {
     anchorTexts: Map<string, string>;
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
-    members: EffectiveMember[];
-    // Absent = the host draws its own chrome (title + filter), so the panel renders no header.
-    onClose?: () => void;
     onCommentClick?: (cardId: string) => void;
     onCommentContextMenu?: (e: React.MouseEvent, card: CommentCard, entry: CommentEntry | undefined) => void;
     className?: string;
@@ -64,8 +58,6 @@ export function CommentPanel({
     anchorTexts,
     currentUserEmail,
     filter,
-    members,
-    onClose,
     onCommentClick,
     onCommentContextMenu,
     className,
@@ -88,16 +80,6 @@ export function CommentPanel({
 
     return (
         <PropertiesPanel className={className}>
-            {onClose && (
-                <div className="flex items-center justify-between border-b px-3 py-2">
-                    <span className="text-sm font-medium">Comments</span>
-                    <div className="flex items-center gap-1">
-                        <CommentFilterButton filter={filter} members={members} currentUserEmail={currentUserEmail} />
-                        <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
-                    </div>
-                </div>
-            )}
-
             {filter.isActive && <FilterSummary filter={filter} onClear={filter.clear} />}
 
             {visible.length === 0 ? (

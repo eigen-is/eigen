@@ -91,10 +91,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LoginPage` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-page.tsx |
 | `MemberAvatar` | `@workspace/ui` | packages/ui/src/components/layout/comments/member-avatar.tsx |
 | `MemberCommandList` | `@workspace/ui` | packages/ui/src/components/layout/comments/member-command-list.tsx |
-| `MobilePanelColumn` | `@workspace/ui` | packages/ui/src/components/layout/comments/mobile-panel-column.tsx |
 | `NoteCard` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card-dialog.tsx |
 | `NotFound` | `@workspace/ui` | packages/ui/src/components/layout/app/not-found.tsx |
+| `PanelColumn` | `@workspace/ui` | packages/ui/src/components/layout/comments/panel-column.tsx |
 | `PresenceLabel` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `RequestAccessView` | `@workspace/ui` | packages/ui/src/components/layout/app/request-access-view.tsx |
 | `ShadowContent` | `@workspace/ui` | packages/ui/src/components/layout/shadow-content.tsx |

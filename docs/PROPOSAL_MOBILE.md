@@ -15,11 +15,13 @@
 
 ## Phase 5 — shipped (structural)
 
-- One shared mobile pane on docs, slides and sheets. `MobilePanelColumn` draws the back arrow, the
-  title and the comment filter toolbar, and the panel body runs full width. The editors hide under
-  the pane, they never unmount, so scroll position, selection and node views survive a visit.
-  Panel open state lives in one `useDocumentPanels()` hook. Comment rows and activity rows share
-  one `onOpenCard` prop, and the pane stays on Activity when a card opens.
+- One shared comments/activity pane, `PanelColumn`, on every viewport and in all four editors
+  (stickies hosts activity only). Its `Column` toolbar draws the title, the filter and the close
+  affordance — back arrow on mobile, X on desktop — so `CommentPanel` and `ActivityPanel` are plain
+  list bodies. On mobile the editors hide under the pane, they never unmount, so scroll position,
+  selection and node views survive a visit. Panel open state lives in one `useDocumentPanels(isMobile)`
+  hook. Comment rows and activity rows share one `onOpenCard` prop, and the mobile pane stays put when
+  a card opens.
 - The sheet engine re-measures on container resize, not just on window resize. That also fixes the
   desktop panel-clip bug: the grid now resizes to the panel edge and the scrollbar stays
   reachable.
@@ -56,9 +58,9 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   390×420 — bar reads "1 of 1", the document does not move). Highlights and the count are correct.
   Fix seam: a `surfaceHidden` prop on `DocSearchProvider` that parks the pending reveal and replays it
   from a layout effect once the surface is visible again.
-- **Stickies Activity toggle below 768px**: stickies is the fourth editor and still gates its
-  toggle on `!isMobile` — the abandoned "only offer it where the panel renders" idiom. Its mobile
-  Activity is unreachable. Either give stickies the shared `MobilePanelColumn` or drop the gate.
+- **Stickies Activity toggle below 768px**: stickies now mounts the shared `PanelColumn`, but still
+  gates its toggle on `!isMobile` — the abandoned "only offer it where the panel renders" idiom. Its
+  mobile Activity stays unreachable until the gate goes.
 - **Drive touch multi-select**: picking more than one item needs a modifier click today, so the
   multi-item menus are keyboard-assisted only on touch. Leading candidate: a "Select mode" entry
   in the long-press menu and the kebab that turns on checkboxes and reuses the existing
