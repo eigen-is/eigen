@@ -6,7 +6,7 @@ import { type RefObject, useEffect } from 'react';
 // was focused before it opened. `active` suspends the trap while a nested modal (a Radix dialog
 // portaled elsewhere in the DOM) owns focus, so the two don't fight over it.
 const FOCUSABLE_SELECTOR =
-    'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), video[controls], audio[controls], [tabindex]:not([tabindex="-1"])';
 
 export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) {
     // Capture the trigger on mount (before focus moves in) and restore it on unmount.
@@ -25,7 +25,11 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) 
             if (e.key !== 'Tab') return;
             const focusables = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
             if (focusables.length === 0) {
+                // Nothing focusable inside (e.g. an image-only lightbox): hold focus on the
+                // container itself rather than letting Tab walk into the page behind it. Escape
+                // still closes, so the user is never stuck.
                 e.preventDefault();
+                container.focus();
                 return;
             }
             const first = focusables[0];
