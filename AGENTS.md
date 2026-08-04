@@ -73,9 +73,10 @@ bun run check          # lint + typecheck + test
   more apps need it, it belongs in `packages/`. Never put `useQuery`, `useMutation`, error toasts, or `try/catch` +
   `toast.error()` in app components — all error handling lives in hooks using `onMutationError`.
   See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
-- **Package dependency direction is one-way: `sheet → lib`, never the reverse.** `packages/lib` is shared
-  FE+BE; `packages/sheet` has React peer dependencies and DOM-coupled modules. If lib imported sheet,
-  the BE would transitively pull React in at module-eval time. Shared sheet types (`Cell`, `Sheet`, `Op`,
+- **Package dependency direction is one-way: `sheet → lib` and `ui → lib`, never the reverse — `lib`
+  imports neither.** `packages/lib` is shared FE+BE; `packages/sheet` and `packages/ui` have React peer
+  dependencies and DOM-coupled modules. If lib imported either, the BE would transitively pull React in
+  at module-eval time (a biome rule enforces it). Shared sheet types (`Cell`, `Sheet`, `Op`,
   `CellMatrix`, `Range`, `SingleRange`, `ConditionalFormatRule`, …) live in `packages/lib/src/sheets/types.ts`;
   the sheet package's `engine/types.ts` and `state/types.ts` re-export them. Sheet utilities that need to be importable
   by both FE and BE (e.g. `opToPatchOnSheets`) live in `packages/lib/src/sheets/`

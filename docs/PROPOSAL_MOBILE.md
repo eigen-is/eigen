@@ -15,18 +15,20 @@
 
 ## Phase 5 — shipped (structural)
 
-- One shared comments/activity pane, `PanelColumn`, on every viewport and in all four editors
-  (stickies hosts activity only). Its `Column` toolbar draws the title, the filter and the close
-  affordance — back arrow on mobile, X on desktop — so `CommentPanel` and `ActivityPanel` are plain
-  list bodies. On mobile the editors hide under the pane, they never unmount, so scroll position,
-  selection and node views survive a visit. Panel open state lives in one `useDocumentPanels(isMobile)`
+- One shared comments/activity pane, `PanelColumn`, on every viewport in docs, slides and sheets
+  (stickies hosts it for activity, desktop-only — see Next round). Its `Column` toolbar draws the
+  title, the filter and the close affordance — back arrow on mobile, X on desktop — so
+  `CommentPanel` and `ActivityPanel` are plain list bodies. On mobile the editors hide under the
+  pane, they never unmount, so scroll position, selection and node views survive a visit. Panel open state lives in one `useDocumentPanels(isMobile)`
   hook. Comment rows and activity rows share one `onOpenCard` prop, and the mobile pane stays put when
   a card opens.
 - The sheet engine re-measures on container resize, not just on window resize. That also fixes the
   desktop panel-clip bug: the grid now resizes to the panel edge and the scrollbar stays
   reachable.
 - Docs comment and activity panels render from 768px. The old 1200px `isWide` gate is gone. The
-  page shifts left before it scales, so the text column always clears the panel.
+  page shifts left before it scales, so the text column always clears the panel. The figure and
+  table properties panels ride the same gate — intentional: from 768px up, selecting a figure or a
+  table auto-opens its panel for writers.
 - Slides on mobile is view-only for everyone. Thumbnail long-press and the thumbnail context menu
   are desktop and iPad-desktop-layout only. The kebab open-state cue was dropped again: it is
   unreachable under the takeover pane.
@@ -58,9 +60,10 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   390×420 — bar reads "1 of 1", the document does not move). Highlights and the count are correct.
   Fix seam: a `surfaceHidden` prop on `DocSearchProvider` that parks the pending reveal and replays it
   from a layout effect once the surface is visible again.
-- **Stickies Activity toggle below 768px**: stickies now mounts the shared `PanelColumn`, but still
-  gates its toggle on `!isMobile` — the abandoned "only offer it where the panel renders" idiom. Its
-  mobile Activity stays unreachable until the gate goes.
+- **Stickies Activity below 768px**: stickies mounts the shared `PanelColumn` behind `!isMobile` and
+  gates its toolbar toggle the same way, so mobile Activity is unreachable. Giving it the mobile pane
+  means adopting the other three editors' shape: hide the board under a `hidden` wrapper and pass
+  `DocSearchProvider`'s `onOpenChange`.
 - **Drive touch multi-select**: picking more than one item needs a modifier click today, so the
   multi-item menus are keyboard-assisted only on touch. Leading candidate: a "Select mode" entry
   in the long-press menu and the kebab that turns on checkboxes and reuses the existing
@@ -121,4 +124,4 @@ Everything so far is Chromium-only. Open on a real phone and tablet:
 - Docs between 768 and 830px: page legibility at scale ~0.6 with a panel open. Wide tables and
   full-bleed figures may tuck under the panel in the shift band. That is by design, so eyeball it.
 - Docs figure click at 900px (the properties panel opens through the shift; code-verified only)
-  and the mobile mark-tap path (the card dialog closes back into the pane).
+  and the mobile mark-tap path (the card dialog opens over the document and closes back into it).
