@@ -38,6 +38,7 @@ import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
+import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type ArrangeOp, computeArrange } from './arrange';
 import { useActiveComments } from './hooks/use-active-comments';
@@ -192,6 +193,33 @@ function SlideEditorInner({
         if (isPresenting) clearHighlights();
     }, [isPresenting, clearHighlights]);
 
+    // Present chrome: the exit X shows on entry and on any pointer activity, then fades away again.
+    const [presentControlsVisible, setPresentControlsVisible] = useState(false);
+    const presentControlsTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+    const revealPresentControls = useCallback(() => {
+        setPresentControlsVisible(true);
+        clearTimeout(presentControlsTimerRef.current);
+        presentControlsTimerRef.current = setTimeout(() => setPresentControlsVisible(false), 2000);
+    }, []);
+    useEffect(() => {
+        if (isPresenting) revealPresentControls();
+        return () => clearTimeout(presentControlsTimerRef.current);
+    }, [isPresenting, revealPresentControls]);
+
+    const exitPresent = useCallback(() => {
+        setIsPresenting(false);
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    }, []);
+
+    // Fullscreen also ends outside our control (Esc, Android back gesture) — leave present with it.
+    useEffect(() => {
+        const onFullscreenChange = () => {
+            if (!document.fullscreenElement) setIsPresenting(false);
+        };
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    }, []);
+
     const auth = useAuth();
     const { panel, commentPanelOpen, activityPanelOpen, toggleComments, toggleActivity, closePanels } =
         useDocumentPanels();
@@ -283,7 +311,7 @@ function SlideEditorInner({
             const { isPresenting: presenting, isEditing: editing, searchOpen: barOpen } = escStateRef.current;
             if (presenting) {
                 e.stopPropagation();
-                setIsPresenting(false);
+                exitPresent();
             } else if (editing) {
                 e.stopPropagation();
                 setEditingObjectId(null);
@@ -294,7 +322,7 @@ function SlideEditorInner({
         };
         document.addEventListener('keydown', onKeyDown, true);
         return () => document.removeEventListener('keydown', onKeyDown, true);
-    }, []);
+    }, [exitPresent]);
     const moveSelected = useCallback(
         (dx: number, dy: number) => {
             if (!yjsDoc) return;
@@ -664,14 +692,9 @@ function SlideEditorInner({
 
     const handlePresent = useCallback(() => {
         setEditingObjectId(null);
-        const el = document.documentElement;
-        if (el.requestFullscreen) {
-            el.requestFullscreen().then(() => setIsPresenting(true));
-        } else {
-            // iOS Safari has no Element.requestFullscreen — the overlay is fixed inset-0, so present
-            // without it rather than leaving mobile's one kept action dead.
-            setIsPresenting(true);
-        }
+        setIsPresenting(true);
+        // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
+        document.documentElement.requestFullscreen?.().catch(() => {});
     }, []);
 
     const handleAddComment = useCallback(
@@ -730,14 +753,18 @@ function SlideEditorInner({
     if (isPresenting && activeSlide) {
         return (
             <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black cursor-none"
+                className={cn(
+                    'fixed inset-0 z-50 flex items-center justify-center bg-black',
+                    !presentControlsVisible && 'cursor-none',
+                )}
+                onPointerMove={revealPresentControls}
                 onClick={() => {
+                    revealPresentControls();
                     const currentIdx = deck.slideOrder.indexOf(activeSlideId!);
                     if (currentIdx < deck.slideOrder.length - 1) {
                         setActiveSlideId(deck.slideOrder[currentIdx + 1]);
                     } else {
-                        setIsPresenting(false);
-                        if (document.fullscreenElement) document.exitFullscreen();
+                        exitPresent();
                     }
                 }}
                 onContextMenu={(e) => {
@@ -761,6 +788,23 @@ function SlideEditorInner({
                         <ReadOnlySlideObject key={obj.id} obj={obj} />
                     ))}
                 </div>
+                <button
+                    type="button"
+                    title="Exit present (Esc)"
+                    aria-label="Exit present"
+                    // The slide covers the overlay, hence the chip; hidden means gone, so a tap in
+                    // this corner still advances.
+                    className={cn(
+                        'absolute top-4 right-4 rounded-full bg-black/50 p-2.5 text-white transition-opacity hover:bg-black/70',
+                        !presentControlsVisible && 'pointer-events-none opacity-0',
+                    )}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        exitPresent();
+                    }}
+                >
+                    <X className="size-5" />
+                </button>
             </div>
         );
     }
