@@ -125,6 +125,23 @@ function requestType(request: DocumentTransformRequest): string {
     return request.kind === 'import' ? request.targetType : request.documentType;
 }
 
+// Exports log the format they render, imports the format they read; previews and
+// extracts have none.
+function requestFormat(request: DocumentTransformRequest): string {
+    if (request.kind === 'export') return request.format;
+    if (request.kind === 'import') return request.sourceFormat;
+    return '-';
+}
+
+// The count/bytes a warning carries is the diagnostic — a bare code hides how many
+// blobs were skipped. recalc-failed's message stays out of the logs: it can quote
+// document content.
+function formatWarning(warning: TransformWarning): string {
+    if ('count' in warning) return `${warning.code}:${warning.count}`;
+    if ('bytes' in warning) return `${warning.code}:${warning.bytes}`;
+    return warning.code;
+}
+
 export class DocumentTransformRunner {
     private readonly workerUrl: string;
     private readonly maxQueued: number;
@@ -157,16 +174,27 @@ export class DocumentTransformRunner {
     // ahead of run() so a caller can refuse before paying for an expensive input
     // (run-transform.ts checks it before capturing the document).
     assertAdmissible(priority: TransformPriority): void {
-        if (this.closing) throw new ApiError(503, BUSY_MESSAGE);
-        if (this.foreground.length + this.background.length >= this.maxQueued) throw new ApiError(503, BUSY_MESSAGE);
+        if (this.closing) this.refuse(priority, 'closing');
+        if (this.foreground.length + this.background.length >= this.maxQueued) this.refuse(priority, 'queue-full');
         if (priority === 'background' && this.background.length >= this.maxQueuedBackground) {
-            throw new ApiError(503, BUSY_MESSAGE);
+            this.refuse(priority, 'background-share');
         }
         if (priority === 'foreground') {
             let predictedWaitMs = this.foreground.reduce((sum, job) => sum + job.admissionCostMs, 0);
             for (const active of this.active.values()) predictedWaitMs += active.admissionCostMs;
-            if (predictedWaitMs > this.maxPredictedWaitMs) throw new ApiError(503, BUSY_MESSAGE);
+            if (predictedWaitMs > this.maxPredictedWaitMs) this.refuse(priority, 'predicted-wait', predictedWaitMs);
         }
+    }
+
+    // Overload is an outcome too (proposal § Observability): a 503 flood must be
+    // visible in the logs, with the queue state that caused it.
+    private refuse(priority: TransformPriority, reason: string, predictedWaitMs?: number): never {
+        console.warn(
+            `[transform] admission refused reason=${reason} priority=${priority} ` +
+                `queueDepth=${this.foreground.length + this.background.length}` +
+                (predictedWaitMs === undefined ? '' : ` predictedWaitMs=${predictedWaitMs}`),
+        );
+        throw new ApiError(503, BUSY_MESSAGE);
     }
 
     // Throws ApiError(503) synchronously when the job cannot be admitted; the
@@ -250,13 +278,17 @@ export class DocumentTransformRunner {
             const outcome = response.ok ? 'success' : response.error.code;
             const outputBytes = response.ok ? resultBytes(response.result) : 0;
             const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
+            // The Worker stamps transform-only time, so the rest of the job is spawn,
+            // module evaluation and messaging — the one-shot cost worth watching.
+            const startupMs = transformMs === undefined ? -1 : Math.round(totalMs - transformMs);
             console.log(
                 `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
-                    `priority=${job.priority} outcome=${outcome} queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
+                    `format=${requestFormat(job.request)} priority=${job.priority} outcome=${outcome} ` +
+                    `queueDepth=${queueDepth} queueWaitMs=${queueWaitMs} ` +
                     `captureMs=${job.captureMs?.toFixed(0) ?? -1} prepMs=${job.prepMs?.toFixed(0) ?? -1} ` +
-                    `inputBytes=${inputBytes} ` +
+                    `inputBytes=${inputBytes} startupMs=${startupMs} ` +
                     `transformMs=${transformMs?.toFixed(0) ?? -1} totalMs=${totalMs} outputBytes=${outputBytes}` +
-                    (warnings ? ` warnings=${warnings.map((warning) => warning.code).join(',')}` : ''),
+                    (warnings ? ` warnings=${warnings.map(formatWarning).join(',')}` : ''),
             );
             job.resolve(response);
             this.startNext();

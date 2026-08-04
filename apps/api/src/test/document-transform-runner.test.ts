@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { ApiError } from '../lib/core/errors';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../lib/document/transform/protocol';
 import { DocumentTransformRunner, TRANSFORM_LIMITS } from '../lib/document/transform/runner';
@@ -123,6 +123,43 @@ describe('DocumentTransformRunner', () => {
             expect((err as ApiError).message).toContain('busy');
         }
         await Promise.all([active, queued]);
+        await runner.close();
+    });
+
+    // Proposal § Observability: an overload has to leave a trace, and a job's record
+    // needs its format and Worker startup time (total minus the Worker's own transform
+    // time) to tell a slow document from a slow spawn.
+    test('logs every refused admission with the queue state', async () => {
+        const runner = makeRunner({ maxQueued: 1 });
+        const active = runner.run(makeRequest({ behavior: 'sleep', ms: 100 }), PREVIEW_OPTIONS);
+        await Bun.sleep(10);
+        const queued = runner.run(makeRequest(), PREVIEW_OPTIONS);
+
+        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+        expect(() => runner.run(makeRequest(), PREVIEW_OPTIONS)).toThrow(ApiError);
+        const warned = warnSpy.mock.calls.map((args) => String(args[0]));
+        warnSpy.mockRestore();
+
+        expect(warned).toHaveLength(1);
+        expect(warned[0]).toContain('priority=foreground');
+        expect(warned[0]).toContain('queueDepth=1');
+
+        await Promise.all([active, queued]);
+        await runner.close();
+    });
+
+    test('logs the format, worker startup time and warning payloads with the job', async () => {
+        const runner = makeRunner();
+        const logSpy = spyOn(console, 'log').mockImplementation(() => {});
+        const response = await runner.run(makeExportRequest({ behavior: 'export-warn' }), EXPORT_OPTIONS);
+        const logged = logSpy.mock.calls.map((args) => String(args[0]));
+        logSpy.mockRestore();
+
+        expect(response.ok).toBe(true);
+        const line = logged.find((l) => l.includes('[transform] job=')) ?? '';
+        expect(line).toContain('format=html');
+        expect(line).toMatch(/startupMs=\d+/);
+        expect(line).toContain('warnings=corrupt-blobs-skipped:3');
         await runner.close();
     });
 

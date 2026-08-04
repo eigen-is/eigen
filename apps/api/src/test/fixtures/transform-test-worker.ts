@@ -18,6 +18,7 @@ type TestDirective = {
         | 'document-error'
         | 'export-ok'
         | 'export-echo-media'
+        | 'export-warn'
         | 'export-malformed'
         | 'import-ok'
         | 'import-malformed'
@@ -61,6 +62,18 @@ self.onmessage = async (event: MessageEvent<WorkerRequestEnvelope>) => {
             // Export results ride the response transfer list, never a clone.
             const data = new Uint8Array([9, 8, 7, 6]).buffer;
             const response: WorkerResponseEnvelope = { jobId, response: { ok: true, result: { data }, warnings: [] } };
+            postMessage(response, [data]);
+            return;
+        }
+        case 'export-warn': {
+            // A success that carries a warning payload and a transform time, the two
+            // dimensions the runner's job log derives from the response.
+            const data = new Uint8Array([1]).buffer;
+            const response: WorkerResponseEnvelope = {
+                jobId,
+                response: { ok: true, result: { data }, warnings: [{ code: 'corrupt-blobs-skipped', count: 3 }] },
+                transformMs: 2,
+            };
             postMessage(response, [data]);
             return;
         }
