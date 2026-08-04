@@ -292,13 +292,18 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   dialog: the editor is hidden while the pane is up, so scroll-to-mark (docs) and the slide + object
   reveal (slides) would drive a view nobody can see, and an activity row's card opens over the Activity
   pane rather than switching the pane to Comments under the dialog. Docs' desktop `ActivityPanel` still
-  switches — that pair is unchanged.
+  switches — that pair is unchanged. The three comment-mode props (`filter`, `activeComments`,
+  `commentContextMenu`) are required in both modes, so an activity-only host would have to pass three
+  unused ones; all three hosts offer both panels today, so nothing does.
   All three editors hide the editor (a `hidden` wrapper) rather than unmounting it and mount the
   pane's `Column` as a sibling, so tiptap node views, slide thumbnails, scroll position and selection
   survive a pane visit — that is also why docs' two resize observers and the sheet engine's skip 0×0
-  boxes (`display: none` measures zero). Hiding takes the find bar with it, in all three; ACCEPTED
-  residue — Mod+F over an open pane opens the bar invisibly and unfocusably (hardware keyboards
-  only). Desktop is untouched: the panels stay `w-64` siblings with their own header.
+  boxes (`display: none` measures zero) and why docs' figure node view refuses to size an image off a
+  0-width page. Hiding takes the find bar with it, in all three, so every host passes
+  `DocSearchProvider`'s `onOpenChange` and closes the pane when a session opens below the breakpoint
+  (⌘F, a palette in-document hit) — the bar would open inside the hidden editor otherwise. Desktop is
+  untouched: slides and sheets keep their `w-64` sibling panels with their own header, docs its
+  absolute right-edge overlay.
 - **Open state**: `useDocumentPanels()` (`@workspace/lib/comments`) owns the comments/activity pair
   for docs, slides and sheets — one `panel: 'comments' | 'activity' | null` slot, so the two can
   never both be open. Host-owned like `useCommentFilter`; `isMobile` stays with the host.

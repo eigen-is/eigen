@@ -33,6 +33,8 @@
   nudge and delete, Cmd+Z, copy and paste are all gated).
 - The docs mobile kebab has Comments (with count) and Activity back, and the palette
   comment-reveal opens the card dialog on every viewport.
+- Opening a find session while the pane is up (⌘F, a palette in-document hit) closes the pane in
+  all three editors. The bar rides with the editor, so it used to open inside the hidden one.
 
 Findings 5 (panels) and 11 (slides view-only) are closed, with their knock-ons. Finding 13
 (calendar week view) was reviewed on 2026-08-03: it is fine on mobile for now, no work planned.
@@ -47,6 +49,14 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   all-sheets dropdown. No rename, reorder or recolor.
 - **Tap-target pass** (finding 21): recurring 24–36px icon buttons against the ~44px guideline
   (stickies column header 24px, chat message actions 28px, toolbar and topbar 32–36px).
+- **Reveal-scroll is lost when the pane closes for a find session**: the palette hit reveals its
+  match while the editor is still hidden, and `scrollIntoView` on a `display: none` subtree does
+  nothing, so a match outside the current scroll window stays off-screen (verified at 390×420 —
+  bar reads "1 of 1", the document does not move). Highlights and the count are correct. Needs a
+  "re-reveal once the surface is visible" seam; there is none today.
+- **Stickies Activity toggle below 768px**: stickies is the fourth editor and still gates its
+  toggle on `!isMobile` — the abandoned "only offer it where the panel renders" idiom. Its mobile
+  Activity is unreachable. Either give stickies the shared `MobilePanelColumn` or drop the gate.
 - **Drive touch multi-select**: picking more than one item needs a modifier click today, so the
   multi-item menus are keyboard-assisted only on touch. Leading candidate: a "Select mode" entry
   in the long-press menu and the kebab that turns on checkboxes and reuses the existing
@@ -72,9 +82,6 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   verified working on touch). Not converted to always-visible; the 28px targets are finding 21.
 - Beyond the audit's five long-press surfaces, some context menus remain right-click-only by
   scope: contacts list rows, slides canvas objects, sheet row/column headers.
-- Mod+F over an open mobile pane opens the find bar invisibly and unfocusably. The bar rides with
-  the hidden editor. Hardware keyboards under 768px only, and it behaves the same in all three
-  editors.
 - Slides keeps document-level keydown hooks (Delete, arrows), so a hardware keyboard can act on
   the hidden canvas while the pane is open. Pre-existing body-level listeners, same family as the
   Mod+F drift.
