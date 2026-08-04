@@ -69,10 +69,9 @@ function WaitlistRoute() {
 
     const handleBack = () => navigate({ to: '/waitlist', search: { tab: activeTab } });
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (!selected) return;
-        remove.mutate(selected.id);
-        setShowDelete(false);
+        await remove.mutateAsync(selected.id);
         handleBack();
     };
 

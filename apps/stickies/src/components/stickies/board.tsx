@@ -444,7 +444,6 @@ export function StickiesBoard({
                                                     details: { card: removed?.title ?? '', cardId: deleteCardId },
                                                 });
                                             }
-                                            setDeleteCardId(null);
                                         }}
                                     />
 

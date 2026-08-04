@@ -60,7 +60,6 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
 
     const handleDelete = async () => {
         await deleteSharedCalendar.mutateAsync(sharedCalendar.id);
-        setShowDeleteConfirmation(false);
         onOpenChange(false);
     };
 

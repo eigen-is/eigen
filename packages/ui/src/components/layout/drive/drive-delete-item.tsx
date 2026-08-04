@@ -14,15 +14,10 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     const isSingle = paths.length === 1;
     const deletePathsMutation = useDeletePaths();
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (paths.length === 0) return;
-
-        deletePathsMutation.mutate(paths, {
-            onSuccess: () => {
-                onOpenChange(false);
-                for (const path of paths) onAfterAction?.('delete', path);
-            },
-        });
+        await deletePathsMutation.mutateAsync(paths);
+        for (const path of paths) onAfterAction?.('delete', path);
     };
 
     const description = isSingle

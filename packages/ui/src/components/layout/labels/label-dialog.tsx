@@ -194,7 +194,6 @@ export function LabelDialog({
                 itemName={selectedLabel?.name}
                 onDelete={() => {
                     onDelete();
-                    setShowDeleteConfirmation(false);
                     onOpenChange(false);
                 }}
             />

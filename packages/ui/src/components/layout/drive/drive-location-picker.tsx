@@ -12,7 +12,12 @@ type DriveLocationPickerProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     mode: 'create' | 'save-as' | 'folder';
-    onConfirm: (location: { ownerId: string; mountId: string; folderId: string; name?: string }) => void;
+    onConfirm: (location: {
+        ownerId: string;
+        mountId: string;
+        folderId: string;
+        name?: string;
+    }) => void | Promise<void>;
     onDownloadInstead?: () => void;
     title?: string;
     defaultName?: string;
@@ -42,6 +47,7 @@ export function DriveLocationPicker({
     const { user } = useAuth();
     const [name, setName] = useState(defaultName);
     const [expanded, setExpanded] = useState(mode !== 'create');
+    const [pending, setPending] = useState(false);
     const [location, setLocation] = useState<DriveLocationValue>({
         ownerId: defaultOwnerId || user?.id || '',
         mountId: defaultMountId,
@@ -59,15 +65,24 @@ export function DriveLocationPicker({
 
     const hasName = mode === 'create' || mode === 'save-as';
 
-    const handleSubmit = () => {
-        if (hasName && !name.trim()) return;
-        onConfirm({
-            ownerId: location.ownerId || user.id,
-            mountId: location.mountId,
-            folderId: location.folderId,
-            name: hasName ? name.trim() : undefined,
-        });
-        onOpenChange(false);
+    // Own the async lifecycle: disable actions in-flight (no double-submit), close only after the
+    // create/save fulfils, and stay open on rejection so the caller's error toast reads with the retry.
+    const handleSubmit = async () => {
+        if ((hasName && !name.trim()) || pending) return;
+        setPending(true);
+        try {
+            await onConfirm({
+                ownerId: location.ownerId || user.id,
+                mountId: location.mountId,
+                folderId: location.folderId,
+                name: hasName ? name.trim() : undefined,
+            });
+            onOpenChange(false);
+        } catch {
+            // Stay open for retry; the mutation's onMutationError already surfaced the toast.
+        } finally {
+            setPending(false);
+        }
     };
 
     const resolvedTitle =
@@ -120,7 +135,7 @@ export function DriveLocationPicker({
 
                 <DialogFooter className="px-6 py-3 border-t flex-row justify-between sm:justify-between">
                     {onDownloadInstead ? (
-                        <Button variant="outline" onClick={onDownloadInstead}>
+                        <Button variant="outline" onClick={onDownloadInstead} disabled={pending}>
                             <Download className="h-4 w-4 mr-2" />
                             Download instead
                         </Button>
@@ -128,10 +143,10 @@ export function DriveLocationPicker({
                         <div />
                     )}
                     <div className="flex gap-2">
-                        <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                             Cancel
                         </Button>
-                        <Button onClick={handleSubmit} disabled={hasName && !name.trim()}>
+                        <Button onClick={handleSubmit} disabled={pending || (hasName && !name.trim())}>
                             {resolvedConfirmLabel}
                         </Button>
                     </div>

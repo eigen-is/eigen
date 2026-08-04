@@ -142,7 +142,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
     const handleNonRecurringDelete = async () => {
         await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
-        setShowDeleteDialog(false);
         onOpenChange(false);
     };
 
@@ -164,8 +163,6 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
         if (pendingDeleteAction) {
             await handleDelete(pendingDeleteAction);
         }
-        setShowRecurringDeleteConfirm(false);
-        setPendingDeleteAction(null);
     };
 
     const recurrenceText = event.rrule ? rruleToText(event.rrule) : null;

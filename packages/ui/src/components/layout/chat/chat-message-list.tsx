@@ -599,14 +599,13 @@ export function ChatMessageList({
                             .filter((a): a is string => typeof a === 'string')
                             .map((name) => findByName(name)?.id)
                             .filter((id): id is string => !!id);
-                        if (pathIds.length > 0) {
-                            copyFiles.mutate({
-                                pathIds,
-                                targetOwnerId: location.ownerId,
-                                targetMountId: location.mountId,
-                                targetParentId: location.folderId,
-                            });
-                        }
+                        if (pathIds.length === 0) return;
+                        return copyFiles.mutateAsync({
+                            pathIds,
+                            targetOwnerId: location.ownerId,
+                            targetMountId: location.mountId,
+                            targetParentId: location.folderId,
+                        });
                     }}
                     onDownloadInstead={handleDownloadLocally}
                 />

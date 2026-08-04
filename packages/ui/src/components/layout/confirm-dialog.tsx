@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '../button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../dialog';
 
@@ -6,7 +7,7 @@ export type ConfirmDialogProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     description: string;
-    onConfirm: () => void;
+    onConfirm: () => void | Promise<void>;
     cancelText?: string;
     confirmText?: string;
 };
@@ -20,6 +21,23 @@ export function ConfirmDialog({
     cancelText = 'Cancel',
     confirmText = 'Confirm',
 }: ConfirmDialogProps) {
+    const [pending, setPending] = useState(false);
+
+    // Own the async lifecycle: disable both actions in-flight (no double-submit), close only after
+    // the callback fulfils, and stay open on rejection so the caller's error toast reads with the retry.
+    const handleConfirm = async () => {
+        if (pending) return;
+        setPending(true);
+        try {
+            await onConfirm();
+            onOpenChange(false);
+        } catch {
+            // Stay open for retry; the mutation's onMutationError already surfaced the toast.
+        } finally {
+            setPending(false);
+        }
+    };
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
@@ -28,10 +46,12 @@ export function ConfirmDialog({
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                         {cancelText}
                     </Button>
-                    <Button onClick={onConfirm}>{confirmText}</Button>
+                    <Button onClick={handleConfirm} disabled={pending}>
+                        {confirmText}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

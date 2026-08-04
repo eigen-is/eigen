@@ -185,8 +185,6 @@ function MailRoute() {
     const confirmDeleteEmails = async () => {
         if (pendingDeleteEmails.length > 0) {
             await actions.confirmDeleteEmails(pendingDeleteEmails);
-            setDeleteDialogOpen(false);
-            setPendingDeleteEmails([]);
         }
     };
 

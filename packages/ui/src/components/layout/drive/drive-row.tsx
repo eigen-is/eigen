@@ -87,7 +87,16 @@ export function DriveRow({
                     onItemClick?.(item);
                 }
             }}
-            onContextMenu={hideActions ? undefined : (e) => handleContextMenu(e, item)}
+            onContextMenu={
+                hideActions
+                    ? (e) => {
+                          // Picker rows have no actions, but the event must not bubble to DriveBrowser's
+                          // background New-folder menu (which would offer to create a sibling of this row).
+                          e.preventDefault();
+                          e.stopPropagation();
+                      }
+                    : (e) => handleContextMenu(e, item)
+            }
             {...(disabled || hideActions ? {} : longPressBind(item))}
             {...drag.getDragProps(item)}
             {...getDropProps(item)}

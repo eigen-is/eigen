@@ -188,33 +188,26 @@ export function DriveLayout({
     );
 
     const handlePickDestination = useCallback(
-        (location: { ownerId: string; mountId: string; folderId: string }) => {
+        async (location: { ownerId: string; mountId: string; folderId: string }) => {
             const items = dialogs.copyMove.items;
             if (dialogs.copyMove.mode === 'move') {
                 if (location.ownerId !== ownerId || location.mountId !== mountId) {
                     toast.error('Moving across drives isn’t supported yet — use Copy to…');
                     return;
                 }
-                for (const item of items) movePath.mutate({ pathId: item.id, targetParentId: location.folderId });
+                await Promise.all(
+                    items.map((item) => movePath.mutateAsync({ pathId: item.id, targetParentId: location.folderId })),
+                );
             } else {
-                copyPath.mutate({
+                await copyPath.mutateAsync({
                     items,
                     targetOwnerId: location.ownerId,
                     targetMountId: location.mountId,
                     targetParentId: location.folderId,
                 });
             }
-            dialogs.copyMove.closeDialog();
         },
-        [
-            dialogs.copyMove.items,
-            dialogs.copyMove.mode,
-            dialogs.copyMove.closeDialog,
-            ownerId,
-            mountId,
-            movePath,
-            copyPath,
-        ],
+        [dialogs.copyMove.items, dialogs.copyMove.mode, ownerId, mountId, movePath, copyPath],
     );
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
