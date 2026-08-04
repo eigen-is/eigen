@@ -22,7 +22,7 @@ import { sanitizeExportHtml } from '../sanitize';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
-// (worker.ts owns execution; the main-thread wrappers live in doc/{html,pdf,docx}.ts).
+// (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 //
 // Every format renders the same document by design: WeasyPrint and Turbodocx both

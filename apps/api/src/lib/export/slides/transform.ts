@@ -21,7 +21,7 @@ const PAGE_WIDTH_PX = 960;
 const PAGE_HEIGHT_PX = 540;
 
 // Materialized doc + prepared media → export bytes. Runs inside the transform Worker
-// (worker.ts owns execution; the main-thread wrappers live in slides/{html,pdf}.ts).
+// (worker.ts owns execution; the main-thread orchestration lives in export-document.ts).
 // This module must not reach the Mount or the preview cache — the Worker imports it.
 export function renderEigenslidesExport(
     doc: Y.Doc,
