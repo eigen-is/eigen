@@ -49,11 +49,13 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   all-sheets dropdown. No rename, reorder or recolor.
 - **Tap-target pass** (finding 21): recurring 24–36px icon buttons against the ~44px guideline
   (stickies column header 24px, chat message actions 28px, toolbar and topbar 32–36px).
-- **Reveal-scroll is lost when the pane closes for a find session**: the palette hit reveals its
-  match while the editor is still hidden, and `scrollIntoView` on a `display: none` subtree does
-  nothing, so a match outside the current scroll window stays off-screen (verified at 390×420 —
-  bar reads "1 of 1", the document does not move). Highlights and the count are correct. Needs a
-  "re-reveal once the surface is visible" seam; there is none today.
+- **Session-open actions run while the surface is hidden**: opening a find session closes the pane,
+  but everything that session does on open — the reveal scroll and the bar's own input focus — fires
+  in the same tick, before the editor is back. Neither works on a `display: none` subtree, so a match
+  outside the current scroll window stays off-screen and the bar can open unfocused (verified at
+  390×420 — bar reads "1 of 1", the document does not move). Highlights and the count are correct.
+  Fix seam: a `surfaceHidden` prop on `DocSearchProvider` that parks the pending reveal and replays it
+  from a layout effect once the surface is visible again.
 - **Stickies Activity toggle below 768px**: stickies is the fourth editor and still gates its
   toggle on `!isMobile` — the abandoned "only offer it where the panel renders" idiom. Its mobile
   Activity is unreachable. Either give stickies the shared `MobilePanelColumn` or drop the gate.
@@ -83,8 +85,8 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
 - Beyond the audit's five long-press surfaces, some context menus remain right-click-only by
   scope: contacts list rows, slides canvas objects, sheet row/column headers.
 - Slides keeps document-level keydown hooks (Delete, arrows), so a hardware keyboard can act on
-  the hidden canvas while the pane is open. Pre-existing body-level listeners, same family as the
-  Mod+F drift.
+  the hidden canvas while the pane is open. Pre-existing body-level listeners — the same
+  hidden-surface family as the session-open residual under Next round.
 - Flipping a desktop viewport to mobile with the thumbnail menu open leaves a menu on screen once.
   It dismisses on tap. Strictly better than the stranded reopen it replaced.
 - Pane rows show the anchor text while the card dialog shows the title. A glance mismatch, product
