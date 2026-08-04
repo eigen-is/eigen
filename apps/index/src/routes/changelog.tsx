@@ -25,7 +25,6 @@ export const Route = createFileRoute('/changelog')({
                 content: 'Release notes and user-visible changes to eigen, newest first.',
             },
             { property: 'og:type', content: 'website' },
-            { property: 'og:url', content: 'https://eigen.is/changelog' },
         ],
     }),
 });

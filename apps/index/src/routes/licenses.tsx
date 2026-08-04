@@ -24,7 +24,6 @@ export const Route = createFileRoute('/licenses')({
                 content: 'The open-source packages eigen is built on, and their licenses.',
             },
             { property: 'og:type', content: 'website' },
-            { property: 'og:url', content: 'https://eigen.is/licenses' },
         ],
     }),
 });

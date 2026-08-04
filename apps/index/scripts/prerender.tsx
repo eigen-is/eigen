@@ -7,15 +7,27 @@ import type { ArticleBody, ContentManifest } from './lib/content-types';
 const ROOT = process.cwd(); // apps/index
 const DIST = join(ROOT, '..', '..', 'dist', 'index');
 const GEN = join(ROOT, 'src', 'content', '.generated');
-const BASE_URL = 'https://eigen.is';
+const DOMAIN = process.env['DOMAIN']?.replace(/\/+$/, '');
+const PUBLIC_ORIGIN = DOMAIN ? `https://${DOMAIN}` : undefined;
 const DEFAULT_DESCRIPTION =
     'Eigen is your minimal, secure workspace in the cloud. Simple and secure. You control your data.';
+
+function publicUrl(path: string): string | undefined {
+    if (!PUBLIC_ORIGIN) return undefined;
+    return `${PUBLIC_ORIGIN}${path === '/' ? '' : path}`;
+}
 
 function manifest(name: string): ContentManifest {
     return JSON.parse(readFileSync(join(GEN, `${name}.manifest.json`), 'utf-8'));
 }
 
-type PageMeta = { title: string; description: string; url: string; type: 'website' | 'article'; updated?: string };
+type PageMeta = {
+    title: string;
+    description: string;
+    url: string | undefined;
+    type: 'website' | 'article';
+    updated?: string;
+};
 type ArticleRef = { collection: 'blog' | 'support'; slug: string };
 type PageArticle = ArticleRef & { body: ArticleBody };
 type PrerenderRoute = { path: string; meta: PageMeta; article?: ArticleRef };
@@ -32,11 +44,11 @@ function routes(): PrerenderRoute[] {
             // cleanly in place (AuthProvider renders children on the first client render
             // for this ungated app rather than a null loading fallback).
             path: '/',
-            meta: { title: 'eigen', description: DEFAULT_DESCRIPTION, url: BASE_URL, type: 'website' },
+            meta: { title: 'eigen', description: DEFAULT_DESCRIPTION, url: publicUrl('/'), type: 'website' },
         },
         {
             path: '/blog',
-            meta: { title: 'Blog - eigen', description: DEFAULT_DESCRIPTION, url: `${BASE_URL}/blog`, type: 'website' },
+            meta: { title: 'Blog - eigen', description: DEFAULT_DESCRIPTION, url: publicUrl('/blog'), type: 'website' },
             // The blog index renders the latest post in full.
             article: latestBlog ? { collection: 'blog', slug: latestBlog.slug } : undefined,
         },
@@ -45,7 +57,7 @@ function routes(): PrerenderRoute[] {
             meta: {
                 title: 'Eigen Support',
                 description: 'Help and documentation for Eigen.',
-                url: `${BASE_URL}/support`,
+                url: publicUrl('/support'),
                 type: 'website',
             },
         },
@@ -54,7 +66,7 @@ function routes(): PrerenderRoute[] {
             meta: {
                 title: 'Open-source licenses - eigen',
                 description: 'The open-source packages eigen is built on, and their licenses.',
-                url: `${BASE_URL}/licenses`,
+                url: publicUrl('/licenses'),
                 type: 'website',
             },
         },
@@ -63,7 +75,7 @@ function routes(): PrerenderRoute[] {
             meta: {
                 title: 'Changelog - eigen',
                 description: 'Release notes and user-visible changes to eigen, newest first.',
-                url: `${BASE_URL}/changelog`,
+                url: publicUrl('/changelog'),
                 type: 'website',
             },
         },
@@ -74,7 +86,7 @@ function routes(): PrerenderRoute[] {
             meta: {
                 title: `${a.title} - eigen blog`,
                 description: a.description,
-                url: `${BASE_URL}/blog/${a.slug}`,
+                url: publicUrl(`/blog/${a.slug}`),
                 type: 'article',
                 updated: a.date,
             },
@@ -87,7 +99,7 @@ function routes(): PrerenderRoute[] {
             meta: {
                 title: `${section} - Eigen Support`,
                 description: `Help articles for ${section}.`,
-                url: `${BASE_URL}/support/${section}`,
+                url: publicUrl(`/support/${section}`),
                 type: 'website',
             },
         });
@@ -98,7 +110,7 @@ function routes(): PrerenderRoute[] {
             meta: {
                 title: `${a.title} - Eigen Support`,
                 description: a.description,
-                url: `${BASE_URL}/support/${a.slug}`,
+                url: publicUrl(`/support/${a.slug}`),
                 type: 'article',
                 updated: a.updated,
             },
@@ -111,12 +123,13 @@ function routes(): PrerenderRoute[] {
 function withMeta(html: string, m: PageMeta): string {
     const t = escapeHtml(m.title);
     const d = escapeHtml(m.description);
-    return html
+    const page = html
         .replace('<title>eigen</title>', `<title>${t}</title>`)
         .replace('property="og:title" content="eigen"', `property="og:title" content="${t}"`)
         .replaceAll(`content="${DEFAULT_DESCRIPTION}"`, `content="${d}"`)
-        .replace('content="website"', `content="${m.type}"`)
-        .replace(`content="${BASE_URL}"`, `content="${escapeHtml(m.url)}"`);
+        .replace('content="website"', `content="${m.type}"`);
+    const ogUrl = m.url ? `<meta property="og:url" content="${escapeHtml(m.url)}"/>` : '';
+    return page.replace('</head>', `${ogUrl}</head>`);
 }
 
 // Minimal Article JSON-LD for article pages (SEO). A safe, always-valid schema.
@@ -150,10 +163,11 @@ function outFile(path: string): string {
 
 function sitemap(routeList: PrerenderRoute[]): string {
     const urls = routeList
-        .map((r) => {
-            const loc = escapeHtml(BASE_URL + (r.path === '/' ? '' : r.path));
+        .flatMap((r) => {
+            if (!r.meta.url) return [];
+            const loc = escapeHtml(r.meta.url);
             const lastmod = r.meta.updated ? `<lastmod>${escapeHtml(r.meta.updated)}</lastmod>` : '';
-            return `  <url><loc>${loc}</loc>${lastmod}</url>`;
+            return [`  <url><loc>${loc}</loc>${lastmod}</url>`];
         })
         .join('\n');
     return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
@@ -190,11 +204,9 @@ async function main() {
             const inlined = article
                 ? `<script type="application/json" id="eigen-article-body">${JSON.stringify(article).replace(/<\//g, '<\\/')}</script>`
                 : '';
+            const canonical = route.meta.url ? `<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>` : '';
             const page = withMeta(shell, route.meta)
-                .replace(
-                    '</head>',
-                    `${hoisted}<link rel="canonical" href="${escapeHtml(route.meta.url)}"/>${jsonLd(route.meta)}</head>`,
-                )
+                .replace('</head>', `${hoisted}${canonical}${jsonLd(route.meta)}</head>`)
                 // Append TanStack Router's dehydration <script> (sets window.$_TSR)
                 // after the inlined body. It's a plain inline script in the body, so it
                 // runs during HTML parse — before the deferred entry module
@@ -204,8 +216,8 @@ async function main() {
             writeFileSync(outFile(route.path), page);
             console.log(`Prerendered ${route.path}`);
         }
-        writeFileSync(join(DIST, 'sitemap.xml'), sitemap(all));
-        console.log(`Prerender complete: ${all.length} routes + sitemap.xml`);
+        if (PUBLIC_ORIGIN) writeFileSync(join(DIST, 'sitemap.xml'), sitemap(all));
+        console.log(`Prerender complete: ${all.length} routes${PUBLIC_ORIGIN ? ' + sitemap.xml' : ''}`);
     } finally {
         await vite.close();
     }
