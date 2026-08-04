@@ -146,6 +146,33 @@ describe('Sheets xlsx import/convert', () => {
         return assertJson<DrivePath>(res);
     }
 
+    test('convert completes even when the client has disconnected (aborted request signal)', async () => {
+        // A page reload aborts every in-flight fetch, and a large workbook needs
+        // 40-70s of Worker time — the conversion must detach from the connection
+        // and finish anyway (the new sheet surfaces via the drive SSE refresh).
+        const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'survives' }]);
+        const xlsxFile = new File([buffer], 'detached.xlsx', { type: XLSX_MIME });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+
+        const controller = new AbortController();
+        controller.abort();
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST', signal: controller.signal },
+        );
+
+        expect(res.status).toBe(200);
+        const converted = await assertJson<DrivePath>(res);
+        expect(converted.name).toBe('detached.eigensheets');
+    });
+
     test('convert .xlsx to eigensheets replicates the workbook content', async () => {
         const buffer = await buildXlsxBuffer([
             { a1: 'A1', value: 'Name' },

@@ -22,7 +22,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
+import { ProgressDialog } from '@workspace/ui/components/layout/drive/progress-dialog';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
@@ -779,7 +779,7 @@ export const EditorToolbar = ({
                 </DialogContent>
             </Dialog>
 
-            <ExportProgressDialog open={isExporting} />
+            <ProgressDialog open={isExporting} title="Exporting document" />
 
             <DrivePickerWithUpload
                 open={importPickerOpen}

@@ -28,7 +28,7 @@ import { DriveList, DriveListToolbar } from './drive-list';
 import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
 import { DriveUploadFiles } from './drive-upload-files';
-import { ExportProgressDialog } from './export-progress-dialog';
+import { ProgressDialog } from './progress-dialog';
 import { useDriveDialogs } from './use-drive-dialogs';
 
 export type DriveLayoutProps = {
@@ -490,7 +490,15 @@ export function DriveLayout({
                 onAfterAction={onAfterAction}
             />
 
-            <ExportProgressDialog open={isExporting} />
+            <ProgressDialog open={isExporting} title="Exporting document" />
+            <ProgressDialog
+                open={convertMutation.isPending}
+                title={
+                    convertMutation.variables?.targetType === 'eigendoc'
+                        ? 'Converting to document'
+                        : 'Converting to sheet'
+                }
+            />
         </>
     );
 }

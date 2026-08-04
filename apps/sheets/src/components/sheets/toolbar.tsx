@@ -3,7 +3,7 @@ import { useExportDocument, useImportDocument, useImportFromDrive } from '@works
 import type { DrivePath } from '@workspace/lib/types/drive';
 
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
+import { ProgressDialog } from '@workspace/ui/components/layout/drive/progress-dialog';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Sheet } from 'lucide-react';
 import { useState } from 'react';
@@ -54,7 +54,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 createIcon={Sheet}
                 createType="sheets"
             />
-            <ExportProgressDialog open={isExporting} />
+            <ProgressDialog open={isExporting} title="Exporting document" />
             <DrivePickerWithUpload
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}

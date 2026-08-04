@@ -58,13 +58,14 @@ async function saveDocImages(mount: Mount, docPath: DrivePath, images: Transform
     }
 }
 
+// No signal parameter by design: conversion detaches from the request so a page
+// reload cannot kill a minute of Worker progress (routes/drive.ts /convert).
 export async function convertToDocument(
     drive: Drive | SharedDrive,
     mount: Mount,
     sourcePath: DrivePath,
     targetType: 'eigensheets' | 'eigendoc',
     user?: User,
-    signal?: AbortSignal,
 ): Promise<DrivePath> {
     if (!sourcePath.parentId) throw new ApiError(400, 'Cannot convert a root file');
 
@@ -80,7 +81,7 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.xlsx')) {
             throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
         }
-        const snapshotJson = await importXlsxSnapshot(buffer, signal);
+        const snapshotJson = await importXlsxSnapshot(buffer);
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
@@ -92,7 +93,7 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
             throw new ApiError(400, 'Only .docx files can be converted to documents');
         }
-        const { update, images } = await importDocxUpdate(buffer, signal);
+        const { update, images } = await importDocxUpdate(buffer);
         const name = sourcePath.name.replace(/\.docx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc', user);
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);

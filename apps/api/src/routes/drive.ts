@@ -200,7 +200,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-        async ({ params, request, user }) => {
+        async ({ params, user }) => {
             if (params.targetType !== 'eigensheets' && params.targetType !== 'eigendoc') {
                 throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
             }
@@ -211,9 +211,11 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (path.size > (await getUploadMaxSize(params.ownerId, user.id, params.mountId))) {
                 throw new ApiError(413, 'Source file too large');
             }
-            // A disconnected conversion has no value — the signal lets the runner drop
-            // the queued job or terminate its Worker.
-            return await convertToDocument(drive, mount, path, params.targetType, user, request.signal);
+            // Deliberately no abort signal: a page reload aborts every in-flight fetch,
+            // and a large workbook needs a minute of Worker time — the conversion
+            // finishes anyway and the new file surfaces via the drive SSE refresh
+            // (preview generation takes no signal for the same reason).
+            return await convertToDocument(drive, mount, path, params.targetType, user);
         },
         { auth: true },
     )
