@@ -3,9 +3,6 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { cn } from '@workspace/ui/lib/utils';
@@ -20,9 +17,10 @@ import {
     deleteSheet,
     editSheetName,
     en,
+    getSheetIndex,
     type Sheet,
 } from '../../state';
-import { ChangeColor } from '../ChangeColor';
+import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 
 type Props = {
     sheet: Sheet;
@@ -219,10 +217,19 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         }
         if (name === 'color') {
             return (
-                <DropdownMenuSub key={name}>
-                    <DropdownMenuSubTrigger>{sheetconfig.changeColor}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>{context.allowEdit && <ChangeColor />}</DropdownMenuSubContent>
-                </DropdownMenuSub>
+                <ColorPickerMenuItem
+                    key={name}
+                    label={sheetconfig.changeColor}
+                    value={sheet.color ?? ''}
+                    resetLabel={sheetconfig.resetColor}
+                    onChange={(color) => {
+                        if (context.allowEdit === false || !sheet?.id) return;
+                        setContext((ctx) => {
+                            const index = getSheetIndex(ctx, sheet.id!);
+                            if (index != null) ctx.sheets[index].color = color || undefined;
+                        });
+                    }}
+                />
             );
         }
         if (name === 'focus') {
@@ -260,6 +267,17 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         });
     }, [isDropPlaceholder, setContext, sheet, refs.globalCache]);
 
+    const onRootKeyDown = useCallback(
+        (e: React.KeyboardEvent<HTMLDivElement>) => {
+            if (editing || isDropPlaceholder) return;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectSheet();
+            }
+        },
+        [editing, isDropPlaceholder, selectSheet],
+    );
+
     const isActive = !isDropPlaceholder && context.currentSheetId === sheet.id;
 
     return (
@@ -296,6 +314,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 sheet.hide === 1 && 'hidden',
             )}
             onClick={selectSheet}
+            onKeyDown={onRootKeyDown}
             onContextMenu={
                 context.allowEdit && !isDropPlaceholder
                     ? (e) => {

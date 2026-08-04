@@ -324,14 +324,16 @@ export const FilterMenu: React.FC = () => {
                         return (
                             <Popover key={name} open={showSubMenu} onOpenChange={setShowSubMenu}>
                                 <PopoverAnchor asChild>
-                                    <div
-                                        className={cn(menuItemClass, 'justify-between gap-2')}
+                                    <button
+                                        type="button"
+                                        className={cn(menuItemClass, 'w-full justify-between gap-2')}
                                         onMouseEnter={openSubMenu}
                                         onMouseLeave={closeSubMenu}
+                                        onClick={openSubMenu}
                                     >
                                         <span>{filter.filterByColor}</span>
                                         <ChevronRight className="size-3.5" aria-hidden="true" />
-                                    </div>
+                                    </button>
                                 </PopoverAnchor>
                                 <PopoverContent
                                     side="right"
