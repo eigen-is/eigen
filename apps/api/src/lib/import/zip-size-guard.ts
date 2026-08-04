@@ -1,5 +1,5 @@
 import type JSZip from 'jszip';
-import { ApiError } from '../core';
+import { ApiError } from '../core/errors';
 
 // xlsx and docx are both zips, and the upload route only bounds the COMPRESSED bytes
 // (getUploadMaxSize, default 35 MB / mount quota) — so a decompression bomb, a few KB of

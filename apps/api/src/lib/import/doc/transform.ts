@@ -1,6 +1,6 @@
 import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 import * as Y from 'yjs';
-import { ApiError } from '../../core';
+import { ApiError } from '../../core/errors';
 import { type DocImportWorkerResult, toTransferableBuffer } from '../../document/transform/protocol';
 import { docSchema, docxToPmJson } from './from-docx';
 

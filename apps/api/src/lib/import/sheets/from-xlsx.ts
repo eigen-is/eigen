@@ -26,7 +26,7 @@ import type {
 } from 'exceljs';
 import he from 'he';
 import JSZip from 'jszip';
-import { ApiError } from '../../core';
+import { ApiError } from '../../core/errors';
 import { assertDecompressedSizeWithinBounds } from '../zip-size-guard';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).

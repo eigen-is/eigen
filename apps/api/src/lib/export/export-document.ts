@@ -1,6 +1,6 @@
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
-import { ApiError } from '../core';
+import { ApiError } from '../core/errors';
 import type { DocumentExportFormat, EigendocExportFormat, SheetExportFormat } from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
 import type { Mount } from '../mount';

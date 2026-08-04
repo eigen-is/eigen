@@ -1,6 +1,6 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
-import { ApiError } from '../../core';
+import { ApiError } from '../../core/errors';
 import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
 import { xlsxToSheets } from './from-xlsx';
 
