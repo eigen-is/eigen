@@ -10,13 +10,17 @@ import { writeEigendocToYjs } from '../../lib/document/doc';
 import type { Mount } from '../../lib/mount';
 
 // Deterministic eigendoc + eigenslides fixtures for the document-transform work
-// (preview/export golden tests). Everything is literal — no randomness, no clock —
-// so rendered output is byte-stable across runs and the golden hashes in
-// document-transform.test.ts stay valid.
+// (preview/export golden tests and the responsiveness benchmark). Everything is
+// literal — no randomness, no clock — so rendered output is byte-stable across runs
+// and the golden hashes in document-transform.test.ts stay valid.
 //
-// Both fixtures are deliberately over the preview cap (24 blocks / 10 slides) and
-// carry one media reference, hostile strings the sanitizer must defang, and the
-// node/object variants each renderer special-cases.
+// Two sizes, mirroring heavy-sheets.ts:
+//   - buildGoldenDocJson() / buildGoldenDeck(): small. Deliberately over the preview
+//     cap (24 blocks / 10 slides), carrying one media reference, hostile strings the
+//     sanitizer must defang, and the node/object variants each renderer special-cases.
+//   - buildHeavyDocJson(sections) / buildHeavyDeck(slides, objectsPerSlide): far
+//     beyond any preview budget, size-tunable, no media — the render cost the
+//     benchmark measures, not the feature coverage.
 
 export const GOLDEN_MEDIA_NAME = 'pixel.png';
 export const GOLDEN_BEYOND_CAP = 'BEYOND-PREVIEW-CAP';
@@ -138,6 +142,81 @@ export function buildGoldenDocJson(): JSONContent {
     return { type: 'doc', content };
 }
 
+const HEAVY_SENTENCE = 'Revenue held across every region while costs stayed flat, so the margin picture is unchanged.';
+
+// Each section is a heading + a marked-up paragraph, with a code block, a list and a
+// table folded in on a fixed cadence — the node mix the renderers pay most for
+// (lowlight highlighting, nested list/table walks), repeated `sections` times.
+export function buildHeavyDocJson(sections = 300): JSONContent {
+    const content: JSONContent[] = [];
+    for (let i = 1; i <= sections; i++) {
+        content.push({
+            type: 'heading',
+            attrs: { level: (i % 3) + 1 },
+            content: [{ type: 'text', text: `Section ${i}` }],
+        });
+        content.push({
+            type: 'paragraph',
+            content: [
+                { type: 'text', text: `${HEAVY_SENTENCE} Entry ${i} is ` },
+                { type: 'text', marks: [{ type: 'bold' }], text: 'material' },
+                { type: 'text', text: ' and ' },
+                { type: 'text', marks: [{ type: 'italic' }], text: 'reviewed' },
+                { type: 'text', text: ', see the ' },
+                {
+                    type: 'text',
+                    marks: [{ type: 'link', attrs: { href: `${GOLDEN_DOC_LINK}/${i}` } }],
+                    text: 'appendix',
+                },
+                { type: 'text', text: `. ${HEAVY_SENTENCE}` },
+            ],
+        });
+        if (i % 4 === 0) {
+            content.push({
+                type: 'codeBlock',
+                attrs: { language: 'javascript' },
+                content: [
+                    {
+                        type: 'text',
+                        text: `const total${i} = rows.filter((row) => row.region === 'North').reduce((sum, row) => sum + row.value, 0);`,
+                    },
+                ],
+            });
+        }
+        if (i % 5 === 0) {
+            content.push({
+                type: 'bulletList',
+                content: ['North', 'South', 'East', 'West'].map((region) => ({
+                    type: 'listItem',
+                    content: [{ type: 'paragraph', content: [{ type: 'text', text: `${region} ${i}` }] }],
+                })),
+            });
+        }
+        if (i % 10 === 0) {
+            content.push({
+                type: 'table',
+                content: [
+                    {
+                        type: 'tableRow',
+                        content: ['Region', 'Total'].map((label) => ({
+                            type: 'tableHeader',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: label }] }],
+                        })),
+                    },
+                    ...['North', 'South', 'East'].map((region, row) => ({
+                        type: 'tableRow',
+                        content: [region, String(i * 10 + row)].map((cell) => ({
+                            type: 'tableCell',
+                            content: [{ type: 'paragraph', content: [{ type: 'text', text: cell }] }],
+                        })),
+                    })),
+                ],
+            });
+        }
+    }
+    return { type: 'doc', content };
+}
+
 export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     writeEigendocToYjs(doc, json, docSchema);
 }
@@ -240,6 +319,40 @@ export function buildGoldenDeck(): DeckData {
         ]);
     }
 
+    return deck;
+}
+
+// Text objects only — no media, so the deck renders without a seeded media/ folder.
+// Every slide carries a title plus body objects laid out in a fixed grid.
+export function buildHeavyDeck(slides = 60, objectsPerSlide = 6): DeckData {
+    const deck: DeckData = { slides: {}, objects: {}, slideOrder: [] };
+    for (let s = 1; s <= slides; s++) {
+        const slideId = `heavy-slide-${s}`;
+        const objectIds: string[] = [];
+        for (let o = 0; o < objectsPerSlide; o++) {
+            const object = textObject(`heavy-obj-${s}-${o}`, slideId, {
+                x: 160 + (o % 2) * 880,
+                y: 120 + Math.floor(o / 2) * 300,
+                w: 800,
+                h: 260,
+                text:
+                    o === 0
+                        ? `<p>Slide ${s} — <strong>heavy deck</strong></p>`
+                        : `<p>${HEAVY_SENTENCE} Point ${o} of slide ${s}.</p>`,
+                fontSize: o === 0 ? 96 : 40,
+                fontWeight: o === 0 ? 'bold' : 'normal',
+                background: o % 3 === 0 ? { type: 'solid', color: '#eef2ff' } : null,
+            });
+            deck.objects[object.id] = object;
+            objectIds.push(object.id);
+        }
+        deck.slides[slideId] = {
+            id: slideId,
+            objectIds,
+            background: { type: 'gradient', from: '#ffffff', to: '#dbe7ff', angle: 45 },
+        };
+        deck.slideOrder.push(slideId);
+    }
     return deck;
 }
 

@@ -1,9 +1,11 @@
 // Responsiveness benchmark for document transforms (proposal Phase 0 baseline and
-// the Phase 1 gate). Seeds a heavy eigensheets doc, then measures a cold preview
-// and an XLSX export while probing the event loop, the /health route, and RSS.
+// the Phase 1 gate). Seeds a heavy document of each collab type — eigensheets,
+// eigendoc, eigenslides — then measures a cold preview, a cache-hit preview and a
+// download export while probing the event loop, the /health route, and RSS.
 //
 // Run from apps/api:
 //   bun src/test/transform-benchmark.ts [--rows 1500] [--cols 40]
+//                                       [--sections 300] [--slides 60] [--objects 6]
 //   EIGEN_BENCH_XLSX=/path/to/big.xlsx adds a real-workbook scenario (file is
 //   imported through the normal import seam; nothing is written to the repo).
 //
@@ -20,6 +22,7 @@ const { authedRequest, driveGet, drivePost, getTestContext } = await import('./s
 const { getHome } = await import('../lib/home/get-home');
 const { importIntoDocument } = await import('../lib/import/import-document');
 const { buildHeavyOps, buildHeavySheets, seedSheetsDoc } = await import('./fixtures/heavy-sheets');
+const { buildHeavyDeck, buildHeavyDocJson, seedEigendoc, seedSlidesDoc } = await import('./fixtures/golden-documents');
 const fs = await import('node:fs');
 
 const args = process.argv.slice(2);
@@ -29,6 +32,9 @@ function argNum(name: string, fallback: number): number {
 }
 const ROWS = argNum('rows', 1500);
 const COLS = argNum('cols', 40);
+const SECTIONS = argNum('sections', 300);
+const SLIDES = argNum('slides', 60);
+const OBJECTS = argNum('objects', 6);
 
 const ctx = await getTestContext();
 const token = ctx.alice.user.sessionToken;
@@ -90,9 +96,9 @@ async function measure(label: string, work: () => Promise<unknown>) {
     return { e2eMs, result };
 }
 
-async function createSheetsDoc(fileName: string): Promise<DrivePath> {
+async function createDocument(fileName: string, type: 'sheets' | 'doc' | 'slides'): Promise<DrivePath> {
     const root = await driveGet<DrivePath>(token, ownerId, mountId, 'root');
-    return drivePost<DrivePath>(token, ownerId, mountId, `folder/${root.id}/create/sheets`, { fileName });
+    return drivePost<DrivePath>(token, ownerId, mountId, `folder/${root.id}/create/${type}`, { fileName });
 }
 
 async function coldPreview(pathId: string): Promise<{ bytes: number; cacheBytes: number }> {
@@ -108,8 +114,8 @@ async function coldPreview(pathId: string): Promise<{ bytes: number; cacheBytes:
     return { bytes: Buffer.byteLength(body), cacheBytes: cacheFile ? fs.statSync(cacheFile).size : 0 };
 }
 
-async function exportXlsx(pathId: string): Promise<{ data: ArrayBuffer }> {
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/export/xlsx`);
+async function exportDownload(pathId: string, format: 'xlsx' | 'html'): Promise<{ data: ArrayBuffer }> {
+    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${pathId}/export/${format}`);
     if (res.status !== 200) throw new Error(`export failed: ${res.status}`);
     return { data: await res.arrayBuffer() };
 }
@@ -122,7 +128,7 @@ async function importXlsx(pathId: string, data: ArrayBuffer): Promise<void> {
     if (res.status !== 200) throw new Error(`import failed: ${res.status} ${await res.text()}`);
 }
 
-async function runScenario(label: string, pathId: string): Promise<ArrayBuffer> {
+async function runScenario(label: string, pathId: string, format: 'xlsx' | 'html'): Promise<ArrayBuffer> {
     const cold = await measure(`${label}: cold preview`, () => coldPreview(pathId));
     const sizes = cold.result as { bytes: number; cacheBytes: number };
     console.log(`body bytes ${sizes.bytes}  cache bytes ${sizes.cacheBytes}`);
@@ -130,37 +136,60 @@ async function runScenario(label: string, pathId: string): Promise<ArrayBuffer> 
     const warm = await measure(`${label}: cache-hit preview`, () => coldPreview(pathId));
     console.log(`cache-hit e2e ${warm.e2eMs.toFixed(1)}ms`);
 
-    const xlsx = await measure(`${label}: xlsx export`, () => exportXlsx(pathId));
-    const exported = (xlsx.result as { data: ArrayBuffer }).data;
-    console.log(`xlsx bytes ${exported.byteLength}`);
+    const download = await measure(`${label}: ${format} export`, () => exportDownload(pathId, format));
+    const exported = (download.result as { data: ArrayBuffer }).data;
+    console.log(`${format} bytes ${exported.byteLength}`);
     return exported;
 }
 
 // The export's own bytes go back in through the /import route, into a fresh doc —
 // so import runs under the same event-loop/health probes as preview and export.
 async function importScenario(label: string, xlsx: ArrayBuffer) {
-    const target = await createSheetsDoc(`bench-import-${Date.now()}`);
+    const target = await createDocument(`bench-import-${Date.now()}`, 'sheets');
     await measure(`${label}: xlsx import`, () => importXlsx(target.id, xlsx));
     console.log(`import bytes ${xlsx.byteLength}`);
 }
 
 // Scenario 1: deterministic synthetic heavy sheet (same generator the tests use).
 {
-    const doc = await createSheetsDoc('bench-synthetic');
+    const doc = await createDocument('bench-synthetic', 'sheets');
     const home = await getHome(ownerId);
     const collab = await home.drive.getCollabDocument(mountId, doc.id);
     const seedStart = performance.now();
     seedSheetsDoc(collab.doc, buildHeavySheets(ROWS, COLS), buildHeavyOps(60, 25, ROWS, COLS));
     console.log(`seeded synthetic ${ROWS}x${COLS} in ${(performance.now() - seedStart).toFixed(0)}ms`);
-    const exported = await runScenario(`synthetic ${ROWS}x${COLS}`, doc.id);
+    const exported = await runScenario(`synthetic ${ROWS}x${COLS}`, doc.id, 'xlsx');
     await importScenario(`synthetic ${ROWS}x${COLS}`, exported);
+}
+
+// Scenario 2: heavy eigendoc — the same probes as the sheet scenario, so a doc-render
+// regression shows up next to the sheets numbers.
+{
+    const doc = await createDocument('bench-doc', 'doc');
+    const home = await getHome(ownerId);
+    const collab = await home.drive.getCollabDocument(mountId, doc.id);
+    const seedStart = performance.now();
+    seedEigendoc(collab.doc, buildHeavyDocJson(SECTIONS));
+    console.log(`seeded doc ${SECTIONS} sections in ${(performance.now() - seedStart).toFixed(0)}ms`);
+    await runScenario(`doc ${SECTIONS} sections`, doc.id, 'html');
+}
+
+// Scenario 3: heavy eigenslides deck.
+{
+    const deck = await createDocument('bench-deck', 'slides');
+    const home = await getHome(ownerId);
+    const collab = await home.drive.getCollabDocument(mountId, deck.id);
+    const seedStart = performance.now();
+    seedSlidesDoc(collab.doc, buildHeavyDeck(SLIDES, OBJECTS));
+    console.log(`seeded deck ${SLIDES}x${OBJECTS} in ${(performance.now() - seedStart).toFixed(0)}ms`);
+    await runScenario(`deck ${SLIDES}x${OBJECTS}`, deck.id, 'html');
 }
 
 // Memory pass (proposal § Memory benchmark): repeat the heavy preview through
 // one-shot Workers and verify post-job RSS stabilizes instead of growing linearly.
 if (args.includes('--memory')) {
     const { generateDocumentPreview } = await import('../lib/preview/preview-document');
-    const doc = await createSheetsDoc('bench-memory');
+    const doc = await createDocument('bench-memory', 'sheets');
     const home = await getHome(ownerId);
     const collab = await home.drive.getCollabDocument(mountId, doc.id);
     seedSheetsDoc(collab.doc, buildHeavySheets(600, 45), buildHeavyOps(40, 25, 600, 45));
@@ -178,10 +207,10 @@ if (args.includes('--memory')) {
     }
 }
 
-// Scenario 2: a real workbook, if provided (kept out of the repo).
+// Scenario 4: a real workbook, if provided (kept out of the repo).
 const xlsxPath = process.env['EIGEN_BENCH_XLSX'];
 if (xlsxPath && fs.existsSync(xlsxPath)) {
-    const doc = await createSheetsDoc('bench-real-xlsx');
+    const doc = await createDocument('bench-real-xlsx', 'sheets');
     const home = await getHome(ownerId);
     const { mount, path } = await home.drive.resolveFile(mountId, doc.id);
     const buffer = Buffer.from(fs.readFileSync(xlsxPath));
@@ -189,7 +218,7 @@ if (xlsxPath && fs.existsSync(xlsxPath)) {
         importIntoDocument(home.drive, mount, path, buffer, home.user),
     );
     console.log(`imported ${xlsxPath}`);
-    await runScenario('real xlsx', doc.id);
+    await runScenario('real xlsx', doc.id, 'xlsx');
 } else {
     console.log('\n(no EIGEN_BENCH_XLSX provided — skipping real-workbook scenario)');
 }
