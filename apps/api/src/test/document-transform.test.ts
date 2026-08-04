@@ -22,7 +22,13 @@ import {
     toTransferableBuffer,
 } from '../lib/document/transform/protocol';
 import { runTransformToBytes } from '../lib/document/transform/run-transform';
-import { documentTransformRunner, EXPORT_IMPORT_TRANSFORM_DEADLINE_MS } from '../lib/document/transform/runner';
+import {
+    documentTransformRunner,
+    EXPORT_IMPORT_ADMISSION_COST_MS,
+    EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+    PREVIEW_ADMISSION_COST_MS,
+    PREVIEW_TRANSFORM_DEADLINE_MS,
+} from '../lib/document/transform/runner';
 import { exportDocument, runDocumentExport } from '../lib/export/export-document';
 import { collectExportMedia } from '../lib/export/media';
 import { getHome } from '../lib/home/get-home';
@@ -53,6 +59,19 @@ import { authedRequest, driveGet, driveGetList, drivePost, driveUpload, getTestC
 // preview cache keeps its dedupe/stale-while-revalidate contract on top of the runner.
 
 const GARBAGE = Buffer.from([0xde, 0xad, 0xbe, 0xef, 1, 2, 3, 4, 5, 6, 7, 8]);
+
+// The production limits — deadline plus admission cost — for the runner calls this
+// suite makes directly, in place of the route seams.
+const PREVIEW_OPTIONS = {
+    priority: 'foreground',
+    deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS,
+    admissionCostMs: PREVIEW_ADMISSION_COST_MS,
+} as const;
+const EXPORT_OPTIONS = {
+    priority: 'foreground',
+    deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+    admissionCostMs: EXPORT_IMPORT_ADMISSION_COST_MS,
+} as const;
 
 function sha256(data: ArrayBuffer | Buffer | string): string {
     return new Bun.CryptoHasher('sha256').update(data).digest('hex');
@@ -151,7 +170,7 @@ describe('document transform (eigensheets preview)', () => {
 
         const response = await documentTransformRunner.run(
             { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
-            { priority: 'foreground', deadlineMs: 30_000 },
+            PREVIEW_OPTIONS,
         );
         expect(previewBody(response)).toBe(direct.body);
         expect(response.ok && response.warnings).toEqual(direct.warnings);
@@ -170,7 +189,7 @@ describe('document transform (eigensheets preview)', () => {
         try {
             const response = await documentTransformRunner.run(
                 { kind: 'preview', documentType: 'eigensheets', source: await captureCollabSource(mount, path) },
-                { priority: 'foreground', deadlineMs: 30_000 },
+                PREVIEW_OPTIONS,
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
             expect(previewBody(response).length).toBeGreaterThan(0);
@@ -524,7 +543,7 @@ describe('document transform (xlsx import)', () => {
     test('Worker import equals the pre-move parse + recalc pipeline', async () => {
         const response = await documentTransformRunner.run(
             { kind: 'import', sourceFormat: 'xlsx', targetType: 'eigensheets', data: await buildImportFixture() },
-            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+            EXPORT_OPTIONS,
         );
         const snapshotJson = importSnapshot(response);
         expect(sha256(snapshotJson)).toBe(GOLDEN_IMPORT_SNAPSHOT_SHA256);
@@ -656,7 +675,7 @@ describe('document transform (eigendoc)', () => {
 
         const response = await documentTransformRunner.run(
             { kind: 'preview', documentType: 'eigendoc', mediaUrls, source: await captureCollabSource(mount, path) },
-            { priority: 'foreground', deadlineMs: 30_000 },
+            PREVIEW_OPTIONS,
         );
         const body = previewBody(response);
         expect(body).toBe(direct.body);
@@ -740,7 +759,7 @@ describe('document transform (eigendoc)', () => {
                 media,
                 source: await captureCollabSource(mount, path),
             },
-            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+            EXPORT_OPTIONS,
         );
         // Ownership moved to the Worker, and the bytes came back as a data URI.
         expect(media[0].data.byteLength).toBe(0);
@@ -758,7 +777,7 @@ describe('document transform (eigendoc)', () => {
                 media: await collectExportMedia(mount, path),
                 source: await captureCollabSource(mount, path),
             },
-            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+            EXPORT_OPTIONS,
         );
         // Turbodocx is externalized from the bundle — a real zip proves the Worker
         // resolved it at runtime and produced the document off-thread.
@@ -787,7 +806,7 @@ describe('document transform (eigenslides)', () => {
 
         const response = await documentTransformRunner.run(
             { kind: 'preview', documentType: 'eigenslides', mediaUrls, source: await captureCollabSource(mount, path) },
-            { priority: 'foreground', deadlineMs: 30_000 },
+            PREVIEW_OPTIONS,
         );
         const body = previewBody(response);
         expect(body).toBe(direct.body);
@@ -870,7 +889,7 @@ describe('document transform (eigenslides)', () => {
                     media: await collectExportMedia(mount, path),
                     source: await captureCollabSource(mount, path),
                 },
-                { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+                EXPORT_OPTIONS,
             );
             expect(response.ok && response.warnings).toContainEqual({ code: 'corrupt-blobs-skipped', count: 1 });
             // The skipped edit is gone, the base write still renders.
@@ -895,7 +914,7 @@ describe('document transform (docx import)', () => {
     async function runDocxImport(data: ArrayBuffer): Promise<DocumentTransformResponse> {
         return documentTransformRunner.run(
             { kind: 'import', sourceFormat: 'docx', targetType: 'eigendoc', data },
-            { priority: 'foreground', deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS },
+            EXPORT_OPTIONS,
         );
     }
 

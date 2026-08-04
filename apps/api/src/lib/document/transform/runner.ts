@@ -30,10 +30,16 @@ export const EXPORT_IMPORT_TRANSFORM_DEADLINE_MS = 120_000;
 // active Worker away from user-facing work.
 export const EXTRACT_TRANSFORM_DEADLINE_MS = 30_000;
 
+// What a job is expected to cost the queue: ~10–20× the worst measured end-to-end
+// time, deliberately decoupled from the deadlines above, which bound runaways rather
+// than typical wait. Extract-text jobs reuse the preview cost.
+export const PREVIEW_ADMISSION_COST_MS = 15_000;
+export const EXPORT_IMPORT_ADMISSION_COST_MS = 30_000;
+
 const MAX_ACTIVE_WORKERS = 1;
 const MAX_QUEUED_JOBS = 16;
 // A queued request holds its HTTP connection open, so foreground admission is
-// bounded by predicted wait (summed worst-case deadlines), not queue length alone.
+// bounded by predicted wait (summed admission costs), not queue length alone.
 const MAX_PREDICTED_WAIT_MS = 120_000;
 const CLOSE_GRACE_MS = 5_000;
 // Shown verbatim by useExportDocument's error toast — keep it human-readable.
@@ -45,6 +51,7 @@ const BUSY_MESSAGE = 'The server is busy, please try again in a moment';
 export type RunOptions = {
     priority: TransformPriority;
     deadlineMs: number;
+    admissionCostMs: number;
     captureMs?: number;
     prepMs?: number;
     signal?: AbortSignal;
@@ -55,13 +62,14 @@ type Job = {
     request: DocumentTransformRequest;
     priority: TransformPriority;
     deadlineMs: number;
+    admissionCostMs: number;
     captureMs?: number;
     prepMs?: number;
     enqueuedAt: number;
     resolve: (response: DocumentTransformResponse) => void;
 };
 
-type ActiveJob = { settle: (response: DocumentTransformResponse) => void; deadlineMs: number };
+type ActiveJob = { settle: (response: DocumentTransformResponse) => void; admissionCostMs: number };
 
 function errorResponse(code: TransformError['code'], message: string): DocumentTransformResponse {
     return { ok: false, error: { code, message } };
@@ -115,8 +123,8 @@ export class DocumentTransformRunner {
         if (this.closing) throw new ApiError(503, BUSY_MESSAGE);
         if (this.foreground.length + this.background.length >= this.maxQueued) throw new ApiError(503, BUSY_MESSAGE);
         if (opts.priority === 'foreground') {
-            let predictedWaitMs = this.foreground.reduce((sum, job) => sum + job.deadlineMs, 0);
-            for (const active of this.active.values()) predictedWaitMs += active.deadlineMs;
+            let predictedWaitMs = this.foreground.reduce((sum, job) => sum + job.admissionCostMs, 0);
+            for (const active of this.active.values()) predictedWaitMs += active.admissionCostMs;
             if (predictedWaitMs > this.maxPredictedWaitMs) throw new ApiError(503, BUSY_MESSAGE);
         }
 
@@ -130,6 +138,7 @@ export class DocumentTransformRunner {
                 request,
                 priority: opts.priority,
                 deadlineMs: opts.deadlineMs,
+                admissionCostMs: opts.admissionCostMs,
                 captureMs: opts.captureMs,
                 prepMs: opts.prepMs,
                 enqueuedAt: Date.now(),
@@ -206,7 +215,7 @@ export class DocumentTransformRunner {
             job.resolve(response);
             this.startNext();
         };
-        this.active.set(job.id, { settle, deadlineMs: job.deadlineMs });
+        this.active.set(job.id, { settle, admissionCostMs: job.admissionCostMs });
 
         const timer = setTimeout(
             () => settle(errorResponse('timeout', 'Document transform timed out')),

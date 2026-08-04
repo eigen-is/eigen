@@ -20,8 +20,10 @@ import type {
 } from './protocol';
 import {
     documentTransformRunner,
+    EXPORT_IMPORT_ADMISSION_COST_MS,
     EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
     EXTRACT_TRANSFORM_DEADLINE_MS,
+    PREVIEW_ADMISSION_COST_MS,
     PREVIEW_TRANSFORM_DEADLINE_MS,
     type RunOptions,
     type TransformPriority,
@@ -37,21 +39,24 @@ import {
 // There is deliberately no main-thread fallback: a runner 503 and controlled
 // document errors keep their HTTP status, every other failure throws.
 
-// What a caller still decides; the deadline belongs to the operation, and the capture
-// time is measured here. prepMs: main-thread media preparation time, measured by the
-// caller's wrapper — logged with the job so a fast Worker behind slow preparation
-// stays visible.
-type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'captureMs'> & {
+// What a caller still decides; the limits below belong to the operation, and the
+// capture time is measured here. prepMs: main-thread media preparation time, measured
+// by the caller's wrapper — logged with the job so a fast Worker behind slow
+// preparation stays visible.
+type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionCostMs' | 'captureMs'> & {
     priority?: TransformPriority;
 };
 
+// The operation's kill deadline paired with what it costs foreground admission.
+type TransformLimits = Pick<RunOptions, 'deadlineMs' | 'admissionCostMs'>;
+
 async function runTransformRequest(
     request: DocumentTransformRequest,
-    deadlineMs: number,
+    limits: TransformLimits,
     opts: TransformOptions & { captureMs?: number },
 ): Promise<TransformResult> {
     const { priority = 'foreground', ...rest } = opts;
-    const response = await documentTransformRunner.run(request, { ...rest, priority, deadlineMs });
+    const response = await documentTransformRunner.run(request, { ...rest, ...limits, priority });
     if (!response.ok) {
         if (response.error.status) throw new ApiError(response.error.status, response.error.message);
         const what =
@@ -66,12 +71,12 @@ async function runDocumentTransform(
     mount: Mount,
     drivePath: DrivePath,
     job: CollabTransformJob,
-    deadlineMs: number,
+    limits: TransformLimits,
     opts: TransformOptions,
 ): Promise<TransformResult> {
     const captureStart = performance.now();
     const source = await captureCollabSource(mount, drivePath);
-    return runTransformRequest({ ...job, source }, deadlineMs, {
+    return runTransformRequest({ ...job, source }, limits, {
         ...opts,
         captureMs: performance.now() - captureStart,
     });
@@ -90,7 +95,7 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
 }
 
 // Text results (preview bodies, indexable content) and binary results (exports). The
-// job kind decides which the Worker returns, and each seam owns the deadline its
+// job kind decides which the Worker returns, and each seam owns the limits its
 // operation runs under. The runner validated the result pairs with the request
 // (protocol.ts's resultMatchesRequest), so these narrow instead of re-checking.
 export async function runTransformToText(
@@ -103,7 +108,7 @@ export async function runTransformToText(
         mount,
         drivePath,
         job,
-        PREVIEW_TRANSFORM_DEADLINE_MS,
+        { deadlineMs: PREVIEW_TRANSFORM_DEADLINE_MS, admissionCostMs: PREVIEW_ADMISSION_COST_MS },
         opts,
     )) as PreviewResult;
     return result.body;
@@ -119,7 +124,7 @@ export async function runTransformToExtractedText(
         mount,
         drivePath,
         job,
-        EXTRACT_TRANSFORM_DEADLINE_MS,
+        { deadlineMs: EXTRACT_TRANSFORM_DEADLINE_MS, admissionCostMs: PREVIEW_ADMISSION_COST_MS },
         opts,
     )) as ExtractTextResult;
     return result.text;
@@ -135,7 +140,7 @@ export async function runTransformToBytes(
         mount,
         drivePath,
         job,
-        EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+        { deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS, admissionCostMs: EXPORT_IMPORT_ADMISSION_COST_MS },
         opts,
     )) as ExportWorkerResult;
     return Buffer.from(result.data);
@@ -151,7 +156,7 @@ export async function runImportToSnapshotJson(
 ): Promise<string> {
     const result = (await runTransformRequest(
         { ...job, data },
-        EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+        { deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS, admissionCostMs: EXPORT_IMPORT_ADMISSION_COST_MS },
         opts,
     )) as SheetsImportWorkerResult;
     return new TextDecoder().decode(result.snapshotJson);
@@ -164,7 +169,7 @@ export async function runImportToDocumentUpdate(
 ): Promise<DocImportWorkerResult> {
     return (await runTransformRequest(
         { ...job, data },
-        EXPORT_IMPORT_TRANSFORM_DEADLINE_MS,
+        { deadlineMs: EXPORT_IMPORT_TRANSFORM_DEADLINE_MS, admissionCostMs: EXPORT_IMPORT_ADMISSION_COST_MS },
         opts,
     )) as DocImportWorkerResult;
 }
