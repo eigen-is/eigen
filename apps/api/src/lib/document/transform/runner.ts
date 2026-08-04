@@ -279,8 +279,9 @@ export class DocumentTransformRunner {
             const outputBytes = response.ok ? resultBytes(response.result) : 0;
             const warnings = response.ok && response.warnings.length > 0 ? response.warnings : null;
             // The Worker stamps transform-only time, so the rest of the job is spawn,
-            // module evaluation and messaging — the one-shot cost worth watching.
-            const startupMs = transformMs === undefined ? -1 : Math.round(totalMs - transformMs);
+            // module evaluation and messaging — the one-shot cost worth watching. Clamped:
+            // totalMs is whole-ms while the Worker's stamp is fractional, and -1 is taken.
+            const startupMs = transformMs === undefined ? -1 : Math.max(0, Math.round(totalMs - transformMs));
             console.log(
                 `[transform] job=${job.id} kind=${job.request.kind} type=${requestType(job.request)} ` +
                     `format=${requestFormat(job.request)} priority=${job.priority} outcome=${outcome} ` +
