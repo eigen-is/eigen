@@ -108,6 +108,7 @@ function requestType(request: DocumentTransformRequest): string {
 export class DocumentTransformRunner {
     private readonly workerUrl: string;
     private readonly maxQueued: number;
+    private readonly maxQueuedBackground: number;
     private readonly maxPredictedWaitMs: number;
     private readonly closeGraceMs: number;
     private foreground: Job[] = [];
@@ -117,10 +118,17 @@ export class DocumentTransformRunner {
     private closing = false;
 
     constructor(
-        opts: { workerUrl?: string; maxQueued?: number; maxPredictedWaitMs?: number; closeGraceMs?: number } = {},
+        opts: {
+            workerUrl?: string;
+            maxQueued?: number;
+            maxQueuedBackground?: number;
+            maxPredictedWaitMs?: number;
+            closeGraceMs?: number;
+        } = {},
     ) {
         this.workerUrl = opts.workerUrl ?? new URL('./worker', import.meta.url).href;
         this.maxQueued = opts.maxQueued ?? MAX_QUEUED_JOBS;
+        this.maxQueuedBackground = opts.maxQueuedBackground ?? MAX_QUEUED_BACKGROUND;
         this.maxPredictedWaitMs = opts.maxPredictedWaitMs ?? MAX_PREDICTED_WAIT_MS;
         this.closeGraceMs = opts.closeGraceMs ?? CLOSE_GRACE_MS;
     }
@@ -131,7 +139,7 @@ export class DocumentTransformRunner {
     assertAdmissible(priority: TransformPriority): void {
         if (this.closing) throw new ApiError(503, BUSY_MESSAGE);
         if (this.foreground.length + this.background.length >= this.maxQueued) throw new ApiError(503, BUSY_MESSAGE);
-        if (priority === 'background' && this.background.length >= MAX_QUEUED_BACKGROUND) {
+        if (priority === 'background' && this.background.length >= this.maxQueuedBackground) {
             throw new ApiError(503, BUSY_MESSAGE);
         }
         if (priority === 'foreground') {
