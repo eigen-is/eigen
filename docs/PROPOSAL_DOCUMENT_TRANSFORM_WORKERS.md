@@ -106,6 +106,13 @@
 > - § Build's built-output smoke check resolved to source: production executes `src/index.ts` (the bundle
 >   was retired from the deploy path on main, 2026-08-04; `buildfordocker` remains a Worker-graph
 >   verification tool), so the automated suite exercises exactly the artifact that ships.
+>
+> **Post-ship amendment (2026-08-04, `preview-no-recalc`).** Preview and `extract-text` reads no longer
+> recalc (`readSheetsFromDoc(doc, { recalc: false })`): a legacy never-computed workbook (formula cells,
+> no `calcChain` — converted before the import Worker persisted computed values) costs a ~39s full recalc
+> that the 30s preview/extract deadline killed on every attempt, looping forever on eigen.is. Stored
+> values serve as-is (valueless formula cells blank); export stays the only recalc'ing read; preview
+> golden re-pinned. See SHEETS.md § Server-side recalc.
 
 ## Summary
 

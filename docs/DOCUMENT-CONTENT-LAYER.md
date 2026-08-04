@@ -69,11 +69,15 @@ A doc with pending ops but no snapshot (browser killed before the first flush) r
 and BE. An op batch that cannot apply is rolled back and skipped with a warning rather than
 failing the whole read; the doc stays loadable with everything else applied.
 
-After replay, `readSheetsFromDoc` runs a **gated server-side recalc**: `sheetsNeedRecalc()`
-(formula cells but no `calcChain`) decides whether to hand the sheets to `recalcSheets()`. This is
-why an xlsx import that was never opened in an editor still exports and previews with values. A
-live-edited doc already persists fresh `v`/`m` through its ops, so it pays nothing. A recalc that
-throws falls back to the replayed values — an export must never 500 because recalc hiccuped.
+After replay, `readSheetsFromDoc` can run a **gated server-side recalc**: `sheetsNeedRecalc()`
+(formula cells but no `calcChain`) decides whether to hand the sheets to `recalcSheets()`. Only the
+export read opts in — preview and search extract pass `{ recalc: false }` and serve replayed values
+as-is, because a legacy never-computed workbook costs an unbounded recalc (~39s measured), past
+their 30s Worker deadline (SHEETS.md § Server-side recalc). This is why an xlsx import that was
+never opened in an editor still exports with values (the import itself persists computed values +
+`calcChain`, so post-import docs never fire the gate anywhere). A live-edited doc already persists
+fresh `v`/`m` through its ops, so it pays nothing. A recalc that throws falls back to the replayed
+values — an export must never 500 because recalc hiccuped.
 
 ## Writers are unsafe against live editors
 

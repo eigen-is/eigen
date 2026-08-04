@@ -104,9 +104,10 @@ export async function extractCollabText(
         }
         case 'eigensheets': {
             const { readSheetsFromDoc } = await import('../document/sheets');
-            const { sheets, recalcError } = readSheetsFromDoc(doc);
-            const warnings: TransformWarning[] = recalcError ? [{ code: 'recalc-failed', message: recalcError }] : [];
-            return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings };
+            // No recalc: the index serves stored values — a legacy never-computed
+            // workbook must not cost a full recalc inside the 30s extract deadline.
+            const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+            return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings: [] };
         }
     }
 }

@@ -39,8 +39,8 @@ function textCell(text: string) {
     return { v: text, m: text, ct: { fa: 'General', t: 'g' } };
 }
 
-// `f` without `v`/`m` and no sheet calcChain → sheetsNeedRecalc fires, so every
-// read runs the server-side recalc path this program moves off-thread.
+// `f` without `v`/`m` and no sheet calcChain → sheetsNeedRecalc fires. Only the
+// export read recalcs these; preview and extract serve them uncomputed (empty).
 function formulaCell(formula: string) {
     return { f: formula };
 }
