@@ -584,7 +584,7 @@ import { getSharedDrive } from "../drive";
 import { resolveCalendar } from "../calendar/get-calendar";
 import { requireOwnerAccess } from "../core/access";
 import { readDocContent, readSheetContent, readSlidesContent,
-         readSheetCellValue, readSheetRange } from "../document";
+         readSheetCellValue, readSheetRange } from "./sdk-readers";
 
 const SDK_ERROR = {
     NOT_FOUND: "NOT_FOUND",
@@ -615,7 +615,7 @@ const SDK_METHODS: Record<string, SDKMethod<unknown>> = {
         params: ownerScoped.extend({ mountId: z.string(), pathId: z.string().optional() }),
         handler: async (user, p) => {
             const drive = await getSharedDrive(p.ownerId, user);
-            return drive.list(p.mountId, p.pathId);
+            return drive.getFolderContents(p.mountId, p.pathId);
         },
     },
     "drive.getPath": {
@@ -631,7 +631,7 @@ const SDK_METHODS: Record<string, SDKMethod<unknown>> = {
         params: ownerScoped.extend({ mountId: z.string(), pathId: z.string() }),
         handler: async (user, p) => {
             const drive = await getSharedDrive(p.ownerId, user);
-            return drive.readFile(p.mountId, p.pathId);
+            return drive.downloadFile(p.mountId, p.pathId);
         },
     },
 
@@ -1259,14 +1259,10 @@ Progress events broadcast to all the user's open SSE connections. Multiple sideb
 ## Backend Structure
 
 ```
-apps/api/src/lib/document/                  # Document Content Layer (shared by SDK, export, import, preview)
-  doc-reader.ts         # readDocContent(ownerId, mountId, pathId) — Yjs → ProseMirror JSON + plain text
-  doc-writer.ts         # writeDocContent(...) — for SDK writes (Phase 2) and import
-  sheets-reader.ts      # readSheetContent(...) — Yjs → SheetContent (uses Yjs ops layer below)
-  sheets-writer.ts      # writeSheetContent(...) / setCellValue(...) — emits ops via Yjs ops layer
-  slides-reader.ts      # readSlidesContent(...) — Yjs → DeckData
-  slides-writer.ts      # writeSlidesContent(...)
-  a1-notation.ts        # parseA1Notation() — A1 → numeric row/col conversion (real lexer)
+apps/api/src/lib/document/                  # Document Content Layer — exists as built (doc.ts / sheets.ts /
+                                            # slides.ts / media.ts: *FromDoc readers + writers over a
+                                            # materialized Y.Doc, called inside the document-transform
+                                            # Worker). See DOCUMENT-CONTENT-LAYER.md; no changes proposed
 
 apps/api/src/lib/scripts/
   scripts.ts            # Scripts domain class (CRUD, execution lifecycle)
@@ -1276,6 +1272,11 @@ apps/api/src/lib/scripts/
   runner.js             # Deno worker (Proxy SDK + console capture + script execution) — plain JS
   sdk-handler.ts        # SDK_METHODS registry — Zod schemas + delegation to getSharedDrive /
                         # resolveCalendar / requireOwnerAccess + ApiError → SDK error code mapping
+  sdk-readers.ts        # readDocContent / readSheetContent / readSlidesContent + cell/range helpers —
+                        # ACL via getSharedDrive, then captureCollabSource + a transform-Worker read
+                        # over the as-built *FromDoc readers (see § Document Content Layer)
+  sdk-writers.ts        # Phase 2 — live-safe SDK writes (op-push via yjs-ops + drive.getCollabDocument)
+  a1-notation.ts        # parseA1Notation() — A1 → numeric row/col conversion (real lexer)
   proxy-fetch.ts        # net.fetch handler — checks manifest domain allowlist
   sse-events.ts         # SSE event builders for script domain
 
@@ -1287,8 +1288,8 @@ packages/lib/src/types/
   document.ts           # Shared content types: DocContent, SheetContent, SlidesContent, CellData
 
 packages/lib/src/sheets/
-  yjs-ops.ts            # Pure ops module — applyOpsToSheets(), pushOpsToYDoc(), readSheetsFromYDoc()
-                        # Used by both sheet client AND backend sheets-writer
+  yjs-ops.ts            # Exists (opToPatchOnSheets — the shared replay step under readSheetsFromDoc);
+                        # gains pushOpsToYDoc() + the op builders for Phase 2 backend writes
 
 packages/lib/src/core/scripts/
   hooks/
@@ -1413,27 +1414,33 @@ event.
 ### The Problem
 
 `drive.readFile()` returns raw file data — useless for Yjs-backed documents. A scripting SDK that can only
-read binary Yjs blobs is not a real API. Today, `loadEigendocContent()` (in the export system) does this for
-docs, `loadSlidesContent()` for slides, and `loadSheetsContent()` for sheets — three separate readers in
-`apps/api/src/lib/export/`. The Document Content Layer consolidates them into a single, well-tested module
-with consistent addressing.
+read binary Yjs blobs is not a real API. The consolidation this section originally proposed has since been
+built by the document-transform-workers program: `apps/api/src/lib/document/` holds one per-type module
+(`readEigendocFromDoc`, `readSheetsFromDoc`, `readDeckFromDoc`, plus the doc/sheets writers), and export,
+preview, import round-trips and search extraction all read through it inside the document-transform Worker —
+callers capture compressed blobs (`captureCollabSource`) and the Worker materializes them
+([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)). What scripting still needs is the SDK-facing
+surface on top: `(user, ownerId, mountId, pathId)` addressing with ACL, and shaping into the content types
+below.
 
 ### Architecture
 
 ```
-SDK / Export / Preview / Import / Search
-          ↓
-Document Content Layer (backend)
-  readDocContent() / readSheetContent() / readSlidesContent()
-  writeDocContent() / writeSheetContent() / writeSlidesContent()  (Phase 2)
-          ↓
-Yjs database (data.db) → yjs-loader.ts → Y.Doc → structured content
+Scripting SDK
+      ↓
+sdk-readers.ts — readDocContent() / readSheetContent() / readSlidesContent()      (proposed)
+      ↓
+getSharedDrive(ownerId, user) → captureCollabSource() → document-transform Worker
+      ↓
+materializeYjsState → readEigendocFromDoc / readSheetsFromDoc / readDeckFromDoc   (as built —
+                      also used by export, preview, import round-trips and search extraction)
 ```
 
-All readers and writers take `(user, ownerId, mountId, pathId)` and route through `getSharedDrive(ownerId, user)`
-internally — the same ACL path that drive and editor routes already use. This means scripts (and the export,
-preview, and import systems once they migrate) automatically respect cross-user shares: a user can read a
-document that another user has shared with them, the same way they can in the UI.
+The SDK readers take `(user, ownerId, mountId, pathId)` and route through `getSharedDrive(ownerId, user)`
+internally — the same ACL path that drive and editor routes already use — then read through the transform
+seam (`run-transform.ts`) the way search extraction's `extract-text` op does (scripting adds its own read
+op), so scripts respect cross-user shares and the runner's admission control alike. Export, preview, import
+and search already sit on the as-built layer; this proposal doesn't touch them.
 
 ### Shared Content Types
 
@@ -1480,41 +1487,36 @@ type DocumentContent = DocContent | SheetContent | SlidesContent;
 ### Document Readers
 
 All readers take `(user, ownerId, mountId, pathId)` and resolve via `getSharedDrive(ownerId, user)` so ACL is
-consistent with the route layer. The existing `loadEigendocContent()`
-(`apps/api/src/lib/export/doc/content.ts`) and `loadSlidesContent()` (`apps/api/src/lib/export/slides/content.ts`)
-are refactored from "open mount + load Yjs + parse" into thin adapters around the new readers — same logic,
-share-aware addressing.
+consistent with the route layer. They are thin compositions over the as-built content layer — capture on the
+main thread, materialize + read in the document-transform Worker, shape into the content types above. The
+Phase-4 deletion of the Mount-side `read*Content` loaders was deliberate (a heavy doc blocked the main thread
+for hundreds of ms); these SDK readers must not reintroduce a main-thread Yjs materialization.
 
 ```typescript
-// apps/api/src/lib/document/doc-reader.ts
+// apps/api/src/lib/scripts/sdk-readers.ts
 async function readDocContent(
     user: User, ownerId: string, mountId: string, pathId: string,
 ): Promise<DocContent> {
     // 1. getSharedDrive(ownerId, user) — Drive | SharedDrive, ACL enforced
-    // 2. drive.getMount(mountId) → mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id)
-    // 3. loadYjsState() (existing yjs-loader.ts)
-    // 4. ydoc.getXmlFragment('default') → yXmlFragmentToProsemirrorJSON()
-    // 5. Plain text from PM JSON
-    // 6. Build media map from mount.getChildByName(pathId, 'media')
+    // 2. captureCollabSource(mount, path) — short compressed-blob copy, main thread
+    // 3. Transform-Worker read: materializeYjsState → readEigendocFromDoc(ydoc) → PM JSON
+    // 4. Plain text from PM JSON
+    // 5. Media map via listDocumentMedia() (main thread)
 }
 
-// apps/api/src/lib/document/sheets-reader.ts
 async function readSheetContent(
     user: User, ownerId: string, mountId: string, pathId: string,
 ): Promise<SheetContent> {
-    // 1. getSharedDrive(ownerId, user) → mount.openDatabase + loadYjsState
-    // 2. readSheetsFromYDoc(ydoc) — uses the shared Yjs ops module (see below)
-    // 3. Map Sheet[] → SheetContent.sheets[].cells (sparse, non-empty only)
-    // 4. Optionally recalculate formulas via headless FormulaEngine (in place — see SHEETS.md)
+    // 1. Same capture path; readSheetsFromDoc(ydoc) in the Worker — snapshot + ops replay
+    //    and server-side recalc are already wired there (SHEETS.md § Server-side recalc)
+    // 2. Map Sheet[] → SheetContent.sheets[].cells (sparse, non-empty only)
 }
 
-// apps/api/src/lib/document/slides-reader.ts
 async function readSlidesContent(
     user: User, ownerId: string, mountId: string, pathId: string,
 ): Promise<SlidesContent> {
-    // 1. getSharedDrive(ownerId, user) → mount.openDatabase + loadYjsState
-    // 2. ydoc.getMap('slides'), ydoc.getMap('objects'), ydoc.getArray('slideOrder')
-    // 3. yMapToSlideObject() (existing helper) → typed SlideObject[]
+    // 1. Same capture path; readDeckFromDoc(ydoc) in the Worker → DeckData
+    // 2. Media map via listDocumentMedia() (main thread)
 }
 ```
 
@@ -1522,9 +1524,9 @@ async function readSlidesContent(
 caller passes the author's `User` object, fetched via the auth layer at trigger registration time. Every
 reader and writer always has a `User` in scope; there is no "headless" code path with a different ACL.
 
-**Sheets formula recalculation**: tracked in [SHEETS.md](SHEETS.md). The headless `FormulaEngine` exists in
-`packages/sheet/src/engine/` with `numfmt` integrated. Wiring `engine.recalculateAll()` into
-`readSheetContent()` is a separate task that benefits all consumers automatically.
+**Sheets formula recalculation**: already wired — `readSheetsFromDoc` recalcs server-side when a doc needs it
+(gated on `sheetsNeedRecalc`, falling back to replayed values on failure; see [SHEETS.md](SHEETS.md)
+§ Server-side recalc). Script reads inherit it for free.
 
 **Sheets A1 notation**: parsed by `a1-notation.ts` with a real lexer (not a regex). Handles sheet names with
 quotes, absolute refs (`$A$1`), open ranges (`A:A`, `1:1`), and tab-prefixed ranges (`Sheet1!A1:Z`).
@@ -1544,25 +1546,12 @@ Backend writes from the script SDK must use the **same ops mechanism**, not a sn
 - The sheet client's pending ops are wiped server-side
 - Live observers don't see the script's edit as a discrete change
 
-The fix is a shared module used by both sides:
+The read half of this module exists as built: `opToPatchOnSheets()` (`packages/lib/src/sheets/yjs-ops.ts`)
+is the pure replay step, and `replaySheetsOps()` (`packages/sheet/src/engine/replay-ops.ts`) drives it for
+both the FE's initial load and the backend's `readSheetsFromDoc`. Phase 2 adds the write half next to it:
 
 ```typescript
-// packages/lib/src/sheets/yjs-ops.ts
-
-import * as Y from 'yjs';
-import { applyOpsToSheets } from '@workspace/sheet/state';  // pure function, extracted from Workbook
-import type { Op, Sheet } from '@workspace/sheet';
-
-// Read the current Sheet[] state from a Y.Doc by replaying snapshot + pending ops
-export function readSheetsFromYDoc(doc: Y.Doc): Sheet[] {
-    const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
-    let sheets: Sheet[] = snapshot ? JSON.parse(snapshot) : [DEFAULT_SHEET];
-    const ops = doc.getArray<Op[]>('ops').toArray();
-    for (const opBatch of ops) {
-        sheets = applyOpsToSheets(sheets, opBatch);
-    }
-    return sheets;
-}
+// packages/lib/src/sheets/yjs-ops.ts — additions
 
 // Push an op batch onto the Y.Doc's ops array — same mechanism the frontend uses
 export function pushOpsToYDoc(doc: Y.Doc, ops: Op[]): void {
@@ -1579,26 +1568,22 @@ export function buildSetCellRangeOp(
 ): Op[] { /* … */ }
 ```
 
-`applyOpsToSheets()` is extracted from sheet's existing op-application logic
-(currently embedded in `WorkbookInstance.applyOp` in `packages/sheet/src/components/Workbook/api.ts`)
-into a pure function that takes `Sheet[]` and returns `Sheet[]`. The Workbook component continues to use it,
-but now the backend writer can call the same logic.
-
 The backend writer becomes:
 
 ```typescript
-// apps/api/src/lib/document/sheets-writer.ts
+// apps/api/src/lib/scripts/sdk-writers.ts
 import { pushOpsToYDoc, buildSetCellValueOp } from '@workspace/lib/sheets/yjs-ops';
 
 export async function setCellValue(
     user: User, ownerId: string, mountId: string, pathId: string,
     sheetIndex: number, row: number, col: number, value: unknown,
 ): Promise<void> {
-    // ACL via the same path as drive routes — write permission is part of SharedDrive
     const drive = await getSharedDrive(ownerId, user);
-    // Use the live CollabDocument if editors are connected; otherwise open a fresh Y.Doc
-    // tied to data.db via the existing collab infrastructure.
-    const collabDoc = await getOrLoadCollabDocument(drive, mountId, pathId);
+    // getCollabDocument re-checks read only — a write needs its own explicit check
+    // first, same shape as the import commit (import-document.ts). It returns the
+    // live document if editors are connected, loading it otherwise.
+    if (!(await drive.canWrite(mountId, pathId, user))) throw new ApiError(403, 'No write permission');
+    const collabDoc = await drive.getCollabDocument(mountId, pathId);
     const ops = buildSetCellValueOp(sheetIndex, row, col, value);
     pushOpsToYDoc(collabDoc.doc, ops);
     // CollabDocument's existing update listener broadcasts to connected WebSocket clients
@@ -1615,17 +1600,22 @@ This means:
 - **One mental model** — the FE op handler and the BE writer both call `pushOpsToYDoc(doc, ops)`
 
 The same shared-ops pattern applies to docs (TipTap/y-prosemirror has `prosemirrorJSONToYDoc` for full-doc
-operations and `Y.applyUpdate(doc, update)` for incremental — these are already used in
-`apps/api/src/lib/import/doc/writer.ts`) and slides (Y.Map mutations on `slides`/`objects`/`slideOrder` —
-straightforward Yjs ops, no separate ops array).
+operations and `Y.applyUpdate(doc, update)` for incremental — both already used by `writeEigendocToYjs` /
+`writeEigendocUpdateToYjs` in `apps/api/src/lib/document/doc.ts`) and slides (Y.Map mutations on
+`slides`/`objects`/`slideOrder` — straightforward Yjs ops, no separate ops array).
 
 ### Document Writers (Phase 2)
 
+Import-grade writers exist as built (`writeEigendocToYjs` / `writeEigendocUpdateToYjs` in
+`lib/document/doc.ts`, `writeSheetsToYjs` / `writeSheetsSnapshotToYjs` in `lib/document/sheets.ts`), but they
+snapshot-replace and wipe pending ops — unsafe while editors are connected
+([DOCUMENT-CONTENT-LAYER.md § Writers are unsafe against live editors](DOCUMENT-CONTENT-LAYER.md#writers-are-unsafe-against-live-editors)).
+The SDK writers are the live-safe layer the scripting platform adds:
+
 ```typescript
-// apps/api/src/lib/document/doc-writer.ts
+// apps/api/src/lib/scripts/sdk-writers.ts
 async function writeDocContent(user: User, ownerId: string, mountId: string, pathId: string, content: DocContent) { /* … */ }
 
-// apps/api/src/lib/document/sheets-writer.ts
 async function writeSheetContent(user: User, ownerId: string, mountId: string, pathId: string, content: SheetContent) { /* … */ }
 
 async function setCellValue(user: User, ownerId: string, mountId: string, pathId: string,
@@ -1634,7 +1624,6 @@ async function setCellValue(user: User, ownerId: string, mountId: string, pathId
 async function setCellRange(user: User, ownerId: string, mountId: string, pathId: string,
     sheetIndex: number, row: number, col: number, values: unknown[][]) { /* … */ }
 
-// apps/api/src/lib/document/slides-writer.ts
 async function writeSlidesContent(user: User, ownerId: string, mountId: string, pathId: string, content: SlidesContent) { /* … */ }
 ```
 
@@ -1698,13 +1687,13 @@ emit ops through the same shared module. Live editors connected at the time obse
 | Consumer | Doc reader | Sheet reader | Slides reader | Writers | Today |
 |----------|-----------|-------------|--------------|---------|-------|
 | **Scripting SDK** | `getText`, `getJson` | `getCell`, `getRange`, `getSheetData` | `getDeck` | Phase 2 | Built in Phase 1 (read), Phase 2 (write) |
-| **Export** (DOCX, PDF, HTML) | Yes | Yes | Yes | — | Docs + Slides + Sheets exist (`loadEigendocContent`, `loadSlidesContent`, `loadSheetsContent`) |
-| **Preview** (HTML rendering) | Yes | Yes | Yes | — | Same as export |
-| **Import** (DOCX, XLSX, PPTX) | — | — | — | Yes | Doc writer + sheet writer exist (`apps/api/src/lib/import/`) |
-| **Search indexing** (future) | Yes | Yes | Yes | — | No |
+| **Export** (DOCX, PDF, HTML) | Yes | Yes | Yes | — | As built — `lib/export/<type>/transform.ts` calls the `*FromDoc` readers in the Worker |
+| **Preview** (HTML rendering) | Yes | Yes | Yes | — | As built — `lib/preview/eigen<type>-render.ts` |
+| **Import** (DOCX, XLSX, PPTX) | — | — | — | Yes | As built — `lib/import/import-document.ts` commits via the `lib/document/` writers |
+| **Search indexing** | Yes | Yes | Yes | — | As built — the `extract-text` op (`lib/search/extract-render.ts`) |
 
-Existing callers of `loadEigendocContent()`, `loadSheetsContent()`, and `loadSlidesContent()` in the export
-system become thin wrappers around `readDocContent()`, `readSheetContent()`, and `readSlidesContent()`.
+Export, preview, import and search already consume the as-built layer; the scripting SDK row is the only
+new consumer this proposal adds.
 
 ## Implementation Phases
 
@@ -1727,22 +1716,18 @@ The minimum that proves the full pipeline end-to-end, with read-only SDK and a w
 - Routes: CRUD, execute, cancel, list
 - Personal scope only
 
-**Document Content Layer:**
-- `readDocContent(ownerId, mountId, pathId)` — refactored from existing `loadEigendocContent()`
-- `readSheetContent(ownerId, mountId, pathId)` — refactored from existing `loadSheetsContent()` and integrated
-  with the new shared Yjs ops module
-- `readSlidesContent(ownerId, mountId, pathId)` — refactored from existing `loadSlidesContent()`
+**Document content access** (the content layer itself exists as built — see
+[DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)):
+- `sdk-readers.ts` — `readDocContent` / `readSheetContent` / `readSlidesContent`: ACL via `getSharedDrive`,
+  then `captureCollabSource` + a transform-Worker read over the as-built `*FromDoc` readers
 - `a1-notation.ts` — A1 notation parser (real lexer, not regex)
 - Shared types: `DocContent`, `SheetContent`, `SlidesContent`, `CellData` in `packages/lib/src/types/document.ts`
-- Existing export-system readers become thin wrappers around the new readers
 
-**Shared Sheets Yjs Ops Module (`packages/lib/src/sheets/yjs-ops.ts`):**
-- `readSheetsFromYDoc(doc)` — replay snapshot + ops, used by both FE and BE
+**Shared Sheets Yjs Ops Module (`packages/lib/src/sheets/yjs-ops.ts`)** (the read/replay half exists as
+built — `opToPatchOnSheets` + `replaySheetsOps`):
 - `pushOpsToYDoc(doc, ops)` — push an op batch, used by both FE and BE (Phase 2 BE writes)
 - `buildSetCellValueOp`, `buildSetCellRangeOp` — high-level op builders (used in Phase 2 BE writes; defined
   in Phase 1 alongside the read path so the module is one cohesive piece)
-- Extract `applyOpsToSheets(sheets, ops)` from `WorkbookInstance.applyOp` into a pure function and have the
-  Workbook component delegate to it
 
 **SDK (read-only):**
 - `eigen.docs.getActive()` / `eigen.docs.getById({...})` — methods: `getText`, `getJson`
@@ -1780,8 +1765,8 @@ The minimum that proves the full pipeline end-to-end, with read-only SDK and a w
   `sheets.setCellRange`, `slides.insertSlide` — with quota enforcement and ACL validation, all routed
   through the same Yjs ops modules used by live editors
 - **DocumentWriters**: `writeDocContent()`, `writeSheetContent()`, `writeSlidesContent()`
-- **File import**: DOCX → `DocContent` → `writeDocContent()`, XLSX → `SheetContent` → `writeSheetContent()`,
-  PPTX → `SlidesContent` → `writeSlidesContent()`
+- **File import**: DOCX and XLSX shipped as built (`lib/import/` through the transform Worker); what remains
+  is PPTX → `SlidesContent` → `writeSlidesContent()`
 - **User-scoped properties** — per-user config for shared scripts (like Google's `UserProperties`)
 - Team/org script scope (Scripts domain in TeamHome/OrgHome)
 - Installation/permission approval flow
@@ -1799,7 +1784,6 @@ The minimum that proves the full pipeline end-to-end, with read-only SDK and a w
 - Execution metrics and quota enforcement
 - Script versioning with rollback UI
 - Script module/import mechanism (bundling or import maps)
-- Sheets export (HTML, XLSX) via `readSheetContent()` + format-specific serializers
 - Custom sheet functions (batch evaluation of `=EIGEN_FUNC()` cells)
 - Public marketplace / script registry — only viable after Phase 3 OS-level isolation lands
 
