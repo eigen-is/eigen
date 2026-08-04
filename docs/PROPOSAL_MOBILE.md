@@ -60,6 +60,8 @@ Contracts for the shipped pane live in [COMMENTS.md](COMMENTS.md) (panel hosting
   390×420 — bar reads "1 of 1", the document does not move). Highlights and the count are correct.
   Fix seam: a `surfaceHidden` prop on `DocSearchProvider` that parks the pending reveal and replays it
   from a layout effect once the surface is visible again.
+- Same family: Mod+F while the pane covers an already open find session only refocuses the
+  hidden input, so nothing visible happens. Closing the session when the pane opens fixes it.
 - **Stickies Activity below 768px**: stickies mounts the shared `PanelColumn` behind `!isMobile` and
   gates its toolbar toggle the same way, so mobile Activity is unreachable. Giving it the mobile pane
   means adopting the other three editors' shape: hide the board under a `hidden` wrapper and pass
