@@ -6,7 +6,7 @@ import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
 import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
 import { ImageResizeHandles } from '@workspace/ui/components/layout/media/image-resize-handles';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps) {
     const imageRef = useRef<HTMLImageElement>(null);
@@ -26,6 +26,12 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     const isEditable = editor.isEditable;
     const layout = (node.attrs.layout || 'block') as FigureLayout;
     const isWrapping = layout === 'wrap-left' || layout === 'wrap-right';
+
+    // Re-arm the one-shot loader when the source changes so the author's width reset recomputes the ratio.
+    useEffect(() => {
+        imageProcessed.current = false;
+        setAspectRatio(null);
+    }, [mediaName]);
 
     const getMaxWidth = useCallback(() => {
         const container = containerRef.current?.closest('[data-document]');

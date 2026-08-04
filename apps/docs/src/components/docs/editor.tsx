@@ -519,14 +519,16 @@ const TiptapEditor = ({
                 path.mountId,
                 item.mediaName,
             );
-            if (result && editorRef.current) {
+            // Re-upload failed: skip insertion, don't fall through to the source doc's unresolvable mediaName.
+            if (!result) return;
+            if (editorRef.current) {
                 editorRef.current
                     .chain()
                     .focus()
                     .setFigure({ mediaName: result.mediaName, width, caption: item.caption })
                     .run();
-                return;
             }
+            return;
         }
         if (editorRef.current) {
             editorRef.current

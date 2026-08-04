@@ -553,9 +553,11 @@ function SlideEditorInner({
                                 path.mountId,
                                 item.mediaName,
                             ).then((result) => {
+                                // Re-upload failed: skip insertion, don't write the source deck's unresolvable mediaName.
+                                if (!result) return;
                                 addObject(activeSlideId, {
                                     ...imageProps,
-                                    mediaName: result?.mediaName ?? item.mediaName,
+                                    mediaName: result.mediaName,
                                 } as Omit<ImageObject, 'id' | 'slideId'>);
                             });
                         } else {
