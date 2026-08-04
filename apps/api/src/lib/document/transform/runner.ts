@@ -87,18 +87,19 @@ function errorResponse(code: TransformError['code'], message: string): DocumentT
 // Each arm of the closed warning union carries exactly one payload field; settle()
 // renders them after the job left `active`, so an unknown code or a missing payload
 // has to be refused here rather than throw with nobody left to settle the request.
+// Keyed by the union so a future arm is a compile error here — a switch default
+// would silently turn every success carrying the new warning into invalid-response.
+const WARNING_VALIDATORS: Record<TransformWarning['code'], (w: Record<string, unknown>) => boolean> = {
+    'recalc-failed': (w) => typeof w.message === 'string',
+    'corrupt-blobs-skipped': (w) => typeof w.count === 'number',
+    'byte-guard-truncated': (w) => typeof w.bytes === 'number',
+};
+
 function isValidWarning(warning: unknown): boolean {
-    const w = warning as Partial<TransformWarning> | undefined;
-    switch (w?.code) {
-        case 'recalc-failed':
-            return typeof w.message === 'string';
-        case 'corrupt-blobs-skipped':
-            return typeof w.count === 'number';
-        case 'byte-guard-truncated':
-            return typeof w.bytes === 'number';
-        default:
-            return false;
-    }
+    if (!warning || typeof warning !== 'object') return false;
+    const w = warning as Record<string, unknown>;
+    const validate = typeof w.code === 'string' && WARNING_VALIDATORS[w.code as TransformWarning['code']];
+    return validate ? validate(w) : false;
 }
 
 // Full shape check at the trust boundary: a half-valid response (`{ok: true}`
