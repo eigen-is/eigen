@@ -6,10 +6,12 @@ import { readEigendocFromDoc } from '../lib/document/doc';
 import { toTransferableBuffer } from '../lib/document/transform/protocol';
 import { getSharedDrive } from '../lib/drive/get-drive';
 import { getHome } from '../lib/home/get-home';
+import { importDocxToEigendocUpdate } from '../lib/import/doc/transform';
 import { importIntoDocument } from '../lib/import/import-document';
 import { getUserById } from '../lib/user';
 import { seedEigendoc } from './fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_HEADING, GOLDEN_DOCX_IMAGE_NAME, GOLDEN_DOCX_LINK } from './fixtures/golden-docx';
+import { buildDeclaredSizeBombZip } from './fixtures/zip-bomb';
 import {
     assertJson,
     authedRequest,
@@ -57,7 +59,7 @@ function convertRequest(pathId: string, targetType = 'eigendoc'): Promise<Respon
     );
 }
 
-function importRequest(pathId: string, body: ArrayBuffer): Promise<Response> {
+function importRequest(pathId: string, body: BodyInit): Promise<Response> {
     return authedRequest(ctx.alice.user.sessionToken, `/drive/${ctx.alice.user.id}/${mountId}/file/${pathId}/import`, {
         method: 'POST',
         body,
@@ -156,6 +158,20 @@ describe('Eigendoc docx import/convert', () => {
         expect(await res.text()).toBe('Not a valid docx file');
     }, 60_000);
 
+    test('import route surfaces the decompression-bomb guard as 413 Document too large', async () => {
+        const docPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/doc`,
+            { fileName: 'bomb-import-target' },
+        );
+        const bomb = await buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
+        const res = await importRequest(docPath.id, new Uint8Array(bomb));
+        expect(res.status).toBe(413);
+        expect(await res.text()).toBe('Document too large');
+    }, 60_000);
+
     test('write revoked while the transform ran blocks the commit', async () => {
         // The route checks write before buffering, then the job queues and transforms
         // for up to minutes. Calling the commit seam directly with a writer whose
@@ -213,4 +229,25 @@ describe('Eigendoc docx import/convert', () => {
             await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
         }
     }, 60_000);
+});
+
+describe('docx import resource guards', () => {
+    test('rejects a docx whose declared decompressed size exceeds the cap', async () => {
+        // The declared-size guard reads each entry's uncompressedSize straight from the zip
+        // central directory and never decompresses, so it needs no real bomb payload — the
+        // fixture forges a tiny entry's declared size just over the 200 MB cap. The guard
+        // runs before mammoth inflates anything (that OOM is uncatchable, so a post-parse
+        // check would never fire).
+        const bomb = await buildDeclaredSizeBombZip('word/document.xml', 201 * 1024 * 1024);
+
+        let error: unknown;
+        try {
+            await importDocxToEigendocUpdate(toTransferableBuffer(bomb));
+        } catch (e) {
+            error = e;
+        }
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(413);
+        expect((error as ApiError).message).toBe('Document too large');
+    });
 });

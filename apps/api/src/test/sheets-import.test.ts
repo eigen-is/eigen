@@ -15,6 +15,7 @@ import { importIntoDocument } from '../lib/import/import-document';
 import { normalizeMonthMinuteTokens, xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import { getUserById } from '../lib/user';
+import { buildDeclaredSizeBombZip } from './fixtures/zip-bomb';
 import {
     assertJson,
     authedRequest,
@@ -322,10 +323,7 @@ describe('Sheets xlsx import/convert', () => {
             await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]),
             'bomb-target.xlsx',
         );
-        const zip = new JSZip();
-        zip.file('xl/worksheets/sheet1.xml', Buffer.from('<sheetData/>'));
-        const honest = Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
-        const bomb = forgeCentralDirUncompressedSize(honest, 201 * 1024 * 1024);
+        const bomb = await buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
@@ -1394,43 +1392,14 @@ describe('Sheets xlsx conversion fidelity', () => {
     });
 });
 
-// Forge the uncompressedSize a zip DECLARES for its file entries, so the declared size no
-// longer matches the DEFLATE stream's true output. Walk the central directory (located via
-// the End Of Central Directory record, PK\x05\x06 → CD offset at +16), and rewrite the
-// uncompressedSize field (+24) of every central header (PK\x01\x02) that declares content —
-// JSZip prepends zero-size directory entries (`xl/`, `xl/worksheets/`) for a nested path, so
-// the real file entry is not the first. Walking the CD (fixed 46-byte header + name + extra +
-// comment) lands the patch precisely and skips false signature hits in the compressed data.
-function forgeCentralDirUncompressedSize(zip: Buffer, forgedSize: number): Buffer {
-    const out = Buffer.from(zip);
-    let eocd = out.length - 22;
-    while (eocd >= 0 && out.readUInt32LE(eocd) !== 0x06054b50) eocd--;
-    if (eocd < 0) throw new Error('EOCD not found');
-    let p = out.readUInt32LE(eocd + 16);
-    let patched = 0;
-    while (p < eocd && out.readUInt32LE(p) === 0x02014b50) {
-        if (out.readUInt32LE(p + 24) > 0) {
-            out.writeUInt32LE(forgedSize, p + 24);
-            patched++;
-        }
-        p += 46 + out.readUInt16LE(p + 28) + out.readUInt16LE(p + 30) + out.readUInt16LE(p + 32);
-    }
-    if (patched === 0) throw new Error('no file entry to forge');
-    return out;
-}
-
 describe('xlsxToSheets resource guards', () => {
     test('rejects an xlsx whose declared decompressed size exceeds the cap', async () => {
         // The declared-size guard reads each entry's uncompressedSize straight from the zip
-        // central directory and never decompresses, so it needs no real bomb payload — forge a
-        // tiny entry's declared size just over the 200 MB cap. The guard runs before any
-        // inflation (that OOM is uncatchable, so a post-load check is useless), so this 413
-        // comes from assertDeclaredSizeWithinBounds. Forging keeps the test off the 200 MB
-        // compression path that made it hit the 5 s timeout.
-        const zip = new JSZip();
-        zip.file('xl/worksheets/sheet1.xml', Buffer.from('<sheetData/>'));
-        const honest = Buffer.from(await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
-        const bomb = forgeCentralDirUncompressedSize(honest, 201 * 1024 * 1024);
+        // central directory and never decompresses, so it needs no real bomb payload — the
+        // fixture forges a tiny entry's declared size just over the 200 MB cap. The guard runs
+        // before any inflation (that OOM is uncatchable, so a post-load check is useless), so
+        // this 413 comes from the declared-size pass.
+        const bomb = await buildDeclaredSizeBombZip('xl/worksheets/sheet1.xml', 201 * 1024 * 1024);
 
         let error: unknown;
         try {
@@ -1442,11 +1411,11 @@ describe('xlsxToSheets resource guards', () => {
         expect((error as ApiError).status).toBe(413);
     });
 
-    // NOTE: the streaming actual-size guard (assertActualSizeWithinBounds, the forged-header
-    // bomb defense) has no test here — exercising it needs >200 MB of genuine inflation, whose
-    // fixture can't be built in under ~2 s without hand-rolling a native-zlib zip. The declared
-    // guard above and the cell-count guard below stay covered; the byte-cap logic is one shared
-    // MAX_DECOMPRESSED_BYTES constant across both passes in from-xlsx.ts.
+    // NOTE: the streaming actual-size guard (the forged-header bomb defense) has no test here —
+    // exercising it needs >200 MB of genuine inflation, whose fixture can't be built in under
+    // ~2 s without hand-rolling a native-zlib zip. The declared guard above and the cell-count
+    // guard below stay covered; the byte-cap logic is one shared MAX_DECOMPRESSED_BYTES constant
+    // across both passes in lib/import/zip-size-guard.ts.
 
     test('rejects an xlsx declaring an absurd cell count', async () => {
         // Two far-apart cells span the full Excel grid (1,048,576 × 16,384 ≈ 1.7e10 cells)
