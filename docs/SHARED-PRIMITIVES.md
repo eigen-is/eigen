@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-846 primitives across 6 kinds. `packages/sheet` internals are excluded.
+847 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -144,7 +144,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PreviewProvider` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `SSEProvider` | `@workspace/ui/components/layout/sse-provider` | packages/ui/src/components/layout/sse-provider/sse-provider.tsx |
 
-## Contexts, schemas & classes (6)
+## Contexts, schemas & classes (7)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -152,6 +152,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
+| `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
