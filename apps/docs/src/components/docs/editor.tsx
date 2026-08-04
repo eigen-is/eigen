@@ -105,7 +105,8 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
 const lowlight = createLowlight(common);
 
 // How far the w-64 panel reaches into the scroll box's content box: everything but that box's p-4
-// gutter. The panel is an absolute overlay, so the content box never shrinks by itself.
+// gutter. The panel is an absolute overlay, so the content box never shrinks by itself. The find
+// bar clears the same panel with its own right-68 inset below (w-64 plus the bar's gutter).
 const PANEL_INTRUSION_PX = 256 - 16;
 const PAGE_MARGIN_PX = 75.6; // p-[2cm] at 96dpi
 // The page's right margin may tuck under the panel — it always has at desktop widths. Only the text

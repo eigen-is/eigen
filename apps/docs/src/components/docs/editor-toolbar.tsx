@@ -110,7 +110,9 @@ export const EditorToolbar = ({
     const { exportDocument, isExporting } = useExportDocument();
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
-    const isMobile = useMediaQuery('(max-width: 1200px)');
+    // Toolbar density only: below this the format controls fold into dropdowns. Not the 768px
+    // system mobile breakpoint that useLayout().isMobile reports.
+    const isCompact = useMediaQuery('(max-width: 1200px)');
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -206,7 +208,7 @@ export const EditorToolbar = ({
                             onRedo={() => editor.chain().focus().redo().run()}
                         />
 
-                        {isMobile && (
+                        {isCompact && (
                             <>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -396,7 +398,7 @@ export const EditorToolbar = ({
                 }
                 center={
                     canWrite &&
-                    !isMobile && (
+                    !isCompact && (
                         <div className="flex">
                             <ToolbarSeparator />
 
