@@ -7,7 +7,7 @@ import { isAttachmentReference } from '@workspace/lib/types/chat';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { UserNameCard } from '@workspace/ui/components/layout/user-name-card';
-import { Check, Download, MoreVertical, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Download, Pencil, Trash2, X } from 'lucide-react';
 import type React from 'react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useLongPress } from '../../../hooks/use-long-press';
@@ -219,8 +219,7 @@ export function ChatMessageList({
 
     const [saveAttachmentsMsg, setSaveAttachmentsMsg] = useState<ChatMessage | null>(null);
 
-    // Message actions (Save attachments / Edit / Delete) open the singleton context menu — reachable by
-    // right-click, touch long-press and the coarse/hover ⋮, not a mouse-hover-only bar.
+    // Message actions (Save attachments / Edit / Delete) reach the singleton context menu via right-click and touch long-press.
     const contextMenu = useContextMenu<ChatMessage>();
     const openMenuAt = contextMenu.openAt;
     const handleLongPress = useCallback(
@@ -230,6 +229,20 @@ export function ChatMessageList({
         [openMenuAt],
     );
     const longPress = useLongPress(handleLongPress);
+
+    // One gating source shared by the hover bar and the context menu so the two action sets never drift.
+    const getMessageActions = useCallback(
+        (message: ChatMessage) => {
+            const isOwn = message.authorId === currentUserId;
+            const hasFileAttachments = !!message.attachments?.some((a) => typeof a === 'string');
+            return {
+                canSaveAttachments: hasFileAttachments && !!ownerId && !!mountId,
+                canEdit: isOwn && !!onEditMessage,
+                canDelete: isOwn && !!onDeleteMessage,
+            };
+        },
+        [currentUserId, ownerId, mountId, onEditMessage, onDeleteMessage],
+    );
 
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
     useEffect(() => () => downloadTimers.current.forEach(clearTimeout), []);
@@ -354,8 +367,7 @@ export function ChatMessageList({
     }
 
     const menuMessage = contextMenu.item;
-    const menuIsOwn = !!menuMessage && menuMessage.authorId === currentUserId;
-    const menuHasFileAttachments = !!menuMessage?.attachments?.some((a) => typeof a === 'string');
+    const menuActions = menuMessage ? getMessageActions(menuMessage) : null;
 
     return (
         <div ref={scrollRef} className={cn('flex-1 overflow-y-auto relative', className)}>
@@ -398,10 +410,8 @@ export function ChatMessageList({
                     );
                 }
 
-                const isOwn = message.authorId === currentUserId;
-                const hasFileAttachments = !!message.attachments?.some((a) => typeof a === 'string');
-                const hasActions =
-                    (hasFileAttachments && !!ownerId && !!mountId) || (isOwn && (!!onEditMessage || !!onDeleteMessage));
+                const actions = getMessageActions(message);
+                const hasActions = actions.canSaveAttachments || actions.canEdit || actions.canDelete;
                 const actionProps = hasActions
                     ? {
                           onContextMenu: (e: React.MouseEvent) => {
@@ -414,20 +424,36 @@ export function ChatMessageList({
                           ...longPress.bind(message),
                       }
                     : {};
-                const actionsKebab = hasActions ? (
-                    <div className="absolute right-2 top-1 invisible group-hover:visible pointer-coarse:visible">
-                        <button
-                            type="button"
-                            aria-label="Message actions"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                contextMenu.openAt(message, rect.left, rect.bottom);
-                            }}
-                            className="flex h-7 w-7 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-sm hover:bg-accent"
-                        >
-                            <MoreVertical className="h-4 w-4" />
-                        </button>
+                // Desktop-only hover affordance (fine pointer); touch has none — long-press opens the same menu.
+                const hoverActions = hasActions ? (
+                    <div className="absolute right-2 top-1 z-10 flex items-center rounded-md border bg-background shadow-sm invisible pointer-fine:group-hover:visible">
+                        {actions.canSaveAttachments && (
+                            <TooltipButton
+                                icon={Download}
+                                tooltipText="Save attachments"
+                                className="h-7 w-7"
+                                preventFocusLoss
+                                onClick={() => setSaveAttachmentsMsg(message)}
+                            />
+                        )}
+                        {actions.canEdit && onEditMessage && (
+                            <TooltipButton
+                                icon={Pencil}
+                                tooltipText="Edit"
+                                className="h-7 w-7"
+                                preventFocusLoss
+                                onClick={() => onEditMessage(message)}
+                            />
+                        )}
+                        {actions.canDelete && onDeleteMessage && (
+                            <TooltipButton
+                                icon={Trash2}
+                                tooltipText="Delete"
+                                className="h-7 w-7"
+                                preventFocusLoss
+                                onClick={() => onDeleteMessage(message)}
+                            />
+                        )}
                     </div>
                 ) : null;
 
@@ -473,7 +499,7 @@ export function ChatMessageList({
                                 />
                                 {renderAttachments(message)}
                             </div>
-                            {actionsKebab}
+                            {hoverActions}
                         </div>
                     );
                 }
@@ -517,7 +543,7 @@ export function ChatMessageList({
                                 />
                                 {renderAttachments(message)}
                             </div>
-                            {actionsKebab}
+                            {hoverActions}
                         </div>
                     );
                 }
@@ -572,7 +598,7 @@ export function ChatMessageList({
                                 </>
                             )}
                         </div>
-                        {actionsKebab}
+                        {hoverActions}
                     </div>
                 );
             })}
@@ -580,7 +606,7 @@ export function ChatMessageList({
             <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[180px]">
                 {menuMessage && (
                     <>
-                        {menuHasFileAttachments && ownerId && mountId && (
+                        {menuActions?.canSaveAttachments && (
                             <DropdownMenuItem
                                 onClick={() => {
                                     setSaveAttachmentsMsg(menuMessage);
@@ -590,7 +616,7 @@ export function ChatMessageList({
                                 <Download className="h-4 w-4 mr-2" /> Save attachments
                             </DropdownMenuItem>
                         )}
-                        {menuIsOwn && onEditMessage && (
+                        {menuActions?.canEdit && onEditMessage && (
                             <DropdownMenuItem
                                 onClick={() => {
                                     onEditMessage(menuMessage);
@@ -600,7 +626,7 @@ export function ChatMessageList({
                                 <Pencil className="h-4 w-4 mr-2" /> Edit
                             </DropdownMenuItem>
                         )}
-                        {menuIsOwn && onDeleteMessage && (
+                        {menuActions?.canDelete && onDeleteMessage && (
                             <DropdownMenuItem
                                 variant="destructive"
                                 onClick={() => {
