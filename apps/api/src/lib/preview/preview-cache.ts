@@ -28,7 +28,9 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 // Renderer format version — bump when generated HTML changes shape (e.g. plaintext moved
 // from <pre> to prose paragraphs) so cached previews regenerate despite an unchanged updatedAt.
 // f3: sheets previews render off-thread with the row/column/cell budget.
-const TEXT_FORMAT = 'f3';
+// f4: merges and conditional formatting clip to the render window (spans, window-scoped
+//     aggregates, formula-rule ceiling).
+const TEXT_FORMAT = 'f4';
 
 function textCacheName(drivePath: DrivePath): string {
     return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.${TEXT_FORMAT}.json`;
