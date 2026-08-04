@@ -237,10 +237,12 @@ export function FilePreview({
                     confirmLabel="Save here"
                     defaultOwnerId={path.ownerId}
                     defaultMountId={path.mountId}
-                    onConfirm={(location) => {
+                    onConfirm={async (location) => {
                         const pathIds =
                             locationPickerMode === 'all' ? downloadableSiblings.map((s) => s.id) : [path.id];
-                        copyFiles.mutate({
+                        // Await the copy so the picker closes on success and stays open (with the failure
+                        // toast) on error, instead of closing immediately.
+                        await copyFiles.mutateAsync({
                             pathIds,
                             targetOwnerId: location.ownerId,
                             targetMountId: location.mountId,

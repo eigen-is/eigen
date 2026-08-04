@@ -43,7 +43,9 @@ export function DeleteDialog({
     // Confirmation prompts read as questions; append "?" unless the caller already terminated the sentence.
     const terminator = /[.?!]$/.test(description) ? '' : '?';
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        // While pending, ignore every close path (Escape/backdrop/X) so the retry surface survives;
+        // opening is always allowed.
+        <Dialog open={open} onOpenChange={(o) => (o || !pending) && onOpenChange(o)}>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>

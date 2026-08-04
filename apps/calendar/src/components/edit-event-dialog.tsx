@@ -22,7 +22,7 @@ import { ConfirmDialog } from '@workspace/ui/components/layout/confirm-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
 import type { CalendarOption } from './calendar-utils';
 import { resolveCalendarName } from './calendar-utils';
@@ -92,6 +92,14 @@ export function EditEventDialog({
     const [selectedCalKey, setSelectedCalKey] = useState('');
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
+
+    // A cross-Home move creates the destination event then deletes the source. If the delete fails the
+    // dialog stays open; remember that the destination already exists so a retry only re-runs the delete
+    // instead of creating a second event (and re-fanning-out invitations). Reset each time the dialog opens.
+    const createdDestRef = useRef(false);
+    useEffect(() => {
+        if (open) createdDestRef.current = false;
+    }, [open]);
 
     const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
     const calendarChanged = event
@@ -208,8 +216,14 @@ export function EditEventDialog({
             } else {
                 // Cross-Home move can't be atomic (the calendars live in different Homes): recreate the event
                 // in the target Home and delete the source. Organizer link and exception overrides don't cross Homes.
-                await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
+                // The ref keeps the move retry-safe — skip re-creation if a prior attempt already created the
+                // destination and only the source delete failed.
+                if (!createdDestRef.current) {
+                    await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
+                    createdDestRef.current = true;
+                }
                 await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId });
+                createdDestRef.current = false;
             }
         } else if (action === 'all') {
             await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });

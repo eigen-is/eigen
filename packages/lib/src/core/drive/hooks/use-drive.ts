@@ -308,6 +308,19 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     });
 }
 
+// Thrown by useDeletePaths when a batch trash partially fails: carries the paths that were trashed and
+// the ones that weren't, so the caller can run its after-delete side effects for the successes and narrow
+// a retry to just the failures (re-sending already-trashed ids 404s).
+export class PartialDeleteError extends Error {
+    constructor(
+        readonly succeeded: DrivePath[],
+        readonly failed: DrivePath[],
+    ) {
+        super(`Failed to delete ${failed.length} of ${succeeded.length + failed.length} items`);
+        this.name = 'PartialDeleteError';
+    }
+}
+
 // DELETE MULTIPLE PATHS — derives owner/mount from each path so mixed-owner selections
 // (aggregate filter views list other owners' items) each hit their own home.
 export function useDeletePaths() {
@@ -329,8 +342,8 @@ export function useDeletePaths() {
             for (const path of succeeded) {
                 invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             }
-            const failedCount = results.filter((r) => r.status === 'rejected').length;
-            if (failedCount > 0) throw new Error(`Failed to delete ${failedCount} of ${paths.length} items`);
+            const failed = paths.filter((_, i) => results[i].status === 'rejected');
+            if (failed.length > 0) throw new PartialDeleteError(succeeded, failed);
             return succeeded;
         },
         onError: onMutationError,

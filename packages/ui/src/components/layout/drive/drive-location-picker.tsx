@@ -92,7 +92,9 @@ export function DriveLocationPicker({
     const resolvedNameLabel = nameLabel ?? (mode === 'save-as' ? 'Save as' : 'Name');
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        // While pending, ignore every close path (Escape/backdrop/X) so the retry surface survives;
+        // opening is always allowed.
+        <Dialog open={open} onOpenChange={(o) => (o || !pending) && onOpenChange(o)}>
             <DialogContent
                 abovePreview={abovePreview}
                 className={cn(
