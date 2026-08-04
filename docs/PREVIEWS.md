@@ -87,8 +87,8 @@ through the same seam — see [EXPORT.md](EXPORT.md):
 1. The main thread keeps ACL, cache lookup/dedupe, builds the media URL map for doc and slides, and captures
    the document's compressed Yjs blobs in a short SELECT-only transaction (`readYjsStatePayload` via
    `captureCollabSource`).
-   That main-thread half is one thin wrapper per type (`preview/eigen{doc,slides,sheets}-preview.ts`); every
-   transform then goes through `runTransformToText` / `runTransformToBytes`
+   That main-thread half is one shared entry, `generateDocumentPreview` in `preview/preview-document.ts`
+   (the `export-document.ts` counterpart); every transform then goes through `runTransformToText` / `runTransformToBytes`
    (`lib/document/transform/run-transform.ts`), the one main-thread seam that owns capture timing, the
    operation's deadline, admission, warning surfacing, and failure mapping.
 2. `DocumentTransformRunner` (`lib/document/transform/runner.ts`) admits the job: one active Worker, queue of
@@ -206,7 +206,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
 | `apps/api/src/lib/preview/eigen{doc,slides,sheets}-render.ts`             | Worker-side body renderers (first 20 blocks / 8 slides / budgeted first sheet) |
-| `apps/api/src/lib/preview/eigen{doc,slides,sheets}-preview.ts`            | Main-thread orchestration: media prep + the transform seam |
+| `apps/api/src/lib/preview/preview-document.ts`                            | Main-thread orchestration for all three types: media prep + the transform seam |
 | `apps/api/src/lib/document/media.ts`                                      | Document media helpers: listing, preview URLs, Worker-side data URIs |
 | `apps/api/src/lib/preview/preview-marker.ts`                              | `renderPreviewTruncatedMarker()` appended on truncation |
 | `apps/api/src/lib/document/transform/protocol.ts`                         | Clone-safe transform job/request/response unions    |

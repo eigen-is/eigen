@@ -7,10 +7,8 @@ import { ApiError } from '../core/errors';
 import type { TransformPriority } from '../document/transform/runner';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
-import { generateEigendocPreview } from './eigendoc-preview';
-import { generateEigensheetsPreview } from './eigensheets-preview';
-import { generateEigenslidesPreview } from './eigenslides-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
+import { generateDocumentPreview, type PreviewDocumentType } from './preview-document';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
@@ -291,27 +289,17 @@ async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<S
     });
 }
 
+// Map, not Record: mimeType is document data — object lookup would resolve prototype keys.
+const COLLAB_PREVIEW_TYPES = new Map<string, PreviewDocumentType>([
+    [DRIVE_MIME_DOC, 'eigendoc'],
+    [DRIVE_MIME_SLIDES, 'eigenslides'],
+    [DRIVE_MIME_SHEETS, 'eigensheets'],
+]);
+
 async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
-    const mime = drivePath.mimeType || '';
-    const cacheName = textCacheName(drivePath);
-
-    if (mime === DRIVE_MIME_DOC) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigendoc', (priority) =>
-            generateEigendocPreview(mount, drivePath, priority),
-        );
-    }
-
-    if (mime === DRIVE_MIME_SLIDES) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigenslides', (priority) =>
-            generateEigenslidesPreview(mount, drivePath, priority),
-        );
-    }
-
-    if (mime === DRIVE_MIME_SHEETS) {
-        return getOrCacheText(mount.previewsDir, drivePath.id, cacheName, 'eigensheets', (priority) =>
-            generateEigensheetsPreview(mount, drivePath, priority),
-        );
-    }
-
-    return null;
+    const documentType = COLLAB_PREVIEW_TYPES.get(drivePath.mimeType || '');
+    if (!documentType) return null;
+    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
+        generateDocumentPreview(documentType, mount, drivePath, priority),
+    );
 }

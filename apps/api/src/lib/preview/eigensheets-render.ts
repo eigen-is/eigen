@@ -6,7 +6,7 @@ import { renderSheetsPreviewHtml } from '../export/sheets/render';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
 // Materialized doc → sanitized preview body. Runs inside the transform Worker
-// (worker.ts owns execution; the main-thread wrapper lives in eigensheets-preview.ts).
+// (worker.ts owns execution; the main-thread orchestration lives in preview-document.ts).
 // This module must not reach the Mount or the transform seam — the Worker imports it,
 // and the sheet renderer it pulls in must stay out of the main process. Recalc failure
 // serves replayed values with a warning — a preview must never fail because recalc

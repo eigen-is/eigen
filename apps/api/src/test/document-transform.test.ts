@@ -25,11 +25,10 @@ import { getHome } from '../lib/home/get-home';
 import { docSchema, docxToPmJson } from '../lib/import/doc/from-docx';
 import { importXlsxToSheetsSnapshot } from '../lib/import/sheets/transform';
 import type { Mount } from '../lib/mount';
-import { generateEigendocPreview } from '../lib/preview/eigendoc-preview';
 import { renderEigendocPreviewBody } from '../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../lib/preview/eigensheets-render';
-import { generateEigenslidesPreview } from '../lib/preview/eigenslides-preview';
 import { renderEigenslidesPreviewBody } from '../lib/preview/eigenslides-render';
+import { generateDocumentPreview } from '../lib/preview/preview-document';
 import {
     appendGoldenDocParagraph,
     buildGoldenDeck,
@@ -647,7 +646,7 @@ describe('document transform (eigendoc)', () => {
     });
 
     test('preview body matches the pinned golden hash', async () => {
-        const body = await generateEigendocPreview(golden.mount, golden.path);
+        const body = await generateDocumentPreview('eigendoc', golden.mount, golden.path);
         // A glance, not the document: the first 20 blocks with the truncated marker,
         // media as an embed URL, hostile content defanged.
         expect(body).toContain('Quarterly Report');
@@ -811,7 +810,7 @@ describe('document transform (eigenslides)', () => {
     });
 
     test('preview body matches the pinned golden hash', async () => {
-        const body = await generateEigenslidesPreview(golden.mount, golden.path);
+        const body = await generateDocumentPreview('eigenslides', golden.mount, golden.path);
         // First 8 slides with the truncated marker, media as an embed URL.
         expect(body).toContain('Deck <strong>title</strong>');
         expect(body).not.toContain(GOLDEN_BEYOND_CAP);

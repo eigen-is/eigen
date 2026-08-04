@@ -159,7 +159,7 @@ async function importScenario(label: string, xlsx: ArrayBuffer) {
 // Memory pass (proposal § Memory benchmark): repeat the heavy preview through
 // one-shot Workers and verify post-job RSS stabilizes instead of growing linearly.
 if (args.includes('--memory')) {
-    const { generateEigensheetsPreview } = await import('../lib/preview/eigensheets-preview');
+    const { generateDocumentPreview } = await import('../lib/preview/preview-document');
     const doc = await createSheetsDoc('bench-memory');
     const home = await getHome(ownerId);
     const collab = await home.drive.getCollabDocument(mountId, doc.id);
@@ -170,7 +170,7 @@ if (args.includes('--memory')) {
     console.log(`\n=== memory: ${memoryRuns} repeated Worker previews (600x45) ===`);
     for (let i = 0; i < memoryRuns; i++) {
         const start = performance.now();
-        await generateEigensheetsPreview(mount, path);
+        await generateDocumentPreview('eigensheets', mount, path);
         Bun.gc(true);
         console.log(
             `run ${i + 1}: ${(performance.now() - start).toFixed(0)}ms rss=${(process.memoryUsage.rss() / 1024 / 1024).toFixed(0)}MB`,

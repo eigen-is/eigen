@@ -45,7 +45,7 @@ function renderDeckDocument(
         ? { fillPage: true, pageWidthPx: PAGE_WIDTH_PX, pageHeightPx: PAGE_HEIGHT_PX }
         : undefined;
     const slidesHtml = renderDeckHtml(deck, sizeUnit, (mediaName) => dataUriMap.get(mediaName) ?? null, slideOptions);
-    // Sanitize the assembled body exactly like the preview surface (eigenslides-preview.ts) —
+    // Sanitize the assembled body exactly like the preview surface (eigenslides-render.ts) —
     // defence in depth over render.ts's per-value escaping, so the download/print surface is
     // as guarded as the preview.
     const sanitized = sanitizeExportHtml(slidesHtml);
