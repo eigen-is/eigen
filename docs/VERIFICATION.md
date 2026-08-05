@@ -29,9 +29,12 @@ verification too.
 - **Never start, restart, or kill the user's dev server.** Check what's running first (`lsof`).
   If the running server serves a different branch than the code under verification, run an
   isolated vite from a git worktree on a free port (`cd <worktree>/apps/<app> && bunx vite
-  --port 3999`). Caveat: the API's CORS allow-list doesn't include extra ports — shim
-  `Access-Control-Allow-Origin` onto `localhost:8000` responses via Playwright route
-  interception, and stub the streaming `/sse/` endpoint (it hangs `route.fetch`).
+  --port 3999`). Caveat: the API's CORS allow-list doesn't include extra ports — launch the
+  test browser with CORS off instead:
+  `chromium.launchPersistentContext('/tmp/<name>-profile', { channel: 'chrome', headless: true, args: ['--disable-web-security'] })`.
+  Don't shim `Access-Control-Allow-Origin` via Playwright route interception — intercepting
+  requests reproducibly stalls vite's module graph mid-load (blank page, no error), and the
+  no-CORS browser also leaves SSE and the collab WebSocket untouched.
 - **The API must run unsandboxed.** An agent-launched server under the macOS command sandbox
   fails SQLite WAL locking with `SQLITE_IOERR_VNODE` ("disk I/O error") — sometimes only on
   cold reopens minutes later, after files got stamped with `com.apple.provenance`. Symptoms:

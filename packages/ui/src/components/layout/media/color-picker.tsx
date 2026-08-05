@@ -20,7 +20,7 @@ DEFAULT_COLORS.unshift(
     Array.from({ length: DEFAULT_COLUMNS }, (_, i) => i).map((i) => {
         const b = ((Math.sqrt(i / (DEFAULT_COLUMNS - 1)) * 255) | 0).toString(16).padStart(2, '0');
         return {
-            label: 'test',
+            label: `#${b}${b}${b}`,
             value: `#${b}${b}${b}`,
         };
     }),

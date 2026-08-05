@@ -1,7 +1,13 @@
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
-import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
-import { useState } from 'react';
+import { isLightColor } from '@workspace/lib/constants';
+import {
+    DropdownMenuItem,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import { DEFAULT_COLORS } from '@workspace/ui/components/layout/media/color-picker';
+import { cn } from '@workspace/ui/lib/utils';
+import { Check, RotateCcw } from 'lucide-react';
 
 type Props = {
     label: string;
@@ -9,36 +15,68 @@ type Props = {
     onChange: (color: string) => void;
     resetLabel?: string;
     showReset?: boolean;
+    // CustomBorder composes color + style + border type in one open menu, like its
+    // sibling style items; everything else closes on pick like a normal menu item.
+    keepMenuOpen?: boolean;
 };
 
-// A menu row that opens the shared ColorPicker in a popover — the menu-item analogue of
-// the toolbar's ColorPickerButton. A popover, not a Radix submenu, because menu roving
-// only visits registered items: raw swatch buttons inside a SubContent are keyboard-dead.
-// The popover is its own focus scope, so the grid is reachable by keyboard and touch.
-export function ColorPickerMenuItem({ label, value, onChange, resetLabel, showReset }: Props) {
-    const [open, setOpen] = useState(false);
+// A menu row that opens the shared color grid as a real submenu — the menu-item
+// analogue of the toolbar's ColorPickerButton. Every swatch is a registered menu
+// item (not a raw button), so hover-open, pointer travel into the grid, menu
+// roving and the mobile drill-in all behave like every other submenu. Swatch
+// markup mirrors ColorPicker (menu items can't come out of its button grid,
+// and menu-item context needs size-* icons to dodge the [&_svg] default) —
+// keep the two visually in sync.
+export function ColorPickerMenuItem({ label, value, onChange, resetLabel, showReset = true, keepMenuOpen }: Props) {
+    const normalizedValue = value.toLowerCase();
+    const keepOpen = keepMenuOpen ? (e: Event) => e.preventDefault() : undefined;
 
     return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                {/* preventDefault keeps the parent menu open so the popover can layer over it. */}
-                <DropdownMenuItem className="justify-between gap-2" onSelect={(e) => e.preventDefault()}>
-                    <span>{label}</span>
-                    <span className="h-3 w-6 rounded border" style={{ backgroundColor: value || 'transparent' }} />
-                </DropdownMenuItem>
-            </PopoverTrigger>
-            <PopoverContent side="right" align="start" className="luckysheet-mousedown-cancel w-auto p-3">
-                <ColorPicker
-                    value={value}
-                    resetLabel={resetLabel}
-                    showReset={showReset}
-                    preventFocusLoss
-                    onChange={(color) => {
-                        onChange(color);
-                        setOpen(false);
-                    }}
-                />
-            </PopoverContent>
-        </Popover>
+        <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+                <span>{label}</span>
+                <span className="ml-auto h-3 w-6 rounded border" style={{ backgroundColor: value || 'transparent' }} />
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="luckysheet-mousedown-cancel flex flex-col gap-2 p-3">
+                {showReset && (
+                    <DropdownMenuItem className="-mx-1" onSelect={keepOpen} onClick={() => onChange('')}>
+                        <RotateCcw className="size-4" />
+                        <span>{resetLabel}</span>
+                    </DropdownMenuItem>
+                )}
+                {DEFAULT_COLORS.map((row, rowIdx) => (
+                    <div
+                        // biome-ignore lint/suspicious/noArrayIndexKey: static palette rows — order is meaningful, no stable id
+                        key={rowIdx}
+                        className="grid gap-1"
+                        style={{ gridTemplateColumns: `repeat(${row.length}, 1fr)` }}
+                    >
+                        {row.map((color) => {
+                            const selected = normalizedValue === color.value.toLowerCase();
+                            return (
+                                <DropdownMenuItem
+                                    key={color.value}
+                                    title={color.label}
+                                    onSelect={keepOpen}
+                                    onClick={() => onChange(color.value)}
+                                    className={cn(
+                                        'h-4 w-4 justify-center rounded-full border border-border/50 p-0 transition-transform focus:scale-125',
+                                        selected && 'ring-2 ring-ring ring-offset-1',
+                                    )}
+                                    style={{ backgroundColor: color.value }}
+                                >
+                                    {selected && (
+                                        <Check
+                                            className="size-2"
+                                            style={{ color: isLightColor(color.value) ? '#000' : '#fff' }}
+                                        />
+                                    )}
+                                </DropdownMenuItem>
+                            );
+                        })}
+                    </div>
+                ))}
+            </DropdownMenuSubContent>
+        </DropdownMenuSub>
     );
 }

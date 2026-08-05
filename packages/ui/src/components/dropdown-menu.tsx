@@ -374,6 +374,9 @@ function DropdownMenuSubContent({
     if (menu && sub) {
         // contents keeps rows flat in the scrolling Content; none hides the whole page (incl. non-item JSX) off-path, while on-path ancestors stay contents so nested pages still show.
         // className/props are desktop-panel concerns, intentionally dropped: the page inherits the root Content's box + scroll.
+        // Page children mount only once pushed onto the stack — desktop SubContent is
+        // equally lazy (Presence), and heavy pages (color grids) would otherwise mount
+        // hidden on every menu open. Popped pages unmount and drop their local state.
         return (
             <PageContext.Provider value={pageValue}>
                 <div
@@ -393,7 +396,7 @@ function DropdownMenuSubContent({
                         {sub.label}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    {children}
+                    {menu.stack.includes(sub.id) && children}
                 </div>
             </PageContext.Provider>
         );
