@@ -1,5 +1,11 @@
-import type { Op, Sheet } from '@workspace/lib/sheets';
-import { createDefaultSheets, recalcSheets, replaySheetsOps, sheetsNeedRecalc } from '@workspace/sheet/engine';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
+import {
+    createDefaultSheets,
+    recalcSheets,
+    replaySheetsOps,
+    sheetsNeedRecalc,
+    withMaterializedData,
+} from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 
 // Materialized Yjs doc → Sheet[]. Every consumer of a persisted workbook reads it in
@@ -17,8 +23,12 @@ export function readSheetsFromDoc(
     // flushSnapshot. The ops were recorded against the editor's default sheets
     // (they reference 'sheet-1'), so replay must start from the same base — an
     // empty base silently drops every edit. A doc with neither stays [].
-    const sheets = snapshot ? (JSON.parse(snapshot) as Sheet[]) : opBatches.length > 0 ? createDefaultSheets() : [];
-    const replayed = replaySheetsOps(sheets, opBatches);
+    const sheets = snapshot ? decodeSheetsSnapshot(snapshot) : opBatches.length > 0 ? createDefaultSheets() : [];
+    // v2 snapshots are celldata-only, but the renderers' conditional-format pass and
+    // the cross-sheet formula resolver read the dense `data` matrix (v1 editor
+    // flushes carried it implicitly). Materialize it for every sheet so preview and
+    // export see the same workbook regardless of which format persisted it.
+    const replayed = replaySheetsOps(sheets, opBatches).map(withMaterializedData);
 
     // Server-side recalc for docs the client never computed for us — legacy xlsx
     // imports from before the import Worker persisted computed values + calcChain.
@@ -47,6 +57,10 @@ export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void
     });
 }
 
-export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[]): void {
-    writeSheetsSnapshotToYjs(doc, JSON.stringify(sheets));
+// `computed` declares whether these sheets carry engine-computed values: it seeds
+// the decoded calcChain, which is what the read-path recalc gate keys off. Only
+// pass true for value-complete sheets — false makes an export recompute, which is
+// the safe direction.
+export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[], opts: { computed: boolean }): void {
+    writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot(sheets, opts));
 }

@@ -1,4 +1,4 @@
-import type { Sheet } from '@workspace/lib/sheets';
+import { encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import { recalcSheets } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import { type TransformWarning, toTransferableText } from '../../document/transform/protocol';
@@ -14,8 +14,8 @@ export async function importXlsxToSheetsSnapshot(
 ): Promise<{ snapshotJson: ArrayBuffer; warnings: TransformWarning[] }> {
     const warnings: TransformWarning[] = [];
     const parsed = await parseXlsxOrThrow(Buffer.from(data));
-    const sheets = recalcImportedSheets(parsed, warnings);
-    return { snapshotJson: toTransferableText(JSON.stringify(sheets)), warnings };
+    const { sheets, computed } = recalcImportedSheets(parsed, warnings);
+    return { snapshotJson: toTransferableText(encodeSheetsSnapshot(sheets, { computed })), warnings };
 }
 
 // xlsx is a zip-based format — the parser needs the full file in memory to read
@@ -30,22 +30,18 @@ async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
 }
 
 // Recompute formula cells through our engine once at import so the persisted
-// snapshot carries engine-verified v/m (and a calcChain, so the read-path gate
-// never fires for imported docs). The importer's cached values are usually
-// Excel's own, so this mainly reconciles divergence; a recalc failure must not
-// block the import, so fall back to the parsed sheets. recalcSheets returns a
-// dense `data` matrix, but the importer persists sparse `celldata` only (the
-// computed values are synced into it) — drop `data` so a large import doesn't
-// bloat the snapshot; the read path re-materializes it.
-function recalcImportedSheets(sheets: Sheet[], warnings: TransformWarning[]): Sheet[] {
+// snapshot carries engine-verified v/m, and report which case happened: only a
+// successful recalc may be encoded as `computed`, which is what seeds the decoded
+// calcChain and keeps the read-path gate from firing for imported docs. The
+// importer's cached values are usually Excel's own, so this mainly reconciles
+// divergence; a recalc failure must not block the import, so the parsed sheets go
+// in uncomputed and an export recalcs them. recalcSheets syncs the computed values
+// into `celldata`, and the encoder drops the dense `data` matrix it also returns.
+function recalcImportedSheets(sheets: Sheet[], warnings: TransformWarning[]): { sheets: Sheet[]; computed: boolean } {
     try {
-        return recalcSheets(sheets).map((sheet) => {
-            const lean = { ...sheet };
-            delete lean.data;
-            return lean;
-        });
+        return { sheets: recalcSheets(sheets), computed: true };
     } catch (err) {
         warnings.push({ code: 'recalc-failed', message: err instanceof Error ? err.message : String(err) });
-        return sheets;
+        return { sheets, computed: false };
     }
 }

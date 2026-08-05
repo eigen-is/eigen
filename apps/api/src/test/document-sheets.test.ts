@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { Op, Sheet } from '@workspace/lib/sheets';
+import { encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { sheetsNeedRecalc } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
@@ -18,6 +18,12 @@ async function readSheets(mount: Mount, path: DrivePath): Promise<{ sheets: Shee
     const result = readSheetsFromDoc(doc);
     doc.destroy();
     return result;
+}
+
+// readSheetsFromDoc materializes a dense `data` matrix on every sheet (the
+// renderers read it); equality pins here compare the persisted shape, so strip it.
+function withoutData(sheets: Sheet[]): Sheet[] {
+    return sheets.map(({ data: _data, ...sheet }) => sheet);
 }
 
 describe('document/sheets', () => {
@@ -86,7 +92,33 @@ describe('document/sheets', () => {
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(result).toEqual(sheets);
+        expect(withoutData(result)).toEqual(sheets);
+    });
+
+    test('every read sheet carries a materialized dense data matrix', async () => {
+        // v2 snapshots are celldata-only; the renderers' CF pass and the cross-sheet
+        // formula resolver read `data`, so the read seam must materialize it.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'materialized-data' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+        const sheets: Sheet[] = [
+            { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 1, c: 2, v: { v: 7, m: '7' } }], config: {} },
+        ];
+        writeSheetsToYjs(collab.doc, sheets, { computed: false });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const { sheets: result } = await readSheets(mount, path);
+
+        expect(result[0].data).toBeDefined();
+        expect(result[0].data![1][2]?.v).toBe(7);
+        expect(result[0].data!.length).toBeGreaterThanOrEqual(2);
     });
 
     test('write round-trip: writeSheetsToYjs then a persisted read returns same sheets', async () => {
@@ -112,12 +144,12 @@ describe('document/sheets', () => {
             { id: 'sheet-2', name: 'Sheet2', order: 1, celldata: [], config: {} },
         ];
 
-        writeSheetsToYjs(collab.doc, sheets);
+        writeSheetsToYjs(collab.doc, sheets, { computed: false });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(result).toEqual(sheets);
+        expect(withoutData(result)).toEqual(sheets);
     });
 
     test('writeSheetsSnapshotToYjs commits pre-serialized JSON and clears the ops array', async () => {
@@ -140,14 +172,14 @@ describe('document/sheets', () => {
         const sheets: Sheet[] = [
             { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: { v: 'hi' } }], config: {} },
         ];
-        writeSheetsSnapshotToYjs(collab.doc, JSON.stringify(sheets));
+        writeSheetsSnapshotToYjs(collab.doc, encodeSheetsSnapshot(sheets, { computed: false }));
 
         expect(collab.doc.getArray('ops').length).toBe(0);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        expect((await readSheets(mount, path)).sheets).toEqual(sheets);
+        expect(withoutData((await readSheets(mount, path)).sheets)).toEqual(sheets);
 
         const viaSheets = new Y.Doc();
-        writeSheetsToYjs(viaSheets, sheets);
+        writeSheetsToYjs(viaSheets, sheets, { computed: false });
         expect(collab.doc.getMap('state').get('snapshot')).toBe(viaSheets.getMap('state').get('snapshot'));
         viaSheets.destroy();
     });
@@ -170,7 +202,7 @@ describe('document/sheets', () => {
         expect(collab.doc.getArray('ops').length).toBe(1);
 
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-        writeSheetsToYjs(collab.doc, sheets);
+        writeSheetsToYjs(collab.doc, sheets, { computed: false });
 
         expect(collab.doc.getArray('ops').length).toBe(0);
     });
@@ -299,7 +331,7 @@ describe('document/sheets — patch op replay', () => {
         const { sheets: result, recalcError } = await readSheets(mount, path);
 
         expect(result).toHaveLength(2);
-        expect(result[1]).toEqual(newSheet);
+        expect(withoutData(result)[1]).toEqual(newSheet);
         expect(recalcError).toBeNull();
     });
 
@@ -496,7 +528,9 @@ describe('document/sheets — patch op replay', () => {
                 ],
             },
         ];
-        writeSheetsToYjs(collab.doc, sheets);
+        // Uncomputed: no cached values, so the decoded doc carries no calcChain and
+        // the read gate must fire.
+        writeSheetsToYjs(collab.doc, sheets, { computed: false });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
@@ -536,7 +570,9 @@ describe('document/sheets — patch op replay', () => {
                 calcChain: [{ r: 0, c: 1, id: 'sheet-1' }],
             },
         ] as unknown as Sheet[];
-        writeSheetsToYjs(collab.doc, sheets);
+        // Value-complete: the decoded calcChain is seeded from the `f` cells, which is
+        // what holds the gate off (the written calcChain itself never goes on the wire).
+        writeSheetsToYjs(collab.doc, sheets, { computed: true });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
@@ -564,7 +600,7 @@ describe('document/sheets — patch op replay', () => {
                 ],
             },
         ] as unknown as Sheet[];
-        writeSheetsToYjs(doc, sheets);
+        writeSheetsToYjs(doc, sheets, { computed: false });
 
         const { sheets: result, recalcError } = readSheetsFromDoc(doc, { recalc: false });
 
@@ -648,6 +684,6 @@ describe('document/sheets — patch op replay', () => {
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(result).toEqual(sheets);
+        expect(withoutData(result)).toEqual(sheets);
     });
 });

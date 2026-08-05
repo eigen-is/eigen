@@ -47,7 +47,7 @@ function asSheet(v: unknown): Sheet | null {
 // usable row/column to the default grid, so replay must materialize the same
 // grid — ops were recorded against it, and a smaller base makes patches
 // beyond the celldata extent fail to resolve.
-function withMaterializedData(s: Sheet): Sheet {
+export function withMaterializedData(s: Sheet): Sheet {
     if (s.data) return s;
     const row = s.row != null && s.row > 0 ? s.row : DEFAULT_SHEET_ROW_COUNT;
     const column = s.column != null && s.column > 0 ? s.column : DEFAULT_SHEET_COLUMN_COUNT;

@@ -224,7 +224,9 @@ export function buildHeavyOps(batches = 40, opsPerBatch = 25, rows = 600, cols =
 // batch in its own transaction so data.db accumulates a real update-row history
 // (the capture path must carry snapshot + updates, not a single consolidated blob).
 export function seedSheetsDoc(doc: Y.Doc, sheets: Sheet[], opBatches: Op[][]): void {
-    writeSheetsToYjs(doc, sheets);
+    // Uncomputed on purpose: the formula cells carry `f` with no `v`/`m`, so the
+    // export read's recalc gate must fire on them.
+    writeSheetsToYjs(doc, sheets, { computed: false });
     for (const batch of opBatches) {
         doc.transact(() => {
             doc.getArray<Op[]>('ops').push([batch]);
