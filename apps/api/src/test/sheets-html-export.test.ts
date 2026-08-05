@@ -43,7 +43,7 @@ function useCount(out: RenderOut, cls: string): number {
 }
 
 describe('Sheets HTML export — class-based styles', () => {
-    test('emits zero inline style attributes; every style is a head class', () => {
+    test('emits zero inline style attributes; every style is a document class', () => {
         const sheet: Sheet = {
             ...makeSheet(
                 [
@@ -154,6 +154,67 @@ describe('Sheets HTML export — class-based styles', () => {
             'T',
         );
         expect(doc).not.toMatch(/url\(\s*['"]?https?:/i);
+    });
+
+    // Every value below is a schemaless CRDT string a collaborator (or a crafted xlsx)
+    // can set. In a style attribute they were inert; in stylesheet text `</style>` ends
+    // the element and whatever follows is live markup — DOMPurify keeps an
+    // <svg><image href>, and WeasyPrint fetches it server-side while rendering the PDF.
+    // Assert on the assembled, sanitized document: the pre-sanitize strings can't show
+    // whether the breakout survived.
+    const BREAKOUT = '1px}</style><svg><image href=http://169.254.169.254/latest/meta-data/></svg><style>.z{a:b';
+
+    // The document keeps exactly two style elements — the embedded fonts and the class
+    // rules. A third means the value closed the element and opened its own.
+    function expectNoBreakout(doc: string): void {
+        expect(doc).not.toMatch(/<svg/i);
+        expect(doc).not.toMatch(/<image/i);
+        expect(doc).not.toMatch(/url\(\s*['"]?https?:/i);
+        expect(doc).not.toMatch(/@import/i);
+        expect(doc.match(/<style>/g)?.length).toBe(2);
+    }
+
+    test('a hostile cell value cannot terminate the style element', () => {
+        for (const cell of [
+            { v: 'x', bg: BREAKOUT },
+            { v: 'x', ff: BREAKOUT },
+            { v: 'x', fc: BREAKOUT },
+        ]) {
+            expectNoBreakout(renderSheetsExportDocument([makeSheet([{ r: 0, c: 0, v: cell }])], 'T'));
+        }
+    });
+
+    test('hostile row/column dimensions cannot terminate the style element', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]);
+        sheet.config = {
+            columnlen: { 0: BREAKOUT as unknown as number },
+            rowlen: { 0: BREAKOUT as unknown as number },
+        };
+        const doc = renderSheetsExportDocument([sheet], 'T');
+        expectNoBreakout(doc);
+        // Non-numeric dimensions fall back to the defaults rather than concatenating —
+        // the same coercion getSheetContentSize applies for the @page rule.
+        expect(doc).toContain('width:73px');
+        expect(doc).toContain('height:19px');
+        expect(doc).not.toContain('169.254.169.254');
+    });
+
+    test('a backslash or comment opener cannot swallow the rules that follow', () => {
+        // `font-family:"Foo\"` escapes its own closing quote, and `red/*` opens a comment:
+        // in one shared stylesheet either would eat every later rule, so one odd cell
+        // would strip the styling off the rest of the workbook.
+        for (const bad of ['Foo\\', 'Foo/*']) {
+            const out = renderSheetsHtml([
+                makeSheet([
+                    { r: 0, c: 0, v: { v: 'a', ff: bad } },
+                    { r: 0, c: 1, v: { v: 'b', bg: '#654321' } },
+                ]),
+            ]);
+            expect(out.css).not.toContain('\\');
+            expect(out.css).not.toContain('/*');
+            // The later cell's rule is still its own reachable rule.
+            expect(classesFor(out, 'background:#654321').length).toBe(1);
+        }
     });
 });
 
@@ -410,6 +471,15 @@ describe('Sheets HTML export — cell styling', () => {
         const rule = out.css.match(new RegExp(`\\.${cls[0]}\\{([^}]*)\\}`))?.[1] ?? '';
         expect(rule).toContain('color:#ff0000');
         expect(rule).toContain('background:#0000ff');
+    });
+
+    test('a font name containing & or an apostrophe survives into the stylesheet intact', () => {
+        // CSS text never decodes entities, so HTML-escaping the name here would ask
+        // WeasyPrint for a font called "Bell MT &amp; O'Neill".
+        const out = renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: "Bell MT & O'Neill" } }])]);
+        expect(out.css).toContain('font-family:"Bell MT & ONeill",sans-serif');
+        expect(out.css).not.toContain('&amp;');
+        expect(out.css).not.toContain('&#39;');
     });
 
     test('rt as a positive angle produces a CSS rotate anchored at bottom-left', () => {

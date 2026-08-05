@@ -20,13 +20,24 @@ const isDataUri = (value: string): boolean => /^\s*data:/i.test(value);
 // targets aren't fetched during render, and sheets/docs carry legitimate http(s) hyperlinks.
 function restrictToDataRefs(node: AttrNode): void {
     const style = node.getAttribute('style');
-    if (style?.includes('url(')) {
-        const stripped = style.replace(NON_DATA_URL, 'url()');
+    if (style != null) {
+        // A CSS escape spells the same token invisibly to a regex (`\75 rl(…)` is
+        // `url(…)` to the parser), so drop backslashes before scanning. Generated
+        // export CSS never contains one.
+        const scanned = style.replace(/\\/g, '');
+        const stripped = scanned.includes('url(') ? scanned.replace(NON_DATA_URL, 'url()') : scanned;
         if (stripped !== style) node.setAttribute('style', stripped);
     }
     if (node.tagName === 'IMG') {
         const src = node.getAttribute('src');
         if (src && !isDataUri(src)) node.removeAttribute('src');
+    }
+    // SVG <image>/<use> reference through href (and legacy xlink:href), which DOMPurify
+    // keeps by default and WeasyPrint fetches server-side — the same SSRF as <img src>,
+    // through a different attribute.
+    for (const attr of ['href', 'xlink:href']) {
+        const value = node.getAttribute(attr);
+        if (value != null && !isDataUri(value) && node.tagName !== 'A') node.removeAttribute(attr);
     }
 }
 
@@ -36,7 +47,12 @@ function restrictToDataRefs(node: AttrNode): void {
 function restrictStyleTextToDataRefs(node: { textContent: string | null }): void {
     const text = node.textContent;
     if (!text) return;
-    const stripped = text.replace(NON_DATA_URL, 'url()').replace(/@import\b/gi, '');
+    // Backslashes go first for the same reason as in style attributes: `@\69 mport` and
+    // `\75 rl(` are `@import` and `url(` to a CSS parser but not to these regexes.
+    const stripped = text
+        .replace(/\\/g, '')
+        .replace(NON_DATA_URL, 'url()')
+        .replace(/@import\b/gi, '');
     if (stripped !== text) node.textContent = stripped;
 }
 

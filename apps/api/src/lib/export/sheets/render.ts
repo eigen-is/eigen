@@ -91,15 +91,39 @@ function styleAttr(styles: StyleRegistry | undefined, declarations: string): str
     return styles ? `class="${internStyle(styles, declarations)}"` : `style="${declarations}"`;
 }
 
-// Braces are structural in a stylesheet and escapeHtml leaves them alone, so a hostile
-// value ("red}td{display:none") could otherwise close its rule block and author
-// arbitrary document-wide CSS. Legit declarations never contain braces — strip them.
+// Cell values are schemaless CRDT strings, and in a stylesheet they sit in CSS text
+// rather than in an HTML attribute — a context where different characters are
+// structural and where HTML entities are never decoded. Every declaration reaches the
+// document through here, so the whole class is closed at this one seam instead of per
+// field: `<`/`>` end the <style> element (and DOMPurify keeps what follows — an
+// <svg><image href> is a server-side fetch under WeasyPrint), `{`/`}` open and close
+// rule blocks, `\` starts a CSS escape (which also hides `url(`/`@import` from the
+// sanitizer's scan by spelling them `\75 rl(` / `@\69 mport`), and `/*` opens a comment
+// that swallows every later rule. None of them can appear in a legitimate declaration.
+const CSS_TEXT_STRUCTURAL = /[<>{}\\]|\/\*|\*\//g;
+
 function serializeStyleRules(styles: StyleRegistry): string {
     const rules = [`td{${BASE_TD_STYLE}}`];
     for (const [declarations, cls] of styles) {
-        rules.push(`.${cls}{${declarations.replace(/[{}]/g, '')}}`);
+        rules.push(`.${cls}{${declarations.replace(CSS_TEXT_STRUCTURAL, '')}}`);
     }
     return rules.join('\n');
+}
+
+// A font-family quote must be a real `"` in stylesheet text and `&quot;` in a style
+// attribute, where a literal `"` would close the attribute early and silently drop every
+// later declaration. Both emitters ask here so the two never disagree.
+function fontQuote(forStylesheet: boolean): string {
+    return forStylesheet ? '"' : '&quot;';
+}
+
+// Dimensions are schemaless at the Yjs boundary — a collaborator can store a string.
+// getSheetContentSize coerces for the same reason (its result reaches the @page rule);
+// these reach the width/height declarations, so they get the same treatment at the
+// source rather than relying on the structural strip above.
+function cssLength(value: number | undefined, fallback: number): number {
+    const n = Number(value ?? fallback);
+    return Number.isFinite(n) ? n : fallback;
 }
 
 // Runs inside the transform Worker (worker.ts owns execution; the format logic
@@ -348,7 +372,7 @@ function renderSheet(
     const cols: string[] = [];
     let tableWidth = 0;
     for (const c of renderCols) {
-        const w = config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
+        const w = cssLength(config.columnlen?.[c], DEFAULT_COL_WIDTH);
         tableWidth += w;
         cols.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
     }
@@ -357,7 +381,7 @@ function renderSheet(
     // Rows
     const rows: string[] = [];
     for (const r of renderRows) {
-        const h = config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT;
+        const h = cssLength(config.rowlen?.[r], DEFAULT_ROW_HEIGHT);
         const cells: string[] = [];
         const rowMerges = merges.filter((m) => m.r <= r && r < m.r + m.rs);
 
@@ -414,7 +438,7 @@ function renderSheet(
     // second class token rather than going through styleAttr.
     const divClass = isLast || !styles ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
     const pageBreak = isLast || styles ? '' : ' style="page-break-after:always"';
-    const q = styles ? '"' : '&quot;';
+    const q = fontQuote(styles !== undefined);
     const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${q}Inter${q},system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const html = `<div class="${divClass}"${pageBreak}>
 <table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>
@@ -476,13 +500,16 @@ function buildCellStyle(
 
     if (v) {
         const family = resolveFontFamily(v.ff);
-        // In a style attribute the font-family quotes must be HTML-encoded (`&quot;`) —
-        // a literal `"` closes the attribute early and silently drops every later
-        // declaration (color, background, etc.). In stylesheet text entities are never
-        // decoded, so there the quotes must be real. Family name is escaped either way
-        // to defang stray quotes.
-        const q = forStylesheet ? '"' : '&quot;';
-        if (family) parts.push(`font-family:${q}${escapeHtml(family)}${q},sans-serif`);
+        // The name itself is escaped for its context too: entity-encoded in an attribute,
+        // but in stylesheet text entities stay literal, so escapeHtml there would render
+        // a font called "Bell MT & Co" as "Bell MT &amp; Co". Dropping the quote
+        // characters is what a stylesheet actually needs — they are all that could end
+        // the quoted value early, and the seam strips the CSS-structural rest.
+        if (family) {
+            const name = forStylesheet ? family.replace(/["'\\]/g, '') : escapeHtml(family);
+            const q = fontQuote(forStylesheet);
+            parts.push(`font-family:${q}${name}${q},sans-serif`);
+        }
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
         if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);

@@ -76,6 +76,45 @@ describe('export sanitize — style elements', () => {
         expect(out).toContain('data:image/png;base64');
         expect(out).not.toMatch(/url\(\s*['"]?https?:/i);
     });
+
+    // A CSS escape spells a token invisibly to a regex: `@\69 mport` and `\75 rl(` are
+    // `@import` and `url(` to the parser that actually fetches them. Dropping the
+    // backslash is what defangs them — `75 rl(…)` is an unknown function, not a fetch —
+    // so assert no real `url(`/`@import` token survives (the e2e suite below proves the
+    // consequence: WeasyPrint opens no connection).
+    test('CSS-escaped @import and url() are neutralized in style elements', () => {
+        const out = sanitizeExportHtml(
+            '<style>@\\69 mport "http://evil.test/a.css";.s0{background:\\75 rl(http://evil.test/b.png)}</style>',
+        );
+        expect(out).not.toMatch(/@import/i);
+        expect(out).not.toMatch(/\burl\(\s*['"]?https?:/i);
+        expect(out).not.toContain('\\');
+    });
+
+    test('a CSS-escaped url() in a style attribute is neutralized', () => {
+        const out = sanitizeExportHtml('<div style="background:\\75 rl(http://evil.test/c.png)">x</div>');
+        expect(out).not.toMatch(/\burl\(\s*['"]?https?:/i);
+        expect(out).not.toContain('\\');
+    });
+});
+
+// The url()/img-src rule left SVG's own reference attributes open. DOMPurify keeps
+// <svg><image href="http://…">, and WeasyPrint fetches it while rendering.
+describe('export sanitize — SVG references', () => {
+    test('a remote href on an SVG image is dropped', () => {
+        const out = sanitizeExportHtml('<svg><image href="http://evil.test/pixel.png"></image></svg>');
+        expect(out).not.toMatch(/href\s*=\s*["']?https?:/i);
+    });
+
+    test('a remote xlink:href on an SVG image is dropped', () => {
+        const out = sanitizeExportHtml('<svg><image xlink:href="http://evil.test/pixel.png"></image></svg>');
+        expect(out).not.toMatch(/href\s*=\s*["']?https?:/i);
+    });
+
+    test('http(s) anchors still keep their href', () => {
+        const out = sanitizeExportHtml('<a href="https://example.com/report">r</a>');
+        expect(out).toContain('href="https://example.com/report"');
+    });
 });
 
 const wp = await isWeasyPrintAvailable();
@@ -97,11 +136,17 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
             },
         });
         try {
-            // Mirror an export path: sanitize the assembled body, then render — as every caller
-            // does. Covers both vectors: the style attribute and the body style element.
+            // Mirror an export path: sanitize the assembled body, then render — as every
+            // caller does. One body carrying every known vector: plain and CSS-escaped
+            // url()/@import in both a style element and a style attribute, and an SVG
+            // image reference through href and xlink:href.
+            const u = (name: string) => `http://127.0.0.1:${server.port}/${name}`;
             const body = sanitizeExportHtml(
-                `<style>.pwn{background:url(http://127.0.0.1:${server.port}/pwn.css)}@import "http://127.0.0.1:${server.port}/i.css";</style>` +
-                    `<div class="pwn" style="width:200px;height:100px;background-image:url(http://127.0.0.1:${server.port}/pwn.png)">x</div>`,
+                `<style>.pwn{background:url(${u('a.css')})}@import "${u('b.css')}";` +
+                    `@\\69 mport "${u('c.css')}";.pwn2{background:\\75 rl(${u('d.png')})}</style>` +
+                    `<div class="pwn" style="width:200px;height:100px;background-image:url(${u('e.png')})">x</div>` +
+                    `<div style="background:\\75 rl(${u('f.png')})">y</div>` +
+                    `<svg><image href="${u('g.png')}"></image><image xlink:href="${u('h.png')}"></image></svg>`,
             );
             await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`);
             await Bun.sleep(250); // let any async fetch land before asserting

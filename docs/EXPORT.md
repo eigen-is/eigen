@@ -149,10 +149,14 @@ Every HTML pipeline — doc and slides (`{doc,slides}/transform.ts`) and the she
 (`apps/api/src/lib/export/sanitize.ts`) inside the Worker, before it is wrapped or handed to a
 converter. DOCX and the PDFs inherit it, because they are built from that same sanitized HTML.
 
-On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element
-and every `<img src>` must be a `data:` URI**; anything else is stripped, and `@import` (whose
-string form fetches without any `url()`, and which can only exist in element CSS) is removed from
-style-element text. That is the SSRF guard. Export embeds all its
+On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element,
+every `<img src>`, and every SVG `href`/`xlink:href` must be a `data:` URI**; anything else is
+stripped, and `@import` (whose string form fetches without any `url()`, and which can only exist
+in element CSS) is removed from style-element text. Backslashes are dropped from CSS before that
+scan, because a CSS escape spells the same token invisibly to a regex — `\75 rl(…)` and
+`@\69 mport` are `url(…)` and `@import` to the parser that does the fetching. SVG `<image href>`
+is covered because DOMPurify keeps it by default and it is a fetch just like `<img src>`;
+`<a href>` is explicitly exempt. That is the SSRF guard. Export embeds all its
 resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT
 string (a slide text run, a sheet cell). WeasyPrint fetches such references server-side while
 rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the

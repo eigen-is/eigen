@@ -277,11 +277,24 @@ DOMPurify/jsdom CSS-parses every inline `style` attribute it sanitizes while cla
 and style-element text pass through as plain strings — inline styles made a 340k-cell export
 82MB with ~75% of its 104s spent CSS-parsing (13.7GB RSS); classes render it in ~7s at 10.4MB.
 The preview (`renderSheetsPreviewHtml`) keeps inline styles: its body fragment is embedded
-without a `<head>` (PREVIEWS.md), and its bytes are golden-pinned. Hostile values can't abuse
-the stylesheet context: values are still `escapeHtml`'d (no markup can survive into CSS text),
-braces are stripped at rule emit so a value can't close its declaration block, and the
-sanitizer applies the same data-URI-only `url()` rule to style-element text plus an `@import`
-strip (EXPORT.md § Sanitization and SSRF).
+without a `<head>` (PREVIEWS.md), and its bytes are golden-pinned.
+
+**Stylesheet text is a different escaping context from a style attribute**, and cell values are
+schemaless CRDT strings. Two guarantees keep them inert, both at seams rather than per field:
+
+- `serializeStyleRules` strips what is structural in CSS text from every declaration it emits:
+  `<`/`>` (which would end the `<style>` element — and DOMPurify keeps what follows, so an
+  `<svg><image href>` becomes a server-side fetch under WeasyPrint), `{`/`}` (rule blocks),
+  `\` (a CSS escape, which also spells `url(`/`@import` invisibly to the sanitizer's scan as
+  `\75 rl(` / `@\69 mport`), and `/*`/`*/` (a comment that would swallow every later rule —
+  in one shared stylesheet that means one odd cell unstyling the rest of the workbook).
+- Numeric fields are coerced, not escaped: `columnlen`/`rowlen` go through `cssLength`, the
+  same `Number()` guard `getSheetContentSize` applies for the `@page` rule.
+
+Values are still `escapeHtml`'d on the way in, except the font family, where entity encoding
+would corrupt a real name (`Bell MT & Co`) — there the quote characters are dropped instead.
+The sanitizer applies the data-URI-only `url()` rule to style-element text as well, plus an
+`@import` strip and SVG `href`/`xlink:href` coverage (EXPORT.md § Sanitization and SSRF).
 
 Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `FormulaEngine` plus a
 `createArrayResolver` over all loaded sheets (so cross-sheet refs like `=Sheet2!A1>10` resolve),
