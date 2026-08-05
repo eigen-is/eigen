@@ -149,12 +149,16 @@ Every HTML pipeline — doc and slides (`{doc,slides}/transform.ts`) and the she
 (`apps/api/src/lib/export/sanitize.ts`) inside the Worker, before it is wrapped or handed to a
 converter. DOCX and the PDFs inherit it, because they are built from that same sanitized HTML.
 
-On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute and every `<img src>`
-must be a `data:` URI**; anything else is stripped. That is the SSRF guard. Export embeds all its
+On top of DOMPurify it adds one rule: **every `url()` in a `style` attribute or `<style>` element
+and every `<img src>` must be a `data:` URI**; anything else is stripped, and `@import` (whose
+string form fetches without any `url()`, and which can only exist in element CSS) is removed from
+style-element text. That is the SSRF guard. Export embeds all its
 resources as data URIs, so a remote reference can only have come from an attacker-controlled CRDT
 string (a slide text run, a sheet cell). WeasyPrint fetches such references server-side while
 rendering, from the API host, and its CLI has no way to restrict fetch protocols — so the
-restriction has to happen here. `<a href>` is deliberately left alone: link targets are not fetched
+restriction has to happen here. The style-element coverage exists for the sheets exports, which
+emit their interned class rules in a body `<style>` (SHEETS.md § HTML/PDF export). `<a href>` is
+deliberately left alone: link targets are not fetched
 during render, and docs and sheets carry legitimate http(s) hyperlinks.
 
 The hook is added and removed around each synchronous `DOMPurify.sanitize()` call, so it never leaks
@@ -292,7 +296,10 @@ the autofilter range, conditional formatting (engine rule order becomes explicit
 (per-cell rules that ExcelJS re-merges into sqref rectangles), and hyperlinks. Webpage links are scheme-gated
 through `resolveWebLink` (`@workspace/lib/sheets/web-link`, the same gate the editor's link navigation uses);
 internal links are written in Excel-native `location` form. `renderSheetsHtml` (`sheets/render.ts`) renders the
-full workbook for exports; the quick preview shares its internals via `renderSheetsPreviewHtml`, which clips
+full workbook for exports with class-based styles — every style interns into a workbook-global class registry
+whose rules ship in a body `<style>` element, so DOMPurify never CSS-parses per-cell inline attributes
+(SHEETS.md § HTML/PDF export); the quick preview shares its internals via `renderSheetsPreviewHtml`, which
+keeps inline styles (its fragment embeds without a `<head>`), clips
 the first sheet to the preview budget and runs inside the document-transform Worker (see PREVIEWS.md). Both
 render webpage hyperlinks as `target="_blank" rel="noopener noreferrer"` anchors through the same scheme
 gate (internal links stay plain text — no meaningful target in standalone HTML).

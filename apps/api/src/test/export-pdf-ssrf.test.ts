@@ -43,6 +43,41 @@ describe('export sanitize — SSRF surface', () => {
     });
 });
 
+// The sheets export emits its class rules in a body <style> element, so the same data-only
+// restriction that guards style attributes must cover style-element CSS text — plus @import,
+// which can only exist there (a declaration-only style attribute can't carry at-rules).
+describe('export sanitize — style elements', () => {
+    test('a style element and its class rules survive sanitization', () => {
+        const out = sanitizeExportHtml(
+            '<style>td{color:#111}\n.s0{background:#eee}</style><table><tbody><tr><td class="s0">x</td></tr></tbody></table>',
+        );
+        expect(out).toContain('<style>');
+        expect(out).toContain('.s0{background:#eee}');
+        expect(out).toContain('class="s0"');
+    });
+
+    test('a remote url() inside a style element is neutralized', () => {
+        const out = sanitizeExportHtml('<style>.s0{background:url(http://169.254.169.254/latest/meta-data/)}</style>');
+        expect(out).not.toMatch(/url\(\s*['"]?https?:/i);
+        expect(out).toContain('<style>');
+    });
+
+    test('@import is neutralized in both string and url form', () => {
+        const out = sanitizeExportHtml(
+            '<style>@import "http://evil.test/a.css";@import url(http://evil.test/b.css);.s0{color:red}</style>',
+        );
+        expect(out).not.toMatch(/@import/i);
+        expect(out).not.toMatch(/url\(\s*['"]?https?:/i);
+        expect(out).toContain('.s0{color:red}');
+    });
+
+    test('a data: url() inside a style element is kept', () => {
+        const out = sanitizeExportHtml(`<style>.s0{background:url(${DATA_PNG})}</style>`);
+        expect(out).toContain('data:image/png;base64');
+        expect(out).not.toMatch(/url\(\s*['"]?https?:/i);
+    });
+});
+
 const wp = await isWeasyPrintAvailable();
 const suite = wp ? describe : describe.skip;
 
@@ -62,9 +97,11 @@ suite('PDF export SSRF (WeasyPrint end-to-end)', () => {
             },
         });
         try {
-            // Mirror an export path: sanitize the assembled body, then render — as every caller does.
+            // Mirror an export path: sanitize the assembled body, then render — as every caller
+            // does. Covers both vectors: the style attribute and the body style element.
             const body = sanitizeExportHtml(
-                `<div style="width:200px;height:100px;background-image:url(http://127.0.0.1:${server.port}/pwn.png)">x</div>`,
+                `<style>.pwn{background:url(http://127.0.0.1:${server.port}/pwn.css)}@import "http://127.0.0.1:${server.port}/i.css";</style>` +
+                    `<div class="pwn" style="width:200px;height:100px;background-image:url(http://127.0.0.1:${server.port}/pwn.png)">x</div>`,
             );
             await htmlToPdf(`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${body}</body></html>`);
             await Bun.sleep(250); // let any async fetch land before asserting

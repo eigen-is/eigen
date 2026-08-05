@@ -31,10 +31,11 @@ import { resolveFontFamily } from './fonts';
 
 const DEFAULT_COL_WIDTH = 73;
 const DEFAULT_ROW_HEIGHT = 19;
-// Inline defaults applied to every td so the markup renders without the document <head>
-// CSS (preview embedders strip it). Vertical-align is intentionally absent — buildCellStyle
+// Defaults applied to every td: inline in the preview so the markup renders without the
+// document <head> CSS (preview embedders strip it), and as the shared td{} rule in the
+// class-based export stylesheet. Vertical-align is intentionally absent — buildCellStyle
 // always emits one (`middle`, `top`, `bottom`, …) so we never end up with two competing
-// declarations in a single style attribute.
+// declarations for one cell.
 const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 const HORIZONTAL_ALIGN: Record<number, string> = {
@@ -68,13 +69,46 @@ const BORDER_STYLE_CSS: Record<number, string> = {
 const PAGE_MARGIN = 40;
 const PAGE_SLACK = 20;
 
+// Full exports intern every emitted style into a class ("s0", "s1", …) declared in a
+// body <style> element: a real workbook repeats a few hundred distinct styles across
+// hundreds of thousands of cells, and DOMPurify/jsdom CSS-parses every inline style
+// attribute it sanitizes (the 82MB/104s pathology) while class attributes and style-
+// element text pass through as plain strings. Keys are the exact declaration strings
+// the inline path would emit; values already went through escapeHtml at build time.
+// The preview keeps inline styles — its body fragment embeds without a <head>.
+type StyleRegistry = Map<string, string>;
+
+function internStyle(styles: StyleRegistry, declarations: string): string {
+    let cls = styles.get(declarations);
+    if (cls === undefined) {
+        cls = `s${styles.size}`;
+        styles.set(declarations, cls);
+    }
+    return cls;
+}
+
+function styleAttr(styles: StyleRegistry | undefined, declarations: string): string {
+    return styles ? `class="${internStyle(styles, declarations)}"` : `style="${declarations}"`;
+}
+
+// Braces are structural in a stylesheet and escapeHtml leaves them alone, so a hostile
+// value ("red}td{display:none") could otherwise close its rule block and author
+// arbitrary document-wide CSS. Legit declarations never contain braces — strip them.
+function serializeStyleRules(styles: StyleRegistry): string {
+    const rules = [`td{${BASE_TD_STYLE}}`];
+    for (const [declarations, cls] of styles) {
+        rules.push(`.${cls}{${declarations.replace(/[{}]/g, '')}}`);
+    }
+    return rules.join('\n');
+}
+
 // Runs inside the transform Worker (worker.ts owns execution; the format logic
 // stays here in export/).
 export function renderSheetsExportDocument(sheets: Sheet[], title: string): string {
-    const bodyHtml = renderSheetsHtml(sheets);
+    const { html, css } = renderSheetsHtml(sheets);
     // target isn't in DOMPurify's default allowlist; hyperlink anchors always pair
     // it with rel="noopener noreferrer", so letting it through is tabnabbing-safe.
-    const sanitized = sanitizeExportHtml(bodyHtml, { ADD_ATTR: ['target'] });
+    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`, { ADD_ATTR: ['target'] });
     return wrapInDocument(title, sanitized);
 }
 
@@ -90,7 +124,8 @@ export function renderSheetsPdfDocument(sheets: Sheet[], title: string): string 
         if (size.height > maxH) maxH = size.height;
     }
 
-    const sanitized = sanitizeExportHtml(renderSheetsHtml(sheets));
+    const { html, css } = renderSheetsHtml(sheets);
+    const sanitized = sanitizeExportHtml(`<style>${css}</style>\n${html}`);
     const pageSize = {
         width: maxW + 2 * PAGE_MARGIN + PAGE_SLACK,
         height: maxH + 2 * PAGE_MARGIN + PAGE_SLACK,
@@ -123,9 +158,13 @@ function createRenderContext(sheets: Sheet[]): { engine: FormulaEngine; resolver
     return { engine, resolver };
 }
 
-export function renderSheetsHtml(sheets: Sheet[]): string {
+export function renderSheetsHtml(sheets: Sheet[]): { html: string; css: string } {
     const { engine, resolver } = createRenderContext(sheets);
-    return sheets.map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver).html).join('\n');
+    const styles: StyleRegistry = new Map();
+    const html = sheets
+        .map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver, undefined, styles).html)
+        .join('\n');
+    return { html, css: serializeStyleRules(styles) };
 }
 
 // Preview is a glance, not a document — render only the first sheet, clipped to
@@ -233,6 +272,7 @@ function renderSheet(
     engine: FormulaEngine,
     resolver: CellResolver,
     budget?: SheetPreviewBudget,
+    styles?: StyleRegistry,
 ): { html: string; truncated: boolean } {
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
@@ -310,7 +350,7 @@ function renderSheet(
     for (const c of renderCols) {
         const w = config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
         tableWidth += w;
-        cols.push(`<col style="width:${w}px">`);
+        cols.push(`<col ${styleAttr(styles, `width:${w}px`)}>`);
     }
     const colgroup = `<colgroup>${cols.join('')}</colgroup>`;
 
@@ -343,9 +383,14 @@ function renderSheet(
                 if (rs > 1) attrs.push(`rowspan="${rs}"`);
             }
 
-            const cellStyle = buildCellStyle(v, borderMap.get(key), showGrid, cfStyle);
-            const style = cellStyle ? `${BASE_TD_STYLE};${cellStyle}` : BASE_TD_STYLE;
-            attrs.push(`style="${style}"`);
+            const cellStyle = buildCellStyle(v, borderMap.get(key), showGrid, cfStyle, styles !== undefined);
+            if (styles) {
+                // The base td declarations live in the shared td{} rule; an unstyled
+                // cell needs no class at all.
+                if (cellStyle) attrs.push(styleAttr(styles, cellStyle));
+            } else {
+                attrs.push(`style="${cellStyle ? `${BASE_TD_STYLE};${cellStyle}` : BASE_TD_STYLE}"`);
+            }
 
             // Webpage links render as anchors gated by the same scheme allowlist as
             // FE navigation; blocked schemes and internal sheet/cellrange links (no
@@ -356,18 +401,23 @@ function renderSheet(
             if (href != null) {
                 display = `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${display}</a>`;
             }
-            const dataBarLayer = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display) : null;
-            const inner = wrapForRotation(v, dataBarLayer ?? display);
+            const dataBarLayer = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display, styles) : null;
+            const inner = wrapForRotation(v, dataBarLayer ?? display, styles);
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
             cells.push(`<td${attrStr}>${inner}</td>`);
         }
 
-        rows.push(`<tr style="height:${h}px">${cells.join('')}</tr>`);
+        rows.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
-    const pageBreak = isLast ? '' : ' style="page-break-after:always"';
-    const html = `<div class="sheet"${pageBreak}>
-<table style="border-collapse:collapse;table-layout:fixed;font-family:&quot;Inter&quot;,system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px">${colgroup}<tbody>${rows.join('')}</tbody></table>
+    // The .sheet div already carries a class, so the page-break style joins it as a
+    // second class token rather than going through styleAttr.
+    const divClass = isLast || !styles ? 'sheet' : `sheet ${internStyle(styles, 'page-break-after:always')}`;
+    const pageBreak = isLast || styles ? '' : ' style="page-break-after:always"';
+    const q = styles ? '"' : '&quot;';
+    const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${q}Inter${q},system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
+    const html = `<div class="${divClass}"${pageBreak}>
+<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rows.join('')}</tbody></table>
 </div>`;
     return { html, truncated };
 }
@@ -387,7 +437,7 @@ function getCellDisplay(v: Cell | null): string {
 // bars use a hardcoded red — that's a long-standing canvas behavior, intentionally
 // inherited here for visual parity. Diverging would mean the export differs from what
 // users see on screen.
-function renderDataBar(bar: DataBar, display: string): string {
+function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): string {
     // Bar colors come from the schemaless rule format — escape like every other cell color.
     const from = escapeHtml(bar.format[0]);
     const to = bar.format.length > 1 ? escapeHtml(bar.format[1]) : '';
@@ -410,7 +460,7 @@ function renderDataBar(bar: DataBar, display: string): string {
     }
 
     const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
-    return `<div style="${barStyle}"></div><span style="position:relative;z-index:1">${display}</span>`;
+    return `<div ${styleAttr(styles, barStyle)}></div><span ${styleAttr(styles, 'position:relative;z-index:1')}>${display}</span>`;
 }
 
 function buildCellStyle(
@@ -418,6 +468,7 @@ function buildCellStyle(
     borders: { l?: string; r?: string; t?: string; b?: string } | undefined,
     showGrid: boolean,
     cfStyle: CellFormatStyle | undefined,
+    forStylesheet: boolean,
 ): string {
     const parts: string[] = [];
 
@@ -425,11 +476,13 @@ function buildCellStyle(
 
     if (v) {
         const family = resolveFontFamily(v.ff);
-        // The style attribute is wrapped in double quotes by the caller, so the
-        // font-family quotes must be HTML-encoded (`&quot;`) — using literal `"`
-        // here closes the attribute early and silently drops every later declaration
-        // (color, background, etc.). Family name is escaped to defang stray quotes.
-        if (family) parts.push(`font-family:&quot;${escapeHtml(family)}&quot;,sans-serif`);
+        // In a style attribute the font-family quotes must be HTML-encoded (`&quot;`) —
+        // a literal `"` closes the attribute early and silently drops every later
+        // declaration (color, background, etc.). In stylesheet text entities are never
+        // decoded, so there the quotes must be real. Family name is escaped either way
+        // to defang stray quotes.
+        const q = forStylesheet ? '"' : '&quot;';
+        if (family) parts.push(`font-family:${q}${escapeHtml(family)}${q},sans-serif`);
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
         if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
@@ -516,10 +569,10 @@ function isNumericRotation(v: Cell | null): v is Cell & { rt: number } {
 //
 // `rt: 'vertical'` uses CSS writing-mode for stacked top-to-bottom characters; the span
 // flows naturally without absolute positioning since writing-mode handles the layout.
-function wrapForRotation(v: Cell | null, inner: string): string {
+function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry): string {
     if (!v || v.rt == null) return inner;
     if (v.rt === 'vertical') {
-        return `<span style="writing-mode:vertical-rl;text-orientation:upright">${inner}</span>`;
+        return `<span ${styleAttr(styles, 'writing-mode:vertical-rl;text-orientation:upright')}>${inner}</span>`;
     }
     if (isNumericRotation(v)) {
         const { rt } = v;
@@ -527,10 +580,10 @@ function wrapForRotation(v: Cell | null, inner: string): string {
         const yPin = rt > 0 ? 'bottom:0' : 'top:0';
         const origin = rt > 0 ? 'left bottom' : 'left top';
         const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
-        return (
-            `<span style="position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
-            `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)">${inner}</span>`
-        );
+        const decl =
+            `position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
+            `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)`;
+        return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
     }
     return inner;
 }
