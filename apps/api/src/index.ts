@@ -14,6 +14,11 @@ const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 const server = app.listen({
     port: 8000,
     maxRequestBodySize: 1024 * 1024 * 1024, // 1 GB — per-file limits enforced by streaming parser
+    // Bun closes a connection that streams no bytes for ~30s by default, which killed
+    // every export/convert whose transform outlives it (the response is silent while the
+    // Worker runs). Cover the worst legitimate silence: 120s transform deadline + 60s
+    // WeasyPrint subprocess + margin. WebSockets are unaffected (own keepalive config).
+    idleTimeout: 200,
 });
 
 export type { App as app } from './app';
