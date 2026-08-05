@@ -85,15 +85,9 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 ## Performance (sheet-perf program leftovers, 2026-08-05)
 
 Program history + measurements: gitignored `docs/superpowers/sheet-perf/PHASE0-MEASUREMENTS.md`.
-Shipped through P2 (snapshot v2, 56.5→12.6MB; import 21.4→4.7s; export idle-drop fix; smells sweep).
+Shipped through P3b (snapshot v2, 56.5→12.6MB; import 21.4→4.7s; export idle-drop fix; smells
+sweep; class-based export styles, html render 153s/82MB → 7.3s/10.4MB on the reference workbook).
 
-- [ ] **P3b — class-based styles in the full sheets HTML export** (`export/sheets/render.ts`):
-      per-cell inline styles make the 340k-cell export 82MB and put ~75% of its 104s inside
-      DOMPurify/jsdom CSS-parsing (13.7GB RSS); only 224 distinct style combos exist. Emit a
-      class per distinct style in the document head for `renderSheetsHtml`; the bounded
-      preview (`renderSheetsPreviewHtml`) keeps inline styles (its body is embedded without a
-      `<head>`). Check `sanitizeExportHtml` keeps the `<style>` element. Export html/pdf-html
-      goldens move intentionally; unblocks PDF (WeasyPrint 60s cap needs the small document)
 - [ ] **P4 — prod-build browser open benchmark** (vite build + preview + CORS shim per
       VERIFICATION.md): the open-path gate after the v2 codec — measures what remains of
       workbook-init produce + first-render long tasks with bundled assets

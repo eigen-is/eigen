@@ -358,11 +358,12 @@ describe('document transform (eigensheets preview)', () => {
     }, 60_000);
 });
 
-// Recorded from the pre-Worker pipeline on the golden fixture (the html download and
-// the wrapped document fed to htmlToPdf), so the move off-thread is proven
-// byte-identical. Regenerate only for an intentional renderer change.
-const GOLDEN_EXPORT_HTML_SHA256 = '7ca7f67cbdcdfb160fb34f4f22d81b9df74c06fba9b37be368e57e4c861bbc98';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = '8189376ecb1b541ebfd86bcffc937c3daae711e8f76558cddf8e9dbec047422c';
+// Pinned bytes of the golden fixture's export documents (the html download and the
+// wrapped document fed to htmlToPdf). Regenerate only for an intentional renderer
+// change — last moved by the class-based export styles (2026-08-05), which replaced
+// every inline style attribute with interned classes in a body <style> element.
+const GOLDEN_EXPORT_HTML_SHA256 = 'f5d528de407c003abef49b98ce37a24c8aea7f7a1f366e46118535680d6512fe';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = '5cc180f8ccf3b9f2864b9226c9323810a8ba780c0ed6ad94b754ec43dc22c2bd';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -373,12 +374,12 @@ describe('document transform (eigensheets export)', () => {
         golden = await home.drive.resolveFile(mountId, sheetsPath.id);
     });
 
-    test('html export through the Worker is byte-identical to the pre-move pipeline', async () => {
+    test('html export through the Worker matches the pinned golden bytes', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_EXPORT_HTML_SHA256);
     }, 120_000);
 
-    test('pdf-html export through the Worker is byte-identical to the pre-move pipeline', async () => {
+    test('pdf-html export through the Worker matches the pinned golden bytes', async () => {
         // The stage before htmlToPdf: the wrapped document WeasyPrint renders, with
         // the @page size derived from the widest/tallest sheet.
         const job = {

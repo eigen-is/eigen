@@ -263,10 +263,25 @@ HTML/PDF export use this same shape — see § HTML/PDF export below.
 ### HTML/PDF export
 
 `apps/api/src/lib/export/sheets/render.ts` calls `evaluateConditionalFormat` per sheet and merges
-`textColor`/`cellColor` into the cell's inline style. `dataBar` entries render as an
+`textColor`/`cellColor` into the cell's style. `dataBar` entries render as an
 absolutely-positioned `<div>` inside a `position:relative` `<td>`, with geometry mirrored from
 the canvas painter. Negative bars hardcode red (canvas legacy); positive bars use the
 user-configured `format` colors.
+
+**Class-based styles (full exports only).** `renderSheetsHtml` interns every emitted style —
+cell, row height, col width, table, data bar, rotation span — into a workbook-global registry
+(`s0`, `s1`, …) and returns `{ html, css }`; the document builders embed the rules in a body
+`<style>` element that rides through `sanitizeExportHtml` with the markup. A real workbook
+repeats a few hundred distinct styles across hundreds of thousands of cells, and
+DOMPurify/jsdom CSS-parses every inline `style` attribute it sanitizes while class attributes
+and style-element text pass through as plain strings — inline styles made a 340k-cell export
+82MB with ~75% of its 104s spent CSS-parsing (13.7GB RSS); classes render it in ~7s at 10.4MB.
+The preview (`renderSheetsPreviewHtml`) keeps inline styles: its body fragment is embedded
+without a `<head>` (PREVIEWS.md), and its bytes are golden-pinned. Hostile values can't abuse
+the stylesheet context: values are still `escapeHtml`'d (no markup can survive into CSS text),
+braces are stripped at rule emit so a value can't close its declaration block, and the
+sanitizer applies the same data-URI-only `url()` rule to style-element text plus an `@import`
+strip (EXPORT.md § Sanitization and SSRF).
 
 Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `FormulaEngine` plus a
 `createArrayResolver` over all loaded sheets (so cross-sheet refs like `=Sheet2!A1>10` resolve),
