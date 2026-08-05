@@ -80,4 +80,38 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
         const result = getCalculationOrder([cell, cell], map);
         expect(result).toHaveLength(1);
     });
+
+    test('hub cell precedes all of its dependents', () => {
+        // A hub many formulas read: hub.parents lists every dependent.
+        const n = 5000;
+        const hub = makeCell('hub');
+        const map: FormulaCellInfoMap = { hub };
+        for (let i = 0; i < n; i++) {
+            const key = `dep${i}`;
+            map[key] = makeCell(key);
+            hub.parents[key] = 1;
+        }
+        const result = getCalculationOrder([hub], map);
+        expect(result).toHaveLength(n + 1);
+        expect(result[0].key).toBe('hub');
+    });
+
+    test('long dependency chain keeps strict base-to-dependent order', () => {
+        // c0 ← c1 ← … ← cN (each cell's value feeds the next). Import-scale depth:
+        // the pre-fix concat-based stack made this quadratic (17s of a 21s import).
+        const n = 30000;
+        const map: FormulaCellInfoMap = {};
+        for (let i = 0; i < n; i++) {
+            map[`c${i}`] = makeCell(`c${i}`);
+        }
+        for (let i = 0; i < n - 1; i++) {
+            map[`c${i}`].parents[`c${i + 1}`] = 1;
+        }
+        const result = getCalculationOrder([map.c0], map);
+        expect(result).toHaveLength(n);
+        const position = new Map(result.map((cell, index) => [cell.key, index]));
+        for (let i = 0; i < n - 1; i++) {
+            expect(position.get(`c${i}`)!).toBeLessThan(position.get(`c${i + 1}`)!);
+        }
+    });
 });
