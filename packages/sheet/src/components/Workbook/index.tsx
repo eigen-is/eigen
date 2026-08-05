@@ -495,6 +495,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onKeyDown = useCallback(
             (e: React.KeyboardEvent<HTMLDivElement>) => {
+                // Portaled UI (menus, popovers, dialogs) renders outside this div but still
+                // bubbles keydown through the React tree. The grid only owns keys from its
+                // own DOM subtree — without this, menu roving moves the selection and the
+                // handler's tail steals focus out of the open menu.
+                if (!e.currentTarget.contains(e.target as Node)) return;
                 const { nativeEvent } = e;
                 // handling undo and redo ahead because handleUndo and handleRedo
                 // themselves are calling setContext, and should not be nested

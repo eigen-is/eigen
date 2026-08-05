@@ -46,6 +46,8 @@ export function FontSizeStepper({ value, onChange }: FontSizeStepperProps) {
                 onChange={(e) => setDraft(e.target.value)}
                 onBlur={commit}
                 onKeyDown={(e) => {
+                    // Typing here must not reach the workbook's onKeyDown (grid navigation / cell edit).
+                    e.stopPropagation();
                     if (e.key === 'Enter') {
                         commit();
                         e.currentTarget.blur();

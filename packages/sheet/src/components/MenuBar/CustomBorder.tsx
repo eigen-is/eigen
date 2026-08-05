@@ -37,6 +37,7 @@ export function CustomBorder({ onPick }: Props) {
                 label={border.borderColor}
                 value={changeColor}
                 showReset={false}
+                keepMenuOpen
                 onChange={(color) => {
                     setChangeColor(color);
                     onPick(color, changeStyle);
