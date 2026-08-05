@@ -46,7 +46,7 @@ again — `apps/sheets` hides the workbook rather than unmounting it for the mob
 
 | Key     | Type    | Purpose                                   |
 |---------|---------|-------------------------------------------|
-| `state` | Y.Map   | `snapshot` — full JSON for initialization |
+| `state` | Y.Map   | `snapshot` — the encoded workbook (see § Snapshot format v2) |
 | `ops`   | Y.Array | Incremental ops for real-time sync        |
 
 **Why op-based**: Full JSON snapshots cause overwrite conflicts. Ops are granular — concurrent edits on different cells
@@ -62,6 +62,34 @@ reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" mea
 **`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`), and
 `use-sheet.ts` strips it from the snapshot on both write and read (older docs may still carry one baked in;
 a persisted cursor resurfaced on open as phantom stats-bar values for a selection nobody made).
+
+## Snapshot format (v2)
+
+The `state.snapshot` string is written and read ONLY through
+`encodeSheetsSnapshot` / `decodeSheetsSnapshot` (`packages/lib/src/sheets/snapshot-codec.ts`,
+exported via `@workspace/lib/sheets`). v1 was `JSON.stringify(Sheet[])` — 56MB for a real
+340k-cell workbook (224 distinct style combos and ~110 distinct border payloads repeated
+per cell); v2 interns both in workbook-global dictionaries and is ~4.5× smaller (12.6MB for
+the same workbook). The codec lives at the serialization seam only: in-memory `Sheet[]`,
+the op format and `replaySheetsOps` are untouched.
+
+- Envelope: `{"f":"eigensheets/2","computed":bool,"styles":[…],"borders":[…],"sheets":[…]}`.
+- Cells: `[r, c, styleIdx, content?]` tuples; a bare-primitive content means `v` with
+  `m === String(v)` (rehydrated on decode); style-only cells carry no content slot. The
+  dense `data` matrix folds into the cell list at encode (editor flushes carry authoritative
+  `data` over stale `celldata`) and is never persisted; `selections` never persists either.
+- `config.borderInfo`'s per-cell entries become `[r, c, borderIdx]` in an order-preserving
+  list (later entries override); other rangeTypes ride verbatim.
+- `calcChain` is never persisted. `computed: true` (importer post-recalc, every editor
+  flush) makes the decoder seed it from the `f` cells — which is exactly the signal
+  `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
+  uncomputed snapshot (recalc-failed import) decodes without a chain and exports recalc.
+- **Legacy**: a snapshot starting with `[` is v1 `Sheet[]` JSON and passes through
+  `JSON.parse` unchanged — every pre-v2 doc keeps opening. Reads still strip `selections`
+  to heal v1 snapshots that baked one in.
+- `readSheetsFromDoc` materializes the dense `data` matrix for every sheet after replay
+  (`withMaterializedData`): v2 snapshots are celldata-only, but the renderers'
+  conditional-format pass and the cross-sheet formula resolver read `data`.
 
 ## Mount-time Bootstrap
 
