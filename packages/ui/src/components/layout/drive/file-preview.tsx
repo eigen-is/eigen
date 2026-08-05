@@ -46,6 +46,8 @@ export function FilePreview({
     onNext,
 }: FilePreviewProps) {
     useHotkey('Escape', () => onClose(), { enabled: true });
+    // Space closes it again, the way it opened it (Finder's Quick Look).
+    useHotkey('Space', () => onClose(), { enabled: true, preventDefault: true });
     useHotkey(
         'ArrowLeft',
         () => {

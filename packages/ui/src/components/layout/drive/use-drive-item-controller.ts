@@ -54,6 +54,12 @@ export function useDriveItemController({
     const internalSelection = useListSelection({ items, getId: (item) => item.id });
     const selection = externalSelection ?? internalSelection;
 
+    // A row picked through the URL (drive's `pid`) is a real selection, not just active-row
+    // styling — the palette's selection actions and the shift-range anchor read the selection set.
+    useEffect(() => {
+        if (activeItemId) selection.select(activeItemId);
+    }, [activeItemId, selection.select]);
+
     useEffect(() => {
         onSelectionChange?.(selection.selectedItems);
     }, [selection.selectedItems, onSelectionChange]);

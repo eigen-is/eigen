@@ -51,13 +51,30 @@ export function useKeyboardListNavigation<T>({
         }
     }, [activeId, items]);
 
+    // The list owns the keyboard model, so it takes focus on mount — and takes it back whenever
+    // focus falls to <body>. Clicking non-focusable chrome (the detail panel, a toolbar) or
+    // restoring the page from the back/forward cache leaves nothing focused, and every shortcut
+    // here would stay dead until the user clicked a row again.
     useEffect(() => {
+        const focusList = () => containerRef.current?.focus({ preventScroll: true });
+
         const timer = setTimeout(() => {
-            if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
-                containerRef.current.focus({ preventScroll: true });
-            }
+            if (!containerRef.current?.contains(document.activeElement)) focusList();
         }, 100);
-        return () => clearTimeout(timer);
+
+        const reclaim = () => {
+            if (document.activeElement === document.body) focusList();
+        };
+        // focusout fires before the next element takes focus, so re-check on the next tick.
+        const onFocusOut = () => setTimeout(reclaim, 0);
+        document.addEventListener('focusout', onFocusOut);
+        window.addEventListener('pageshow', reclaim);
+
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('focusout', onFocusOut);
+            window.removeEventListener('pageshow', reclaim);
+        };
     }, [containerRef]);
 
     const scrollToRow = (index: number) => {
@@ -139,6 +156,10 @@ export function useKeyboardListNavigation<T>({
 
             case ' ':
                 e.preventDefault();
+                // React renders the quick-look overlay before this native event finishes bubbling,
+                // so without this the overlay's own Space-to-close hotkey (on document) would shut
+                // it again on the very press that opened it.
+                e.stopPropagation();
                 if (selectedIndex >= 0 && selectedIndex < items.length) {
                     const id = getId(items[selectedIndex]);
                     if (onQuickLook) onQuickLook(id);
