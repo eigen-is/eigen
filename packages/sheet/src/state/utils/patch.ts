@@ -54,7 +54,7 @@ const addtionalMergeOps = (ops: Op[], id: string) => {
     });
 
     const new_ops: Op[] = [];
-    Object.entries(merge_new).forEach(([, v]) => {
+    for (const v of Object.values(merge_new)) {
         const { r, c, rs, cs } = v;
         const headerOp = {
             op: 'replace',
@@ -75,7 +75,7 @@ const addtionalMergeOps = (ops: Op[], id: string) => {
         }
 
         new_ops.push(headerOp);
-    });
+    }
     return new_ops;
 };
 
@@ -280,14 +280,14 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             });
             if (index !== ctx.sheets.length) {
                 const sheetsRight = ctx.sheets.filter((sheet) => (sheet?.order as number) >= (order as number));
-                sheetsRight.forEach((sheet) => {
+                for (const sheet of sheetsRight) {
                     ops.push({
                         id: sheet.id,
                         op: 'replace',
                         path: ['order'],
                         value: (sheet?.order as number) - 1,
                     });
-                });
+                }
             }
         } else {
             // normal add sheet
@@ -321,14 +321,14 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             const sheetsRight = ctx.sheets.filter(
                 (sheet) => (sheet?.order as number) >= (order as number) && sheet.id !== options.deleteSheetOp?.id,
             );
-            sheetsRight.forEach((sheet) => {
+            for (const sheet of sheetsRight) {
                 ops.push({
                     id: sheet.id,
                     op: 'replace',
                     path: ['order'],
                     value: sheet?.order as number,
                 });
-            });
+            }
         } else {
             // normal delete sheet
             ops = [
@@ -342,14 +342,14 @@ export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions
             const order = options.deletedSheet?.value?.order as number;
             if (options.deletedSheet?.order !== ctx.sheets.length) {
                 const sheetsRight = ctx.sheets.filter((sheet) => (sheet?.order as number) >= (order as number));
-                sheetsRight.forEach((sheet) => {
+                for (const sheet of sheetsRight) {
                     ops.push({
                         id: sheet.id,
                         op: 'replace',
                         path: ['order'],
                         value: sheet?.order as number,
                     });
-                });
+                }
             }
         }
     }

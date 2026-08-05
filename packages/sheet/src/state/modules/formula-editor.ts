@@ -201,13 +201,13 @@ export function functionHTMLGenerate(txt: string) {
 
 function getRangeIndexes($editor: HTMLDivElement) {
     const res: number[] = [];
-    $editor.querySelectorAll('span.fortune-formula-functionrange-cell').forEach((ele) => {
+    for (const ele of $editor.querySelectorAll('span.fortune-formula-functionrange-cell')) {
         const indexStr = ele.getAttribute('rangeindex');
         if (indexStr) {
             const rangeIndex = parseInt(indexStr, 10);
             res.push(rangeIndex);
         }
-    });
+    }
     return res;
 }
 

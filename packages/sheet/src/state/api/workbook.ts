@@ -40,15 +40,15 @@ export function setSheetName(ctx: Context, name: string, options: CommonOptions 
 }
 
 export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
-    ctx.sheets?.forEach((sheet) => {
+    for (const sheet of ctx.sheets) {
         if (sheet.id! in orderList) {
             sheet.order = orderList[sheet.id!];
         }
-    });
+    }
     // re-order starting from 0
-    sortBy(ctx.sheets, ['order']).forEach((sheet, i) => {
+    for (const [i, sheet] of sortBy(ctx.sheets, ['order']).entries()) {
         sheet.order = i;
-    });
+    }
 }
 
 export function scroll(

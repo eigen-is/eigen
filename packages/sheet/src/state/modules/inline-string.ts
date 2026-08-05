@@ -106,7 +106,7 @@ export function convertCssToStyleList(cssText: string, originCell: Cell) {
         it: originCell.it || 0,
         ff: originCell.ff || 0,
     };
-    cssTextArray.forEach((s) => {
+    for (let s of cssTextArray) {
         s = s.toLowerCase();
         const key = s.substring(0, s.indexOf(':')).trim();
         const value = s.substring(s.indexOf(':') + 1).trim();
@@ -149,7 +149,7 @@ export function convertCssToStyleList(cssText: string, originCell: Cell) {
         if (key === 'lucky-underline') {
             styleList.un = Number(value);
         }
-    });
+    }
 
     return styleList;
 }

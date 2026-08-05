@@ -192,17 +192,17 @@ export class FormulaCache {
         }
 
         const changesHistory = type === 'undo' ? history.inversePatches : history.patches;
-        changesHistory.forEach((patch) => {
+        for (const patch of changesHistory) {
             if (isFormula(patch.value?.f) || patch.value === null || patch.path[5] === 'f') {
                 requestUpdate({ r: patch.path[3], c: patch.path[4] });
             } else if (Array.isArray(patch.value)) {
-                patch.value.forEach((value) => {
+                for (const value of patch.value) {
                     requestUpdate(value);
-                });
+                }
             } else {
                 requestUpdate(patch.value);
             }
-        });
+        }
     }
 }
 

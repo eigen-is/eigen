@@ -1290,6 +1290,9 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 
     const rowIndexArr: number[] = [];
     const colIndexArr: number[] = [];
+    // Set-based dedupe: includes() per cell turns large copies quadratic.
+    const rowIndexSet = new Set<number>();
+    const colIndexSet = new Set<number>();
 
     for (let s = 0; s < (ranges?.length ?? 0); s += 1) {
         const range = ranges![s];
@@ -1300,12 +1303,14 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         const c2 = range.column[1];
 
         for (let copyR = r1; copyR <= r2; copyR += 1) {
-            if (!rowIndexArr.includes(copyR)) {
+            if (!rowIndexSet.has(copyR)) {
+                rowIndexSet.add(copyR);
                 rowIndexArr.push(copyR);
             }
 
             for (let copyC = c1; copyC <= c2; copyC += 1) {
-                if (!colIndexArr.includes(copyC)) {
+                if (!colIndexSet.has(copyC)) {
+                    colIndexSet.add(copyC);
                     colIndexArr.push(copyC);
                 }
             }

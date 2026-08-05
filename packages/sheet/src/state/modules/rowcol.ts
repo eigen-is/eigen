@@ -15,7 +15,7 @@ import { getSheetIndex } from '../utils';
 type FilterObj = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
 
 const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet) => {
-    Object.entries(merge_new).forEach(([, v]) => {
+    for (const v of Object.values(merge_new)) {
         const { r, c, rs, cs } = v;
 
         // Engine inserts null for new cells inside an expanded merge range; the
@@ -35,7 +35,7 @@ const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet
                 ? assign(cloneDeep(existing), { mc: { r, c, rs, cs } })
                 : { mc: { r, c, rs, cs } };
         }
-    });
+    }
 };
 
 function shiftStateOnlyFieldsForInsert(
@@ -772,7 +772,7 @@ export function insertRowCol(
         if (cellBorderConfig.length) {
             for (let r = 0; r < count; r += 1) {
                 const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
-                cellBorderConfigCopy.forEach((item) => {
+                for (const item of cellBorderConfigCopy) {
                     if (direction === 'rightbottom') {
                         // Insert below: increment from template row position
                         item.value.row_index += r + 1;
@@ -780,7 +780,7 @@ export function insertRowCol(
                         // Insert above: target row shifts down, new rows inserted before it (increment from 0)
                         item.value.row_index += r;
                     }
-                });
+                }
                 cfg.borderInfo?.push(...cellBorderConfigCopy);
             }
         }
@@ -863,7 +863,7 @@ export function insertRowCol(
         if (cellBorderConfig.length) {
             for (let i = 0; i < count; i += 1) {
                 const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
-                cellBorderConfigCopy.forEach((item) => {
+                for (const item of cellBorderConfigCopy) {
                     if (direction === 'rightbottom') {
                         // Insert right: increment from template column position
                         item.value.col_index += i + 1;
@@ -871,7 +871,7 @@ export function insertRowCol(
                         // Insert left: target column shifts right, new columns inserted before it (increment from 0)
                         item.value.col_index += i;
                     }
-                });
+                }
                 cfg.borderInfo?.push(...cellBorderConfigCopy);
             }
         }

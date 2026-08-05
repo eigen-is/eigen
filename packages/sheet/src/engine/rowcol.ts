@@ -248,7 +248,10 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
 
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
-        for (let i = 0; i < count; i += 1) newData.splice(insertAt, 0, blank());
+        // Single splice: one-at-a-time inserts re-shift the tail per row.
+        const blankRows: (typeof newData)[number][] = [];
+        for (let i = 0; i < count; i += 1) blankRows.push(blank());
+        newData.splice(insertAt, 0, ...blankRows);
     } else {
         if (cfg.colhidden != null)
             newCfg.colhidden = shiftKeyedMapForInsert(cfg.colhidden, op.index, count, op.direction);
@@ -257,8 +260,9 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         if (cfg.customWidth != null)
             newCfg.customWidth = shiftKeyedMapForInsert(cfg.customWidth, op.index, count, op.direction);
 
+        const blanks = new Array<null>(count).fill(null);
         for (const row of newData) {
-            for (let i = 0; i < count; i += 1) row.splice(insertAt, 0, null);
+            row.splice(insertAt, 0, ...blanks);
         }
     }
 

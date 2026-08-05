@@ -756,9 +756,9 @@ export function updateCell(
                 }
                 // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
                 else {
-                    Object.keys(value).forEach((attr) => {
+                    for (const attr of Object.keys(value)) {
                         curv![attr as keyof Cell] = value[attr];
-                    });
+                    }
                 }
             } else {
                 delFunctionGroup(ctx, r, c);
@@ -901,7 +901,7 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
 
     const result: { r: number; c: number }[] = [];
 
-    range.forEach((ele) => {
+    for (const ele of range) {
         // This data may be a range or a single cell
         const rs = ele.row;
         const cs = ele.column;
@@ -911,7 +911,7 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
                 result.push({ r, c });
             }
         }
-    });
+    }
     return result;
 }
 

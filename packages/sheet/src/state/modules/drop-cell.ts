@@ -2048,18 +2048,17 @@ export function updateDropCell(ctx: Context) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
 
-            let emptyRange: SingleRange[] = [];
+            const emptyRange: SingleRange[] = [];
 
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-                const range = cfSplitRange(
-                    cdformat_cellrange[j],
-                    { row: copyRange.row, column: copyRange.column },
-                    { row: applyRange.row, column: applyRange.column },
-                    'operatePart',
+                emptyRange.push(
+                    ...cfSplitRange(
+                        cdformat_cellrange[j],
+                        { row: copyRange.row, column: copyRange.column },
+                        { row: applyRange.row, column: applyRange.column },
+                        'operatePart',
+                    ),
                 );
-                if (range.length > 0) {
-                    emptyRange = emptyRange.concat(range);
-                }
             }
 
             if (emptyRange.length > 0) {

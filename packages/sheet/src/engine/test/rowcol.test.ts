@@ -48,6 +48,26 @@ describe('applySheetsInsertRowCol — row', () => {
         expect(result[0].data![2][0]?.v).toBe('c');
     });
 
+    test('multi-count insert creates distinct row instances', () => {
+        // The batched splice must never share one blank-row array across the
+        // inserted rows — a write through one would surface in all of them.
+        const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')]])];
+        const result = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 0,
+            count: 3,
+            direction: 'lefttop',
+            id: 's1',
+        });
+        const data = result[0].data!;
+        expect(data.length).toBe(5);
+        expect(data[0]).not.toBe(data[1]);
+        expect(data[1]).not.toBe(data[2]);
+        data[0][0] = cell('x');
+        expect(data[1][0]).toBeNull();
+        expect(data[2][0]).toBeNull();
+    });
+
     test('insert row in middle (rightbottom) shifts cells below', () => {
         const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]])];
         const result = applySheetsInsertRowCol(sheets, {

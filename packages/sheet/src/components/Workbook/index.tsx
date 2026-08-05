@@ -92,7 +92,7 @@ function reduceUndoList(ctx: Context, ctxBefore: Context, globalCache: React.Mut
     );
     if (ctxBefore.sheets.length > ctx.sheets.length) {
         const sheetDeleted = ctxBefore.sheets
-            .filter((oneSheet) => ctx.sheets.map((item) => item.id).indexOf(oneSheet.id) === -1)
+            .filter((oneSheet) => sheetsId.indexOf(oneSheet.id) === -1)
             .map((item) => getSheetIndex(ctxBefore, item.id as string));
         const deletedIndex = sheetDeleted[0];
         globalCache.current.undoList = globalCache.current.undoList.map((oneStep) => {

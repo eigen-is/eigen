@@ -493,11 +493,11 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                 const entry = cfg.borderInfo[i];
 
                 if (entry.rangeType === 'range') {
-                    let bd_emptyRange: SingleRange[] = [];
+                    const bd_emptyRange: SingleRange[] = [];
 
                     for (let j = 0; j < entry.range.length; j += 1) {
-                        bd_emptyRange = bd_emptyRange.concat(
-                            cfSplitRange(
+                        bd_emptyRange.push(
+                            ...cfSplitRange(
                                 entry.range[j],
                                 { row: [c_r1, c_r2], column: [c_c1, c_c2] },
                                 { row: [minh, maxh], column: [minc, maxc] },
@@ -666,11 +666,11 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                 const entry = sourceCurConfig.borderInfo[i];
 
                 if (entry.rangeType === 'range') {
-                    let bd_emptyRange: SingleRange[] = [];
+                    const bd_emptyRange: SingleRange[] = [];
 
                     for (let j = 0; j < entry.range.length; j += 1) {
-                        bd_emptyRange = bd_emptyRange.concat(
-                            cfSplitRange(
+                        bd_emptyRange.push(
+                            ...cfSplitRange(
                                 entry.range[j],
                                 { row: [c_r1, c_r2], column: [c_c1, c_c2] },
                                 { row: [minh, maxh], column: [minc, maxc] },
@@ -702,8 +702,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         if (source_curCdformat != null && source_curCdformat.length > 0) {
             for (let i = 0; i < source_curCdformat.length; i += 1) {
                 const source_curCdformat_cellrange = source_curCdformat[i].cellrange;
-                let emptyRange: SingleRange[] = [];
-                let emptyRange2: SingleRange[] = [];
+                const emptyRange: SingleRange[] = [];
+                const emptyRange2: SingleRange[] = [];
 
                 for (let j = 0; j < source_curCdformat_cellrange.length; j += 1) {
                     const range = cfSplitRange(
@@ -713,7 +713,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                         'restPart',
                     );
 
-                    emptyRange = emptyRange.concat(range);
+                    emptyRange.push(...range);
 
                     const range2 = cfSplitRange(
                         source_curCdformat_cellrange[j],
@@ -722,9 +722,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
                         'operatePart',
                     );
 
-                    if (range2.length > 0) {
-                        emptyRange2 = emptyRange2.concat(range2);
-                    }
+                    emptyRange2.push(...range2);
                 }
 
                 source_curCdformat[i].cellrange = emptyRange;
@@ -787,15 +785,16 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         if (curCdformat != null && curCdformat.length > 0) {
             for (let i = 0; i < curCdformat.length; i += 1) {
                 const { cellrange } = curCdformat[i];
-                let emptyRange: SingleRange[] = [];
+                const emptyRange: SingleRange[] = [];
                 for (let j = 0; j < cellrange.length; j += 1) {
-                    const range = cfSplitRange(
-                        cellrange[j],
-                        { row: [c_r1, c_r2], column: [c_c1, c_c2] },
-                        { row: [minh, maxh], column: [minc, maxc] },
-                        'allPart',
+                    emptyRange.push(
+                        ...cfSplitRange(
+                            cellrange[j],
+                            { row: [c_r1, c_r2], column: [c_c1, c_c2] },
+                            { row: [minh, maxh], column: [minc, maxc] },
+                            'allPart',
+                        ),
                     );
-                    emptyRange = emptyRange.concat(range);
                 }
                 curCdformat[i].cellrange = emptyRange;
             }
@@ -884,11 +883,12 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                     });
                 });
 
-                arr = arr.concat(arrData);
+                // push per row: concat re-copies the accumulator per range
+                for (const row of arrData) arr.push(row);
 
                 isSameRow = true;
             } else if (c_c1 === copyRange.copyRange[1].column[0] && c_c2 === copyRange.copyRange[1].column[1]) {
-                arr = arr.concat(arrData);
+                for (const row of arrData) arr.push(row);
             }
         } else {
             arr = arrData;
@@ -1151,7 +1151,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
             for (let i = 0; i < ruleArr_cf.length; i += 1) {
                 const cf_range = ruleArr_cf[i].cellrange;
 
-                let emptyRange: SingleRange[] = [];
+                const emptyRange: SingleRange[] = [];
 
                 for (let th = 1; th <= timesH; th += 1) {
                     for (let tc = 1; tc <= timesC; tc += 1) {
@@ -1168,9 +1168,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
                                 'operatePart',
                             );
 
-                            if (range.length > 0) {
-                                emptyRange = emptyRange.concat(range);
-                            }
+                            emptyRange.push(...range);
                         }
                     }
                 }

@@ -30,9 +30,9 @@ const defaultGlobalCache: GlobalCache = {
     scrollTop: 0,
     scrollListeners: defaultScrollListeners,
     notifyScrollListeners: () => {
-        defaultScrollListeners.forEach((fn) => {
+        for (const fn of defaultScrollListeners) {
             fn();
-        });
+        }
     },
 };
 

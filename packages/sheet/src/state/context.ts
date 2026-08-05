@@ -454,7 +454,7 @@ export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
     if (data?.length > 0) {
         let hasActive = false;
         const indexs: (string | number)[] = [];
-        data.forEach((item) => {
+        for (const item of data) {
             if (item.id == null) {
                 item.id = generateSheetId();
             }
@@ -474,7 +474,7 @@ export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
                     hasActive = true;
                 }
             }
-        });
+        }
         if (!hasActive) {
             data[0].status = 1;
         }

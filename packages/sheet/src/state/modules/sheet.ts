@@ -66,9 +66,9 @@ export function addSheet(
     const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) {
         delete sheetData.data;
-        ctx.sheets.forEach((sheet) => {
+        for (const sheet of ctx.sheets) {
             sheet.order = (sheet.order as number) < sheetData.order! ? sheet.order : (sheet.order as number) + 1;
-        });
+        }
     }
     const sheetconfig: Sheet = isNil(sheetData)
         ? {
@@ -142,7 +142,7 @@ export function deleteSheet(ctx: Context, id: string) {
 }
 
 export function updateSheet(ctx: Context, newData: Sheet[]) {
-    newData.forEach((newDatum) => {
+    for (const newDatum of newData) {
         const { data, row, column } = newDatum;
         const index = getSheetIndex(ctx, newDatum.id!) as number;
         if (data != null) {
@@ -172,11 +172,11 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
         } else if (newDatum.celldata != null) {
             initSheetData(ctx, index, newDatum);
             const _index = getSheetIndex(ctx, newDatum.id!) as number;
-            newDatum.celldata?.forEach((d) => {
+            for (const d of newDatum.celldata) {
                 setFormulaCellInfo(ctx, { r: d.r, c: d.c, id: newDatum.id! }, ctx.sheets[_index].data, newDatum.id);
-            });
+            }
         }
-    });
+    }
     const currentIdx = getSheetIndex(ctx, ctx.currentSheetId);
     if (currentIdx != null) {
         ctx.config = ctx.sheets[currentIdx].config ?? {};
