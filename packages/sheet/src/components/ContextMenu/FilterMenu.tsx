@@ -198,6 +198,11 @@ export const FilterMenu: React.FC = () => {
         dateTreeExpandState.current[key] = expand;
     }, []);
 
+    // Set-based membership: includes() per rendered value item turns large
+    // distinct-value columns quadratic on every toggle or search keystroke.
+    const valuesUncheckSet = useMemo(() => new Set(valuesUncheck), [valuesUncheck]);
+    const showValuesSet = useMemo(() => new Set(showValues), [showValues]);
+
     const searchValues = useMemo(
         () =>
             debounce((text: string) => {
@@ -559,7 +564,7 @@ export const FilterMenu: React.FC = () => {
                                         <FilterValueItem
                                             key={v.key}
                                             item={v}
-                                            isChecked={(key) => !valuesUncheck.includes(key)}
+                                            isChecked={(key) => !valuesUncheckSet.has(key)}
                                             onChange={(item, checked) => {
                                                 const rows = hiddenRows.current;
                                                 hiddenRows.current = checked
@@ -572,7 +577,7 @@ export const FilterMenu: React.FC = () => {
                                             isItemVisible={(item) =>
                                                 showValues.length === data.flattenValues.length
                                                     ? true
-                                                    : showValues.includes(item.text)
+                                                    : showValuesSet.has(item.text)
                                             }
                                         />
                                     ))}
