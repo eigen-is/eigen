@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
-import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { update } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
@@ -103,14 +103,14 @@ async function readSnapshot(ownerId: string, mountId: string, pathId: string): P
     const snapshot = doc.getMap('state').get('snapshot');
     doc.destroy();
     if (typeof snapshot !== 'string') throw new Error('Snapshot missing');
-    return JSON.parse(snapshot);
+    return decodeSheetsSnapshot(snapshot);
 }
 
 // /convert and /import commit the Worker's snapshotJson verbatim, so parsing here
 // yields the same Sheet[] a route round-trip would read back — without a Worker spawn.
 async function parseXlsx(buffer: ArrayBuffer): Promise<Sheet[]> {
     const { snapshotJson } = await importXlsxToSheetsSnapshot(buffer);
-    return JSON.parse(new TextDecoder().decode(snapshotJson));
+    return decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
 }
 
 async function parseWorkbook(workbook: ExcelJS.Workbook): Promise<Sheet[]> {
