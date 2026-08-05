@@ -8,7 +8,7 @@ export function getCalculationOrder(
     formulaCellInfoMap: FormulaCellInfoMap,
 ): FormulaCellInfo[] {
     const formulaRunList: FormulaCellInfo[] = [];
-    let stack = [...updateValueArray];
+    const stack = [...updateValueArray];
     const existsKeys: Record<string, 1> = {};
 
     while (stack.length > 0) {
@@ -38,10 +38,14 @@ export function getCalculationOrder(
             formulaRunList.push(formulaObject);
             existsKeys[formulaObject.key] = 1;
         } else {
-            // Mark gray: push self back, then push parents so they resolve first
+            // Mark gray: push self back, then push parents so they resolve first.
+            // In-place pushes, not concat — rebuilding the stack per visit is O(V·E)
+            // and cost 17s of a 21s import on a 125k-formula workbook.
             formulaObject.color = 'b';
             stack.push(formulaObject);
-            stack = stack.concat(parentNodes);
+            for (const parentNode of parentNodes) {
+                stack.push(parentNode);
+            }
         }
     }
 
