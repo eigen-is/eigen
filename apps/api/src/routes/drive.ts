@@ -186,7 +186,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/export/:format',
-        async ({ params, request, user, set }) => {
+        async ({ params, request, user, set, server }) => {
+            // The response streams nothing while the job queues and its Worker runs —
+            // queue wait + 120s deadline (+ 60s WeasyPrint for pdf) can outlast any
+            // server-wide idleTimeout (Bun caps it at 255s), so exempt this request.
+            // request.signal still fires on a real client disconnect.
+            server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             // A disconnected export has no cached value — the signal lets the runner
@@ -200,7 +205,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-        async ({ params, user }) => {
+        async ({ params, request, user, server }) => {
+            // Same idle-timeout exemption as the export route: silent while queued + transforming.
+            server?.timeout(request, 0);
             if (params.targetType !== 'eigensheets' && params.targetType !== 'eigendoc') {
                 throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
             }
@@ -221,7 +228,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import',
-        async ({ params, request, user }) => {
+        async ({ params, request, user, server }) => {
+            // Same idle-timeout exemption as the export route: silent while queued + transforming.
+            server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
@@ -243,7 +252,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
-        async ({ params, body, request, user }) => {
+        async ({ params, body, request, user, server }) => {
+            // Same idle-timeout exemption as the export route: silent while queued + transforming.
+            server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {

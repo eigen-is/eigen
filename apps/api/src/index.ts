@@ -14,10 +14,12 @@ const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 const server = app.listen({
     port: 8000,
     maxRequestBodySize: 1024 * 1024 * 1024, // 1 GB — per-file limits enforced by streaming parser
-    // Bun closes a connection that streams no bytes for ~30s by default, which killed
-    // every export/convert whose transform outlives it (the response is silent while the
-    // Worker runs). Cover the worst legitimate silence: 120s transform deadline + 60s
-    // WeasyPrint subprocess + margin. WebSockets are unaffected (own keepalive config).
+    // Bun closes idle connections by default (10s documented; ~30s observed on 1.3.14),
+    // which killed every silent long-running response. 200s is a broad floor for slow
+    // routes (large copies, protocol ops); it can NOT cover the transform routes — queue
+    // wait + 120s deadline (+ 60s WeasyPrint) exceeds Bun's 255s cap on this knob — so
+    // those exempt themselves per-request via server.timeout(request, 0) (routes/drive.ts).
+    // WebSockets are unaffected (own keepalive config).
     idleTimeout: 200,
 });
 

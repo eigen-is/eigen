@@ -89,9 +89,11 @@ const result = await exportDocument(mount, path, params.format, request.signal);
 
 Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only), 503 when the transform runner
 is saturated. `request.signal` is threaded through so a disconnected export drops its queued job or terminates
-its Worker. The response streams nothing while the Worker runs, so `app.listen` sets `idleTimeout: 200`
-(`apps/api/src/index.ts`) — without it Bun closes the silent connection at ~30s, which aborted the signal and
-killed every export whose transform outlived it. The transform runs under the 120s export/import deadline
+its Worker. The response streams nothing while the job queues and its Worker runs, and that silence can
+exceed any server-wide idle timeout (Bun caps `idleTimeout` at 255s; queue wait + deadline + WeasyPrint can
+pass it), so the export/import/convert routes exempt themselves per-request with `server.timeout(request, 0)`
+— without that Bun closes the silent connection (10s documented default; ~30s observed), aborting the signal
+and killing the job mid-transform. The transform runs under the 120s export/import deadline
 (`TRANSFORM_LIMITS` in `runner.ts`, looked up per job kind by the seam in `run-transform.ts`); WeasyPrint keeps its own
 60s subprocess timeout (504 on expiry), and a non-zero WeasyPrint exit is a 500 with its stderr in the message.
 

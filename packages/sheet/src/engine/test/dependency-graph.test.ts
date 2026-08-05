@@ -96,6 +96,20 @@ describe('engine/dependency-graph — getCalculationOrder', () => {
         expect(result[0].key).toBe('hub');
     });
 
+    test('cyclic graph terminates and yields every node exactly once', () => {
+        // Spreadsheets do contain circular references; recalc.ts relies on the sort
+        // being cycle-tolerant by construction (no throw, no hang).
+        const a = makeCell('a');
+        const b = makeCell('b');
+        const c = makeCell('c');
+        a.parents.b = 1;
+        b.parents.c = 1;
+        c.parents.a = 1;
+        const map: FormulaCellInfoMap = { a, b, c };
+        const result = getCalculationOrder([a], map);
+        expect(result.map((cell) => cell.key).sort()).toEqual(['a', 'b', 'c']);
+    });
+
     test('long dependency chain keeps strict base-to-dependent order', () => {
         // c0 ← c1 ← … ← cN (each cell's value feeds the next). Import-scale depth:
         // the pre-fix concat-based stack made this quadratic (17s of a 21s import).
