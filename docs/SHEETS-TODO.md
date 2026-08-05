@@ -82,6 +82,33 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
       calendar markers). Rendering is provably unaffected (numfmt classifies case-insensitively);
       worst case is a mislabeled dialog chip — align the port if exactness ever matters
 
+## Performance (sheet-perf program leftovers, 2026-08-05)
+
+Program history + measurements: gitignored `docs/superpowers/sheet-perf/PHASE0-MEASUREMENTS.md`.
+Shipped through P2 (snapshot v2, 56.5→12.6MB; import 21.4→4.7s; export idle-drop fix; smells sweep).
+
+- [ ] **P3b — class-based styles in the full sheets HTML export** (`export/sheets/render.ts`):
+      per-cell inline styles make the 340k-cell export 82MB and put ~75% of its 104s inside
+      DOMPurify/jsdom CSS-parsing (13.7GB RSS); only 224 distinct style combos exist. Emit a
+      class per distinct style in the document head for `renderSheetsHtml`; the bounded
+      preview (`renderSheetsPreviewHtml`) keeps inline styles (its body is embedded without a
+      `<head>`). Check `sanitizeExportHtml` keeps the `<style>` element. Export html/pdf-html
+      goldens move intentionally; unblocks PDF (WeasyPrint 60s cap needs the small document)
+- [ ] **P4 — prod-build browser open benchmark** (vite build + preview + CORS shim per
+      VERIFICATION.md): the open-path gate after the v2 codec — measures what remains of
+      workbook-init produce + first-render long tasks with bundled assets
+- [ ] **snapshot v2.1 candidates, measured post-P4**: formula-pattern dedup (125k formula
+      strings = 3.4MB, needs decode-side shifting budget) and style-only-cell rectangle
+      compression (209k cells); only if P4 says size still hurts
+- [ ] **FilterMenu `RangeError` risk**: `without(rows, ...item.rows)` / `concat(...)` spread a
+      >65k-element rows bucket as call arguments (`components/ContextMenu/FilterMenu.tsx:544,548,566`)
+      — needs a Set-difference rewrite, found+left by the 2026-08-05 smells sweep
+- [ ] **es-toolkit compat-`forEach` pass**: ~20 `forEach(obj, fn)` sites (paste, toolbar,
+      rowcol, conditional-format, …) not mechanically convertible (`return false` break
+      semantics, object iteration) — dedicated careful pass
+- [ ] **xlsx export spot-open in real Excel** (VERIFICATION.md rule for external consumers):
+      exports re-parse cleanly in exceljs but were never opened in Excel/Google Sheets this round
+
 ## App / architecture
 
 - [ ] move the sheets toolbar onto the shared `ColumnLayout` chrome (currently the engine's own
