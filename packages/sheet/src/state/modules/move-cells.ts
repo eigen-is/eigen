@@ -287,10 +287,10 @@ export function onCellsMoveEnd(
             const entry = cfg.borderInfo[i];
 
             if (entry.rangeType === 'range' && entry.borderType !== 'border-slash') {
-                let bd_emptyRange: SingleRange[] = [];
+                const bd_emptyRange: SingleRange[] = [];
                 for (let j = 0; j < entry.range.length; j += 1) {
-                    bd_emptyRange = bd_emptyRange.concat(
-                        cfSplitRange(
+                    bd_emptyRange.push(
+                        ...cfSplitRange(
                             entry.range[j],
                             { row: last.row, column: last.column },
                             { row: [row_s, row_e], column: [col_s, col_e] },
@@ -398,15 +398,16 @@ export function onCellsMoveEnd(
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
-            let emptyRange: SingleRange[] = [];
+            const emptyRange: SingleRange[] = [];
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-                const range = cfSplitRange(
-                    cdformat_cellrange[j],
-                    { row: last.row, column: last.column },
-                    { row: [row_s, row_e], column: [col_s, col_e] },
-                    'allPart',
+                emptyRange.push(
+                    ...cfSplitRange(
+                        cdformat_cellrange[j],
+                        { row: last.row, column: last.column },
+                        { row: [row_s, row_e], column: [col_s, col_e] },
+                        'allPart',
+                    ),
                 );
-                emptyRange = emptyRange.concat(range);
             }
             cdformat[i].cellrange = emptyRange;
         }
