@@ -1,4 +1,4 @@
-import { cloneDeep, find, flatten, omit, reduce, size, union } from 'es-toolkit/compat';
+import { cloneDeep, find, flatten, omit, reduce, size } from 'es-toolkit/compat';
 import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
@@ -462,12 +462,14 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
     const flattenValues: string[] = [];
     // Date values
     const dates: FilterDate[] = [];
-    let datesUncheck: string[] = [];
+    const datesUncheck: string[] = [];
+    const datesUncheckSet = new Set<string>();
     const dateRowMap: Record<string, number[]> = {};
 
     // Non-date values
     const valuesMap: Map<string, FilterValue[]> = new Map();
-    let valuesUncheck: string[] = [];
+    const valuesUncheck: string[] = [];
+    const valuesUncheckSet = new Set<string>();
     const valueRowMap: Record<string, number[]> = {};
 
     const flowdata = getFlowdata(ctx);
@@ -550,10 +552,11 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
             monthValue.dateValues.push(dateStr);
             dayValue.rows.push(r);
             dayValue.dateValues.push(dateStr);
-            dateRowMap[dateStr] = (dateRowMap[dateStr] || []).concat(r);
+            (dateRowMap[dateStr] ||= []).push(r);
 
-            if (r in hiddenRows) {
-                datesUncheck = union(datesUncheck, [dateStr]);
+            if (r in hiddenRows && !datesUncheckSet.has(dateStr)) {
+                datesUncheckSet.add(dateStr);
+                datesUncheck.push(dateStr);
             }
         } else {
             let v: Cell['v'] | null;
@@ -588,10 +591,11 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                 flattenValues.push(text);
             }
 
-            if (r in hiddenRows) {
-                valuesUncheck = union(valuesUncheck, [key]);
+            if (r in hiddenRows && !valuesUncheckSet.has(key)) {
+                valuesUncheckSet.add(key);
+                valuesUncheck.push(key);
             }
-            valueRowMap[key] = (valueRowMap[key] || []).concat(r);
+            (valueRowMap[key] ||= []).push(r);
         }
     }
     return {
