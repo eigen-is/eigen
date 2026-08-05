@@ -186,6 +186,13 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(decoded[1]).toEqual({ id: 'sheet-2', name: 'Sheet2', order: 1 });
     });
 
+    test('an empty config survives the round-trip so config ops still resolve', () => {
+        // Every fresh sheet carries `config: {}`; dropping it makes a later
+        // `config.merge.0_0` op unreplayable.
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+        expect(decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: false }))).toEqual(sheets);
+    });
+
     test('decoded cells sharing a style do not share nested object identity', () => {
         const ct = { fa: 'General', t: 'n', s: [{ v: 'run', fc: '#ff0000' }] };
         const sheets: Sheet[] = [
@@ -224,5 +231,26 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(encoded).not.toContain('"selections":');
         const decoded = decodeSheetsSnapshot(encoded);
         expect(decoded[0].data).toBeUndefined();
+    });
+
+    test('a dense `data` matrix is folded into cells and outranks a stale celldata', () => {
+        // The editor flushes `data` with `celldata` left at its pre-edit state.
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                celldata: [{ r: 0, c: 0, v: { v: 'stale', m: 'stale' } }],
+                data: [
+                    [{ v: 'edited', m: 'edited' }, null],
+                    [null, { ...HEADER_STYLE, f: '=A1', v: 'edited', m: 'edited' }],
+                ],
+            } as Sheet,
+        ];
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
+        expect(decoded[0].celldata).toEqual([
+            { r: 0, c: 0, v: { v: 'edited', m: 'edited' } },
+            { r: 1, c: 1, v: { ...HEADER_STYLE, f: '=A1', v: 'edited', m: 'edited' } },
+        ]);
     });
 });

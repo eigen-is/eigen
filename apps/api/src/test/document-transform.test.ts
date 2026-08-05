@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import type { Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import type { ImageObject, TextObject } from '@workspace/lib/slides';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
@@ -403,11 +403,11 @@ describe('document transform (eigensheets export)', () => {
     }, 120_000);
 });
 
-// Recorded from the pre-Worker import pipeline (xlsxToSheets + import-document's
-// recalcImportedSheets + JSON.stringify) over buildImportFixture(), so the move
-// off-thread is proven byte-identical. Regenerate only for an intentional
-// converter change.
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '0d9772e1958e05d72706cdb6980ecd3859fd44ea4c2b74c70a4652e557038811';
+// Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
+// encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
+// thread are proven to emit the same bytes. Regenerate only for an intentional
+// converter or wire-format change (last moved by the snapshot v2 format).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '310a4f1b918d8901737343cddd8bcad48487d706af4440b3d28670c398b2a4ae';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a
@@ -568,8 +568,24 @@ describe('document transform (xlsx import)', () => {
         const direct = await importXlsxToSheetsSnapshot(await buildImportFixture());
         expect(snapshotJson).toBe(new TextDecoder().decode(direct.snapshotJson));
         // The stale cached SUM(B2:B3)=999 was recomputed at import.
-        const sheets = JSON.parse(snapshotJson) as Sheet[];
+        const sheets = decodeSheetsSnapshot(snapshotJson);
         expect(sheets[0].celldata?.find((cell) => cell.r === 3 && cell.c === 1)?.v?.v).toBe(49);
+    }, 120_000);
+
+    test('the committed snapshot is stored in the v2 wire format, flagged computed', async () => {
+        const target = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'import-snapshot-v2' },
+        );
+        expect((await importRequest(target.id, await buildImportFixture())).status).toBe(200);
+
+        const snapshot = (await XLSX_FIXTURE.readState(target.id)) as string;
+        expect(snapshot.startsWith('{"f":"eigensheets/2"')).toBe(true);
+        // The import recalc succeeded, so the decoded calcChain keeps the read gate off.
+        expect(snapshot).toContain('"computed":true');
     }, 120_000);
 
     test('a recalc failure keeps the parsed values and returns a warning', async () => {
@@ -583,7 +599,7 @@ describe('document transform (xlsx import)', () => {
         try {
             const { snapshotJson, warnings } = await importXlsxToSheetsSnapshot(await buildImportFixture());
             expect(warnings).toContainEqual({ code: 'recalc-failed', message: 'forced recalc failure' });
-            const sheets = JSON.parse(new TextDecoder().decode(snapshotJson)) as Sheet[];
+            const sheets = decodeSheetsSnapshot(new TextDecoder().decode(snapshotJson));
             // Parsed values survive: the xlsx's own stale cached result, not a failure.
             expect(sheets[0].celldata?.find((cell) => cell.r === 3 && cell.c === 1)?.v?.v).toBe(999);
         } finally {

@@ -6,7 +6,7 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
-import type { BorderInfo, Cell, CellBorderInfo, CellWithRowAndCol, Sheet, SheetConfig } from './types';
+import type { BorderInfo, Cell, CellBorderInfo, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
 
 const FORMAT = 'eigensheets/2';
 
@@ -55,7 +55,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     const encoded = sheets.map((sheet) => {
         const {
             celldata,
-            data: _data,
+            data,
             selections: _selections,
             calcChain: _calcChain,
             config,
@@ -63,15 +63,23 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
         } = sheet as RuntimeSheet;
         const out: EncodedSheet = { ...rest };
 
-        if (celldata) {
+        // The dense matrix never goes on the wire, but it is the authoritative copy
+        // when present: editor state edits write `data` and leave `celldata` stale,
+        // so folding it in here is what the read path's withSyncedCelldataIfData
+        // does — without it a flushed workbook persists as its pre-edit celldata.
+        const entries = data ? denseToEntries(data) : celldata;
+        if (entries) {
             const cells: EncodedCell[] = [];
-            for (const entry of celldata) cells.push(encodeCell(entry, styles, styleIndex));
+            for (const entry of entries) cells.push(encodeCell(entry, styles, styleIndex));
             out.cells = cells;
         }
 
+        // An empty config still ships: every fresh sheet has one, and a replayed op
+        // adding to it (`config.merge.0_0`, a row height, …) cannot resolve its path
+        // against an absent config — immer rejects the whole batch.
         if (config) {
             const { borderInfo, ...restConfig } = config;
-            if (Object.keys(restConfig).length > 0) out.config = restConfig;
+            out.config = restConfig;
             if (borderInfo) out.borderCells = borderInfo.map((info) => encodeBorder(info, borders, borderIndex));
         }
 
@@ -113,6 +121,19 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
 
         return sheet;
     });
+}
+
+function denseToEntries(data: CellMatrix): CellWithRowAndCol[] {
+    const entries: CellWithRowAndCol[] = [];
+    for (let r = 0; r < data.length; r++) {
+        const row = data[r];
+        if (!row) continue;
+        for (let c = 0; c < row.length; c++) {
+            const v = row[c];
+            if (v != null) entries.push({ r, c, v });
+        }
+    }
+    return entries;
 }
 
 function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: Map<string, number>): EncodedCell {
