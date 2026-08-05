@@ -113,6 +113,11 @@
 > that the 30s preview/extract deadline killed on every attempt, looping forever on eigen.is. Stored
 > values serve as-is (valueless formula cells blank); export stays the only recalc'ing read; preview
 > golden re-pinned. See SHEETS.md § Server-side recalc.
+>
+> **Post-ship amendment (2026-08-05, `sheet-snapshot-v2`).** The sheets snapshot is now the v2
+> dictionary-encoded format (SHEETS.md § Snapshot format v2); `calcChain` is no longer persisted —
+> the decoder seeds it from the envelope's `computed` flag, so the recalc gate's signal is unchanged.
+> The import snapshot golden moved with the format; preview/export goldens did not.
 
 ## Summary
 

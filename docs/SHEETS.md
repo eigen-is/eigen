@@ -85,11 +85,16 @@ the op format and `replaySheetsOps` are untouched.
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
   uncomputed snapshot (recalc-failed import) decodes without a chain and exports recalc.
 - **Legacy**: a snapshot starting with `[` is v1 `Sheet[]` JSON and passes through
-  `JSON.parse` unchanged — every pre-v2 doc keeps opening. Reads still strip `selections`
-  to heal v1 snapshots that baked one in.
+  `JSON.parse` unchanged — every pre-v2 doc keeps opening. (The FE read seam additionally
+  strips `selections` to heal v1 snapshots that baked a cursor in; the codec itself never
+  writes one.) Any other non-v2 input throws `Unknown sheets snapshot format` — corrupt
+  envelopes fail crisp instead of decoding a half-empty workbook.
 - `readSheetsFromDoc` materializes the dense `data` matrix for every sheet after replay
   (`withMaterializedData`): v2 snapshots are celldata-only, but the renderers'
-  conditional-format pass and the cross-sheet formula resolver read `data`.
+  conditional-format pass and the cross-sheet formula resolver read `data`. Accepted bound:
+  the matrix spans the celldata extent, so one far-flung cell (think `XFD1048576`) makes a
+  preview/extract read allocate a huge dense grid — bounded by the one-shot Worker's
+  deadline/death, same class as the editor's own `initSheetData`.
 
 ## Mount-time Bootstrap
 
@@ -202,11 +207,14 @@ recompute runs inside the op-emitting `produce`, so recomputed `v` **and** `m` p
 replay server-side (`replaySheetsOps`). The genuinely stale population is narrow — xlsx-imported docs
 never opened in an editor, and crash/race divergence between formula text and cached value.
 `recalcSheets` therefore fires only when `sheetsNeedRecalc` sees a sheet with `f` cells but no populated
-`calcChain` (editor-flushed snapshots carry the chain; imported ones don't), and any recalc failure
-falls back to the replayed stale-but-valid `Sheet[]` — an export must never 500 because recalc
-hiccuped. The xlsx importer (`import/sheets/transform.ts`, in the same Worker) also runs `recalcSheets` once
-at import, so the persisted snapshot carries computed values (and a `calcChain`) and the read gate never
-fires for it.
+`calcChain`. The chain itself is never persisted (§ Snapshot format v2): for v2 snapshots the decoder
+seeds it exactly when the envelope says `computed: true` (every editor flush, every recalc-successful
+import), while legacy v1 snapshots still carry whatever chain the editor baked in — either way the gate
+sees the same signal it always keyed off. Any recalc failure falls back to the replayed
+stale-but-valid `Sheet[]` — an export must never 500 because recalc hiccuped. The xlsx importer
+(`import/sheets/transform.ts`, in the same Worker) also runs `recalcSheets` once at import and encodes
+with `computed: true`, so the read gate never fires for imported docs (a recalc-failed import encodes
+`computed: false` and exports recompute).
 
 What the function does, in order: materialize each sheet's dense `data` from `celldata` (a resolver over
 null `data` would recompute everything to blanks); discover formula cells by scanning `data` for `f`

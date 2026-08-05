@@ -215,6 +215,58 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(b.ct.fa).toBe('General');
     });
 
+    test('decoded borders sharing a dict entry do not share side-object identity', () => {
+        const side = { l: { style: 1, color: '#000000' }, t: { style: 1, color: '#000000' } };
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                celldata: [],
+                config: {
+                    borderInfo: [
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, ...side } },
+                        { rangeType: 'cell', value: { row_index: 1, col_index: 0, ...side } },
+                    ],
+                },
+            } as Sheet,
+        ];
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
+        const [a, b] = decoded[0].config!.borderInfo! as { value: { l: { style: number; color: string } } }[];
+        expect(a.value.l).toEqual({ style: 1, color: '#000000' });
+        expect(a.value.l).not.toBe(b.value.l);
+        a.value.l.style = 13;
+        expect(b.value.l.style).toBe(1);
+    });
+
+    test('an empty cell object survives as {} rather than collapsing to null', () => {
+        // An op patch recorded against the {} cell (['data', r, c, 'v']) must still
+        // resolve through it after a round-trip; a null parent rolls back the batch.
+        const sheets: Sheet[] = [
+            { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: {} }] } as Sheet,
+        ];
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
+        expect(decoded[0].celldata![0].v).toEqual({});
+        expect(decoded[0].celldata![0].v).not.toBeNull();
+    });
+
+    test('unknown envelope format throws instead of decoding garbage', () => {
+        expect(() => decodeSheetsSnapshot('{"f":"eigensheets/99","sheets":[]}')).toThrow(
+            'Unknown sheets snapshot format',
+        );
+        expect(() => decodeSheetsSnapshot('{"foo":1}')).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('encoding is byte-stable for a fixed workbook', async () => {
+        // Byte stability is what the import golden in document-transform.test.ts pins
+        // end-to-end; this local pin makes a codec-side drift fail fast. Moving it is
+        // an intentional format change.
+        const encoded = encodeSheetsSnapshot(WORKBOOK, { computed: true });
+        const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded));
+        const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+        expect(hex).toBe('b454d628aefb05b830f5b722861cac9dcc688a5851be0d624fcc155389b6dc5e');
+    });
+
     test('data and selections never reach the snapshot', () => {
         const sheets: Sheet[] = [
             {

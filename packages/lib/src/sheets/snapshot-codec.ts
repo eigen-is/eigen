@@ -2,7 +2,7 @@
 // v1 was JSON.stringify(Sheet[]), which repeats every cell's style keys and every
 // border payload inline — 56MB for a real 340k-cell workbook, of which only 224
 // distinct style combinations and ~110 distinct border payloads were measured.
-// v2 interns both workbook-wide and drops the per-cell key names, ~5.5x smaller.
+// v2 interns both workbook-wide and drops the per-cell key names, ~4.5x smaller.
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
@@ -94,7 +94,10 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     // Every doc written before v2 stores a plain Sheet[] array.
     if (snapshot.trimStart().startsWith('[')) return JSON.parse(snapshot) as Sheet[];
 
-    const { computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
+    const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
+    // Fail crisp on a corrupt envelope or a future format — silent garbage-in
+    // would materialize a half-empty workbook instead of surfacing the problem.
+    if (f !== FORMAT) throw new Error(`Unknown sheets snapshot format: ${String(f).slice(0, 40)}`);
     return sheets.map((encoded) => {
         const { cells, borderCells, config, ...rest } = encoded;
         const sheet: RuntimeSheet = { ...rest };
@@ -138,6 +141,10 @@ function denseToEntries(data: CellMatrix): CellWithRowAndCol[] {
 
 function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: Map<string, number>): EncodedCell {
     if (entry.v == null) return [entry.r, entry.c, -1];
+    // An empty cell object is not null: an op patch recorded against it (e.g.
+    // ['data', r, c, 'v']) must still resolve through it after a round-trip —
+    // a null parent would roll back the whole replayed batch.
+    if (Object.keys(entry.v).length === 0) return [entry.r, entry.c, -1, {}];
 
     const raw = entry.v as Record<string, unknown>;
     let style: StyleTuple | undefined;
@@ -194,9 +201,9 @@ function decodeCell(styleIdx: number, content: EncodedContent | undefined, style
     return cell as Cell;
 }
 
-// Cells sharing a dictionary entry must not share nested object identity — an
-// in-place `cell.ct.x = …` outside an immer draft would corrupt every sibling.
-// Primitives copy by value; object-valued keys (ct, unknown future ones) deep-clone.
+// Consumers sharing a dictionary entry (cell styles, border side payloads) must
+// not share nested object identity — an in-place `cell.ct.x = …` outside an immer
+// draft would corrupt every sibling. Primitives copy by value; object values deep-clone.
 function materializeStyle(style: StyleTuple): Record<string, unknown> {
     const cell: Record<string, unknown> = {};
     for (const key in style) {
@@ -225,7 +232,11 @@ function encodeBorder(info: BorderInfo, borders: BorderSides[], borderIndex: Map
 
 function decodeBorder(entry: EncodedBorder, borders: BorderSides[]): BorderInfo {
     if (!Array.isArray(entry)) return entry;
-    const value = { row_index: entry[0], col_index: entry[1], ...borders[entry[2]] } as CellBorderInfo['value'];
+    const value = {
+        row_index: entry[0],
+        col_index: entry[1],
+        ...materializeStyle(borders[entry[2]]),
+    } as CellBorderInfo['value'];
     return { rangeType: 'cell', value };
 }
 

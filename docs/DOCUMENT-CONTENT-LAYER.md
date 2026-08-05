@@ -53,13 +53,16 @@ itself takes a resolved `Mount`/`DrivePath` pair and assumes the caller already 
 
 ## Sheets — snapshot + ops replay
 
-Fortune-sheet stores its state as `Y.Map('state').snapshot` (JSON-serialized last-flushed
-`Sheet[]`) plus `Y.Array('ops')` (op batches since the last flush). Live editors push ops onto
-the array and observe it for remote ops; on `beforeunload` they flush a fresh snapshot and clear
-the ops array (see `apps/sheets/src/components/sheets/hooks/use-sheet.ts`).
+Fortune-sheet stores its state as `Y.Map('state').snapshot` (the encoded last-flushed
+workbook — SHEETS.md § Snapshot format v2; legacy docs hold plain `Sheet[]` JSON) plus
+`Y.Array('ops')` (op batches since the last flush). Live editors push ops onto
+the array and observe it for remote ops; on `beforeunload` they flush a fresh snapshot via
+`encodeSheetsSnapshot` and clear the ops array (see
+`apps/sheets/src/components/sheets/hooks/use-sheet.ts`).
 
-`readSheetsFromDoc` parses the snapshot then replays pending op batches via
-`replaySheetsOps()` (re-exported from `@workspace/sheet/engine`) — single source of
+`readSheetsFromDoc` decodes the snapshot (`decodeSheetsSnapshot` — v1 arrays pass
+through untouched), replays pending op batches via `replaySheetsOps()`, and materializes each
+sheet's dense `data` matrix for the renderers (re-exported from `@workspace/sheet/engine`) — single source of
 truth, also used by the FE on initial load. The replay path uses `opToPatchOnSheets()`
 (`packages/lib/src/sheets/yjs-ops.ts`), kept in `@workspace/lib` so server-side replay doesn't
 pull in the sheet package's DOM-coupled state barrel.
@@ -74,15 +77,17 @@ After replay, `readSheetsFromDoc` can run a **gated server-side recalc**: `sheet
 export read opts in — preview and search extract pass `{ recalc: false }` and serve replayed values
 as-is, because a legacy never-computed workbook costs an unbounded recalc (~39s measured), past
 their 30s Worker deadline (SHEETS.md § Server-side recalc). This is why an xlsx import that was
-never opened in an editor still exports with values (the import itself persists computed values +
-`calcChain`, so post-import docs never fire the gate anywhere). A live-edited doc already persists
+never opened in an editor still exports with values (the import persists computed values with
+`computed: true`, which makes the decoder seed a `calcChain`, so post-import docs never fire the
+gate anywhere). A live-edited doc already persists
 fresh `v`/`m` through its ops, so it pays nothing. A recalc that throws falls back to the replayed
 values — an export must never 500 because recalc hiccuped.
 
 ## Writers are unsafe against live editors
 
-`writeSheetsSnapshotToYjs` — which `writeSheetsToYjs(doc, sheets)` composes after
-`JSON.stringify`, and which the xlsx import path calls directly with the Worker's snapshot JSON —
+`writeSheetsSnapshotToYjs` — which `writeSheetsToYjs(doc, sheets, { computed })` composes
+after `encodeSheetsSnapshot`, and which the xlsx import path calls directly with the Worker's
+already-encoded snapshot —
 does:
 
 ```typescript
