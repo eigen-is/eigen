@@ -27,11 +27,11 @@ export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string, i
         height: number;
         backgroundColor: string;
     }[] = [];
-    $span.querySelectorAll('span.fortune-formula-functionrange-cell').forEach((ele) => {
+    for (const ele of $span.querySelectorAll('span.fortune-formula-functionrange-cell')) {
         const rangeIndex = parseInt(ele.getAttribute('rangeindex') || '0', 10);
-        if (rangeIndex === ignoreRangeIndex) return;
+        if (rangeIndex === ignoreRangeIndex) continue;
         const cellrange = getcellrange(ctx, ele.textContent || '');
-        if (rangeIndex === ctx.formulaCache.selectingRangeIndex || cellrange == null) return;
+        if (rangeIndex === ctx.formulaCache.selectingRangeIndex || cellrange == null) continue;
         if (
             cellrange.sheetId === ctx.currentSheetId ||
             (!cellrange.sheetId && ctx.formulaCache.rangetosheet === ctx.currentSheetId)
@@ -51,7 +51,7 @@ export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string, i
                 });
             }
         }
-    });
+    }
     ctx.formulaRangeHighlight = formulaRanges;
 }
 

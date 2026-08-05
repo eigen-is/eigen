@@ -159,10 +159,10 @@ export function calculateFormula(ctx: Context, id?: string, range?: SingleRange)
         calculateSheetFromula(ctx, id, range);
         return;
     }
-    ctx.sheets.forEach((sheet_obj) => {
-        if (!sheet_obj.id) return;
+    for (const sheet_obj of ctx.sheets) {
+        if (!sheet_obj.id) continue;
         calculateSheetFromula(ctx, sheet_obj.id, range);
-    });
+    }
 }
 
 // Walk each sheet's data once and rebuild calcChain from cells that carry a

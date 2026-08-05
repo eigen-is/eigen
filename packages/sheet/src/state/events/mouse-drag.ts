@@ -505,13 +505,11 @@ export function handleOverlayMouseUp(
         }
         if (changeRowSelected) {
             cfg.rowlen ||= {};
-            ctx.selections
-                ?.filter((select) => select.row_select)
-                ?.forEach((select) => {
-                    for (let r = select.row[0]; r <= select.row[1]; r += 1) {
-                        cfg.rowlen![r] = Math.ceil(size);
-                    }
-                });
+            for (const select of ctx.selections?.filter((select) => select.row_select) ?? []) {
+                for (let r = select.row[0]; r <= select.row[1]; r += 1) {
+                    cfg.rowlen![r] = Math.ceil(size);
+                }
+            }
         } else {
             cfg.rowlen[ctx.rowsResizeStart[1]] = Math.ceil(size);
         }
@@ -576,13 +574,11 @@ export function handleOverlayMouseUp(
         }
         if (changeColumnSelected) {
             cfg.columnlen ||= {};
-            ctx.selections
-                ?.filter((select) => select.column_select)
-                ?.forEach((select) => {
-                    for (let r = select.column[0]; r <= select.column[1]; r += 1) {
-                        cfg.columnlen![r] = Math.ceil(size);
-                    }
-                });
+            for (const select of ctx.selections?.filter((select) => select.column_select) ?? []) {
+                for (let r = select.column[0]; r <= select.column[1]; r += 1) {
+                    cfg.columnlen![r] = Math.ceil(size);
+                }
+            }
         } else {
             cfg.columnlen[ctx.colsResizeStart[1]] = Math.ceil(size);
         }

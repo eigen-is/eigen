@@ -19,12 +19,12 @@ export function getNullData(rlen: number, clen: number) {
 export function updateMoreCell(r: number, c: number, dataMatrix: string[][], ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
-    dataMatrix.forEach((datas, i) => {
-        datas.forEach((_data, j) => {
+    for (let i = 0; i < dataMatrix.length; i += 1) {
+        for (let j = 0; j < dataMatrix[i].length; j += 1) {
             const v = dataMatrix[i][j];
             setCellValue(ctx, r + i, c + j, flowdata, v);
-        });
-    });
+        }
+    }
 }
 
 // Build the split-regex source from the user's checkbox/text-input selection.

@@ -682,9 +682,9 @@ export function autoSelectionFormula(
 
     if (!isfalse) {
         ctx.formulaCache.execFunctionExist.reverse();
-        ctx.formulaCache.execFunctionExist.forEach((formulaCell) => {
+        for (const formulaCell of ctx.formulaCache.execFunctionExist) {
             setFormulaCellInfo(ctx, { r: formulaCell.r, c: formulaCell.c, id: ctx.currentSheetId }, flowdata);
-        });
+        }
 
         execFunctionGroup(ctx, null, null, null, null, flowdata);
         ctx.formulaCache.execFunctionGlobalData = null;

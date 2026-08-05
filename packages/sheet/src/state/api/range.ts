@@ -20,7 +20,7 @@ export function getFlattenRange(ctx: Context, range?: Range) {
 
     const result: { r: number; c: number }[] = [];
 
-    range?.forEach((ele) => {
+    for (const ele of range ?? []) {
         const rs = ele.row;
         const cs = ele.column;
         for (let r = rs[0]; r <= rs[1]; r += 1) {
@@ -28,7 +28,7 @@ export function getFlattenRange(ctx: Context, range?: Range) {
                 result.push({ r, c });
             }
         }
-    });
+    }
     return result;
 }
 
@@ -45,13 +45,13 @@ export function getSelectionCoordinates(ctx: Context) {
     const rangeArr = cloneDeep(ctx.selections);
     const sheetId = ctx.currentSheetId;
 
-    rangeArr?.forEach((ele) => {
+    for (const ele of rangeArr ?? []) {
         const rangeText = getRangetxt(ctx, sheetId, {
             column: ele.column,
             row: ele.row,
         });
         result.push(rangeText);
-    });
+    }
 
     return result;
 }
@@ -134,11 +134,11 @@ export function setCellFormatByRange(
         throw invalidParams();
     }
 
-    range.forEach((singleRange) => {
+    for (const singleRange of range) {
         for (let r = singleRange.row[0]; r <= singleRange.row[1]; r += 1) {
             for (let c = singleRange.column[0]; c <= singleRange.column[1]; c += 1) {
                 setCellFormat(ctx, r, c, attr, value, options);
             }
         }
-    });
+    }
 }

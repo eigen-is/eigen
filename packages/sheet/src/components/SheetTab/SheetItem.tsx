@@ -98,20 +98,18 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                 const droppingId = sheet.id;
                 let draggingSheet: Sheet | undefined;
                 let droppingSheet: Sheet | undefined;
-                [...draftCtx.sheets]
-                    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                    .forEach((f, i) => {
-                        f.order = i;
-                        if (f.id === draggingId) draggingSheet = f;
-                        else if (f.id === droppingId) droppingSheet = f;
-                    });
+                const sorted = [...draftCtx.sheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                for (const [i, f] of sorted.entries()) {
+                    f.order = i;
+                    if (f.id === draggingId) draggingSheet = f;
+                    else if (f.id === droppingId) droppingSheet = f;
+                }
                 if (draggingSheet && droppingSheet) {
                     draggingSheet.order = droppingSheet.order! - 0.1;
-                    [...draftCtx.sheets]
-                        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                        .forEach((f, i) => {
-                            f.order = i;
-                        });
+                    const resorted = [...draftCtx.sheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                    for (const [i, f] of resorted.entries()) {
+                        f.order = i;
+                    }
                 } else if (draggingSheet && isDropPlaceholder) {
                     draggingSheet.order = draftCtx.sheets.length;
                 }
