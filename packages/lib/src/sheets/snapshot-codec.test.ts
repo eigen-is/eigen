@@ -186,6 +186,28 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(decoded[1]).toEqual({ id: 'sheet-2', name: 'Sheet2', order: 1 });
     });
 
+    test('decoded cells sharing a style do not share nested object identity', () => {
+        const ct = { fa: 'General', t: 'n', s: [{ v: 'run', fc: '#ff0000' }] };
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                celldata: [
+                    { r: 0, c: 0, v: { v: 1, m: '1', ct } },
+                    { r: 0, c: 1, v: { v: 2, m: '2', ct } },
+                ],
+            } as Sheet,
+        ];
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
+        const [a, b] = decoded[0].celldata!.map((cell) => cell.v as { ct: typeof ct });
+        expect(a.ct).toEqual(ct);
+        expect(a.ct).not.toBe(b.ct);
+        expect(a.ct.s).not.toBe(b.ct.s);
+        a.ct.fa = 'mutated';
+        expect(b.ct.fa).toBe('General');
+    });
+
     test('data and selections never reach the snapshot', () => {
         const sheets: Sheet[] = [
             {

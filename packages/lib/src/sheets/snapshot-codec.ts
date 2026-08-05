@@ -159,7 +159,7 @@ function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: 
 function decodeCell(styleIdx: number, content: EncodedContent | undefined, styles: StyleTuple[]): Cell | null {
     if (styleIdx === -1 && content === undefined) return null;
 
-    const cell: Record<string, unknown> = styleIdx === -1 ? {} : { ...styles[styleIdx] };
+    const cell: Record<string, unknown> = styleIdx === -1 ? {} : materializeStyle(styles[styleIdx]);
     if (content === undefined) return cell as Cell;
     if (typeof content !== 'object') {
         cell['v'] = content;
@@ -171,6 +171,29 @@ function decodeCell(styleIdx: number, content: EncodedContent | undefined, style
         else cell[key] = content[key];
     }
     return cell as Cell;
+}
+
+// Cells sharing a dictionary entry must not share nested object identity — an
+// in-place `cell.ct.x = …` outside an immer draft would corrupt every sibling.
+// Primitives copy by value; object-valued keys (ct, unknown future ones) deep-clone.
+function materializeStyle(style: StyleTuple): Record<string, unknown> {
+    const cell: Record<string, unknown> = {};
+    for (const key in style) {
+        const value = style[key];
+        cell[key] = typeof value === 'object' && value !== null ? cloneJsonValue(value) : value;
+    }
+    return cell;
+}
+
+function cloneJsonValue(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(cloneJsonValue);
+    if (typeof value === 'object' && value !== null) {
+        const out: Record<string, unknown> = {};
+        for (const key in value as Record<string, unknown>)
+            out[key] = cloneJsonValue((value as Record<string, unknown>)[key]);
+        return out;
+    }
+    return value;
 }
 
 function encodeBorder(info: BorderInfo, borders: BorderSides[], borderIndex: Map<string, number>): EncodedBorder {
