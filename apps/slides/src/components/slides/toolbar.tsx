@@ -11,7 +11,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
+import { ProgressDialog } from '@workspace/ui/components/layout/drive/progress-dialog';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
@@ -123,7 +123,7 @@ export function Toolbar({
                     </div>
                 }
             />
-            <ExportProgressDialog open={isExporting} />
+            <ProgressDialog open={isExporting} title="Exporting document" />
         </>
     );
 }

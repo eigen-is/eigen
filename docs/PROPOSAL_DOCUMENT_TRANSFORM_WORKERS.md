@@ -486,6 +486,10 @@ This keeps a Worker crash from leaving a partially parsed document in shared sta
 
 - A queued job whose request is aborted should be removed before payload preparation.
 - A foreground export/import Worker whose request disconnects may be terminated because its result has no cache value.
+  **As-built exception (2026-08-05):** the `/convert` route passes no signal — its result is a durable document,
+  not an uncacheable response, and a page reload was killing minute-long conversions of large workbooks. A
+  disconnected conversion completes and surfaces via the drive SSE refresh, like a preview. `/import` into an
+  existing document keeps its signal.
 - A preview regeneration may finish after disconnect because its result populates a content-addressed cache entry.
 - Server shutdown stops admission, rejects queued work, waits a short grace period for active work, then terminates the
   Worker. Mount/database shutdown begins after document jobs release their main-thread preparation references.
