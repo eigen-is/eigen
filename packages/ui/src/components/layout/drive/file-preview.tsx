@@ -48,20 +48,18 @@ export function FilePreview({
     useHotkey('Escape', () => onClose(), { enabled: true });
     // Space closes it again, the way it opened it (Finder's Quick Look).
     useHotkey('Space', () => onClose(), { enabled: true, preventDefault: true });
-    useHotkey(
-        'ArrowLeft',
-        () => {
-            if (hasPrev) onPrev();
-        },
-        { enabled: true },
-    );
-    useHotkey(
-        'ArrowRight',
-        () => {
-            if (hasNext) onNext();
-        },
-        { enabled: true },
-    );
+    // The siblings arrive in the list's own order, so up/down step exactly like the drive list
+    // does and left/right mean the same thing.
+    const goPrev = () => {
+        if (hasPrev) onPrev();
+    };
+    const goNext = () => {
+        if (hasNext) onNext();
+    };
+    useHotkey('ArrowLeft', goPrev, { enabled: true });
+    useHotkey('ArrowUp', goPrev, { enabled: true });
+    useHotkey('ArrowRight', goNext, { enabled: true });
+    useHotkey('ArrowDown', goNext, { enabled: true });
 
     const [locationPickerOpen, setLocationPickerOpen] = useState(false);
     const [locationPickerMode, setLocationPickerMode] = useState<'single' | 'all'>('single');
