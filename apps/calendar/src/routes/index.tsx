@@ -8,7 +8,7 @@ export const Route = createFileRoute('/')({
             throw redirect({
                 to: '/view/$mode/$from/$to',
                 params: { mode: 'month', from: String(from), to: String(to) },
-            } as never);
+            });
         } else {
             throw redirect({ to: '/login' });
         }
