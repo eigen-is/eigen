@@ -5,18 +5,17 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-851 primitives across 6 kinds. `packages/sheet` internals are excluded.
+849 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (117)
+## Components (115)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
-| `AccessDenied` | `@workspace/ui` | packages/ui/src/components/layout/app/access-denied.tsx |
 | `ActivityPanel` | `@workspace/ui` | packages/ui/src/components/layout/comments/activity-panel.tsx |
 | `ActivityRow` | `@workspace/ui` | packages/ui/src/components/layout/activity-row.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
@@ -91,7 +90,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MemberCommandList` | `@workspace/ui` | packages/ui/src/components/layout/comments/member-command-list.tsx |
 | `NoteCard` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui` | packages/ui/src/components/layout/notes/note-card-dialog.tsx |
-| `NotFound` | `@workspace/ui` | packages/ui/src/components/layout/app/not-found.tsx |
 | `PanelColumn` | `@workspace/ui` | packages/ui/src/components/layout/comments/panel-column.tsx |
 | `PresenceLabel` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `RequestAccessView` | `@workspace/ui` | packages/ui/src/components/layout/app/request-access-view.tsx |
