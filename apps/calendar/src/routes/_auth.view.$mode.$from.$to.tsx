@@ -19,7 +19,7 @@ import { WeekView } from '../components/week-view';
 
 export const Route = createFileRoute('/_auth/view/$mode/$from/$to')({
     component: CalendarView,
-    validateSearch: (search: Record<string, unknown>) => ({
+    validateSearch: (search: Record<string, unknown>): { eventId?: string } => ({
         eventId: typeof search.eventId === 'string' ? search.eventId : undefined,
     }),
 });
