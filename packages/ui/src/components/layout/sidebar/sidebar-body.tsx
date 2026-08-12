@@ -6,9 +6,10 @@ export type SidebarBodyProps = {
     className?: string;
 };
 
-// Sidebar content column. Owns the content gutter (`app-gutter`) so the
-// SidebarSection / StorageUsage children inside it never manage their own
-// horizontal padding — every app sidebar renders its sections into one of these.
+// Sidebar content column. The full-height flex column every app sidebar needs
+// (so `mt-auto` on StorageUsage sinks to the bottom) plus the content gutter
+// (`app-gutter`), so apps stop hand-rolling the outer `flex h-full flex-col`
+// wrapper and their sections never manage their own horizontal padding.
 export function SidebarBody({ children, className }: SidebarBodyProps) {
-    return <div className={cn('flex flex-1 flex-col app-gutter', className)}>{children}</div>;
+    return <div className={cn('flex h-full flex-col app-gutter', className)}>{children}</div>;
 }
