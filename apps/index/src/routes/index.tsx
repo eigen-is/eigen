@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { getDemoEnterUrl, getSpaceAppUrl, publicApi } from '@workspace/lib/api';
+import { getDemoEnterUrl, getSpaceAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { usePublicConfig } from '@workspace/lib/public';
+import { useJoinWaitlist, usePublicConfig } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
@@ -9,7 +9,6 @@ import { Label } from '@workspace/ui/components/label';
 import { EigenCyclingLogo } from '@workspace/ui/components/layout/braket';
 import { Textarea } from '@workspace/ui/components/textarea';
 import React, { useCallback } from 'react';
-import { toast } from 'sonner';
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
@@ -19,12 +18,12 @@ export function HomeComponent() {
     const [showWaitlistForm, setShowWaitlistForm] = React.useState(false);
     const [email, setEmail] = React.useState('');
     const [notes, setNotes] = React.useState('');
-    const [isSubmitting, setIsSubmitting] = React.useState(false);
     const { data: config } = usePublicConfig();
     const waitlistEnabled = config?.waitlistEnabled ?? false;
     const landingLinks = config?.landingLinks ?? [];
     const demoMode = config?.demoMode ?? false;
     const { isAuthenticated } = useAuth();
+    const joinWaitlist = useJoinWaitlist();
 
     // This page is prerendered and hydrates before the session check resolves, so
     // send signed-in visitors to the app from an effect that reacts to auth flipping
@@ -34,7 +33,6 @@ export function HomeComponent() {
     }, [isAuthenticated]);
 
     const resetForm = useCallback(() => {
-        setIsSubmitting(false);
         setShowWaitlistForm(false);
         setEmail('');
         setNotes('');
@@ -51,28 +49,13 @@ export function HomeComponent() {
     }, []);
 
     const handleWaitlistSubmit = useCallback(
-        async (e: React.FormEvent) => {
+        (e: React.FormEvent) => {
             e.preventDefault();
-            setIsSubmitting(true);
-
-            const time = Date.now();
-            const waitlistResult = await publicApi.waitlist.post({ email, notes });
-            const duration = Date.now() - time;
-            // Make sure it takes a bit
-            await new Promise((resolve) => setTimeout(resolve, Math.max(350 - duration, 0)));
-
-            resetForm();
-
-            const isSignedUp = waitlistResult.data === true;
-            if (isSignedUp) {
-                toast.success('Joined the waitlist', { description: 'Thanks for signing up' });
-            } else {
-                toast.error('Failed to sign up', {
-                    description: 'Signing up currently not available, please try again',
-                });
-            }
+            // On failure the hook toasts the reason and isPending clears, re-enabling the form so the
+            // visitor can retry; only a success clears the fields and closes the card.
+            joinWaitlist.mutate({ email, notes }, { onSuccess: resetForm });
         },
-        [email, notes],
+        [email, notes, joinWaitlist.mutate, resetForm],
     );
 
     return (
@@ -148,7 +131,7 @@ export function HomeComponent() {
                                     type="email"
                                     placeholder="Enter your email"
                                     value={email}
-                                    disabled={isSubmitting}
+                                    disabled={joinWaitlist.isPending}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
                                 />
@@ -159,17 +142,22 @@ export function HomeComponent() {
                                     id="notes"
                                     placeholder="Tell us why you're interested"
                                     value={notes}
-                                    disabled={isSubmitting}
+                                    disabled={joinWaitlist.isPending}
                                     onChange={(e) => setNotes(e.target.value)}
                                 />
                             </div>
                         </CardContent>
                         <CardFooter className="flex justify-end mt-4 gap-4">
-                            <Button type="button" variant="outline" disabled={isSubmitting} onClick={resetForm}>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                disabled={joinWaitlist.isPending}
+                                onClick={resetForm}
+                            >
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={isSubmitting}>
-                                {isSubmitting ? 'Submitting...' : 'Submit'}
+                            <Button type="submit" disabled={joinWaitlist.isPending}>
+                                {joinWaitlist.isPending ? 'Submitting...' : 'Submit'}
                             </Button>
                         </CardFooter>
                     </form>

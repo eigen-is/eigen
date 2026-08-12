@@ -1,9 +1,10 @@
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery } from '@tanstack/react-query';
 import { publicApi } from '@workspace/lib/api';
 import { parseOwnerId } from '@workspace/lib/types';
 import { validateEmailAddress } from '@workspace/lib/validation';
+import { toast } from 'sonner';
 import type { PublicUser } from '../../../types/public';
-import { AppError } from '../../api-error';
+import { AppError, onMutationError } from '../../api-error';
 import { fetchPublicUser } from '../user-batcher';
 
 const publicKeys = {
@@ -25,6 +26,23 @@ export function usePublicConfig() {
             return res.data;
         },
         staleTime: Infinity,
+    });
+}
+
+export function useJoinWaitlist() {
+    return useMutation({
+        mutationFn: async (body: { email: string; notes: string }) => {
+            const start = Date.now();
+            const res = await publicApi.waitlist.post(body);
+            if (res.error) throw new AppError(res);
+            // Let the submit register as a deliberate action even when the server answers instantly.
+            await new Promise((resolve) => setTimeout(resolve, Math.max(350 - (Date.now() - start), 0)));
+            return res.data;
+        },
+        onSuccess: () => {
+            toast.success('Joined the waitlist', { description: 'Thanks for signing up' });
+        },
+        onError: onMutationError,
     });
 }
 
