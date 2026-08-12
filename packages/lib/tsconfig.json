@@ -2,8 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "paths": {
-      "@workspace/lib/*": ["./src/core/*", "./src/*"],
-      "@workspace/ui/*": ["./src/*"]
+      "@workspace/lib/*": ["./src/core/*", "./src/*"]
     }
   },
   "include": ["src"],

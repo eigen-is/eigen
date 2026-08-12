@@ -38,7 +38,7 @@ function CollaborativeTextEditor() {
             <div className="flex-1 overflow-hidden">
                 <CollaborativeEditor
                     path={path}
-                    access={docInfo}
+                    canWrite={docInfo.canWrite}
                     mediaFolderId={mediaFolderId}
                     chatFolderId={chatFolderId}
                     onAccessDialogOpen={openAccessDialog}
