@@ -8,7 +8,7 @@ import {
     type EigenDocType,
     getEigenDocInfoByMime,
 } from '@workspace/lib/types/drive';
-import { NotFound } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/layout/drive/use-drive-list-route';
@@ -54,7 +54,7 @@ function DriveRoute() {
     };
 
     if (isFolderContentLoadingError) {
-        return <NotFound />;
+        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
     // The mime route is keyed on the url-slug form (`application-eigendoc`); resolve it

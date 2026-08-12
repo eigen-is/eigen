@@ -5,7 +5,8 @@ import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
 import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
-import { LoadingState, NotFound, RequestAccessView } from '@workspace/ui';
+import { LoadingState, RequestAccessView } from '@workspace/ui';
+import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
@@ -122,7 +123,7 @@ function DriveRoute() {
         if (isFolderContentLoadingError instanceof AppError && isFolderContentLoadingError.status === 403) {
             return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
         }
-        return <NotFound />;
+        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
     return (

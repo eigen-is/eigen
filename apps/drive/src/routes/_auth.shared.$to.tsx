@@ -3,7 +3,7 @@ import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
-import { LoadingState, NotFound } from '@workspace/ui';
+import { LoadingState } from '@workspace/ui';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
@@ -53,7 +53,7 @@ function DriveRoute() {
     };
 
     if (isFolderContentLoadingError) {
-        return <NotFound />;
+        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
     if (isFolderContentLoading) {

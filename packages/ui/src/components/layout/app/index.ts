@@ -1,5 +1,4 @@
 export { AboutDialog } from './about-dialog.tsx';
-export { AccessDenied } from './access-denied.tsx';
 export { AppLogo } from './app-logo.tsx';
 export { AppShell } from './app-shell.tsx';
 export type { ColumnProps } from './column-layout.tsx';
@@ -11,7 +10,6 @@ export { ErrorState } from './error-state.tsx';
 export type { LayoutContextType } from './layout-context.tsx';
 export { LayoutContext, useApp, useLayout } from './layout-context.tsx';
 export { LoadingState } from './loading-state.tsx';
-export { NotFound } from './not-found.tsx';
 export { RequestAccessView } from './request-access-view.tsx';
 export { SettingsPage } from './settings-page.tsx';
 export { Topbar } from './topbar.tsx';
