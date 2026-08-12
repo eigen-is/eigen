@@ -10,7 +10,7 @@ import type {
     NewDraft,
 } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { processInboundImip } from '../calendar/imip';
+import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { isDemo } from '../config/env';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentPills } from '../core/mail-template';
@@ -168,7 +168,11 @@ export class Mail {
         const message = await this.store.getMessage(messageId);
         if (!message) return null;
 
+        // Summarize invite parts while the parsed content is still in memory, then blank it.
         for (const a of message.attachments) {
+            if (a.contentType.startsWith('text/calendar')) {
+                a.calendarInvite = summarizeCalendarInvite(a);
+            }
             a.content = Buffer.alloc(0);
         }
 
