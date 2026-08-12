@@ -13,4 +13,5 @@ export { LayoutContext, useApp, useLayout } from './layout-context.tsx';
 export { LoadingState } from './loading-state.tsx';
 export { NotFound } from './not-found.tsx';
 export { RequestAccessView } from './request-access-view.tsx';
+export { SettingsPage } from './settings-page.tsx';
 export { Topbar } from './topbar.tsx';
