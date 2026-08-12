@@ -156,10 +156,8 @@ export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: s
 }
 
 export function useSnapTargets(objects: SlideObject[], excludeIds: string[]) {
-    const excludeKey = excludeIds.join(',');
     return useMemo(() => {
         if (excludeIds.length === 0) return { vSnaps: [] as number[], hSnaps: [] as number[] };
         return computeSnapLines(objects, new Set(excludeIds));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [objects, excludeKey]);
+    }, [objects, excludeIds]);
 }
