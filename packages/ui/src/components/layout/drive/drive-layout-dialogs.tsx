@@ -15,7 +15,7 @@ import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
 import { DriveUploadFiles } from './drive-upload-files';
 import { ProgressDialog } from './progress-dialog';
-import { useDocumentExport } from './use-document-export';
+import { ExportProgressDialog, useDocumentExport } from './use-document-export';
 import { useDriveDialogs } from './use-drive-dialogs';
 
 type UseDriveLayoutDialogsOptions = {
@@ -45,7 +45,7 @@ export function useDriveLayoutDialogs({
     const deletePathsMutation = useDeletePaths();
     const convertMutation = useConvertDocument(ownerId, mountId);
     const isCoarsePointer = useIsCoarsePointer();
-    const { exportPath, exportDialog } = useDocumentExport();
+    const { exportPath, isExporting } = useDocumentExport();
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [pendingDeletePaths, setPendingDeletePaths] = useState<DrivePath[]>([]);
 
@@ -225,7 +225,7 @@ export function useDriveLayoutDialogs({
             if (!open) setPendingDeletePaths([]);
         },
         onPickDestination: handlePickDestination,
-        exportDialog,
+        isExporting,
         isConverting: convertMutation.isPending,
         convertTargetType: convertMutation.variables?.targetType,
     };
@@ -329,7 +329,7 @@ export function DriveLayoutDialogs({ actions }: DriveLayoutDialogsProps) {
                 onAfterAction={onAfterAction}
             />
 
-            {actions.exportDialog}
+            <ExportProgressDialog open={actions.isExporting} />
             <ProgressDialog
                 open={actions.isConverting}
                 title={actions.convertTargetType === 'eigendoc' ? 'Converting to document' : 'Converting to sheet'}

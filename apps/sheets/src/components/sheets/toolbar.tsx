@@ -2,7 +2,7 @@ import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 
 import { DocumentImportPicker } from '@workspace/ui/components/layout/drive/document-import-picker';
-import { useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Sheet } from 'lucide-react';
 import { useState } from 'react';
@@ -14,7 +14,7 @@ type ToolbarLeftProps = {
 };
 
 export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: ToolbarLeftProps) {
-    const { exportPath, exportDialog } = useDocumentExport();
+    const { exportPath, isExporting } = useDocumentExport();
     const [importPickerOpen, setImportPickerOpen] = useState(false);
 
     return (
@@ -31,7 +31,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, canWrite }: Toolbar
                 createIcon={Sheet}
                 createType="sheets"
             />
-            {exportDialog}
+            <ExportProgressDialog open={isExporting} />
             <DocumentImportPicker
                 path={path}
                 open={importPickerOpen}

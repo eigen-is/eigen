@@ -22,7 +22,7 @@ import { Label } from '@workspace/ui/components/label';
 
 import { DocumentImportPicker } from '@workspace/ui/components/layout/drive/document-import-picker';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
 import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
@@ -107,7 +107,7 @@ export const EditorToolbar = ({
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     // Controlled: useEditor skips selection-only re-renders, so opening must re-render for a live disabled check.
     const [insertMenuOpen, setInsertMenuOpen] = useState(false);
-    const { exportPath, exportDialog } = useDocumentExport();
+    const { exportPath, isExporting } = useDocumentExport();
     const isCompact = useIsCompactToolbar();
 
     const handleLinkOperation = () => {
@@ -757,7 +757,7 @@ export const EditorToolbar = ({
                 </DialogContent>
             </Dialog>
 
-            {exportDialog}
+            <ExportProgressDialog open={isExporting} />
 
             <DocumentImportPicker
                 path={path}

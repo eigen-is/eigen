@@ -10,7 +10,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
@@ -48,7 +48,7 @@ export function Toolbar({
     activityPanelOpen,
     unresolvedCommentCount,
 }: ToolbarProps) {
-    const { exportPath, exportDialog } = useDocumentExport();
+    const { exportPath, isExporting } = useDocumentExport();
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     const isCompact = useIsCompactToolbar();
     // Below the 768px system breakpoint the slide canvas unmounts (view-only), so editing entries
@@ -121,7 +121,7 @@ export function Toolbar({
                     </div>
                 }
             />
-            {exportDialog}
+            <ExportProgressDialog open={isExporting} />
         </>
     );
 }
