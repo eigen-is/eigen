@@ -1,16 +1,15 @@
 import { formatDate } from '@workspace/lib/date';
 import type { AdminUser } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
-import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { PersonList } from '@workspace/ui/components/layout/person-list';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { cn } from '@workspace/ui/lib/utils';
 import { Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 type AdminUserListToolbarProps = {
     searchQuery: string;
@@ -39,48 +38,32 @@ type AdminUserListProps = {
 };
 
 export function AdminUserList({ users, searchQuery, activeUserId, onRowClick, emptyMessage }: AdminUserListProps) {
-    const filtered = useMemo(() => {
-        const sorted = [...users].sort((a, b) => a.name.localeCompare(b.name));
-        if (!searchQuery) return sorted;
-        const q = searchQuery.toLowerCase();
-        return sorted.filter((u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
-    }, [users, searchQuery]);
-
-    if (filtered.length === 0) {
-        return <EmptyState message={searchQuery ? 'No users match your search.' : emptyMessage} />;
-    }
-
     return (
-        <div className="flex-1 overflow-y-auto">
-            <AlphabeticalList
-                items={filtered}
-                getKey={(u) => u.id}
-                getGroupKey={(u) => u.name.charAt(0).toUpperCase()}
-                renderItem={(user) => (
-                    <div
-                        className={cn(
-                            'flex items-center gap-3 px-6 py-3 eigen-list-item',
-                            activeUserId === user.id && 'eigen-list-item-active',
-                        )}
-                        onClick={() => onRowClick(user.id)}
-                    >
-                        <UserItem
-                            name={user.name}
-                            email={user.email}
-                            userId={user.id}
-                            label={
-                                user.role && (
-                                    <Badge variant="outline" className="text-xs">
-                                        {user.role}
-                                    </Badge>
-                                )
-                            }
-                            className="flex-1"
-                        />
-                    </div>
-                )}
-            />
-        </div>
+        <PersonList
+            items={users}
+            searchQuery={searchQuery}
+            activeId={activeUserId}
+            getId={(u) => u.id}
+            getName={(u) => u.name}
+            getSearchFields={(u) => [u.name, u.email]}
+            onRowClick={onRowClick}
+            emptyState={<EmptyState message={searchQuery ? 'No users match your search.' : emptyMessage} />}
+            renderPerson={(user) => (
+                <UserItem
+                    name={user.name}
+                    email={user.email}
+                    userId={user.id}
+                    label={
+                        user.role && (
+                            <Badge variant="outline" className="text-xs">
+                                {user.role}
+                            </Badge>
+                        )
+                    }
+                    className="flex-1"
+                />
+            )}
+        />
     );
 }
 
