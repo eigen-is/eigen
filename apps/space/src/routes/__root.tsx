@@ -6,16 +6,12 @@ import { SpaceSidebar } from '../components/space/space-sidebar';
 function SpaceRoot() {
     const { user } = useAuth();
 
-    if (!user) {
-        return (
-            <AppShell appName="space" rootRoute={Route}>
-                <Outlet />
-            </AppShell>
-        );
-    }
-
     return (
-        <AppShell appName="space" rootRoute={Route} sidebar={({ condensed }) => <SpaceSidebar condensed={condensed} />}>
+        <AppShell
+            appName="space"
+            rootRoute={Route}
+            sidebar={user ? ({ condensed }) => <SpaceSidebar condensed={condensed} /> : undefined}
+        >
             <div className="flex-1 overflow-auto">
                 <Outlet />
             </div>
