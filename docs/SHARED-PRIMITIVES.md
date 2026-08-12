@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-847 primitives across 6 kinds. `packages/sheet` internals are excluded.
+848 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -154,7 +154,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (223)
+## Hooks (224)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -333,6 +333,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useMarkNotificationRead` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useNotifications` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
 | `useUnreadNotificationCount` | `@workspace/lib/notification` | packages/lib/src/core/notification/hooks/use-notifications.ts |
+| `useJoinWaitlist` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicConfig` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUser` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
 | `usePublicUsers` | `@workspace/lib/public` | packages/lib/src/core/public/hooks/use-public.ts |
