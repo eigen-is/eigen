@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-850 primitives across 6 kinds. `packages/sheet` internals are excluded.
+851 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -384,7 +384,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (232)
+## Types (233)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -441,6 +441,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Attendee` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarEvent` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarEventOccurrence` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `CalendarInvite` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `CalendarItem` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `CalendarShare` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `ChatAttachment` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
