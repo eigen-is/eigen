@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Button } from '../button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../dialog';
@@ -6,10 +7,11 @@ export type ConfirmDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     title: string;
-    description: string;
+    description: ReactNode;
     onConfirm: () => void | Promise<void>;
     cancelText?: string;
     confirmText?: string;
+    destructive?: boolean;
 };
 
 export function ConfirmDialog({
@@ -20,6 +22,7 @@ export function ConfirmDialog({
     onConfirm,
     cancelText = 'Cancel',
     confirmText = 'Confirm',
+    destructive = false,
 }: ConfirmDialogProps) {
     const [pending, setPending] = useState(false);
 
@@ -51,7 +54,11 @@ export function ConfirmDialog({
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                         {cancelText}
                     </Button>
-                    <Button onClick={handleConfirm} disabled={pending}>
+                    <Button
+                        variant={destructive ? 'destructive' : 'default'}
+                        onClick={handleConfirm}
+                        disabled={pending}
+                    >
                         {confirmText}
                     </Button>
                 </DialogFooter>
