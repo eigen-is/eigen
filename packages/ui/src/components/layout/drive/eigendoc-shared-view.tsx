@@ -7,6 +7,7 @@ import { useContext } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { useLayout } from '../app/layout-context';
 import { LoadingState } from '../app/loading-state';
+import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
@@ -66,17 +67,15 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             onRowActivate={openDocument}
             onBackToList={onNavigateBack}
             onAfterAction={() => navigate({ to: '/' })}
-            allowDelete={to === 'by-me'}
-            allowShare={true}
-            allowCreateFolder={false}
-            allowUpload={false}
-            allowMove={false}
-            allowedCreateTypes={new Set([config.createType])}
+            capabilities={{
+                ...DRIVE_CAPABILITIES.listing,
+                canDelete: to === 'by-me',
+                canRename: to === 'by-me',
+                createTypes: new Set([config.createType]),
+            }}
             getItemHref={getDriveItemUrl}
-            showBreadcrumb={false}
             title={`${config.labelPlural} shared ${to === 'by-me' ? 'by' : 'with'} me`}
             currentPath={rootPath}
-            allowRename={to === 'by-me'}
             emptyState={
                 <EmptyState
                     message={

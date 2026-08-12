@@ -138,12 +138,18 @@ the New menu for free. Routes publish selection-aware actions with `usePaletteSe
 ### Architecture
 
 ```
-DriveLayout (orchestrator: columns, actions, dialogs via useDriveDialogs)
+DriveLayout (list/detail columns; every action gated by one required `capabilities` value)
+├── useDriveLayoutDialogs + DriveLayoutDialogs (drive-layout-dialogs.tsx: dialog state,
+│     mutations, palette publication — a capability that's off exposes `undefined` handlers)
 ├── DriveList (toolbar + breadcrumb + external drop zone + view-mode toggle)
 │   ├── DriveGrid  → DriveTile   (grid view)
 │   └── DriveTable → DriveRow    (list view: sorting, keyboard nav, drag-drop, context menu)
 └── DriveDetail (preview, metadata, access list — 400px column, hidden on mobile until opened)
 ```
+
+Render sites declare their whole surface as one `DriveCapabilities` value (`drive-capabilities.ts`):
+the fs browser passes `DRIVE_CAPABILITIES.browse`, watched passes `.readOnly`, and the flat views
+(mime filters, per-app doc lists, shared-by/with-me) spread `.listing` with their own overrides.
 
 `DriveBrowser` (`drive-browser.tsx`) is a separate, lighter layer over `DriveTable`: breadcrumb + mount
 list, no dialogs and no detail column. The file picker (`drive-file-picker.tsx`) and the location field

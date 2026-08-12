@@ -5,7 +5,6 @@ import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/dr
 import {
     type DrivePath,
     type DriveSearchParams,
-    type EigenDocType,
     isDocumentType,
     isFolderType,
     isInlineEditable,
@@ -13,6 +12,7 @@ import {
 import { LoadingState, NotFound } from '@workspace/ui';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
 
@@ -105,15 +105,12 @@ function DriveRoute() {
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
             onAfterAction={() => {}}
-            allowDelete={to === 'by-me'}
-            allowShare={true}
-            allowCreateFolder={false}
-            allowUpload={false}
-            allowMove={false}
-            allowedCreateTypes={new Set<EigenDocType>()}
-            showBreadcrumb={false}
+            capabilities={{
+                ...DRIVE_CAPABILITIES.listing,
+                canDelete: to === 'by-me',
+                canRename: to === 'by-me',
+            }}
             title={to === 'by-me' ? 'Shared by me' : 'Shared with me'}
-            allowRename={to === 'by-me'}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}
             emptyState={

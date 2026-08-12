@@ -5,7 +5,6 @@ import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo } from '@workspace/lib/dri
 import {
     type DrivePath,
     type DriveSearchParams,
-    type EigenDocType,
     isDocumentType,
     isFolderType,
     isInlineEditable,
@@ -13,6 +12,7 @@ import {
 import { LoadingState } from '@workspace/ui';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
 
@@ -95,15 +95,8 @@ function WatchedRoute() {
             onRowActivate={onRowActivate}
             onBackToList={handleBack}
             onAfterAction={() => {}}
-            allowDelete={false}
-            allowShare={false}
-            allowCreateFolder={false}
-            allowUpload={false}
-            allowMove={false}
-            allowRename={false}
-            showBreadcrumb={false}
+            capabilities={DRIVE_CAPABILITIES.readOnly}
             title="Watched"
-            allowedCreateTypes={new Set<EigenDocType>()}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}
             emptyState={<EmptyState message="Watched files will appear here." />}

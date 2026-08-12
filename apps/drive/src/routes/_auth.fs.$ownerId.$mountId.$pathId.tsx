@@ -14,6 +14,7 @@ import {
 import { LoadingState, NotFound, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
 import { useContext, useEffect } from 'react';
@@ -169,14 +170,9 @@ function DriveRoute() {
                 onRowActivate={onRowActivate}
                 onBackToList={handleBackToList}
                 onAfterAction={handleAfterAction}
-                allowCreateFolder={true}
-                allowDelete={true}
-                allowShare={true}
-                allowUpload={true}
-                allowMove={true}
+                capabilities={DRIVE_CAPABILITIES.browse}
                 onQuickLook={onQuickLook}
                 getItemHref={getDriveItemUrl}
-                showBreadcrumb={true}
                 pid={pid}
                 unreadPathIds={unreadChatIds}
                 highlightHistory={showHistory}
