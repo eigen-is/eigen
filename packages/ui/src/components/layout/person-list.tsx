@@ -1,11 +1,11 @@
+import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
+import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
+import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
+import { useLongPress } from '@workspace/ui/hooks/use-long-press';
+import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import { type ReactNode, useMemo, useRef } from 'react';
-import { useKeyboardListNavigation } from '../../hooks/use-keyboard-list-navigation';
-import { useListDrag } from '../../hooks/use-list-drag';
-import { useListSelection } from '../../hooks/use-list-selection';
-import { useLongPress } from '../../hooks/use-long-press';
-import { useSelectableContextMenu } from '../../hooks/use-selectable-context-menu';
 import { AlphabeticalList, alphaGroupKey } from './alphabetical-list';
 import { ContextMenuAnchor } from './context-menu';
 
