@@ -63,7 +63,7 @@ export function OnboardingSettingsPage() {
     };
 
     return (
-        <div className="app-gutter max-w-2xl space-y-6">
+        <div className="space-y-6">
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Waitlist</h3>
                 <p className="text-sm text-muted-foreground">

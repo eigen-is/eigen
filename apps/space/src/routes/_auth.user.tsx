@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { SettingsPage } from '@workspace/ui/components/layout/app/settings-page.tsx';
 import { ProfileEditor } from '../components/space/profile-editor';
 
 export const Route = createFileRoute('/_auth/user')({
@@ -9,14 +8,8 @@ export const Route = createFileRoute('/_auth/user')({
 
 function RouteComponent() {
     return (
-        <ColumnLayout>
-            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Edit Profile</ToolbarTitle>}>
-                <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl app-gutter">
-                        <ProfileEditor />
-                    </div>
-                </div>
-            </Column>
-        </ColumnLayout>
+        <SettingsPage title="Edit Profile">
+            <ProfileEditor />
+        </SettingsPage>
     );
 }
