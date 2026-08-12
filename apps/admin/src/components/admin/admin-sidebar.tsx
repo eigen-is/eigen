@@ -53,7 +53,7 @@ export function AdminSidebar({
     };
 
     return (
-        <div className="h-full flex flex-col">
+        <>
             <SidebarBody>
                 <SidebarSection condensed={condensed}>
                     {isOwner && (
@@ -131,6 +131,8 @@ export function AdminSidebar({
                             />
                         ))}
                 </SidebarSection>
+
+                {/* No StorageUsage: Admin is a server-admin surface, not a personal-storage context. */}
             </SidebarBody>
 
             <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -157,6 +159,6 @@ export function AdminSidebar({
                     </form>
                 </DialogContent>
             </Dialog>
-        </div>
+        </>
     );
 }

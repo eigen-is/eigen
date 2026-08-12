@@ -11,7 +11,7 @@ import {
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { EigenLoader, StorageUsage, TooltipButton } from '@workspace/ui';
+import { StorageUsage, TooltipButton } from '@workspace/ui';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
@@ -47,17 +47,22 @@ function CalendarCheckbox({ color, checked, onChange }: { color: string; checked
     );
 }
 
-function SharedCalendarItem({
-    sc,
+// One row for both personal calendars and shared/team calendars — callers resolve
+// the colour, label and checked state from whichever calendar shape they hold.
+function CalendarRow({
+    color,
+    label,
+    checked,
     condensed,
     onToggle,
     onEdit,
 }: {
-    sc: SharedCalendar;
+    color: string;
+    label: string;
+    checked: boolean;
     condensed: boolean;
     onToggle: () => void;
     onEdit: () => void;
-    label?: string;
 }) {
     return (
         <div
@@ -66,10 +71,10 @@ function SharedCalendarItem({
                 !condensed && 'pr-8 hover:bg-accent',
             )}
         >
-            <CalendarCheckbox color={sc.color || sc.calendarColor} checked={sc.visible} onChange={onToggle} />
+            <CalendarCheckbox color={color} checked={checked} onChange={onToggle} />
             {!condensed && (
                 <>
-                    <span className="text-sm truncate flex-1">{sc.calendarName}</span>
+                    <span className="text-sm truncate flex-1">{label}</span>
                     <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
                         <TooltipButton
                             icon={Pencil}
@@ -153,7 +158,7 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
     const weekRange = getWeekRange(new Date());
 
     return (
-        <div className="h-full flex flex-col">
+        <>
             <SidebarBody>
                 <SidebarPrimaryButton
                     icon={CalendarPlus}
@@ -185,85 +190,58 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
                     <SidebarSection
                         condensed={condensed}
                         title="My Calendars"
+                        loading={calendarsLoading}
                         action={
                             <TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar} />
                         }
                     >
-                        {calendarsLoading ? (
-                            <EigenLoader />
-                        ) : (
-                            calendars.map((cal) => (
-                                <div
-                                    key={cal.id}
-                                    className={cn(
-                                        'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
-                                        !condensed && 'pr-8 hover:bg-accent',
-                                    )}
-                                >
-                                    <CalendarCheckbox
-                                        color={cal.color}
-                                        checked={cal.visible}
-                                        onChange={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
-                                    />
-                                    {!condensed && (
-                                        <>
-                                            <span className="text-sm truncate flex-1">{cal.name}</span>
-                                            <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
-                                                <TooltipButton
-                                                    icon={Pencil}
-                                                    tooltipText="Edit calendar"
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    onClick={() => handleEditCalendar(cal)}
-                                                />
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            ))
-                        )}
+                        {calendars.map((cal) => (
+                            <CalendarRow
+                                key={cal.id}
+                                color={cal.color}
+                                label={cal.name}
+                                checked={cal.visible}
+                                condensed={condensed}
+                                onToggle={() => updateCalendar.mutate({ id: cal.id, visible: !cal.visible })}
+                                onEdit={() => handleEditCalendar(cal)}
+                            />
+                        ))}
                     </SidebarSection>
 
                     {personalShared.length > 0 && (
-                        <SidebarSection condensed={condensed} title="Shared with me">
-                            {sharedLoading ? (
-                                <EigenLoader />
-                            ) : (
-                                personalShared.map((sc) => (
-                                    <SharedCalendarItem
-                                        key={sc.id}
-                                        sc={sc}
-                                        condensed={condensed}
-                                        onToggle={() =>
-                                            updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
-                                        }
-                                        onEdit={() => handleEditSharedCalendar(sc)}
-                                    />
-                                ))
-                            )}
+                        <SidebarSection condensed={condensed} title="Shared with me" loading={sharedLoading}>
+                            {personalShared.map((sc) => (
+                                <CalendarRow
+                                    key={sc.id}
+                                    color={sc.color || sc.calendarColor}
+                                    label={sc.calendarName}
+                                    checked={sc.visible}
+                                    condensed={condensed}
+                                    onToggle={() => updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })}
+                                    onEdit={() => handleEditSharedCalendar(sc)}
+                                />
+                            ))}
                         </SidebarSection>
                     )}
 
                     {teamShared.length > 0 && (
-                        <SidebarSection condensed={condensed} title="Team Calendars">
-                            {sharedLoading ? (
-                                <EigenLoader />
-                            ) : (
-                                teamShared.map((sc) => {
-                                    const display = { ...sc, calendarName: getTeamName(sc.ownerUserId) };
-                                    return (
-                                        <SharedCalendarItem
-                                            key={sc.id}
-                                            sc={display}
-                                            condensed={condensed}
-                                            onToggle={() =>
-                                                updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
-                                            }
-                                            onEdit={() => handleEditSharedCalendar(display)}
-                                        />
-                                    );
-                                })
-                            )}
+                        <SidebarSection condensed={condensed} title="Team Calendars" loading={sharedLoading}>
+                            {teamShared.map((sc) => {
+                                const display = { ...sc, calendarName: getTeamName(sc.ownerUserId) };
+                                return (
+                                    <CalendarRow
+                                        key={sc.id}
+                                        color={display.color || display.calendarColor}
+                                        label={display.calendarName}
+                                        checked={display.visible}
+                                        condensed={condensed}
+                                        onToggle={() =>
+                                            updateSharedCalendar.mutate({ id: sc.id, visible: !sc.visible })
+                                        }
+                                        onEdit={() => handleEditSharedCalendar(display)}
+                                    />
+                                );
+                            })}
                         </SidebarSection>
                     )}
                 </div>
@@ -291,6 +269,6 @@ export function CalendarSidebar({ condensed = false }: CalendarSidebarProps) {
             />
 
             <CreateEventDialog open={createEventOpen} onOpenChange={setCreateEventOpen} />
-        </div>
+        </>
     );
 }

@@ -123,18 +123,16 @@ function FilterRow({
 
 function GuestAppSidebar({ condensed }: { condensed: boolean }) {
     return (
-        <div className="flex h-full flex-col">
-            <SidebarBody>
-                <SidebarSection condensed={condensed}>
-                    <SidebarItem
-                        icon={<Download className="h-4 w-4" />}
-                        to="/shared/with-me"
-                        label="Shared with me"
-                        condensed={condensed}
-                    />
-                </SidebarSection>
-            </SidebarBody>
-        </div>
+        <SidebarBody>
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                    icon={<Download className="h-4 w-4" />}
+                    to="/shared/with-me"
+                    label="Shared with me"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+        </SidebarBody>
     );
 }
 
@@ -171,92 +169,83 @@ function UserAppSidebar({ condensed = false, newButton }: AppSidebarProps) {
     const watchedProps = currentApp === 'drive' ? { to: '/watched' } : { href: getDriveAppUrl('watched') };
 
     return (
-        <div className="flex h-full flex-col">
-            <SidebarBody>
-                {newButton}
+        <SidebarBody>
+            {newButton}
 
-                <SidebarSection condensed={condensed}>
-                    <SidebarItem
-                        icon={<Home className="h-4 w-4" />}
-                        {...driveHomeProps}
-                        label="Drive"
-                        condensed={condensed}
-                    />
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                    icon={<Home className="h-4 w-4" />}
+                    {...driveHomeProps}
+                    label="Drive"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+
+            <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
+                {FILTER_ENTRIES.map((entry) => (
+                    <FilterRow key={entry.label} entry={entry} currentApp={currentApp} condensed={condensed} />
+                ))}
+            </SidebarSection>
+
+            <SidebarSection condensed={condensed} title={condensed ? undefined : 'Sharing'}>
+                <SidebarItem
+                    icon={<UsersRound className="h-4 w-4" />}
+                    to="/shared/by-me"
+                    label={currentApp === 'drive' ? 'Shared by me' : `${SHARING_NOUN[currentApp]} shared by me`}
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Download className="h-4 w-4" />}
+                    to="/shared/with-me"
+                    label={currentApp === 'drive' ? 'Shared with me' : `${SHARING_NOUN[currentApp]} shared with me`}
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Bell className="h-4 w-4" />}
+                    {...watchedProps}
+                    label="Watched"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+
+            <SidebarSection condensed={condensed}>
+                <SidebarItem icon={<Trash2 className="h-4 w-4" />} {...trashProps} label="Trash" condensed={condensed}>
+                    {currentApp === 'drive' && !condensed && trashCount > 0 && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                            {trashCount}
+                        </Badge>
+                    )}
+                </SidebarItem>
+            </SidebarSection>
+
+            {myTeams?.some((t) => t.mounts.length > 0) && (
+                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
+                    {myTeams.flatMap((team) =>
+                        team.mounts
+                            .filter((mount) => mount.rootPathId)
+                            .map((mount) => {
+                                const owner = teamOwnerId(team.id);
+                                // A team drive always opens its folder view — in Drive directly, from
+                                // an eigendoc app over in the Drive app (like the Drive home link). The
+                                // type-filtered slice already lives in this app's "All …" view.
+                                const fsPath = `fs/${owner}/${mount.id}/${mount.rootPathId}`;
+                                const mountProps =
+                                    currentApp === 'drive' ? { to: `/${fsPath}` } : { href: getDriveAppUrl(fsPath) };
+                                return (
+                                    <SidebarItem
+                                        key={`${team.id}-${mount.id}`}
+                                        icon={<UserAvatar email={owner} className="h-4 w-4" />}
+                                        {...mountProps}
+                                        label={mount.name}
+                                        condensed={condensed}
+                                    />
+                                );
+                            }),
+                    )}
                 </SidebarSection>
+            )}
 
-                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
-                    {FILTER_ENTRIES.map((entry) => (
-                        <FilterRow key={entry.label} entry={entry} currentApp={currentApp} condensed={condensed} />
-                    ))}
-                </SidebarSection>
-
-                <SidebarSection condensed={condensed} title={condensed ? undefined : 'Sharing'}>
-                    <SidebarItem
-                        icon={<UsersRound className="h-4 w-4" />}
-                        to="/shared/by-me"
-                        label={currentApp === 'drive' ? 'Shared by me' : `${SHARING_NOUN[currentApp]} shared by me`}
-                        condensed={condensed}
-                    />
-                    <SidebarItem
-                        icon={<Download className="h-4 w-4" />}
-                        to="/shared/with-me"
-                        label={currentApp === 'drive' ? 'Shared with me' : `${SHARING_NOUN[currentApp]} shared with me`}
-                        condensed={condensed}
-                    />
-                    <SidebarItem
-                        icon={<Bell className="h-4 w-4" />}
-                        {...watchedProps}
-                        label="Watched"
-                        condensed={condensed}
-                    />
-                </SidebarSection>
-
-                <SidebarSection condensed={condensed}>
-                    <SidebarItem
-                        icon={<Trash2 className="h-4 w-4" />}
-                        {...trashProps}
-                        label="Trash"
-                        condensed={condensed}
-                    >
-                        {currentApp === 'drive' && !condensed && trashCount > 0 && (
-                            <Badge variant="secondary" className="ml-auto text-xs">
-                                {trashCount}
-                            </Badge>
-                        )}
-                    </SidebarItem>
-                </SidebarSection>
-
-                {myTeams?.some((t) => t.mounts.length > 0) && (
-                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
-                        {myTeams.flatMap((team) =>
-                            team.mounts
-                                .filter((mount) => mount.rootPathId)
-                                .map((mount) => {
-                                    const owner = teamOwnerId(team.id);
-                                    // A team drive always opens its folder view — in Drive directly, from
-                                    // an eigendoc app over in the Drive app (like the Drive home link). The
-                                    // type-filtered slice already lives in this app's "All …" view.
-                                    const fsPath = `fs/${owner}/${mount.id}/${mount.rootPathId}`;
-                                    const mountProps =
-                                        currentApp === 'drive'
-                                            ? { to: `/${fsPath}` }
-                                            : { href: getDriveAppUrl(fsPath) };
-                                    return (
-                                        <SidebarItem
-                                            key={`${team.id}-${mount.id}`}
-                                            icon={<UserAvatar email={owner} className="h-4 w-4" />}
-                                            {...mountProps}
-                                            label={mount.name}
-                                            condensed={condensed}
-                                        />
-                                    );
-                                }),
-                        )}
-                    </SidebarSection>
-                )}
-
-                <StorageUsage className="mt-auto" condensed={condensed} />
-            </SidebarBody>
-        </div>
+            <StorageUsage className="mt-auto" condensed={condensed} />
+        </SidebarBody>
     );
 }
