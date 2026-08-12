@@ -17,8 +17,11 @@ export function createAuthRouteOptions({ redirectGuests = false }: { redirectGue
             location: { href: string };
         }) => {
             if (!context.auth.isAuthenticated) {
+                // Widened like login-route's `to`: this file compiles in every app's Register,
+                // including apps without a /login route of their own (the index app).
+                const loginPath: string = '/login';
                 throw redirect({
-                    to: '/login',
+                    to: loginPath,
                     search: {
                         redirect: location.href,
                     },
