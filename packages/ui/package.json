@@ -56,7 +56,10 @@
     "./assets/fonts/source-serif/SourceSerif4-Variable.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable.woff2",
     "./assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2",
     "./postcss.config": "./postcss.config.mjs",
-    "./lib/*": "./src/lib/*.ts",
+    "./lib/*": [
+      "./src/lib/*.ts",
+      "./src/lib/*.tsx"
+    ],
     "./components/*": [
       "./src/components/*.tsx",
       "./src/components/*.ts"
