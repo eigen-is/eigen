@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-851 primitives across 6 kinds. `packages/sheet` internals are excluded.
+852 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (117)
+## Components (118)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -124,6 +124,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `InfoBlock` | `@workspace/ui/components/layout/info-block` | packages/ui/src/components/layout/info-block.tsx |
 | `MailComposeLink` | `@workspace/ui/components/layout/mail-compose-link` | packages/ui/src/components/layout/mail-compose-link.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |
+| `PersonList` | `@workspace/ui/components/layout/person-list` | packages/ui/src/components/layout/person-list.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/alignment-picker.tsx |
 | `BackgroundFillBlock` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/background-fill-block.tsx |
 | `PropertiesPanel` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/properties-panel.tsx |
@@ -151,7 +152,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommandPaletteContext` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
-| `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
@@ -259,51 +260,51 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useUpdateLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
 | `useUploadContactAvatar` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
-| `useAggregateMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useAggregateMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useAllWatches` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
-| `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useBreadcrumb` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useCheckPermissions` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useConvertDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-convert-document.ts |
-| `useCopyFiles` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useCopyPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useCopyToMediaFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useCreateDriveItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useCreateFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useCreateFolderItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useDeletePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useCopyFiles` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useCopyPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useCopyToMediaFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useCreateDriveItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useCreateFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useCreateFolderItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useDeletePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useDriveAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useDriveViewPreferences` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-view-preferences.ts |
-| `useDuplicatePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useEffectiveMembers` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useEmptyTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useDuplicatePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useEffectiveMembers` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `useEmptyTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useExportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
 | `useFileHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
-| `useFolderContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useFolderLookup` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useFolderContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useFolderLookup` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useImportDocument` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useImportFromDrive` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useIsEffectiveOwner` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useIsPathWatched` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
-| `useListTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useListTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useMediaResolver` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
-| `useMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useMountMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useMounts` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useMovePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `usePathInfo` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `usePathInfos` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `usePermanentlyDelete` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useMountMimeContent` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useMounts` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useMovePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `usePathInfo` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `usePathInfos` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `usePermanentlyDelete` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useRecordHistory` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-file-history.ts |
-| `useRenamePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useRequestAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useRestorePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useRenamePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
+| `useRequestAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `useRestorePath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
+| `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useUnwatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
-| `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
-| `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useWatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useFileContent` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-content.ts |
 | `useFileSave` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-save.ts |
@@ -791,7 +792,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
-| `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive.ts |
+| `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `beginOptimisticMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `consumeRecentMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
