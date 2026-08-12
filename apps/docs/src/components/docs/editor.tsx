@@ -112,7 +112,7 @@ const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - A
 
 export const CollaborativeEditor = ({
     path,
-    access,
+    canWrite,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -120,7 +120,7 @@ export const CollaborativeEditor = ({
     initialSearchTerm,
 }: {
     path: DrivePath;
-    access: { canRead: boolean; canWrite: boolean };
+    canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -163,7 +163,7 @@ export const CollaborativeEditor = ({
                 path={path}
                 yDoc={yDoc}
                 provider={provider}
-                access={access}
+                canWrite={canWrite}
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
@@ -223,7 +223,7 @@ const TiptapEditor = ({
     yDoc,
     provider,
     path,
-    access,
+    canWrite,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -233,7 +233,7 @@ const TiptapEditor = ({
     yDoc: Y.Doc;
     provider: WebsocketProvider;
     path: DrivePath;
-    access: { canRead: boolean; canWrite: boolean };
+    canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -322,7 +322,7 @@ const TiptapEditor = ({
 
     const editor = useEditor(
         {
-            editable: access.canWrite,
+            editable: canWrite,
             extensions: [
                 ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
                 Figure,
@@ -694,10 +694,10 @@ const TiptapEditor = ({
         return () => clearTimeout(timer);
     }, [editor]);
 
-    const docSearchController = useProseMirrorSearchController(editor, access.canWrite);
+    const docSearchController = useProseMirrorSearchController(editor, canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const showSidebar = !isMobile && (panel !== null || (access.canWrite && sidebarContext !== 'document'));
+    const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
 
     // Slide the centred page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - A4_WIDTH_PX) / 2);
@@ -786,7 +786,7 @@ const TiptapEditor = ({
                                 <EditorToolbar
                                     editor={editor}
                                     path={path}
-                                    canWrite={access.canWrite}
+                                    canWrite={canWrite}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}
@@ -880,7 +880,7 @@ const TiptapEditor = ({
             <CommentLifecycleDialogs
                 lifecycle={lifecycle}
                 path={path}
-                canWrite={access.canWrite}
+                canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
                 onDelete={(cardId) => {
                     if (!editor) return;
