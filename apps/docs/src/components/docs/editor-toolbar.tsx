@@ -176,7 +176,7 @@ export const EditorToolbar = ({
               : 'Normal';
 
     const activeFontFamily = editor.getAttributes('textStyle').fontFamily || '';
-    const activeFontName = activeFontFamily.match(/^'([^']+)'/)?.[1] ?? 'Inter';
+    const activeFontName = activeFontFamily.match(/^'([^']+)'/)?.[1] ?? EIGEN_FONTS[0].name;
 
     return (
         <>

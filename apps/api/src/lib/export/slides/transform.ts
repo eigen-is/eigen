@@ -11,6 +11,7 @@ import {
     type TransformWarning,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import type { SizeUnit } from '../render-types';
 import { sanitizeExportHtml } from '../sanitize';
@@ -75,7 +76,7 @@ img { display: block; max-width: 100%; }
 
 const SCREEN_CSS = `${SHARED_RESET}
 body {
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: ${FONT_STACK_SANS};
     background: #f5f5f5;
     margin: 0;
     padding: 2rem;
@@ -119,7 +120,7 @@ const PDF_CSS = `${SHARED_RESET}
 }
 
 body {
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: ${FONT_STACK_SANS};
     margin: 0;
     padding: 0;
 }

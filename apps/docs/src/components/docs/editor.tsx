@@ -15,6 +15,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { A4_WIDTH_PX, getDocExtensions, PAGE_MARGIN_PX } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -366,13 +367,13 @@ const TiptapEditor = ({
                     const doc = new DOMParser().parseFromString(html, 'text/html');
 
                     const fontMap: Record<string, string> = {
-                        'Times New Roman': "'Source Serif 4', serif",
-                        Georgia: "'Source Serif 4', serif",
-                        Palatino: "'Source Serif 4', serif",
-                        'Palatino Linotype': "'Source Serif 4', serif",
-                        'Courier New': "'JetBrains Mono', monospace",
-                        Consolas: "'JetBrains Mono', monospace",
-                        'Comic Sans MS': "'Excalifont', cursive",
+                        'Times New Roman': getFontFamily('Source Serif 4'),
+                        Georgia: getFontFamily('Source Serif 4'),
+                        Palatino: getFontFamily('Source Serif 4'),
+                        'Palatino Linotype': getFontFamily('Source Serif 4'),
+                        'Courier New': getFontFamily('JetBrains Mono'),
+                        Consolas: getFontFamily('JetBrains Mono'),
+                        'Comic Sans MS': getFontFamily('Excalifont'),
                     };
                     doc.querySelectorAll('[style]').forEach((el) => {
                         const htmlEl = el as HTMLElement;

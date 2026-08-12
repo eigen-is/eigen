@@ -1,3 +1,4 @@
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import type * as Y from 'yjs';
 
 export function normalizeDeck(yjsDoc: Y.Doc) {
@@ -38,7 +39,7 @@ export function normalizeDeck(yjsDoc: Y.Doc) {
         if (!objValue) continue;
         const obj = objValue as Y.Map<unknown>;
         if (obj.get('type') === 'text' && !obj.get('fontFamily')) {
-            obj.set('fontFamily', 'Inter');
+            obj.set('fontFamily', EIGEN_FONTS[0].name);
         }
     }
 

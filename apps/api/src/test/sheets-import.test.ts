@@ -719,7 +719,7 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('2:0')?.rt).toBe(-45);
         expect(byCoord.get('3:0')?.rt).toBe(-90);
         expect(byCoord.get('4:0')?.rt).toBe('vertical');
-        // Georgia is a serif font → mapped to the bundled Source Serif 4. See FONT_MAP
+        // Georgia is a serif font → mapped to the bundled Source Serif 4. See FONT_CATEGORY_MAP
         // in apps/api/src/lib/import/sheets/from-xlsx.ts; only the four supported faces
         // ship as embedded webfonts, so unsupported families collapse to the closest one.
         expect(byCoord.get('0:1')?.ff).toBe('Source Serif 4');
