@@ -108,7 +108,8 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
                     </SidebarSection>
                 )}
 
-                <StorageUsage className="mt-auto" condensed={condensed} />
+                {/* Guests manage no storage — drive's guest sidebar omits this too. */}
+                {!isGuest && <StorageUsage className="mt-auto" condensed={condensed} />}
             </SidebarBody>
 
             {!isGuest && (
