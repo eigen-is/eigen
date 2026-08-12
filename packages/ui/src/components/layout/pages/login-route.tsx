@@ -11,7 +11,7 @@ function LoginRoute() {
     return <LoginPage email={email || undefined} />;
 }
 
-export const loginSearchSchema = z.object({
+const loginSearchSchema = z.object({
     redirect: z.string().optional().catch(''),
     email: z.string().optional().catch(''),
 });
