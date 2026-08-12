@@ -22,12 +22,6 @@ export type DocSearchBarContextValue = {
 
 const DocSearchBarContext = createContext<DocSearchBarContextValue | null>(null);
 
-export function useDocSearchBar(): DocSearchBarContextValue {
-    const ctx = useContext(DocSearchBarContext);
-    if (!ctx) throw new Error('useDocSearchBar must be used inside <DocSearchProvider>');
-    return ctx;
-}
-
 // Null-safe variant (the useOptionalCommandPalette pattern) for chrome that renders
 // with and without a provider — toolbar ⌕ buttons, the sheets Edit-menu item.
 export function useOptionalDocSearchBar(): DocSearchBarContextValue | null {

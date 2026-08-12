@@ -72,7 +72,6 @@
     "./components/layout/comments": "./src/components/layout/comments/index.ts",
     "./components/layout/contacts": "./src/components/layout/contacts/index.ts",
     "./components/layout/context-menu": "./src/components/layout/context-menu/index.ts",
-    "./components/layout/delete": "./src/components/layout/delete/index.ts",
     "./components/layout/editor": "./src/components/layout/editor/index.ts",
     "./components/layout/drive": "./src/components/layout/drive/index.ts",
     "./components/layout/home": "./src/components/layout/home/index.ts",
