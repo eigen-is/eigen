@@ -13,6 +13,7 @@ import {
 } from '@workspace/lib/types/drive';
 import { NotFound } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
 import { FILTER_LABELS } from '@workspace/ui/components/layout/sidebar/app-sidebar';
@@ -89,7 +90,7 @@ function DriveRoute() {
     // The mime route is keyed on the url-slug form (`application-eigendoc`); resolve it
     // back to the matching EigenDocType so create is offered only for that kind.
     const matchedType = getEigenDocInfoByMime(mimeType)?.type;
-    const allowedCreateTypes = new Set<EigenDocType>(matchedType ? [matchedType] : []);
+    const createTypes = new Set<EigenDocType>(matchedType ? [matchedType] : []);
 
     return (
         <DriveLayout
@@ -104,13 +105,7 @@ function DriveRoute() {
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
             onAfterAction={() => {}}
-            allowDelete={true}
-            allowShare={true}
-            allowCreateFolder={false}
-            allowUpload={false}
-            allowMove={false}
-            allowedCreateTypes={allowedCreateTypes}
-            showBreadcrumb={false}
+            capabilities={{ ...DRIVE_CAPABILITIES.listing, createTypes }}
             title={FILTER_LABELS[mimeType]}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}

@@ -19,6 +19,7 @@ import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
 import { DriveAccessDialog } from './drive-access-dialog';
+import type { DriveCapabilities } from './drive-capabilities';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import { DriveCreateFolder } from './drive-create-folder';
 import { DriveDeleteItem } from './drive-delete-item';
@@ -44,17 +45,9 @@ export type DriveLayoutProps = {
     onRowActivate?: (path: DrivePath) => void;
     onBackToList: () => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
-    allowCreateFolder?: boolean;
-    allowDelete?: boolean;
-    allowShare?: boolean;
-    showBreadcrumb?: boolean;
+    capabilities: DriveCapabilities;
     // Toolbar title shown when there's no breadcrumb (filter/sharing/watched views).
     title?: string;
-    allowUpload?: boolean;
-    // Omit to allow every EigenDocType; pass an empty set to disable create entirely.
-    allowedCreateTypes?: ReadonlySet<EigenDocType>;
-    allowRename?: boolean;
-    allowMove?: boolean;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     getItemHref?: (item: DrivePath) => string | undefined;
     pid?: string;
@@ -76,22 +69,25 @@ export function DriveLayout({
     pathId,
     selectedPath = null,
     currentPath = null,
-    allowCreateFolder = true,
-    allowDelete = true,
-    allowShare = true,
-    allowedCreateTypes,
-    allowUpload = true,
-    allowRename = true,
-    allowMove = true,
+    capabilities,
     onQuickLook,
     getItemHref,
     pid = undefined,
-    showBreadcrumb = false,
     title,
     unreadPathIds,
     emptyState,
     highlightHistory,
 }: DriveLayoutProps) {
+    const {
+        canCreateFolder: allowCreateFolder,
+        canUpload: allowUpload,
+        canDelete: allowDelete,
+        canRename: allowRename,
+        canMove: allowMove,
+        canShare: allowShare,
+        showBreadcrumb,
+        createTypes: allowedCreateTypes,
+    } = capabilities;
     const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);

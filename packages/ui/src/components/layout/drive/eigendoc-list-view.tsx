@@ -12,6 +12,7 @@ import { useContext } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { useLayout } from '../app/layout-context';
 import { usePreview } from '../preview-provider';
+import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
@@ -92,14 +93,12 @@ export function EigenDocListView({
             onQuickLook={(path, siblings) => openPreview(path, siblings)}
             onBackToList={onNavigateBack}
             onAfterAction={onNavigateBack}
-            allowDelete={true}
-            allowShare={true}
-            allowCreateFolder={false}
-            allowUpload={false}
-            allowMove={allowMove}
-            allowedCreateTypes={new Set([config.createType])}
+            capabilities={{
+                ...DRIVE_CAPABILITIES.listing,
+                canMove: allowMove,
+                createTypes: new Set([config.createType]),
+            }}
             getItemHref={getDriveItemUrl}
-            showBreadcrumb={false}
             title={config.allLabel}
             currentPath={rootPath}
             emptyState={<EmptyState hint={`Use the “${config.newLabel}” button to create one.`} />}
