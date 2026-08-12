@@ -72,7 +72,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const myAttendeeStatus = event.data?.attendees?.find(
         (a) => a.email.toLowerCase() === user?.email?.toLowerCase(),
     )?.status;
-    const hasAttendees = (event.data?.attendees?.length ?? 0) > 0;
+    const attendees = event.data?.attendees ?? [];
 
     const handleDelete = async (action: RecurringAction) => {
         if (isLinkedEvent && isPartOfSeries) {
@@ -235,14 +235,11 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                             </div>
                         )}
 
-                        {hasAttendees && (
+                        {attendees.length > 0 && (
                             <div className="flex items-start gap-3 text-sm">
                                 <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                 <div className="flex-1">
-                                    <AttendeeList
-                                        attendees={event.data!.attendees!}
-                                        organizer={event.data?.organizer}
-                                    />
+                                    <AttendeeList attendees={attendees} organizer={event.data?.organizer} />
                                 </div>
                             </div>
                         )}
