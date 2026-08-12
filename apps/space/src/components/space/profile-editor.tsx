@@ -15,7 +15,7 @@ const formSchema = z.object({
     lastName: z.string().optional(),
 });
 
-export type ProfileFormValues = z.infer<typeof formSchema>;
+type ProfileFormValues = z.infer<typeof formSchema>;
 
 export function ProfileEditor() {
     const { data: contact, isLoading, error: fetchError } = useMeContact();
