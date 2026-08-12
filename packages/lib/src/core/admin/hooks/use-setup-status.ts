@@ -26,7 +26,8 @@ export function useCompleteSetup() {
             return res.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.setupStatus() });
+            // Mark stale without refetching, so the wizard's success card stays up until its reload CTA.
+            queryClient.invalidateQueries({ queryKey: adminKeys.setupStatus(), refetchType: 'none' });
         },
         onError: onMutationError,
     });

@@ -1,4 +1,4 @@
-import { useCheckSetupS3, useCompleteSetup } from '@workspace/lib/admin';
+import { useCheckSetupS3, useCompleteSetup, type useSetupStatus } from '@workspace/lib/admin';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
@@ -12,8 +12,8 @@ import { CheckCircle2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
-// Shape of the /setup/status query the parent route already fetched and passes down.
-type SetupStatus = { setupRequired: boolean; domain?: string; mailDomain?: string };
+// The /setup/status shape the parent route already fetched and passes down.
+type SetupStatus = NonNullable<ReturnType<typeof useSetupStatus>['data']>;
 
 export function SetupWizard({ status }: { status: SetupStatus }) {
     const completeSetup = useCompleteSetup();
