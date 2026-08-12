@@ -1,9 +1,7 @@
-import { setupApi } from '@workspace/lib/api';
-import { AppError } from '@workspace/lib/api-error';
+import { useCheckSetupS3, useCompleteSetup } from '@workspace/lib/admin';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
-import { LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
@@ -11,23 +9,24 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@w
 import { Label } from '@workspace/ui/components/label';
 import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader';
 import { CheckCircle2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
-async function checkS3ViaSetup(config: S3Config): Promise<{ ok: boolean; message: string }> {
-    const res = await setupApi.s3check.post(config);
-    if (res.error) return { ok: false, message: new AppError(res).message };
-    return res.data;
-}
+// Shape of the /setup/status query the parent route already fetched and passes down.
+type SetupStatus = { setupRequired: boolean; domain?: string; mailDomain?: string };
 
-export function SetupWizard() {
-    const [step, setStep] = useState<'loading' | 'config' | 'complete' | 'already-setup'>('loading');
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(false);
+export function SetupWizard({ status }: { status: SetupStatus }) {
+    const completeSetup = useCompleteSetup();
+    const s3Check = useCheckSetupS3();
+    const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
 
-    const [domain, setDomain] = useState('');
-    const [domainFromEnv, setDomainFromEnv] = useState(false);
-    const [mailDomain, setMailDomain] = useState('');
+    const [completed, setCompleted] = useState(false);
+
+    // A real DOMAIN env var is locked; the localhost default stays editable.
+    const domainFromEnv = !!status.domain && status.domain !== 'localhost';
+    const [domain, setDomain] = useState(() =>
+        status.domain ? (status.domain === 'localhost' ? 'eigen.localhost' : status.domain) : '',
+    );
     const [orgName, setOrgName] = useState('');
     const [storageType, setStorageType] = useState<ServerStorageType>('local-fullnames');
     const [s3Config, setS3Config] = useState<S3Config>(EMPTY_S3);
@@ -38,39 +37,14 @@ export function SetupWizard() {
     const onS3Verified = useCallback((verified: boolean) => setS3Verified(verified), []);
 
     // Mirrors backend getMailDomain(): MAIL_DOMAIN env → DOMAIN env → user-typed domain.
-    const effectiveMailDomain = mailDomain || domain;
+    const effectiveMailDomain = (status.mailDomain ?? '') || domain;
     const formReady = !!(domain && orgName && adminUsername && adminName && adminPassword.length >= 8 && s3Verified);
-
-    useEffect(() => {
-        setupApi.status
-            .get()
-            .then((res) => {
-                const data = res.data;
-                if (!data?.setupRequired) {
-                    setStep('already-setup');
-                } else {
-                    if (data.domain) {
-                        setDomain(data.domain === 'localhost' ? 'eigen.localhost' : data.domain);
-                        setDomainFromEnv(data.domain !== 'localhost');
-                    }
-                    setMailDomain(data.mailDomain ?? '');
-                    setStep('config');
-                }
-            })
-            .catch(() => {
-                setError('Failed to connect to server');
-                setStep('config');
-            });
-    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formReady) return;
-        setLoading(true);
-        setError(null);
-
         try {
-            const res = await setupApi.complete.post({
+            await completeSetup.mutateAsync({
                 domain,
                 orgName,
                 storageType,
@@ -87,45 +61,13 @@ export function SetupWizard() {
                       }
                     : {}),
             });
-            if (res.error) {
-                setError(new AppError(res).message);
-                return;
-            }
-            setStep('complete');
+            setCompleted(true);
         } catch {
-            setError('Network error. Please try again.');
-        } finally {
-            setLoading(false);
+            // The mutation hook toasts the failure; stay on the form so the user can retry.
         }
     };
 
-    if (step === 'loading') {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-background">
-                <LoadingState />
-            </div>
-        );
-    }
-
-    if (step === 'already-setup') {
-        return (
-            <div className="min-h-screen flex items-center justify-center bg-background p-4">
-                <Card className="w-full max-w-md">
-                    <CardHeader className="text-center">
-                        <CardTitle className="text-2xl">Already Configured</CardTitle>
-                        <CardDescription>Eigen has already been set up. Please proceed to login.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <Button className="w-full" onClick={() => (window.location.href = '/')}>
-                            Go to Login
-                        </Button>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    if (step === 'complete') {
+    if (completed) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background p-4">
                 <Card className="w-full max-w-md">
@@ -157,12 +99,6 @@ export function SetupWizard() {
                     <CardDescription>Let's configure your instance</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {error && (
-                        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
-                            {error}
-                        </div>
-                    )}
-
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-4">
                             <h3 className="font-medium text-lg">Server Configuration</h3>
@@ -202,7 +138,7 @@ export function SetupWizard() {
                                 onStorageTypeChange={setStorageType}
                                 s3Config={s3Config}
                                 onS3ConfigChange={setS3Config}
-                                checkS3={checkS3ViaSetup}
+                                checkS3={handleS3Check}
                                 onS3Verified={onS3Verified}
                             />
                         </div>
@@ -252,8 +188,8 @@ export function SetupWizard() {
                             </div>
                         </div>
 
-                        <Button type="submit" disabled={!formReady || loading} className="w-full">
-                            {loading ? 'Setting up...' : 'Complete Setup'}
+                        <Button type="submit" disabled={!formReady || completeSetup.isPending} className="w-full">
+                            {completeSetup.isPending ? 'Setting up...' : 'Complete Setup'}
                         </Button>
                     </form>
                 </CardContent>
