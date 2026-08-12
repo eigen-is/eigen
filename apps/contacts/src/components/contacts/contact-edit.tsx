@@ -172,28 +172,17 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                         if (!user) return;
                                         const formData = new FormData();
                                         formData.append('file', file);
-
                                         const uploadHandler = upload.createUpload(file.name);
-
                                         try {
-                                            await uploadWithProgress({
+                                            const response = await uploadWithProgress({
                                                 url: getContactsAvatarUploadUrl(user.id),
                                                 formData,
-                                                onProgress: (progress: number) => {
-                                                    uploadHandler.updateProgress(progress);
-                                                },
-                                                onSuccess: (response: string) => {
-                                                    uploadHandler.complete();
-                                                    setAvatar(response);
-                                                },
-                                                onError: (err) => {
-                                                    uploadHandler.error();
-                                                    console.error('Upload error:', err);
-                                                },
+                                                onProgress: uploadHandler.updateProgress,
                                             });
+                                            uploadHandler.complete();
+                                            setAvatar(response);
                                         } catch (err: unknown) {
-                                            console.error('Error uploading file:', err);
-                                            uploadHandler.error();
+                                            uploadHandler.error(err instanceof Error ? err.message : undefined);
                                         }
                                     }}
                                 />

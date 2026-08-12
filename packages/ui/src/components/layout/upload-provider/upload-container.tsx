@@ -35,7 +35,9 @@ export function UploadContainer({ uploads, onRemove }: { uploads: UploadItem[]; 
                             value={upload.progress}
                             className={cn(upload.status === 'error' && 'bg-destructive/20')}
                         />
-                        {upload.status === 'error' && <p className="text-xs text-destructive mt-1">Upload failed</p>}
+                        {upload.status === 'error' && (
+                            <p className="text-xs text-destructive mt-1">{upload.errorMessage ?? 'Upload failed'}</p>
+                        )}
                     </CardContent>
                 </Card>
             ))}
