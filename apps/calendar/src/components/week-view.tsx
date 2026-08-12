@@ -12,8 +12,10 @@ import {
 } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
+import { eventPillStateClasses } from './calendar-utils';
 import { EventDetailDialog } from './event-detail-dialog';
+import { useEventDetailState } from './hooks/use-event-detail-state';
 
 type WeekViewProps = {
     currentDate: Date;
@@ -33,38 +35,15 @@ export function WeekView({
     initialEventId,
 }: WeekViewProps) {
     const { user } = useAuth();
-    const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
-    const [detailOpen, setDetailOpen] = useState(false);
-
-    const didAutoOpen = useRef(false);
-    useEffect(() => {
-        if (!initialEventId || events.length === 0 || didAutoOpen.current) return;
-        const match = events.find(
-            (e) => e.id === initialEventId || e.uid === initialEventId || e.data?.organizerEventId === initialEventId,
-        );
-        if (match && !isFreeBusyEvent(match)) {
-            didAutoOpen.current = true;
-            setSelectedEvent(match);
-            setDetailOpen(true);
-        }
-    }, [initialEventId, events]);
+    const { handleEventClick, detailDialogProps } = useEventDetailState({
+        events,
+        calendars,
+        sharedCalendars,
+        initialEventId,
+    });
 
     const { startDate, endDate } = useMemo(() => getWeekRange(currentDate), [currentDate]);
     const days = useMemo(() => getDaysInRange(startDate, endDate), [startDate, endDate]);
-
-    const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (isFreeBusyEvent(event)) return;
-        setSelectedEvent(event);
-        setDetailOpen(true);
-    };
-
-    const selectedCalendar = selectedEvent ? calendars.find((c) => c.id === selectedEvent.calendarId) || null : null;
-
-    const selectedSharedCalendar =
-        selectedEvent && !selectedCalendar
-            ? sharedCalendars?.find((s) => s.calendarId === selectedEvent.calendarId) || null
-            : null;
 
     return (
         <>
@@ -112,12 +91,7 @@ export function WeekView({
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
                                                     'text-xs leading-tight px-1.5 py-1 rounded text-white truncate',
-                                                    freeBusy
-                                                        ? 'opacity-50 cursor-default'
-                                                        : 'cursor-pointer hover:opacity-80',
-                                                    inviteStatus === 'pending' &&
-                                                        'border border-dashed bg-transparent !text-foreground',
-                                                    inviteStatus === 'declined' && 'opacity-40',
+                                                    eventPillStateClasses('block', freeBusy, inviteStatus),
                                                 )}
                                                 style={
                                                     inviteStatus === 'pending'
@@ -145,10 +119,7 @@ export function WeekView({
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
                                                     'text-sm leading-tight flex items-start gap-1.5 py-0.5 px-0.5 rounded',
-                                                    freeBusy
-                                                        ? 'opacity-50 cursor-default'
-                                                        : 'cursor-pointer hover:bg-accent',
-                                                    inviteStatus === 'declined' && 'opacity-40',
+                                                    eventPillStateClasses('dot', freeBusy, inviteStatus),
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}
                                                 title={event.title}
@@ -186,13 +157,7 @@ export function WeekView({
                 </div>
             </div>
 
-            <EventDetailDialog
-                open={detailOpen}
-                onOpenChange={setDetailOpen}
-                event={selectedEvent}
-                calendar={selectedCalendar}
-                sharedCalendar={selectedSharedCalendar}
-            />
+            <EventDetailDialog {...detailDialogProps} />
         </>
     );
 }
