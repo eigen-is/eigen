@@ -174,7 +174,8 @@ Uploaded files stream to a draft-temp staging area (`uploadDraftAttachment` → 
 (`attachFromDrive`); Drive **containers** (docs, folders) are added as `driveReferences` instead and rendered
 as reference-pill `<a>` links at save/send (`renderAttachmentPills`, `mail-template.ts`) — see
 [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md). Received attachments re-parse from the `.eml` on read and can be
-copied into Drive (`saveAttachmentsToDrive`).
+copied into Drive (`saveAttachmentsToDrive`); `text/calendar` parts are additionally summarized into a typed
+`Attachment.calendarInvite` for the invite widget — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations).
 
 ## Delivery and inbound
 

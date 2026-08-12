@@ -27,6 +27,20 @@ export type AddressObject = {
     text: string;
 };
 
+// A text/calendar attachment summarized at message-read time by the API's canonical ical.js
+// parser (summarizeCalendarInvite). Dates are real Dates on the FE via Eden's reviver.
+export type CalendarInvite = {
+    method: ImipMethod;
+    uid: string;
+    summary: string;
+    startTime: Date;
+    endTime: Date;
+    allDay: boolean;
+    timezone: string | null;
+    location: string | null;
+    organizer: { email: string; name?: string } | null;
+};
+
 export type Attachment = {
     type: 'attachment';
     content: unknown;
@@ -41,6 +55,8 @@ export type Attachment = {
     cid?: string | undefined;
     related: boolean;
     calendarMethod?: ImipMethod;
+    // Set on text/calendar attachments in the message-detail payload; null = unparseable ICS.
+    calendarInvite?: CalendarInvite | null;
 };
 
 export type ParsedMail = {

@@ -292,12 +292,7 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
                     {email.attachments?.map(
                         (attachment: Attachment, index: number) =>
                             attachment.contentType.startsWith('text/calendar') && (
-                                <CalendarInviteWidget
-                                    key={index}
-                                    attachment={attachment}
-                                    emailId={email.id}
-                                    attachmentIndex={index}
-                                />
+                                <CalendarInviteWidget key={index} invite={attachment.calendarInvite} />
                             ),
                     )}
                 </div>

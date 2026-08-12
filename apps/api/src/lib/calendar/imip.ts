@@ -7,7 +7,7 @@ import {
     IMIP_METHODS,
     type ImipMethod,
 } from '@workspace/lib/types/calendar';
-import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
+import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
@@ -167,6 +167,34 @@ export function extractCalendarAttachment(mail: {
     const method = raw && IMIP_METHODS.includes(raw as ImipMethod) ? (raw as ImipMethod) : undefined;
 
     return { ics, method };
+}
+
+// Read-time summary of a single text/calendar attachment for the message-detail payload.
+// Returns null for unparseable ICS — the mail widget renders that as an explicit error state.
+export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite | null {
+    const cal = extractCalendarAttachment({ attachments: [attachment] });
+    if (!cal) return null;
+    try {
+        const { events, method } = parseIcs(cal.ics);
+        const event = events[0];
+        if (!event) return null;
+        const organizer = event.data?.organizer;
+        return {
+            // ICS METHOD wins, then the parser's Content-Type-derived calendarMethod; a bare
+            // event .ics without METHOD anywhere still renders as an invitation card.
+            method: method ?? attachment.calendarMethod ?? 'REQUEST',
+            uid: event.uid,
+            summary: event.title,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            allDay: event.allDay,
+            timezone: event.timezone,
+            location: event.location,
+            organizer: organizer ? { email: organizer.email, name: organizer.name } : null,
+        };
+    } catch {
+        return null;
+    }
 }
 
 export function processInboundImip(home: Home, mail: { attachments: Attachment[]; from?: AddressObject }): void {
