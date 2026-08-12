@@ -76,7 +76,7 @@ passes its `controller`.
 - **Placement:** the bar floats top-right of the wrapped subtree; a surface passes `barClassName` offsets
   to clear its own chrome. `onOpenChange` lets a surface with a layered `Escape` (slides:
   present → edit → bar → deselect) defer its default action to the bar-close.
-- **Chrome entry points:** `useDocSearchBar()` (and the null-safe `useOptionalDocSearchBar()`) expose
+- **Chrome entry points:** the null-safe `useOptionalDocSearchBar()` exposes
   `open()` / `openReplace()` / `canReplace` to toolbar buttons (`find-in-document-button.tsx`, the `⌕`
   cluster) and Edit-menu items — so read-only surfaces hide "Find and replace".
 

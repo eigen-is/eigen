@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-849 primitives across 6 kinds. `packages/sheet` internals are excluded.
+842 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (118)
+## Components (116)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -121,8 +121,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CollapsibleUserList` | `@workspace/ui/components/layout/collapsible-user-list` | packages/ui/src/components/layout/collapsible-user-list.tsx |
 | `ContextMenuAnchor` | `@workspace/ui/components/layout/context-menu` | packages/ui/src/components/layout/context-menu/context-menu-anchor.tsx |
 | `CopyInput` | `@workspace/ui/components/layout/copy-input` | packages/ui/src/components/layout/copy-input.tsx |
-| `DangerZone` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/danger-zone.tsx |
-| `DeleteDialog` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/delete-dialog.tsx |
 | `InfoBlock` | `@workspace/ui/components/layout/info-block` | packages/ui/src/components/layout/info-block.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/alignment-picker.tsx |
@@ -156,12 +154,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (220)
+## Hooks (218)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `useAcceptWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
-| `useActiveMember` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-active-member.ts |
 | `useAddTeamMember` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useAdminUsers` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-users.ts |
 | `useCreateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
@@ -250,7 +247,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `useAddContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useAddLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |
-| `useContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useContacts` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useContactSuggestions` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts |
 | `useDeleteContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
@@ -381,7 +377,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useScrollToIndex` | `@workspace/ui/hooks/use-scroll-to-index` | packages/ui/src/hooks/use-scroll-to-index.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (234)
+## Types (232)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -610,8 +606,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserAvatarProps` | `@workspace/ui` | packages/ui/src/components/layout/user-avatar.tsx |
 | `UserItemProps` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
 | `UserNameCardProps` | `@workspace/ui` | packages/ui/src/components/layout/user-name-card.tsx |
-| `DangerZoneProps` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/danger-zone.tsx |
-| `DeleteDialogProps` | `@workspace/ui/components/layout/delete` | packages/ui/src/components/layout/delete/delete-dialog.tsx |
 | `OwnerInfoPopoverProps` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |
 | `DownloadMode` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
 | `PreviewMode` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
@@ -620,7 +614,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (265)
+## Utilities & constants (264)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -880,7 +874,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getFileIconComponent` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
 | `getSlashTargetQuery` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-utils.ts |
-| `loginSearchSchema` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `renderPresenceCaret` | `@workspace/ui` | packages/ui/src/components/layout/collab/presence-label.tsx |
 | `SHEETS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |

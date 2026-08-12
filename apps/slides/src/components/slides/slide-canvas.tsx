@@ -237,8 +237,7 @@ export function SlideCanvas({
                     maxHeight: '100%',
                     maxWidth: '100%',
                     containerType: 'size',
-                    // Own stacking context so the canvas-internal overlays below (snap lines, marquee,
-                    // selection bounds, rotation badge) stay scoped under the canvas, not the portal tier.
+                    // Explicit stacking context for the canvas-internal overlay tiers below.
                     isolation: 'isolate',
                     ...getBackgroundStyle(slide.background, resolveMediaUrl),
                 }}
