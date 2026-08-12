@@ -7,7 +7,6 @@ import { useContext } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { useLayout } from '../app/layout-context';
 import { LoadingState } from '../app/loading-state';
-import { NotFound } from '../app/not-found';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
@@ -47,7 +46,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
     };
 
     if (isFolderContentLoadingError) {
-        return <NotFound />;
+        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
     if (isFolderContentLoading) {

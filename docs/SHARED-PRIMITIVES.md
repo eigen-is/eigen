@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-850 primitives across 6 kinds. `packages/sheet` internals are excluded.
+851 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (117)
+## Components (118)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -123,6 +123,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuAnchor` | `@workspace/ui/components/layout/context-menu` | packages/ui/src/components/layout/context-menu/context-menu-anchor.tsx |
 | `CopyInput` | `@workspace/ui/components/layout/copy-input` | packages/ui/src/components/layout/copy-input.tsx |
 | `InfoBlock` | `@workspace/ui/components/layout/info-block` | packages/ui/src/components/layout/info-block.tsx |
+| `MailComposeLink` | `@workspace/ui/components/layout/mail-compose-link` | packages/ui/src/components/layout/mail-compose-link.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/alignment-picker.tsx |
 | `BackgroundFillBlock` | `@workspace/ui/components/layout/properties-panel` | packages/ui/src/components/layout/properties-panel/background-fill-block.tsx |

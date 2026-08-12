@@ -1,6 +1,6 @@
-import { getMailComposeUrl } from '@workspace/lib/api';
 import { useResolvedUser } from '@workspace/lib/public';
 import type { HTMLAttributes, ReactNode } from 'react';
+import { MailComposeLink } from './mail-compose-link';
 
 export type UserNameProps = HTMLAttributes<HTMLDivElement> & {
     name?: string;
@@ -22,15 +22,7 @@ export function UserName({ name, email, userId, label, className, mailLink = fal
             {resolvedEmail && (resolvedEmail !== displayName || mailLink) && (
                 <>
                     {' '}
-                    (
-                    {mailLink ? (
-                        <a className="hover:underline" href={getMailComposeUrl(resolvedEmail)}>
-                            {resolvedEmail}
-                        </a>
-                    ) : (
-                        resolvedEmail
-                    )}
-                    )
+                    (<MailComposeLink email={resolvedEmail} mailLink={mailLink} />)
                 </>
             )}
         </span>
