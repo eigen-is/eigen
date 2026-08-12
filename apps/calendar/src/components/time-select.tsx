@@ -187,6 +187,10 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
     );
 }
 
+export function toTimeString(date: Date): string {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
 export function roundToNext15Minutes(date: Date): Date {
     const d = new Date(date);
     const mins = d.getMinutes();
