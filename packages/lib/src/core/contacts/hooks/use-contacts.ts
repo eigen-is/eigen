@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { contactsApi } from '@workspace/lib/api';
+import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AppError, onMutationError } from '../../api-error';
@@ -115,6 +115,30 @@ export function useMeContact() {
         },
         enabled: !!ownerId,
         staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+}
+
+// Multipart avatar upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through
+// raw fetch, mirroring useUploadDraftAttachment. Returns the stored avatar path.
+async function uploadContactAvatarRequest(ownerId: string, file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(getContactsAvatarUploadUrl(ownerId), {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+    });
+    if (!res.ok) throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
+    return await res.text();
+}
+
+export function useUploadContactAvatar() {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+
+    return useMutation({
+        mutationFn: (file: File) => uploadContactAvatarRequest(ownerId, file),
+        onError: onMutationError,
     });
 }
 
