@@ -8,7 +8,7 @@ import { MemberAvatar } from './member-avatar';
 
 // Pinned rows live outside cmdk's list so they never get filtered, hence they can't reuse
 // CommandItem's data-[selected] styling.
-export const memberRowClassName =
+const memberRowClassName =
     'relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground';
 
 // The "me / Unassigned" header block shared by AssigneePicker and AssigneeMenuItems.
