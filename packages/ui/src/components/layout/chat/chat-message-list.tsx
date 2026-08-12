@@ -1,15 +1,12 @@
 import { getDriveDownloadUrl } from '@workspace/lib/api';
-import { useContacts } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
 import { useCopyFiles, useFolderLookup } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
-import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { UserNameCard } from '@workspace/ui/components/layout/user-name-card';
-import { Check, Download, Pencil, Trash2, X } from 'lucide-react';
+import { Download, Pencil, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLongPress } from '../../../hooks/use-long-press';
 import { cn } from '../../../lib/utils';
 import { DropdownMenuItem } from '../../dropdown-menu';
@@ -21,6 +18,9 @@ import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveLocationPicker } from '../drive/drive-location-picker';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserAvatar } from '../user-avatar';
+import { InlineEdit } from './inline-edit';
+import { InspectCard } from './inspect-card';
+import { RichContent } from './rich-content';
 
 type ChatMessageListProps = {
     messages: ChatMessage[];
@@ -45,152 +45,6 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
     if (prev.authorId !== curr.authorId) return false;
     const diff = new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime();
     return diff < 5 * 60 * 1000;
-}
-
-function InlineEmail({ email }: { email: string }) {
-    return <UserNameCard email={email} mailLink className="cursor-default font-medium" />;
-}
-
-// Matches http(s) URLs, trimming trailing punctuation.
-const URL_REGEX = /https?:\/\/[^\s<>'")\]]+[^\s<>'")\].,;:!?]/g;
-
-type RichToken = { index: number; end: number; type: 'email' | 'url'; value: string };
-
-function tokenize(text: string): RichToken[] {
-    const tokens: RichToken[] = [];
-    const emailRegex = new RegExp(EMAIL_FIND_REGEX);
-    const urlRegex = new RegExp(URL_REGEX);
-
-    let match: RegExpExecArray | null;
-    while ((match = emailRegex.exec(text)) !== null) {
-        tokens.push({ index: match.index, end: match.index + match[0].length, type: 'email', value: match[0] });
-    }
-    while ((match = urlRegex.exec(text)) !== null) {
-        tokens.push({ index: match.index, end: match.index + match[0].length, type: 'url', value: match[0] });
-    }
-
-    tokens.sort((a, b) => a.index - b.index);
-    return tokens;
-}
-
-function RichContent({ text, className }: { text: string; className?: string }) {
-    const parts: ReactNode[] = [];
-    const tokens = tokenize(text);
-
-    let lastIdx = 0;
-    for (const token of tokens) {
-        if (token.index < lastIdx) continue;
-        if (token.index > lastIdx) {
-            parts.push(text.slice(lastIdx, token.index));
-        }
-        if (token.type === 'email') {
-            parts.push(<InlineEmail key={token.index} email={token.value} />);
-        } else {
-            parts.push(
-                <a
-                    key={token.index}
-                    href={token.value}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-link hover:underline break-all"
-                >
-                    {token.value}
-                </a>,
-            );
-        }
-        lastIdx = token.end;
-    }
-    if (lastIdx < text.length) {
-        parts.push(text.slice(lastIdx));
-    }
-    return <p className={className}>{parts}</p>;
-}
-
-function InspectCard({ target }: { target: string }) {
-    const { data: contacts = [] } = useContacts();
-    const contact = contacts.find((c) => c.email?.some((e) => e.toLowerCase() === target.toLowerCase()));
-
-    return (
-        <div className="flex gap-4 p-4 rounded-lg border bg-card max-w-sm">
-            <div className="shrink-0">
-                <UserItem email={target} mailLink={true} />
-            </div>
-            <div className="flex-1 min-w-0 space-y-1">
-                {contact?.company && (
-                    <p className="text-xs text-muted-foreground">
-                        {contact.jobTitle ? `${contact.jobTitle} at ` : ''}
-                        {contact.company}
-                    </p>
-                )}
-                {contact?.phone && contact.phone.length > 0 && contact.phone[0] && (
-                    <p className="text-xs text-muted-foreground">{contact.phone[0]}</p>
-                )}
-            </div>
-        </div>
-    );
-}
-
-function InlineEdit({
-    initialContent,
-    onSave,
-    onCancel,
-}: {
-    initialContent: string;
-    onSave: (content: string) => void;
-    onCancel: () => void;
-}) {
-    const [content, setContent] = useState(initialContent);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    useEffect(() => {
-        const ta = textareaRef.current;
-        if (ta) {
-            ta.focus();
-            ta.setSelectionRange(ta.value.length, ta.value.length);
-            ta.style.height = 'auto';
-            ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
-        }
-    }, []);
-
-    const handleSave = () => {
-        const trimmed = content.trim();
-        if (trimmed && trimmed !== initialContent) {
-            onSave(trimmed);
-        } else {
-            onCancel();
-        }
-    };
-
-    return (
-        <div className="flex items-end gap-2">
-            <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={(e) => {
-                    setContent(e.target.value);
-                    e.target.style.height = 'auto';
-                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                }}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSave();
-                    }
-                    if (e.key === 'Escape') {
-                        e.preventDefault();
-                        onCancel();
-                    }
-                }}
-                onBlur={() => {
-                    if (content.trim() === initialContent) onCancel();
-                }}
-                rows={1}
-                className="flex-1 min-w-0 resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
-            />
-            <TooltipButton icon={Check} tooltipText="Save" className="h-8 w-8" preventFocusLoss onClick={handleSave} />
-            <TooltipButton icon={X} tooltipText="Cancel" className="h-8 w-8" preventFocusLoss onClick={onCancel} />
-        </div>
-    );
 }
 
 export function ChatMessageList({
