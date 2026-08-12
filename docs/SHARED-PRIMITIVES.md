@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-851 primitives across 6 kinds. `packages/sheet` internals are excluded.
+850 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (118)
+## Components (117)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -86,7 +86,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LabelDialog` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-dialog.tsx |
 | `LabelFilterHeader` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-filter-header.tsx |
 | `LabelManager` | `@workspace/ui` | packages/ui/src/components/layout/labels/label-manager.tsx |
-| `LoadingScreen` | `@workspace/ui` | packages/ui/src/components/layout/pages/loading-screen.tsx |
 | `LoadingState` | `@workspace/ui` | packages/ui/src/components/layout/app/loading-state.tsx |
 | `LoginPage` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-page.tsx |
 | `MemberAvatar` | `@workspace/ui` | packages/ui/src/components/layout/comments/member-avatar.tsx |
