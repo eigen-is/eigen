@@ -2,15 +2,10 @@ import type { OrgMember } from '@workspace/lib/types/admin';
 import { EmptyState } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
-import { AlphabeticalList } from '@workspace/ui/components/layout/alphabetical-list';
+import { PersonList } from '@workspace/ui/components/layout/person-list';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
-import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
-import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
-import { cn } from '@workspace/ui/lib/utils';
 import { Plus } from 'lucide-react';
-import { useMemo, useRef } from 'react';
 import { CreateUserDialog } from './create-user-dialog';
 
 type MembersListToolbarProps = {
@@ -63,68 +58,32 @@ type MembersListProps = {
 };
 
 export function MembersList({ members, searchQuery, activeMemberId, onRowClick }: MembersListProps) {
-    const listRef = useRef<HTMLDivElement>(null);
-
-    const filteredMembers = useMemo(() => {
-        const sorted = [...members].sort((a, b) => a.name.localeCompare(b.name));
-        if (!searchQuery) return sorted;
-        const q = searchQuery.toLowerCase();
-        return sorted.filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q));
-    }, [members, searchQuery]);
-
-    const selection = useListSelection({ items: filteredMembers, getId: (m) => m.userId });
-
-    const drag = useListDrag({ selection, getId: (m) => m.userId, dragType: 'member' });
-
-    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation({
-        items: filteredMembers,
-        activeId: activeMemberId,
-        getId: (m) => m.id,
-        getSelectionId: (m) => m.userId,
-        onSelect: (id) => onRowClick(id),
-        containerRef: listRef,
-        selection,
-    });
-
-    if (filteredMembers.length === 0) {
-        return <EmptyState message={searchQuery ? 'No members match your search' : 'No members found'} />;
-    }
-
     return (
-        <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>
-            <AlphabeticalList
-                items={filteredMembers}
-                getKey={(m) => m.id}
-                getGroupKey={(m) => m.name.charAt(0).toUpperCase()}
-                renderItem={(member, flatIndex) => (
-                    <div
-                        className={cn(
-                            'flex items-center gap-3 px-6 py-3 eigen-list-item',
-                            (activeMemberId === member.id || selectedIndex === flatIndex) && 'eigen-list-item-active',
-                            selection.isSelected(member.userId) && 'eigen-list-item-selected',
-                        )}
-                        onClick={(e) => {
-                            selection.handleItemClick(member.userId, e);
-                            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                                onRowClick(member.id);
-                            }
-                        }}
-                        {...drag.getDragProps(member)}
-                    >
-                        <UserItem
-                            name={member.name}
-                            email={member.email}
-                            userId={member.userId}
-                            label={
-                                <Badge variant={roleBadgeVariant[member.role] ?? 'outline'} className="text-xs">
-                                    {member.role}
-                                </Badge>
-                            }
-                            className="flex-1"
-                        />
-                    </div>
-                )}
-            />
-        </div>
+        <PersonList
+            items={members}
+            searchQuery={searchQuery}
+            activeId={activeMemberId}
+            getId={(m) => m.id}
+            getSelectionId={(m) => m.userId}
+            getName={(m) => m.name}
+            getSearchFields={(m) => [m.name, m.email]}
+            onRowClick={onRowClick}
+            selectable
+            dragType="member"
+            emptyState={<EmptyState message={searchQuery ? 'No members match your search' : 'No members found'} />}
+            renderPerson={(member) => (
+                <UserItem
+                    name={member.name}
+                    email={member.email}
+                    userId={member.userId}
+                    label={
+                        <Badge variant={roleBadgeVariant[member.role] ?? 'outline'} className="text-xs">
+                            {member.role}
+                        </Badge>
+                    }
+                    className="flex-1"
+                />
+            )}
+        />
     );
 }
