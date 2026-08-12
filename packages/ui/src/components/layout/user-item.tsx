@@ -1,9 +1,9 @@
-import { getMailComposeUrl } from '@workspace/lib/api';
 import { useResolvedUser } from '@workspace/lib/public';
 import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Avatar, AvatarImage } from '../avatar.tsx';
 import { EigenLoader } from './braket/eigen-loader.tsx';
+import { MailComposeLink } from './mail-compose-link';
 import { OwnerInfoPopover } from './owner-info-popover';
 
 export type UserItemProps = Omit<HTMLAttributes<HTMLDivElement>, 'popover'> & {
@@ -48,13 +48,7 @@ export function UserItem({
                 <div className="flex justify-between items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
                     {resolvedEmail && (resolvedEmail !== displayName || mailLink) && (
                         <span>
-                            {mailLink ? (
-                                <a className="hover:underline" href={getMailComposeUrl(resolvedEmail)}>
-                                    {resolvedEmail}
-                                </a>
-                            ) : (
-                                resolvedEmail
-                            )}
+                            <MailComposeLink email={resolvedEmail} mailLink={mailLink} />
                         </span>
                     )}
                     {label && <span className="ml-auto">{label}</span>}
