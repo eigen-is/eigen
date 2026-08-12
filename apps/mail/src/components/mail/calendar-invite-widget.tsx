@@ -13,7 +13,8 @@ function buildCalendarLink(invite: CalendarInvite): string {
 }
 
 type CalendarInviteWidgetProps = {
-    // null/undefined = the server could not parse the attached ICS.
+    // null = the server could not parse the attached ICS; undefined = the payload carries no
+    // summary at all (stale cache / version skew). Both render the error card.
     invite: CalendarInvite | null | undefined;
 };
 

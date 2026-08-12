@@ -9,7 +9,12 @@ beforeAll(async () => {
     ctx = await getTestContext();
 });
 
-async function deliverAndGetMessage(subject: string, boundary: string, ics: string): Promise<Email> {
+async function deliverAndGetMessage(
+    subject: string,
+    boundary: string,
+    ics: string,
+    method = 'REQUEST',
+): Promise<Email> {
     const eml = [
         'From: organizer@external.com',
         `To: ${ctx.alice.user.email}`,
@@ -22,7 +27,7 @@ async function deliverAndGetMessage(subject: string, boundary: string, ics: stri
         '',
         'You have been invited.',
         `--${boundary}`,
-        'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+        `Content-Type: text/calendar; method=${method}; charset=utf-8`,
         'Content-Disposition: attachment; filename="invite.ics"',
         '',
         ics,
@@ -101,6 +106,26 @@ describe('Mail calendar-invite payload', () => {
         expect(invite.allDay).toBe(true);
         expect(new Date(invite.startTime).toISOString()).toBe('2026-05-04T00:00:00.000Z');
         expect(new Date(invite.endTime).toISOString()).toBe('2026-05-06T00:00:00.000Z');
+    });
+
+    test('a METHOD-less ICS falls back to the transport calendarMethod', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//External//Calendar//EN',
+            'BEGIN:VEVENT',
+            'UID:invite-payload-uid-3@external.com',
+            'SUMMARY:Payload Cancelled',
+            'DTSTART:20260610T090000Z',
+            'DTEND:20260610T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const message = await deliverAndGetMessage('Invitation: Payload Cancelled', 'inv-bare', ics, 'CANCEL');
+
+        const attachment = findOrFail(message.attachments, (a) => a.contentType.startsWith('text/calendar'));
+        expect(attachment.calendarInvite?.method).toBe('CANCEL');
     });
 
     test('an unparseable ICS yields an explicit null, and the message still serves', async () => {

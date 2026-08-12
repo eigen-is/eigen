@@ -180,8 +180,9 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
         if (!event) return null;
         const organizer = event.data?.organizer;
         return {
-            // A bare event .ics without METHOD anywhere still renders as an invitation card.
-            method: method ?? cal.method ?? 'REQUEST',
+            // ICS METHOD wins, then the parser's Content-Type-derived calendarMethod; a bare
+            // event .ics without METHOD anywhere still renders as an invitation card.
+            method: method ?? attachment.calendarMethod ?? 'REQUEST',
             uid: event.uid,
             summary: event.title,
             startTime: event.startTime,
