@@ -1,5 +1,4 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
-import { useExportDocument } from '@workspace/lib/drive';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, TooltipButton } from '@workspace/ui';
@@ -11,7 +10,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { ProgressDialog } from '@workspace/ui/components/layout/drive/progress-dialog';
+import { useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
@@ -49,8 +48,7 @@ export function Toolbar({
     activityPanelOpen,
     unresolvedCommentCount,
 }: ToolbarProps) {
-    const { exportDocument, isExporting } = useExportDocument();
-    const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
+    const { exportPath, exportDialog } = useDocumentExport();
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     const isCompact = useIsCompactToolbar();
     // Below the 768px system breakpoint the slide canvas unmounts (view-only), so editing entries
@@ -67,7 +65,7 @@ export function Toolbar({
                             path={path}
                             canWrite={canWrite}
                             onAccessDialogOpen={onAccessDialogOpen}
-                            onExport={handleExport}
+                            onExport={(format) => exportPath(path, format)}
                             exportFormats={['pdf', 'html']}
                             createLabel="New slide"
                             createIcon={Presentation}
@@ -123,7 +121,7 @@ export function Toolbar({
                     </div>
                 }
             />
-            <ProgressDialog open={isExporting} title="Exporting document" />
+            {exportDialog}
         </>
     );
 }

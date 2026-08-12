@@ -1,13 +1,6 @@
 import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
-import {
-    useConvertDocument,
-    useCopyPath,
-    useDeletePaths,
-    useDuplicatePath,
-    useExportDocument,
-    useMovePath,
-} from '@workspace/lib/drive';
+import { useConvertDocument, useCopyPath, useDeletePaths, useDuplicatePath, useMovePath } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import { type DrivePath, EIGEN_DOC_TYPES, type EigenDocType } from '@workspace/lib/types/drive';
 import { useCallback, useMemo, useState } from 'react';
@@ -22,6 +15,7 @@ import { DriveLocationPicker } from './drive-location-picker';
 import { DriveRenameItem } from './drive-rename-item';
 import { DriveUploadFiles } from './drive-upload-files';
 import { ProgressDialog } from './progress-dialog';
+import { useDocumentExport } from './use-document-export';
 import { useDriveDialogs } from './use-drive-dialogs';
 
 type UseDriveLayoutDialogsOptions = {
@@ -51,7 +45,7 @@ export function useDriveLayoutDialogs({
     const deletePathsMutation = useDeletePaths();
     const convertMutation = useConvertDocument(ownerId, mountId);
     const isCoarsePointer = useIsCoarsePointer();
-    const { exportDocument, isExporting } = useExportDocument();
+    const { exportPath, exportDialog } = useDocumentExport();
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [pendingDeletePaths, setPendingDeletePaths] = useState<DrivePath[]>([]);
 
@@ -150,11 +144,6 @@ export function useDriveLayoutDialogs({
         }
     }, []);
 
-    const handleExportPath = useCallback(
-        (path: DrivePath, format: string) => exportDocument(path.ownerId, path.mountId, path.id, format),
-        [exportDocument],
-    );
-
     const handleConvertPath = useCallback(
         (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
             if (!path.parentId) return;
@@ -219,7 +208,7 @@ export function useDriveLayoutDialogs({
         onShareClick,
         onEmailCollaborators,
         onDownload: handleDownloadPath,
-        onExport: handleExportPath,
+        onExport: exportPath,
         onConvert: handleConvertPath,
         // Wiring consumed by <DriveLayoutDialogs> below.
         ownerId,
@@ -236,7 +225,7 @@ export function useDriveLayoutDialogs({
             if (!open) setPendingDeletePaths([]);
         },
         onPickDestination: handlePickDestination,
-        isExporting,
+        exportDialog,
         isConverting: convertMutation.isPending,
         convertTargetType: convertMutation.variables?.targetType,
     };
@@ -340,7 +329,7 @@ export function DriveLayoutDialogs({ actions }: DriveLayoutDialogsProps) {
                 onAfterAction={onAfterAction}
             />
 
-            <ProgressDialog open={actions.isExporting} title="Exporting document" />
+            {actions.exportDialog}
             <ProgressDialog
                 open={actions.isConverting}
                 title={actions.convertTargetType === 'eigendoc' ? 'Converting to document' : 'Converting to sheet'}
