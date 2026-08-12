@@ -1,19 +1,26 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { onMutationError } from '../../api-error';
+import { useAuth } from '../auth-context';
 import { authClient } from './use-auth-client';
 
 const appPasswordKeys = {
     all: ['app-passwords'] as const,
+    list: (userId: string) => [...appPasswordKeys.all, userId] as const,
 };
 
 export function useAppPasswords() {
+    const { user } = useAuth();
+    const userId = user?.id || '';
+
     return useQuery({
-        queryKey: appPasswordKeys.all,
+        queryKey: appPasswordKeys.list(userId),
         queryFn: async () => {
             const result = await authClient.apiKey.list();
             if (result.error) throw result.error;
             return result.data?.apiKeys ?? [];
         },
+        enabled: !!userId,
+        staleTime: 5 * 60 * 1000,
     });
 }
 
