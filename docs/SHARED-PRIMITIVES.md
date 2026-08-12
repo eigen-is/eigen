@@ -368,8 +368,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpload` | `@workspace/ui` | packages/ui/src/components/layout/upload-provider/upload-provider.tsx |
 | `useAttachmentMeta` | `@workspace/ui/components/layout` | packages/ui/src/components/layout/attachment/use-attachment-meta.ts |
 | `useContextMenu` | `@workspace/ui/components/layout/context-menu` | packages/ui/src/components/layout/context-menu/use-context-menu.ts |
-| `useOptionalPreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
-| `usePreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
+| `useOptionalPreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-context.ts |
+| `usePreview` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-context.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
@@ -614,9 +614,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItemProps` | `@workspace/ui` | packages/ui/src/components/layout/user-item.tsx |
 | `UserNameCardProps` | `@workspace/ui` | packages/ui/src/components/layout/user-name-card.tsx |
 | `OwnerInfoPopoverProps` | `@workspace/ui/components/layout/owner-info-popover` | packages/ui/src/components/layout/owner-info-popover.tsx |
-| `DownloadMode` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
+| `DownloadMode` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-context.ts |
 | `PreviewMode` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
-| `PreviewOptions` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-provider.tsx |
+| `PreviewOptions` | `@workspace/ui/components/layout/preview-provider` | packages/ui/src/components/layout/preview-provider/preview-context.ts |
 | `UserDetailHeroProps` | `@workspace/ui/components/layout/user-detail-hero` | packages/ui/src/components/layout/user-detail-hero.tsx |
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
