@@ -16,11 +16,8 @@ type AdminFilteredUserRouteProps = {
     detailEmptyMessage: string;
 };
 
-/**
- * Shared list/detail page for a server-wide user classification (guests, orphans). The two admin
- * routes differ only in the filter passed to `useAdminUsers`, the route they navigate to, and their
- * per-page wording — everything else is this component.
- */
+// Shared list/detail page for the guests and orphans routes, which differ only in filter,
+// navigation target, and wording.
 export function AdminFilteredUserRoute({
     filter,
     routeTo,
