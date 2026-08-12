@@ -780,8 +780,10 @@ function SlideEditorInner({
     if (isPresenting && activeSlide) {
         return (
             <div
+                // Full-screen present sits at the documented full-screen tier (z-100, like FilePreview),
+                // not the portal tier, so it covers the app chrome instead of tying with it.
                 className={cn(
-                    'fixed inset-0 z-50 flex items-center justify-center bg-black',
+                    'fixed inset-0 z-[100] flex items-center justify-center bg-black',
                     !presentControlsVisible && 'cursor-none',
                 )}
                 onPointerMove={revealPresentControls}
