@@ -15,7 +15,7 @@ import {
     invalidatePathMoved,
     invalidatePathRenamed,
     invalidateTrash,
-} from './hooks/use-drive';
+} from './hooks/keys';
 import { invalidateFileHistory } from './hooks/use-file-history';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId?: string): boolean {

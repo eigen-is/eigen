@@ -1,7 +1,8 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import type { DrivePath } from '../../types/drive';
 import { getDrivePreviewUrl } from '../api';
-import { useFolderLookup, useUploadFile } from './hooks/use-drive';
+import { useFolderLookup } from './hooks/reads';
+import { useUploadFile } from './hooks/writes';
 
 const PENDING_PREFIX = 'pending:';
 
