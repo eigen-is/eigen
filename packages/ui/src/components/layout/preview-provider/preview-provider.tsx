@@ -3,29 +3,28 @@ import { getTextPreviewMode, isExiftoolExtension } from '@workspace/lib/constant
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import type React from 'react';
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
+import {
+    type DownloadMode,
+    PreviewContext,
+    type PreviewOptions,
+    useOptionalPreview,
+    usePreview,
+} from './preview-context';
 
-export type DownloadMode = 'direct' | 'save-to-drive';
-
-export type PreviewOptions = {
-    downloadMode?: DownloadMode;
-};
+// The context object and the usePreview/useOptionalPreview hooks live in the
+// feature-tree-free ./preview-context leaf so Dialog can read the preview flag
+// without importing this module. Re-exported here so existing consumers keep their
+// import path.
+export type { DownloadMode, PreviewOptions };
+export { useOptionalPreview, usePreview };
 
 type PreviewState = {
     path: DrivePath;
     siblings: DrivePath[];
     downloadMode: DownloadMode;
 };
-
-type PreviewContextValue = {
-    openPreview: (path: DrivePath, siblings?: DrivePath[], options?: PreviewOptions) => void;
-    updatePreview: (path: DrivePath) => void;
-    closePreview: () => void;
-    isPreviewOpen: boolean;
-};
-
-const PreviewContext = createContext<PreviewContextValue | undefined>(undefined);
 
 export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'fallback';
 
@@ -119,14 +118,4 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
             )}
         </PreviewContext.Provider>
     );
-}
-
-export function usePreview() {
-    const context = useContext(PreviewContext);
-    if (!context) throw new Error('usePreview must be used within a PreviewProvider');
-    return context;
-}
-
-export function useOptionalPreview() {
-    return useContext(PreviewContext);
 }
