@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-852 primitives across 6 kinds. `packages/sheet` internals are excluded.
+851 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (118)
+## Components (117)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -37,7 +37,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatSlashSuggest` | `@workspace/ui` | packages/ui/src/components/layout/chat/chat-slash-suggest.tsx |
 | `ColorPicker` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
 | `ColorPickerButton` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker-button.tsx |
-| `ColorSwatchRow` | `@workspace/ui` | packages/ui/src/components/layout/notes/color-swatch-row.tsx |
 | `Column` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `CommentContextMenu` | `@workspace/ui` | packages/ui/src/components/layout/comments/comment-context-menu.tsx |
