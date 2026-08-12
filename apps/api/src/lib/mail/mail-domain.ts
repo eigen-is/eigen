@@ -372,7 +372,7 @@ export class Mail {
                     ...email,
                     subject: email.subject ?? meta.subject,
                     text: email.text ?? meta.text,
-                    html: email.html || meta.html, // || not ?? — mailparser uses `false` for "no HTML"
+                    html: email.html || meta.html, // || not ?? — empty html also falls back to the sidecar
                     to: email.to ?? meta.to,
                     cc: email.cc ?? meta.cc,
                     bcc: email.bcc ?? meta.bcc,
