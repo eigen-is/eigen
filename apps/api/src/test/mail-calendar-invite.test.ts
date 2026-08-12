@@ -40,7 +40,7 @@ async function deliverAndGetMessage(
     });
     expect(res.status).toBe(200);
 
-    const listRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/`);
+    const listRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox/inbox`);
     const list = await assertJson<EmailSummary[]>(listRes);
     const summary = findOrFail(list, (m) => m.subject === subject);
 
