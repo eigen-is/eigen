@@ -3,7 +3,7 @@ import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib
 import { Mail } from 'lucide-react';
 import { useMemo } from 'react';
 import { useSearch } from '../../search';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Debounce keystrokes before firing the mail search. 150ms is short enough that the user

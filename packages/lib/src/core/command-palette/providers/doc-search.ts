@@ -1,7 +1,7 @@
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { Text } from 'lucide-react';
 import { useMemo } from 'react';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // In-document hits for the palette `doc:` scope. DocSearchController.search is pure and
