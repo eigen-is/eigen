@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAggregateMimeContent, usePathInfo } from '@workspace/lib/drive';
 import {
@@ -7,15 +7,11 @@ import {
     type DriveSearchParams,
     type EigenDocType,
     getEigenDocInfoByMime,
-    isDocumentType,
-    isFolderType,
-    isInlineEditable,
 } from '@workspace/lib/types/drive';
 import { NotFound } from '@workspace/ui';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
-import { usePreview } from '@workspace/ui/components/layout/preview-provider';
+import { useDriveListRoute } from '@workspace/ui/components/layout/drive/use-drive-list-route';
 import { FILTER_LABELS } from '@workspace/ui/components/layout/sidebar/app-sidebar';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
@@ -35,8 +31,6 @@ function DriveRoute() {
     const auth = useAuth();
     const ownerId = auth.user!.id;
     const { data: selectedPath = null } = usePathInfo(uid || ownerId, mid || DEFAULT_MOUNT_ID, pid);
-    const { isMobile } = useLayout();
-    const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
     const {
         data: folderContents = [],
@@ -44,40 +38,16 @@ function DriveRoute() {
         error: isFolderContentLoadingError,
     } = useAggregateMimeContent(mimeType);
 
-    const onRowSelect = (path: DrivePath) => {
-        if (isPreviewOpen) {
-            updatePreview(path);
-        }
-
-        if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {
-            onRowActivate(path);
-        } else {
+    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+        items: folderContents,
+        onOpenFolder: () => navigate({ to: Route.fullPath, params: { mimeType }, search: { pid: undefined } }),
+        onSelectItem: (path: DrivePath) =>
             navigate({
                 to: Route.fullPath,
                 params: { mimeType },
                 search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
-            });
-        }
-    };
-
-    const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
-        openPreview(path, sortedSiblings);
-    };
-
-    const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'folder') {
-            navigate({ to: Route.fullPath, params: { mimeType }, search: { pid: undefined } });
-        } else if (isDocumentType(path.type)) {
-            openDocument(path);
-        } else if (isInlineEditable(path.mimeType, path.name)) {
-            navigate({
-                to: '/edit/$ownerId/$mountId/$pathId',
-                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
-            });
-        } else {
-            openPreview(path, folderContents);
-        }
-    };
+            }),
+    });
 
     const handleBackToList = () => {
         navigate({ to: Route.fullPath, params: { mimeType } });

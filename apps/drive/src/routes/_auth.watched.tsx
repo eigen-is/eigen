@@ -1,20 +1,13 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo } from '@workspace/lib/drive';
-import {
-    type DrivePath,
-    type DriveSearchParams,
-    isDocumentType,
-    isFolderType,
-    isInlineEditable,
-} from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { LoadingState } from '@workspace/ui';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
-import { usePreview } from '@workspace/ui/components/layout/preview-provider';
+import { useDriveListRoute } from '@workspace/ui/components/layout/drive/use-drive-list-route';
 
 export const Route = createFileRoute('/_auth/watched')({
     component: WatchedRoute,
@@ -31,50 +24,25 @@ function WatchedRoute() {
     const { user } = useAuth();
     const userId = user!.id;
     const { pid, uid, mid } = Route.useSearch();
-    const { isMobile } = useLayout();
-    const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
     // One request fans out server-side over the caller's own home, their teams, and every owner
     // who shared a path with them (?all=1).
     const { data: watches = [], isLoading } = useAllWatches();
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
 
-    const onRowSelect = (path: DrivePath) => {
-        if (isPreviewOpen) {
-            updatePreview(path);
-        }
-
-        if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {
-            onRowActivate(path);
-        } else {
-            navigate({
-                to: Route.fullPath,
-                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
-            });
-        }
-    };
-
-    const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
-        openPreview(path, sortedSiblings);
-    };
-
-    const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'folder') {
+    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+        items: watches,
+        onOpenFolder: (path: DrivePath) =>
             navigate({
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
-            });
-        } else if (isDocumentType(path.type)) {
-            openDocument(path);
-        } else if (isInlineEditable(path.mimeType, path.name)) {
+            }),
+        onSelectItem: (path: DrivePath) =>
             navigate({
-                to: '/edit/$ownerId/$mountId/$pathId',
-                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
-            });
-        } else {
-            openPreview(path, watches);
-        }
-    };
+                to: Route.fullPath,
+                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
+            }),
+    });
 
     const handleBack = () => {
         navigate({ to: Route.fullPath, search: { pid: undefined, uid: undefined, mid: undefined } });
