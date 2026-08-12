@@ -1,4 +1,4 @@
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useIsGuest } from '@workspace/lib/auth';
 import { useAllChats } from '@workspace/lib/chat';
 import { EmptyState } from '@workspace/ui';
@@ -71,11 +71,5 @@ function ChatIndex() {
 }
 
 export const Route = createFileRoute('/_auth/')({
-    beforeLoad: ({ context }) => {
-        const userId = context.auth?.user?.id;
-        if (!userId) {
-            throw redirect({ to: '/login' });
-        }
-    },
     component: ChatIndex,
 });
