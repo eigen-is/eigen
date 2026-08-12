@@ -16,7 +16,7 @@ import { AttachmentDraftChips } from '../attachment/attachment-draft-chips';
 import { AssigneeChip } from '../comments/assignee-chip';
 import { AssigneePicker } from '../comments/assignee-picker';
 import { DrivePickerWithUpload } from '../drive/drive-picker-with-upload';
-import { ColorSwatchRow } from '../notes/color-swatch-row';
+import { ColorPicker } from '../media/color-picker';
 
 type CardFormProps = {
     // 'edit' emits a minimal diff (only changed fields), so an unchanged save is a
@@ -167,7 +167,13 @@ export function CardForm({
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
                     <div className="flex shrink-0 items-center gap-2">
                         <Label>Color</Label>
-                        <ColorSwatchRow currentColor={color} onChangeColor={setColor} />
+                        <ColorPicker
+                            value={color}
+                            onChange={setColor}
+                            colors={EIGEN_STICKIES_COLORS}
+                            columns={EIGEN_STICKIES_COLORS[0].length}
+                            showReset={false}
+                        />
                     </div>
                     {members && currentUserEmail && (
                         <div className="flex min-w-0 items-center gap-2">
