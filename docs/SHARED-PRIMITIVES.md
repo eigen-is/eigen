@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-849 primitives across 6 kinds. `packages/sheet` internals are excluded.
+850 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -621,7 +621,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/layout/user-name` | packages/ui/src/components/layout/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (264)
+## Utilities & constants (265)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -869,6 +869,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateEmailTarget` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
+| `createAuthRouteOptions` | `@workspace/ui` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `DEFAULT_COLORS` | `@workspace/ui` | packages/ui/src/components/layout/media/color-picker.tsx |
 | `DOCS_CONFIG` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-config.ts |
