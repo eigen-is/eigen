@@ -1,4 +1,5 @@
 import { isSameFill } from '@workspace/lib/background';
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -235,7 +236,7 @@ function TextProperties({
             <PropertySection title="Text">
                 <PropertyRow label="Font">
                     <FontPicker
-                        value={isMixed(fontFamily) ? 'Inter' : fontFamily || 'Inter'}
+                        value={isMixed(fontFamily) ? EIGEN_FONTS[0].name : fontFamily || EIGEN_FONTS[0].name}
                         onChange={(f) => onUpdate({ fontFamily: f })}
                         className="h-7 w-full text-xs"
                     />

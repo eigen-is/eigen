@@ -1,3 +1,4 @@
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import type { ImageObject, TextObject } from '@workspace/lib/slides';
 
 export type { DeckData, ImageObject, SlideItem, SlideObject, TextObject } from '@workspace/lib/slides';
@@ -25,7 +26,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     h: 162,
     rotation: 0,
     text: '<p>New text</p>',
-    fontFamily: 'Inter',
+    fontFamily: EIGEN_FONTS[0].name,
     fontSize: 48,
     fontWeight: 'normal',
     fontStyle: 'normal',
