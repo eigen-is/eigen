@@ -7,12 +7,6 @@ import { useEffect, useRef } from 'react';
 import { useUpload } from '../../layout/upload-provider/upload-provider';
 import { uploadWithProgress } from '../upload-provider/upload-with-progress';
 
-export type UploadResult = {
-    success: boolean;
-    fileName: string;
-    error?: unknown;
-};
-
 export type DriveUploadFilesProps = {
     path: DrivePath;
     open: boolean;
@@ -64,46 +58,20 @@ export function DriveUploadFiles({
         const name = files.length > 1 ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);
 
+        const formData = new FormData();
+        for (const file of files) {
+            formData.append('file', file);
+        }
+
         try {
-            const formData = new FormData();
-            for (const file of files) {
-                formData.append('file', file);
-            }
+            await uploadWithProgress({ url, formData, onProgress: uploadHandler.updateProgress });
+            uploadHandler.complete();
 
-            // Upload with progress tracking
-            await uploadWithProgress({
-                url,
-                formData,
-                onProgress: (progress: number) => {
-                    uploadHandler.updateProgress(progress);
-                },
-                onSuccess: async () => {
-                    // Mark upload as complete
-                    uploadHandler.complete();
-
-                    // Invalidate the parent folder cache so new files appear
-                    invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.id);
-
-                    // Notify parent component
-                    if (onAfterAction) {
-                        onAfterAction('upload', {
-                            success: true,
-                            fileName: name,
-                            files: files.length,
-                        });
-                    }
-
-                    return { success: true, fileName: name };
-                },
-                onError: (err) => {
-                    // Mark upload as failed
-                    uploadHandler.error();
-
-                    return { success: false, fileName: name, error: err };
-                },
-            });
-        } catch (_err: unknown) {
-            uploadHandler.error();
+            // Invalidate the parent folder cache so new files appear
+            invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.id);
+            onAfterAction?.('upload', { success: true, fileName: name, files: files.length });
+        } catch (err: unknown) {
+            uploadHandler.error(err instanceof Error ? err.message : undefined);
         }
     };
 

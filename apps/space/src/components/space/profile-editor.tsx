@@ -1,14 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigate } from '@tanstack/react-router';
-import { getContactsAvatarUploadUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
 import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
-import { AvatarEditor, ErrorState, LoadingState } from '@workspace/ui';
+import { AvatarEditor, ErrorState, LoadingState, useContactAvatarUpload } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
-import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
-import { uploadWithProgress } from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
 import { InfoIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -19,15 +15,14 @@ const formSchema = z.object({
     lastName: z.string().optional(),
 });
 
-export type ProfileFormValues = z.infer<typeof formSchema>;
+type ProfileFormValues = z.infer<typeof formSchema>;
 
 export function ProfileEditor() {
-    const { user } = useAuth();
     const { data: contact, isLoading, error: fetchError } = useMeContact();
     const [avatar, setAvatar] = useState<string | null>(null);
     const initializedRef = useRef(false);
 
-    const upload = useUpload();
+    const uploadAvatar = useContactAvatarUpload(setAvatar);
     const updateContactMutation = useUpdateContact();
 
     const form = useForm<ProfileFormValues>({
@@ -82,33 +77,7 @@ export function ProfileEditor() {
                         email={contact?.email?.[0]}
                         imageUrl={avatar || ''}
                         onRemove={avatar ? () => setAvatar(null) : undefined}
-                        onUpload={async (file) => {
-                            const formData = new FormData();
-                            formData.append('file', file);
-
-                            const uploadHandler = upload.createUpload(file.name);
-
-                            try {
-                                await uploadWithProgress({
-                                    url: getContactsAvatarUploadUrl(user?.id || ''),
-                                    formData,
-                                    onProgress: (progress: number) => {
-                                        uploadHandler.updateProgress(progress);
-                                    },
-                                    onSuccess: (response: string) => {
-                                        uploadHandler.complete();
-                                        setAvatar(response);
-                                    },
-                                    onError: (err) => {
-                                        uploadHandler.error();
-                                        console.error('Upload error:', err);
-                                    },
-                                });
-                            } catch (err: unknown) {
-                                console.error('Error uploading file:', err);
-                                uploadHandler.error();
-                            }
-                        }}
+                        onUpload={uploadAvatar}
                     />
                 </div>
 

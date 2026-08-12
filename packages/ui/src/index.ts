@@ -22,6 +22,7 @@ export * from './components/layout/sidebar';
 export * from './components/layout/toolbar';
 export * from './components/layout/unread-dot';
 export * from './components/layout/upload-provider';
+export * from './components/layout/use-contact-avatar-upload';
 export * from './components/layout/user-avatar';
 export * from './components/layout/user-item';
 export * from './components/layout/user-name-card';

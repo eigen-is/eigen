@@ -10,6 +10,7 @@ export type UploadItem = {
     filename: string;
     progress: number;
     status: UploadStatus;
+    errorMessage?: string;
     cancelFn?: () => void;
 };
 
@@ -21,7 +22,7 @@ type UploadContextValue = {
         id: UploadId;
         updateProgress: (progress: number) => void;
         complete: () => void;
-        error: () => void;
+        error: (message?: string) => void;
         cancel: () => void;
     };
     removeUpload: (id: UploadId) => void;
@@ -57,14 +58,16 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
                             upload.id === id ? { ...upload, status: 'completed', progress: 100 } : upload,
                         ),
                     );
-                    // Auto-remove after 3 seconds
+                    // Auto-remove after 1 second
                     setTimeout(() => {
                         setUploads((prev) => prev.filter((upload) => upload.id !== id));
                     }, 1000);
                 },
-                error: () => {
+                error: (message) => {
                     setUploads((prev) =>
-                        prev.map((upload) => (upload.id === id ? { ...upload, status: 'error' } : upload)),
+                        prev.map((upload) =>
+                            upload.id === id ? { ...upload, status: 'error', errorMessage: message } : upload,
+                        ),
                     );
                     // Auto-remove after 3 seconds
                     setTimeout(() => {

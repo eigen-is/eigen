@@ -7,7 +7,8 @@
     "*.css"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
