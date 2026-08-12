@@ -57,6 +57,10 @@ type EmailListProps = {
     setCursorIndex: (index: number) => void;
     onRowClick: (emailId: string) => void;
     activeRowId?: string;
+    // While the inline composer owns typing, the list must not grab or reclaim focus — arrows
+    // would otherwise switch conversations under a half-written reply. Same signal the
+    // shortcuts layer gates on.
+    isComposing?: boolean;
     isLoading?: boolean;
     error?: Error | null;
     // Changes when the list's view identity changes (mailbox switch or entering/leaving search);
@@ -89,6 +93,7 @@ export function EmailList({
     isFetchingMore,
     onLoadMore,
     activeRowId,
+    isComposing,
     onRowClick,
     onReply,
     onReplyAll,
@@ -155,7 +160,8 @@ export function EmailList({
     // Shared keyboard model in lifted-cursor mode: MailRoute owns the cursor (id-tracked, shared
     // with the shortcuts layer) and the virtualizer scrolls. The hook also owns list focus — the
     // mount grab plus the body-focus reclaim that keeps the shortcuts alive after a click on
-    // non-focusable chrome. No onDelete: Delete stays swallowed, batch delete lives on the menu.
+    // non-focusable chrome — gated off while composing so a reply keeps its keystrokes.
+    // No onDelete: Delete stays swallowed, batch delete lives on the menu.
     const { handleKeyDown } = useKeyboardListNavigation({
         items: orderedEmails,
         getId: (e) => e.id,
@@ -163,6 +169,7 @@ export function EmailList({
         containerRef: tableRef,
         selection,
         scrollToIndex: (index) => virtualizer.scrollToIndex(index),
+        reclaimFocus: !isComposing,
         cursorIndex,
         onCursorChange: setCursorIndex,
     });

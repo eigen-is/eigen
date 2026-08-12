@@ -349,6 +349,9 @@ function MailRoute() {
                             onLoadMore={fetchNextPage}
                             onRowClick={actions.handleRowClick}
                             activeRowId={mailId}
+                            // The same gate the shortcuts layer uses: while the inline composer owns
+                            // typing, the list must not grab or reclaim focus.
+                            isComposing={isComposing}
                             mailboxes={mailboxes}
                             currentFolderId={currentFolderId}
                             onDelete={handleDeleteEmailsByIds}
