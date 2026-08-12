@@ -11,7 +11,6 @@ import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspa
 import { useContext } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { useLayout } from '../app/layout-context';
-import { NotFound } from '../app/not-found';
 import { usePreview } from '../preview-provider';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
@@ -76,7 +75,7 @@ export function EigenDocListView({
     };
 
     if (isFolderContentLoadingError) {
-        return <NotFound />;
+        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
     return (
