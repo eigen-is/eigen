@@ -161,6 +161,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAcceptWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useAddTeamMember` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useAdminUsers` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-users.ts |
+| `useCheckSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
+| `useCompleteSetup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCreateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
 | `useCreateUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
