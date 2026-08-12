@@ -3,15 +3,17 @@ import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { EmptyState, ErrorState, LoadingState, Toolbar } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { ContextMenuAnchor } from '@workspace/ui/components/layout/context-menu';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
 import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
+import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
+import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { Keyboard, Paperclip, Star } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { EmailContextMenu } from './email-context-menu';
 
 type EmailListToolbarProps = {
@@ -98,7 +100,6 @@ export function EmailList({
     mailboxes = [],
     currentFolderId = '',
 }: EmailListProps) {
-    const contextMenu = useContextMenu<EmailSummary>();
     const tableRef = useRef<HTMLDivElement>(null);
 
     // Estimate only — every row is measured, since a long sender line can wrap to a second row.
@@ -114,8 +115,8 @@ export function EmailList({
     });
     const virtualItems = virtualizer.getVirtualItems();
 
-    // Keep the keyboard cursor in view. Replaces the shared hook's scrollToRow —
-    // fires on cursor moves (arrows) and when an opened row syncs the cursor.
+    // Keep the keyboard cursor in view. Covers the cursor writers that bypass the list's own
+    // key handler: j/k in the shortcuts layer, and an opened row syncing the cursor (useMailList).
     useEffect(() => {
         if (cursorIndex >= 0) virtualizer.scrollToIndex(cursorIndex);
     }, [cursorIndex, virtualizer]);
@@ -149,115 +150,31 @@ export function EmailList({
         }
     }, [virtualItems, hasMore, isFetchingMore, orderedEmails.length, onLoadMore]);
 
-    // Auto-focus the scroller shortly after mount so arrows work without a click —
-    // reproduces use-keyboard-list-navigation.ts (54-61). Skip if focus already landed inside.
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (tableRef.current && !tableRef.current.contains(document.activeElement)) {
-                tableRef.current.focus({ preventScroll: true });
-            }
-        }, 100);
-        return () => clearTimeout(timer);
-    }, []);
-
     const drag = useListDrag({ selection, getId: (e) => e.id, dragType: 'email' });
 
-    // Mail-local keyboard nav, reproducing use-keyboard-list-navigation.ts for mail
-    // (columns=1, no onQuickLook, no onDelete). Arrows scroll via the effect above;
-    // Enter/Space/Home/End scroll explicitly since the cursor may not move.
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-        if (orderedEmails.length === 0) return;
+    // Shared keyboard model in lifted-cursor mode: MailRoute owns the cursor (id-tracked, shared
+    // with the shortcuts layer) and the virtualizer scrolls. The hook also owns list focus — the
+    // mount grab plus the body-focus reclaim that keeps the shortcuts alive after a click on
+    // non-focusable chrome. No onDelete: Delete stays swallowed, batch delete lives on the menu.
+    const { handleKeyDown } = useKeyboardListNavigation({
+        items: orderedEmails,
+        getId: (e) => e.id,
+        onSelect: onRowClick,
+        containerRef: tableRef,
+        selection,
+        scrollToIndex: (index) => virtualizer.scrollToIndex(index),
+        cursorIndex,
+        onCursorChange: setCursorIndex,
+    });
 
-        if ((e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            selection.selectAll();
-            return;
-        }
-
-        if (e.key === 'Escape') {
-            e.preventDefault();
-            selection.clearSelection();
-            return;
-        }
-
-        const moveTo = (next: number) => {
-            e.preventDefault();
-            if (next >= 0 && next !== cursorIndex) {
-                const id = orderedEmails[next].id;
-                if (e.shiftKey) selection.selectRange(id);
-                else selection.select(id);
-                if (!e.shiftKey) onRowClick(id);
-                setCursorIndex(next);
-            }
-        };
-
-        switch (e.key) {
-            case 'ArrowDown':
-                // From no cursor, Down enters at the first row.
-                moveTo(cursorIndex < 0 ? 0 : Math.min(cursorIndex + 1, orderedEmails.length - 1));
-                break;
-
-            case 'ArrowUp':
-                moveTo(Math.max(cursorIndex - 1, 0));
-                break;
-
-            case ' ':
-            case 'Enter':
-                e.preventDefault();
-                if (cursorIndex >= 0 && cursorIndex < orderedEmails.length) {
-                    onRowClick(orderedEmails[cursorIndex].id);
-                    virtualizer.scrollToIndex(cursorIndex);
-                }
-                break;
-
-            case 'Delete':
-                // Mail never wired a keyboard delete into the shared hook; preserve the
-                // no-op (it still swallowed the key). Batch delete stays on the context menu.
-                e.preventDefault();
-                break;
-
-            case 'PageUp':
-            case 'Home':
-                e.preventDefault();
-                setCursorIndex(0);
-                selection.select(orderedEmails[0].id);
-                onRowClick(orderedEmails[0].id);
-                virtualizer.scrollToIndex(0);
-                break;
-
-            case 'PageDown':
-            case 'End': {
-                e.preventDefault();
-                const lastIndex = orderedEmails.length - 1;
-                setCursorIndex(lastIndex);
-                selection.select(orderedEmails[lastIndex].id);
-                onRowClick(orderedEmails[lastIndex].id);
-                virtualizer.scrollToIndex(lastIndex);
-                break;
-            }
-        }
-    };
-
-    const handleContextMenu = (e: React.MouseEvent, email: EmailSummary) => {
-        if (!selection.isSelected(email.id)) {
-            selection.select(email.id);
-        }
-        contextMenu.handleContextMenu(e, email);
-    };
-
-    // Long-press opens the same menu on touch. Rows are mapped inline (no per-row component to hang a
-    // hook on), so one list-level useLongPress carries the pressed row via bind(email).
-    const openMenuAt = contextMenu.openAt;
-    const handleLongPress = useCallback(
-        (email: EmailSummary, x: number, y: number) => {
-            if (!selection.isSelected(email.id)) {
-                selection.select(email.id);
-            }
-            openMenuAt(email, x, y);
-        },
-        [selection, openMenuAt],
-    );
-    const longPress = useLongPress(handleLongPress);
+    // Right-click and touch long-press select-then-open the same singleton menu. Rows are mapped
+    // inline (no per-row component to hang a hook on), so one list-level useLongPress carries the
+    // pressed row via bind(email).
+    const { contextMenu, handleContextMenu, openAt } = useSelectableContextMenu({
+        selection,
+        getId: (e) => e.id,
+    });
+    const longPress = useLongPress(openAt);
 
     const contextIds = contextMenu.item
         ? selection.selectedCount > 1

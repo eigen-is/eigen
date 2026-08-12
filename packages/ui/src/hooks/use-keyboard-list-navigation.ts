@@ -17,6 +17,12 @@ type UseKeyboardListNavigationOptions<T> = {
     selection?: UseListSelectionReturn<T>;
     columns?: number;
     scrollToIndex?: (index: number) => void;
+    // Lifted-cursor mode (pass both): the parent owns the cursor — mail tracks it by email id
+    // so it survives sort/new-mail changes and shares it with the shortcuts layer. The hook
+    // navigates from cursorIndex, reports moves to onCursorChange, and skips its own activeId
+    // sync (the owner decides how an opened row moves the cursor).
+    cursorIndex?: number;
+    onCursorChange?: (index: number) => void;
 };
 
 export function useKeyboardListNavigation<T>({
@@ -33,23 +39,30 @@ export function useKeyboardListNavigation<T>({
     onQuickLook,
     columns = 1,
     scrollToIndex,
+    cursorIndex,
+    onCursorChange,
 }: UseKeyboardListNavigationOptions<T>) {
-    const [selectedIndex, setSelectedIndex] = useState(-1);
+    const lifted = cursorIndex !== undefined;
+    const [internalIndex, setInternalIndex] = useState(-1);
+    const selectedIndex = cursorIndex ?? internalIndex;
+    const setSelectedIndex: (index: number) => void = onCursorChange ?? setInternalIndex;
+
     const getIdRef = useRef(getId);
     useEffect(() => {
         getIdRef.current = getId;
     });
 
     useEffect(() => {
+        if (lifted) return;
         if (activeId && items.length > 0) {
             const index = items.findIndex((item) => getIdRef.current(item) === activeId);
             if (index !== -1) {
-                setSelectedIndex(index);
+                setInternalIndex(index);
             }
         } else {
-            setSelectedIndex(-1);
+            setInternalIndex(-1);
         }
-    }, [activeId, items]);
+    }, [lifted, activeId, items]);
 
     // The list owns the keyboard model, so it takes focus on mount — and takes it back whenever
     // focus falls to <body>. Clicking non-focusable chrome (the detail panel, a toolbar) or
@@ -125,15 +138,13 @@ export function useKeyboardListNavigation<T>({
 
         const moveTo = (computeNext: (prev: number) => number) => {
             e.preventDefault();
-            setSelectedIndex((prev) => {
-                const next = computeNext(prev);
-                if (next >= 0 && next !== prev) {
-                    updateSelection(items[next], e);
-                    if (!e.shiftKey) notify(items[next], next);
-                    scrollToRow(next);
-                }
-                return next;
-            });
+            const next = computeNext(selectedIndex);
+            if (next >= 0 && next !== selectedIndex) {
+                updateSelection(items[next], e);
+                if (!e.shiftKey) notify(items[next], next);
+                scrollToRow(next);
+            }
+            setSelectedIndex(next);
         };
 
         switch (e.key) {
