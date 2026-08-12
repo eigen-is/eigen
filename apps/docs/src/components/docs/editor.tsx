@@ -336,10 +336,10 @@ const TiptapEditor = ({
                         const entry = card.chatName
                             ? allCommentsRef.current.find((c) => c.chatName === card.chatName)
                             : undefined;
-                        commentContextMenu.handleContextMenu(event as unknown as React.MouseEvent, { card, entry });
+                        commentContextMenu.openAt({ card, entry }, event.clientX, event.clientY);
                     },
                     onSelectionContextMenu: (event) => {
-                        selectionContextMenu.handleContextMenu(event as unknown as React.MouseEvent, true);
+                        selectionContextMenu.openAt(true, event.clientX, event.clientY);
                     },
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: toggleComments,
