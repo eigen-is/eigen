@@ -6,19 +6,11 @@ import { CalendarSidebar } from '../components/calendar-sidebar';
 function CalendarRoot() {
     const { user } = useAuth();
 
-    if (!user) {
-        return (
-            <AppShell appName="calendar" rootRoute={Route}>
-                <Outlet />
-            </AppShell>
-        );
-    }
-
     return (
         <AppShell
             appName="calendar"
             rootRoute={Route}
-            sidebar={({ condensed }) => <CalendarSidebar condensed={condensed} />}
+            sidebar={user ? ({ condensed }) => <CalendarSidebar condensed={condensed} /> : undefined}
         >
             <Outlet />
         </AppShell>

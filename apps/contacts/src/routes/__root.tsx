@@ -6,19 +6,6 @@ import { ContactsSidebar } from '../components/contacts/contacts-sidebar';
 
 function ContactsRoot() {
     const { user } = useAuth();
-
-    if (!user) {
-        return (
-            <AppShell appName="contacts" rootRoute={Route}>
-                <Outlet />
-            </AppShell>
-        );
-    }
-
-    return <AuthenticatedContactsRoot />;
-}
-
-function AuthenticatedContactsRoot() {
     const { data: contacts = [] } = useContacts();
     const updateContact = useUpdateContact();
 
@@ -41,9 +28,13 @@ function AuthenticatedContactsRoot() {
         <AppShell
             appName="contacts"
             rootRoute={Route}
-            sidebar={({ condensed }) => (
-                <ContactsSidebar condensed={condensed} onAssignLabel={handleAssignLabelByDrop} />
-            )}
+            sidebar={
+                user
+                    ? ({ condensed }) => (
+                          <ContactsSidebar condensed={condensed} onAssignLabel={handleAssignLabelByDrop} />
+                      )
+                    : undefined
+            }
         >
             <Outlet />
         </AppShell>

@@ -30,21 +30,13 @@ export function EigenDocRoot({ config, rootRoute, isFullScreen = false, teamOwne
     const { data: root } = useRootFolder(activeOwnerId, activeMountId);
     const rootPath = isGuest ? null : root || null;
 
-    if (!user) {
-        return (
-            <AppShell appName={config.appName} rootRoute={rootRoute}>
-                <Outlet />
-            </AppShell>
-        );
-    }
-
     return (
         <AppShell
             appName={config.appName}
             rootRoute={rootRoute}
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
             sidebar={
-                !isFullScreen
+                user && !isFullScreen
                     ? ({ condensed }) => (
                           <AppSidebar
                               condensed={condensed}
@@ -58,9 +50,13 @@ export function EigenDocRoot({ config, rootRoute, isFullScreen = false, teamOwne
                     : undefined
             }
         >
-            <EigenDocDriveContext.Provider value={{ rootPath }}>
+            {user ? (
+                <EigenDocDriveContext.Provider value={{ rootPath }}>
+                    <Outlet />
+                </EigenDocDriveContext.Provider>
+            ) : (
                 <Outlet />
-            </EigenDocDriveContext.Provider>
+            )}
         </AppShell>
     );
 }
