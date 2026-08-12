@@ -4,7 +4,7 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from 'react'
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { type UseListSelectionReturn, useListSelection } from '../../../hooks/use-list-selection';
-import { useContextMenu } from '../context-menu';
+import { useSelectableContextMenu } from '../../../hooks/use-selectable-context-menu';
 
 export type UseDriveItemControllerOptions = {
     // Already sorted by the caller — the controller selects/navigates over them as-is.
@@ -92,28 +92,13 @@ export function useDriveItemController({
     const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
-    const contextMenu = useContextMenu<DrivePath>();
-
-    const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
-        if (!selection.isSelected(item.id)) {
-            selection.select(item.id);
-        }
-        contextMenu.handleContextMenu(e, item);
-    };
-
-    // Opens the menu at the given viewport coords with the same selection side effect as right-click —
-    // the shared path for both the long-press (touch) opener and the kebab button below.
-    const openContextMenuAt = (item: DrivePath, x: number, y: number) => {
-        if (!selection.isSelected(item.id)) {
-            selection.select(item.id);
-        }
-        contextMenu.openAt(item, x, y);
-    };
-
-    const openContextMenuFromButton = (button: HTMLElement, item: DrivePath) => {
-        const rect = button.getBoundingClientRect();
-        openContextMenuAt(item, rect.right, rect.bottom);
-    };
+    // Right-click, the long-press (touch) opener, and the kebab button all select-then-open.
+    const {
+        contextMenu,
+        handleContextMenu,
+        openAt: openContextMenuAt,
+        openFromButton: openContextMenuFromButton,
+    } = useSelectableContextMenu({ selection, getId: (item) => item.id });
 
     const isValidFolderDrop = (targetItem: DrivePath) => {
         if (targetItem.type !== 'folder') return false;

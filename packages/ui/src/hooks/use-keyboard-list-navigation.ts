@@ -1,6 +1,14 @@
 import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
 import type { UseListSelectionReturn } from './use-list-selection';
 
+// Lifted-cursor mode, both props or neither: the parent owns the cursor — mail tracks it by
+// email id so it survives sort/new-mail changes and shares it with the shortcuts layer. The
+// hook navigates from cursorIndex, reports moves to onCursorChange, and skips its own activeId
+// sync (the owner decides how an opened row moves the cursor).
+type LiftedCursorOptions =
+    | { cursorIndex: number; onCursorChange: (index: number) => void }
+    | { cursorIndex?: undefined; onCursorChange?: undefined };
+
 type UseKeyboardListNavigationOptions<T> = {
     items: T[];
     activeId?: string;
@@ -17,7 +25,11 @@ type UseKeyboardListNavigationOptions<T> = {
     selection?: UseListSelectionReturn<T>;
     columns?: number;
     scrollToIndex?: (index: number) => void;
-};
+    // Off while another surface owns typing (mail's inline composer): the list then neither
+    // grabs focus on mount nor reclaims it from <body>, so arrows can't start switching
+    // conversations under a half-written reply. Default on.
+    reclaimFocus?: boolean;
+} & LiftedCursorOptions;
 
 export function useKeyboardListNavigation<T>({
     items,
@@ -33,29 +45,40 @@ export function useKeyboardListNavigation<T>({
     onQuickLook,
     columns = 1,
     scrollToIndex,
+    reclaimFocus = true,
+    cursorIndex,
+    onCursorChange,
 }: UseKeyboardListNavigationOptions<T>) {
-    const [selectedIndex, setSelectedIndex] = useState(-1);
+    const lifted = cursorIndex !== undefined;
+    const [internalIndex, setInternalIndex] = useState(-1);
+    const selectedIndex = cursorIndex ?? internalIndex;
+    const setSelectedIndex: (index: number) => void = onCursorChange ?? setInternalIndex;
+
     const getIdRef = useRef(getId);
     useEffect(() => {
         getIdRef.current = getId;
     });
 
     useEffect(() => {
+        if (lifted) return;
         if (activeId && items.length > 0) {
             const index = items.findIndex((item) => getIdRef.current(item) === activeId);
             if (index !== -1) {
-                setSelectedIndex(index);
+                setInternalIndex(index);
             }
         } else {
-            setSelectedIndex(-1);
+            setInternalIndex(-1);
         }
-    }, [activeId, items]);
+    }, [lifted, activeId, items]);
 
     // The list owns the keyboard model, so it takes focus on mount — and takes it back whenever
     // focus falls to <body>. Clicking non-focusable chrome (the detail panel, a toolbar) or
     // restoring the page from the back/forward cache leaves nothing focused, and every shortcut
-    // here would stay dead until the user clicked a row again.
+    // here would stay dead until the user clicked a row again. While reclaimFocus is off the
+    // whole effect stands down; flipping it back on re-arms the grab timer, which also covers
+    // closing a composer that held focus — unmounting a focused subtree fires NO focusout.
     useEffect(() => {
+        if (!reclaimFocus) return;
         const focusList = () => containerRef.current?.focus({ preventScroll: true });
 
         const timer = setTimeout(() => {
@@ -75,7 +98,7 @@ export function useKeyboardListNavigation<T>({
             document.removeEventListener('focusout', onFocusOut);
             window.removeEventListener('pageshow', reclaim);
         };
-    }, [containerRef]);
+    }, [containerRef, reclaimFocus]);
 
     const scrollToRow = (index: number) => {
         if (scrollToIndex) {
@@ -125,15 +148,13 @@ export function useKeyboardListNavigation<T>({
 
         const moveTo = (computeNext: (prev: number) => number) => {
             e.preventDefault();
-            setSelectedIndex((prev) => {
-                const next = computeNext(prev);
-                if (next >= 0 && next !== prev) {
-                    updateSelection(items[next], e);
-                    if (!e.shiftKey) notify(items[next], next);
-                    scrollToRow(next);
-                }
-                return next;
-            });
+            const next = computeNext(selectedIndex);
+            if (next >= 0 && next !== selectedIndex) {
+                updateSelection(items[next], e);
+                if (!e.shiftKey) notify(items[next], next);
+                scrollToRow(next);
+            }
+            setSelectedIndex(next);
         };
 
         switch (e.key) {
