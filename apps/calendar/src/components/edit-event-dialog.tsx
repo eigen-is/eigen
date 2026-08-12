@@ -250,7 +250,7 @@ export function EditEventDialog({
                         selectedCalKey={selectedCalKey}
                         setSelectedCalKey={setSelectedCalKey}
                         calendarOptions={calendarOptions}
-                        recurrenceStartDate={new Date(startDate)}
+                        recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
                         timezone={event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone}
                         allDayId="edit-all-day"
                         attendeesSection={
