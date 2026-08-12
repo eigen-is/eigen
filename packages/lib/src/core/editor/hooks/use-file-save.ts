@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys } from '../../drive/hooks/use-drive';
+import { driveKeys } from '../../drive/hooks/keys';
 import { editorKeys } from './use-file-content';
 
 type SaveParams = {

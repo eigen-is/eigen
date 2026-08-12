@@ -2,7 +2,7 @@ import { type QueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import type { ClientFileEventType, FileEvent, FileEventDetailsMap } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys } from './use-drive';
+import { driveKeys } from './keys';
 
 // Discriminated client-event shape — mirrors the POST /history route's typebox union.
 // cardId is required on the wire; it stays optional in FileEventDetailsMap only because

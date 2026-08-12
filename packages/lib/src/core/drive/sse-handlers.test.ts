@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { driveKeys } from './hooks/use-drive';
+import { driveKeys } from './hooks/keys';
 import { handleDriveSSEvent } from './sse-handlers';
 
 // Record every queryKey passed to invalidateQueries so we can assert which caches a handler touches.

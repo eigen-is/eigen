@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateItemCreated } from './use-drive';
+import { invalidateItemCreated } from './keys';
 
 type ConvertTarget = 'eigensheets' | 'eigendoc';
 

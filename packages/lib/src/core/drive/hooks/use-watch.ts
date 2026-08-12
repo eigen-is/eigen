@@ -4,7 +4,7 @@ import { useAuth } from '@workspace/lib/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { PathWatchStatus } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys } from './use-drive';
+import { driveKeys } from './keys';
 
 // GET WATCH STATUS — is the current user watching this path? (direct or via ancestor)
 export function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {

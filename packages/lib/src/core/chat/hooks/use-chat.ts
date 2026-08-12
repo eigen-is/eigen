@@ -7,7 +7,8 @@ import { DRIVE_MIME_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys, invalidateItemCreated, useAggregateMimeContent } from '../../drive/hooks/use-drive';
+import { driveKeys, invalidateItemCreated } from '../../drive/hooks/keys';
+import { useAggregateMimeContent } from '../../drive/hooks/reads';
 import { publicUserKeys } from '../../public/hooks/use-public';
 import { fetchPublicUser } from '../../public/user-batcher';
 
