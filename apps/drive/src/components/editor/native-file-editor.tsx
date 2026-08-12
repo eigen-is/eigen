@@ -85,9 +85,11 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
         );
     }
 
-    const updatedAt = data!.updatedAt;
+    if (!data) return <LoadingState />;
+
+    const updatedAt = data.updatedAt;
     const editorProps = {
-        content: data!.content,
+        content: data.content,
         updatedAt,
         ownerId: path.ownerId,
         mountId: path.mountId,
@@ -105,8 +107,8 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
             {/* The editor returns a find-bar provider wrapping its Column; this grows it in the row. */}
             <div className="flex-1 min-w-0 h-full">
                 <Suspense fallback={<LoadingState />}>
-                    {data!.editMode === 'markdown' ? (
-                        <MarkdownEditor key={reloadKey} {...editorProps} frontmatter={data!.frontmatter ?? null} />
+                    {data.editMode === 'markdown' ? (
+                        <MarkdownEditor key={reloadKey} {...editorProps} frontmatter={data.frontmatter ?? null} />
                     ) : (
                         <CodeEditor key={reloadKey} {...editorProps} />
                     )}
