@@ -47,7 +47,7 @@ export type ParsedMail = {
     attachments: Attachment[];
     headers: MailHeaders;
     headerLines: HeaderLines;
-    html: string | false;
+    html: string | null;
     text?: string | undefined;
     textAsHtml?: string | undefined;
     subject?: string | undefined;
