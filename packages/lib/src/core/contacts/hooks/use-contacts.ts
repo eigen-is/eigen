@@ -34,23 +34,6 @@ export function useContacts() {
     });
 }
 
-// Fetch a contact by ID
-export function useContact(id: string) {
-    const { user } = useAuth();
-    const ownerId = user?.id || '';
-
-    return useQuery({
-        queryKey: contactKeys.detail(ownerId, id),
-        queryFn: async () => {
-            if (!id) return null;
-            const response = await contactsApi({ ownerId }).contacts({ id }).get();
-            return response.data;
-        },
-        enabled: !!id && !!ownerId,
-        staleTime: 5 * 60 * 1000, // 5 minutes
-    });
-}
-
 // Add a new contact
 export function useAddContact() {
     const queryClient = useQueryClient();
