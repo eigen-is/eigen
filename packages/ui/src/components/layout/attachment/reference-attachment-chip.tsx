@@ -1,9 +1,10 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { ExternalLink, X } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { getFileIcon } from '../drive/file-presentation';
+import { AttachmentChipRemoveButton, CHIP_BASE_CLASS } from './attachment-chip-shared';
 
 type ReferenceAttachmentChipProps = {
     reference: AttachmentReference;
@@ -17,11 +18,7 @@ type ReferenceAttachmentChipProps = {
 export function ReferenceAttachmentChip({ reference, onRemove, className }: ReferenceAttachmentChipProps) {
     const displayName = stripEigenExtension(reference.name);
 
-    const outerClass = cn(
-        'inline-flex items-center gap-1.5 rounded-md bg-muted text-xs text-foreground border overflow-hidden min-h-10',
-        'hover:bg-muted/80 transition-colors cursor-pointer',
-        className,
-    );
+    const outerClass = cn(CHIP_BASE_CLASS, 'hover:bg-muted/80 transition-colors cursor-pointer', className);
 
     function handleClick() {
         const url = getDriveItemUrl({
@@ -54,20 +51,7 @@ export function ReferenceAttachmentChip({ reference, onRemove, className }: Refe
                 <span className="truncate max-w-[200px]">{onRemove ? displayName : `Open ${displayName}`}</span>
                 {!onRemove && <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />}
             </div>
-            {onRemove && (
-                <button
-                    type="button"
-                    className="shrink-0 rounded p-1 mr-1 text-muted-foreground hover:text-foreground hover:bg-muted-foreground/20 transition-colors"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onRemove();
-                    }}
-                    aria-label={`Remove ${displayName}`}
-                >
-                    <X className="h-3 w-3" />
-                </button>
-            )}
+            {onRemove && <AttachmentChipRemoveButton label={displayName} onRemove={onRemove} />}
         </div>
     );
 }

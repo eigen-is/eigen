@@ -1,6 +1,7 @@
-import { Download, Paperclip, X } from 'lucide-react';
+import { Download, Paperclip } from 'lucide-react';
 import type { MouseEvent, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
+import { AttachmentChipRemoveButton, CHIP_BASE_CLASS } from './attachment-chip-shared';
 
 type SimpleAttachmentChipProps = {
     filename: string;
@@ -26,7 +27,7 @@ export function SimpleAttachmentChip({
     className,
 }: SimpleAttachmentChipProps) {
     const outerClass = cn(
-        'inline-flex items-center gap-1.5 rounded-md bg-muted text-xs text-foreground border overflow-hidden min-h-10',
+        CHIP_BASE_CLASS,
         (downloadUrl || onClick) && 'hover:bg-muted/80 transition-colors',
         className,
     );
@@ -45,20 +46,7 @@ export function SimpleAttachmentChip({
                 <span className="truncate max-w-[200px]">{filename}</span>
                 {showDownloadIcon && <Download className="h-3 w-3 text-muted-foreground shrink-0" />}
             </div>
-            {onRemove && (
-                <button
-                    type="button"
-                    className="shrink-0 rounded p-1 mr-1 text-muted-foreground hover:text-foreground hover:bg-muted-foreground/20 transition-colors"
-                    onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onRemove();
-                    }}
-                    aria-label={`Remove ${filename}`}
-                >
-                    <X className="h-3 w-3" />
-                </button>
-            )}
+            {onRemove && <AttachmentChipRemoveButton label={filename} onRemove={onRemove} />}
         </>
     );
 
