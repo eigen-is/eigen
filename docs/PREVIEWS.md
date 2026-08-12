@@ -120,7 +120,7 @@ truncated marker — never a partially sliced string — and surfaces a `byte-gu
 
 Eigensheets, eigendoc and eigenslides preview generation runs in a one-shot Bun Worker so Yjs reconstruction,
 op replay, recalc, HTML rendering, and sanitization never block the API event loop
-(`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phases 1–3 as-built). Every export rides the same runner
+([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). Every export rides the same runner
 through the same seam — see [EXPORT.md](EXPORT.md):
 
 1. The main thread keeps ACL, cache lookup/dedupe, builds the media URL map for doc and slides, and captures
@@ -153,9 +153,9 @@ through the same seam — see [EXPORT.md](EXPORT.md):
 The runner logs one observability line per job (queue depth/wait, main-thread capture/media-prep ms,
 input/output bytes, transform/total ms, outcome, warning codes). `src/test/transform-benchmark.ts` measures end-to-end latency, event-loop delay,
 health-route latency, and RSS on heavy fixtures; run it from `apps/api` with
-`bun src/test/transform-benchmark.ts [--memory]`. Measured note for the warm-pool decision (proposal Phase
-4): each terminated heavy Worker currently retains ~7MB RSS in Bun 1.3 (trivial Workers plateau; the same
-pipeline on-thread is flat), so high cold-preview churn argues for Worker recycling in a later phase.
+`bun src/test/transform-benchmark.ts [--memory]`. Each terminated heavy Worker retains ~7MB RSS in Bun 1.3
+(trivial Workers plateau; the same pipeline on-thread is flat) — but the no-warm-pool decision stands on a
+measured pathology, recorded in [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md) § Worker lifecycle.
 
 ## Image Previews
 

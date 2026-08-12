@@ -18,7 +18,7 @@ Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also expo
 sections below.
 
 Every eigendoc/eigenslides/eigensheets export runs its Yjs reconstruction, rendering and sanitization in the
-one-shot document-transform Worker (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phases 2–3 as-built): the
+one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the
 main thread prepares media, the Worker returns the finished document bytes. The DOCX conversion runs there too
 — the Worker loads the externalized `@turbodocx/html-to-docx` from runtime `node_modules`. WeasyPrint stays a
 main-thread subprocess on top of the Worker's HTML.
@@ -265,7 +265,7 @@ apps/api/src/lib/export/slides/
 ## Sheets Export
 
 Eigensheets (`.eigensheets`) support XLSX, PDF, and HTML export via the same route. Every format runs in the
-one-shot document-transform Worker (`docs/PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md`, Phase 2 as-built), so Yjs
+one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)), so Yjs
 reconstruction, op replay, recalc, rendering, sanitization, and ExcelJS/ZIP work never block the API event
 loop:
 

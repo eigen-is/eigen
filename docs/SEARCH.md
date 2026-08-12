@@ -88,7 +88,7 @@ types (doc, slides, sheets) extract inside the one-shot document-transform Worke
 `extract-text` op runs `lib/search/extract-render.ts` over the same `*FromDoc` readers of the
 [document content layer](DOCUMENT-CONTENT-LAYER.md) that preview and export use, so search's idea of
 "document text" cannot drift from them, and a heavy extraction never blocks the event loop (own 30 s
-deadline, background queue quota — see PROPOSAL_DOCUMENT_TRANSFORM_WORKERS.md). Thin collectors
+deadline, background queue quota — see [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). Thin collectors
 flatten each shape (ProseMirror JSON → text, slide text objects, the **sparse** `celldata` display
 values), cut to the `CONTENT_INDEX_MAX_BYTES` UTF-8 byte budget (~100 KB) at a code-point boundary.
 Stickies and chat stay light main-thread reads (`readStickiesContent`, `readChatContent` — card and
