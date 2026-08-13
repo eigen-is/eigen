@@ -300,10 +300,7 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
                     <div className="eigensheets-preview mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
             ) : (
-                <div
-                    className="eigen-prose p-8 max-w-[52rem] mx-auto"
-                    dangerouslySetInnerHTML={{ __html: data.body }}
-                />
+                <div className="eigen-prose p-8 max-w-4xl mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
             )}
         </div>
     );

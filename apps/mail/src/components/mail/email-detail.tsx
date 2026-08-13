@@ -277,8 +277,9 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
 
                     <ReadAttachments emailId={email.id} attachments={email.attachments} />
 
-                    {/* Email body — capped at the doc canvas width (210mm) and centred like a page */}
-                    <div className="prose prose-sm mx-auto max-w-[210mm]">
+                    {/* Email body — left-aligned with the header, capped at the document reading
+                        width (max-w-4xl, same as drive's editor and eigendoc preview) */}
+                    <div className="prose prose-sm max-w-4xl">
                         {email.html || email.textAsHtml ? (
                             <ShadowContent
                                 content={emailContent}

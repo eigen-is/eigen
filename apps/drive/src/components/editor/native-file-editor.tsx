@@ -69,7 +69,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
             <ColumnLayout>
                 <Column id="list" width="flex" onBack={onClose} toolbar={viewToolbar}>
                     <div className="h-full overflow-auto">
-                        <div className="w-full px-12 py-6 max-w-[52rem] mx-auto">
+                        <div className="w-full px-12 py-6 max-w-4xl mx-auto">
                             {preview?.body ? (
                                 <div className="eigen-prose" dangerouslySetInnerHTML={{ __html: preview.body }} />
                             ) : (
