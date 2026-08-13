@@ -2,23 +2,16 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useCheckPermissions } from '@workspace/lib/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import {
-    CenteredToolbar,
-    ChatMessageInput,
-    type ChatMessageInputHandle,
-    ChatMessageList,
-    LoadingState,
-    RequestAccessView,
-    ToolbarTitle,
-    UserAvatar,
-} from '@workspace/ui';
+import { CenteredToolbar, LoadingState, RequestAccessView, ToolbarTitle } from '@workspace/ui';
+import { ChatMessageInput, type ChatMessageInputHandle, ChatMessageList } from '@workspace/ui/components/chat';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
 import { DriveRenameItem } from '@workspace/ui/components/drive/drive-rename-item';
 import { DriveShareSummary } from '@workspace/ui/components/drive/drive-share-summary';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
+import { UserAvatar } from '@workspace/ui/components/user';
 import { useRef, useState } from 'react';
 
 function ChatView() {

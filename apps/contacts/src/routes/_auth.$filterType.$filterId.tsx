@@ -5,7 +5,7 @@ import type { Contact } from '@workspace/lib/types/contact';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { LabelFilterHeader } from '@workspace/ui/components/labels/label-filter-header';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { useEffect, useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';

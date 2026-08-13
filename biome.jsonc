@@ -31,7 +31,20 @@
       "preset": "recommended",
       "style": {
         "noNonNullAssertion": "off",
-        "noDescendingSpecificity": "off"
+        "noDescendingSpecificity": "off",
+        // The package exports maps are the module resolver; extension-suffixed workspace
+        // specifiers don't resolve through them. See CODE-STANDARDS.md § Imports.
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "patterns": [
+              {
+                "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+              }
+            ]
+          }
+        }
       },
       "complexity": {
         "useLiteralKeys": "off"
@@ -59,7 +72,14 @@
                 "paths": {
                   "react": { "message": "engine/ is imported by the backend and must stay React-free." },
                   "react-dom": { "message": "engine/ is imported by the backend and must stay React-free." }
-                }
+                },
+                // Overrides replace the root rule options wholesale — restate the suffix ban.
+                "patterns": [
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  }
+                ]
               }
             }
           }
@@ -79,6 +99,11 @@
                   {
                     "group": ["@workspace/sheet", "@workspace/sheet/**", "@workspace/ui", "@workspace/ui/**"],
                     "message": "lib must not import sheet or ui (would pull React into the backend). Put shared sheet types in packages/lib/src/sheets/types.ts."
+                  },
+                  // Overrides replace the root rule options wholesale — restate the suffix ban.
+                  {
+                    "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
+                    "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
                   }
                 ]
               }

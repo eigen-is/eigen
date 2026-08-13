@@ -2,7 +2,7 @@ import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { useEmailById, useMailboxes, useMoveEmail } from '@workspace/lib/mail';
 import type { Email } from '@workspace/lib/types/mail';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { AppShell } from '@workspace/ui/components/layout/app/app-shell';
 import { EmailSidebar } from '../components/mail/email-sidebar';
 
 function MailRoot() {

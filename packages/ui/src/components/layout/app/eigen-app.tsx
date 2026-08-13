@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { HotkeysProvider, useHotkey } from '@tanstack/react-hotkeys';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from '@workspace/lib/auth/auth-context.tsx';
+import { AuthProvider } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type React from 'react';
 import { lazy, Suspense, useState } from 'react';

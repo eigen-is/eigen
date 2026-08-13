@@ -1,4 +1,4 @@
-import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
+import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { DRIVE_TYPE_STICKIES, type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { desc, lt, lte } from 'drizzle-orm';

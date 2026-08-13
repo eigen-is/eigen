@@ -5,7 +5,7 @@ import { usePublicConfig } from '@workspace/lib/public';
 import { useServerSettings } from '@workspace/lib/settings';
 import { ErrorState, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { AppShell } from '@workspace/ui/components/layout/app/app-shell';
 import { AdminSidebar } from '../components/admin/admin-sidebar.tsx';
 import { SetupWizard } from '../components/admin/setup-wizard.tsx';
 

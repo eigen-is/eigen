@@ -5,130 +5,132 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-848 primitives across 6 kinds. `packages/sheet` internals are excluded.
+873 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (114)
+## Components (116)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AboutDialog` | `@workspace/ui` | packages/ui/src/components/layout/app/about-dialog.tsx |
-| `ActivityPanel` | `@workspace/ui` | packages/ui/src/components/comments/activity-panel.tsx |
 | `ActivityRow` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
 | `AlphabeticalList` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `AppLogo` | `@workspace/ui` | packages/ui/src/components/layout/app/app-logo.tsx |
 | `AppShell` | `@workspace/ui` | packages/ui/src/components/layout/app/app-shell.tsx |
 | `AppSidebar` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
-| `AssigneeMenuItems` | `@workspace/ui` | packages/ui/src/components/comments/assignee-menu-items.tsx |
-| `AssigneePicker` | `@workspace/ui` | packages/ui/src/components/comments/assignee-picker.tsx |
 | `AvatarEditor` | `@workspace/ui` | packages/ui/src/components/avatar-editor.tsx |
 | `Bar` | `@workspace/ui` | packages/ui/src/components/braket/bar.tsx |
-| `CardDialog` | `@workspace/ui` | packages/ui/src/components/cards/card-dialog.tsx |
-| `CardForm` | `@workspace/ui` | packages/ui/src/components/cards/card-form.tsx |
-| `CardFormDialog` | `@workspace/ui` | packages/ui/src/components/cards/card-form-dialog.tsx |
 | `CenteredToolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
-| `ChatCreateWizard` | `@workspace/ui` | packages/ui/src/components/chat/chat-create-wizard.tsx |
-| `ChatMessageInput` | `@workspace/ui` | packages/ui/src/components/chat/chat-message-input.tsx |
-| `ChatMessageList` | `@workspace/ui` | packages/ui/src/components/chat/chat-message-list.tsx |
-| `ChatPlayerSuggest` | `@workspace/ui` | packages/ui/src/components/chat/chat-player-suggest.tsx |
-| `ChatSlashSuggest` | `@workspace/ui` | packages/ui/src/components/chat/chat-slash-suggest.tsx |
-| `ColorPicker` | `@workspace/ui` | packages/ui/src/components/media/color-picker.tsx |
-| `ColorPickerButton` | `@workspace/ui` | packages/ui/src/components/media/color-picker-button.tsx |
 | `Column` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
 | `ColumnLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
-| `CommentContextMenu` | `@workspace/ui` | packages/ui/src/components/comments/comment-context-menu.tsx |
-| `CommentFilterMenuItems` | `@workspace/ui` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
-| `CommentLifecycleDialogs` | `@workspace/ui` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
-| `CommentMenuItems` | `@workspace/ui` | packages/ui/src/components/comments/comment-menu-items.tsx |
-| `CommentPanel` | `@workspace/ui` | packages/ui/src/components/comments/comment-panel.tsx |
-| `CommentThread` | `@workspace/ui` | packages/ui/src/components/comments/comment-thread.tsx |
 | `ConfirmDialog` | `@workspace/ui` | packages/ui/src/components/confirm-dialog.tsx |
-| `ContactAddRow` | `@workspace/ui` | packages/ui/src/components/contacts/contact-add-row.tsx |
-| `ContactAutosuggest` | `@workspace/ui` | packages/ui/src/components/contacts/contact-autosuggest.tsx |
 | `CopyInput` | `@workspace/ui` | packages/ui/src/components/copy-input.tsx |
 | `CountBadge` | `@workspace/ui` | packages/ui/src/components/count-badge.tsx |
-| `CreatedByMeta` | `@workspace/ui` | packages/ui/src/components/comments/created-by-meta.tsx |
+| `DeleteDialog` | `@workspace/ui` | packages/ui/src/components/delete/delete-dialog.tsx |
 | `DocumentModeButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DocumentShareCluster` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-share-cluster.tsx |
-| `DriveAccessList` | `@workspace/ui` | packages/ui/src/components/drive/drive-access-list.tsx |
-| `DriveBrowser` | `@workspace/ui` | packages/ui/src/components/drive/drive-browser.tsx |
-| `DriveCreateEigenDoc` | `@workspace/ui` | packages/ui/src/components/drive/drive-create-eigendoc.tsx |
-| `DriveFilePicker` | `@workspace/ui` | packages/ui/src/components/drive/drive-file-picker.tsx |
-| `DriveGrid` | `@workspace/ui` | packages/ui/src/components/drive/drive-grid.tsx |
-| `DriveItemMenuItems` | `@workspace/ui` | packages/ui/src/components/drive/drive-item-menu.tsx |
-| `DriveLocationField` | `@workspace/ui` | packages/ui/src/components/drive/drive-location-field.tsx |
-| `DriveLocationPicker` | `@workspace/ui` | packages/ui/src/components/drive/drive-location-picker.tsx |
-| `DriveMountList` | `@workspace/ui` | packages/ui/src/components/drive/drive-mount-list.tsx |
-| `DrivePickerWithUpload` | `@workspace/ui` | packages/ui/src/components/drive/drive-picker-with-upload.tsx |
-| `DrivePreview` | `@workspace/ui` | packages/ui/src/components/drive/drive-preview.tsx |
-| `DriveTable` | `@workspace/ui` | packages/ui/src/components/drive/drive-table.tsx |
 | `EditMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/edit-menu.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenCyclingLogo` | `@workspace/ui` | packages/ui/src/components/braket/eigen-cycling-logo.tsx |
-| `EigenDocListView` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-list-view.tsx |
-| `EigenDocNewButton` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-new-button.tsx |
-| `EigenDocRoot` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-root.tsx |
-| `EigenDocSharedView` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-shared-view.tsx |
 | `EigenLoader` | `@workspace/ui` | packages/ui/src/components/braket/eigen-loader.tsx |
 | `EigenLogo` | `@workspace/ui` | packages/ui/src/components/braket/eigen-logo.tsx |
 | `EmptyState` | `@workspace/ui` | packages/ui/src/components/layout/app/empty-state.tsx |
 | `ErrorBoundary` | `@workspace/ui` | packages/ui/src/components/layout/app/error-boundary.tsx |
 | `ErrorState` | `@workspace/ui` | packages/ui/src/components/layout/app/error-state.tsx |
 | `FileMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
-| `FilterSummary` | `@workspace/ui` | packages/ui/src/components/comments/comment-filter-summary.tsx |
-| `ImageResizeHandles` | `@workspace/ui` | packages/ui/src/components/media/image-resize-handles.tsx |
 | `InfoBlock` | `@workspace/ui` | packages/ui/src/components/info-block.tsx |
 | `KebabTrigger` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/kebab-trigger.tsx |
 | `Ket` | `@workspace/ui` | packages/ui/src/components/braket/ket.tsx |
-| `LabelAssignSubMenu` | `@workspace/ui` | packages/ui/src/components/labels/label-assign-sub-menu.tsx |
-| `LabelDialog` | `@workspace/ui` | packages/ui/src/components/labels/label-dialog.tsx |
-| `LabelFilterHeader` | `@workspace/ui` | packages/ui/src/components/labels/label-filter-header.tsx |
-| `LabelManager` | `@workspace/ui` | packages/ui/src/components/labels/label-manager.tsx |
 | `LoadingState` | `@workspace/ui` | packages/ui/src/components/layout/app/loading-state.tsx |
-| `LoginPage` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-page.tsx |
-| `MemberAvatar` | `@workspace/ui` | packages/ui/src/components/comments/member-avatar.tsx |
-| `MemberCommandList` | `@workspace/ui` | packages/ui/src/components/comments/member-command-list.tsx |
-| `NoteCard` | `@workspace/ui` | packages/ui/src/components/notes/note-card.tsx |
-| `NoteCardDialog` | `@workspace/ui` | packages/ui/src/components/notes/note-card-dialog.tsx |
-| `PanelColumn` | `@workspace/ui` | packages/ui/src/components/comments/panel-column.tsx |
-| `PresenceLabel` | `@workspace/ui` | packages/ui/src/components/collab/presence-label.tsx |
 | `RequestAccessView` | `@workspace/ui` | packages/ui/src/components/layout/app/request-access-view.tsx |
+| `SearchBar` | `@workspace/ui` | packages/ui/src/components/search-bar/search-bar.tsx |
 | `SettingsPage` | `@workspace/ui` | packages/ui/src/components/layout/app/settings-page.tsx |
 | `ShadowContent` | `@workspace/ui` | packages/ui/src/components/shadow-content.tsx |
 | `SidebarBody` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItem` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
 | `SidebarSection` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
-| `StorageUsage` | `@workspace/ui` | packages/ui/src/components/home/usage.tsx |
 | `Toolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
 | `ToolbarSeparator` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-separator.tsx |
 | `ToolbarTitle` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-title.tsx |
 | `TooltipButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
 | `Topbar` | `@workspace/ui` | packages/ui/src/components/layout/app/topbar.tsx |
 | `UnreadDot` | `@workspace/ui` | packages/ui/src/components/unread-dot.tsx |
-| `UploadContainer` | `@workspace/ui` | packages/ui/src/components/upload-provider/upload-container.tsx |
-| `UserAvatar` | `@workspace/ui` | packages/ui/src/components/user/user-avatar.tsx |
-| `UserItem` | `@workspace/ui` | packages/ui/src/components/user/user-item.tsx |
-| `UserNameCard` | `@workspace/ui` | packages/ui/src/components/user/user-name-card.tsx |
 | `AttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-chip.tsx |
 | `AttachmentDraftChips` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/attachment-draft-chips.tsx |
 | `ReferenceAttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/reference-attachment-chip.tsx |
 | `SimpleAttachmentChip` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/simple-attachment-chip.tsx |
+| `CardDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-dialog.tsx |
+| `CardForm` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form.tsx |
+| `CardFormDialog` | `@workspace/ui/components/cards` | packages/ui/src/components/cards/card-form-dialog.tsx |
+| `ChatCreateWizard` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-create-wizard.tsx |
+| `ChatMessageInput` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
+| `ChatMessageList` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-list.tsx |
+| `ChatPlayerSuggest` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-player-suggest.tsx |
+| `ChatSlashSuggest` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-slash-suggest.tsx |
+| `PresenceLabel` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
+| `ActivityPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/activity-panel.tsx |
+| `AssigneeMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-menu-items.tsx |
+| `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
+| `CommentContextMenu` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-context-menu.tsx |
+| `CommentFilterMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-menu-items.tsx |
+| `CommentLifecycleDialogs` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx |
+| `CommentMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
+| `CommentPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-panel.tsx |
+| `CommentThread` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-thread.tsx |
+| `CreatedByMeta` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/created-by-meta.tsx |
+| `FilterSummary` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-filter-summary.tsx |
+| `MemberAvatar` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-avatar.tsx |
+| `MemberCommandList` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/member-command-list.tsx |
+| `PanelColumn` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/panel-column.tsx |
+| `ContactAddRow` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-add-row.tsx |
+| `ContactAutosuggest` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-autosuggest.tsx |
 | `ContextMenuAnchor` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/context-menu-anchor.tsx |
+| `DriveAccessList` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
+| `DriveBrowser` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
+| `DriveCreateEigenDoc` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-create-eigendoc.tsx |
+| `DriveFilePicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-file-picker.tsx |
+| `DriveGrid` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-grid.tsx |
+| `DriveItemMenuItems` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-item-menu.tsx |
+| `DriveLocationField` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
+| `DriveLocationPicker` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-picker.tsx |
+| `DriveMountList` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
+| `DrivePickerWithUpload` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-picker-with-upload.tsx |
+| `DrivePreview` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-preview.tsx |
+| `DriveTable` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
+| `EigenDocListView` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-list-view.tsx |
+| `EigenDocNewButton` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-new-button.tsx |
+| `EigenDocRoot` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
+| `EigenDocSharedView` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-shared-view.tsx |
 | `LightEditor` | `@workspace/ui/components/editor` | packages/ui/src/components/editor/light-editor.tsx |
+| `StorageUsage` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
+| `LabelAssignSubMenu` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-assign-sub-menu.tsx |
+| `LabelDialog` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-dialog.tsx |
+| `LabelFilterHeader` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
+| `LabelManager` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-manager.tsx |
+| `LoginPage` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-page.tsx |
+| `ColorPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
+| `ColorPickerButton` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
+| `ImageResizeHandles` | `@workspace/ui/components/media` | packages/ui/src/components/media/image-resize-handles.tsx |
+| `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
+| `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/alignment-picker.tsx |
 | `BackgroundFillBlock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/background-fill-block.tsx |
 | `PropertiesPanel` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertyNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
 | `PropertyRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertySection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `UploadContainer` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-container.tsx |
 | `CollapsibleUserList` | `@workspace/ui/components/user` | packages/ui/src/components/user/collapsible-user-list.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |
 | `PersonList` | `@workspace/ui/components/user` | packages/ui/src/components/user/person-list.tsx |
+| `UserAvatar` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-avatar.tsx |
 | `UserDetailHero` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-detail-hero.tsx |
+| `UserItem` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserName` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
+| `UserNameCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
 
 ## Providers (5)
 
@@ -136,11 +138,11 @@ rather than inlining `queryClient.invalidateQueries`.
 |------|-------------|------|
 | `AuthProvider` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `MediaResolverProvider` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
-| `UploadProvider` | `@workspace/ui` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `PreviewProvider` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-provider.tsx |
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
+| `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
-## Contexts, schemas & classes (7)
+## Contexts, schemas & classes (8)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -149,10 +151,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CommentMarkSchema` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/comment-mark.ts |
 | `FigureNode` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure.ts |
 | `PartialDeleteError` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
-| `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
+| `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
+| `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (223)
+## Hooks (226)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -353,19 +356,22 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateTeamMount` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
 | `useUpdateTeamSettings` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-settings.ts |
 | `useUploadTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
+| `useDebouncedValue` | `@workspace/lib/use-debounced-value` | packages/lib/src/core/use-debounced-value.ts |
 | `useRestoreVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useSaveVersion` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useVersions` | `@workspace/lib/versioning` | packages/lib/src/core/versioning/hooks.ts |
 | `useApp` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useContactAvatarUpload` | `@workspace/ui` | packages/ui/src/components/use-contact-avatar-upload.ts |
-| `useContactInput` | `@workspace/ui` | packages/ui/src/components/contacts/use-contact-input.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
-| `useMountLabel` | `@workspace/ui` | packages/ui/src/components/drive/drive-mount-list.tsx |
-| `useUpload` | `@workspace/ui` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `useAttachmentMeta` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-meta.ts |
+| `useContactInput` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/use-contact-input.ts |
 | `useContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/use-context-menu.ts |
+| `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
+| `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `usePreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
+| `useProseMirrorSearchController` | `@workspace/ui/components/search/prosemirror-search-controller` | packages/ui/src/components/search/prosemirror-search-controller.ts |
+| `useUpload` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
@@ -380,7 +386,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (233)
+## Types (240)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -389,6 +395,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `RouterAppContext` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `LocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
+| `EmoteDefinition` | `@workspace/lib/chat/built-in-emotes` | packages/lib/src/core/chat/built-in-emotes.ts |
+| `CommandPaletteContextValue` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `CommentAssigneeFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `CommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
@@ -398,6 +406,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DirectAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `DriveAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `InheritedAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
+| `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `BorderInfo` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -582,43 +591,47 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
 | `AvatarEditorProps` | `@workspace/ui` | packages/ui/src/components/avatar-editor.tsx |
-| `ChatMessageInputHandle` | `@workspace/ui` | packages/ui/src/components/chat/chat-message-input.tsx |
-| `ColorPickerButtonProps` | `@workspace/ui` | packages/ui/src/components/media/color-picker-button.tsx |
-| `ColorPickerProps` | `@workspace/ui` | packages/ui/src/components/media/color-picker.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
-| `CommentContextMenuItem` | `@workspace/ui` | packages/ui/src/components/comments/comment-menu-items.tsx |
 | `ConfirmDialogProps` | `@workspace/ui` | packages/ui/src/components/confirm-dialog.tsx |
-| `ContactAutosuggestProps` | `@workspace/ui` | packages/ui/src/components/contacts/types.ts |
-| `DriveAccessListProps` | `@workspace/ui` | packages/ui/src/components/drive/drive-access-list.tsx |
-| `DriveGridProps` | `@workspace/ui` | packages/ui/src/components/drive/drive-grid.tsx |
-| `DriveLocationValue` | `@workspace/ui` | packages/ui/src/components/drive/drive-location-field.tsx |
-| `DriveTableProps` | `@workspace/ui` | packages/ui/src/components/drive/drive-table.tsx |
-| `DriveViewProps` | `@workspace/ui` | packages/ui/src/components/drive/drive-table.tsx |
-| `EigenDocAppConfig` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-config.ts |
-| `FilePresentation` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
-| `LabelFilterHeaderProps` | `@workspace/ui` | packages/ui/src/components/labels/label-filter-header.tsx |
-| `LabelManagerProps` | `@workspace/ui` | packages/ui/src/components/labels/types.ts |
+| `DeleteDialogProps` | `@workspace/ui` | packages/ui/src/components/delete/delete-dialog.tsx |
 | `LayoutContextType` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
-| `PresenceUser` | `@workspace/ui` | packages/ui/src/components/collab/presence-label.tsx |
+| `SearchBarProps` | `@workspace/ui` | packages/ui/src/components/search-bar/search-bar.tsx |
 | `SidebarBodyProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItemProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
 | `SidebarSectionProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
-| `SlashTargetContext` | `@workspace/ui` | packages/ui/src/components/chat/chat-utils.ts |
-| `StorageData` | `@workspace/ui` | packages/ui/src/components/home/usage.tsx |
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
-| `UploadItem` | `@workspace/ui` | packages/ui/src/components/upload-provider/upload-provider.tsx |
-| `UserAvatarProps` | `@workspace/ui` | packages/ui/src/components/user/user-avatar.tsx |
-| `UserItemProps` | `@workspace/ui` | packages/ui/src/components/user/user-item.tsx |
-| `UserNameCardProps` | `@workspace/ui` | packages/ui/src/components/user/user-name-card.tsx |
+| `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
+| `SlashTargetContext` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
+| `PresenceUser` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
+| `CommentContextMenuItem` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
+| `ContactAutosuggestProps` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/types.ts |
+| `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
+| `DriveGridProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-grid.tsx |
+| `DriveLocationValue` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
+| `DriveTableProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
+| `DriveViewProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
+| `EigenDocAppConfig` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `CreateCallbacks` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
+| `DriveCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
+| `StorageData` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
+| `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
+| `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
+| `ColorPickerButtonProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
+| `ColorPickerProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `DownloadMode` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `PreviewMode` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-provider.tsx |
 | `PreviewOptions` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
+| `FlashRange` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
+| `UploadItem` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `OwnerInfoPopoverProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |
+| `UserAvatarProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-avatar.tsx |
 | `UserDetailHeroProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-detail-hero.tsx |
+| `UserItemProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
+| `UserNameCardProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (266)
+## Utilities & constants (278)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -727,6 +740,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isUnknownCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `resolveEmoteKey` | `@workspace/lib/chat` | packages/lib/src/core/chat/emotes.ts |
 | `SLASH_COMMANDS` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
+| `BUILT_IN_EMOTES` | `@workspace/lib/chat/built-in-emotes` | packages/lib/src/core/chat/built-in-emotes.ts |
+| `EMOTE_COMMANDS` | `@workspace/lib/chat/emotes` | packages/lib/src/core/chat/emotes.ts |
 | `copyToClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -789,7 +804,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
+| `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
+| `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
+| `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
+| `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `stripTagsServer` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
+| `htmlToPlainText` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `beginOptimisticMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `consumeRecentMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
@@ -868,23 +889,27 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
-| `createAuthRouteOptions` | `@workspace/ui` | packages/ui/src/components/layout/pages/auth-route.tsx |
-| `createLoginRouteOptions` | `@workspace/ui` | packages/ui/src/components/layout/pages/login-route.tsx |
-| `DEFAULT_COLORS` | `@workspace/ui` | packages/ui/src/components/media/color-picker.tsx |
-| `DOCS_CONFIG` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-config.ts |
-| `eigenDocEditorValidateSearch` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-config.ts |
-| `eigenDocValidateSearch` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
-| `getAtSuggestQuery` | `@workspace/ui` | packages/ui/src/components/chat/chat-utils.ts |
-| `getFileIcon` | `@workspace/ui` | packages/ui/src/components/drive/file-presentation.tsx |
-| `getFileIconComponent` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
-| `getFilePresentation` | `@workspace/ui` | packages/lib/src/core/file-presentation.ts |
-| `getSlashTargetQuery` | `@workspace/ui` | packages/ui/src/components/chat/chat-utils.ts |
-| `renderPresenceCaret` | `@workspace/ui` | packages/ui/src/components/collab/presence-label.tsx |
-| `SHEETS_CONFIG` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-config.ts |
-| `SLIDES_CONFIG` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-config.ts |
-| `STICKIES_CONFIG` | `@workspace/ui` | packages/ui/src/components/drive/eigendoc-config.ts |
-| `uploadWithProgress` | `@workspace/ui` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
+| `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
+| `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
+| `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
+| `DOCS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `eigenDocValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `getFileIcon` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/file-presentation.tsx |
+| `SHEETS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `SLIDES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `STICKIES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `getCreateMenuItems` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
+| `DRIVE_CAPABILITIES` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
+| `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
+| `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |
+| `DEFAULT_COLORS` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `PROPERTIES_PANEL_WIDTH_PX` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `buildDocSearchQuery` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
+| `searchFlashKey` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
+| `uploadWithProgress` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-with-progress.tsx |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
+| `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
+| `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |

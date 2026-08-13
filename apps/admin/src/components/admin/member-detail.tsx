@@ -5,7 +5,7 @@ import type { OrgMember } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/delete/danger-zone';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { UserDetailHero } from '@workspace/ui/components/user/user-detail-hero';
 import { KeyRound } from 'lucide-react';

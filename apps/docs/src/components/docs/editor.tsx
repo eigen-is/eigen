@@ -30,17 +30,15 @@ import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib
 import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { Column, LoadingState, useLayout } from '@workspace/ui';
+import { CardFormDialog } from '@workspace/ui/components/cards';
+import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
-    CardFormDialog,
-    Column,
+    type CommentContextMenuItem,
     CommentLifecycleDialogs,
     CommentMenuItems,
-    LoadingState,
     PanelColumn,
-    useLayout,
-} from '@workspace/ui';
-import { renderPresenceCaret } from '@workspace/ui/components/collab';
-import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
+} from '@workspace/ui/components/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,

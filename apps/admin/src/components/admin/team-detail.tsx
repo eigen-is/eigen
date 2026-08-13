@@ -21,7 +21,7 @@ import { Button } from '@workspace/ui/components/button';
 import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import type { MountFormValues } from '@workspace/ui/components/mount/mount-form';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';

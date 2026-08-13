@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAdminUsers, useDeleteUser } from '@workspace/lib/admin';
 import { EmptyState, LoadingState } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { useState } from 'react';
 import { AdminUserDetail, AdminUserDetailToolbar, AdminUserList, AdminUserListToolbar } from './admin-user-list';
 

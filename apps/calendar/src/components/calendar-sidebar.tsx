@@ -11,7 +11,8 @@ import {
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { StorageUsage, TooltipButton } from '@workspace/ui';
+import { TooltipButton } from '@workspace/ui';
+import { StorageUsage } from '@workspace/ui/components/home';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';

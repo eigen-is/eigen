@@ -9,7 +9,7 @@ import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/dr
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { UserAvatar } from '@workspace/ui/components/user/user-avatar';
 import {
     ClipboardList,

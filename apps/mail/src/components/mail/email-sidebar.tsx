@@ -1,5 +1,5 @@
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
-import { StorageUsage } from '@workspace/ui';
+import { StorageUsage } from '@workspace/ui/components/home';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';

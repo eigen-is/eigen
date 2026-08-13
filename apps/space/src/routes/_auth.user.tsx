@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui/components/layout/app/settings-page.tsx';
+import { SettingsPage } from '@workspace/ui/components/layout/app/settings-page';
 import { ProfileEditor } from '../components/space/profile-editor';
 
 export const Route = createFileRoute('/_auth/user')({

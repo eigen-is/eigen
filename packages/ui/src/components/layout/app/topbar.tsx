@@ -1,11 +1,11 @@
 import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
-import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl, getSupportUrl } from '@workspace/lib/api.ts';
-import { apps } from '@workspace/lib/apps.ts';
+import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl, getSupportUrl } from '@workspace/lib/api';
+import { apps } from '@workspace/lib/apps';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { cn } from '@workspace/ui/lib/utils.ts';
+import { cn } from '@workspace/ui/lib/utils';
 import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { EigenLogo } from '../../braket/eigen-logo.tsx';

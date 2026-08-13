@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@work
 import { CopyInput } from '@workspace/ui/components/copy-input';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';

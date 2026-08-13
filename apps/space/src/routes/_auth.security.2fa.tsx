@@ -4,7 +4,7 @@ import { authClient, useDisable2FA, useInitialize2FA, useVerifyTotp } from '@wor
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { ShieldCheck } from 'lucide-react';

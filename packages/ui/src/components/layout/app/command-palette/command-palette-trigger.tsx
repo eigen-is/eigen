@@ -1,5 +1,5 @@
 import { useOptionalCommandPalette } from '@workspace/lib/command-palette';
-import { useIsDesktop } from '@workspace/lib/media/hooks/use-media-query';
+import { useIsDesktop } from '@workspace/lib/media';
 import { Button } from '@workspace/ui/components/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
