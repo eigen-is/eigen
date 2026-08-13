@@ -27,6 +27,10 @@
 > - `apps/contacts/.../contact-edit.tsx` keeps four commented `as never` casts at the react-hook-form
 >   `useFieldArray` seam — a documented exception, not a breach of §9's zero-`as any`.
 > - `apps/api/package.json` exports `./src/index.js` for a `.ts` file (pre-existing; type-erased importers only).
+> - `messageGet` re-parses every `text/calendar` attachment with ical.js on every message open (the §1.4
+>   fix's read path; `mail-domain.ts` → `summarizeCalendarInvite`). Sender-controlled N×size amplification,
+>   LOW (linear parse, no recurrence expansion, malformed input contained). Fix: persist the summary at
+>   delivery, or first-part short-circuit + a size guard — needs a product call on multi-invite messages.
 
 > **TLDR**: The data layer is in excellent shape — zero `useQuery`/`useMutation` in app components, every lib
 > mutation routes errors through `onMutationError`, zero `as any` in frontend apps. The real debt is
