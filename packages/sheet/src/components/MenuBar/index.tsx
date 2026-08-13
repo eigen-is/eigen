@@ -5,10 +5,10 @@ import { cn } from '@workspace/ui/lib/utils';
 import { type ReactNode, useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { DataMenu } from './data-menu';
-import { EditMenu } from './edit-menu';
 import { FormatMenu } from './format-menu';
 import { FormatToolbar, formatToolbarQuery } from './format-toolbar';
 import { InsertMenu } from './insert-menu';
+import { SheetEditMenu } from './sheet-edit-menu';
 import { ViewMenu } from './view-menu';
 
 type Props = {
@@ -41,7 +41,7 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                         className="w-56 luckysheet-mousedown-cancel"
                         onCloseAutoFocus={onCloseAutoFocus}
                     >
-                        <EditMenu focusFindBarRef={focusFindBarRef} />
+                        <SheetEditMenu focusFindBarRef={focusFindBarRef} />
                     </DropdownMenuContent>
                 </DropdownMenu>
 

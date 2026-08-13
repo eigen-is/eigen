@@ -2,7 +2,7 @@ import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-route
 import { useAuth } from '@workspace/lib/auth';
 import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
-import { useSearch } from '@workspace/lib/search';
+import { useSearchQuery } from '@workspace/lib/search';
 import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
@@ -129,7 +129,7 @@ function MailRoute() {
     // mailboxes. Capped at the search route's max (50); results replace the paginated list while
     // searching.
     const isSearching = searchQuery.trim().length > 0;
-    const { data: searchData, isFetching: isSearchFetching } = useSearch({
+    const { data: searchData, isFetching: isSearchFetching } = useSearchQuery({
         ownerId,
         q: searchQuery,
         sources: ['mail'],

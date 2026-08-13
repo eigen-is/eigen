@@ -190,8 +190,9 @@ Elysia route handler return type → Eden Treaty infers response type → hook e
   or string concatenation for conditional Tailwind classes
 - **Name for grep-ability; don't shadow libraries** — use the established prefixes so a whole category is
   one search away: `use*` (hooks), `Eigen*` (brand components), `*Dialog`, `*Provider`, `invalidate*`
-  (cache helpers), `*Keys` (query-key factories). Don't reuse a name a dependency already owns (we shadow
-  TanStack Router's `useSearch`), and don't give three different helpers the same name (`isMobile`)
+  (cache helpers), `*Keys` (query-key factories). Don't reuse a name a dependency already owns (our search
+  hook is `useSearchQuery`, not `useSearch`, to stay clear of TanStack Router's `useSearch`), and don't give
+  three different helpers the same name (`isMobile`)
 
 ### Imports
 
