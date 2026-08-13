@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui/components/layout/app/settings-page';
+import { SettingsPage } from '@workspace/ui';
 import { Separator } from '@workspace/ui/components/separator';
 import { MailPrefsSection } from '../components/space/mail-prefs-section';
 import { SignatureSection } from '../components/space/signature-section';

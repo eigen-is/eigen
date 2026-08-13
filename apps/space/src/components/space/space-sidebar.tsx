@@ -1,9 +1,7 @@
 import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
-import { SidebarItem } from '@workspace/ui';
+import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
-import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { BookUser, KeySquare, LockKeyholeIcon, Mail, MonitorSmartphone, Shield, UserRound } from 'lucide-react';
 
 type SpaceSidebarProps = {

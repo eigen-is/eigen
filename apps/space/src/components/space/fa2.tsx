@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import { CopyInput } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent } from '@workspace/ui/components/card';
-import { CopyInput } from '@workspace/ui/components/copy-input';
 import {
     Form,
     FormControl,

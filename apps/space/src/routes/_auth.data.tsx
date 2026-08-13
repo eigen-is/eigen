@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { SettingsPage } from '@workspace/ui/components/layout/app/settings-page';
+import { SettingsPage } from '@workspace/ui';
 import { DownloadHome } from '../components/space/download-home';
 
 export const Route = createFileRoute('/_auth/data')({
