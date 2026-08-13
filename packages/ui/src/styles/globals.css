@@ -550,6 +550,13 @@
         print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
     }
+
+    /* The mail body's screen scale-to-fit (shadow-content) is cloned with its inline
+       transform; paper gets the unscaled layout. */
+    .printable .shadow-host {
+        transform: none !important;
+        margin-bottom: 0 !important;
+    }
 }
 
 @media screen {

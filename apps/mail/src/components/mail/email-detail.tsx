@@ -261,9 +261,11 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
 
     return (
         <div className="flex flex-col h-full bg-background">
-            <div className="app-gutter flex-1 overflow-auto" data-document="email-detail">
-                {/* Email header */}
-                <div className="space-y-4 mb-6">
+            {/* y-scroll (not auto): the body's scale-to-fit reacts to pane width, so a scrollbar
+                that comes and goes with the scaled height would oscillate on classic scrollbars. */}
+            <div className="app-gutter flex-1 overflow-y-scroll" data-document="email-detail">
+                {/* Email header — capped at the doc canvas width (w-[210mm]) and centred like a page */}
+                <div className="space-y-4 mb-6 mx-auto max-w-[210mm]">
                     <div>
                         <h1 className="text-xl font-medium mb-4">
                             {email.subject ? String(email.subject) : '(No subject)'}

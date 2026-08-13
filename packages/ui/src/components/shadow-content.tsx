@@ -138,6 +138,13 @@ export function ShadowContent({
         font-family: var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
         color: light-dark(#333, #e8eaed);
         line-height: 1.5;
+        /* fit-content exposes the content's natural width (fixed-width mail layouts exceed
+           the host; wrapping content measures at host width), driving the scale-to-fit below.
+           overflow-wrap keeps one unbreakable token (a long URL) out of that measurement. */
+        width: fit-content;
+        min-width: 100%;
+        box-sizing: border-box;
+        overflow-wrap: anywhere;
         ${scheme === 'light' ? 'background: #fff; padding: 16px; border-radius: 8px;' : ''}
       }
       a { color: #2563eb; text-decoration: none; }
@@ -154,7 +161,33 @@ export function ShadowContent({
         shadowRoot.appendChild(styleElement);
         shadowRoot.appendChild(contentContainer);
 
+        // Same trick as the doc canvas: content wider than the host is scaled down to fit
+        // instead of overflowing. offset* metrics ignore the transform, so the observer
+        // never feeds itself; the negative margin reclaims the scaled-away height.
+        const fitToHost = () => {
+            // All reads before all writes: an offset* read after a style write forces a layout flush.
+            const hostWidth = hostElement.offsetWidth;
+            const hostHeight = hostElement.offsetHeight;
+            if (hostWidth === 0) return;
+            const scale = Math.min(1, hostWidth / contentContainer.offsetWidth);
+            if (scale < 1) {
+                hostElement.style.transform = `scale(${scale})`;
+                hostElement.style.transformOrigin = 'top left';
+                hostElement.style.marginBottom = `${-(1 - scale) * hostHeight}px`;
+            } else {
+                hostElement.style.transform = '';
+                hostElement.style.marginBottom = '';
+            }
+        };
+        // Fit before the highlight scroll: scrollIntoView must see the scaled geometry,
+        // not the layout the observer is about to shrink.
+        fitToHost();
         if (highlightTerm) highlightMatches(contentContainer, highlightTerm);
+
+        const resizeObserver = new ResizeObserver(fitToHost);
+        resizeObserver.observe(hostElement);
+        resizeObserver.observe(contentContainer);
+        return () => resizeObserver.disconnect();
     }, [content, contentType, scheme, highlightTerm]);
 
     return <div ref={shadowHostRef} className={cn('shadow-host', className)} {...props} />;
