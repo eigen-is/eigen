@@ -158,7 +158,7 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Mail shortcuts** | `apps/mail/src/components/mail/hooks/use-mail-shortcuts.ts` | Opt-in Gmail-style keyboard shortcuts; `?` in Mail opens the cheat-sheet. See [MAIL.md](docs/MAIL.md) |
 | **Mail list + pagination** | `packages/lib/src/core/mail/hooks/use-emails.ts` + `apps/mail/src/components/mail/` | Keyset-paginated `useInfiniteQuery` with optimistic per-id cache patches; BE serves the DB immediately and reconciles via fire-and-forget sync. See [MAIL.md](docs/MAIL.md) |
 | **Eigen-doc icons**| `packages/lib/src/core/eigendoc-icons.ts`             | `EIGEN_DOC_ICONS: Record<EigenDocType, LucideIcon>` — single source for the icon shown next to a doc/sheets/slides/stickies/chat row. Kept out of `types/drive.ts` so that file stays type-only on the BE side |
-| **Drive copy/move**| `packages/lib/src/core/drive/hooks/use-drive.ts`      | Right-click **Move to… / Copy to… / Duplicate** via `useMovePath`/`useCopyPath`/`useDuplicatePath` + the reused `DriveLocationPicker`. See [STORAGE.md § Copy / Move](docs/STORAGE.md#copy--move) |
+| **Drive copy/move**| `packages/lib/src/core/drive/hooks/writes.ts`      | Right-click **Move to… / Copy to… / Duplicate** via `useMovePath`/`useCopyPath`/`useDuplicatePath` + the reused `DriveLocationPicker`. See [STORAGE.md § Copy / Move](docs/STORAGE.md#copy--move) |
 
 #### Page Layout Pattern
 
