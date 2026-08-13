@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useTeams } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { EmptyState, LoadingState } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { TeamDetail, TeamDetailToolbar } from '../components/admin/team-detail';
 
 type TeamsSearch = {

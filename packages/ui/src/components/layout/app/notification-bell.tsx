@@ -1,4 +1,4 @@
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { useAuth } from '@workspace/lib/auth';
 import {
     describeNotification,
     isClickableNotification,

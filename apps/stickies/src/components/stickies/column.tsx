@@ -2,7 +2,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { cn } from '@workspace/ui/lib/utils';
 import { Pencil, Plus } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef } from 'react';

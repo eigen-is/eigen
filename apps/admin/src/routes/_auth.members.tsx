@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMembers } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { EmptyState, LoadingState } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { useState } from 'react';
 import { MemberDetail, MemberDetailToolbar } from '../components/admin/member-detail';
 import { MembersList, MembersListToolbar } from '../components/admin/members-list';

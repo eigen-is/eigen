@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from '@tanstack/react-router';
 import { API_HOST, getDemoEnterUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { type ReactNode, useEffect, useState } from 'react';

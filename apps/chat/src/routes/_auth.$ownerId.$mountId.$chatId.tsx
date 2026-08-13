@@ -17,7 +17,7 @@ import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-d
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
 import { DriveRenameItem } from '@workspace/ui/components/drive/drive-rename-item';
 import { DriveShareSummary } from '@workspace/ui/components/drive/drive-share-summary';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { useRef, useState } from 'react';
 

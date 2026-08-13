@@ -1,5 +1,5 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { useAuth } from '@workspace/lib/auth';
 import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CardDialog } from '../cards/card-dialog';

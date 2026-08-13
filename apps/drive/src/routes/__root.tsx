@@ -3,7 +3,7 @@ import { type RouterAppContext, useAuth, useIsGuest } from '@workspace/lib/auth'
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { AppShell } from '@workspace/ui/components/layout/app/app-shell';
 import { AppSidebar } from '@workspace/ui/components/layout/sidebar/app-sidebar';
 import { createContext } from 'react';
 import { DriveNewMenu } from '../components/drive/drive-new-menu';

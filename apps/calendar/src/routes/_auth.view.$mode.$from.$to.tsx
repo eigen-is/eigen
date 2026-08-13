@@ -10,7 +10,7 @@ import {
     type ViewMode,
 } from '@workspace/lib/calendar';
 import { LoadingState } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app';
 import { useCallback, useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
 import { CreateEventDialog } from '../components/create-event-dialog';

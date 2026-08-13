@@ -2,7 +2,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
-import { EmptyState, ErrorState, LoadingState } from '@workspace/ui';
+import { EmptyState, ErrorState, LoadingState, Toolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -15,7 +15,6 @@ import { LabelAssignSubMenu } from '@workspace/ui/components/labels/label-assign
 import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { PersonList } from '@workspace/ui/components/user/person-list';
 import { UserItem } from '@workspace/ui/components/user/user-item';
-import { Toolbar } from '@workspace/ui/index';
 import { ArrowUpDown, Pencil, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 
