@@ -1,7 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
-import { UserAvatar } from '@workspace/ui';
+import { UserAvatar } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
 import { Home } from 'lucide-react';
 

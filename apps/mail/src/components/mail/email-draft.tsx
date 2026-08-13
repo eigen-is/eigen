@@ -4,8 +4,9 @@ import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mai
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
-import { ConfirmDialog, ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
+import { ConfirmDialog, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { ContactAutosuggest } from '@workspace/ui/components/contacts';
 import {
     Dialog,
     DialogContent,

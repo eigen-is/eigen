@@ -10,8 +10,10 @@ import {
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { CardFormDialog, CommentLifecycleDialogs, LoadingState, PanelColumn, useLayout } from '@workspace/ui';
+import { LoadingState, useLayout } from '@workspace/ui';
+import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
+import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
