@@ -13,8 +13,8 @@ import {
 } from '@workspace/lib/calendar';
 import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import { ConfirmDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';

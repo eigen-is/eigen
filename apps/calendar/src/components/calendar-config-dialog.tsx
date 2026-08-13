@@ -3,8 +3,8 @@ import { useAuth } from '@workspace/lib/auth';
 import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@workspace/lib/calendar';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
+import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import {
     Dialog,
     DialogContent,
@@ -15,7 +15,7 @@ import {
 } from '@workspace/ui/components/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
-import { ColorPicker } from '@workspace/ui/components/media/color-picker';
+import { ColorPicker } from '@workspace/ui/components/media';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Separator } from '@workspace/ui/components/separator';
 import { useEffect, useState } from 'react';
