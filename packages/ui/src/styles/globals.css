@@ -536,6 +536,15 @@
     }
 }
 
+/* The forced-light mail canvas (shadow-content) draws its card chrome — padding + rounded
+   corners — only in dark mode, where the white card is visible against the app background.
+   In the light theme the card is white-on-white and the chrome would read as a stray indent.
+   Custom properties inherit across the shadow boundary. */
+.dark .shadow-host {
+    --shadow-card-padding: 16px;
+    --shadow-card-radius: 8px;
+}
+
 @media print {
     .no-print {
         display: none;
@@ -559,6 +568,9 @@
         transform: none !important;
         /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline margin */
         margin-bottom: 0 !important;
+        /* paper is light even when the app theme is dark: no card chrome in print */
+        --shadow-card-padding: 0px;
+        --shadow-card-radius: 0px;
     }
 }
 

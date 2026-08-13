@@ -145,7 +145,7 @@ export function ShadowContent({
         min-width: 100%;
         box-sizing: border-box;
         overflow-wrap: anywhere;
-        ${scheme === 'light' ? 'background: #fff; padding: 16px; border-radius: 8px;' : ''}
+        ${scheme === 'light' ? 'background: #fff; padding: var(--shadow-card-padding, 0px); border-radius: var(--shadow-card-radius, 0px);' : ''}
       }
       a { color: #2563eb; text-decoration: none; }
       a:hover { text-decoration: underline; }
