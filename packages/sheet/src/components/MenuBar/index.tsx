@@ -1,6 +1,6 @@
 import { useMediaQuery } from '@workspace/lib/media';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
-import { useFindBarRefocus } from '@workspace/ui/components/layout/search/find-in-document-button';
+import { useFindBarRefocus } from '@workspace/ui/components/search/find-in-document-button';
 import { cn } from '@workspace/ui/lib/utils';
 import { type ReactNode, useContext } from 'react';
 import { WorkbookContext } from '../../context';

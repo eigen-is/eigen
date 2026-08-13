@@ -7,6 +7,8 @@ import { validateEmailAddress } from '@workspace/lib/validation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { Bar } from '../../braket/bar.tsx';
+import { Ket } from '../../braket/ket.tsx';
 import { Button } from '../../button.tsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../card.tsx';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../../form.tsx';
@@ -14,8 +16,6 @@ import { Input } from '../../input.tsx';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '../../input-group.tsx';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../tabs.tsx';
 import { useApp } from '../app/layout-context.tsx';
-import { Bar } from '../braket/bar.tsx';
-import { Ket } from '../braket/ket.tsx';
 
 const loginFormSchema = z.object({
     email: z.string().min(1, 'Username is required'),

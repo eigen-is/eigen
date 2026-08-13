@@ -10,7 +10,7 @@ import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-bod
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
+import { UserAvatar } from '@workspace/ui/components/user/user-avatar';
 import {
     ClipboardList,
     KeyRound,

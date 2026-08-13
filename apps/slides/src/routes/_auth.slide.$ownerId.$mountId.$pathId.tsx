@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
-import { eigenDocEditorValidateSearch } from '@workspace/ui/components/layout/drive';
-import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
+import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { useEigenDocEditorRoute, useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { SlideEditor } from '../components/slides/editor';
 

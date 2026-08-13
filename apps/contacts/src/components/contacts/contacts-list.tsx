@@ -11,10 +11,10 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { LabelAssignSubMenu } from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
-import { PersonList } from '@workspace/ui/components/layout/person-list';
-import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { LabelAssignSubMenu } from '@workspace/ui/components/labels/label-assign-sub-menu';
+import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
+import { PersonList } from '@workspace/ui/components/user/person-list';
+import { UserItem } from '@workspace/ui/components/user/user-item';
 import { Toolbar } from '@workspace/ui/index';
 import { ArrowUpDown, Pencil, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';

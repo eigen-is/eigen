@@ -32,10 +32,10 @@ import {
     PanelColumn,
     useLayout,
 } from '@workspace/ui';
-import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
-import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
+import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
+import { useContextMenu } from '@workspace/ui/components/context-menu';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
+import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

@@ -2,9 +2,9 @@ import type { OrgMember } from '@workspace/lib/types/admin';
 import { EmptyState } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
-import { PersonList } from '@workspace/ui/components/layout/person-list';
-import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
+import { PersonList } from '@workspace/ui/components/user/person-list';
+import { UserItem } from '@workspace/ui/components/user/user-item';
 import { Plus } from 'lucide-react';
 import { CreateUserDialog } from './create-user-dialog';
 

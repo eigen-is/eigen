@@ -6,7 +6,7 @@
 > Follow-on to the async S3 sync work (see [SYNC.md](SYNC.md)): that made the upload pipeline safe
 > *given* a sane bucket; this makes the bucket sane **from inside the admin app** instead of a warning
 > telling the operator to go click around their S3 provider. Surface: the shared `S3ConfigCard`
-> (`packages/ui/src/components/layout/mount/s3-config-card.tsx`), already rendered everywhere S3 is
+> (`packages/ui/src/components/mount/s3-config-card.tsx`), already rendered everywhere S3 is
 > configured — server-default storage, team mounts, and the first-run setup wizard.
 
 ## Problem
@@ -51,7 +51,7 @@ warning at all today.
 
 ## Current state (grounded, 2026-07-06)
 
-- **Selection + check.** `MountForm` (`packages/ui/src/components/layout/mount/mount-form.tsx`) renders
+- **Selection + check.** `MountForm` (`packages/ui/src/components/mount/mount-form.tsx`) renders
   `S3ConfigCard` when `storageType === 's3'`; "Test Connection" calls the card's injected `onCheck`.
   There are exactly **two** check routes, both stateless (S3 config in the body):
   `POST /settings/s3check` (`routes/settings.ts`, `requireAdmin`) and `POST /setup/s3check`

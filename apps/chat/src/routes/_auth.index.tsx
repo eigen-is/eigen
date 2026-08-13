@@ -3,8 +3,8 @@ import { useIsGuest } from '@workspace/lib/auth';
 import { useAllChats } from '@workspace/lib/chat';
 import { EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { ChatCreateWizard } from '@workspace/ui/components/chat/chat-create-wizard';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { MessageSquare, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 

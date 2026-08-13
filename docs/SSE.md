@@ -35,7 +35,7 @@ for the notification center architecture.
 Types live in `packages/lib/src/types/sse.ts`. Per domain, the backend builder is
 `apps/api/src/lib/[domain]/sse-events.ts` and the frontend handler is
 `packages/lib/src/core/[domain]/sse-handlers.ts`, registered in `packages/lib/src/core/sse/hooks/use-sse.ts` (mounted
-by `packages/ui/src/components/layout/sse-provider/sse-provider.tsx`). The stream itself is
+by `packages/ui/src/components/sse-provider/sse-provider.tsx`). The stream itself is
 `apps/api/src/routes/sse.ts` plus `home.broadcast()` in `apps/api/src/lib/home/home.ts`.
 
 ## Event Design

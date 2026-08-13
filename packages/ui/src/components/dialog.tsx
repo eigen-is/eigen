@@ -3,7 +3,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { XIcon } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import type * as React from 'react';
-import { useOptionalPreview } from './layout/preview-provider/preview-context';
+import { useOptionalPreview } from './preview-provider/preview-context';
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
     return <DialogPrimitive.Root data-slot="dialog" {...props} />;

@@ -18,9 +18,9 @@ import {
     UsersRound,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { StorageUsage } from '../../home/usage';
+import { UserAvatar } from '../../user/user-avatar';
 import { useLayout } from '../app/layout-context';
-import { StorageUsage } from '../home/usage';
-import { UserAvatar } from '../user-avatar';
 import { SidebarBody } from './sidebar-body';
 import { SidebarItem } from './sidebar-item';
 import { SidebarSection } from './sidebar-section';

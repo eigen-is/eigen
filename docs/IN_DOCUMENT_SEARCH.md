@@ -9,7 +9,7 @@ Matches are **plain serialisable data** (`id` + `label` + `context`) revealed by
 so the same controller also feeds the command palette `doc:` scope and the `?q=` deep link. Comment
 threads on a board are searched server-side through a separate `DocCommentSearch` capability backed
 by `comments.db`'s `comments_fts`. Core contract in `packages/lib/src/types/doc-search.ts`; the bar
-and the shared controllers in `packages/ui/src/components/layout/search/`.
+and the shared controllers in `packages/ui/src/components/search/`.
 
 This is **finding a location inside the document you already have open**. Finding *which* document
 contains a term (drive-wide body search) is a different system — see [SEARCH.md](SEARCH.md).

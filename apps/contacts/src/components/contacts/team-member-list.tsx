@@ -1,6 +1,6 @@
 import { EmptyState } from '@workspace/ui';
-import { PersonList } from '@workspace/ui/components/layout/person-list';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { PersonList } from '@workspace/ui/components/user/person-list';
+import { UserItem } from '@workspace/ui/components/user/user-item';
 
 export type TeamMember = { email: string; name: string };
 

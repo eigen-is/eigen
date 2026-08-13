@@ -1,6 +1,6 @@
 import { createRootRouteWithContext, useMatch } from '@tanstack/react-router';
 import type { RouterAppContext } from '@workspace/lib/auth';
-import { DOCS_CONFIG, EigenDocRoot } from '@workspace/ui/components/layout/drive';
+import { DOCS_CONFIG, EigenDocRoot } from '@workspace/ui/components/drive';
 
 function DocsRoot() {
     const isEditorRoute = useMatch({ from: '/_auth/doc/$ownerId/$mountId/$pathId', shouldThrow: false });

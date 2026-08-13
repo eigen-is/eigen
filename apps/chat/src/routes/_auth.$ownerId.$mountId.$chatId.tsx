@@ -12,12 +12,12 @@ import {
     ToolbarTitle,
     UserAvatar,
 } from '@workspace/ui';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
+import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
+import { DriveRenameItem } from '@workspace/ui/components/drive/drive-rename-item';
+import { DriveShareSummary } from '@workspace/ui/components/drive/drive-share-summary';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
-import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { useRef, useState } from 'react';
 

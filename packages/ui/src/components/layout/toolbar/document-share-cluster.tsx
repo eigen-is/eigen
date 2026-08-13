@@ -1,8 +1,8 @@
 import { useIsMobile } from '@workspace/lib/media';
 import { Activity, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
+import { CountBadge } from '../../count-badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
-import { CountBadge } from '../count-badge';
-import { FindInDocumentButton, FindInDocumentMenuItem, useFindBarRefocus } from '../search/find-in-document-button';
+import { FindInDocumentButton, FindInDocumentMenuItem, useFindBarRefocus } from '../../search/find-in-document-button';
 import { DocumentModeButton } from './document-mode-button';
 import { KebabTrigger } from './kebab-trigger';
 import { TooltipButton } from './tooltip-button';

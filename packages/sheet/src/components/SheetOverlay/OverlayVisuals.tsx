@@ -1,4 +1,4 @@
-import { PresenceLabel } from '@workspace/ui/components/layout/collab';
+import { PresenceLabel } from '@workspace/ui/components/collab';
 import type React from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';

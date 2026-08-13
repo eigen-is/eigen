@@ -8,10 +8,10 @@ import {
     type EigenDocType,
     getEigenDocInfoByMime,
 } from '@workspace/lib/types/drive';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
+import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
+import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
-import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
-import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
-import { useDriveListRoute } from '@workspace/ui/components/layout/drive/use-drive-list-route';
 import { FILTER_LABELS } from '@workspace/ui/components/layout/sidebar/app-sidebar';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({

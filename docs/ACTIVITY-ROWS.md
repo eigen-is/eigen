@@ -18,7 +18,7 @@ eigendoc editors' *Activity* side panel (`ActivityPanel`, toggled from `Document
 └────────────────────────────────────────────────────┘
 ```
 
-- Rendered by `ActivityRow` (`packages/ui/src/components/layout/activity-row.tsx`). All lines
+- Rendered by `ActivityRow` (`packages/ui/src/components/activity-row.tsx`). All lines
   truncate; rows with no content collapse to the action line alone.
 - The avatar slot is always reserved so rows align. Bell rows add a small app badge on the
   avatar (`notification-badge.tsx`: app color + glyph from `EIGEN_DOC_ICONS`/`colorVar`,

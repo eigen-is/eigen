@@ -14,9 +14,9 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
+import { LightEditor } from '@workspace/ui/components/editor';
 import { Input } from '@workspace/ui/components/input';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { useFilePasteTarget } from '@workspace/ui/hooks/use-file-paste-target';
 import { cn } from '@workspace/ui/lib/utils';

@@ -5,6 +5,7 @@ import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { CenteredToolbar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/comments';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,7 +15,6 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/layout/comments';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';

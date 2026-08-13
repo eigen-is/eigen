@@ -39,19 +39,19 @@ import {
     PanelColumn,
     useLayout,
 } from '@workspace/ui';
+import { renderPresenceCaret } from '@workspace/ui/components/collab';
+import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { renderPresenceCaret } from '@workspace/ui/components/layout/collab';
-import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
-import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/layout/properties-panel';
-import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
-import { useProseMirrorSearchController } from '@workspace/ui/components/layout/search/prosemirror-search-controller';
-import { SearchHighlight } from '@workspace/ui/components/layout/search/prosemirror-search-highlight';
+import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
+import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
+import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
+import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';

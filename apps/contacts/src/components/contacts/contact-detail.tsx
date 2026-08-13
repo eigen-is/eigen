@@ -4,8 +4,8 @@ import { formatDate } from '@workspace/lib/date';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { Badge } from '@workspace/ui/components/badge';
-import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
-import { UserDetailHero } from '@workspace/ui/components/layout/user-detail-hero';
+import { EigenLoader } from '@workspace/ui/components/braket/eigen-loader.tsx';
+import { UserDetailHero } from '@workspace/ui/components/user/user-detail-hero';
 import { Building, Calendar, Mail, MapPin, Phone } from 'lucide-react';
 import { PersonDetailToolbar } from './person-detail-toolbar';
 

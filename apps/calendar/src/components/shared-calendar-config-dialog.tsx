@@ -3,6 +3,7 @@ import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } f
 import { parseOwnerId } from '@workspace/lib/types';
 import type { SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import {
     Dialog,
     DialogContent,
@@ -12,11 +13,10 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { Label } from '@workspace/ui/components/label';
-import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { ColorPicker } from '@workspace/ui/components/media/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Separator } from '@workspace/ui/components/separator';
+import { UserItem } from '@workspace/ui/components/user/user-item';
 import { useEffect, useState } from 'react';
 
 type SharedCalendarConfigDialogProps = {

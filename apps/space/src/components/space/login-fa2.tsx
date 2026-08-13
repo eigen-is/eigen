@@ -1,6 +1,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { getRouteApi } from '@tanstack/react-router';
 import { useVerifyBackupCode, useVerifyTotp } from '@workspace/lib/auth';
+import { Bar } from '@workspace/ui/components/braket/bar';
+import { Ket } from '@workspace/ui/components/braket/ket';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -15,8 +17,6 @@ import {
 } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
 import { useApp } from '@workspace/ui/components/layout/app/layout-context';
-import { Bar } from '@workspace/ui/components/layout/braket/bar';
-import { Ket } from '@workspace/ui/components/layout/braket/ket';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';

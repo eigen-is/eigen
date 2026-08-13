@@ -10,7 +10,7 @@ import {
     BreadcrumbSeparator,
 } from '@workspace/ui/components/breadcrumb';
 import { Button } from '@workspace/ui/components/button';
-import { FindInDocumentButton } from '@workspace/ui/components/layout/search/find-in-document-button';
+import { FindInDocumentButton } from '@workspace/ui/components/search/find-in-document-button';
 import { ArrowLeft } from 'lucide-react';
 import { Fragment } from 'react';
 

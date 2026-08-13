@@ -241,8 +241,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/lib/drive/drive.ts`                                         | `resolveFile()` → ACL-checked `{ mount, path }` for preview/export/thumb routes |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
-| `packages/ui/src/components/layout/drive/file-preview.tsx`                | Preview overlay component                        |
-| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Context: open/close/navigate previews            |
+| `packages/ui/src/components/drive/file-preview.tsx`                | Preview overlay component                        |
+| `packages/ui/src/components/preview-provider/preview-provider.tsx` | Context: open/close/navigate previews            |
 | `packages/lib/src/core/drive/hooks/use-drive.ts`                          | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |

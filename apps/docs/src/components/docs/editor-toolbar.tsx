@@ -7,6 +7,9 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, ToolbarSeparator, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -19,15 +22,11 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-
-import { DocumentImportPicker } from '@workspace/ui/components/layout/drive/document-import-picker';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
-import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
-import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
 import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
+import { ColorPickerButton } from '@workspace/ui/components/media/color-picker-button';
+import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {

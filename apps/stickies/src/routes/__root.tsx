@@ -1,6 +1,6 @@
 import { createRootRouteWithContext, useMatch } from '@tanstack/react-router';
 import type { RouterAppContext } from '@workspace/lib/auth';
-import { EigenDocRoot, STICKIES_CONFIG } from '@workspace/ui/components/layout/drive';
+import { EigenDocRoot, STICKIES_CONFIG } from '@workspace/ui/components/drive';
 
 function StickiesRoot() {
     const isEditorRoute = useMatch({ from: '/_auth/board/$ownerId/$mountId/$pathId', shouldThrow: false });

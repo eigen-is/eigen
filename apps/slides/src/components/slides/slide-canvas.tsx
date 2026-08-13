@@ -4,7 +4,7 @@ import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef } from 'react';

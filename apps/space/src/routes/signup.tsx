@@ -2,13 +2,13 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useInviteRegister, useValidateInviteToken } from '@workspace/lib/auth';
 import { validateUsername } from '@workspace/lib/validation';
 import { ErrorState, LoadingState } from '@workspace/ui';
+import { Bar } from '@workspace/ui/components/braket/bar';
+import { Ket } from '@workspace/ui/components/braket/ket';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
-import { Bar } from '@workspace/ui/components/layout/braket/bar';
-import { Ket } from '@workspace/ui/components/layout/braket/ket';
 import { useState } from 'react';
 import { z } from 'zod';
 

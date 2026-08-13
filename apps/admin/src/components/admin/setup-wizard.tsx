@@ -2,12 +2,12 @@ import { useCheckSetupS3, useCompleteSetup, type useSetupStatus } from '@workspa
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
+import { EigenLoader } from '@workspace/ui/components/braket/eigen-loader';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
 import { Label } from '@workspace/ui/components/label';
-import { EigenLoader } from '@workspace/ui/components/layout/braket/eigen-loader';
 import { CheckCircle2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
