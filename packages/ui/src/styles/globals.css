@@ -562,3 +562,38 @@
     user-select: none;
     pointer-events: none;
 }
+
+/* Selected-object chrome (shared: docs figure via ImageResizeHandles, slides
+   SelectionChrome overlay, sheets floating image via ImgBoxs): the ring around
+   the object and the square resize grips, one visual for all three editors. */
+.eigen-selection-ring {
+    outline: 2px solid var(--selection-handle);
+}
+
+.eigen-selection-handle {
+    @apply absolute h-3 w-3 bg-background border border-selection-handle rounded-sm;
+}
+
+/* Presence, selection, and in-document search chrome is screen-only; the print
+   clone copies the live editor DOM, so strip it here. */
+@media print {
+    .collaboration-cursor__caret,
+    .collaboration-cursor__label,
+    .eigen-selection-handle {
+        display: none;
+    }
+
+    .eigen-selection-ring,
+    .eigen-search-ring,
+    .eigen-search-ring-active {
+        outline: none;
+    }
+
+    .eigen-search-match,
+    .eigen-search-match-active,
+    .tiptap .ProseMirror-search-match,
+    .tiptap .ProseMirror-active-search-match {
+        background-color: transparent;
+        box-shadow: none;
+    }
+}

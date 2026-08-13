@@ -122,7 +122,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                                 ref={imageRef}
                                 src={src}
                                 alt={alt}
-                                className={cn('max-w-full block', selected && 'ring-2 ring-ring rounded-sm')}
+                                className="max-w-full block"
                                 style={{
                                     width: width ? `${width}px` : undefined,
                                     aspectRatio: aspectRatio ?? undefined,

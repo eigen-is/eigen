@@ -88,7 +88,10 @@ export function ImageResizeHandles({
     const displayWidth = localWidth ?? width;
 
     return (
-        <div className="relative inline-block" style={{ width: displayWidth ? `${displayWidth}px` : undefined }}>
+        <div
+            className={cn('relative inline-block', selected && 'eigen-selection-ring')}
+            style={{ width: displayWidth ? `${displayWidth}px` : undefined }}
+        >
             {children}
             {selected &&
                 editable &&
@@ -97,10 +100,7 @@ export function ImageResizeHandles({
                         key={direction}
                         type="button"
                         aria-label="Resize image"
-                        className={cn(
-                            'absolute h-3 w-3 bg-background border border-selection-handle rounded-sm touch-none p-0',
-                            className,
-                        )}
+                        className={cn('eigen-selection-handle touch-none p-0', className)}
                         onPointerDown={(e) => handleResizeStart(e, direction)}
                         onKeyDown={handleKeyResize}
                     />

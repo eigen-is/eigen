@@ -35,14 +35,13 @@ function ActiveImage({ img }: { img: Image }) {
         <div
             id="luckysheet-modal-dialog-activeImage"
             // pointer-events-auto: the pane-region wrapper is pointer-events none
-            className="absolute pointer-events-auto"
+            className="absolute pointer-events-auto eigen-selection-ring"
             style={{
                 zIndex: 20,
                 width: w,
                 height: h,
                 left: img.left,
                 top: img.top,
-                outline: '1px solid var(--selection-handle)',
             }}
         >
             {/* Class kept for DOM querySelector in image.ts resize logic */}
@@ -65,10 +64,7 @@ function ActiveImage({ img }: { img: Image }) {
             {HANDLE_POSITIONS.map(({ key, className }) => (
                 <div
                     key={key}
-                    className={cn(
-                        'absolute h-3 w-3 bg-background border border-selection-handle rounded-sm',
-                        className,
-                    )}
+                    className={cn('eigen-selection-handle', className)}
                     data-type={key}
                     onMouseDown={(e) => {
                         onImageResizeStart(refs.globalCache, e.nativeEvent, key);

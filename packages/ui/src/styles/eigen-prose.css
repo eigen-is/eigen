@@ -490,6 +490,15 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
     filter: brightness(0.95);
 }
 
+/* Comment highlights are collaboration chrome, not content — keep print clean.
+   The doc export embeds this stylesheet and WeasyPrint renders print media, so
+   the same rule keeps PDF exports clean too. */
+@media print {
+    .tiptap .comment-highlight {
+        background-color: transparent;
+    }
+}
+
 /* ===== In-document search flash (docs) =====
    The steady-state prosemirror-search classes are styled in globals.css beside
    .eigen-search-match — one source of truth for the wash/ring values. Only the one-shot

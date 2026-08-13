@@ -45,7 +45,7 @@ type SelectionChromeProps = {
 export function SelectionChrome({ obj, showRotate, onResizeStart, onRotateStart }: SelectionChromeProps) {
     return (
         <div
-            className="absolute pointer-events-none ring-1 ring-selection-handle"
+            className="absolute pointer-events-none eigen-selection-ring"
             style={{
                 left: `${pxToPercent(obj.x, 'x')}%`,
                 top: `${pxToPercent(obj.y, 'y')}%`,
@@ -58,10 +58,7 @@ export function SelectionChrome({ obj, showRotate, onResizeStart, onRotateStart 
             {RESIZE_HANDLES.map(({ mode, className }) => (
                 <div
                     key={mode}
-                    className={cn(
-                        'absolute h-3 w-3 bg-background border border-selection-handle rounded-sm pointer-events-auto',
-                        className,
-                    )}
+                    className={cn('eigen-selection-handle pointer-events-auto', className)}
                     onMouseDown={(e) => {
                         e.stopPropagation();
                         onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h, obj.rotation);
