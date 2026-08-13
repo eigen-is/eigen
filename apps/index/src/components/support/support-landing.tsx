@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
+import { Column, ColumnLayout } from '@workspace/ui';
 import { Card, CardContent } from '@workspace/ui/components/card';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { SECTIONS } from './sections';
 import { SupportSearch } from './support-search';
 

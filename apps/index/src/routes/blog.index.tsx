@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
+import { Column, ColumnLayout } from '@workspace/ui';
 import { BlogPost } from '../components/blog-post';
 import { useArticleBody } from '../content/use-article-body';
 import { getAllBlogPosts } from '../data/blog-posts';
