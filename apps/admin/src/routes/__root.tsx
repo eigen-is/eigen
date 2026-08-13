@@ -3,9 +3,8 @@ import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspa
 import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useServerSettings } from '@workspace/lib/settings';
-import { ErrorState, LoadingState } from '@workspace/ui';
+import { AppShell, ErrorState, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell';
 import { AdminSidebar } from '../components/admin/admin-sidebar.tsx';
 import { SetupWizard } from '../components/admin/setup-wizard.tsx';
 

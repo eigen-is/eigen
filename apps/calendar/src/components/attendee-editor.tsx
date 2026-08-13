@@ -1,12 +1,10 @@
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Attendee } from '@workspace/lib/types/calendar';
+import { TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
-import { ContactAddRow } from '@workspace/ui/components/contacts/contact-add-row';
-import { useContactInput } from '@workspace/ui/components/contacts/use-contact-input';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { CollapsibleUserList } from '@workspace/ui/components/user/collapsible-user-list';
-import { UserItem } from '@workspace/ui/components/user/user-item';
+import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';
+import { CollapsibleUserList, UserItem } from '@workspace/ui/components/user';
 import { Check, CircleDashed, ClipboardCopy, HelpCircle, X as XIcon } from 'lucide-react';
 import { useCallback } from 'react';
 import { toast } from 'sonner';

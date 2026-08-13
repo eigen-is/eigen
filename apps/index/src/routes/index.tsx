@@ -2,7 +2,7 @@ import { createFileRoute, Link } from '@tanstack/react-router';
 import { getDemoEnterUrl, getSpaceAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useJoinWaitlist, usePublicConfig } from '@workspace/lib/public';
-import { EigenCyclingLogo } from '@workspace/ui/components/braket';
+import { EigenCyclingLogo } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';

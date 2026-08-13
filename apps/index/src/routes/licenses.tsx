@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
+import { AppShell, Column, ColumnLayout } from '@workspace/ui';
 import type { LicensePackage } from '../../scripts/lib/content-types';
 
 // Eager glob (not a static import) so a not-yet-generated file degrades to an empty list

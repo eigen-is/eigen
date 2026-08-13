@@ -1,4 +1,4 @@
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { TooltipButton } from '@workspace/ui';
 import { Minus, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 

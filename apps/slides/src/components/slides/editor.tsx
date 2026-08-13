@@ -26,7 +26,7 @@ import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@work
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';

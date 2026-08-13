@@ -1,7 +1,7 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CenteredToolbar, TooltipButton } from '@workspace/ui';
+import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, TooltipButton, useLayout } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
@@ -10,10 +10,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
-import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
-import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { ImagePlus, Play, Plus, Presentation, Type } from 'lucide-react';
 import type * as Y from 'yjs';
 

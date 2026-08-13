@@ -1,8 +1,8 @@
 import { useDeleteLabel, useUpdateLabel } from '@workspace/lib/contacts';
 import type { Label } from '@workspace/lib/types/label';
-import { TooltipButton } from '@workspace/ui';
 import { Pencil } from 'lucide-react';
 import { useState } from 'react';
+import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { LabelDialog } from './label-dialog';
 
 export type LabelFilterHeaderProps = {

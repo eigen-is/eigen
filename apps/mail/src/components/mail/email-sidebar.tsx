@@ -1,9 +1,7 @@
 import type { MaildirMailbox } from '@workspace/lib/types/mail';
+import { SidebarBody, SidebarItem, SidebarSection } from '@workspace/ui';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
-import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';

@@ -5,12 +5,11 @@ import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
 import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
-import { LoadingState, RequestAccessView } from '@workspace/ui';
+import { EmptyState, LoadingState, RequestAccessView } from '@workspace/ui';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
-import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 

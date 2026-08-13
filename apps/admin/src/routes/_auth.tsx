@@ -2,8 +2,7 @@ import { createFileRoute, Outlet, redirect } from '@tanstack/react-router';
 import { useMembers } from '@workspace/lib/admin';
 import { authClient, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
-import { EmptyState, LoadingState } from '@workspace/ui';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { EmptyState, LoadingState, useLayout } from '@workspace/ui';
 import { useEffect, useRef } from 'react';
 
 export const Route = createFileRoute('/_auth')({

@@ -1,9 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useInviteRegister, useValidateInviteToken } from '@workspace/lib/auth';
 import { validateUsername } from '@workspace/lib/validation';
-import { ErrorState, LoadingState } from '@workspace/ui';
-import { Bar } from '@workspace/ui/components/braket/bar';
-import { Ket } from '@workspace/ui/components/braket/ket';
+import { Bar, ErrorState, Ket, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';

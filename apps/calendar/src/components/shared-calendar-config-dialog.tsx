@@ -2,8 +2,8 @@ import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { SharedCalendar } from '@workspace/lib/types/calendar';
+import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import {
     Dialog,
     DialogContent,
@@ -13,10 +13,10 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { Label } from '@workspace/ui/components/label';
-import { ColorPicker } from '@workspace/ui/components/media/color-picker';
+import { ColorPicker } from '@workspace/ui/components/media';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Separator } from '@workspace/ui/components/separator';
-import { UserItem } from '@workspace/ui/components/user/user-item';
+import { UserItem } from '@workspace/ui/components/user';
 import { useEffect, useState } from 'react';
 
 type SharedCalendarConfigDialogProps = {

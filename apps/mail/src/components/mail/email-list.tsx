@@ -1,11 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { formatDateTime } from '@workspace/lib/date';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
-import { EmptyState, ErrorState, LoadingState, Toolbar } from '@workspace/ui';
+import { EmptyState, ErrorState, KebabTrigger, LoadingState, SearchBar, Toolbar } from '@workspace/ui';
 import { ContextMenuAnchor } from '@workspace/ui/components/context-menu';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
-import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
-import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
 import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import type { UseListSelectionReturn } from '@workspace/ui/hooks/use-list-selection';

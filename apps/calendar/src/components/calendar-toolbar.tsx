@@ -1,6 +1,7 @@
 import type { ViewMode } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
 import { useIsMobile } from '@workspace/lib/media';
+import { KebabTrigger, Toolbar, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -8,7 +9,6 @@ import {
     DropdownMenuItem,
     DropdownMenuSeparator,
 } from '@workspace/ui/components/dropdown-menu';
-import { KebabTrigger, Toolbar, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 

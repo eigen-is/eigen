@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { formatDateOnly } from '@workspace/lib/date';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
+import { Column, ColumnLayout } from '@workspace/ui';
 import type { ArticleBody, ArticleMeta } from '../../content/manifest';
 import { ArticleBreadcrumb } from '../article-breadcrumb';
 import { ArticleContent } from '../article-content';
