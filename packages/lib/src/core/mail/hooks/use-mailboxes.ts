@@ -1,6 +1,7 @@
 import { type QueryClient, useQuery } from '@tanstack/react-query';
 import { mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { AppError } from '../../api-error';
 
 export const mailboxKeys = {
@@ -21,7 +22,7 @@ export function useMailboxes() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 1 * 60 * 1000, // 1 minute
+        staleTime: STALE_TIME.ONE_MINUTE,
         retry: 1,
         enabled: !!ownerId,
     });

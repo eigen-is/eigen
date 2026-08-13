@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import { toast } from 'sonner';
@@ -21,7 +22,7 @@ export function useTeamSettings(teamId: string) {
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!teamId,
     });
 }

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { searchApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { SearchSource } from '@workspace/lib/types/search';
 import { AppError } from '../../api-error';
 import { searchKeys } from '../keys';
@@ -37,6 +38,6 @@ export function useSearch(opts: UseSearchOptions) {
             return response.data;
         },
         enabled: opts.enabled !== false && opts.q.length > 0 && !!opts.ownerId,
-        staleTime: 30_000,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 }

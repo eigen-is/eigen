@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { toast } from 'sonner';
@@ -18,7 +19,7 @@ export function useServerSettings() {
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 

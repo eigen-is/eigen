@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { onMutationError } from '../../api-error';
 import { useAuth } from '../auth-context';
 import { authClient } from './use-auth-client';
@@ -20,7 +21,7 @@ export function useAppPasswords() {
             return result.data?.apiKeys ?? [];
         },
         enabled: !!userId,
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 

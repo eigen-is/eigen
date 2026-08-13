@@ -2,6 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useQuery } from '@tanstack/react-query';
 import { homeApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { AppError } from '../../api-error';
 
 // Define query keys for reuse
@@ -24,7 +25,7 @@ export function useHomeSize() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId,
     });
 }
@@ -55,7 +56,7 @@ export function useMyTeams() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 2 * 60 * 1000,
+        staleTime: STALE_TIME.TWO_MINUTES,
         enabled: !!ownerId,
     });
 }

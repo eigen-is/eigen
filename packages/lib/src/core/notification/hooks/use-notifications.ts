@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { notificationApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 
@@ -18,7 +19,7 @@ export function useNotifications(ownerId: string, enabled: boolean = true) {
             return response.data;
         },
         enabled: !!ownerId && enabled,
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
 
@@ -31,7 +32,7 @@ export function useUnreadNotificationCount(ownerId: string) {
             return response.data.count;
         },
         enabled: !!ownerId,
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
 

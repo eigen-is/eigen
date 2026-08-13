@@ -1,6 +1,7 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -16,7 +17,7 @@ export function useMounts(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
         enabled: !!ownerId,
     });
 }
@@ -30,7 +31,7 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
         enabled: !!ownerId && !!mountId,
     });
 }
@@ -49,7 +50,7 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         retry: 1,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
@@ -91,7 +92,7 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
 }
 
 // GET MIME CONTENTS (aggregates over all mounts of one owner)
-export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleTime: number = 1000 * 60 * 5) {
+export function mimeContentQueryConfig(ownerId: string, mimeType: string, staleTime: number = STALE_TIME.FIVE_MINUTES) {
     return {
         queryKey: driveKeys.mime(ownerId, mimeType),
         queryFn: async (): Promise<DrivePath[]> => {
@@ -113,7 +114,11 @@ export function useMimeContent(ownerId: string, mimeType: string, staleTime?: nu
 // GET AGGREGATE MIME CONTENTS — personal + every team the signed-in user belongs to, merged and
 // deduped server-side (GET /drive/:ownerId/mime/:mimeType?teams=1). Always scoped to the current
 // user, so it reads useAuth itself rather than taking an ownerId.
-export function useAggregateMimeContent(mimeType: string, staleTime: number = 1000 * 60 * 5, enabled: boolean = true) {
+export function useAggregateMimeContent(
+    mimeType: string,
+    staleTime: number = STALE_TIME.FIVE_MINUTES,
+    enabled: boolean = true,
+) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
     return useQuery<DrivePath[]>({
@@ -146,7 +151,7 @@ export function useMountMimeContent(ownerId: string, mountId: string, mimeType: 
         },
         enabled: !!mimeType && !!ownerId && !!mountId,
         retry: 1,
-        staleTime: 1000 * 60 * 5,
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
@@ -161,7 +166,7 @@ export function usePathInfo(ownerId: string, mountId: string, pathId: string | u
             return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
@@ -179,7 +184,7 @@ export function usePathInfos(refs: { ownerId: string; mountId: string; pathId: s
                 return response.data;
             },
             enabled: !!r.pathId && !!r.ownerId && !!r.mountId,
-            staleTime: 1000 * 60 * 5,
+            staleTime: STALE_TIME.FIVE_MINUTES,
         })),
     });
 }
@@ -195,7 +200,7 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
             return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
@@ -220,6 +225,6 @@ export function useTextPreview(
         // Short window so a stale-while-revalidate preview (the previous version, served while
         // the current one regenerates server-side) self-heals: after 30s the query is stale, so
         // the next refetch trigger (window focus or remount) fetches the fresh copy.
-        staleTime: 1000 * 30,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 }

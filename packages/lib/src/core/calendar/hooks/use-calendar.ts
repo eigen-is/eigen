@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -44,7 +45,7 @@ export function useCalendars(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId,
     });
 }
@@ -103,7 +104,7 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 2 * 60 * 1000,
+        staleTime: STALE_TIME.TWO_MINUTES,
         enabled: !!ownerId && enabled && from > 0 && to > 0,
     });
 }
@@ -183,7 +184,7 @@ export function useCalendarAccess(ownerId: string, calendarId: string, enabled =
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId && !!calendarId && enabled,
     });
 }
@@ -231,7 +232,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                 }
                 return data as CalendarEventOccurrence[];
             },
-            staleTime: 2 * 60 * 1000,
+            staleTime: STALE_TIME.TWO_MINUTES,
             enabled: from > 0 && to > 0,
         })),
     });
@@ -252,7 +253,7 @@ export function useSharedCalendars(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId,
     });
 }

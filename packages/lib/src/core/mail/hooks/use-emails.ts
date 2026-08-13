@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query';
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { useMemo } from 'react';
@@ -64,7 +65,7 @@ export function useEmails(mailboxPath: string) {
             const oldest = lastPage[lastPage.length - 1];
             return { beforeDate: new Date(oldest.date).getTime(), beforeId: oldest.id };
         },
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
         retry: 1,
         enabled: !!ownerId,
     });

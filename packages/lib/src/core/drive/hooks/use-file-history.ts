@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { ClientFileEventType, FileEvent, FileEventDetailsMap } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys } from './keys';
@@ -39,7 +40,7 @@ export function useFileHistory(ownerId: string, mountId: string, pathId: string,
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId,
-        staleTime: 30_000,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 }
 

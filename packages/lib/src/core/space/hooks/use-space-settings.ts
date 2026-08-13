@@ -1,6 +1,7 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { spaceApi } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -23,7 +24,7 @@ export function useSpaceSettings() {
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId && !isGuest,
     });
 }

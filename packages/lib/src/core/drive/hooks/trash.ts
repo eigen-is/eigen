@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateTrash } from './keys';
 
@@ -13,7 +14,7 @@ export function useListTrash(ownerId: string, mountId: string) {
             return response.data;
         },
         enabled: !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 

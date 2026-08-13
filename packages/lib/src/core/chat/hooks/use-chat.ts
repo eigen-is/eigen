@@ -1,6 +1,7 @@
 import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatApi, driveApi, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { useMyTeams } from '@workspace/lib/home';
 import type { ChatAttachment, ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_MIME_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
@@ -56,7 +57,7 @@ export function groupChatsBySection(chats: DrivePath[], teams: readonly { id: st
 // and per-team lists keep the aggregate's updatedAt-desc order.
 export function useChatSections(enabled: boolean = true): ChatSections & { isLoading: boolean } {
     // 1-min staleTime (sidebar wants fresher data); `enabled` lets closed wizards skip the fetch.
-    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, 60_000, enabled);
+    const { data: chats, isLoading } = useAggregateMimeContent(CHAT_MIME_SLUG, STALE_TIME.ONE_MINUTE, enabled);
     const { data: myTeams, isLoading: teamsLoading } = useMyTeams();
     return useMemo(() => {
         const sections = groupChatsBySection(chats ?? [], myTeams ?? []);
@@ -92,7 +93,7 @@ export function useMessages(ownerId: string, mountId: string, chatId: string | u
             return lastPage[0]?.id;
         },
         enabled: !!chatId && !!ownerId && !!mountId,
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
 
@@ -146,7 +147,7 @@ function byMembersQueryConfig(ownerId: string, emails: string[]) {
             return response.data.matches;
         },
         enabled: emails.length > 0 && !!ownerId,
-        staleTime: 30_000,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
     };
 }
 

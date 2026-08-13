@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../api-error';
 import { chatKeys } from '../chat/hooks/use-chat';
@@ -14,7 +15,7 @@ export function useVersions(ownerId: string, mountId: string, pathId: string) {
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!pathId,
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
 

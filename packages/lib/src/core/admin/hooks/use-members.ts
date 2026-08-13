@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { toast } from 'sonner';
 import { settingsApi } from '../../api';
@@ -26,7 +27,7 @@ export function useMembers(organizationId?: string) {
             }));
         },
         enabled: !!organizationId && !isGuest,
-        staleTime: 1000 * 60 * 2,
+        staleTime: STALE_TIME.TWO_MINUTES,
     });
 }
 

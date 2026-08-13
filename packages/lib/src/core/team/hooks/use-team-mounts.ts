@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import { AppError, onMutationError } from '../../api-error';
 import { teamKeys } from './use-team-settings';
@@ -12,7 +13,7 @@ export function useTeamMounts(teamId: string) {
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!teamId,
     });
 }

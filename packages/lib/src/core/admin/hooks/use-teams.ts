@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
@@ -30,7 +31,7 @@ export function useTeams(organizationId?: string) {
             }));
         },
         enabled: !!organizationId && !isGuest,
-        staleTime: 1000 * 60 * 2,
+        staleTime: STALE_TIME.TWO_MINUTES,
     });
 }
 

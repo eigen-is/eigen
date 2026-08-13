@@ -1,6 +1,7 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateHomeSize } from '../../home';
@@ -29,7 +30,7 @@ export function useContacts() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId && !isGuest,
     });
 }
@@ -97,7 +98,7 @@ export function useMeContact() {
             return response.data;
         },
         enabled: !!ownerId,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 

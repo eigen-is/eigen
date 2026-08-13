@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { collabApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 
@@ -20,7 +21,7 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!containerId,
-        staleTime: 120_000,
+        staleTime: STALE_TIME.TWO_MINUTES,
     });
 }
 

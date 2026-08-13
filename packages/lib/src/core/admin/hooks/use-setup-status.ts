@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
 import { setupApi } from '../../api';
@@ -13,7 +14,7 @@ export function useSetupStatus() {
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        staleTime: 1000 * 60 * 5,
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
