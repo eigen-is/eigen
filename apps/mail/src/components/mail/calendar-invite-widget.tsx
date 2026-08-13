@@ -1,6 +1,5 @@
 import { getCalendarAppUrl } from '@workspace/lib/api';
-import { getMonthRange } from '@workspace/lib/calendar';
-import { formatEventWhen } from '@workspace/lib/date';
+import { formatEventWhen, getMonthRange } from '@workspace/lib/calendar';
 import type { CalendarInvite } from '@workspace/lib/types/mail';
 import { Button } from '@workspace/ui/components/button';
 import { cn } from '@workspace/ui/lib/utils';

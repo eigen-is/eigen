@@ -7,9 +7,9 @@ import {
     getInviteStatus,
     getMonthRange,
     isFreeBusyEvent,
-    isToday,
     WEEKDAY_HEADERS,
 } from '@workspace/lib/calendar';
+import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
 import { useMemo } from 'react';

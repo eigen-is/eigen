@@ -59,14 +59,6 @@ export function getDaysInRange(startDate: Date, endDate: Date): Date[] {
     return days;
 }
 
-export function isSameDay(a: Date, b: Date): boolean {
-    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
-
-export function isToday(date: Date): boolean {
-    return isSameDay(date, new Date());
-}
-
 export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
     return events.filter((e) => {
         if (e.allDay) {
@@ -95,6 +87,55 @@ export function toLocalDateString(date: Date): string {
 export function formatEventTime(event: CalendarEventOccurrence): string {
     if (event.allDay) return '';
     return formatTime(event.startTime);
+}
+
+// Calendar rows stored before TZID ingestion-normalization can hold a non-IANA zone that makes Intl
+// throw RangeError; this shared FE+BE code can't import the api-side normalizeTimezone, so it
+// degrades to UTC locally using the same Intl-construction oracle.
+function safeTimeZone(timezone?: string | null): string {
+    if (!timezone) return 'UTC';
+    try {
+        new Intl.DateTimeFormat('en', { timeZone: timezone });
+        return timezone;
+    } catch {
+        return 'UTC';
+    }
+}
+
+export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezone?: string | null): string {
+    const tz = safeTimeZone(timezone);
+    const dateOpts: Intl.DateTimeFormatOptions = {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        timeZone: tz,
+    };
+    const timeOpts: Intl.DateTimeFormatOptions = {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: tz,
+    };
+
+    if (allDay) {
+        // All-day endTime is exclusive (midnight after the last day), so the displayed
+        // end date is one day earlier than the stored value.
+        const displayEnd = new Date(end.getTime() - 86400_000);
+        const startStr = start.toLocaleDateString('en', dateOpts);
+        if (
+            start.toLocaleDateString('en', { timeZone: tz }) === displayEnd.toLocaleDateString('en', { timeZone: tz })
+        ) {
+            return startStr;
+        }
+        return `${startStr} – ${displayEnd.toLocaleDateString('en', dateOpts)}`;
+    }
+
+    const sameDay = start.toLocaleDateString('en', { timeZone: tz }) === end.toLocaleDateString('en', { timeZone: tz });
+    if (sameDay) {
+        return `${start.toLocaleDateString('en', dateOpts)} · ${start.toLocaleTimeString('en', timeOpts)} – ${end.toLocaleTimeString('en', timeOpts)}`;
+    }
+    return `${start.toLocaleString('en', { ...dateOpts, ...timeOpts })} – ${end.toLocaleString('en', { ...dateOpts, ...timeOpts })}`;
 }
 
 export function getCalendarColor(
