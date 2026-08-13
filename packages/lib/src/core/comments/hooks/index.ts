@@ -1,3 +1,7 @@
+// Comment threads are backed by chat rooms and invalidated by chat SSE, so the thread
+// hooks live in the chat domain. Comment cards build on those threads, so surface them
+// from @workspace/lib/comments too.
+export { invalidateComments, useAssignComment, useComments, useResolveComment } from '../../chat';
 export { useCardIdFromChatName } from './use-card-id-from-chat-name';
 export { readCards, useCommentCards } from './use-comment-cards';
 export { useCommentLifecycle } from './use-comment-lifecycle';
