@@ -21,7 +21,6 @@
     "yjs": "^13.6.27"
   },
   "exports": {
-    "./*": "./src/core/*.ts",
     "./api": "./src/core/api.ts",
     "./api-error": "./src/core/api-error.ts",
     "./apps": "./src/core/apps.ts",

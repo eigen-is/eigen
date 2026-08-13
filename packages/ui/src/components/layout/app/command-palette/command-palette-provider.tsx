@@ -1,5 +1,4 @@
-import { CommandPaletteContext } from '@workspace/lib/command-palette';
-import type { CommandPaletteContextValue } from '@workspace/lib/command-palette/hooks/use-command-palette';
+import { CommandPaletteContext, type CommandPaletteContextValue } from '@workspace/lib/command-palette';
 import type { PaletteScope, PaletteSelection, PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DocCommentSearch, DocSearchController, DocSearchSession } from '@workspace/lib/types/doc-search';
 import { type ReactNode, useMemo, useState } from 'react';

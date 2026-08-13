@@ -203,7 +203,7 @@ with `.ts`/`.tsx`** — suffixed specifiers don't resolve, and Biome rejects the
 
 | Specifier                            | What you get                                                  | Example                                    |
 |--------------------------------------|---------------------------------------------------------------|--------------------------------------------|
-| `@workspace/ui`                      | Root barrel: the AGENTS.md Key UI Components, the layout system, generic leaf primitives | `import { TooltipButton } from '@workspace/ui'` |
+| `@workspace/ui`                      | Root barrel: the AGENTS.md Key UI Components, the layout system (app/sidebar/toolbar — not pages), generic leaf primitives | `import { TooltipButton } from '@workspace/ui'` |
 | `@workspace/ui/components/[area]`    | Area barrel (drive, chat, comments, editor, media, user, …)   | `@workspace/ui/components/drive`           |
 | `@workspace/ui/components/[leaf]`    | Extensionless deep import for a component its barrel doesn't export | `@workspace/ui/components/search/doc-search-provider` |
 | `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` | `@workspace/ui/components/layout/app`      |
