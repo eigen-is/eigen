@@ -119,7 +119,7 @@ The component inventory lives in [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) â€
 registry of every export of `packages/lib` and `packages/ui`. Search there before building any shared
 component, hook or type. Layout components sit under `packages/ui/src/components/layout/`.
 
-The comments/activity pane is `PanelColumn` (`layout/comments/panel-column.tsx`) on every viewport: a
+The comments/activity pane is `PanelColumn` (`components/comments/panel-column.tsx`) on every viewport: a
 `Column` whose toolbar holds the title, the filter and the close affordance (back arrow on mobile, X on
 desktop) around `CommentPanel` or `ActivityPanel`. See [COMMENTS.md](COMMENTS.md).
 

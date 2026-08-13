@@ -203,19 +203,19 @@ If hover icons would affect row height, use `absolute` positioning so they float
 
 #### Key UI Components
 
-Before building custom UI, check these exist in `packages/ui/src/components/layout/`:
+Before building custom UI, check these exist in `packages/ui/src/components/`:
 
 | Component       | File                        | Use for                              |
 |-----------------|-----------------------------|--------------------------------------|
-| `TooltipButton` | `toolbar/tooltip-button.tsx` | Icon button with tooltip             |
+| `TooltipButton` | `layout/toolbar/tooltip-button.tsx` | Icon button with tooltip             |
 | `DeleteDialog`  | `delete/delete-dialog.tsx`   | Destructive action confirmation      |
 | `ConfirmDialog` | `confirm-dialog.tsx`         | Generic confirmation dialog          |
-| `EmptyState`    | `app/empty-state.tsx`        | "Nothing here" message with icon     |
-| `LoadingState`  | `app/loading-state.tsx`      | Centered spinner                     |
-| `ErrorState`    | `app/error-state.tsx`        | Error message display                |
+| `EmptyState`    | `layout/app/empty-state.tsx` | "Nothing here" message with icon     |
+| `LoadingState`  | `layout/app/loading-state.tsx` | Centered spinner                     |
+| `ErrorState`    | `layout/app/error-state.tsx` | Error message display                |
 | `SearchBar`     | `search-bar/search-bar.tsx`  | Search input with icon               |
-| `FileMenu`      | `toolbar/file-menu.tsx`      | File dropdown (rename, delete, etc.) |
-| `RequestAccessView` | `app/request-access-view.tsx` | "Request access" screen for shared resources (hides sidebar) |
+| `FileMenu`      | `layout/toolbar/file-menu.tsx` | File dropdown (rename, delete, etc.) |
+| `RequestAccessView` | `layout/app/request-access-view.tsx` | "Request access" screen for shared resources (hides sidebar) |
 
 Full component list: [SHARED-PRIMITIVES.md](docs/SHARED-PRIMITIVES.md) (generated, CI-gated); layout patterns in [LAYOUT.md](docs/LAYOUT.md)
 

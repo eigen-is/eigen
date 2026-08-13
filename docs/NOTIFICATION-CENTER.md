@@ -209,4 +209,4 @@ Backend: `apps/api/src/lib/notification-center/` (schema, db-config with the v2 
 `NotificationCenter` service, SSE builder) and `apps/api/src/routes/notification.ts`. Frontend:
 `packages/lib/src/core/notification/` (hooks, SSE handler, `resolve-link.ts`, `describe.ts`), shared types in
 `packages/lib/src/types/notification.ts`, and the bell + shared row in
-`packages/ui/src/components/layout/` (`activity-row.tsx`, `app/notification-bell.tsx`, `app/notification-badge.tsx`).
+`packages/ui/src/components/` (`activity-row.tsx`, `layout/app/notification-bell.tsx`, `layout/app/notification-badge.tsx`).

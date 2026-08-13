@@ -60,7 +60,7 @@ Rules baked into the contract:
 
 ## The Find Bar
 
-`DocSearchProvider` (`packages/ui/.../layout/search/doc-search-provider.tsx`) owns the find session
+`DocSearchProvider` (`packages/ui/.../components/search/doc-search-provider.tsx`) owns the find session
 and renders the floating `FindReplaceBar`. A surface wraps its editor subtree in the provider and
 passes its `controller`.
 
@@ -95,7 +95,7 @@ the same:
 
 | Surface | Controller | Strategy | Replace |
 |---|---|---|---|
-| Docs | `useProseMirrorSearchController` (`packages/ui/.../layout/search/prosemirror-search-controller.ts`) | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
+| Docs | `useProseMirrorSearchController` (`packages/ui/.../components/search/prosemirror-search-controller.ts`) | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
 | Sheets | `apps/sheets/src/components/sheets/hooks/use-search-controller.ts` | adapter over `packages/sheet` `collectMatches`, iterating **all tabs**; `reveal` reuses scroll-and-select | ✓ |
 | Slides | `apps/slides/src/components/slides/hooks/use-slides-doc-search.ts` | in-memory scan of the deck | — |
 | Stickies | `apps/stickies/src/components/stickies/hooks/use-stickies-doc-search.ts` | Y.Doc scan of `tasks` / `columns`; `reveal` scrolls to + flashes the card | — |
