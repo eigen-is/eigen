@@ -1,3 +1,5 @@
+import type { QueryClient } from '@tanstack/react-query';
+
 export const searchKeys = {
     all: ['search'] as const,
     owner: (ownerId: string) => [...searchKeys.all, ownerId] as const,
@@ -33,3 +35,7 @@ export const helpSearchKeys = {
     all: ['help-search'] as const,
     query: (q: string) => [...helpSearchKeys.all, q] as const,
 };
+
+export function invalidateSearchOwner(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: searchKeys.owner(ownerId) });
+}
