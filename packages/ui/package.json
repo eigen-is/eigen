@@ -55,7 +55,6 @@
     "./assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2": "./src/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2",
     "./assets/fonts/source-serif/SourceSerif4-Variable.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable.woff2",
     "./assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2",
-    "./postcss.config": "./postcss.config.mjs",
     "./lib/*": [
       "./src/lib/*.ts",
       "./src/lib/*.tsx"
@@ -64,16 +63,17 @@
       "./src/components/*.tsx",
       "./src/components/*.ts"
     ],
-    "./components/layout": "./src/components/layout/index.ts",
     "./components/layout/*": [
       "./src/components/layout/*.tsx",
       "./src/components/layout/*.ts"
     ],
     "./components/layout/app": "./src/components/layout/app/index.ts",
     "./components/layout/pages": "./src/components/layout/pages/index.ts",
+    "./components/layout/sidebar": "./src/components/layout/sidebar/index.ts",
     "./components/layout/toolbar": "./src/components/layout/toolbar/index.ts",
     "./components/attachment": "./src/components/attachment/index.ts",
     "./components/braket": "./src/components/braket/index.ts",
+    "./components/cards": "./src/components/cards/index.ts",
     "./components/chat": "./src/components/chat/index.ts",
     "./components/collab": "./src/components/collab/index.ts",
     "./components/comments": "./src/components/comments/index.ts",
@@ -83,11 +83,16 @@
     "./components/editor": "./src/components/editor/index.ts",
     "./components/home": "./src/components/home/index.ts",
     "./components/labels": "./src/components/labels/index.ts",
+    "./components/media": "./src/components/media/index.ts",
+    "./components/notes": "./src/components/notes/index.ts",
     "./components/preview-provider": "./src/components/preview-provider/index.ts",
     "./components/properties-panel": "./src/components/properties-panel/index.ts",
     "./components/sse-provider": "./src/components/sse-provider/index.ts",
     "./components/upload-provider": "./src/components/upload-provider/index.ts",
     "./components/user": "./src/components/user/index.ts",
-    "./hooks/*": "./src/hooks/*.ts"
+    "./hooks/*": [
+      "./src/hooks/*.ts",
+      "./src/hooks/*.tsx"
+    ]
   }
 }

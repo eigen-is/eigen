@@ -8,9 +8,6 @@
     "jsx": "react-jsx",
     "allowJs": true,
     "moduleResolution": "bundler",
-    "paths": {
-      "@workspace/lib/*": ["../../packages/lib/src/core/*", "../../packages/lib/src/*"]
-    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "noEmit": true,

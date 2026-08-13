@@ -28,6 +28,7 @@
     "@tiptap/static-renderer": "^3.21.0",
     "@tiptap/y-tiptap": "^3.0.2",
     "@types/nodemailer": "^6.4.23",
+    "@workspace/lib": "workspace:*",
     "@workspace/sheet": "workspace:*",
     "@workspace/ui": "workspace:*",
     "better-auth": "^1.5.6",
