@@ -1,3 +1,4 @@
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { getDriveComparator, useDriveViewPreferences } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type React from 'react';
@@ -27,7 +28,6 @@ export type DriveLayoutProps = {
     // Toolbar title shown when there's no breadcrumb (filter/sharing/watched views).
     title?: string;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
-    getItemHref?: (item: DrivePath) => string | undefined;
     pid?: string;
     unreadPathIds?: Set<string>;
     emptyState?: React.ReactNode;
@@ -49,8 +49,7 @@ export function DriveLayout({
     currentPath = null,
     capabilities,
     onQuickLook,
-    getItemHref,
-    pid = undefined,
+    pid,
     title,
     unreadPathIds,
     emptyState,
@@ -95,7 +94,8 @@ export function DriveLayout({
         onConvert: actions.onConvert,
         onDownload: actions.onDownload,
         onExport: actions.onExport,
-        getItemHref,
+        // Every view links rows to the one canonical item URL.
+        getItemHref: getDriveItemUrl,
         allowDelete: capabilities.canDelete,
         allowUpload: capabilities.canUpload,
         onRename: actions.onRename,

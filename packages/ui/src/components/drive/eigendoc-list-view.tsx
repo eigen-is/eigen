@@ -1,4 +1,4 @@
-import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
+import { openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import {
     DEFAULT_MOUNT_ID,
@@ -98,7 +98,6 @@ export function EigenDocListView({
                 canMove: allowMove,
                 createTypes: new Set([config.createType]),
             }}
-            getItemHref={getDriveItemUrl}
             title={config.allLabel}
             currentPath={rootPath}
             emptyState={<EmptyState hint={`Use the “${config.newLabel}” button to create one.`} />}

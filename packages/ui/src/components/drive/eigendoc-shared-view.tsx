@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
+import { openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
@@ -73,7 +73,6 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
                 canRename: to === 'by-me',
                 createTypes: new Set([config.createType]),
             }}
-            getItemHref={getDriveItemUrl}
             title={`${config.labelPlural} shared ${to === 'by-me' ? 'by' : 'with'} me`}
             currentPath={rootPath}
             emptyState={

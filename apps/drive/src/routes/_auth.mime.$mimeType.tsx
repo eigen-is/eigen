@@ -1,5 +1,4 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAggregateMimeContent, usePathInfo } from '@workspace/lib/drive';
 import {
@@ -77,7 +76,6 @@ function DriveRoute() {
             capabilities={{ ...DRIVE_CAPABILITIES.listing, createTypes }}
             title={FILTER_LABELS[mimeType]}
             onQuickLook={onQuickLook}
-            getItemHref={getDriveItemUrl}
         />
     );
 }

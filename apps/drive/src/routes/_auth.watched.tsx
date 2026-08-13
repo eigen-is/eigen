@@ -1,5 +1,4 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
@@ -65,7 +64,6 @@ function WatchedRoute() {
             capabilities={DRIVE_CAPABILITIES.readOnly}
             title="Watched"
             onQuickLook={onQuickLook}
-            getItemHref={getDriveItemUrl}
             emptyState={<EmptyState message="Watched files will appear here." />}
         />
     );
