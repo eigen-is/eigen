@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-849 primitives across 6 kinds. `packages/sheet` internals are excluded.
+848 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -153,7 +153,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui` | packages/ui/src/components/layout/drive/eigendoc-root.tsx |
 | `LayoutContext` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 
-## Hooks (224)
+## Hooks (223)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -229,7 +229,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useYjsUndoState` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-state.ts |
 | `useCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `useCommandResults` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-results.ts |
-| `useDebouncedValue` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-debounced-value.ts |
 | `useOptionalCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `usePaletteDocSearch` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-doc-search.ts |
 | `usePaletteDocSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
@@ -703,6 +702,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getBackgroundStyle` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `isSameFill` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
 | `formatEventTime` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
+| `formatEventWhen` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `formatFreeBusyTitle` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getCalendarColor` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `getDaysInRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -712,8 +712,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getWeekRange` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `handleCalendarSSEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/sse-handlers.ts |
 | `isFreeBusyEvent` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `isSameDay` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
-| `isToday` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `occurrenceDateToString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `parseOccurrenceDate` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `toLocalDateString` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
@@ -773,12 +771,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatDate` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatDateOnly` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatDateTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
-| `formatEventWhen` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatFullDateTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatInputDate` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatMonth` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTimeAgo` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
+| `isSameDay` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
+| `isToday` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `applyPreserveCase` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/preserve-case.ts |
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `A4_WIDTH_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
