@@ -72,7 +72,6 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={() => {}}
             capabilities={{ ...DRIVE_CAPABILITIES.listing, createTypes }}
             title={FILTER_LABELS[mimeType]}
             onQuickLook={onQuickLook}

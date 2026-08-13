@@ -70,7 +70,6 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={() => {}}
             capabilities={{
                 ...DRIVE_CAPABILITIES.listing,
                 canDelete: to === 'by-me',

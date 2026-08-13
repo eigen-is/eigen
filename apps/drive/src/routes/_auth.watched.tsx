@@ -60,7 +60,6 @@ function WatchedRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBack}
-            onAfterAction={() => {}}
             capabilities={DRIVE_CAPABILITIES.readOnly}
             title="Watched"
             onQuickLook={onQuickLook}
