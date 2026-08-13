@@ -37,6 +37,14 @@ Two things that aren't written down anywhere else: the API serves every app from
   `CellMatrix`, `Range`, `SingleRange`, `ConditionalFormatRule`, …) live in `packages/lib/src/sheets/types.ts`;
   the sheet package's `engine/types.ts` and `state/types.ts` re-export them. Sheet utilities that need to be importable
   by both FE and BE (e.g. `opToPatchOnSheets`) live in `packages/lib/src/sheets/`
+- **The backend imports lib through React-free subpaths, never `core/` domain barrels** — every
+  `@workspace/lib/<domain>` barrel re-exports React hooks, so importing one from `apps/api` pulls React in at
+  module-eval. BE-safe by design: `types/*`, `constants`(`/*`), `validation`, `sheets`(`/*`), `slides`,
+  `docs/eigendoc`, and the React-free leaf modules (`date`, `format`, `html`). For a React-free
+  module that lives *inside* a domain dir, lib's exports map carves out an explicit subpath —
+  `calendar/calendar-utils`, `chat/emotes`, `chat/built-in-emotes`, `chat/format-preview`, `collab/yjs-utils` —
+  import those, not the barrel. Need a new one? Add the exports entry next to these and keep the module
+  React-free; lib has no wildcard exports into `core/`, so an uncarved deep import simply won't resolve
 - **Don't break the type chain** — types flow from Elysia route handlers → Eden Treaty → hooks → components
   automatically. No `as any`, no `as Type` casts. Fix types at the source (add return type annotations to backend
   handlers using shared types from `packages/lib/src/types/`). See CODE-STANDARDS.md § Typing
@@ -143,14 +151,14 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
 | **Routing**        | `apps/[name]/src/routes/`                             | TanStack Router, file-based. `_auth.tsx` guards            |
 | **Command palette**| `packages/lib/src/core/command-palette/` + `packages/ui/src/components/layout/app/command-palette/` | `Mod+K` dialog mounted by `AppShell.PaletteRunner`, gated via `useOptionalCommandPalette` so apps without the provider don't crash. See [PROPOSAL_COMMAND_PALETTE.md](docs/PROPOSAL_COMMAND_PALETTE.md); the `doc:` scope handoff is in [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md) |
-| **In-document search** | `packages/lib/src/doc-search/` + `packages/ui/src/components/layout/search/` + per-app controllers | ⌘F find bar (+ replace) in every eigendoc editor — one shared 3-method `DocSearchController` contract, `DocSearchProvider` session + keybinds, `?q=` deep links, phase-2 comment search. See [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md) |
+| **In-document search** | `packages/lib/src/doc-search/` + `packages/ui/src/components/search/` + per-app controllers | ⌘F find bar (+ replace) in every eigendoc editor — one shared 3-method `DocSearchController` contract, `DocSearchProvider` session + keybinds, `?q=` deep links, phase-2 comment search. See [IN_DOCUMENT_SEARCH.md](docs/IN_DOCUMENT_SEARCH.md) |
 | **Search**         | `apps/api/src/lib/mount/search-index.ts` + `apps/api/src/routes/search.ts` + `packages/lib/src/core/search/` | Per-scope inline FTS5 — mail (`MailDB.searchMail`) + drive name/content indexes with a per-mount reindex queue; FE `useSearch` hook. See [SEARCH.md](docs/SEARCH.md) |
 | **Contact suggestions** | `packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts` | Single canonical hook merging personal contacts + team members, used by mail compose, calendar share/attendees, drive share, chat @-mention, and the command palette. `ContactSuggestion` shape in `packages/lib/src/types/contact.ts` |
-| **New-chat wizard** | `packages/lib/src/core/chat/hooks/use-chat.ts` + `packages/ui/src/components/layout/chat/chat-create-wizard.tsx` | `ChatCreateWizard` — two-step "New chat" dialog (person + team mode) with open-don't-duplicate matching and server-side create + share. See [CHAT.md](docs/CHAT.md#new-chat-wizard) |
+| **New-chat wizard** | `packages/lib/src/core/chat/hooks/use-chat.ts` + `packages/ui/src/components/chat/chat-create-wizard.tsx` | `ChatCreateWizard` — two-step "New chat" dialog (person + team mode) with open-don't-duplicate matching and server-side create + share. See [CHAT.md](docs/CHAT.md#new-chat-wizard) |
 | **Mail shortcuts** | `apps/mail/src/components/mail/hooks/use-mail-shortcuts.ts` | Opt-in Gmail-style keyboard shortcuts; `?` in Mail opens the cheat-sheet. See [MAIL.md](docs/MAIL.md) |
 | **Mail list + pagination** | `packages/lib/src/core/mail/hooks/use-emails.ts` + `apps/mail/src/components/mail/` | Keyset-paginated `useInfiniteQuery` with optimistic per-id cache patches; BE serves the DB immediately and reconciles via fire-and-forget sync. See [MAIL.md](docs/MAIL.md) |
 | **Eigen-doc icons**| `packages/lib/src/core/eigendoc-icons.ts`             | `EIGEN_DOC_ICONS: Record<EigenDocType, LucideIcon>` — single source for the icon shown next to a doc/sheets/slides/stickies/chat row. Kept out of `types/drive.ts` so that file stays type-only on the BE side |
-| **Drive copy/move**| `packages/lib/src/core/drive/hooks/use-drive.ts`      | Right-click **Move to… / Copy to… / Duplicate** via `useMovePath`/`useCopyPath`/`useDuplicatePath` + the reused `DriveLocationPicker`. See [STORAGE.md § Copy / Move](docs/STORAGE.md#copy--move) |
+| **Drive copy/move**| `packages/lib/src/core/drive/hooks/writes.ts`      | Right-click **Move to… / Copy to… / Duplicate** via `useMovePath`/`useCopyPath`/`useDuplicatePath` + the reused `DriveLocationPicker`. See [STORAGE.md § Copy / Move](docs/STORAGE.md#copy--move) |
 
 #### Page Layout Pattern
 
@@ -203,19 +211,19 @@ If hover icons would affect row height, use `absolute` positioning so they float
 
 #### Key UI Components
 
-Before building custom UI, check these exist in `packages/ui/src/components/layout/`:
+Before building custom UI, check these exist in `packages/ui/src/components/`:
 
 | Component       | File                        | Use for                              |
 |-----------------|-----------------------------|--------------------------------------|
-| `TooltipButton` | `toolbar/tooltip-button.tsx` | Icon button with tooltip             |
+| `TooltipButton` | `layout/toolbar/tooltip-button.tsx` | Icon button with tooltip             |
 | `DeleteDialog`  | `delete/delete-dialog.tsx`   | Destructive action confirmation      |
 | `ConfirmDialog` | `confirm-dialog.tsx`         | Generic confirmation dialog          |
-| `EmptyState`    | `app/empty-state.tsx`        | "Nothing here" message with icon     |
-| `LoadingState`  | `app/loading-state.tsx`      | Centered spinner                     |
-| `ErrorState`    | `app/error-state.tsx`        | Error message display                |
+| `EmptyState`    | `layout/app/empty-state.tsx` | "Nothing here" message with icon     |
+| `LoadingState`  | `layout/app/loading-state.tsx` | Centered spinner                     |
+| `ErrorState`    | `layout/app/error-state.tsx` | Error message display                |
 | `SearchBar`     | `search-bar/search-bar.tsx`  | Search input with icon               |
-| `FileMenu`      | `toolbar/file-menu.tsx`      | File dropdown (rename, delete, etc.) |
-| `RequestAccessView` | `app/request-access-view.tsx` | "Request access" screen for shared resources (hides sidebar) |
+| `FileMenu`      | `layout/toolbar/file-menu.tsx` | File dropdown (rename, delete, etc.) |
+| `RequestAccessView` | `layout/app/request-access-view.tsx` | "Request access" screen for shared resources (hides sidebar) |
 
 Full component list: [SHARED-PRIMITIVES.md](docs/SHARED-PRIMITIVES.md) (generated, CI-gated); layout patterns in [LAYOUT.md](docs/LAYOUT.md)
 
@@ -251,8 +259,9 @@ These patterns have caused bugs across multiple domains:
 - **Third copy → shared wrapper** — the "if two+ apps need it, it goes in `packages/`" rule applies to
   *scaffolds*, not just components: route guards, `_auth.tsx` files, editor shells, loading/empty/error
   treatments. When you're about to paste one into a *third* app, stop and extract a single guarded wrapper
-  into `packages/ui` (we have four near-identical EigenDoc editor routes and four sidebars rendering
-  loaders four ways)
+  into `packages/ui` — the way the 11 per-app `main.tsx` bootstraps and `_auth.tsx` guards became
+  `createEigenAppRouter`/`createAuthRouteOptions`, and the app sidebars came to share one `SidebarSection`
+  loading/error/empty treatment
 
 ### SSE Pattern
 

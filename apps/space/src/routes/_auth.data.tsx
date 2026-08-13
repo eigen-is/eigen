@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { SettingsPage } from '@workspace/ui';
 import { DownloadHome } from '../components/space/download-home';
 
 export const Route = createFileRoute('/_auth/data')({
@@ -9,14 +8,8 @@ export const Route = createFileRoute('/_auth/data')({
 
 function DataExportComponent() {
     return (
-        <ColumnLayout>
-            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Data Export</ToolbarTitle>}>
-                <div className="h-full overflow-y-auto">
-                    <div className="w-full max-w-3xl app-gutter">
-                        <DownloadHome />
-                    </div>
-                </div>
-            </Column>
-        </ColumnLayout>
+        <SettingsPage title="Data Export">
+            <DownloadHome />
+        </SettingsPage>
     );
 }

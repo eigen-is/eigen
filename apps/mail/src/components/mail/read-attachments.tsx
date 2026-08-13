@@ -3,8 +3,8 @@ import { useAuth } from '@workspace/lib/auth';
 import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { TooltipButton } from '@workspace/ui';
-import { SimpleAttachmentChip } from '@workspace/ui/components/layout/attachment';
-import { DriveLocationPicker } from '@workspace/ui/components/layout/drive/drive-location-picker';
+import { SimpleAttachmentChip } from '@workspace/ui/components/attachment';
+import { DriveLocationPicker } from '@workspace/ui/components/drive';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
 

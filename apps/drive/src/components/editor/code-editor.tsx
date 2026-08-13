@@ -21,9 +21,8 @@ import {
     keymap,
     lineNumbers,
 } from '@codemirror/view';
-import { ConfirmDialog, TooltipButton } from '@workspace/ui';
-import { Column } from '@workspace/ui/components/layout/app/column-layout';
-import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
+import { Column, ConfirmDialog, TooltipButton } from '@workspace/ui';
+import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { Redo, Undo } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { ConflictDialog } from './conflict-dialog';

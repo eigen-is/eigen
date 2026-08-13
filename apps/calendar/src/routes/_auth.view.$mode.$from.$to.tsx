@@ -9,8 +9,7 @@ import {
     useSharedCalendars,
     type ViewMode,
 } from '@workspace/lib/calendar';
-import { LoadingState } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout';
+import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
 import { useCallback, useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
 import { CreateEventDialog } from '../components/create-event-dialog';
@@ -19,7 +18,7 @@ import { WeekView } from '../components/week-view';
 
 export const Route = createFileRoute('/_auth/view/$mode/$from/$to')({
     component: CalendarView,
-    validateSearch: (search: Record<string, unknown>) => ({
+    validateSearch: (search: Record<string, unknown>): { eventId?: string } => ({
         eventId: typeof search.eventId === 'string' ? search.eventId : undefined,
     }),
 });

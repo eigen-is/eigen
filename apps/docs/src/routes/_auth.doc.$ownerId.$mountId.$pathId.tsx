@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
-import { eigenDocEditorValidateSearch } from '@workspace/ui/components/layout/drive';
-import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
+import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { useEigenDocEditorRoute, useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
 import { CollaborativeEditor } from '../components/docs/editor';
 
@@ -38,7 +38,7 @@ function CollaborativeTextEditor() {
             <div className="flex-1 overflow-hidden">
                 <CollaborativeEditor
                     path={path}
-                    access={docInfo}
+                    canWrite={docInfo.canWrite}
                     mediaFolderId={mediaFolderId}
                     chatFolderId={chatFolderId}
                     onAccessDialogOpen={openAccessDialog}

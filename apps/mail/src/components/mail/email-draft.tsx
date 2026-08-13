@@ -4,8 +4,9 @@ import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mai
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
-import { ConfirmDialog, ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
+import { ConfirmDialog, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { ContactAutosuggest } from '@workspace/ui/components/contacts';
 import {
     Dialog,
     DialogContent,
@@ -14,14 +15,14 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { LightEditor } from '@workspace/ui/components/editor';
 import { Input } from '@workspace/ui/components/input';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { useFilePasteTarget } from '@workspace/ui/hooks/use-file-paste-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
 import { useDraft } from './hooks/use-draft';
 
@@ -182,12 +183,16 @@ export function EmailDraft({
     // Paperclip button uses — once per compose session, so a re-render of the route doesn't
     // attach them twice (attachFromDriveMutation is not idempotent).
     const didApplyInitialAttachmentsRef = useRef(false);
+    // handleDriveAttach is recreated each render (over useDraft's stable dispatch); read the
+    // latest via an Effect Event so the effect stays reactive to initialDriveAttachments only.
+    const applyInitialAttachments = useEffectEvent((paths: DrivePath[]) => {
+        void handleDriveAttach(paths);
+    });
     useEffect(() => {
         if (didApplyInitialAttachmentsRef.current) return;
         if (!initialDriveAttachments || initialDriveAttachments.length === 0) return;
         didApplyInitialAttachmentsRef.current = true;
-        void handleDriveAttach(initialDriveAttachments);
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- handleDriveAttach captures live state via useDraft's dispatch; the ref guard is what prevents re-firing
+        applyInitialAttachments(initialDriveAttachments);
     }, [initialDriveAttachments]);
 
     const sendWithFreshDraft = async () => {

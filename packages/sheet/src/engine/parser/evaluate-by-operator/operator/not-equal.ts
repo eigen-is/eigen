@@ -1,5 +1,5 @@
-import type { FormulaArg } from '../../../types.ts';
-import { isLooseEqual } from './equal.ts';
+import type { FormulaArg } from '../../../types';
+import { isLooseEqual } from './equal';
 
 export const SYMBOL = '<>';
 

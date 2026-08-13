@@ -4,21 +4,20 @@ import { useCheckPermissions } from '@workspace/lib/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
     CenteredToolbar,
-    ChatMessageInput,
-    type ChatMessageInputHandle,
-    ChatMessageList,
+    Column,
+    ColumnLayout,
+    DeleteDialog,
+    DocumentShareCluster,
     LoadingState,
     RequestAccessView,
     ToolbarTitle,
-    UserAvatar,
 } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
-import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
+import { ChatMessageInput, type ChatMessageInputHandle, ChatMessageList } from '@workspace/ui/components/chat';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
+import { DriveRenameItem } from '@workspace/ui/components/drive/drive-rename-item';
+import { DriveShareSummary } from '@workspace/ui/components/drive/drive-share-summary';
+import { UserAvatar } from '@workspace/ui/components/user';
 import { useRef, useState } from 'react';
 
 function ChatView() {

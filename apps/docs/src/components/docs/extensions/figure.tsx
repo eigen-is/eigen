@@ -3,8 +3,8 @@ import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode } from '@workspace/lib/docs/eigendoc';
 import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
-import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
-import { ImageResizeHandles } from '@workspace/ui/components/layout/media/image-resize-handles';
+import { ImageResizeHandles } from '@workspace/ui/components/media';
+import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useEffect, useRef, useState } from 'react';
 

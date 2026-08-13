@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { getIndexAppUrl } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { CircleHelp } from 'lucide-react';
 import { useMemo } from 'react';
 import { helpSearchKeys, loadPagefind } from '../../search';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Same debounce as the other async sources — short enough to feel live, long enough to
@@ -40,7 +41,7 @@ export function useHelpSearchResults(
         },
         enabled,
         // The Pagefind index is immutable for a given deployment — cache generously.
-        staleTime: 5 * 60_000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 
     const results = useMemo<PaletteResult[]>(() => {

@@ -1,7 +1,7 @@
 import { useLocation } from '@tanstack/react-router';
 import { type ReactNode, useEffect } from 'react';
 import { cn } from '../../../lib/utils';
-import { useLayout } from '../app/layout-context.tsx';
+import { useLayout } from '../app/layout-context';
 
 export type SidebarProps = {
     condensed: boolean;

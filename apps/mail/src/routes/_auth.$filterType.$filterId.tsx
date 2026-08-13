@@ -2,15 +2,12 @@ import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-route
 import { useAuth } from '@workspace/lib/auth';
 import { usePathInfos } from '@workspace/lib/drive';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
-import { useSearch } from '@workspace/lib/search';
+import { useSearchQuery } from '@workspace/lib/search';
 import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Email } from '@workspace/lib/types/mail';
 import { isEmailDraft } from '@workspace/lib/types/mail';
-import { EmptyState } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
-import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { Column, ColumnLayout, DeleteDialog, EmptyState, useLayout } from '@workspace/ui';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
@@ -129,7 +126,7 @@ function MailRoute() {
     // mailboxes. Capped at the search route's max (50); results replace the paginated list while
     // searching.
     const isSearching = searchQuery.trim().length > 0;
-    const { data: searchData, isFetching: isSearchFetching } = useSearch({
+    const { data: searchData, isFetching: isSearchFetching } = useSearchQuery({
         ownerId,
         q: searchQuery,
         sources: ['mail'],
@@ -349,6 +346,9 @@ function MailRoute() {
                             onLoadMore={fetchNextPage}
                             onRowClick={actions.handleRowClick}
                             activeRowId={mailId}
+                            // The same gate the shortcuts layer uses: while the inline composer owns
+                            // typing, the list must not grab or reclaim focus.
+                            isComposing={isComposing}
                             mailboxes={mailboxes}
                             currentFolderId={currentFolderId}
                             onDelete={handleDeleteEmailsByIds}

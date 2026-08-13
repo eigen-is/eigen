@@ -3,13 +3,13 @@ import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
+import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
 } from '@workspace/ui/components/dropdown-menu';
-import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';

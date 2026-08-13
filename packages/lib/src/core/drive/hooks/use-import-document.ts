@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveImportFromDriveUrl, getDriveImportUrl } from '@workspace/lib/api';
 import { onMutationError } from '../../api-error';
-import { driveKeys } from './use-drive';
+import { driveKeys } from './keys';
 
 export function useImportDocument(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();

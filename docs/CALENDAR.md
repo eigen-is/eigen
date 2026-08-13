@@ -280,11 +280,12 @@ External organizers have no Eigen user ID. `organizerUserId` is set to `external
 | `composeCancelEmail()`    | Build `OutboundMail` for `METHOD:CANCEL`                    |
 | `composeRsvpReply()`      | Build `OutboundMail` for `METHOD:REPLY` (attendee response) |
 | `extractCalendarAttachment()` | Find `text/calendar` attachment in a parsed mail        |
+| `summarizeCalendarInvite()` | Read-time `CalendarInvite` summary for the message payload |
 | `processInboundImip()`    | Dispatch inbound iMIP methods to calendar operations        |
 
 ### Mail UI widget
 
-`apps/mail/src/components/mail/calendar-invite-widget.tsx` — rendered inline in `email-detail.tsx` for any attachment with `contentType.startsWith('text/calendar')`. Regular file attachments with `text/calendar` content type are excluded from the normal attachment list and shown as the widget instead.
+`apps/mail/src/components/mail/calendar-invite-widget.tsx` — rendered inline in `email-detail.tsx` for any attachment with `contentType.startsWith('text/calendar')`. Regular file attachments with `text/calendar` content type are excluded from the normal attachment list and shown as the widget instead. The widget is purely presentational: `Mail.messageGet` summarizes each calendar part via the canonical ical.js parser (`summarizeCalendarInvite`) into `Attachment.calendarInvite` (`CalendarInvite` in `packages/lib/src/types/mail.ts`); `null` means unparseable ICS and renders as an explicit error card.
 
 ## CalDAV
 

@@ -1,20 +1,10 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { contactsApi } from '@workspace/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateHomeSize } from '../../home';
-
-// Query keys for contacts
-export const contactKeys = {
-    all: ['contacts'] as const,
-    owner: (ownerId: string) => [...contactKeys.all, ownerId] as const,
-    lists: (ownerId: string) => [...contactKeys.owner(ownerId), 'list'] as const,
-    list: (ownerId: string, filters: Record<string, unknown>) => [...contactKeys.lists(ownerId), { filters }] as const,
-    details: (ownerId: string) => [...contactKeys.owner(ownerId), 'detail'] as const,
-    detail: (ownerId: string, id: string) => [...contactKeys.details(ownerId), id] as const,
-    me: (ownerId: string) => [...contactKeys.owner(ownerId), 'me'] as const,
-};
+import { contactKeys, invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated } from './keys';
 
 // Fetch all contacts
 export function useContacts() {
@@ -29,25 +19,8 @@ export function useContacts() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId && !isGuest,
-    });
-}
-
-// Fetch a contact by ID
-export function useContact(id: string) {
-    const { user } = useAuth();
-    const ownerId = user?.id || '';
-
-    return useQuery({
-        queryKey: contactKeys.detail(ownerId, id),
-        queryFn: async () => {
-            if (!id) return null;
-            const response = await contactsApi({ ownerId }).contacts({ id }).get();
-            return response.data;
-        },
-        enabled: !!id && !!ownerId,
-        staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }
 
@@ -114,24 +87,30 @@ export function useMeContact() {
             return response.data;
         },
         enabled: !!ownerId,
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
-// Invalidation functions (ownerId-scoped, used from mutation onSuccess)
-export function invalidateContactCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
+// Multipart avatar upload bypasses Eden Treaty (which serializes bodies as JSON) and goes through
+// raw fetch, mirroring useUploadDraftAttachment. Returns the stored avatar path.
+async function uploadContactAvatarRequest(ownerId: string, file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(getContactsAvatarUploadUrl(ownerId), {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+    });
+    if (!res.ok) throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
+    return await res.text();
 }
 
-export function invalidateContactUpdated(queryClient: QueryClient, ownerId: string, contactId: string): void {
-    queryClient.invalidateQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
-}
+export function useUploadContactAvatar() {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
 
-export function invalidateContactDeleted(queryClient: QueryClient, ownerId: string, contactId: string): void {
-    queryClient.removeQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
+    return useMutation({
+        mutationFn: (file: File) => uploadContactAvatarRequest(ownerId, file),
+        onError: onMutationError,
+    });
 }

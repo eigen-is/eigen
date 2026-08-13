@@ -1,5 +1,6 @@
 /// <reference path="../modules.d.ts" />
 
+import { EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
 import { formatInputDate } from '@workspace/lib/date';
 import type {
     BorderSide,
@@ -52,49 +53,57 @@ const VERTICAL_MAP: Record<NonNullable<Alignment['vertical']>, 0 | 1 | 2> = {
 };
 
 // XLSX cells routinely carry fonts we don't bundle (Calibri, Arial, Times, Courier, …).
-// Only Inter / Source Serif 4 / JetBrains Mono / Excalifont have face data inlined into
-// the HTML / PDF export, so unmapped fonts fall back to the browser's generic family —
-// inconsistent with the editor. Map common Office defaults into the closest of the four;
-// anything unrecognized leaves `ff` unset so the document default (Inter) is used.
-const FONT_MAP: Record<string, string> = {
-    inter: 'Inter',
-    'source serif 4': 'Source Serif 4',
-    'source serif pro': 'Source Serif 4',
-    'jetbrains mono': 'JetBrains Mono',
-    excalifont: 'Excalifont',
-    // sans-serif → Inter
-    calibri: 'Inter',
-    'calibri light': 'Inter',
-    arial: 'Inter',
-    helvetica: 'Inter',
-    'helvetica neue': 'Inter',
-    verdana: 'Inter',
-    tahoma: 'Inter',
-    'segoe ui': 'Inter',
-    'trebuchet ms': 'Inter',
-    // serif → Source Serif 4
-    'times new roman': 'Source Serif 4',
-    times: 'Source Serif 4',
-    georgia: 'Source Serif 4',
-    cambria: 'Source Serif 4',
-    garamond: 'Source Serif 4',
-    'book antiqua': 'Source Serif 4',
-    palatino: 'Source Serif 4',
-    'palatino linotype': 'Source Serif 4',
-    // monospace → JetBrains Mono
-    'courier new': 'JetBrains Mono',
-    courier: 'JetBrains Mono',
-    consolas: 'JetBrains Mono',
-    monaco: 'JetBrains Mono',
-    'lucida console': 'JetBrains Mono',
-    menlo: 'JetBrains Mono',
-    // handwritten → Excalifont
-    'comic sans ms': 'Excalifont',
-    'comic sans': 'Excalifont',
+// Only the four bundled fonts have face data inlined into the HTML / PDF export, so unmapped
+// fonts fall back to the browser's generic family — inconsistent with the editor. Map common
+// Office defaults to the closest bundled category; anything unrecognized leaves `ff` unset so
+// the document default (Inter) is used.
+const FONT_CATEGORY_MAP: Record<string, EigenFont['category']> = {
+    inter: 'sans-serif',
+    'source serif 4': 'serif',
+    'source serif pro': 'serif',
+    'jetbrains mono': 'monospace',
+    excalifont: 'hand-drawn',
+    // sans-serif
+    calibri: 'sans-serif',
+    'calibri light': 'sans-serif',
+    arial: 'sans-serif',
+    helvetica: 'sans-serif',
+    'helvetica neue': 'sans-serif',
+    verdana: 'sans-serif',
+    tahoma: 'sans-serif',
+    'segoe ui': 'sans-serif',
+    'trebuchet ms': 'sans-serif',
+    // serif
+    'times new roman': 'serif',
+    times: 'serif',
+    georgia: 'serif',
+    cambria: 'serif',
+    garamond: 'serif',
+    'book antiqua': 'serif',
+    palatino: 'serif',
+    'palatino linotype': 'serif',
+    // monospace
+    'courier new': 'monospace',
+    courier: 'monospace',
+    consolas: 'monospace',
+    monaco: 'monospace',
+    'lucida console': 'monospace',
+    menlo: 'monospace',
+    // hand-drawn
+    'comic sans ms': 'hand-drawn',
+    'comic sans': 'hand-drawn',
 };
 
+// The one bundled font per visual category, sourced from the canonical registry so a font
+// rename never drifts from what the export embeds.
+const BUNDLED_FONT_BY_CATEGORY = Object.fromEntries(EIGEN_FONTS.map((font) => [font.category, font.name])) as Record<
+    EigenFont['category'],
+    string
+>;
+
 function mapToSupportedFont(name: string): string | null {
-    return FONT_MAP[name.trim().toLowerCase()] ?? null;
+    const category = FONT_CATEGORY_MAP[name.trim().toLowerCase()];
+    return category ? BUNDLED_FONT_BY_CATEGORY[category] : null;
 }
 
 const BORDER_STYLE_MAP: Record<string, number> = {

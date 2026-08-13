@@ -1,4 +1,4 @@
-import { htmlToPlainText } from '@workspace/lib/html';
+import { htmlToPlainText } from '@workspace/lib/html-dom';
 import type { ActiveComments } from '@workspace/lib/types/comments';
 import { useMemo } from 'react';
 import type { DeckData } from '../types';

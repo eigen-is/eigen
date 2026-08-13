@@ -1,6 +1,5 @@
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { Column, ColumnLayout, useLayout } from '@workspace/ui';
 import { useEffect } from 'react';
 import { ArticleBreadcrumb } from '../components/article-breadcrumb';
 import { BlogPost } from '../components/blog-post';

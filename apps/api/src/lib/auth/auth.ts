@@ -16,7 +16,7 @@ import {
     twoFactor as twoFactorScheme,
     user as userScheme,
     verification as verificationScheme,
-} from '../../../auth-schema.ts';
+} from '../../../auth-schema';
 import { isTest } from '../config/env';
 import { getServerDataPath } from '../config/paths';
 import { getDomain, getOrgName, getServerConfig } from '../config/server-config';

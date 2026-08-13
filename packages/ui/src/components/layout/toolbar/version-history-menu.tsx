@@ -3,8 +3,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { useRestoreVersion, useSaveVersion, useVersions } from '@workspace/lib/versioning';
 import { History, Save } from 'lucide-react';
+import { ConfirmDialog } from '../../confirm-dialog';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dropdown-menu';
-import { ConfirmDialog } from '../confirm-dialog';
 
 // VersionHistoryMenu renders only the dropdown rows. Pair it with
 // RestoreVersionDialog rendered OUTSIDE the parent <DropdownMenuContent>.

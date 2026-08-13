@@ -73,6 +73,7 @@
         "@tiptap/y-tiptap": "^3.0.2",
         "@turbodocx/html-to-docx": "^1.20.1",
         "@types/nodemailer": "^6.4.23",
+        "@workspace/lib": "workspace:*",
         "@workspace/sheet": "workspace:*",
         "@workspace/ui": "workspace:*",
         "better-auth": "^1.5.6",

@@ -3,7 +3,7 @@ import { Checkbox } from '@workspace/ui/components/checkbox';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { ColorPicker } from '@workspace/ui/components/media';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useCallback, useContext, useEffect, useState } from 'react';

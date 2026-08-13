@@ -1,12 +1,14 @@
 import { isSameFill } from '@workspace/lib/background';
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
-import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { ColorPicker } from '@workspace/ui/components/media';
+import { FontPicker } from '@workspace/ui/components/media/font-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import {
     AlignmentPicker,
     BackgroundFillBlock,
@@ -14,8 +16,7 @@ import {
     PropertyNumberInput,
     PropertyRow,
     PropertySection,
-} from '@workspace/ui/components/layout/properties-panel';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+} from '@workspace/ui/components/properties-panel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Toggle } from '@workspace/ui/components/toggle';
 import {
@@ -235,7 +236,7 @@ function TextProperties({
             <PropertySection title="Text">
                 <PropertyRow label="Font">
                     <FontPicker
-                        value={isMixed(fontFamily) ? 'Inter' : fontFamily || 'Inter'}
+                        value={isMixed(fontFamily) ? EIGEN_FONTS[0].name : fontFamily || EIGEN_FONTS[0].name}
                         onChange={(f) => onUpdate({ fontFamily: f })}
                         className="h-7 w-full text-xs"
                     />

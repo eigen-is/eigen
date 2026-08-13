@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { formatChatPreview } from '@workspace/lib/core/chat/format-preview';
+import { formatChatPreview } from '@workspace/lib/chat/format-preview';
 import { formatEmoteForViewer } from '../lib/chat/commands';
 
 const alice = { id: 'user-alice', email: 'alice@eigen.is' };

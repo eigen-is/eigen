@@ -1,4 +1,4 @@
-import type { FormulaArg, FormulaValue } from '../../../types.ts';
+import type { FormulaArg, FormulaValue } from '../../../types';
 
 export const SYMBOL = '>';
 

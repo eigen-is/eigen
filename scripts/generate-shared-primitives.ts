@@ -7,8 +7,8 @@
 //   bun run primitives --check  fail (exit 1) if the committed file is stale — the CI gate
 //
 // Source of truth: each package's `exports` map. We enumerate the NAMED barrel entry points plus the
-// curated type/constant/hook wildcards; the broad catch-alls (lib `./*`, ui `./components/*`) are skipped
-// on purpose — they expose internals, not the public surface. A primitive that isn't reachable from a
+// curated type/constant/hook wildcards; the broad ui `./components/*` catch-all is skipped
+// on purpose — it exposes internals, not the public surface. A primitive that isn't reachable from a
 // barrel simply won't appear here, which is the nudge to export it (see AGENTS.md "shared until exported").
 
 import { basename, dirname, join, relative } from 'node:path';
@@ -43,7 +43,6 @@ async function entryFiles(pkg: { name: string; dir: string }): Promise<Map<strin
     };
 
     for (const [subpath, rawTarget] of Object.entries(exportsMap)) {
-        if (subpath === './*') continue; // lib catch-all: exposes all internals, not the curated surface
         for (const target of Array.isArray(rawTarget) ? rawTarget : [rawTarget]) {
             if (!target.includes('*')) {
                 record(subpath, target);

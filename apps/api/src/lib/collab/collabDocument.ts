@@ -1,4 +1,4 @@
-import { restoreYjsDoc } from '@workspace/lib/core/collab/yjs-utils';
+import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { DRIVE_TYPE_STICKIES, type DrivePath, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'bun';
 import { desc, lt, lte } from 'drizzle-orm';
@@ -15,7 +15,7 @@ import type { Drive } from '../drive';
 import type { User } from '../user';
 import { compressBlob } from './blob-codec';
 import { COLLAB_DB_CONFIG } from './db-config';
-import * as schema from './schema.ts';
+import * as schema from './schema';
 import { loadYjsState } from './yjs-loader';
 
 export const MESSAGE_SYNC = 0;

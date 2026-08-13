@@ -10,7 +10,7 @@ import {
     invalidateEventCreated,
     invalidateEventDeleted,
     invalidateEventUpdated,
-} from './hooks/use-calendar';
+} from './hooks/keys';
 
 export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('calendar:')) return false;

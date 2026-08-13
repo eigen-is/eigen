@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useChangePassword } from '@workspace/lib/auth';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { Column, ColumnLayout, ToolbarTitle } from '@workspace/ui';
 import { ChangePassword } from '../components/space/change-password';
 
 export const Route = createFileRoute('/_auth/security/password')({

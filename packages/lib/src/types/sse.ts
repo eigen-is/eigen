@@ -27,9 +27,6 @@ export const SSEventType = {
     CHAT_MESSAGE_POSTED: 'chat:message-posted',
     CHAT_MESSAGE_EDITED: 'chat:message-edited',
     CHAT_MESSAGE_DELETED: 'chat:message-deleted',
-    CHAT_MEMBER_ENTERED: 'chat:member-entered',
-    CHAT_MEMBER_LEFT: 'chat:member-left',
-    CHAT_TYPING: 'chat:typing',
     CHAT_COMMENT_INDEX_UPDATED: 'chat:comment-index-updated',
     // Calendar events
     CALENDAR_EVENT_CREATED: 'calendar:event-created',

@@ -2,8 +2,8 @@ import { getChangelogUrl, getLicensesUrl } from '@workspace/lib/api';
 import { formatInputDate } from '@workspace/lib/date';
 import { usePublicConfig } from '@workspace/lib/public';
 import { Github, Scale, ScrollText } from 'lucide-react';
-import { Button } from '../../button.tsx';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
+import { Button } from '../../button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../dialog';
 
 type AboutDialogProps = {
     open: boolean;

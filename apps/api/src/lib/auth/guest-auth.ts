@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { generateId } from '@better-auth/core/utils/id';
 import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
-import { account, user as userTable, verification } from '../../../auth-schema.ts';
+import { account, user as userTable, verification } from '../../../auth-schema';
 import { getDomain, getOrgName } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';

@@ -9,11 +9,10 @@ import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { LandingLink, ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { LoadingState } from '@workspace/ui';
+import { LoadingState, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
 import { Plus, Trash2 } from 'lucide-react';
@@ -99,7 +98,7 @@ export function ServerSettingsPage() {
     };
 
     return (
-        <div className="app-gutter max-w-2xl space-y-6">
+        <div className="space-y-6">
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Storage Quotas</h3>
 

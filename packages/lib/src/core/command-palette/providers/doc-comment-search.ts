@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { MessageSquareText } from 'lucide-react';
 import { useMemo } from 'react';
 import { searchKeys } from '../../search';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Debounce keystrokes before firing the comment search (matches mail-search's 150ms).
@@ -31,7 +32,7 @@ export function useDocCommentSearchResults(
         queryKey: searchKeys.docComments(capability?.docKey ?? '', parsed.q),
         queryFn: () => capability!.search(parsed.q),
         enabled,
-        staleTime: 30_000,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 
     const results = useMemo<PaletteResult[]>(() => {

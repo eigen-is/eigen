@@ -1,8 +1,8 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { NoteCard } from '@workspace/ui';
-import { useAttachmentMeta } from '@workspace/ui/components/layout/attachment';
+import { useAttachmentMeta } from '@workspace/ui/components/attachment';
+import { NoteCard } from '@workspace/ui/components/notes';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useCallback, useRef } from 'react';

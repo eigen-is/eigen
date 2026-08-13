@@ -9,7 +9,7 @@ Matches are **plain serialisable data** (`id` + `label` + `context`) revealed by
 so the same controller also feeds the command palette `doc:` scope and the `?q=` deep link. Comment
 threads on a board are searched server-side through a separate `DocCommentSearch` capability backed
 by `comments.db`'s `comments_fts`. Core contract in `packages/lib/src/types/doc-search.ts`; the bar
-and the shared controllers in `packages/ui/src/components/layout/search/`.
+and the shared controllers in `packages/ui/src/components/search/`.
 
 This is **finding a location inside the document you already have open**. Finding *which* document
 contains a term (drive-wide body search) is a different system — see [SEARCH.md](SEARCH.md).
@@ -60,7 +60,7 @@ Rules baked into the contract:
 
 ## The Find Bar
 
-`DocSearchProvider` (`packages/ui/.../layout/search/doc-search-provider.tsx`) owns the find session
+`DocSearchProvider` (`packages/ui/.../components/search/doc-search-provider.tsx`) owns the find session
 and renders the floating `FindReplaceBar`. A surface wraps its editor subtree in the provider and
 passes its `controller`.
 
@@ -76,7 +76,7 @@ passes its `controller`.
 - **Placement:** the bar floats top-right of the wrapped subtree; a surface passes `barClassName` offsets
   to clear its own chrome. `onOpenChange` lets a surface with a layered `Escape` (slides:
   present → edit → bar → deselect) defer its default action to the bar-close.
-- **Chrome entry points:** `useDocSearchBar()` (and the null-safe `useOptionalDocSearchBar()`) expose
+- **Chrome entry points:** the null-safe `useOptionalDocSearchBar()` exposes
   `open()` / `openReplace()` / `canReplace` to toolbar buttons (`find-in-document-button.tsx`, the `⌕`
   cluster) and Edit-menu items — so read-only surfaces hide "Find and replace".
 
@@ -95,7 +95,7 @@ the same:
 
 | Surface | Controller | Strategy | Replace |
 |---|---|---|---|
-| Docs | `useProseMirrorSearchController` (`packages/ui/.../layout/search/prosemirror-search-controller.ts`) | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
+| Docs | `useProseMirrorSearchController` (`packages/ui/.../components/search/prosemirror-search-controller.ts`) | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
 | Sheets | `apps/sheets/src/components/sheets/hooks/use-search-controller.ts` | adapter over `packages/sheet` `collectMatches`, iterating **all tabs**; `reveal` reuses scroll-and-select | ✓ |
 | Slides | `apps/slides/src/components/slides/hooks/use-slides-doc-search.ts` | in-memory scan of the deck | — |
 | Stickies | `apps/stickies/src/components/stickies/hooks/use-stickies-doc-search.ts` | Y.Doc scan of `tasks` / `columns`; `reveal` scrolls to + flashes the card | — |

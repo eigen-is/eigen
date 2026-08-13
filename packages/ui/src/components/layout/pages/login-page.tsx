@@ -1,21 +1,21 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter } from '@tanstack/react-router';
 import { API_HOST, getDemoEnterUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { Button } from '../../button.tsx';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../card.tsx';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../../form.tsx';
-import { Input } from '../../input.tsx';
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '../../input-group.tsx';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../tabs.tsx';
-import { useApp } from '../app/layout-context.tsx';
-import { Bar } from '../braket/bar.tsx';
-import { Ket } from '../braket/ket.tsx';
+import { Bar } from '../../braket/bar';
+import { Ket } from '../../braket/ket';
+import { Button } from '../../button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../card';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '../../form';
+import { Input } from '../../input';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '../../input-group';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../tabs';
+import { useApp } from '../app/layout-context';
 
 const loginFormSchema = z.object({
     email: z.string().min(1, 'Username is required'),

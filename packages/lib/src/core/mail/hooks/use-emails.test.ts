@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { beginOptimisticMailMutation, emailKeys } from './use-emails';
+import { emailKeys } from './keys';
+import { beginOptimisticMailMutation } from './use-emails';
 
 const OWNER = 'owner-1';
 

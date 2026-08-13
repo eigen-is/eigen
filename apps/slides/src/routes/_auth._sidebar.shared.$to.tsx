@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { EigenDocSharedView, eigenDocValidateSearch, SLIDES_CONFIG } from '@workspace/ui/components/layout/drive';
+import { EigenDocSharedView, eigenDocValidateSearch, SLIDES_CONFIG } from '@workspace/ui/components/drive';
 
 export const Route = createFileRoute('/_auth/_sidebar/shared/$to')({
     component: SharedRoute,

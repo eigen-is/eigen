@@ -1,3 +1,3 @@
-export * from './loading-screen.tsx';
-export * from './login-page.tsx';
-export * from './login-route.tsx';
+export * from './auth-route';
+export * from './login-page';
+export * from './login-route';

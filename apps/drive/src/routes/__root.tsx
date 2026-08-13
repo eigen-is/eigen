@@ -2,9 +2,7 @@ import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { type RouterAppContext, useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
-import { ErrorState, LoadingState } from '@workspace/ui';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
-import { AppSidebar } from '@workspace/ui/components/layout/sidebar/app-sidebar';
+import { AppShell, AppSidebar, ErrorState, LoadingState } from '@workspace/ui';
 import { createContext } from 'react';
 import { DriveNewMenu } from '../components/drive/drive-new-menu';
 
@@ -16,25 +14,23 @@ function DriveRoot() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
 
-    if (!user) {
-        return (
-            <AppShell appName="drive" rootRoute={Route}>
-                <Outlet />
-            </AppShell>
-        );
-    }
+    if (user && !isGuest) return <AuthenticatedDriveRoot />;
 
-    if (isGuest) return <GuestDriveRoot />;
-
-    return <AuthenticatedDriveRoot />;
-}
-
-function GuestDriveRoot() {
+    // Signed-out and guest share one shell: a guest gets the sidebar and a null-root
+    // DriveContext, a signed-out visitor gets neither.
     return (
-        <AppShell appName="drive" rootRoute={Route} sidebar={({ condensed }) => <AppSidebar condensed={condensed} />}>
-            <DriveContext.Provider value={{ rootPath: null }}>
+        <AppShell
+            appName="drive"
+            rootRoute={Route}
+            sidebar={user ? ({ condensed }) => <AppSidebar condensed={condensed} /> : undefined}
+        >
+            {user ? (
+                <DriveContext.Provider value={{ rootPath: null }}>
+                    <Outlet />
+                </DriveContext.Provider>
+            ) : (
                 <Outlet />
-            </DriveContext.Provider>
+            )}
         </AppShell>
     );
 }

@@ -1,4 +1,3 @@
-export * from './use-active-member';
 export * from './use-admin-users';
 export * from './use-is-admin';
 export * from './use-members';

@@ -4,10 +4,9 @@ import { useAuth } from '@workspace/lib/auth';
 import type { DraftAttachmentUpload, DraftInput, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateItemCreated } from '../../drive/hooks/use-drive';
+import { invalidateItemCreated } from '../../drive/hooks/keys';
 import { invalidateHomeSize } from '../../home';
-import { emailKeys } from './use-emails';
-import { invalidateMailboxes } from './use-mailboxes';
+import { emailKeys, invalidateMailboxes } from './keys';
 
 export function createDraftEmail(input: DraftInput): NewDraft {
     return {

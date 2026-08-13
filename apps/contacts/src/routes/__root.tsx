@@ -1,24 +1,11 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
 import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { AppShell } from '@workspace/ui';
 import { ContactsSidebar } from '../components/contacts/contacts-sidebar';
 
 function ContactsRoot() {
     const { user } = useAuth();
-
-    if (!user) {
-        return (
-            <AppShell appName="contacts" rootRoute={Route}>
-                <Outlet />
-            </AppShell>
-        );
-    }
-
-    return <AuthenticatedContactsRoot />;
-}
-
-function AuthenticatedContactsRoot() {
     const { data: contacts = [] } = useContacts();
     const updateContact = useUpdateContact();
 
@@ -41,9 +28,13 @@ function AuthenticatedContactsRoot() {
         <AppShell
             appName="contacts"
             rootRoute={Route}
-            sidebar={({ condensed }) => (
-                <ContactsSidebar condensed={condensed} onAssignLabel={handleAssignLabelByDrop} />
-            )}
+            sidebar={
+                user
+                    ? ({ condensed }) => (
+                          <ContactsSidebar condensed={condensed} onAssignLabel={handleAssignLabelByDrop} />
+                      )
+                    : undefined
+            }
         >
             <Outlet />
         </AppShell>

@@ -7,13 +7,15 @@ import {
     getInviteStatus,
     getMonthRange,
     isFreeBusyEvent,
-    isToday,
     WEEKDAY_HEADERS,
 } from '@workspace/lib/calendar';
+import { isToday } from '@workspace/lib/date';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo } from 'react';
+import { eventPillStateClasses } from './calendar-utils';
 import { EventDetailDialog } from './event-detail-dialog';
+import { useEventDetailState } from './hooks/use-event-detail-state';
 
 type MonthViewProps = {
     currentDate: Date;
@@ -35,21 +37,12 @@ export function MonthView({
     initialEventId,
 }: MonthViewProps) {
     const { user } = useAuth();
-    const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
-    const [detailOpen, setDetailOpen] = useState(false);
-
-    const didAutoOpen = useRef(false);
-    useEffect(() => {
-        if (!initialEventId || events.length === 0 || didAutoOpen.current) return;
-        const match = events.find(
-            (e) => e.id === initialEventId || e.uid === initialEventId || e.data?.organizerEventId === initialEventId,
-        );
-        if (match && !isFreeBusyEvent(match)) {
-            didAutoOpen.current = true;
-            setSelectedEvent(match);
-            setDetailOpen(true);
-        }
-    }, [initialEventId, events]);
+    const { handleEventClick, detailDialogProps } = useEventDetailState({
+        events,
+        calendars,
+        sharedCalendars,
+        initialEventId,
+    });
 
     const { startDate, endDate } = useMemo(() => getMonthRange(currentDate), [currentDate]);
     const days = useMemo(() => getDaysInRange(startDate, endDate), [startDate, endDate]);
@@ -59,20 +52,6 @@ export function MonthView({
     for (let i = 0; i < days.length; i += 7) {
         weeks.push(days.slice(i, i + 7));
     }
-
-    const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (isFreeBusyEvent(event)) return;
-        setSelectedEvent(event);
-        setDetailOpen(true);
-    };
-
-    const selectedCalendar = selectedEvent ? calendars.find((c) => c.id === selectedEvent.calendarId) || null : null;
-
-    const selectedSharedCalendar =
-        selectedEvent && !selectedCalendar
-            ? sharedCalendars?.find((s) => s.calendarId === selectedEvent.calendarId) || null
-            : null;
 
     return (
         <>
@@ -138,12 +117,7 @@ export function MonthView({
                                                             key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                             className={cn(
                                                                 'text-xs leading-tight px-1 py-0.5 rounded text-white truncate',
-                                                                freeBusy
-                                                                    ? 'opacity-50 cursor-default'
-                                                                    : 'cursor-pointer hover:opacity-80',
-                                                                inviteStatus === 'pending' &&
-                                                                    'border border-dashed border-current bg-transparent !text-foreground',
-                                                                inviteStatus === 'declined' && 'opacity-40',
+                                                                eventPillStateClasses('block', freeBusy, inviteStatus),
                                                             )}
                                                             style={
                                                                 inviteStatus === 'pending'
@@ -162,10 +136,7 @@ export function MonthView({
                                                         key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                         className={cn(
                                                             'text-xs leading-tight flex items-center gap-1 truncate rounded px-0.5',
-                                                            freeBusy
-                                                                ? 'opacity-50 cursor-default'
-                                                                : 'cursor-pointer hover:bg-accent',
-                                                            inviteStatus === 'declined' && 'opacity-40',
+                                                            eventPillStateClasses('dot', freeBusy, inviteStatus),
                                                         )}
                                                         onClick={(e) => handleEventClick(event, e)}
                                                         title={event.title}
@@ -203,13 +174,7 @@ export function MonthView({
                 </div>
             </div>
 
-            <EventDetailDialog
-                open={detailOpen}
-                onOpenChange={setDetailOpen}
-                event={selectedEvent}
-                calendar={selectedCalendar}
-                sharedCalendar={selectedSharedCalendar}
-            />
+            <EventDetailDialog {...detailDialogProps} />
         </>
     );
 }

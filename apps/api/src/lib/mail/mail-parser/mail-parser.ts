@@ -2,6 +2,15 @@
 
 import type { Readable } from 'node:stream';
 import { Transform, type TransformCallback, type TransformOptions } from 'node:stream';
+import type { ImipMethod } from '@workspace/lib/types/calendar';
+import type {
+    AddressObject,
+    Attachment,
+    HeaderLines,
+    HeaderValue,
+    MailHeaders,
+    StructuredHeader,
+} from '@workspace/lib/types/mail';
 import encodingJapanese from 'encoding-japanese';
 import he from 'he';
 import { htmlToText } from 'html-to-text';
@@ -51,78 +60,14 @@ linkify.add('@', {
     },
 });
 
-// --- Exported types (merged from index.d.ts) ---
+// --- Exported types ---
+// The shared mail types (StructuredHeader, HeaderValue, HeaderLines, EmailAddress, AddressObject,
+// Attachment, ParsedMail, MailHeaders) live in @workspace/lib/types/mail.
 
-export type StructuredHeader = {
-    value: string;
-    params: Record<string, string>;
-};
-
-export type HeaderValue = string | string[] | AddressObject | Date | StructuredHeader | StructuredHeader[];
-
-export type Headers = Map<string, HeaderValue>;
-
-export type HeaderLines = ReadonlyArray<{
-    key: string;
-    line: string;
-}>;
-
-export type EmailAddress = {
-    address?: string;
-    name: string;
-    group?: EmailAddress[];
-};
-
-export type AddressObject = {
-    value: EmailAddress[];
-    html: string;
-    text: string;
-};
-
-export type AttachmentCommon = {
-    type: 'attachment';
-    content: unknown;
-    contentType: string;
-    contentDisposition: string;
-    filename?: string;
-    headers: Headers;
-    headerLines: HeaderLines;
-    checksum: string;
-    size: number;
-    contentId?: string;
-    cid?: string;
-    related?: boolean;
-    calendarMethod?: 'REQUEST' | 'REPLY' | 'CANCEL';
-};
-
-export type Attachment = AttachmentCommon & {
-    content: Buffer;
-    related: boolean;
-};
-
-export type AttachmentStream = AttachmentCommon & {
+// The streaming attachment the parser emits before its content is buffered into an Attachment.
+export type AttachmentStream = Omit<Attachment, 'content'> & {
     content: Readable;
     release(): void;
-};
-
-export type ParsedMail = {
-    attachments: Attachment[];
-    headers: Headers;
-    headerLines: HeaderLines;
-    html: string | null;
-    text?: string;
-    textAsHtml?: string;
-    subject?: string;
-    references?: string[] | string;
-    date?: Date;
-    to?: AddressObject | AddressObject[];
-    from?: AddressObject;
-    cc?: AddressObject | AddressObject[];
-    bcc?: AddressObject | AddressObject[];
-    replyTo?: AddressObject;
-    messageId?: string;
-    inReplyTo?: string;
-    priority?: 'normal' | 'low' | 'high';
 };
 
 export type MessageText = {
@@ -160,7 +105,7 @@ type Decoder = {
 type MimeTreeNode = {
     node: SplitterNode;
     headerLines: HeaderLines;
-    headers: Headers;
+    headers: MailHeaders;
     contentType: string;
     children: MimeTreeNode[];
     disposition?: string;
@@ -224,11 +169,11 @@ type InternalAttachment = {
     contentId?: string;
     cid?: string;
     related?: boolean;
-    headers?: Headers;
+    headers?: MailHeaders;
     checksum: string;
     size: number;
     release: (() => void) | null;
-    calendarMethod?: 'REQUEST' | 'REPLY' | 'CANCEL';
+    calendarMethod?: ImipMethod;
 };
 
 type BoundaryEntry = {
@@ -328,7 +273,7 @@ class MailParser extends Transform {
     finished: boolean;
     waitingEnd: ((err?: Error) => void) | null;
 
-    headers: Headers | null;
+    headers: MailHeaders | null;
     headerLines: HeaderLines | null;
 
     endReceived: boolean;
@@ -528,7 +473,7 @@ class MailParser extends Transform {
         }
     }
 
-    private processHeaders(lines: Array<{ key: string; line: string }>): Headers {
+    private processHeaders(lines: Array<{ key: string; line: string }>): MailHeaders {
         const headers: Map<string, unknown[]> = new Map();
         for (const line of lines || []) {
             let key = line.key;
@@ -650,7 +595,7 @@ class MailParser extends Transform {
             'disposition-notification-to',
         ];
 
-        const result: Headers = headers as unknown as Headers;
+        const result: MailHeaders = headers as unknown as MailHeaders;
 
         for (const [key, value] of headers.entries()) {
             if (Array.isArray(value)) {

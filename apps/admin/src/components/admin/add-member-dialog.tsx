@@ -1,7 +1,7 @@
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { UserItem } from '@workspace/ui/components/user';
 import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 

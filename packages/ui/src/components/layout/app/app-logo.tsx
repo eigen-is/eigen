@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router';
 import { getDriveAppUrl, getSpaceAppUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import { cn } from '../../../lib/utils.ts';
-import { Bar } from '../braket/bar.tsx';
-import { Ket } from '../braket/ket.tsx';
+import { cn } from '../../../lib/utils';
+import { Bar } from '../../braket/bar';
+import { Ket } from '../../braket/ket';
 
 type AppLogoProps = {
     appName?: string;

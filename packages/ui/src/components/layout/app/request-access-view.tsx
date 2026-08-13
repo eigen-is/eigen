@@ -5,7 +5,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { LockKeyhole } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { UserAvatar } from '../user-avatar';
+import { UserAvatar } from '../../user/user-avatar';
 import { useLayout } from './layout-context';
 
 type RequestAccessViewProps = {

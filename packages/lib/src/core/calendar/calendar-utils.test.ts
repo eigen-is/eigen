@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { CalendarEventOccurrence } from '../../types/calendar';
-import { getEventsForDay } from './calendar-utils';
+import { formatEventWhen, getEventsForDay } from './calendar-utils';
 
 function occurrence(occurrenceDate: string, startTime: Date, endTime: Date): CalendarEventOccurrence {
     return {
@@ -70,5 +70,21 @@ describe('getEventsForDay', () => {
         const occ = [occurrence('2025-03-31', new Date('2025-03-30T22:30:00Z'), new Date('2025-03-30T23:00:00Z'))];
         expect(getEventsForDay(occ, new Date(2025, 2, 30))).toEqual([]);
         expect(getEventsForDay(occ, new Date(2025, 2, 31)).map((e) => e.occurrenceDate)).toEqual(['2025-03-31']);
+    });
+});
+
+describe('formatEventWhen', () => {
+    const start = new Date('2026-09-10T09:00:00Z');
+    const end = new Date('2026-09-10T10:00:00Z');
+
+    test('a valid IANA zone shifts the wall-clock time', () => {
+        // Sept 2026 is CEST (UTC+2), so 09:00Z renders as 11:00.
+        expect(formatEventWhen(start, end, false, 'Europe/Amsterdam')).toContain('11:00');
+    });
+
+    test('a non-IANA zone (pre-normalization stored TZID) degrades to UTC instead of throwing', () => {
+        expect(formatEventWhen(start, end, false, 'W. Europe Standard Time')).toBe(
+            formatEventWhen(start, end, false, 'UTC'),
+        );
     });
 });

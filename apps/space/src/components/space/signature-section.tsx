@@ -1,7 +1,7 @@
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { LightEditor } from '@workspace/ui/components/layout/editor';
+import { LightEditor } from '@workspace/ui/components/editor';
 import { useEffect, useRef, useState } from 'react';
 
 export function SignatureSection() {

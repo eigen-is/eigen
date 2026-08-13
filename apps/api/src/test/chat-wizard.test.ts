@@ -5,7 +5,7 @@ import type { ChatMatch } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { eq } from 'drizzle-orm';
-import { user as userSchema } from '../../auth-schema.ts';
+import { user as userSchema } from '../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerConfig } from '../lib/config/server-config';
 import { getHome } from '../lib/home/get-home';

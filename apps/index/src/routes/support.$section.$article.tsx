@@ -1,5 +1,5 @@
 import { createFileRoute, useParams } from '@tanstack/react-router';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { useLayout } from '@workspace/ui';
 import { useEffect } from 'react';
 import { SupportArticle } from '../components/support/support-article';
 import type { ArticleMeta } from '../content/manifest';

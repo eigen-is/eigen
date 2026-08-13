@@ -1,5 +1,5 @@
-import { BUILT_IN_EMOTES } from '@workspace/lib/core/chat/built-in-emotes';
-import { resolveEmoteKey } from '@workspace/lib/core/chat/emotes';
+import { BUILT_IN_EMOTES } from '@workspace/lib/chat/built-in-emotes';
+import { resolveEmoteKey } from '@workspace/lib/chat/emotes';
 import { validateCommand } from '@workspace/lib/validation';
 
 export type ParsedCommand =

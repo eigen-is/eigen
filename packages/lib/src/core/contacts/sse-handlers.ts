@@ -1,8 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated } from './hooks/use-contacts';
-import { invalidateLabelCreated, invalidateLabelDeleted, invalidateLabelUpdated } from './hooks/use-labels';
+import {
+    invalidateContactCreated,
+    invalidateContactDeleted,
+    invalidateContactUpdated,
+    invalidateLabelCreated,
+    invalidateLabelDeleted,
+    invalidateLabelUpdated,
+} from './hooks/keys';
 
 export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('contacts:')) return false;

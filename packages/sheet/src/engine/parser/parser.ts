@@ -9,13 +9,13 @@ import type {
     ParserEventListener,
     ParserOptions,
     RangeCell,
-} from '../types.ts';
-import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, isValidStrict as isErrorValid } from './error.ts';
-import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator.ts';
-import { Parser as GrammarParser } from './grammar-parser/grammar-parser.ts';
-import { extractLabel, toLabel } from './helper/cell.ts';
-import { invertNumber, toNumber } from './helper/number.ts';
-import { trimEdges } from './helper/string.ts';
+} from '../types';
+import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, isValidStrict as isErrorValid } from './error';
+import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator';
+import { Parser as GrammarParser } from './grammar-parser/grammar-parser';
+import { extractLabel, toLabel } from './helper/cell';
+import { invertNumber, toNumber } from './helper/number';
+import { trimEdges } from './helper/string';
 
 type GrammarParserInstance = { parse: (expression: string) => unknown; yy: Record<string, unknown> };
 

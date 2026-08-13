@@ -3,17 +3,16 @@ import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
+import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ContactAddRow } from '@workspace/ui/components/layout/contacts/contact-add-row';
-import { useContactInput } from '@workspace/ui/components/layout/contacts/use-contact-input';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
+import { UserItem } from '@workspace/ui/components/user';
 import { Users } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 

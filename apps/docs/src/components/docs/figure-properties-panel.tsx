@@ -3,14 +3,14 @@ import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { Input } from '@workspace/ui/components/input';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import {
     AlignmentPicker,
     PropertiesPanel,
     PropertyRow,
     PropertySection,
-} from '@workspace/ui/components/layout/properties-panel';
+} from '@workspace/ui/components/properties-panel';
 import { Toggle } from '@workspace/ui/components/toggle';
 import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
 import { useState } from 'react';

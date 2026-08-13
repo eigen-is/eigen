@@ -5,7 +5,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { DEFAULT_COLORS } from '@workspace/ui/components/layout/media/color-picker';
+import { DEFAULT_COLORS } from '@workspace/ui/components/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, RotateCcw } from 'lucide-react';
 

@@ -19,6 +19,7 @@ import {
     FormulaEngine,
     functionCopy,
 } from '@workspace/sheet/engine';
+import { FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { resolveFontFamily } from './fonts';
@@ -713,7 +714,7 @@ const SHEET_CSS_BASE = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: ${FONT_STACK_SANS};
     font-size: 11px;
     color: #1a1a2e;
     background: #fff;

@@ -1,6 +1,8 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
+import { type CommentContextMenuItem, CommentMenuItems } from '@workspace/ui/components/comments';
+import { ContextMenuAnchor, type useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -8,8 +10,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { type CommentContextMenuItem, CommentMenuItems } from '@workspace/ui/components/layout/comments';
-import { ContextMenuAnchor, type useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
 import type { SlideObject } from './types';
 

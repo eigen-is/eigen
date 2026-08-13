@@ -1,10 +1,9 @@
-import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useIsGuest } from '@workspace/lib/auth';
 import { useAllChats } from '@workspace/lib/chat';
-import { EmptyState } from '@workspace/ui';
+import { Column, ColumnLayout, EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
+import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import { MessageSquare, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -71,11 +70,5 @@ function ChatIndex() {
 }
 
 export const Route = createFileRoute('/_auth/')({
-    beforeLoad: ({ context }) => {
-        const userId = context.auth?.user?.id;
-        if (!userId) {
-            throw redirect({ to: '/login' });
-        }
-    },
     component: ChatIndex,
 });

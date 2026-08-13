@@ -190,22 +190,39 @@ Elysia route handler return type → Eden Treaty infers response type → hook e
   or string concatenation for conditional Tailwind classes
 - **Name for grep-ability; don't shadow libraries** — use the established prefixes so a whole category is
   one search away: `use*` (hooks), `Eigen*` (brand components), `*Dialog`, `*Provider`, `invalidate*`
-  (cache helpers), `*Keys` (query-key factories). Don't reuse a name a dependency already owns (we shadow
-  TanStack Router's `useSearch`), and don't give three different helpers the same name (`isMobile`)
+  (cache helpers), `*Keys` (query-key factories). Don't reuse a name a dependency already owns (our search
+  hook is `useSearchQuery`, not `useSearch`, to stay clear of TanStack Router's `useSearch`), and don't give
+  three different helpers the same name (`isMobile`)
 
 ### Imports
 
-Use workspace aliases, not deep relative paths:
+Workspace imports resolve through each package's `exports` map (`packages/*/package.json`) — there are no
+tsconfig path aliases for `@workspace/*`. If a specifier doesn't resolve, the module isn't public: export it
+from its barrel or give it an exports entry, don't reach around the map. **Never suffix a workspace specifier
+with `.ts`/`.tsx`** — suffixed specifiers don't resolve, and Biome rejects them.
 
-| Alias                             | Points to                                   | Example                                  |
-|-----------------------------------|---------------------------------------------|------------------------------------------|
-| `@workspace/lib/[domain]`        | Hooks + exports for a domain                | `@workspace/lib/drive`                   |
-| `@workspace/lib/types/[domain]`  | Shared types                                | `@workspace/lib/types/calendar`          |
-| `@workspace/lib/api`             | Eden Treaty API client factories            | `@workspace/lib/api`                     |
-| `@workspace/lib/date`            | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) | `@workspace/lib/date` |
-| `@workspace/lib/validation`      | Shared FE/BE validation schemas             | `@workspace/lib/validation`              |
-| `@workspace/ui/components/...`   | UI components (no top-level alias)          | `@workspace/ui/components/ui/button`     |
-| `@workspace/ui/lib/utils`        | `cn()` utility                              | `@workspace/ui/lib/utils`               |
+| Specifier                            | What you get                                                  | Example                                    |
+|--------------------------------------|---------------------------------------------------------------|--------------------------------------------|
+| `@workspace/ui`                      | Root barrel: the AGENTS.md Key UI Components, the layout system (app/sidebar/toolbar — not pages), generic leaf primitives | `import { TooltipButton } from '@workspace/ui'` |
+| `@workspace/ui/components/[area]`    | Area barrel (drive, chat, comments, editor, media, user, …)   | `@workspace/ui/components/drive`           |
+| `@workspace/ui/components/[leaf]`    | Extensionless deep import for a component its barrel doesn't export | `@workspace/ui/components/search/doc-search-provider` |
+| `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` | `@workspace/ui/components/layout/app`      |
+| `@workspace/ui/hooks/[hook]`         | Shared DOM/interaction hooks                                  | `@workspace/ui/hooks/use-long-press`       |
+| `@workspace/ui/lib/utils`            | `cn()` utility                                                | `@workspace/ui/lib/utils`                  |
+| `@workspace/lib/[domain]`            | Domain barrel: hooks, query keys, invalidators                | `@workspace/lib/drive`                     |
+| `@workspace/lib/types/[domain]`      | Shared FE/BE types                                            | `@workspace/lib/types/calendar`            |
+| `@workspace/lib/constants/[x]`       | Shared constants                                              | `@workspace/lib/constants/stale-time`      |
+| `@workspace/lib/api`                 | Eden Treaty API client factories                              | `@workspace/lib/api`                       |
+| `@workspace/lib/date`                | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) | `@workspace/lib/date`                      |
+| `@workspace/lib/validation`          | Shared FE/BE validation schemas                               | `@workspace/lib/validation`                |
+
+Prefer the barrel over a deep import when both reach the same primitive. SHARED-PRIMITIVES.md's *Import from*
+column lists the shortest specifier that resolves each primitive — the right default for components, hooks, and
+utils, but **not** authoritative for types and constants, where it collapses to the aggregate
+`@workspace/lib/types` / `@workspace/lib/constants`. There the table above wins: import types from
+`@workspace/lib/types/<domain>` and constants from `@workspace/lib/constants/<x>`; the bare aggregate specifiers
+are tolerated legacy, not the convention. Backend code imports lib only through the React-free subpaths — see the
+carve-out in [AGENTS.md](../AGENTS.md).
 
 ## Key Patterns
 

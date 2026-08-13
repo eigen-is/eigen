@@ -1,6 +1,6 @@
 import { redirect, useSearch } from '@tanstack/react-router';
 import { z } from 'zod';
-import { LoginPage } from './login-page.tsx';
+import { LoginPage } from './login-page';
 
 function LoginRoute() {
     const search = useSearch({ strict: false }) as { email?: string; redirect?: string };
@@ -11,7 +11,7 @@ function LoginRoute() {
     return <LoginPage email={email || undefined} />;
 }
 
-export const loginSearchSchema = z.object({
+const loginSearchSchema = z.object({
     redirect: z.string().optional().catch(''),
     email: z.string().optional().catch(''),
 });

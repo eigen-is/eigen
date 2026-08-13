@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { PathWatchStatus } from '@workspace/lib/types/file-history';
 import { AppError, onMutationError } from '../../api-error';
-import { driveKeys } from './use-drive';
+import { driveKeys } from './keys';
 
 // GET WATCH STATUS — is the current user watching this path? (direct or via ancestor)
 export function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
@@ -16,7 +17,7 @@ export function useIsPathWatched(ownerId: string, mountId: string, pathId: strin
             return response.data!;
         },
         enabled: !!ownerId && !!mountId && !!pathId,
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
     });
 }
 
@@ -70,6 +71,6 @@ export function useAllWatches() {
             return response.data;
         },
         enabled: !!ownerId,
-        staleTime: 60_000,
+        staleTime: STALE_TIME.ONE_MINUTE,
     });
 }

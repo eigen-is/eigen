@@ -15,6 +15,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { A4_WIDTH_PX, getDocExtensions, PAGE_MARGIN_PX } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -29,28 +30,26 @@ import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib
 import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { Column, LoadingState, useLayout } from '@workspace/ui';
+import { CardFormDialog } from '@workspace/ui/components/cards';
+import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
-    CardFormDialog,
-    Column,
+    type CommentContextMenuItem,
     CommentLifecycleDialogs,
     CommentMenuItems,
-    LoadingState,
     PanelColumn,
-    useLayout,
-} from '@workspace/ui';
+} from '@workspace/ui/components/comments';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { renderPresenceCaret } from '@workspace/ui/components/layout/collab';
-import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
-import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/layout/properties-panel';
-import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
-import { useProseMirrorSearchController } from '@workspace/ui/components/layout/search/prosemirror-search-controller';
-import { SearchHighlight } from '@workspace/ui/components/layout/search/prosemirror-search-highlight';
+import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-panel';
+import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
+import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
+import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -112,7 +111,7 @@ const PANEL_CLEAR_WIDTH_PX = 2 * (TEXT_COLUMN_RIGHT_PX + PANEL_INTRUSION_PX) - A
 
 export const CollaborativeEditor = ({
     path,
-    access,
+    canWrite,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -120,7 +119,7 @@ export const CollaborativeEditor = ({
     initialSearchTerm,
 }: {
     path: DrivePath;
-    access: { canRead: boolean; canWrite: boolean };
+    canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -163,7 +162,7 @@ export const CollaborativeEditor = ({
                 path={path}
                 yDoc={yDoc}
                 provider={provider}
-                access={access}
+                canWrite={canWrite}
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
@@ -223,7 +222,7 @@ const TiptapEditor = ({
     yDoc,
     provider,
     path,
-    access,
+    canWrite,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -233,7 +232,7 @@ const TiptapEditor = ({
     yDoc: Y.Doc;
     provider: WebsocketProvider;
     path: DrivePath;
-    access: { canRead: boolean; canWrite: boolean };
+    canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -322,7 +321,7 @@ const TiptapEditor = ({
 
     const editor = useEditor(
         {
-            editable: access.canWrite,
+            editable: canWrite,
             extensions: [
                 ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
                 Figure,
@@ -336,10 +335,10 @@ const TiptapEditor = ({
                         const entry = card.chatName
                             ? allCommentsRef.current.find((c) => c.chatName === card.chatName)
                             : undefined;
-                        commentContextMenu.handleContextMenu(event as unknown as React.MouseEvent, { card, entry });
+                        commentContextMenu.openAt({ card, entry }, event.clientX, event.clientY);
                     },
                     onSelectionContextMenu: (event) => {
-                        selectionContextMenu.handleContextMenu(event as unknown as React.MouseEvent, true);
+                        selectionContextMenu.openAt(true, event.clientX, event.clientY);
                     },
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: toggleComments,
@@ -366,13 +365,13 @@ const TiptapEditor = ({
                     const doc = new DOMParser().parseFromString(html, 'text/html');
 
                     const fontMap: Record<string, string> = {
-                        'Times New Roman': "'Source Serif 4', serif",
-                        Georgia: "'Source Serif 4', serif",
-                        Palatino: "'Source Serif 4', serif",
-                        'Palatino Linotype': "'Source Serif 4', serif",
-                        'Courier New': "'JetBrains Mono', monospace",
-                        Consolas: "'JetBrains Mono', monospace",
-                        'Comic Sans MS': "'Excalifont', cursive",
+                        'Times New Roman': getFontFamily('Source Serif 4'),
+                        Georgia: getFontFamily('Source Serif 4'),
+                        Palatino: getFontFamily('Source Serif 4'),
+                        'Palatino Linotype': getFontFamily('Source Serif 4'),
+                        'Courier New': getFontFamily('JetBrains Mono'),
+                        Consolas: getFontFamily('JetBrains Mono'),
+                        'Comic Sans MS': getFontFamily('Excalifont'),
                     };
                     doc.querySelectorAll('[style]').forEach((el) => {
                         const htmlEl = el as HTMLElement;
@@ -694,10 +693,10 @@ const TiptapEditor = ({
         return () => clearTimeout(timer);
     }, [editor]);
 
-    const docSearchController = useProseMirrorSearchController(editor, access.canWrite);
+    const docSearchController = useProseMirrorSearchController(editor, canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
 
-    const showSidebar = !isMobile && (panel !== null || (access.canWrite && sidebarContext !== 'document'));
+    const showSidebar = !isMobile && (panel !== null || (canWrite && sidebarContext !== 'document'));
 
     // Slide the centred page left by its overlap with the panel; only shrink once the slack runs out.
     const centredSlack = Math.max(0, (containerWidth - A4_WIDTH_PX) / 2);
@@ -786,7 +785,7 @@ const TiptapEditor = ({
                                 <EditorToolbar
                                     editor={editor}
                                     path={path}
-                                    canWrite={access.canWrite}
+                                    canWrite={canWrite}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}
@@ -880,7 +879,7 @@ const TiptapEditor = ({
             <CommentLifecycleDialogs
                 lifecycle={lifecycle}
                 path={path}
-                canWrite={access.canWrite}
+                canWrite={canWrite}
                 commentContextMenu={commentContextMenu}
                 onDelete={(cardId) => {
                     if (!editor) return;

@@ -1,18 +1,19 @@
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { HotkeysProvider, useHotkey } from '@tanstack/react-hotkeys';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from '@workspace/lib/auth/auth-context.tsx';
+import { AuthProvider } from '@workspace/lib/auth';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type React from 'react';
 import { lazy, Suspense, useState } from 'react';
-import { printDocument } from '../../../lib/printElement.ts';
-import { Toaster } from '../../sonner.tsx';
-import { LoadingScreen } from '../pages/loading-screen.tsx';
-import { PreviewProvider } from '../preview-provider/preview-provider.tsx';
-import { SSEProvider } from '../sse-provider';
-import { UploadProvider } from '../upload-provider/upload-provider.tsx';
-import { CommandPaletteProvider } from './command-palette/command-palette-provider.tsx';
-import { ErrorBoundary } from './error-boundary.tsx';
-import { ThemeProvider } from './theme-provider.tsx';
+import { printDocument } from '../../../lib/printElement';
+import { PreviewProvider } from '../../preview-provider/preview-provider';
+import { Toaster } from '../../sonner';
+import { SSEProvider } from '../../sse-provider';
+import { UploadProvider } from '../../upload-provider/upload-provider';
+import { LoadingScreen } from '../pages/loading-screen';
+import { CommandPaletteProvider } from './command-palette/command-palette-provider';
+import { ErrorBoundary } from './error-boundary';
+import { ThemeProvider } from './theme-provider';
 
 const ReactQueryDevtools = import.meta.env.DEV
     ? lazy(() => import('@tanstack/react-query-devtools').then((m) => ({ default: m.ReactQueryDevtools })))
@@ -36,7 +37,7 @@ export function EigenApp({ children }: EigenAppProps) {
             new QueryClient({
                 defaultOptions: {
                     queries: {
-                        staleTime: 2 * 60 * 1000,
+                        staleTime: STALE_TIME.TWO_MINUTES,
                         retry: 1,
                     },
                 },

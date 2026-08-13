@@ -1,1 +1,1 @@
-export * from './org.ts';
+export * from './org';

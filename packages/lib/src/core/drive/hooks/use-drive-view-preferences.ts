@@ -4,7 +4,8 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { DriveSortDir, DriveSortKey, DriveViewMode, DriveViewPreferences } from '@workspace/lib/types/drive';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateSpaceSettings, spaceKeys, useSpaceSettings } from '../../space/hooks/use-space-settings';
+import { invalidateSpaceSettings, spaceKeys } from '../../space/hooks/keys';
+import { useSpaceSettings } from '../../space/hooks/use-space-settings';
 
 const DEFAULTS: DriveViewPreferences = { mode: 'list', sortKey: 'name', sortDir: 'asc' };
 

@@ -1,5 +1,6 @@
-import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { calendarApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -11,28 +12,17 @@ import type {
     UpdateSharedCalendarInput,
 } from '@workspace/lib/types/calendar';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateHomeSize } from '../../home';
 import { formatFreeBusyTitle, occurrenceDateToString } from '../calendar-utils';
-
-export const calendarKeys = {
-    all: ['calendar'] as const,
-    owner: (ownerId: string) => [...calendarKeys.all, ownerId] as const,
-    calendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'calendars'] as const,
-    calendarList: (ownerId: string) => [...calendarKeys.calendars(ownerId), 'list'] as const,
-    events: (ownerId: string) => [...calendarKeys.owner(ownerId), 'events'] as const,
-    eventRange: (ownerId: string, from: number, to: number) => [...calendarKeys.events(ownerId), { from, to }] as const,
-    calendarEvents: (ownerId: string, calendarId: string, from: number, to: number) =>
-        [
-            ...calendarKeys.events(ownerId),
-            calendarId,
-            {
-                from,
-                to,
-            },
-        ] as const,
-    sharedCalendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'shared'] as const,
-    access: (ownerId: string, calendarId: string) => [...calendarKeys.owner(ownerId), 'access', calendarId] as const,
-};
+import {
+    calendarKeys,
+    invalidateCalendarCreated,
+    invalidateCalendarDeleted,
+    invalidateCalendarUpdated,
+    invalidateEventCreated,
+    invalidateEventDeleted,
+    invalidateEventUpdated,
+    invalidateSharedCalendarUpdated,
+} from './keys';
 
 // --- Calendar CRUD ---
 
@@ -44,7 +34,7 @@ export function useCalendars(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId,
     });
 }
@@ -103,7 +93,7 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 2 * 60 * 1000,
+        staleTime: STALE_TIME.TWO_MINUTES,
         enabled: !!ownerId && enabled && from > 0 && to > 0,
     });
 }
@@ -183,7 +173,7 @@ export function useCalendarAccess(ownerId: string, calendarId: string, enabled =
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId && !!calendarId && enabled,
     });
 }
@@ -231,7 +221,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                 }
                 return data as CalendarEventOccurrence[];
             },
-            staleTime: 2 * 60 * 1000,
+            staleTime: STALE_TIME.TWO_MINUTES,
             enabled: from > 0 && to > 0,
         })),
     });
@@ -252,7 +242,7 @@ export function useSharedCalendars(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
         enabled: !!ownerId,
     });
 }
@@ -315,47 +305,4 @@ export function useRsvp(ownerId: string) {
         onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
         onError: onMutationError,
     });
-}
-
-// --- Invalidation functions (ownerId-scoped, used from mutation onSuccess) ---
-
-export function invalidateCalendarCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
-}
-
-export function invalidateCalendarUpdated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
-}
-
-export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.calendarList(ownerId) });
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
-}
-
-export function invalidateEventCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateEventUpdated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateEventDeleted(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateSharedCalendarUpdated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.sharedCalendars(ownerId) });
-}
-
-export function invalidateCalendarShared(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.sharedCalendars(ownerId) });
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
-}
-
-export function invalidateCalendarUnshared(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: calendarKeys.sharedCalendars(ownerId) });
-    queryClient.invalidateQueries({ queryKey: calendarKeys.events(ownerId) });
 }

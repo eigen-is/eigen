@@ -3,10 +3,8 @@ import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ErrorState, LoadingState } from '@workspace/ui';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { DriveDetail, DriveDetailToolbar } from '@workspace/ui/components/layout/drive/drive-detail';
+import { Column, ColumnLayout, ErrorState, LoadingState, useLayout } from '@workspace/ui';
+import { DriveDetail, DriveDetailToolbar } from '@workspace/ui/components/drive/drive-detail';
 import { lazy, Suspense, useState } from 'react';
 import { ViewToolbar } from './editor-toolbar';
 
@@ -85,9 +83,11 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
         );
     }
 
-    const updatedAt = data!.updatedAt;
+    if (!data) return <LoadingState />;
+
+    const updatedAt = data.updatedAt;
     const editorProps = {
-        content: data!.content,
+        content: data.content,
         updatedAt,
         ownerId: path.ownerId,
         mountId: path.mountId,
@@ -105,8 +105,8 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
             {/* The editor returns a find-bar provider wrapping its Column; this grows it in the row. */}
             <div className="flex-1 min-w-0 h-full">
                 <Suspense fallback={<LoadingState />}>
-                    {data!.editMode === 'markdown' ? (
-                        <MarkdownEditor key={reloadKey} {...editorProps} frontmatter={data!.frontmatter ?? null} />
+                    {data.editMode === 'markdown' ? (
+                        <MarkdownEditor key={reloadKey} {...editorProps} frontmatter={data.frontmatter ?? null} />
                     ) : (
                         <CodeEditor key={reloadKey} {...editorProps} />
                     )}

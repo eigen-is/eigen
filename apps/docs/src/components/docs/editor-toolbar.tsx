@@ -2,12 +2,21 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
-import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CenteredToolbar, ToolbarSeparator, TooltipButton } from '@workspace/ui';
+import {
+    CenteredToolbar,
+    DocumentShareCluster,
+    EditMenu,
+    FileMenu,
+    ToolbarSeparator,
+    TooltipButton,
+} from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -20,14 +29,8 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { ProgressDialog } from '@workspace/ui/components/layout/drive/progress-dialog';
-import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
-import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
-import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
-import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
+import { ColorPickerButton } from '@workspace/ui/components/media';
+import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { Separator } from '@workspace/ui/components/separator';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {
@@ -107,9 +110,7 @@ export const EditorToolbar = ({
     const [importPickerOpen, setImportPickerOpen] = useState(false);
     // Controlled: useEditor skips selection-only re-renders, so opening must re-render for a live disabled check.
     const [insertMenuOpen, setInsertMenuOpen] = useState(false);
-    const { exportDocument, isExporting } = useExportDocument();
-    const importMutation = useImportDocument(path.ownerId, path.mountId);
-    const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
+    const { exportPath, isExporting } = useDocumentExport();
     const isCompact = useIsCompactToolbar();
 
     const handleLinkOperation = () => {
@@ -140,26 +141,6 @@ export const EditorToolbar = ({
         editor.chain().focus().clearNodes().unsetAllMarks().run();
     };
 
-    const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
-
-    const handleImport = () => setImportPickerOpen(true);
-
-    const handleImportFromDrive = (paths: DrivePath[]) => {
-        const source = paths[0];
-        if (!source) return;
-        importFromDriveMutation.mutate({
-            pathId: path.id,
-            sourceOwnerId: source.ownerId,
-            sourceMountId: source.mountId,
-            sourcePathId: source.id,
-        });
-    };
-
-    const handleImportFromDevice = (files: File[]) => {
-        const file = files[0];
-        if (file) importMutation.mutate({ pathId: path.id, file });
-    };
-
     const handleImageFromDevice = (files: File[]) => {
         const file = files[0];
         if (file && onImageUpload) onImageUpload(file);
@@ -176,7 +157,7 @@ export const EditorToolbar = ({
               : 'Normal';
 
     const activeFontFamily = editor.getAttributes('textStyle').fontFamily || '';
-    const activeFontName = activeFontFamily.match(/^'([^']+)'/)?.[1] ?? 'Inter';
+    const activeFontName = activeFontFamily.match(/^'([^']+)'/)?.[1] ?? EIGEN_FONTS[0].name;
 
     return (
         <>
@@ -187,8 +168,8 @@ export const EditorToolbar = ({
                             path={path}
                             canWrite={canWrite}
                             onAccessDialogOpen={onAccessDialogOpen}
-                            onExport={handleExport}
-                            onImport={handleImport}
+                            onExport={(format) => exportPath(path, format)}
+                            onImport={() => setImportPickerOpen(true)}
                             importLabel="Import docx file…"
                             createLabel="New doc"
                             createType="doc"
@@ -779,15 +760,14 @@ export const EditorToolbar = ({
                 </DialogContent>
             </Dialog>
 
-            <ProgressDialog open={isExporting} title="Exporting document" />
+            <ExportProgressDialog open={isExporting} />
 
-            <DrivePickerWithUpload
+            <DocumentImportPicker
+                path={path}
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
                 title="Import docx file"
-                mimeFilter={[DOCX_MIME]}
-                onPickFromDrive={handleImportFromDrive}
-                onPickFromDevice={handleImportFromDevice}
+                mime={DOCX_MIME}
                 accept=".docx"
             />
         </>

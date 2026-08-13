@@ -5,6 +5,8 @@ export type EigenFont = {
     weights: number[];
 };
 
+// Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
+// document default everywhere, and each category maps to exactly one bundled font.
 export const EIGEN_FONTS: EigenFont[] = [
     { name: 'Inter', family: "'Inter', sans-serif", category: 'sans-serif', weights: [400, 500, 600, 700] },
     { name: 'Source Serif 4', family: "'Source Serif 4', serif", category: 'serif', weights: [400, 600, 700] },

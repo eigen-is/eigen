@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, xit } from 'bun:test';
-import Parser from '../../../../parser.ts';
+import Parser from '../../../../parser';
 
 describe('.parse() statistical formulas', () => {
     let parser: Parser | null;

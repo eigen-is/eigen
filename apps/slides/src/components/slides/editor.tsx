@@ -17,24 +17,17 @@ import {
     useMediaResolver,
     useUploadFile,
 } from '@workspace/lib/drive';
-import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
+import { escapeHtml } from '@workspace/lib/html';
+import { htmlToPlainText } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    CardFormDialog,
-    Column,
-    ColumnLayout,
-    CommentLifecycleDialogs,
-    EmptyState,
-    LoadingState,
-    PanelColumn,
-    useLayout,
-} from '@workspace/ui';
-import type { CommentContextMenuItem } from '@workspace/ui/components/layout/comments';
-import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
-import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
-import { DocSearchProvider } from '@workspace/ui/components/layout/search/doc-search-provider';
+import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@workspace/ui';
+import { CardFormDialog } from '@workspace/ui/components/cards';
+import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
+import { useContextMenu } from '@workspace/ui/components/context-menu';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -780,8 +773,10 @@ function SlideEditorInner({
     if (isPresenting && activeSlide) {
         return (
             <div
+                // Full-screen present sits at the documented full-screen tier (z-100, like FilePreview),
+                // not the portal tier, so it covers the app chrome instead of tying with it.
                 className={cn(
-                    'fixed inset-0 z-50 flex items-center justify-center bg-black',
+                    'fixed inset-0 z-[100] flex items-center justify-center bg-black',
                     !presentControlsVisible && 'cursor-none',
                 )}
                 onPointerMove={revealPresentControls}

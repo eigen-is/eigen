@@ -1,5 +1,4 @@
-export { invalidateSearchOwner } from './hooks/invalidate';
+export { helpSearchKeys, invalidateSearchOwner, searchKeys } from './hooks/keys';
 export { useDocCommentSearchHalf } from './hooks/use-doc-comment-search';
-export { useSearch } from './hooks/use-search';
-export { helpSearchKeys, searchKeys } from './keys';
+export { useSearchQuery } from './hooks/use-search';
 export { loadPagefind } from './pagefind';

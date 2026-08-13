@@ -1,8 +1,8 @@
 import { useIsPathWatched, useUnwatchPath, useWatchPath } from '@workspace/lib/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Bell, BellRing } from 'lucide-react';
-import { DropdownMenuItem } from '../../dropdown-menu.tsx';
-import { TooltipButton } from './tooltip-button.tsx';
+import { DropdownMenuItem } from '../../dropdown-menu';
+import { TooltipButton } from './tooltip-button';
 
 type WatchToggleButtonProps = {
     ownerId: string;

@@ -1,6 +1,6 @@
 import { createRootRouteWithContext, useMatch } from '@tanstack/react-router';
 import type { RouterAppContext } from '@workspace/lib/auth';
-import { EigenDocRoot, SLIDES_CONFIG } from '@workspace/ui/components/layout/drive';
+import { EigenDocRoot, SLIDES_CONFIG } from '@workspace/ui/components/drive';
 
 function SlidesRoot() {
     const isEditorRoute = useMatch({ from: '/_auth/slide/$ownerId/$mountId/$pathId', shouldThrow: false });

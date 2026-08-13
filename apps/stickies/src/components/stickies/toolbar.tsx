@@ -3,8 +3,9 @@ import type { useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
-import { CenteredToolbar } from '@workspace/ui';
+import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/comments';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,10 +15,6 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/layout/comments';
-import { DocumentShareCluster } from '@workspace/ui/components/layout/toolbar';
-import { EditMenu } from '@workspace/ui/components/layout/toolbar/edit-menu';
-import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, Plus, SquareKanban } from 'lucide-react';

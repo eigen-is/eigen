@@ -223,13 +223,13 @@ host-specific (the anchor strip *is* the delete); there is no shared delete hook
 
 ## Shared UI components
 
-### NoteCard (`packages/ui/src/components/layout/notes/`)
+### NoteCard (`packages/ui/src/components/notes/`)
 
 Shared card component used across all apps for list-row rendering. Renders a colored card with
 title, description, status icon, and reply count. Also provides `NoteCardDialog` (dialog shell
 with chat-thread slot).
 
-### CommentMenuItems (`packages/ui/src/components/layout/comments/comment-menu-items.tsx`)
+### CommentMenuItems (`packages/ui/src/components/comments/comment-menu-items.tsx`)
 
 The single source of truth for the "Add / View / Color / Resolve / Reopen / Delete" menu used
 across all four apps. Renders items inside whichever menu family the host uses by accepting a
@@ -237,7 +237,7 @@ across all four apps. Renders items inside whichever menu family the host uses b
 `ContextMenu*` works). The `noun` prop tunes labels (`"comment"` by default, stickies passes
 `"sticky"`).
 
-### Assignee UI (`packages/ui/src/components/layout/comments/`)
+### Assignee UI (`packages/ui/src/components/comments/`)
 
 One shared searchable people-list recipe backs every assignment surface: `MemberCommandList`
 (cmdk `Command`; search hidden ≤ 8 members, `max-h-56` scroll, "n people" footer; pinned rows
@@ -254,7 +254,7 @@ through `settings.hooks` (`onCommentAssign`, `commentMembers`, `currentUserEmail
 renders a muted assignee `MemberAvatar` at the far right of its footer meta row (`assigneeEmail`
 prop, board + panel pass `entry?.assignee`).
 
-### CommentContextMenu (`packages/ui/src/components/layout/comments/comment-context-menu.tsx`)
+### CommentContextMenu (`packages/ui/src/components/comments/comment-context-menu.tsx`)
 
 Convenience wrapper that pairs `<CommentMenuItems>` with the project's singleton
 `useContextMenu` + `ContextMenuAnchor` pattern; `noun` tunes the labels (stickies passes
@@ -262,14 +262,14 @@ Convenience wrapper that pairs `<CommentMenuItems>` with the project's singleton
 `<CommentLifecycleDialogs>`; only the per-object slides menu uses `<CommentMenuItems>` directly
 because its hosting menu differs.
 
-### CommentLifecycleDialogs (`packages/ui/src/components/layout/comments/comment-lifecycle-dialogs.tsx`)
+### CommentLifecycleDialogs (`packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx`)
 
 Renders the `<CardDialog>` + `<CommentContextMenu>` pair driven by a `useCommentLifecycle` bundle.
 The host owns the `useContextMenu` instance and supplies the per-app `onDelete` that strips the
 host anchor. Optional `noun` and `onCardDialogClose` (stickies clears its `?chat=` URL param on
 close).
 
-### CommentPanel (`packages/ui/src/components/layout/comments/comment-panel.tsx`)
+### CommentPanel (`packages/ui/src/components/comments/comment-panel.tsx`)
 
 Properties-panel overlay showing all comments for a document. The caller passes `cards`, `entries`,
 `activeCardIds`, and `anchorTexts` — the panel is pure projection.
@@ -281,7 +281,7 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   offers Clear filters. Cards without an entry yet are treated as "open" and unassigned. The old
   All/For-you tabs + status Select are gone.
 - **Hosting**: `CommentPanel` and `ActivityPanel` are list bodies with no chrome. Docs, slides and sheets
-  mount the same `PanelColumn` (`packages/ui/src/components/layout/comments/panel-column.tsx`)
+  mount the same `PanelColumn` (`packages/ui/src/components/comments/panel-column.tsx`)
   on every viewport: one `Column` with
   id `panel` whose toolbar carries `ToolbarTitle`, `CommentFilterButton` in comments mode, and the close
   affordance — `Column`'s own back arrow below the breakpoint, an X above it. `Column` also sizes the
@@ -334,15 +334,15 @@ dots. Member lists hide the current user's named row (the pinned Me row covers t
 semantics: single-choice picks (assignee, status, Clear) dismiss the stickies Filter menu; color
 swatches keep it open for multi-toggle.
 
-### CommentThread (`packages/ui/src/components/layout/comments/comment-thread.tsx`)
+### CommentThread (`packages/ui/src/components/comments/comment-thread.tsx`)
 
 Single comment thread: resolves `chatName` to `chatId` via `useMediaResolver`, renders
 `ChatMessageList` + `ChatMessageInput`. Embedded inside `<CardDialog>` when a card has a `chatName`.
 
-### CardForm + CardFormDialog (`packages/ui/src/components/layout/cards/`)
+### CardForm + CardFormDialog (`packages/ui/src/components/cards/`)
 
 `CardForm` is the shared create/edit form (title input, `LightEditor` description, attachment
-staging, one non-wrapping meta row: compact `ColorSwatchRow` left + `AssigneePicker` right),
+staging, one non-wrapping meta row: compact `ColorPicker` left + `AssigneePicker` right),
 selected by a `mode` prop. It renders in two shells: `CardFormDialog` (a thin standard-Dialog
 wrapper — the create flow) and in-place inside `CardDialog` via `NoteCardDialog`'s `editForm`
 slot (the edit flow — no second dialog is ever stacked). Its field area scrolls with the
@@ -366,7 +366,7 @@ Description is edited via `<LightEditor>`, color via the shared `<ColorPicker>`
 (`EIGEN_STICKIES_COLORS`). Card creation is lazy: clicking "Add comment" opens the dialog purely
 client-side; the backend is only touched on Save.
 
-### CardDialog (`packages/ui/src/components/layout/cards/card-dialog.tsx`)
+### CardDialog (`packages/ui/src/components/cards/card-dialog.tsx`)
 
 Shared view/edit dialog. Wraps `<NoteCardDialog>` with `<CommentThread>` inside. The pencil
 toggles **in-place edit**: `CardForm mode="edit"` replaces the body inside the same dialog
@@ -440,9 +440,9 @@ The Y.Doc is the source of truth for which cards are "active":
 | `packages/lib/src/docs/eigendoc/nodes/comment-mark.ts`              | TipTap mark schema (attr `cardId`)            |
 | `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
-| `packages/ui/src/components/layout/cards/`                          | Shared CardFormDialog + CardDialog |
-| `packages/ui/src/components/layout/comments/`                       | PanelColumn + CommentPanel + ActivityPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
-| `packages/ui/src/components/layout/notes/`                          | NoteCard + NoteCardDialog                     |
+| `packages/ui/src/components/cards/`                          | Shared CardFormDialog + CardDialog |
+| `packages/ui/src/components/comments/`                       | PanelColumn + CommentPanel + ActivityPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
+| `packages/ui/src/components/notes/`                          | NoteCard + NoteCardDialog                     |
 | `apps/docs/src/components/docs/editor.tsx`                          | Docs editor integration                       |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`          | ProseMirror plugins (interaction + decorations) |
 | `apps/slides/src/components/slides/editor.tsx`                      | Slides editor integration                     |

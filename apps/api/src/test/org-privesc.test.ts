@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { and, eq } from 'drizzle-orm';
-import { member as memberSchema } from '../../auth-schema.ts';
+import { member as memberSchema } from '../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerConfig } from '../lib/config/server-config';
 import { requireAdmin } from '../lib/core/access';

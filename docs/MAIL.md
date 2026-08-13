@@ -104,7 +104,7 @@ shared with the shortcuts layer so both act on identical state. `EmailList` (`em
 the rows (`@tanstack/react-virtual`) and fetches the next page as the end nears; it snaps the virtualizer to
 the top when the view identity changes (mailbox switch or entering/leaving search) via a `resetKey`, so the
 scroll window can't desync from a shrunken/grown list. The toolbar search box hits the server FTS endpoint
-(`useSearch`, scoped to the current mailbox) instead of filtering the loaded window.
+(`useSearchQuery`, scoped to the current mailbox) instead of filtering the loaded window.
 
 ## Performance design
 
@@ -174,7 +174,8 @@ Uploaded files stream to a draft-temp staging area (`uploadDraftAttachment` → 
 (`attachFromDrive`); Drive **containers** (docs, folders) are added as `driveReferences` instead and rendered
 as reference-pill `<a>` links at save/send (`renderAttachmentPills`, `mail-template.ts`) — see
 [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md). Received attachments re-parse from the `.eml` on read and can be
-copied into Drive (`saveAttachmentsToDrive`).
+copied into Drive (`saveAttachmentsToDrive`); `text/calendar` parts are additionally summarized into a typed
+`Attachment.calendarInvite` for the invite widget — see [CALENDAR.md § iMIP](CALENDAR.md#imip-email-based-calendar-invitations).
 
 ## Delivery and inbound
 

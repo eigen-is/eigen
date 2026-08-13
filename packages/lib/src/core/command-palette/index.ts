@@ -1,6 +1,10 @@
-export { CommandPaletteContext, useCommandPalette, useOptionalCommandPalette } from './hooks/use-command-palette';
+export {
+    CommandPaletteContext,
+    type CommandPaletteContextValue,
+    useCommandPalette,
+    useOptionalCommandPalette,
+} from './hooks/use-command-palette';
 export { useCommandResults } from './hooks/use-command-results';
-export { useDebouncedValue } from './hooks/use-debounced-value';
 export { usePaletteDocSearch } from './hooks/use-palette-doc-search';
 export { usePaletteDocSelection, usePaletteSelection } from './hooks/use-palette-selection';
 export { usePaletteSelectionActions } from './hooks/use-palette-selection-actions';

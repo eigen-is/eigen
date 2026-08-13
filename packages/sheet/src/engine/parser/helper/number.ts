@@ -1,4 +1,4 @@
-import type { FormulaArg } from '../../types.ts';
+import type { FormulaArg } from '../../types';
 
 // Excel epoch (1899-12-30 UTC). Matches the date-serial convention used elsewhere
 // in the codebase (xlsx import, `datenum_local`) and accounts for the Lotus 1900

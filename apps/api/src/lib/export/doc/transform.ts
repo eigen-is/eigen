@@ -17,6 +17,7 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
+import { FONT_STACK_MONO, FONT_STACK_SANS } from '../font-stacks';
 import { getFontCSS } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from './render';
@@ -114,8 +115,8 @@ function flattenEigenProseCSS(raw: string): string {
 
     // Resolve CSS variables to concrete values
     css = css
-        .replace(/var\(--font-sans\)/g, '"Inter", system-ui, -apple-system, sans-serif')
-        .replace(/var\(--font-mono\)/g, '"JetBrains Mono", "Courier New", monospace')
+        .replace(/var\(--font-sans\)/g, FONT_STACK_SANS)
+        .replace(/var\(--font-mono\)/g, FONT_STACK_MONO)
         .replace(/var\(--color-muted-foreground\)/g, '#6b7280')
         .replace(/var\(--color-primary\)/g, '#2563eb')
         .replace(/var\(--color-link,\s*#2563eb\)/g, '#2563eb')
@@ -186,7 +187,7 @@ a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
 
 body {
-    font-family: "Inter", system-ui, -apple-system, sans-serif;
+    font-family: ${FONT_STACK_SANS};
     font-size: 11pt;
     line-height: 1.5;
     color: #1a1a2e;
@@ -220,7 +221,7 @@ h1, h2, h3, h4, h5, h6, hr, blockquote, pre, table { clear: both; }
 .has-text-align-left { text-align: left; }
 
 /* Ensure pre wraps for PDF */
-pre code { white-space: pre-wrap; font-family: "JetBrains Mono", "Courier New", monospace; }
+pre code { white-space: pre-wrap; font-family: ${FONT_STACK_MONO}; }
 
 /* Task list checkboxes — explicit sizing to match editor (16px) */
 ul[data-type="taskList"] li > label input[type="checkbox"] {

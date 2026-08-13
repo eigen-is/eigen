@@ -10,14 +10,10 @@ import {
     useRestorePath,
 } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
-import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
-import { LoadingState } from '@workspace/ui/components/layout/app/loading-state';
-import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { DriveList, DriveViewControls } from '@workspace/ui/components/layout/drive/drive-list';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 

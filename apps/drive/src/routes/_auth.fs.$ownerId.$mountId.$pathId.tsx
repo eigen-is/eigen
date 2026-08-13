@@ -1,21 +1,14 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
 import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
-import {
-    type DrivePath,
-    type DriveSearchParams,
-    isDocumentType,
-    isFolderType,
-    isInlineEditable,
-} from '@workspace/lib/types/drive';
-import { LoadingState, NotFound, RequestAccessView } from '@workspace/ui';
-import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
-import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
-import { usePreview } from '@workspace/ui/components/layout/preview-provider';
+import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
+import { EmptyState, LoadingState, RequestAccessView } from '@workspace/ui';
+import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
+import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
+import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 
@@ -35,9 +28,7 @@ function DriveRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const { pid, sharePathId, shareEmail, showHistory } = Route.useSearch();
     const navigate = useNavigate();
-    const { isMobile } = useLayout();
     const { rootPath } = useContext(DriveContext);
-    const { openPreview, updatePreview, isPreviewOpen } = usePreview();
     const { user } = useAuth();
     const unreadChatIds = useUnreadChatIds(user?.id ?? '');
 
@@ -65,6 +56,31 @@ function DriveRoute() {
     const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId || '');
     const shareDialogOpen = !!sharePathId && !!shareTargetPath;
 
+    const { onRowSelect, onRowActivate, onQuickLook } = useDriveListRoute({
+        items: folderContents,
+        onOpenFolder: (path: DrivePath) =>
+            navigate({
+                to: Route.fullPath,
+                params: { ownerId, mountId, pathId: path.id },
+                search: { pid: undefined },
+            }),
+        onSelectItem: (path: DrivePath) => {
+            if (currentPath?.parentId === path.id) {
+                navigate({
+                    to: Route.fullPath,
+                    params: { ownerId, mountId, pathId: path.id },
+                    search: { pid: undefined },
+                });
+            } else {
+                navigate({
+                    to: Route.fullPath,
+                    params: { ownerId, mountId, pathId },
+                    search: { pid: path.id },
+                });
+            }
+        },
+    });
+
     const handleShareDialogClose = (open: boolean) => {
         if (!open) {
             navigate({
@@ -72,52 +88,6 @@ function DriveRoute() {
                 params: { ownerId, mountId, pathId },
                 search: { pid, sharePathId: undefined, shareEmail: undefined },
             });
-        }
-    };
-
-    // Handle row click to show path details
-    const onRowSelect = (path: DrivePath) => {
-        if (isPreviewOpen) {
-            updatePreview(path);
-        }
-
-        if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {
-            onRowActivate(path);
-        } else if (currentPath?.parentId === path.id) {
-            navigate({
-                to: Route.fullPath,
-                params: { ownerId, mountId, pathId: path.id },
-                search: { pid: undefined },
-            });
-        } else {
-            navigate({
-                to: Route.fullPath,
-                params: { ownerId, mountId, pathId },
-                search: { pid: path.id },
-            });
-        }
-    };
-
-    const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
-        openPreview(path, sortedSiblings);
-    };
-
-    const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'folder') {
-            navigate({
-                to: Route.fullPath,
-                params: { ownerId, mountId, pathId: path.id },
-                search: { pid: undefined },
-            });
-        } else if (isDocumentType(path.type)) {
-            openDocument(path);
-        } else if (isInlineEditable(path.mimeType, path.name)) {
-            navigate({
-                to: '/edit/$ownerId/$mountId/$pathId',
-                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
-            });
-        } else {
-            openPreview(path, folderContents);
         }
     };
 
@@ -151,7 +121,7 @@ function DriveRoute() {
         if (isFolderContentLoadingError instanceof AppError && isFolderContentLoadingError.status === 403) {
             return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
         }
-        return <NotFound />;
+        return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
     return (
@@ -169,14 +139,8 @@ function DriveRoute() {
                 onRowActivate={onRowActivate}
                 onBackToList={handleBackToList}
                 onAfterAction={handleAfterAction}
-                allowCreateFolder={true}
-                allowDelete={true}
-                allowShare={true}
-                allowUpload={true}
-                allowMove={true}
+                capabilities={DRIVE_CAPABILITIES.browse}
                 onQuickLook={onQuickLook}
-                getItemHref={getDriveItemUrl}
-                showBreadcrumb={true}
                 pid={pid}
                 unreadPathIds={unreadChatIds}
                 highlightHistory={showHistory}

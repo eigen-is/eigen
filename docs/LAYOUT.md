@@ -119,7 +119,7 @@ The component inventory lives in [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) �
 registry of every export of `packages/lib` and `packages/ui`. Search there before building any shared
 component, hook or type. Layout components sit under `packages/ui/src/components/layout/`.
 
-The comments/activity pane is `PanelColumn` (`layout/comments/panel-column.tsx`) on every viewport: a
+The comments/activity pane is `PanelColumn` (`components/comments/panel-column.tsx`) on every viewport: a
 `Column` whose toolbar holds the title, the filter and the close affordance (back arrow on mobile, X on
 desktop) around `CommentPanel` or `ActivityPanel`. See [COMMENTS.md](COMMENTS.md).
 
@@ -133,17 +133,23 @@ the New menu for free. Routes publish selection-aware actions with `usePaletteSe
 ## Drive Components
 
 `DriveLayout` orchestrates the file-management UI. Everything lives in
-`packages/ui/src/components/layout/drive/`.
+`packages/ui/src/components/drive/`.
 
 ### Architecture
 
 ```
-DriveLayout (orchestrator: columns, actions, dialogs via useDriveDialogs)
+DriveLayout (list/detail columns; every action gated by one required `capabilities` value)
+├── useDriveLayoutDialogs + DriveLayoutDialogs (drive-layout-dialogs.tsx: dialog state,
+│     mutations, palette publication — a capability that's off exposes `undefined` handlers)
 ├── DriveList (toolbar + breadcrumb + external drop zone + view-mode toggle)
 │   ├── DriveGrid  → DriveTile   (grid view)
 │   └── DriveTable → DriveRow    (list view: sorting, keyboard nav, drag-drop, context menu)
 └── DriveDetail (preview, metadata, access list — 400px column, hidden on mobile until opened)
 ```
+
+Render sites declare their whole surface as one `DriveCapabilities` value (`drive-capabilities.ts`):
+the fs browser passes `DRIVE_CAPABILITIES.browse`, watched passes `.readOnly`, and the flat views
+(mime filters, per-app doc lists, shared-by/with-me) spread `.listing` with their own overrides.
 
 `DriveBrowser` (`drive-browser.tsx`) is a separate, lighter layer over `DriveTable`: breadcrumb + mount
 list, no dialogs and no detail column. The file picker (`drive-file-picker.tsx`) and the location field
@@ -173,7 +179,7 @@ with the JSX wrapper `getFileIcon` re-exported from `drive/file-presentation.tsx
 | `useKeyboardListNavigation<T>` | `packages/ui/src/hooks/use-keyboard-list-navigation.ts`              | Arrow keys, Home/End, Shift+Arrow, Ctrl+A, Escape        |
 | `useListDrag<T>`               | `packages/ui/src/hooks/use-list-drag.ts`                             | Drag from list (multi-drag badge)                        |
 | `useListDropTarget`            | `packages/ui/src/hooks/use-list-drop-target.ts`                      | Drop on sidebar items                                    |
-| `useContextMenu<T>`            | `packages/ui/src/components/layout/context-menu/use-context-menu.ts` | Right-click context menu                                 |
+| `useContextMenu<T>`            | `packages/ui/src/components/context-menu/use-context-menu.ts` | Right-click context menu                                 |
 
 ### CSS Classes
 
@@ -248,7 +254,7 @@ const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'my-ty
 
 | List                     | File                                                                    | Drag type    |
 |--------------------------|-------------------------------------------------------------------------|--------------|
-| `DriveGrid`/`DriveTable` | `packages/ui/src/components/layout/drive/use-drive-item-controller.ts`  | `drive-item` |
+| `DriveGrid`/`DriveTable` | `packages/ui/src/components/drive/use-drive-item-controller.ts`  | `drive-item` |
 | `EmailList`              | `apps/mail/src/components/mail/email-list.tsx`                          | `email`      |
 | `ContactsList`           | `apps/contacts/src/components/contacts/contacts-list.tsx`               | `contact`    |
 
@@ -284,5 +290,5 @@ const label = formatForDisplay('Mod+S'); // "⌘S" on Mac, "Ctrl+S" on Windows
 
 The shell itself lives in `packages/ui/src/components/layout/app/` (`app-shell.tsx`, `eigen-app.tsx`,
 `column-layout.tsx`, `layout-context.tsx`, `topbar.tsx`), the sidebar in
-`packages/ui/src/components/layout/sidebar/`, and Drive in `packages/ui/src/components/layout/drive/`.
+`packages/ui/src/components/layout/sidebar/`, and Drive in `packages/ui/src/components/drive/`.
 Anything else: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md).

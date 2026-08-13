@@ -8,15 +8,15 @@ import type { CommandContext } from '@workspace/lib/types/command-palette';
 import type { EigenDocType } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { lazy, type ReactNode, Suspense, useCallback, useMemo, useState } from 'react';
-import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc.tsx';
-import { DriveCreateFolder } from '../drive/drive-create-folder.tsx';
-import { useOptionalPreview, usePreview } from '../preview-provider/preview-provider.tsx';
-import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
-import { CommandPalette } from './command-palette/command-palette.tsx';
-import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts.ts';
-import { DemoBanner } from './demo-banner.tsx';
-import { LayoutContext } from './layout-context.tsx';
-import { Topbar } from './topbar.tsx';
+import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
+import { DriveCreateFolder } from '../../drive/drive-create-folder';
+import { useOptionalPreview, usePreview } from '../../preview-provider/preview-provider';
+import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container';
+import { CommandPalette } from './command-palette/command-palette';
+import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts';
+import { DemoBanner } from './demo-banner';
+import { LayoutContext } from './layout-context';
+import { Topbar } from './topbar';
 
 // Browser-only dev widget — never render it during SSR/prerender, where
 // renderToString cannot handle the lazy component's Suspense boundary.

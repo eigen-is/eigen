@@ -3,16 +3,27 @@ import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspa
 import { type RouterAppContext, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useServerSettings } from '@workspace/lib/settings';
-import { LoadingState } from '@workspace/ui';
-import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
-import { AdminSidebar } from '../components/admin/admin-sidebar.tsx';
-import { SetupWizard } from '../components/admin/setup-wizard.tsx';
+import { AppShell, ErrorState, LoadingState } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { AdminSidebar } from '../components/admin/admin-sidebar';
+import { SetupWizard } from '../components/admin/setup-wizard';
 
 function AdminRoot() {
-    const { data: setupStatus, isLoading: setupLoading } = useSetupStatus();
+    const { data: setupStatus, isLoading, error, refetch } = useSetupStatus();
 
-    if (setupLoading) return <LoadingState />;
-    if (setupStatus?.setupRequired) return <SetupWizard />;
+    if (isLoading) return <LoadingState />;
+    if (error) {
+        return (
+            <ErrorState
+                message="Could not check setup status."
+                detail={error.message}
+                action={<Button onClick={() => refetch()}>Try again</Button>}
+            />
+        );
+    }
+    // Never infer "configured" from absent data — only a resolved status decides.
+    if (!setupStatus) return <LoadingState />;
+    if (setupStatus.setupRequired) return <SetupWizard status={setupStatus} />;
 
     return <AdminApp />;
 }

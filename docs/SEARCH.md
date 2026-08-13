@@ -137,7 +137,7 @@ crosses the wire.
 adds every team the caller belongs to via `pullDriveSearch` on the home relay, dedupes by path id
 and re-sorts by recency. Mail stays personal.
 
-On the frontend, `packages/lib/src/core/search/` holds `useSearch` (30 s `staleTime`, `enabled`
+On the frontend, `packages/lib/src/core/search/` holds `useSearchQuery` (30 s `staleTime`, `enabled`
 guard, `AbortSignal` threaded through Eden), `searchKeys` (keyed by owner and every query
 parameter) and `invalidateSearchOwner`. The command palette's `mail-search` and `file-search`
 providers are the consumers; each debounces and asks for its own source only.

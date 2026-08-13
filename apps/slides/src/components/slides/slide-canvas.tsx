@@ -4,7 +4,7 @@ import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useMemo, useRef } from 'react';
@@ -237,6 +237,8 @@ export function SlideCanvas({
                     maxHeight: '100%',
                     maxWidth: '100%',
                     containerType: 'size',
+                    // Explicit stacking context for the canvas-internal overlay tiers below.
+                    isolation: 'isolate',
                     ...getBackgroundStyle(slide.background, resolveMediaUrl),
                 }}
                 onMouseDown={handleCanvasMouseDown}
@@ -311,7 +313,7 @@ export function SlideCanvas({
                     p.rotation === undefined ? null : (
                         <div
                             key={`angle-${p.objId}`}
-                            className="absolute z-50 pointer-events-none rounded bg-foreground px-1.5 py-0.5 text-xs text-background"
+                            className="absolute z-30 pointer-events-none rounded bg-foreground px-1.5 py-0.5 text-xs text-background"
                             style={{
                                 left: `${pxToPercent(p.x + p.w / 2, 'x')}%`,
                                 top: `${pxToPercent(p.y, 'y')}%`,
@@ -325,7 +327,7 @@ export function SlideCanvas({
                 {activeSnapLines.map((line, i) => (
                     <div
                         key={i}
-                        className="absolute pointer-events-none z-50 bg-selection-handle"
+                        className="absolute pointer-events-none z-30 bg-selection-handle"
                         style={
                             line.orientation === 'vertical'
                                 ? { left: `${pxToPercent(line.position, 'x')}%`, top: 0, bottom: 0, width: '1px' }
@@ -335,7 +337,7 @@ export function SlideCanvas({
                 ))}
                 {multiSelectBounds && !dragPreviews.length && (
                     <div
-                        className="absolute z-40 border border-dashed border-selection-handle cursor-move"
+                        className="absolute z-20 border border-dashed border-selection-handle cursor-move"
                         style={{
                             left: `${pxToPercent(multiSelectBounds.x, 'x')}%`,
                             top: `${pxToPercent(multiSelectBounds.y, 'y')}%`,
@@ -348,7 +350,7 @@ export function SlideCanvas({
                 {marquee && (
                     <div
                         className={cn(
-                            'absolute pointer-events-none z-50 border border-selection-handle bg-selection-handle/10',
+                            'absolute pointer-events-none z-30 border border-selection-handle bg-selection-handle/10',
                             marquee.mode === 'intersect' && 'border-dashed',
                         )}
                         style={{

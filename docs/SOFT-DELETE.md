@@ -90,7 +90,7 @@ Trash itself is `GET /trash`, `POST /trash/:pathId/restore`, `DELETE /trash/:pat
 Events: `DRIVE_PATH_TRASHED` (carries `oldParentId` from `trashedFrom`, so the frontend knows which folder
 cache to drop), `DRIVE_PATH_RESTORED`, and `DRIVE_FILE_DELETED` / `DRIVE_FOLDER_DELETED` for permanent deletes.
 The handlers in `packages/lib/src/core/drive/sse-handlers.ts` invalidate the affected folder plus the trash
-list. Hooks (`packages/lib/src/core/drive/hooks/use-drive.ts`) are `useListTrash`, `useRestorePath`,
+list. Hooks (`packages/lib/src/core/drive/hooks/trash.ts`) are `useListTrash`, `useRestorePath`,
 `usePermanentlyDelete` and `useEmptyTrash`, all keyed under `driveKeys.trashList` and invalidating it on
 success through the same `invalidateTrash()` the SSE handlers use.
 

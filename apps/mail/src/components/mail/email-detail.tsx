@@ -1,15 +1,14 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
 import type { AddressObject, Attachment, Email, EmailAddress, MaildirMailbox } from '@workspace/lib/types/mail';
-import { Toolbar, TooltipButton, UserAvatar } from '@workspace/ui';
+import { KebabTrigger, ShadowContent, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
-import { ShadowContent } from '@workspace/ui/components/layout/shadow-content';
-import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Separator } from '@workspace/ui/components/separator';
+import { UserAvatar } from '@workspace/ui/components/user';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { AlertTriangle, Archive, ChevronDown, Forward, Reply, ReplyAll, Trash2 } from 'lucide-react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useEffectEvent, useRef } from 'react';
 import { CalendarInviteWidget } from './calendar-invite-widget';
 import { EmailContextMenu } from './email-context-menu';
 import { ReadAttachments } from './read-attachments';
@@ -235,12 +234,16 @@ function MailHeader({ email, formattedDate }: { email: Email; formattedDate: str
 export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetailProps) {
     const hasMarkedAsRead = useRef<string | null>(null);
 
+    // Mark on email change only; read the latest (unstable) toggleMailRead via an Effect Event.
+    const markRead = useEffectEvent((mail: Email) => {
+        toggleMailRead(mail, true);
+    });
+
     useEffect(() => {
         if (email && !email.isRead && hasMarkedAsRead.current !== email.id) {
             hasMarkedAsRead.current = email.id;
-            toggleMailRead(email, true);
+            markRead(email);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- toggleMailRead is an unstable prop reference; hasMarkedAsRead ref prevents re-marking
     }, [email]);
 
     if (!email) {
@@ -292,12 +295,7 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
                     {email.attachments?.map(
                         (attachment: Attachment, index: number) =>
                             attachment.contentType.startsWith('text/calendar') && (
-                                <CalendarInviteWidget
-                                    key={index}
-                                    attachment={attachment}
-                                    emailId={email.id}
-                                    attachmentIndex={index}
-                                />
+                                <CalendarInviteWidget key={index} invite={attachment.calendarInvite} />
                             ),
                     )}
                 </div>

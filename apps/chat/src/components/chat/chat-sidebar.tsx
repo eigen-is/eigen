@@ -3,12 +3,11 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
-import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
-import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
-import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import { SidebarBody, SidebarItem, SidebarSection, UnreadDot } from '@workspace/ui';
+import { ChatCreateWizard } from '@workspace/ui/components/chat';
+import { StorageUsage } from '@workspace/ui/components/home';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
-import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import { UserAvatar } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
 import { MessageSquare, Plus } from 'lucide-react';
 import { useState } from 'react';
@@ -67,7 +66,7 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
     const teamChats = teams.flatMap((t) => t.chats);
 
     return (
-        <div className="flex h-full flex-col">
+        <>
             <SidebarBody>
                 {!isGuest && (
                     <SidebarPrimaryButton
@@ -79,9 +78,7 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
                 )}
 
                 {isLoading ? (
-                    <div className="flex justify-center py-4">
-                        <EigenLoader />
-                    </div>
+                    <SidebarSection condensed={condensed} loading />
                 ) : (
                     personal.length > 0 && (
                         <SidebarSection condensed={condensed}>
@@ -109,6 +106,9 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
                         ))}
                     </SidebarSection>
                 )}
+
+                {/* Guests manage no storage — drive's guest sidebar omits this too. */}
+                {!isGuest && <StorageUsage className="mt-auto" condensed={condensed} />}
             </SidebarBody>
 
             {!isGuest && (
@@ -123,6 +123,6 @@ export function ChatSidebar({ condensed = false }: ChatSidebarProps) {
                     }
                 />
             )}
-        </div>
+        </>
     );
 }

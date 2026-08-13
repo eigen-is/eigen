@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import * as lib from '../../index.ts';
+import * as lib from '../../index';
 
 describe('sheet/formula-parser/public-api', () => {
     test('Parser should be defined', () => {

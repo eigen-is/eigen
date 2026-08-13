@@ -137,7 +137,7 @@ path owned by the same team).
 - **Sidebar**: Team drives appear under "Shared Drives" in Drive app
 - **Share dialog**: `drive-access-list-edit.tsx` supports team picker + team display
 - **Admin hooks** (`packages/lib/src/core/admin/hooks/`, exported from `@workspace/lib/admin`):
-  `useMembers(orgId?)`, `useTeams(orgId?)`, `useActiveMember()`, `useAdminUsers(filter)`
+  `useMembers(orgId?)`, `useTeams(orgId?)`, `useAdminUsers(filter)`
 - **Team hooks** (`packages/lib/src/core/team/hooks/`, exported from `@workspace/lib/team`):
   `useTeamMembers(teamId)` — takes the raw team id and wraps it with `teamOwnerId()` itself — plus the team
   settings/mounts hooks that share `teamKeys`
@@ -165,8 +165,8 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 
 ### Access
 
-Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see
-`AccessDenied`. Visible via "Admin" in app switcher.
+Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see an access-denied
+`EmptyState`. Visible via "Admin" in app switcher.
 
 ### API
 

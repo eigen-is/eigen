@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { SettingsPage } from '@workspace/ui';
 import { ServerSettingsPage } from '../components/admin/server-settings';
 
 export const Route = createFileRoute('/_auth/settings')({
@@ -9,12 +8,8 @@ export const Route = createFileRoute('/_auth/settings')({
 
 function SettingsRoute() {
     return (
-        <ColumnLayout>
-            <Column id="detail" width="flex" onBack="sidebar" toolbar={<ToolbarTitle>Server Settings</ToolbarTitle>}>
-                <div className="h-full overflow-y-auto">
-                    <ServerSettingsPage />
-                </div>
-            </Column>
-        </ColumnLayout>
+        <SettingsPage title="Server Settings">
+            <ServerSettingsPage />
+        </SettingsPage>
     );
 }

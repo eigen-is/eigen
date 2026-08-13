@@ -33,7 +33,8 @@ const EXIFTOOL_EXTENSIONS = new Set([
 export type TextPreviewMode = 'markdown' | 'plaintext' | 'code' | 'eigendoc' | 'eigenslides' | 'eigensheets';
 
 function getExtension(fileName: string): string {
-    return fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
+    const dot = fileName.lastIndexOf('.');
+    return dot === -1 ? '' : fileName.slice(dot).toLowerCase();
 }
 
 export function getTextPreviewMode(mimeType: string, fileName: string): TextPreviewMode | null {

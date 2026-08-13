@@ -2,8 +2,8 @@ import { getMailAppUrl } from '@workspace/lib/api';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { Mail } from 'lucide-react';
 import { useMemo } from 'react';
-import { useSearch } from '../../search';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useSearchQuery } from '../../search';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Debounce keystrokes before firing the mail search. 150ms is short enough that the user
@@ -25,7 +25,7 @@ export function useMailSearchResults(
     // merges the typed prefix (`mail:`, `>`, `@`) with the chip scope set via Tab.
     const scopeBlocks = scope === 'actions' || scope === 'contacts' || scope === 'doc';
 
-    const { data, isFetching } = useSearch({
+    const { data, isFetching } = useSearchQuery({
         ownerId: ctx.ownerId,
         q: parsed.q,
         sources: ['mail'],

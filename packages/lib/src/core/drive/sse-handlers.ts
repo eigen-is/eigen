@@ -2,8 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { invalidateChatMatches } from '../chat/hooks/use-chat';
-import { collabKeys } from '../collab/hooks/use-collab';
+import { invalidateChatMatches } from '../chat/hooks/keys';
+import { collabKeys } from '../collab/hooks/keys';
 import { invalidateSearchOwner } from '../search';
 import {
     driveKeys,
@@ -15,7 +15,7 @@ import {
     invalidatePathMoved,
     invalidatePathRenamed,
     invalidateTrash,
-} from './hooks/use-drive';
+} from './hooks/keys';
 import { invalidateFileHistory } from './hooks/use-file-history';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId?: string): boolean {

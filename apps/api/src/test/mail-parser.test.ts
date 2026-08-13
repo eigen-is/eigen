@@ -95,7 +95,7 @@ describe('Mail Parser', () => {
             const att = mail.attachments[0];
             expect(att.filename).toBe('test.bin');
             expect(att.contentType).toBe('application/octet-stream');
-            expect(att.content).toBeInstanceOf(Buffer);
+            if (!Buffer.isBuffer(att.content)) throw new Error('attachment content is not a Buffer');
             expect(att.content.toString()).toBe('binary file content');
         });
 
@@ -239,8 +239,10 @@ describe('#14 checkBoundary bare-CR', () => {
         const mail = await simpleParser(bytes);
 
         expect(mail.attachments).toHaveLength(1);
-        expect(mail.attachments[0].filename).toBe('test.bin');
-        expect(mail.attachments[0].content.toString()).toBe('binary file content');
+        const attachment = mail.attachments[0];
+        expect(attachment.filename).toBe('test.bin');
+        if (!Buffer.isBuffer(attachment.content)) throw new Error('attachment content is not a Buffer');
+        expect(attachment.content.toString()).toBe('binary file content');
         expect(mail.text ?? '').toContain('This is the text part.');
         expect(mail.text ?? '').not.toContain('octet-stream');
     });

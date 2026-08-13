@@ -23,11 +23,11 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Download, FileText, Folder, type LucideIcon, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
-import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc';
-import { DriveDeleteItem } from '../drive/drive-delete-item';
-import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
-import { DriveFilePicker } from '../drive/drive-file-picker';
-import { DriveRenameItem } from '../drive/drive-rename-item';
+import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
+import { DriveDeleteItem } from '../../drive/drive-delete-item';
+import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';
+import { DriveFilePicker } from '../../drive/drive-file-picker';
+import { DriveRenameItem } from '../../drive/drive-rename-item';
 import { RestoreVersionDialog, VersionHistoryMenu } from './version-history-menu';
 
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {

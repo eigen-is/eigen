@@ -1,8 +1,8 @@
 // @ts-expect-error - No types available for @formulajs/formulajs
 import * as formulajs from '@formulajs/formulajs';
-import type { FormulaArg, FormulaOutput } from '../../../types.ts';
-import { ERROR_NAME } from '../../error.ts';
-import SUPPORTED_FORMULAS from '../../supported-formulas.ts';
+import type { FormulaArg, FormulaOutput } from '../../../types';
+import { ERROR_NAME } from '../../error';
+import SUPPORTED_FORMULAS from '../../supported-formulas';
 
 export const SYMBOL = SUPPORTED_FORMULAS;
 

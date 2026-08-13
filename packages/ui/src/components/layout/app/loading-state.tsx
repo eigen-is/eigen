@@ -1,4 +1,4 @@
-import { EigenLoader } from '../braket/eigen-loader';
+import { EigenLoader } from '../../braket/eigen-loader';
 
 export function LoadingState() {
     return (

@@ -9,7 +9,7 @@ import { eq } from 'drizzle-orm';
 import * as encoding from 'lib0/encoding';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { user as userSchema } from '../../auth-schema.ts';
+import { user as userSchema } from '../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getHome } from '../lib/home';
 import { getUserById } from '../lib/user';

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { team, teamMember, user } from '../../../auth-schema.ts';
-import { getAuthDrizzleDb } from '../auth/auth.ts';
+import { team, teamMember, user } from '../../../auth-schema';
+import { getAuthDrizzleDb } from '../auth/auth';
 
 export async function getTeam(teamId: string) {
     const db = getAuthDrizzleDb();

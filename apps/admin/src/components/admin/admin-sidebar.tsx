@@ -2,15 +2,12 @@ import { useCreateTeam } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
+import { SidebarBody, SidebarItem, SidebarSection, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
-import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
-import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
+import { UserAvatar } from '@workspace/ui/components/user';
 import {
     ClipboardList,
     KeyRound,
@@ -53,7 +50,7 @@ export function AdminSidebar({
     };
 
     return (
-        <div className="h-full flex flex-col">
+        <>
             <SidebarBody>
                 <SidebarSection condensed={condensed}>
                     {isOwner && (
@@ -131,6 +128,8 @@ export function AdminSidebar({
                             />
                         ))}
                 </SidebarSection>
+
+                {/* No StorageUsage: Admin is a server-admin surface, not a personal-storage context. */}
             </SidebarBody>
 
             <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -157,6 +156,6 @@ export function AdminSidebar({
                     </form>
                 </DialogContent>
             </Dialog>
-        </div>
+        </>
     );
 }

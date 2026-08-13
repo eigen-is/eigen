@@ -2,7 +2,7 @@ import { Link } from '@tanstack/react-router';
 import type { MouseEvent, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
-import { useLayout } from '../app/layout-context.tsx';
+import { useLayout } from '../app/layout-context';
 
 export type SidebarItemProps = {
     icon: ReactNode;

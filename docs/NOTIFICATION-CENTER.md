@@ -73,7 +73,7 @@ refetch. Only `file-event` notifications set it today; all other callers keep th
 ## Row content contract (unified activity)
 
 The bell and the Drive *Recent activity* panel render the same row anatomy through one shared
-`ActivityRow` (`packages/ui/src/components/layout/activity-row.tsx`). Every producer persists to one contract:
+`ActivityRow` (`packages/ui/src/components/activity-row.tsx`). Every producer persists to one contract:
 
 - **`title` = the action sentence** — who did what, where (`New mail from Hanne Oberman`,
   `Mark added a card to "Eigen Feedback"`). Rendered as the small muted first line.
@@ -167,7 +167,7 @@ the stored title as-is.
 
 ### Actor Avatars
 
-`UserAvatar` (from `packages/ui/src/components/layout/user-avatar.tsx`) renders the `actorEmail` avatar next to each
+`UserAvatar` (from `packages/ui/src/components/user/user-avatar.tsx`) renders the `actorEmail` avatar next to each
 notification item.
 
 ### Bell app badge
@@ -209,4 +209,4 @@ Backend: `apps/api/src/lib/notification-center/` (schema, db-config with the v2 
 `NotificationCenter` service, SSE builder) and `apps/api/src/routes/notification.ts`. Frontend:
 `packages/lib/src/core/notification/` (hooks, SSE handler, `resolve-link.ts`, `describe.ts`), shared types in
 `packages/lib/src/types/notification.ts`, and the bell + shared row in
-`packages/ui/src/components/layout/` (`activity-row.tsx`, `app/notification-bell.tsx`, `app/notification-badge.tsx`).
+`packages/ui/src/components/` (`activity-row.tsx`, `layout/app/notification-bell.tsx`, `layout/app/notification-badge.tsx`).
