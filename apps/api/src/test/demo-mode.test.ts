@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
-import { account as accountSchema, member as memberSchema, user as userSchema } from '../../auth-schema.ts';
+import { account as accountSchema, member as memberSchema, user as userSchema } from '../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getDemoPersonaPool } from '../lib/auth/demo-persona-pool';
 import { signInWithScopedPassword } from '../lib/auth/guest-auth';

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { organization } from '../../../auth-schema.ts';
-import { getAuthDrizzleDb } from '../auth/auth.ts';
+import { organization } from '../../../auth-schema';
+import { getAuthDrizzleDb } from '../auth/auth';
 
 export async function getOrgExists(orgId: string) {
     const db = getAuthDrizzleDb();

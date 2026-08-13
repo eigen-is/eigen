@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import evaluateByOperator from '../../../evaluate-by-operator/evaluate-by-operator.ts';
+import evaluateByOperator from '../../../evaluate-by-operator/evaluate-by-operator';
 
 describe('evaluate-by-operator dispatch', () => {
     test('arithmetic operators propagate Error operands instead of silently coercing', () => {

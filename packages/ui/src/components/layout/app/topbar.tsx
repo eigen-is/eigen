@@ -8,9 +8,9 @@ import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { EigenLogo } from '../../braket/eigen-logo.tsx';
-import { Button } from '../../button.tsx';
-import { ConfirmDialog } from '../../confirm-dialog.tsx';
+import { EigenLogo } from '../../braket/eigen-logo';
+import { Button } from '../../button';
+import { ConfirmDialog } from '../../confirm-dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -23,14 +23,14 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
-} from '../../dropdown-menu.tsx';
-import { UserAvatar } from '../../user/user-avatar.tsx';
-import { UserItem } from '../../user/user-item.tsx';
-import { AboutDialog } from './about-dialog.tsx';
-import { AppLogo } from './app-logo.tsx';
-import { CommandPaletteTrigger } from './command-palette/command-palette-trigger.tsx';
-import { useLayout } from './layout-context.tsx';
-import { NotificationBell } from './notification-bell.tsx';
+} from '../../dropdown-menu';
+import { UserAvatar } from '../../user/user-avatar';
+import { UserItem } from '../../user/user-item';
+import { AboutDialog } from './about-dialog';
+import { AppLogo } from './app-logo';
+import { CommandPaletteTrigger } from './command-palette/command-palette-trigger';
+import { useLayout } from './layout-context';
+import { NotificationBell } from './notification-bell';
 
 type NavigateFunction = (opts: { to: string }) => unknown;
 

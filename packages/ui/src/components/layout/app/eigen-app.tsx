@@ -5,15 +5,15 @@ import { AuthProvider } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type React from 'react';
 import { lazy, Suspense, useState } from 'react';
-import { printDocument } from '../../../lib/printElement.ts';
-import { PreviewProvider } from '../../preview-provider/preview-provider.tsx';
-import { Toaster } from '../../sonner.tsx';
+import { printDocument } from '../../../lib/printElement';
+import { PreviewProvider } from '../../preview-provider/preview-provider';
+import { Toaster } from '../../sonner';
 import { SSEProvider } from '../../sse-provider';
-import { UploadProvider } from '../../upload-provider/upload-provider.tsx';
-import { LoadingScreen } from '../pages/loading-screen.tsx';
-import { CommandPaletteProvider } from './command-palette/command-palette-provider.tsx';
-import { ErrorBoundary } from './error-boundary.tsx';
-import { ThemeProvider } from './theme-provider.tsx';
+import { UploadProvider } from '../../upload-provider/upload-provider';
+import { LoadingScreen } from '../pages/loading-screen';
+import { CommandPaletteProvider } from './command-palette/command-palette-provider';
+import { ErrorBoundary } from './error-boundary';
+import { ThemeProvider } from './theme-provider';
 
 const ReactQueryDevtools = import.meta.env.DEV
     ? lazy(() => import('@tanstack/react-query-devtools').then((m) => ({ default: m.ReactQueryDevtools })))

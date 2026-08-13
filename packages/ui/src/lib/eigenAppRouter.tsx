@@ -1,9 +1,9 @@
 import type { AnyRoute, AnyRouter } from '@tanstack/react-router';
 import { createRouter, RouterProvider } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { EigenApp } from '../components/layout/app/eigen-app.tsx';
-import { EmptyState } from '../components/layout/app/empty-state.tsx';
-import { mountReactApp } from './mountReactApp.ts';
+import { EigenApp } from '../components/layout/app/eigen-app';
+import { EmptyState } from '../components/layout/app/empty-state';
+import { mountReactApp } from './mountReactApp';
 
 // Every Eigen SPA (drive, mail, docs, …) boots the same way: a TanStack router
 // with identical defaults over the app's own route tree, mounted inside the

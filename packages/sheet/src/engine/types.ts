@@ -1,5 +1,5 @@
 import type { DependencyIndex } from './dependency-index';
-import type { CellCoordinate } from './parser/helper/cell.ts';
+import type { CellCoordinate } from './parser/helper/cell';
 
 // Sheet data shapes (Cell, CellMatrix, SingleRange, ConditionalFormatRule, …) live
 // in `@workspace/lib/sheets` to avoid a workspace cycle (sheet depends on lib,

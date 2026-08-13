@@ -7,7 +7,7 @@ import error, {
     ERROR_NUM,
     ERROR_REF,
     ERROR_VALUE,
-} from './error.ts';
+} from './error';
 import {
     columnIndexToLabel,
     columnLabelToIndex,
@@ -15,9 +15,9 @@ import {
     rowIndexToLabel,
     rowLabelToIndex,
     toLabel,
-} from './helper/cell.ts';
-import Parser from './parser.ts';
-import SUPPORTED_FORMULAS from './supported-formulas.ts';
+} from './helper/cell';
+import Parser from './parser';
+import SUPPORTED_FORMULAS from './supported-formulas';
 
 export {
     columnIndexToLabel,

@@ -1,5 +1,5 @@
-import type { FormulaArg } from '../../../types.ts';
-import { toNumber } from '../../helper/number.ts';
+import type { FormulaArg } from '../../../types';
+import { toNumber } from '../../helper/number';
 
 export const SYMBOL = '=';
 

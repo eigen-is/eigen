@@ -3,7 +3,7 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
-import { member, user } from '../../auth-schema.ts';
+import { member, user } from '../../auth-schema';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
 import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';

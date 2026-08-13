@@ -8,7 +8,7 @@ import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
 import { Download, UserRoundPlus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useLayout } from '../layout/app/layout-context.tsx';
+import { useLayout } from '../layout/app/layout-context';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { useOptionalPreview } from '../preview-provider/preview-provider';
 import { DriveItemMenuItems } from './drive-item-menu';

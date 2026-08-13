@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { trimEdges } from '../../../helper/string.ts';
+import { trimEdges } from '../../../helper/string';
 
 describe('.trimEdges()', () => {
     it('should correctly trim edges', () => {

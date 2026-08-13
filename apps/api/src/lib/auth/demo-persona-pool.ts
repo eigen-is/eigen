@@ -1,5 +1,5 @@
 import { and, eq, isNull, or } from 'drizzle-orm';
-import { member, user } from '../../../auth-schema.ts';
+import { member, user } from '../../../auth-schema';
 import { getAuthDrizzleDb } from './auth';
 
 // The demo visitor pool, discovered from org membership so it can't drift from the seeder.

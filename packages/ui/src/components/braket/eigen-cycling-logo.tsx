@@ -1,8 +1,8 @@
 import { apps } from '@workspace/lib/apps';
 import { useEffect, useState } from 'react';
-import { cn } from '../../lib/utils.ts';
-import { Bar } from './bar.tsx';
-import { Ket } from './ket.tsx';
+import { cn } from '../../lib/utils';
+import { Bar } from './bar';
+import { Ket } from './ket';
 
 type EigenCyclingLogoProps = {
     className?: string;

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { ToolbarTitle } from '../toolbar/toolbar-title.tsx';
-import { Column, ColumnLayout } from './column-layout.tsx';
+import { ToolbarTitle } from '../toolbar/toolbar-title';
+import { Column, ColumnLayout } from './column-layout';
 
 type SettingsPageProps = {
     title: string;

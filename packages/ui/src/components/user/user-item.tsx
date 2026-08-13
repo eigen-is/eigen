@@ -1,8 +1,8 @@
 import { useResolvedUser } from '@workspace/lib/public';
 import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes, ReactNode } from 'react';
-import { Avatar, AvatarImage } from '../avatar.tsx';
-import { EigenLoader } from '../braket/eigen-loader.tsx';
+import { Avatar, AvatarImage } from '../avatar';
+import { EigenLoader } from '../braket/eigen-loader';
 import { MailComposeLink } from './mail-compose-link';
 import { OwnerInfoPopover } from './owner-info-popover';
 

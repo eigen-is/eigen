@@ -1,5 +1,5 @@
 import { Eye } from 'lucide-react';
-import { TooltipButton } from './tooltip-button.tsx';
+import { TooltipButton } from './tooltip-button';
 
 // Read-only marker in the share cluster's Share slot — the Share button replaces it when canWrite.
 export const DocumentModeButton = () => (

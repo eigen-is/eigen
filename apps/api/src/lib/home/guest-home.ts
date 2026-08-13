@@ -1,10 +1,10 @@
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { getGuestHomePath } from '../config/paths.ts';
+import { getGuestHomePath } from '../config/paths';
 import { JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
 import { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
-import { Home, type HomeSettings } from './home.ts';
+import { Home, type HomeSettings } from './home';
 
 export class GuestHome extends Home {
     constructor(user: User, cleanUp?: () => void) {

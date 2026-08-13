@@ -1,8 +1,8 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { ArrowLeft } from 'lucide-react';
 import { createContext, type ReactNode, useCallback, useContext, useRef, useState } from 'react';
-import { TooltipButton } from '../toolbar/tooltip-button.tsx';
-import { useLayout } from './layout-context.tsx';
+import { TooltipButton } from '../toolbar/tooltip-button';
+import { useLayout } from './layout-context';
 
 type ColumnContextType = {
     mobileColumn: string | null;

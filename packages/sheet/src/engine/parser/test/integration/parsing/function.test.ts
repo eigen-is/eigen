@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import type { FormulaArg } from '../../../../types.ts';
-import Parser from '../../../parser.ts';
+import type { FormulaArg } from '../../../../types';
+import Parser from '../../../parser';
 
 describe('.parse() custom function', () => {
     let parser: Parser | null;

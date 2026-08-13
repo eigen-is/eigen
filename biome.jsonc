@@ -41,6 +41,10 @@
               {
                 "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
                 "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+              },
+              {
+                "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
               }
             ]
           }
@@ -78,6 +82,10 @@
                   {
                     "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
                     "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
                   }
                 ]
               }
@@ -104,6 +112,10 @@
                   {
                     "group": ["@workspace/**/*.ts", "@workspace/**/*.tsx"],
                     "message": "Workspace imports resolve through the package exports map — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
+                  },
+                  {
+                    "group": ["./**/*.ts", "./**/*.tsx", "../**/*.ts", "../**/*.tsx"],
+                    "message": "Relative imports resolve extensionless under moduleResolution: bundler — drop the .ts/.tsx suffix (see CODE-STANDARDS.md § Imports)."
                   }
                 ]
               }
