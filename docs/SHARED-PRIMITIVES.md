@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-873 primitives across 6 kinds. `packages/sheet` internals are excluded.
+888 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (116)
+## Components (124)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -32,6 +32,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DeleteDialog` | `@workspace/ui` | packages/ui/src/components/delete/delete-dialog.tsx |
 | `DocumentModeButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-mode-button.tsx |
 | `DocumentShareCluster` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/document-share-cluster.tsx |
+| `DroppableSidebarItem` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/droppable-sidebar-item.tsx |
 | `EditMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/edit-menu.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenCyclingLogo` | `@workspace/ui` | packages/ui/src/components/braket/eigen-cycling-logo.tsx |
@@ -51,6 +52,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ShadowContent` | `@workspace/ui` | packages/ui/src/components/shadow-content.tsx |
 | `SidebarBody` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItem` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
+| `SidebarPrimaryButton` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-primary-button.tsx |
 | `SidebarSection` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
 | `Toolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
 | `ToolbarSeparator` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-separator.tsx |
@@ -104,6 +106,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocNewButton` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-new-button.tsx |
 | `EigenDocRoot` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `EigenDocSharedView` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-shared-view.tsx |
+| `ExportProgressDialog` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
 | `LightEditor` | `@workspace/ui/components/editor` | packages/ui/src/components/editor/light-editor.tsx |
 | `StorageUsage` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `LabelAssignSubMenu` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-assign-sub-menu.tsx |
@@ -113,7 +116,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LoginPage` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-page.tsx |
 | `ColorPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `ColorPickerButton` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
+| `FontPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/font-picker.tsx |
 | `ImageResizeHandles` | `@workspace/ui/components/media` | packages/ui/src/components/media/image-resize-handles.tsx |
+| `MountForm` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
+| `S3ConfigCard` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/s3-config-card.tsx |
 | `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/alignment-picker.tsx |
@@ -122,6 +128,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-number-input.tsx |
 | `PropertyRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
 | `PropertySection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/properties-panel.tsx |
+| `FindInDocumentButton` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
+| `FindInDocumentMenuItem` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
 | `UploadContainer` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-container.tsx |
 | `CollapsibleUserList` | `@workspace/ui/components/user` | packages/ui/src/components/user/collapsible-user-list.tsx |
 | `OwnerInfoPopover` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |
@@ -132,13 +140,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserName` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UserNameCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
 
-## Providers (5)
+## Providers (6)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `AuthProvider` | `@workspace/lib/auth` | packages/lib/src/core/auth/auth-context.tsx |
 | `MediaResolverProvider` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `PreviewProvider` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-provider.tsx |
+| `DocSearchProvider` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `SSEProvider` | `@workspace/ui/components/sse-provider` | packages/ui/src/components/sse-provider/sse-provider.tsx |
 | `UploadProvider` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 
@@ -155,7 +164,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (226)
+## Hooks (229)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -366,10 +375,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useAttachmentMeta` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-meta.ts |
 | `useContactInput` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/use-contact-input.ts |
 | `useContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/use-context-menu.ts |
+| `useDocumentExport` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
 | `useMountLabel` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-mount-list.tsx |
 | `useDriveListRoute` | `@workspace/ui/components/drive/use-drive-list-route` | packages/ui/src/components/drive/use-drive-list-route.ts |
 | `useOptionalPreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `usePreview` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
+| `useFindBarRefocus` | `@workspace/ui/components/search` | packages/ui/src/components/search/find-in-document-button.tsx |
+| `useOptionalDocSearchBar` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `useProseMirrorSearchController` | `@workspace/ui/components/search/prosemirror-search-controller` | packages/ui/src/components/search/prosemirror-search-controller.ts |
 | `useUpload` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
@@ -386,7 +398,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (240)
+## Types (243)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -618,9 +630,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
 | `ColorPickerButtonProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `ColorPickerProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
+| `MountFormValues` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
 | `DownloadMode` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
 | `PreviewMode` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-provider.tsx |
 | `PreviewOptions` | `@workspace/ui/components/preview-provider` | packages/ui/src/components/preview-provider/preview-context.ts |
+| `DocSearchBarContextValue` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
+| `DocSearchProviderProps` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `FlashRange` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 | `UploadItem` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
 | `OwnerInfoPopoverProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/owner-info-popover.tsx |

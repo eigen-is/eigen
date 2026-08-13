@@ -16,3 +16,4 @@ export * from './eigendoc-new-button';
 export * from './eigendoc-root';
 export * from './eigendoc-shared-view';
 export * from './file-presentation';
+export * from './use-document-export';
