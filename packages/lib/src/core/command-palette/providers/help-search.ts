@@ -4,7 +4,7 @@ import type { PaletteResult, PaletteScope } from '@workspace/lib/types/command-p
 import { CircleHelp } from 'lucide-react';
 import { useMemo } from 'react';
 import { helpSearchKeys, loadPagefind } from '../../search';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Same debounce as the other async sources — short enough to feel live, long enough to

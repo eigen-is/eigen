@@ -17,7 +17,8 @@ import {
     useMediaResolver,
     useUploadFile,
 } from '@workspace/lib/drive';
-import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
+import { escapeHtml } from '@workspace/lib/html';
+import { htmlToPlainText } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';

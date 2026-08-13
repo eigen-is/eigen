@@ -1,5 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
+    formatEventWhen,
     occurrenceDateToString,
     parseOccurrenceDate,
     truncateRRule,
@@ -8,7 +9,6 @@ import {
     useRsvp,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
-import { formatEventWhen } from '@workspace/lib/date';
 import { useMyTeams } from '@workspace/lib/home';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';

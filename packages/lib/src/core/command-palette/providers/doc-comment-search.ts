@@ -3,7 +3,7 @@ import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib
 import { MessageSquareText } from 'lucide-react';
 import { useMemo } from 'react';
 import { searchKeys } from '../../search';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Debounce keystrokes before firing the comment search (matches mail-search's 150ms).

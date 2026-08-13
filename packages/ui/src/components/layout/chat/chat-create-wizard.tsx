@@ -2,12 +2,12 @@ import { openDocument } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useCreateChatRoom, useFindChatByMembers } from '@workspace/lib/chat';
-import { useDebouncedValue } from '@workspace/lib/command-palette';
 import { useMyTeams } from '@workspace/lib/home';
 import { CHATS_FOLDER_NAME, type ChatMatch } from '@workspace/lib/types/chat';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { teamOwnerId } from '@workspace/lib/types/owner';
+import { useDebouncedValue } from '@workspace/lib/use-debounced-value';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {

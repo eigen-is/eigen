@@ -4,7 +4,7 @@ import { isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { useMemo } from 'react';
 import { getFilePresentation } from '../../file-presentation';
 import { useSearch } from '../../search';
-import { useDebouncedValue } from '../hooks/use-debounced-value';
+import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
 // Same debounce as mail — short enough to feel live, long enough to coalesce typing.

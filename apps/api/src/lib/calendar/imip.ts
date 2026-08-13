@@ -1,4 +1,4 @@
-import { formatEventWhen } from '@workspace/lib/date';
+import { formatEventWhen } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
 import {
     type Attendee,
