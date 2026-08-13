@@ -3,7 +3,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
-import { ChatCreateWizard } from '@workspace/ui/components/chat/chat-create-wizard';
+import { ChatCreateWizard } from '@workspace/ui/components/chat';
 import {
     DropdownMenu,
     DropdownMenuContent,
