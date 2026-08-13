@@ -3,7 +3,6 @@ import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath, DriveSortDir, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import { DriveGrid, DriveTable } from '@workspace/ui/components/drive';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -27,7 +26,9 @@ import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
 import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
+import { DriveGrid } from './drive-grid';
 import { useMountLabel } from './drive-mount-list';
+import { DriveTable } from './drive-table';
 
 const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
