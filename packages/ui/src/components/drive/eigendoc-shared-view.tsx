@@ -36,7 +36,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
         error: isFolderContentLoadingError,
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
-    const folderContents = unfilteredFolderContents?.filter((path) => path.type === config.driveType) || [];
+    const folderContents = unfilteredFolderContents.filter((path) => path.type === config.driveType);
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {
@@ -60,7 +60,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             selectedPath={selectedPath}
             ownerId={uid || ownerId}
             mountId={mid || DEFAULT_MOUNT_ID}
-            folderContents={folderContents ?? []}
+            folderContents={folderContents}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}
             onRowSelect={onRowSelect}
