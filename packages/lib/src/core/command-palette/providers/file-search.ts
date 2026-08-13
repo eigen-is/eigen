@@ -3,7 +3,7 @@ import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib
 import { isCollabType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { useMemo } from 'react';
 import { getFilePresentation } from '../../file-presentation';
-import { useSearch } from '../../search';
+import { useSearchQuery } from '../../search';
 import { useDebouncedValue } from '../../use-debounced-value';
 import { parseQuery } from '../parse-query';
 
@@ -24,7 +24,7 @@ export function useFileSearchResults(
     // Skip the network call when the effective scope excludes files.
     const scopeBlocks = scope === 'mail' || scope === 'actions' || scope === 'contacts' || scope === 'doc';
 
-    const { data, isFetching } = useSearch({
+    const { data, isFetching } = useSearchQuery({
         ownerId: ctx.ownerId,
         q: parsed.q,
         sources: ['file'],

@@ -5,7 +5,7 @@ import type { SearchSource } from '@workspace/lib/types/search';
 import { AppError } from '../../api-error';
 import { searchKeys } from '../keys';
 
-export type UseSearchOptions = {
+export type UseSearchQueryOptions = {
     ownerId: string;
     q: string;
     sources?: SearchSource[];
@@ -18,7 +18,7 @@ export type UseSearchOptions = {
     enabled?: boolean;
 };
 
-export function useSearch(opts: UseSearchOptions) {
+export function useSearchQuery(opts: UseSearchQueryOptions) {
     return useQuery({
         queryKey: searchKeys.query(opts),
         queryFn: async ({ signal }) => {
