@@ -817,7 +817,8 @@ const TiptapEditor = ({
                                     <div
                                         data-document="true"
                                         className={cn(
-                                            'grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
+                                            // eigen-paper: the page always renders light, in dark mode too (globals.css)
+                                            'eigen-paper grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none',
                                             !needsScale && 'min-h-full m-auto',
                                         )}
                                         ref={setDocumentEl}

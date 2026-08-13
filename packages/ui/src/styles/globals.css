@@ -17,9 +17,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
-:root {
+:root,
+.eigen-paper {
     /* Drive native UA chrome (scrollbars, form controls) from the theme so the
-       Windows scrollbar is dark in dark mode; macOS overlay bars already match. */
+       Windows scrollbar is dark in dark mode; macOS overlay bars already match.
+       .eigen-paper shares this block so a light-pinned surface re-declares the
+       complete light palette — see the paper comment below. */
     color-scheme: light;
     --radius: 0.375rem;
     --background: oklch(1 0 0);
@@ -114,40 +117,67 @@
 
 /* Light-pinned paper surface — the convention for editor surfaces that render
    user content: the paper keeps its light rendering in dark mode, only the app
-   chrome around it re-themes (decision 2026-07-13, matching the docs page).
-   The docs page pins itself with literal bg-white/text-black utilities;
-   token-driven surfaces — the sheets workbook (canvas + headers + overlays) —
-   scope this class on their surface container instead. It re-pins exactly the
-   theme tokens the surface consumes to their light :root values, so every
-   var(--…) reference inside resolves identically in both themes. Not pinned on
-   purpose: the sheet canvas colors (hardcoded light in canvas.ts) and the
-   per-app accents (--app-current-color — theme-invariant by definition); if
-   either ever themes, pin it here. In-grid app chrome (link card, validation
-   hint box, add-row control) opts back into the theme with .eigen-paper-chrome
-   (declared alongside .dark above). */
-.eigen-paper {
-    color-scheme: light;
-    /* Inherited text re-resolves here: `color` computes at the element that
-       declares it, so body's themed color would otherwise inherit INTO the
-       paper as the dark-mode foreground. Values are verbatim copies of the
-       :root light palette — keep in sync. */
-    color: var(--foreground);
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.129 0.042 264.695);
-    --muted: oklch(0.968 0.007 247.896);
-    --muted-foreground: oklch(0.554 0.046 257.417);
-    --accent: oklch(0.968 0.007 247.896);
-    --accent-foreground: oklch(0.208 0.042 265.755);
-    --input: oklch(0.929 0.013 255.508);
-    --ring: oklch(0.704 0.04 256.788);
-    --warning: oklch(0.7 0.17 75);
-    --selection-handle: #3b82f6;
-}
-
-/* Chrome nested in a paper scope re-resolves inherited text against its own
-   (re-themed) tokens, mirroring the `color` re-resolution above. */
+   chrome around it re-themes (decision 2026-07-13). Scoped on the docs page,
+   the slides canvas, and the sheets workbook + formula bar. The surface gets
+   the complete light palette via the shared `:root, .eigen-paper` block above,
+   so every token inside the paper — current and future — resolves light in
+   both themes. Not pinned on purpose: the sheet canvas colors (hardcoded light
+   in canvas.ts) and the per-app accents (--app-current-color — theme-invariant
+   by definition); if either ever themes, pin it here. In-paper app chrome
+   (sheet link card, validation hint box) opts back into the theme with
+   .eigen-paper-chrome (declared alongside .dark above). */
+.eigen-paper,
 .dark .eigen-paper-chrome {
+    /* Inherited text re-resolves here: `color` computes at the element that
+       declares it, so the surrounding scope's foreground would otherwise
+       inherit INTO the paper (or the nested chrome) unchanged. */
     color: var(--foreground);
+    /* The `--color-*` aliases Tailwind emits from `@theme inline` compute at
+       :root, so handwritten `var(--color-…)` references (e.g. eigen-prose's
+       ::selection) inherit the values already resolved against the html-level
+       theme. Re-declaring the aliases here re-resolves them against this
+       scope's raw tokens. Utilities need no help — `@theme inline` makes them
+       reference the raw tokens directly. Keep in sync with `@theme inline`. */
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --color-chart-1: var(--chart-1);
+    --color-chart-2: var(--chart-2);
+    --color-chart-3: var(--chart-3);
+    --color-chart-4: var(--chart-4);
+    --color-chart-5: var(--chart-5);
+    --color-sidebar: var(--sidebar);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-selected: var(--selected);
+    --color-selected-hover: var(--selected-hover);
+    --color-link: var(--link);
+    --color-selection-handle: var(--selection-handle);
 }
 
 @theme inline {

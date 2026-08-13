@@ -44,11 +44,9 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 ## Rendering
 
 - [ ] sheet dark mode — future dark pass, chrome-side only. The workbook surface (canvas + headers +
-      overlays) is already pinned light and renders pixel-identically in light/dark via the
-      `.eigen-paper` convention in `globals.css`. What's left: adopt `.eigen-paper` on the docs page —
-      it still pins itself with literal `bg-white text-black`, so token-driven visuals inside it (e.g.
-      the `--warning` search highlights) still flip in dark mode. Needs its own pixel gate (changes
-      docs dark search-highlights)
+      overlays + formula bar), the docs page, and the slides canvas are all pinned light via the
+      `.eigen-paper` convention in `globals.css` (full light palette + re-resolved `--color-*`
+      aliases, 2026-08-13), so they render identically in light/dark
 
 ## Code debt (opportunistic — fix when touching the area)
 

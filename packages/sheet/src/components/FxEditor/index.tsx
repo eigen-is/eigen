@@ -213,7 +213,8 @@ export function FxEditor() {
     }, [context.config, context.selections, context.sheets, context.currentSheetId, isHidenRC]);
 
     return (
-        <aside>
+        // eigen-paper: the formula bar reads like the grid — light in dark mode too (globals.css)
+        <aside className="eigen-paper">
             <div className="flex flex-row h-7 border-b border-border bg-muted">
                 <NameBox />
                 <div className="overflow-visible p-0 flex-1 flex items-center relative">

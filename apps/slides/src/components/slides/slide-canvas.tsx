@@ -229,9 +229,10 @@ export function SlideCanvas({
             className="flex-1 flex items-center justify-center p-6 bg-muted overflow-hidden"
             onMouseDown={handleOuterMouseDown}
         >
+            {/* eigen-paper: the slide surface always renders light, in dark mode too (globals.css) */}
             <div
                 ref={canvasRef}
-                className="relative w-full shadow-lg rounded-lg overflow-hidden"
+                className="eigen-paper relative w-full shadow-lg rounded-lg overflow-hidden"
                 style={{
                     aspectRatio: SLIDE_ASPECT_RATIO,
                     maxHeight: '100%',
