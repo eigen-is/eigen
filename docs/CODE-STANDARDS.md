@@ -196,17 +196,29 @@ Elysia route handler return type → Eden Treaty infers response type → hook e
 
 ### Imports
 
-Use workspace aliases, not deep relative paths:
+Workspace imports resolve through each package's `exports` map (`packages/*/package.json`) — there are no
+tsconfig path aliases for `@workspace/*`. If a specifier doesn't resolve, the module isn't public: export it
+from its barrel or give it an exports entry, don't reach around the map. **Never suffix a workspace specifier
+with `.ts`/`.tsx`** — suffixed specifiers don't resolve, and Biome rejects them.
 
-| Alias                             | Points to                                   | Example                                  |
-|-----------------------------------|---------------------------------------------|------------------------------------------|
-| `@workspace/lib/[domain]`        | Hooks + exports for a domain                | `@workspace/lib/drive`                   |
-| `@workspace/lib/types/[domain]`  | Shared types                                | `@workspace/lib/types/calendar`          |
-| `@workspace/lib/api`             | Eden Treaty API client factories            | `@workspace/lib/api`                     |
-| `@workspace/lib/date`            | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) | `@workspace/lib/date` |
-| `@workspace/lib/validation`      | Shared FE/BE validation schemas             | `@workspace/lib/validation`              |
-| `@workspace/ui/components/...`   | UI components (no top-level alias)          | `@workspace/ui/components/ui/button`     |
-| `@workspace/ui/lib/utils`        | `cn()` utility                              | `@workspace/ui/lib/utils`               |
+| Specifier                            | What you get                                                  | Example                                    |
+|--------------------------------------|---------------------------------------------------------------|--------------------------------------------|
+| `@workspace/ui`                      | Root barrel: the AGENTS.md Key UI Components, the layout system, generic leaf primitives | `import { TooltipButton } from '@workspace/ui'` |
+| `@workspace/ui/components/[area]`    | Area barrel (drive, chat, comments, editor, media, user, …)   | `@workspace/ui/components/drive`           |
+| `@workspace/ui/components/[leaf]`    | Extensionless deep import for a component its barrel doesn't export | `@workspace/ui/components/search/doc-search-provider` |
+| `@workspace/ui/components/layout/[dir]` | Layout system barrels: `app`, `pages`, `sidebar`, `toolbar` | `@workspace/ui/components/layout/app`      |
+| `@workspace/ui/hooks/[hook]`         | Shared DOM/interaction hooks                                  | `@workspace/ui/hooks/use-long-press`       |
+| `@workspace/ui/lib/utils`            | `cn()` utility                                                | `@workspace/ui/lib/utils`                  |
+| `@workspace/lib/[domain]`            | Domain barrel: hooks, query keys, invalidators                | `@workspace/lib/drive`                     |
+| `@workspace/lib/types/[domain]`      | Shared FE/BE types                                            | `@workspace/lib/types/calendar`            |
+| `@workspace/lib/constants/[x]`       | Shared constants                                              | `@workspace/lib/constants/stale-time`      |
+| `@workspace/lib/api`                 | Eden Treaty API client factories                              | `@workspace/lib/api`                       |
+| `@workspace/lib/date`                | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) | `@workspace/lib/date`                      |
+| `@workspace/lib/validation`          | Shared FE/BE validation schemas                               | `@workspace/lib/validation`                |
+
+Prefer the barrel over a deep import when both reach the same primitive — SHARED-PRIMITIVES.md lists the
+canonical specifier for everything public. Backend code imports lib only through the React-free subpaths —
+see the carve-out in [AGENTS.md](../AGENTS.md).
 
 ## Key Patterns
 
