@@ -216,9 +216,13 @@ with `.ts`/`.tsx`** — suffixed specifiers don't resolve, and Biome rejects the
 | `@workspace/lib/date`                | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) | `@workspace/lib/date`                      |
 | `@workspace/lib/validation`          | Shared FE/BE validation schemas                               | `@workspace/lib/validation`                |
 
-Prefer the barrel over a deep import when both reach the same primitive — SHARED-PRIMITIVES.md lists the
-canonical specifier for everything public. Backend code imports lib only through the React-free subpaths —
-see the carve-out in [AGENTS.md](../AGENTS.md).
+Prefer the barrel over a deep import when both reach the same primitive. SHARED-PRIMITIVES.md's *Import from*
+column lists the shortest specifier that resolves each primitive — the right default for components, hooks, and
+utils, but **not** authoritative for types and constants, where it collapses to the aggregate
+`@workspace/lib/types` / `@workspace/lib/constants`. There the table above wins: import types from
+`@workspace/lib/types/<domain>` and constants from `@workspace/lib/constants/<x>`; the bare aggregate specifiers
+are tolerated legacy, not the convention. Backend code imports lib only through the React-free subpaths — see the
+carve-out in [AGENTS.md](../AGENTS.md).
 
 ## Key Patterns
 

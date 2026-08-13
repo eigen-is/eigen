@@ -259,8 +259,9 @@ These patterns have caused bugs across multiple domains:
 - **Third copy → shared wrapper** — the "if two+ apps need it, it goes in `packages/`" rule applies to
   *scaffolds*, not just components: route guards, `_auth.tsx` files, editor shells, loading/empty/error
   treatments. When you're about to paste one into a *third* app, stop and extract a single guarded wrapper
-  into `packages/ui` (we have four near-identical EigenDoc editor routes and four sidebars rendering
-  loaders four ways)
+  into `packages/ui` — the way the 11 per-app `main.tsx` bootstraps and `_auth.tsx` guards became
+  `createEigenAppRouter`/`createAuthRouteOptions`, and the app sidebars came to share one `SidebarSection`
+  loading/error/empty treatment
 
 ### SSE Pattern
 
