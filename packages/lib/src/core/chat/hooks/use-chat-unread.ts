@@ -2,7 +2,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
 import type { Notification } from '../../../types/notification';
 import { notificationApi } from '../../api';
-import { notificationKeys, useNotifications } from '../../notification/hooks/use-notifications';
+import { notificationKeys } from '../../notification/hooks/keys';
+import { useNotifications } from '../../notification/hooks/use-notifications';
 
 // Notification tag formats — pathId is always at index 3:
 // chat-message / comment-reply: {type}:{ownerId}:{mountId}:{pathId}

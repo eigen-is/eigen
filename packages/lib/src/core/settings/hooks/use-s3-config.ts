@@ -1,13 +1,10 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { settingsKeys } from './use-server-settings';
-
-const s3ConfigKeys = {
-    all: [...settingsKeys.all, 's3config'] as const,
-};
+import { invalidateServerS3Config, s3ConfigKeys } from './keys';
 
 export function useServerS3Config() {
     return useQuery({
@@ -17,7 +14,7 @@ export function useServerS3Config() {
             if (res.error) throw new AppError(res);
             return res.data;
         },
-        staleTime: 5 * 60 * 1000,
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
@@ -36,8 +33,4 @@ export function useUpdateServerS3Config() {
         },
         onError: onMutationError,
     });
-}
-
-export function invalidateServerS3Config(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({ queryKey: s3ConfigKeys.all });
 }

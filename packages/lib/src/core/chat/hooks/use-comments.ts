@@ -1,15 +1,8 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { collabApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
-
-export const commentKeys = {
-    all: ['comments'] as const,
-    owner: (ownerId: string) => [...commentKeys.all, ownerId] as const,
-    container: (ownerId: string, mountId: string, containerId: string) =>
-        [...commentKeys.owner(ownerId), mountId, containerId] as const,
-    list: (ownerId: string, mountId: string, containerId: string) =>
-        [...commentKeys.container(ownerId, mountId, containerId), 'list'] as const,
-};
+import { commentKeys, invalidateComments } from './keys';
 
 export function useComments(ownerId: string, mountId: string, containerId: string) {
     return useQuery({
@@ -20,7 +13,7 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
             return response.data;
         },
         enabled: !!ownerId && !!mountId && !!containerId,
-        staleTime: 120_000,
+        staleTime: STALE_TIME.TWO_MINUTES,
     });
 }
 
@@ -72,13 +65,4 @@ export function useAssignComment(ownerId: string, mountId: string, containerId: 
         },
         onError: onMutationError,
     });
-}
-
-export function invalidateComments(
-    queryClient: QueryClient,
-    ownerId: string,
-    mountId: string,
-    containerId: string,
-): void {
-    queryClient.invalidateQueries({ queryKey: commentKeys.container(ownerId, mountId, containerId) });
 }

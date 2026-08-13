@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CommandContext, PaletteResult, PaletteScope } from '@workspace/lib/types/command-palette';
 import { MessageSquareText } from 'lucide-react';
 import { useMemo } from 'react';
@@ -31,7 +32,7 @@ export function useDocCommentSearchResults(
         queryKey: searchKeys.docComments(capability?.docKey ?? '', parsed.q),
         queryFn: () => capability!.search(parsed.q),
         enabled,
-        staleTime: 30_000,
+        staleTime: STALE_TIME.THIRTY_SECONDS,
     });
 
     const results = useMemo<PaletteResult[]>(() => {

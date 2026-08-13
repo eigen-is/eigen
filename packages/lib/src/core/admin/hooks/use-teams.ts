@@ -1,11 +1,12 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { invalidateMyTeams } from '../../home';
 import { invalidateTeamMembers } from '../../team';
-import { adminKeys } from './keys';
+import { adminKeys, invalidateAdminTeams } from './keys';
 
 // Admin hooks for team management (org settings UI). Mutations here require
 // admin auth at the better-auth plugin level. For viewing teams the current
@@ -30,7 +31,7 @@ export function useTeams(organizationId?: string) {
             }));
         },
         enabled: !!organizationId && !isGuest,
-        staleTime: 1000 * 60 * 2,
+        staleTime: STALE_TIME.TWO_MINUTES,
     });
 }
 
@@ -127,8 +128,4 @@ export function useUpdateTeam(organizationId?: string) {
         },
         onError: onMutationError,
     });
-}
-
-export function invalidateAdminTeams(queryClient: QueryClient, organizationId: string): void {
-    queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId) });
 }

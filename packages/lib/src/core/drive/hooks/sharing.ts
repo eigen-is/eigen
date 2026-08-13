@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
+import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { collabKeys } from '../../collab/hooks/use-collab';
+import { collabKeys } from '../../collab/hooks/keys';
 import { driveKeys, invalidateAclSharedOrUnshared, invalidateAclUpdated } from './keys';
 
 // UPDATE ACL
@@ -94,7 +95,7 @@ export function useCheckPermissions(ownerId: string, mountId: string, pathId: st
             return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
@@ -109,7 +110,7 @@ export function useEffectiveMembers(ownerId: string, mountId: string, pathId: st
             return response.data;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
@@ -128,7 +129,7 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
             }
         },
         enabled: !!ownerId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }
 
