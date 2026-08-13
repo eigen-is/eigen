@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-887 primitives across 6 kinds. `packages/sheet` internals are excluded.
+886 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -165,7 +165,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (229)
+## Hooks (228)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -278,7 +278,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCopyToMediaFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCreateDriveItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useCreateFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
-| `useCreateFolderItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useDeletePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useDriveAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useDriveViewPreferences` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-view-preferences.ts |

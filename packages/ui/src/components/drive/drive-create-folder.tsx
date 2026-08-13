@@ -1,4 +1,4 @@
-import { useCreateFolderItem } from '@workspace/lib/drive';
+import { useCreateFolder } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DriveLocationPicker } from './drive-location-picker';
 
@@ -19,7 +19,7 @@ export function DriveCreateFolder({
     defaultFolderId,
     onAfterCreate,
 }: DriveCreateFolderProps) {
-    const createMutation = useCreateFolderItem();
+    const createMutation = useCreateFolder();
 
     const handleConfirm = async (location: { ownerId: string; mountId: string; folderId: string; name?: string }) => {
         if (!location.name?.trim()) return;

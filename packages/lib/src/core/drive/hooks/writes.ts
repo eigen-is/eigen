@@ -14,21 +14,8 @@ import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateItemCreated, invalidateItemDeleted, invalidatePathMoved, invalidatePathRenamed } from './keys';
 
-// CREATE FOLDER
-export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({ parentId, folderName }: { parentId: string; folderName: string }) => {
-            const response = await driveApi({ ownerId })({ mountId }).folder({ pathId: parentId }).post({ folderName });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
-        onError: onMutationError,
-    });
-}
-
-export function useCreateFolderItem() {
+// CREATE FOLDER — owner/mount come per call so one instance serves any target drive.
+export function useCreateFolder() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({

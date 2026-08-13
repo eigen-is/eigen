@@ -119,7 +119,7 @@ export function DriveBrowser({
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
     const sortedContents = useMemo(() => [...folderContents].sort(defaultDriveSort), [folderContents]);
     const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId, activeMountId, folderId);
-    const createFolder = useCreateFolder(activeOwnerId, activeMountId);
+    const createFolder = useCreateFolder();
 
     useEffect(() => {
         if (!currentFolderId && rootFolder) {
@@ -186,7 +186,7 @@ export function DriveBrowser({
 
     const handleCreateFolder = (folderName: string) => {
         createFolder.mutate(
-            { parentId: folderId, folderName },
+            { ownerId: activeOwnerId, mountId: activeMountId, parentId: folderId, folderName },
             {
                 onSuccess: (newFolder) => {
                     setCreateFolderOpen(false);
