@@ -55,18 +55,16 @@
     "./assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2": "./src/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2",
     "./assets/fonts/source-serif/SourceSerif4-Variable.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable.woff2",
     "./assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2": "./src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2",
-    "./lib/*": [
-      "./src/lib/*.ts",
-      "./src/lib/*.tsx"
-    ],
-    "./components/*": [
-      "./src/components/*.tsx",
-      "./src/components/*.ts"
-    ],
-    "./components/layout/*": [
-      "./src/components/layout/*.tsx",
-      "./src/components/layout/*.ts"
-    ],
+    "./lib/*": "./src/lib/*.ts",
+    "./lib/eigenAppRouter": "./src/lib/eigenAppRouter.tsx",
+    "./components/*": "./src/components/*.tsx",
+    "./components/contacts/use-contact-input": "./src/components/contacts/use-contact-input.ts",
+    "./components/drive/create-menu": "./src/components/drive/create-menu.ts",
+    "./components/drive/drive-capabilities": "./src/components/drive/drive-capabilities.ts",
+    "./components/drive/use-drive-list-route": "./src/components/drive/use-drive-list-route.ts",
+    "./components/search/prosemirror-search-controller": "./src/components/search/prosemirror-search-controller.ts",
+    "./components/search/prosemirror-search-highlight": "./src/components/search/prosemirror-search-highlight.ts",
+    "./components/layout/*": "./src/components/layout/*.tsx",
     "./components/layout/app": "./src/components/layout/app/index.ts",
     "./components/layout/pages": "./src/components/layout/pages/index.ts",
     "./components/layout/sidebar": "./src/components/layout/sidebar/index.ts",
@@ -90,9 +88,6 @@
     "./components/sse-provider": "./src/components/sse-provider/index.ts",
     "./components/upload-provider": "./src/components/upload-provider/index.ts",
     "./components/user": "./src/components/user/index.ts",
-    "./hooks/*": [
-      "./src/hooks/*.ts",
-      "./src/hooks/*.tsx"
-    ]
+    "./hooks/*": "./src/hooks/*.ts"
   }
 }
