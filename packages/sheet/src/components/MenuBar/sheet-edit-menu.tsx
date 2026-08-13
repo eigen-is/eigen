@@ -24,7 +24,7 @@ import {
 // focusFindBarRef is owned by the parent DropdownMenuContent (MenuBar): a Find pick sets it so the
 // menu's onCloseAutoFocus suppresses Radix's focus-restore to the trigger, which would otherwise
 // steal focus back from the find bar.
-export function EditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
+export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
     const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const { toolbar, button } = en;
