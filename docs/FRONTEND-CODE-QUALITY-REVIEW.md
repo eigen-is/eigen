@@ -4,6 +4,30 @@
 **Scope:** `apps/*/src`, `packages/ui`, the frontend-facing parts of `packages/lib`, and the
 [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md) index. `apps/api` followed only where a frontend contract needed it.
 
+> **✅ Program complete — 2026-08-13** · branch `frontend-quality-review` · 36 units, all merged. The final
+> recall-biased review of the whole branch found no merge blockers — the resolver switch, invalidation
+> completeness, and cross-unit seams all verified clean.
+>
+> **How to read this now.** Every finding below now opens with an outcome callout — ✅ **Done** naming the
+> primitive that resolved it, ❌ **Refuted** with the one-line reason, or ⚠️ **built differently** where the fix
+> landed but not as proposed. The original finding text is kept intact as rationale; line numbers are historical
+> — treat them as hints. **Five claims were refuted or redesigned in the doing:** (1) folding drive's
+> index-route guest-bounce into `_auth.tsx` (§3.2) — the `/` route is a top-level *sibling* of `_auth`, so its
+> check is load-bearing and folding would infinite-loop via `/shared/$to`; (2) the same for calendar's index
+> route (§2.9/§3.2); (3) `ColorSwatchRow` was *not* token-identical to `ColorPicker` (§5.2) — merged anyway at
+> Reinder's direction, ring + padding deltas accepted; (4) the slides "`relative` container has no stacking
+> context" mechanism (§2.5) — the canvas already isolates via containment, so the collision couldn't occur;
+> re-tiered anyway; (5) §4.6's "let the hook own the progress dialog" — `useDocumentExport` stays data-only and
+> a sibling `ExportProgressDialog` owns the title.
+>
+> **Deferred, fix-on-touch** (recorded so they aren't re-discovered):
+> - `apps/api/src/lib/export/sheets/render.ts` spells the sans stack two ways in one file (hardcoded
+>   `"Inter",system-ui,sans-serif` vs `FONT_STACK_SANS`); unifying shifts golden-pinned export bytes, so it
+>   waits for a touch that regenerates goldens.
+> - `apps/contacts/.../contact-edit.tsx` keeps four commented `as never` casts at the react-hook-form
+>   `useFieldArray` seam — a documented exception, not a breach of §9's zero-`as any`.
+> - `apps/api/package.json` exports `./src/index.js` for a `.ts` file (pre-existing; type-erased importers only).
+
 > **TLDR**: The data layer is in excellent shape — zero `useQuery`/`useMutation` in app components, every lib
 > mutation routes errors through `onMutationError`, zero `as any` in frontend apps. The real debt is
 > **duplication and export-surface hygiene**: per-app scaffolds pasted 11× with drift (`main.tsx`, `_auth.tsx`),
@@ -36,6 +60,10 @@ them as hints, they rot.
 
 ### 1.1 A rejected waitlist request leaves the form permanently disabled
 
+> ✅ **Done** — `useJoinWaitlist` added to `core/public/`: checks `response.error`, throws `AppError`,
+> routes failures through `onMutationError`, toasts success; the component keeps only form visibility and
+> uses the mutation's pending state, so a rejection re-enables the form.
+
 The one data-layer violation in all apps, and a real lock-up.
 [apps/index/src/routes/index.tsx](../apps/index/src/routes/index.tsx) sets `isSubmitting` and then awaits a raw
 `publicApi.waitlist.post` with toast feedback, with no `try/catch/finally` (lines ~53–76). A rejected network
@@ -48,6 +76,11 @@ failures, success toast in the hook; the component keeps only form visibility an
 state. At minimum, `try/finally` so a rejection re-enables the form. Test the rejected-request path.
 
 ### 1.2 First-run setup can fall through on errors and has two data paths
+
+> ✅ **Done** — `useSetupStatus` throws on `response.error`; `AdminRoot` renders a retryable `ErrorState`
+> (which gained an `action`) and never infers "configured" from absent data; `useCompleteSetup` +
+> `useCheckSetupS3` added; `SetupWizard` receives the already-fetched status (second raw fetch gone);
+> the status cache is invalidated after completion; `adminKeys.setupStatus` pulled back under `['admin']`.
 
 - [packages/lib/src/core/admin/hooks/use-setup-status.ts](../packages/lib/src/core/admin/hooks/use-setup-status.ts)
   returns `res.data` without checking `res.error` — an HTTP error caches as successful `undefined` — unlike its
@@ -68,6 +101,10 @@ completion failure, and the success transition.
 
 ### 1.3 Upload failures run the error path twice, and the avatar workflow is pasted twice
 
+> ✅ **Done** — the transport helper is promise-only (resolve on success, reject once), pinned by a test;
+> all three callers migrated; one `useUploadContactAvatar` workflow owns the request + `onMutationError` in
+> `lib` with a UI adapter mapping progress + the single rejection into `useUpload`; the empty-string id fixed.
+
 [packages/ui/src/components/layout/upload-provider/upload-with-progress.tsx](../packages/ui/src/components/layout/upload-provider/upload-with-progress.tsx)
 invokes `onError(error)` **and** rejects the same promise, for both HTTP and network failures — two competing
 error contracts. All three callers therefore run their error path twice (`onError` + `catch`): contacts
@@ -86,6 +123,10 @@ together. Extract one `useUploadContactAvatar` workflow: `packages/lib` owns the
 
 ### 1.4 The mail calendar widget owns fetching, parsing, and silent failure
 
+> ✅ **Done** — the server summarizes the invite with the canonical `ical.js` parser and serves a typed
+> calendar-invite summary on the message payload (trusting the parser's `calendarMethod`); the widget is now
+> presentational with a real error state, and the ad hoc regex parser is deleted.
+
 [apps/mail/src/components/mail/calendar-invite-widget.tsx](../apps/mail/src/components/mail/calendar-invite-widget.tsx)
 defines a second, regex-based iCalendar parser (`parseIcsField`/`parseIcs`/`icsDateToDate`), builds an
 authenticated attachment URL, fetches it in an effect, and swallows every failure with `.catch(() => {})` —
@@ -98,6 +139,20 @@ fetch must stay lazy, add a `useCalendarInvite` query in `@workspace/lib/mail` w
 error state, using a standards parser. Keep the widget presentational: loading/error/summary in, JSX out.
 
 ## 2. Small verified bugs
+
+> ✅ **Done** — item-by-item: **(1)** email-list adopts the shared `useKeyboardListNavigation` (taught a
+> lifted-cursor option) and the reclaim stands down while the composer is open; the fork is retired.
+> **(2)** fixed for free by §3.3. **(3)** Admin lists route through `alphaGroupKey` (via `PersonList`, §4.4).
+> **(4)** the §3.1 router factory registers `defaultNotFoundComponent`. **(6)** `getExtension` returns no
+> extension for extensionless names. **(7)** the native-file-editor and calendar event-detail dialog narrow
+> with explicit guards, dropping the `!` clusters. **(8)** docs editor opens comment menus via `openAt`.
+>
+> **(5)** slides overlays re-tiered to `z-30` under `isolation: isolate` and the present overlay to `z-[100]`
+> — but the "`relative` container establishes no stacking context" premise is ❌ **refuted**: the canvas already
+> isolates via `container-type` containment, so the described portal-tier collision couldn't occur; the re-tier
+> stands on standards-compliance, not the stated bug.
+> **(9)** chat's dead `!userId` check dropped and calendar's `as never` cast fixed — but ❌ folding the
+> drive/calendar index-route auth checks into `_auth.tsx` is **refuted** (see §3.2).
 
 1. **Mail focus-reclaim regression.** `apps/mail/src/components/mail/email-list.tsx` reimplements the shared
    `useKeyboardListNavigation` (its comments admit it; the fork exists for virtualization + a parent-lifted
@@ -139,6 +194,10 @@ error state, using a standards parser. Keep the widget presentational: loading/e
 
 ### 3.1 `main.tsx` — 11 copies, one line of difference
 
+> ✅ **Done** — `createEigenAppRouter({ routeTree, basepath })` + `mountEigenApp` in
+> `packages/ui/src/lib/eigenAppRouter.tsx`; each `main.tsx` keeps only its router const + `Register`, and the
+> factory registers `defaultNotFoundComponent` (§2.4). Index app stays outside, as noted.
+
 `apps/{admin,calendar,chat,contacts,docs,drive,mail,sheets,slides,space,stickies}/src/main.tsx`, 39–41 lines each.
 `diff apps/docs/src/main.tsx apps/sheets/src/main.tsx` is exactly one line (`basepath`). The 39-line variants
 dropped three comments — paste drift, not intent. The Index app is genuinely different (SSR/hydration) and stays
@@ -150,6 +209,15 @@ inference; shared code owns the provider and auth-context wiring — and registe
 (§2.4). Do not grow this into a generic framework; two helpers with the current fixed defaults are enough.
 
 ### 3.2 `_auth.tsx` — 11 copies, 4 shapes
+
+> ✅ **Done** — `createAuthRouteOptions({ redirectGuests? })` in
+> `packages/ui/src/components/layout/pages`; the ten non-admin `_auth.tsx` files are one line each and the
+> guest policy is named by the `redirectGuests` flag (which bounces to the Drive app via `window.location`).
+> Chat's dead `!userId` check dropped, calendar's `as never` cast fixed.
+> ❌ **Refuted** — moving drive's and calendar's *index-route* auth checks into `_auth.tsx`: their `/` routes
+> are top-level siblings of `_auth`, not children, so those checks are load-bearing. Folding drive's
+> guest-bounce would infinite-loop — its target `/shared/$to` lives under `_auth`, and the shared factory
+> bounces guests to the whole Drive app, not to `/shared`. Both index routes keep their own auth branching.
 
 md5 groups: chat = drive; docs = sheets = slides = stickies; calendar = contacts = mail = space; admin unique (its
 org/admin gate is genuinely different). The `beforeLoad` redirect block is byte-identical in all ten non-admin
@@ -166,6 +234,9 @@ calendar's and drive's index-route auth re-checks into their `_auth.tsx` (drive'
 
 ### 3.3 `__root.tsx` — the "not signed in" branch, 6 copies + 1 one-liner
 
+> ✅ **Done** — chat's conditional `sidebar={user ? … : undefined}` shape adopted everywhere; the Space
+> scroll bug (§2.2) fell out for free.
+
 The identical ~7-line `if (!user) return <AppShell…><Outlet/></AppShell>` early return exists in
 `apps/{calendar,contacts,mail,space,drive}/src/routes/__root.tsx` and
 `packages/ui/src/components/layout/drive/eigendoc-root.tsx`. Chat solves it in one line:
@@ -174,6 +245,9 @@ The identical ~7-line `if (!user) return <AppShell…><Outlet/></AppShell>` earl
 **Fix**: adopt chat's shape everywhere, or hoist the `!user` branch into `AppShell`.
 
 ### 3.4 Settings-page route scaffold — 6 copies, 2 content widths
+
+> ✅ **Done** — one shared `<SettingsPage title>` owns Column + scroller + one canonical max-width; admin and
+> space settings routes both go through it.
 
 `apps/admin/src/routes/_auth.{settings,onboarding,guest-settings}.tsx` (20 lines each, identical modulo
 title/component) and `apps/space/src/routes/_auth.{user,email,data}.tsx` (same plus a `max-w-3xl app-gutter`
@@ -186,6 +260,9 @@ one canonical max-width.
 
 ### 3.5 `_auth.guests.tsx` ≡ `_auth.orphans.tsx`
 
+> ✅ **Done** — one app-local `AdminFilteredUserRoute` (filter + route target + strings) behind both routes;
+> the two route files and their `validateSearch` stay thin. Stayed in the Admin app.
+
 73 lines each in `apps/admin/src/routes/`; the diff is 12 hunks of names/strings plus
 `useAdminUsers('guest'|'orphan')` — the same page over the two values the hook already accepts. Copy drift has
 crept into the detail pane ("Select a guest…" vs "Select a user…").
@@ -195,6 +272,11 @@ route files and their `validateSearch` thin. This stays in the Admin app — no 
 user classification.
 
 ### 3.6 AGENTS.md is half stale on this topic
+
+> ✅ **Done** (this unit, U36) — AGENTS.md's "Third copy → shared wrapper" parenthetical no longer cites the
+> stale editor-routes/sidebars example; it now points at the real extractions (`createEigenAppRouter`,
+> `createAuthRouteOptions`, and the shared `SidebarSection` loading/error/empty treatment). The sidebar
+> loader-drift itself was fixed in §8.1.
 
 The "four near-identical EigenDoc editor routes and four sidebars rendering loaders four ways" line: the editor
 routes are now thin (46–71 lines over `useEigenDocEditorRoute`) and the four EigenDoc apps have **no** sidebars —
@@ -206,6 +288,10 @@ offenders.
 
 ### 4.1 Calendar event dialogs — the worst single instance
 
+> ✅ **Done** — both dialogs compose one shared event-field-rows component; `calendarOptions` moved to
+> `calendar-utils`. (The edit dialog's recurrence picker now reads the start date as local midnight — a real
+> bug fixed in passing.)
+
 `apps/calendar/src/components/create-event-dialog.tsx` (318 lines) vs `edit-event-dialog.tsx` (480): ~180 of
 create's lines have a verbatim twin in edit — the `calendarOptions` memo, both time-change handlers, the
 all-day/timed Date construction, the entire date-time row JSX (~80 lines), location/description rows, the
@@ -216,6 +302,9 @@ calendar `<Select>`, and the `DialogFooter`. The same helper exists under two na
 `calendar-utils`.
 
 ### 4.2 Drive list routes — the scaffold written four times
+
+> ✅ **Done** — the four routes fold onto one `useDriveListRoute` scaffold; the fs route keeps its extra
+> surface (share dialog, `RequestAccessView`, root-id resolution).
 
 `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx` (194 lines) · `_auth.mime.$mimeType.tsx` (119) ·
 `_auth.shared.$to.tsx` (130) · `_auth.watched.tsx` (112). Each repeats the same `validateSearch` pid/uid(/mid)
@@ -230,11 +319,16 @@ shrinks with §5.5's `capabilities` object.
 
 ### 4.3 Calendar month/week views
 
+> ✅ **Done** — one `useEventDetailState` hook + a shared event-pill class helper serve both views.
+
 `month-view.tsx` and `week-view.tsx` share verbatim blocks: the `didAutoOpen`/`initialEventId` effect,
 `handleEventClick`, the `selectedCalendar`/`selectedSharedCalendar` derivation, the `EventDetailDialog` wiring,
 and the invite-status opacity classes. **Fix**: one `useEventDetailState` hook + a shared event-pill class helper.
 
 ### 4.4 Person lists — four implementations, feature drift
+
+> ✅ **Done** — `<PersonList>` extracted into `packages/ui`; all four lists adopt it, so keyboard nav and
+> `alphaGroupKey` bucketing (the §2.3 defects) come along for free.
 
 `apps/contacts/.../contacts-list.tsx` (selection + drag + keyboard + context menu), `apps/admin/.../members-list.tsx`
 (no context menu), `apps/contacts/.../team-member-list.tsx` (keyboard only), `apps/admin/.../admin-user-list.tsx`
@@ -246,6 +340,9 @@ and the invite-status opacity classes. **Fix**: one `useEventDetailState` hook +
 
 ### 4.5 Select-then-open-menu idiom — 3 copies, drifted anchor
 
+> ✅ **Done** — generalized into `useSelectableContextMenu<T>` in `packages/ui/src/hooks/`; contacts and
+> mail route through it.
+
 Canonical in `packages/ui/.../drive/use-drive-item-controller.ts` (`if (!selection.isSelected(id))
 selection.select(id); contextMenu.handleContextMenu(e, item)`); re-implemented in `contacts-list.tsx` and mail's
 `email-list.tsx` (diff = type names only). Drift: drive anchors the ⋮ menu at `rect.right`, contacts at
@@ -253,6 +350,13 @@ selection.select(id); contextMenu.handleContextMenu(e, item)`); re-implemented i
 touches nothing but `id`.
 
 ### 4.6 Import/export scaffold — docs + sheets + slides
+
+> ✅ **Done** — a shared `DocumentImportPicker` and one export seam replace the pasted handlers at all four
+> sites; the "Exporting document" title lives in exactly one place.
+> ⚠️ **Built differently** — the review said "let the hook own the progress dialog"; the merged design keeps
+> `useDocumentExport` data-only (`{ exportPath, isExporting }`) and puts the title in a presentational sibling
+> `ExportProgressDialog` (course-corrected in `a21669da`, to keep the drive actions object data-only). The
+> dedup goal holds; ownership just sits in the component, not the hook.
 
 The import handlers (`handleImport`/`handleImportFromDrive`/`handleImportFromDevice`) in docs'
 `editor-toolbar.tsx` and sheets' `toolbar.tsx` are byte-for-byte identical; the import JSX differs in three
@@ -264,6 +368,9 @@ shared `DocumentImportPicker`.
 ## 5. packages/ui
 
 ### 5.1 Dead code (grep-verified zero importers, all workspaces, all specifier variants)
+
+> ✅ **Done** — `sheet.tsx`, `skeleton.tsx`, `use-mobile.ts`, the two barrels, and `useDocSearchBar` deleted;
+> the six internal-only symbols un-exported; SHARED-PRIMITIVES.md regenerated.
 
 | Item | Evidence |
 |---|---|
@@ -277,6 +384,15 @@ Also exported but referenced only inside their own file (drop the `export`): `bu
 `tabsListVariants`, `useFormField`, `memberRowClassName`, `loginSearchSchema`. Delete, then `bun run primitives`.
 
 ### 5.2 Byte-identical and near-duplicate components
+
+> ✅ **Done** — `NotFound`/`AccessDenied` deleted for `<EmptyState>` (6 call sites, incl. the admin non-admin
+> gate and §2.4's not-found); `DeleteDialog` folded into `ConfirmDialog` with a thin preset;
+> `ReferenceAttachmentChip` shares `SimpleAttachmentChip`'s shell + remove button; `UserName` shares
+> `UserItem`'s mail-compose link; `LoadingScreen` unpublished from the barrel (still the internal fallback).
+> ⚠️ **ColorSwatchRow — premise refuted, merged anyway** — it was *not* token-for-token identical to
+> `ColorPicker` (ring + padding differ), so the "just delete it" premise didn't hold; merged into `ColorPicker`
+> anyway at Reinder's direction, accepting the visual deltas. `card-form.tsx` now renders
+> `<ColorPicker colors={EIGEN_STICKIES_COLORS} showReset={false}>`.
 
 - **`NotFound` ≡ `AccessDenied`** (`layout/app/`): 13-line files identical apart from names, down to the same
   default flavor string; `EmptyState` renders the same DOM for the message-only case. Consumers: 5 + 1. Replace
@@ -294,6 +410,10 @@ Also exported but referenced only inside their own file (drop the `export`): `bu
 
 ### 5.3 Structural hazards
 
+> ✅ **Done** — the base `Dialog` ↔ drive cycle is broken by a small `preview-context` leaf module;
+> `components.json` `rsc` disabled; lib's dead `@workspace/ui/*` path map dropped; the CODE-STANDARDS
+> `components/ui/button` row is fixed (the § Imports section was rewritten as-built — §7).
+
 - **Import cycle through the base Dialog** (real, traced): `components/dialog.tsx` → `preview-provider` →
   `drive/file-preview` → `drive-location-picker` → `components/dialog`. The lowest shadcn primitive transitively
   depends on the Drive feature tree, for the `abovePreview` z-index flag. Let `PreviewProvider` publish "preview
@@ -307,12 +427,20 @@ Also exported but referenced only inside their own file (drop the `export`): `bu
 
 ### 5.4 `components/layout/` is a junk drawer
 
+> ✅ **Done** — domain and feature trees lifted to `components/<domain>` (`drive`, `chat`, `comments`, …);
+> `components/layout/` keeps only actual layout (`app`, `pages`, `sidebar`, `toolbar`). Consumers repointed
+> and SHARED-PRIMITIVES.md regenerated.
+
 213 of 246 component files live under `layout/`, including domain trees that aren't layout — `drive/` (43 files,
 ~5.8k lines), `comments/` (17), `chat/` (7), `media/`, `labels/`, `contacts/`, `cards/`, `notes/`, `mount/` —
 plus providers. The name has stopped carrying information and inflates every import specifier. Mechanical,
 low-priority fix: `components/{drive,chat,comments,…}` for domains, keep `components/layout/` for actual layout.
 
 ### 5.5 God files
+
+> ✅ **Done** — `DriveLayout` split its dialog orchestration into `drive-layout-dialogs` and now takes one
+> `capabilities` value instead of the seven `allow*`/`show*` flags; `chat-message-list` split off
+> `rich-content.tsx`, `inline-edit.tsx`, and the inspect card. The three "large but cohesive" files were left.
 
 - **`layout/drive/drive-layout.tsx`** (504 lines): one large component, 29 hook calls (14 `useCallback`), a
   27-field props type with 7 boolean `allow*`/`show*` toggles. Split the dialog orchestration out of the
@@ -327,6 +455,10 @@ low-priority fix: `components/{drive,chat,comments,…}` for domains, keep `comp
 
 ### 6.1 One god file: `use-drive.ts` (944 lines, 44 exports, five concerns)
 
+> ✅ **Done** — split along its section banners into `keys.ts` (also drops the `use-watch → use-drive` edge),
+> `reads.ts`, `writes.ts`, `sharing.ts`, `trash.ts` under `core/drive/hooks/`; the barrel keeps consumers
+> unchanged. `use-drive.ts` is gone (docs that pointed at it were repointed in this pass).
+
 Its own section-banner comments mark the seams, and `core/drive/hooks/` already holds sibling modules, so the
 split follows existing convention: `keys.ts` (driveKeys + invalidators — also removes the
 `use-watch.ts → use-drive.ts` import edge), reads, writes, sharing, trash. `core/drive/index.ts` already
@@ -334,6 +466,10 @@ split follows existing convention: `keys.ts` (driveKeys + invalidators — also 
 `use-calendar.ts` (361 lines) reads as a clean keys/CRUD/sharing rhythm, not a god file.
 
 ### 6.2 The one real type fork: the BE mail parser
+
+> ✅ **Done** — the parser imports the 7 types from `@workspace/lib/types/mail`; `string | false` vs
+> `string | null` reconciled at the boundary; the stale no-HTML comment fixed and the boundary narrowing
+> pinned by tests.
 
 `packages/lib/src/types/mail.ts` and `apps/api/src/lib/mail/mail-parser/mail-parser.ts` both define
 `StructuredHeader`, `HeaderValue`, `HeaderLines`, `EmailAddress`, `AddressObject`, `Attachment`, `ParsedMail` —
@@ -344,6 +480,10 @@ into the FE-facing `Email`. **Fix**: the parser imports the 7 types from `@works
 `false` vs `null` at that moment.
 
 ### 6.3 Small pattern breaks (the only ones found)
+
+> ✅ **Done** — one `STALE_TIME` constant set replaces the three 5-minute spellings (query-client default too);
+> every query domain gets a dedicated `hooks/keys.ts`; app-passwords key scoped by user + `staleTime` on both
+> auth queries; `adminKeys.setupStatus` renamespaced under `['admin']`.
 
 - `use-app-passwords.ts` — no `staleTime`; file-private key factory whose `['app-passwords']` key carries nothing
   user-identifying (safe today only because logout calls `queryClient.removeQueries()`).
@@ -357,12 +497,20 @@ into the FE-facing `Email`. **Fix**: the parser imports the 7 types from `@works
 
 ### 6.4 Dead exports
 
+> ✅ **Done** — `useActiveMember` and `useContact` deleted; SHARED-PRIMITIVES.md regenerated. `getErrorMessage`
+> correctly left in place (only its `export` was unneeded — see §10).
+
 **`useActiveMember`** (`core/admin/hooks/use-active-member.ts`) and **`useContact`**
 (`core/contacts/hooks/use-contacts.ts`): zero call sites in the entire repo, yet both are catalogued in
 SHARED-PRIMITIVES.md, which makes them look adopted. Delete and regenerate. (`getErrorMessage` in `api-error.ts`
 is *not* dead — it is called within its own file; only the `export` keyword is unneeded.)
 
 ### 6.5 Placement and layering nits
+
+> ✅ **Done** — `useDebouncedValue` moved to `core/`; DOM `htmlToPlainText` moved to a browser-only `html-dom`
+> module; the comment-thread hooks are surfaced from `@workspace/lib/comments`; the date/calendar predicate
+> inversion folded. The BE deep-import carve-out got explicit React-free subpaths + an AGENTS.md rule — and the
+> lib `"./*": "./src/core/*"` wildcard, which quietly over-served `core/` internals, was removed entirely.
 
 - **`useDebouncedValue`** is a generic 6-line React util living under `core/command-palette/`;
   `chat-create-wizard.tsx` imports the whole palette barrel to debounce an input. Move to `core/`.
@@ -382,6 +530,15 @@ is *not* dead — it is called within its own file; only the `export` keyword is
   touch.
 
 ## 7. Import-path and export-surface hygiene — the systemic finding
+
+> ✅ **Done** — **(a)** the package `exports` maps are now the real resolver: the tsconfig `@workspace/*`
+> catch-alls are gone, wildcards target a single path (only `tsc` fell back across arrays), and
+> CODE-STANDARDS + `package.json` + the SHARED-PRIMITIVES generator were reconciled first (the convention is
+> written up as-built). **(b)** a Biome rule bans `.ts`/`.tsx` suffixes in workspace specifiers, and ~280
+> specifiers were canonicalized — **including the ~260 relative-suffix tail and the missing `search/` / `mount/`
+> / sidebar barrels + `use-document-export` (tail unit).** **(c)** `export *` sub-barrels tightened.
+> **(d)** the missing barrels added so the real shared surface is visible. Naming debt cleared: lib's
+> `useSearch` → `useSearchQuery`; the sheet `EditMenu` → `SheetEditMenu`.
 
 **The `exports` maps are decorative.** Every app tsconfig declares `"@workspace/ui/*": ["../../packages/ui/src/*"]`
 and Vite resolves via `tsconfigPaths`, so the curated entry points constrain nothing — while the SHARED-PRIMITIVES
@@ -420,6 +577,10 @@ Two unrelated components are both named `EditMenu` (`packages/ui/.../toolbar/edi
 
 ### 8.1 Sidebars: one shell, several loader treatments
 
+> ✅ **Done** — one sidebar shell + one canonical `SidebarSection` `loading`/`error`/`empty` treatment; the
+> calendar personal-row parameterized against `SharedCalendarItem`. `StorageUsage` decided: added to chat and
+> hidden for guests (matching drive's guest sidebar); absent-by-design in admin.
+
 The six app sidebars (admin, calendar, chat, contacts, mail, space) share the same wrapper div with the class
 string in two orders (`flex h-full flex-col` in chat/mail/space; `h-full flex flex-col` in
 calendar/contacts/admin). Loading states differ per app: `flex justify-center py-4` (chat),
@@ -432,6 +593,11 @@ of its own `SharedCalendarItem`. **Fix**: move the wrapper into `SidebarBody`; g
 
 ### 8.2 Fonts re-listed outside the registry
 
+> ✅ **Done** — docs paste/toolbar, slides defaults, and the xlsx/export `FONT_MAP`/`FONT_ARRAY` all derive
+> from `EIGEN_FONTS`/`getFontFamily`; the export transforms share one default font-stack set; `EIGEN_FONTS`
+> order is documented load-bearing. (One in-file spelling split in the sheets export render remains — see the
+> deferred list in the header.)
+
 The canonical registry is `EIGEN_FONTS`/`getFontFamily` in `packages/lib/src/constants/fonts.ts`. Re-listings:
 `apps/docs/.../editor.tsx` inlines a `fontMap` with the exact family strings `getFontFamily()` returns; slides
 hardcodes `'Inter'` in `types.ts`, `normalize-deck.ts`, and `slide-properties-panel.tsx`; the BE re-lists the
@@ -442,10 +608,15 @@ constants.
 
 ### 8.3 Editor access-prop contract
 
+> ✅ **Done** — docs now passes `canWrite`, matching sheets/slides/stickies (all four use `canWrite`).
+
 The four EigenDoc editor routes pass document access two ways: docs `access={docInfo}`, sheets/slides/stickies
 `canWrite={docInfo.canWrite}`. Pick one (`canWrite`; 3 of 4 use it).
 
 ### 8.4 Three hand-written ESLint suppressions in a Biome repo
+
+> ✅ **Done** — the two Mail effects resolve their dependencies with `useEffectEvent`; the Slides snap-targets
+> `useMemo` depends on `excludeIds` directly. All three `eslint-disable` lines gone.
 
 `apps/mail/.../email-detail.tsx`, `email-draft.tsx`, and `apps/slides/.../use-snap-lines.ts` carry
 `eslint-disable` comments that suppress nothing under Biome. Two point at unstable callback dependencies — useful
@@ -456,10 +627,17 @@ also contain `eslint-disable` lines — those are out of scope.)
 
 ### 8.5 One app-local type exported without a consumer
 
+> ✅ **Done** — `ProfileFormValues` kept file-local (the `export` removed).
+
 `apps/space/.../profile-editor.tsx` exports `ProfileFormValues`; nothing outside the file imports it. Remove the
 `export`.
 
 ## 9. Verified clean
+
+> ✅ **Still accurate** — re-checked against the merged tree; the data-layer, styling, and
+> already-working-scaffolding non-findings all hold. One documented exception worth flagging (it does *not*
+> break the zero-`as any` claim — these are `as never`): `apps/contacts/.../contact-edit.tsx` carries four
+> commented `as never` casts at the react-hook-form `useFieldArray` seam.
 
 Worth recording — it means the house rules are working where they're enforced, and a validated non-finding
 prevents re-litigation:
@@ -495,6 +673,10 @@ prevents re-litigation:
     is worth fixing, a generic mega-sidebar component is not.
 
 ## 10. Claims that did not survive verification
+
+> ✅ **Still accurate** — every recorded non-survivor holds. The five *in-the-doing* refutations (index-route
+> auth-fold ×2, ColorSwatchRow's "identical" premise, the slides stacking-context mechanism, and §4.6's
+> hook-owns-the-dialog design) are annotated in their own sections and summarized in the header.
 
 Both source reviews contained assertions the code refutes or corrects. Recorded so they don't resurface:
 
