@@ -3,7 +3,7 @@ import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { Input } from '@workspace/ui/components/input';
 import {
     AlignmentPicker,
