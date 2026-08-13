@@ -3,6 +3,92 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.1.1] - 2026-08-13
+
+Mobile & reliability release. Every app now works properly on a phone — column navigation with
+back arrows, touch context menus, collapsing toolbars, and comment & activity panels on small
+screens. Under the hood, every preview, export, and import moved into sandboxed background
+workers with hard deadlines, spreadsheet exports got an order-of-magnitude speedup, and
+slow-loading documents no longer spiral into reconnect loops.
+
+### Added
+
+- **Mobile** — Eigen is now phone-friendly end to end: navigation is column-based with a back
+  arrow in every app, toolbars collapse their controls into a kebab menu (sharing, calendar
+  views, drive sort and view, the mail shortcuts cheat-sheet), dropdown submenus become
+  drill-in pages, and calendar event and stickies card dialogs fit phone widths
+- **Touch** — long-press opens the context menu everywhere right-click does (drive rows and
+  grid tiles, chat messages, stickies cards, slide thumbnails); hover-only action icons rest
+  visible on touch screens; drive rows get a per-file kebab and the details pane gains
+  Move/Copy/Duplicate; and Move to trash asks for confirmation on touch devices
+- **Comments & activity on mobile** — Docs, Sheets, and Slides show their comments and
+  activity panels on small screens (taking over the editor area on phones, and available from
+  tablet width instead of only on wide desktops); Docs adds Comment to the mobile Insert menu
+- **Drive quick look** — press `Space` to open and close a preview of the selected file, and
+  step through the list with the arrow keys while it is open
+- **Slides** — presentation mode shows a transient exit button, so a presentation can be left
+  by touch
+
+### Changed
+
+- **Reliability** — every document preview, HTML/PDF/XLSX/DOCX export, XLSX/DOCX import, and
+  background search extraction now runs in an isolated worker with a hard deadline: one huge
+  or degenerate file can no longer stall the server for everyone, and a stuck job is killed
+  and reported instead of hanging forever
+- **Sheets** — exporting a large spreadsheet to HTML or PDF is an order of magnitude faster
+  and the output a fraction of the size (styles are shared instead of repeated per cell);
+  previews and search indexing read stored values instead of recomputing every formula, so a
+  formula-heavy sheet can no longer time out its own preview; sheets are saved in a leaner
+  snapshot format that opens faster over a remote connection; and large-sheet editing
+  operations (inserting rows and columns, filtering, copying) got a hot-path performance pass
+- **Opening documents** — a document that takes long to load (a huge spreadsheet on a cold
+  server) shows progress instead of spiralling into a connect/disconnect loop, and a
+  just-closed document stays warm on the server for a minute so reopening is instant
+- **Drive** — converting an `.xlsx` or `.docx` into an Eigen document shows a progress
+  dialog, and the conversion finishes on the server even if you navigate away
+- **App icon** — a redesigned, bolder app icon, including the Safari pinned-tab icon
+
+### Fixed
+
+- **Dark mode** — paper stays paper: the document page, the slides canvas, and the sheets
+  formula bar always render light, so content reads the way it prints
+- **Printing** — printed documents no longer show collaborator cursors, selections, search
+  highlights, or comment markers
+- **Mail** — wide HTML emails scale to fit on a phone instead of overflowing; message bodies
+  render in the app's font; calendar invitations are summarized on the server and show a real
+  error state instead of failing quietly; batch actions report exactly what succeeded; and
+  the message list no longer steals keyboard focus while the composer is open
+- **Calendar** — moving an event to another calendar is atomic on the server, and asks for
+  confirmation first when the move would lose data; the edit dialog's recurrence options no
+  longer shift the start date by a day in some timezones; all-day date fields stay legible on
+  narrow screens
+- **Sheets** — read-only viewers really are read-only (menus, shortcuts, and edit paths are
+  disabled) and they see rows and columns that others insert or delete without a reload; menu
+  color pickers are proper submenus and no longer leak keystrokes into the grid; the grid
+  re-measures itself when a side panel opens; and headers, sheet tabs, and pickers work by
+  keyboard and touch
+- **Slides** — editing shortcuts no longer reach the deck while presenting, and slide
+  thumbnails on mobile are view-only
+- **Chat** — mouse users get the hover action icons back on messages (touch users keep the
+  long-press menu), and guests no longer see a storage-usage bar
+- **Drive** — Cancel in the inline text editor asks before discarding unsaved changes, and
+  deleting a selection that spans your drive and a team drive moves every item to trash
+- **Dialogs** — confirmation dialogs wait for their action to finish and surface failures
+  instead of closing early, across delete, move, and save flows
+- **Imports** — importing a `.docx` a second time updates its images instead of failing
+- **Accessibility** — comment color and assignee pickers work by keyboard, and chat, contact,
+  and slide-object actions are reachable by touch
+- **Landing page** — a rejected waitlist signup no longer locks the join form, and
+  social-media link previews use the server's real domain
+- **Installed app** — navigation between apps works when Eigen is installed to the home
+  screen or dock as a web app
+
+### Security
+
+- **Imports** — `.docx` files are capped by decompressed size before parsing (zip-bomb
+  protection), and write permission is re-checked at the moment an import commits, not just
+  when it starts
+
 ## [0.1.0] - 2026-07-19
 
 Search, mail & collaboration release. Find & replace inside every editor and full-content search
