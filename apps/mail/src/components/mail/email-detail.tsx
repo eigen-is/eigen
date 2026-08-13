@@ -264,8 +264,7 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
             {/* y-scroll (not auto): the body's scale-to-fit reacts to pane width, so a scrollbar
                 that comes and goes with the scaled height would oscillate on classic scrollbars. */}
             <div className="app-gutter flex-1 overflow-y-scroll" data-document="email-detail">
-                {/* Email header — capped at the doc canvas width (w-[210mm]) and centred like a page */}
-                <div className="space-y-4 mb-6 mx-auto max-w-[210mm]">
+                <div className="space-y-4 mb-6">
                     <div>
                         <h1 className="text-xl font-medium mb-4">
                             {email.subject ? String(email.subject) : '(No subject)'}
@@ -278,8 +277,8 @@ export function EmailDetail({ email, toggleMailRead, highlightTerm }: EmailDetai
 
                     <ReadAttachments emailId={email.id} attachments={email.attachments} />
 
-                    {/* Email body */}
-                    <div className="prose prose-sm max-w-none">
+                    {/* Email body — capped at the doc canvas width (210mm) and centred like a page */}
+                    <div className="prose prose-sm mx-auto max-w-[210mm]">
                         {email.html || email.textAsHtml ? (
                             <ShadowContent
                                 content={emailContent}
