@@ -1,5 +1,3 @@
-export type { UploadItem } from './upload-provider';
-
 type UploadWithProgressOptions = {
     url: string;
     formData: FormData;
