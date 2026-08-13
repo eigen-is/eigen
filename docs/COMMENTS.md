@@ -342,7 +342,7 @@ Single comment thread: resolves `chatName` to `chatId` via `useMediaResolver`, r
 ### CardForm + CardFormDialog (`packages/ui/src/components/cards/`)
 
 `CardForm` is the shared create/edit form (title input, `LightEditor` description, attachment
-staging, one non-wrapping meta row: compact `ColorSwatchRow` left + `AssigneePicker` right),
+staging, one non-wrapping meta row: compact `ColorPicker` left + `AssigneePicker` right),
 selected by a `mode` prop. It renders in two shells: `CardFormDialog` (a thin standard-Dialog
 wrapper — the create flow) and in-place inside `CardDialog` via `NoteCardDialog`'s `editForm`
 slot (the edit flow — no second dialog is ever stacked). Its field area scrolls with the

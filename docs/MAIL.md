@@ -104,7 +104,7 @@ shared with the shortcuts layer so both act on identical state. `EmailList` (`em
 the rows (`@tanstack/react-virtual`) and fetches the next page as the end nears; it snaps the virtualizer to
 the top when the view identity changes (mailbox switch or entering/leaving search) via a `resetKey`, so the
 scroll window can't desync from a shrunken/grown list. The toolbar search box hits the server FTS endpoint
-(`useSearch`, scoped to the current mailbox) instead of filtering the loaded window.
+(`useSearchQuery`, scoped to the current mailbox) instead of filtering the loaded window.
 
 ## Performance design
 

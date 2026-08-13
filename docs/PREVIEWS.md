@@ -243,7 +243,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
 | `packages/ui/src/components/drive/file-preview.tsx`                | Preview overlay component                        |
 | `packages/ui/src/components/preview-provider/preview-provider.tsx` | Context: open/close/navigate previews            |
-| `packages/lib/src/core/drive/hooks/use-drive.ts`                          | `useTextPreview()` hook                          |
+| `packages/lib/src/core/drive/hooks/reads.ts`                              | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
 | `apps/api/src/lib/preview/eigen{doc,slides,sheets}-render.ts`             | Worker-side body renderers (first 20 blocks / 8 slides / budgeted first sheet) |

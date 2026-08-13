@@ -165,8 +165,8 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 
 ### Access
 
-Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see
-`AccessDenied`. Visible via "Admin" in app switcher.
+Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see an access-denied
+`EmptyState`. Visible via "Admin" in app switcher.
 
 ### API
 
