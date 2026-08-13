@@ -4,15 +4,15 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateHomeSize } from '../home';
 import { invalidateSearchOwner } from '../search';
 import {
-    consumeRecentMailMutation,
     invalidateDraftUpdated,
+    invalidateMailboxes,
     invalidateMailDeleted,
     invalidateMailFlagsChanged,
     invalidateMailMoved,
     invalidateMailReadChanged,
     invalidateMailReceived,
-} from './hooks/use-emails';
-import { invalidateMailboxes } from './hooks/use-mailboxes';
+} from './hooks/keys';
+import { consumeRecentMailMutation } from './hooks/use-emails';
 
 const normalizeMailbox = (mailbox: string) => (mailbox === '' ? 'inbox' : mailbox);
 

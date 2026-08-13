@@ -3,7 +3,7 @@ import { driveApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../api-error';
-import { chatKeys } from '../chat/hooks/use-chat';
+import { chatKeys } from '../chat/hooks/keys';
 import { invalidateVersions, versionsKeys } from './keys';
 
 export function useVersions(ownerId: string, mountId: string, pathId: string) {

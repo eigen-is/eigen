@@ -6,7 +6,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { toast } from 'sonner';
 import { formatChatPreview } from '../chat/format-preview';
 import { CHAT_TEXT_NOTIFICATION_TYPES } from './describe';
-import { invalidateNotifications } from './hooks/use-notifications';
+import { invalidateNotifications } from './hooks/keys';
 import { isClickableNotification, resolveNotificationLink } from './resolve-link';
 
 export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {

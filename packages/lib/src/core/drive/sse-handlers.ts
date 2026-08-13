@@ -2,8 +2,8 @@ import type { QueryClient } from '@tanstack/react-query';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { invalidateChatMatches } from '../chat/hooks/use-chat';
-import { collabKeys } from '../collab/hooks/use-collab';
+import { invalidateChatMatches } from '../chat/hooks/keys';
+import { collabKeys } from '../collab/hooks/keys';
 import { invalidateSearchOwner } from '../search';
 import {
     driveKeys,

@@ -2,13 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
-
-export const collabKeys = {
-    all: ['collab'] as const,
-    info: () => [...collabKeys.all, 'info'] as const,
-    document: (ownerId: string, mountId: string, pathId: string) =>
-        [...collabKeys.info(), ownerId, mountId, pathId] as const,
-};
+import { collabKeys } from './keys';
 
 export function useCollabDocumentInfo(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({

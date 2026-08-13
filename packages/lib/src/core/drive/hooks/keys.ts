@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { collabKeys } from '../../collab/hooks/use-collab';
+import { collabKeys } from '../../collab/hooks/keys';
 import { invalidateHomeSize } from '../../home';
 
 export { DEFAULT_MOUNT_ID };

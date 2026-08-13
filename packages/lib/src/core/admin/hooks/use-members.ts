@@ -1,4 +1,4 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { toast } from 'sonner';
@@ -6,7 +6,7 @@ import { settingsApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
-import { adminKeys } from './keys';
+import { adminKeys, invalidateAdminMembers, invalidateAdminUsers } from './keys';
 
 export function useMembers(organizationId?: string) {
     const isGuest = useIsGuest();
@@ -76,14 +76,6 @@ export function useDeleteUser(organizationId?: string) {
         },
         onError: onMutationError,
     });
-}
-
-export function invalidateAdminUsers(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({ queryKey: adminKeys.users() });
-}
-
-export function invalidateAdminMembers(queryClient: QueryClient, organizationId: string): void {
-    queryClient.invalidateQueries({ queryKey: adminKeys.members(organizationId) });
 }
 
 export function useResetUserPassword() {

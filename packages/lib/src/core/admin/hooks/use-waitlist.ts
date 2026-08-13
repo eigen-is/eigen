@@ -1,19 +1,10 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { toast } from 'sonner';
 import { waitlistApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
-
-// Waitlist is server-wide (home-independent route), so keys have no ownerId level.
-export const waitlistKeys = {
-    all: ['waitlist'] as const,
-    entries: (status?: string) => [...waitlistKeys.all, 'entries', status ?? 'all'] as const,
-};
-
-export function invalidateWaitlistEntries(queryClient: QueryClient) {
-    queryClient.invalidateQueries({ queryKey: waitlistKeys.all });
-}
+import { invalidateWaitlistEntries, waitlistKeys } from './keys';
 
 export function useWaitlistEntries(status?: string) {
     const isGuest = useIsGuest();

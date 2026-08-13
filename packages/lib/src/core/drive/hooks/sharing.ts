@@ -5,7 +5,7 @@ import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { collabKeys } from '../../collab/hooks/use-collab';
+import { collabKeys } from '../../collab/hooks/keys';
 import { driveKeys, invalidateAclSharedOrUnshared, invalidateAclUpdated } from './keys';
 
 // UPDATE ACL

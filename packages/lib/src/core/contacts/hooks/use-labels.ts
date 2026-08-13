@@ -1,20 +1,10 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Label } from '@workspace/lib/types/label';
 import { AppError, onMutationError } from '../../api-error';
-import { contactKeys } from './use-contacts';
-
-// Define query keys for reuse
-export const labelKeys = {
-    all: ['labels'] as const,
-    owner: (ownerId: string) => [...labelKeys.all, ownerId] as const,
-    lists: (ownerId: string) => [...labelKeys.owner(ownerId), 'list'] as const,
-    list: (ownerId: string, filters: string) => [...labelKeys.lists(ownerId), { filters }] as const,
-    details: (ownerId: string) => [...labelKeys.owner(ownerId), 'detail'] as const,
-    detail: (ownerId: string, id: string) => [...labelKeys.details(ownerId), id] as const,
-};
+import { invalidateLabelCreated, invalidateLabelDeleted, invalidateLabelUpdated, labelKeys } from './keys';
 
 // Hook to fetch all labels
 export function useLabels() {
@@ -85,21 +75,4 @@ export function useDeleteLabel() {
         onSuccess: (_data, labelId) => invalidateLabelDeleted(queryClient, ownerId, labelId),
         onError: onMutationError,
     });
-}
-
-// Invalidation functions (ownerId-scoped, used from mutation onSuccess)
-export function invalidateLabelCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: labelKeys.lists(ownerId) });
-}
-
-export function invalidateLabelUpdated(queryClient: QueryClient, ownerId: string, labelId: string): void {
-    queryClient.invalidateQueries({ queryKey: labelKeys.detail(ownerId, labelId) });
-    queryClient.invalidateQueries({ queryKey: labelKeys.lists(ownerId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-}
-
-export function invalidateLabelDeleted(queryClient: QueryClient, ownerId: string, labelId: string): void {
-    queryClient.removeQueries({ queryKey: labelKeys.detail(ownerId, labelId) });
-    queryClient.invalidateQueries({ queryKey: labelKeys.lists(ownerId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
 }

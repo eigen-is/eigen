@@ -6,16 +6,7 @@ import { toast } from 'sonner';
 import type { PublicUser } from '../../../types/public';
 import { AppError, onMutationError } from '../../api-error';
 import { fetchPublicUser } from '../user-batcher';
-
-const publicKeys = {
-    config: ['publicConfig'] as const,
-};
-
-export const publicUserKeys = {
-    all: ['publicUser'] as const,
-    details: () => [...publicUserKeys.all, 'detail'] as const,
-    detail: (id: string) => [...publicUserKeys.details(), id] as const,
-};
+import { publicKeys, publicUserKeys } from './keys';
 
 export function usePublicConfig() {
     return useQuery({

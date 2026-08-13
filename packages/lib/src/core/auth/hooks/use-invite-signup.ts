@@ -1,11 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { publicApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
-
-const inviteKeys = {
-    all: ['invite'] as const,
-    validate: (token: string | undefined) => [...inviteKeys.all, 'validate', token] as const,
-};
+import { inviteKeys } from './keys';
 
 export function useValidateInviteToken(token: string | undefined) {
     return useQuery({

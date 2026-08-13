@@ -1,14 +1,8 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { notificationApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
-
-export const notificationKeys = {
-    all: ['notifications'] as const,
-    owner: (ownerId: string) => [...notificationKeys.all, ownerId] as const,
-    list: (ownerId: string) => [...notificationKeys.owner(ownerId), 'list'] as const,
-    unreadCount: (ownerId: string) => [...notificationKeys.owner(ownerId), 'unread-count'] as const,
-};
+import { invalidateNotifications, notificationKeys } from './keys';
 
 export function useNotifications(ownerId: string, enabled: boolean = true) {
     return useQuery({
@@ -73,8 +67,4 @@ export function useDismissNotification(ownerId: string) {
         onSuccess: () => invalidateNotifications(queryClient, ownerId),
         onError: onMutationError,
     });
-}
-
-export function invalidateNotifications(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: notificationKeys.owner(ownerId) });
 }

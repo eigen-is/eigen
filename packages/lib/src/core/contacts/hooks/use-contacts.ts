@@ -1,21 +1,10 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AppError, onMutationError } from '../../api-error';
-import { invalidateHomeSize } from '../../home';
-
-// Query keys for contacts
-export const contactKeys = {
-    all: ['contacts'] as const,
-    owner: (ownerId: string) => [...contactKeys.all, ownerId] as const,
-    lists: (ownerId: string) => [...contactKeys.owner(ownerId), 'list'] as const,
-    list: (ownerId: string, filters: Record<string, unknown>) => [...contactKeys.lists(ownerId), { filters }] as const,
-    details: (ownerId: string) => [...contactKeys.owner(ownerId), 'detail'] as const,
-    detail: (ownerId: string, id: string) => [...contactKeys.details(ownerId), id] as const,
-    me: (ownerId: string) => [...contactKeys.owner(ownerId), 'me'] as const,
-};
+import { contactKeys, invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated } from './keys';
 
 // Fetch all contacts
 export function useContacts() {
@@ -124,22 +113,4 @@ export function useUploadContactAvatar() {
         mutationFn: (file: File) => uploadContactAvatarRequest(ownerId, file),
         onError: onMutationError,
     });
-}
-
-// Invalidation functions (ownerId-scoped, used from mutation onSuccess)
-export function invalidateContactCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
-}
-
-export function invalidateContactUpdated(queryClient: QueryClient, ownerId: string, contactId: string): void {
-    queryClient.invalidateQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
-}
-
-export function invalidateContactDeleted(queryClient: QueryClient, ownerId: string, contactId: string): void {
-    queryClient.removeQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
-    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
-    invalidateHomeSize(queryClient, ownerId);
 }

@@ -1,18 +1,11 @@
-import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-
-export const teamKeys = {
-    all: ['team'] as const,
-    owner: (teamId: string) => [...teamKeys.all, teamId] as const,
-    settings: (teamId: string) => [...teamKeys.owner(teamId), 'settings'] as const,
-    members: (teamId: string) => [...teamKeys.owner(teamId), 'members'] as const,
-    mounts: (teamId: string) => [...teamKeys.owner(teamId), 'mounts'] as const,
-};
+import { invalidateTeamSettings, teamKeys } from './keys';
 
 export function useTeamSettings(teamId: string) {
     return useQuery({
@@ -42,8 +35,4 @@ export function useUpdateTeamSettings(teamId: string) {
         },
         onError: onMutationError,
     });
-}
-
-export function invalidateTeamSettings(queryClient: QueryClient, teamId: string): void {
-    queryClient.invalidateQueries({ queryKey: teamKeys.settings(teamId) });
 }
