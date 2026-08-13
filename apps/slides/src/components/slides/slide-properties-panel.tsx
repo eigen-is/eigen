@@ -5,8 +5,8 @@ import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { DrivePickerWithUpload } from '@workspace/ui/components/drive/drive-picker-with-upload';
-import { ColorPicker } from '@workspace/ui/components/media/color-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { ColorPicker } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import {
