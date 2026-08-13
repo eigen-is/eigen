@@ -1,9 +1,9 @@
 import { formatFileSize } from '@workspace/lib/format';
 import { useHomeSize } from '@workspace/lib/home';
-import { EigenLoader } from '@workspace/ui';
 import { Progress } from '@workspace/ui/components/progress';
 import { cn } from '@workspace/ui/lib/utils';
 import { useState } from 'react';
+import { EigenLoader } from '../braket/eigen-loader';
 
 export type StorageData = {
     mailAndContacts: { used: number; max: number };

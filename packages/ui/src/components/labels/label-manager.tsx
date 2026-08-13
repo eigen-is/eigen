@@ -1,11 +1,11 @@
 import { useAddLabel, useDeleteLabel, useUpdateLabel } from '@workspace/lib/contacts';
 import type { Label } from '@workspace/lib/types/label';
-import { TooltipButton } from '@workspace/ui';
 import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { SidebarItem } from '../layout/sidebar';
 import { DroppableSidebarItem } from '../layout/sidebar/droppable-sidebar-item';
 import { SidebarSection } from '../layout/sidebar/sidebar-section';
+import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { LabelDialog } from './label-dialog';
 import type { LabelManagerProps } from './types';
 
