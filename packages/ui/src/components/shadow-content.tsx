@@ -135,7 +135,7 @@ export function ShadowContent({
         const styleElement = document.createElement('style');
         styleElement.textContent = `
       .shadow-content-container {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
         color: light-dark(#333, #e8eaed);
         line-height: 1.5;
         ${scheme === 'light' ? 'background: #fff; padding: 16px; border-radius: 8px;' : ''}
