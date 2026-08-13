@@ -8,15 +8,11 @@ import {
 } from '@workspace/lib/admin';
 import { formatDateTime, formatTimeAgo } from '@workspace/lib/date';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
-import { EmptyState, LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, SearchBar, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
-import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
-import { UserItem } from '@workspace/ui/components/user/user-item';
+import { UserItem } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, RefreshCw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';

@@ -1,13 +1,8 @@
 import { formatDate } from '@workspace/lib/date';
 import type { AdminUser } from '@workspace/lib/types/admin';
+import { DeleteDialog, EmptyState, SearchBar, TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
-import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
-import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
-import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { SearchBar } from '@workspace/ui/components/search-bar/search-bar';
-import { PersonList } from '@workspace/ui/components/user/person-list';
-import { UserDetailHero } from '@workspace/ui/components/user/user-detail-hero';
-import { UserItem } from '@workspace/ui/components/user/user-item';
+import { PersonList, UserDetailHero, UserItem } from '@workspace/ui/components/user';
 import { Trash2 } from 'lucide-react';
 import { useState } from 'react';
 

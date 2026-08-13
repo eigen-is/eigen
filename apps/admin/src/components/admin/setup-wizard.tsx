@@ -2,7 +2,7 @@ import { useCheckSetupS3, useCompleteSetup, type useSetupStatus } from '@workspa
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
-import { EigenLoader } from '@workspace/ui/components/braket/eigen-loader';
+import { EigenLoader } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
