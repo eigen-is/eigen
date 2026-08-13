@@ -59,7 +59,7 @@ gradients render as `linear-gradient(<angle>deg in oklab, from, to)`, images as 
 `cover` or `contain`. `isSameFill` backs the "mixed" state when a multi-selection disagrees.
 
 Editing UI is the shared `BackgroundFillBlock`
-(`packages/ui/src/components/layout/properties-panel/background-fill-block.tsx`): none / solid / gradient /
+(`packages/ui/src/components/properties-panel/background-fill-block.tsx`): none / solid / gradient /
 image segments, with a 3×3 arrow grid for the gradient angle. Slide backgrounds allow all three fill types;
 text objects allow solid and gradient only. `SlideBackgroundPanel` adds the apply scope — this slide, this
 and following, or all slides.
@@ -104,7 +104,7 @@ panel column takes over the screen when a pane is open, the same as the other do
   alt-drag duplicate), `use-snap-lines.ts`, `use-marquee-select.ts`, `use-slide-dnd.ts`,
   `use-active-comments.ts`
 
-Shared: `packages/ui/src/components/layout/media/image-resize-handles.tsx` (used by docs + slides).
+Shared: `packages/ui/src/components/media/image-resize-handles.tsx` (used by docs + slides).
 
 ## Export & Preview
 

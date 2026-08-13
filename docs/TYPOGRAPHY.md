@@ -45,7 +45,7 @@ sans-serif for unknown names.
 
 ## FontPicker Component
 
-`packages/ui/src/components/layout/media/font-picker.tsx` renders a dropdown menu of all `EIGEN_FONTS`.
+`packages/ui/src/components/media/font-picker.tsx` renders a dropdown menu of all `EIGEN_FONTS`.
 Each item previews in its own typeface. Props: `value` (font name), `onChange` (callback with font name).
 
 Used in:
@@ -75,7 +75,7 @@ The `FontPicker` automatically picks up new entries from `EIGEN_FONTS`.
 | `packages/ui/src/styles/globals.css`                          | `--font-*` Tailwind theme tokens     |
 | `packages/ui/src/styles/eigen-prose.css`                      | Prose typography (body, headings)     |
 | `packages/lib/src/constants/fonts.ts`                         | `EIGEN_FONTS` registry, `getFontFamily()` |
-| `packages/ui/src/components/layout/media/font-picker.tsx`     | Shared font picker component         |
+| `packages/ui/src/components/media/font-picker.tsx`     | Shared font picker component         |
 | `packages/sheet/src/state/locale/en.ts`                        | Sheets font list, derived from `EIGEN_FONTS` (the sheet package is English-only, so `en.ts` is the only locale) |
 
 ## Future: CJK Support

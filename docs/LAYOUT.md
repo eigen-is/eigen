@@ -133,7 +133,7 @@ the New menu for free. Routes publish selection-aware actions with `usePaletteSe
 ## Drive Components
 
 `DriveLayout` orchestrates the file-management UI. Everything lives in
-`packages/ui/src/components/layout/drive/`.
+`packages/ui/src/components/drive/`.
 
 ### Architecture
 
@@ -179,7 +179,7 @@ with the JSX wrapper `getFileIcon` re-exported from `drive/file-presentation.tsx
 | `useKeyboardListNavigation<T>` | `packages/ui/src/hooks/use-keyboard-list-navigation.ts`              | Arrow keys, Home/End, Shift+Arrow, Ctrl+A, Escape        |
 | `useListDrag<T>`               | `packages/ui/src/hooks/use-list-drag.ts`                             | Drag from list (multi-drag badge)                        |
 | `useListDropTarget`            | `packages/ui/src/hooks/use-list-drop-target.ts`                      | Drop on sidebar items                                    |
-| `useContextMenu<T>`            | `packages/ui/src/components/layout/context-menu/use-context-menu.ts` | Right-click context menu                                 |
+| `useContextMenu<T>`            | `packages/ui/src/components/context-menu/use-context-menu.ts` | Right-click context menu                                 |
 
 ### CSS Classes
 
@@ -254,7 +254,7 @@ const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'my-ty
 
 | List                     | File                                                                    | Drag type    |
 |--------------------------|-------------------------------------------------------------------------|--------------|
-| `DriveGrid`/`DriveTable` | `packages/ui/src/components/layout/drive/use-drive-item-controller.ts`  | `drive-item` |
+| `DriveGrid`/`DriveTable` | `packages/ui/src/components/drive/use-drive-item-controller.ts`  | `drive-item` |
 | `EmailList`              | `apps/mail/src/components/mail/email-list.tsx`                          | `email`      |
 | `ContactsList`           | `apps/contacts/src/components/contacts/contacts-list.tsx`               | `contact`    |
 
@@ -290,5 +290,5 @@ const label = formatForDisplay('Mod+S'); // "⌘S" on Mac, "Ctrl+S" on Windows
 
 The shell itself lives in `packages/ui/src/components/layout/app/` (`app-shell.tsx`, `eigen-app.tsx`,
 `column-layout.tsx`, `layout-context.tsx`, `topbar.tsx`), the sidebar in
-`packages/ui/src/components/layout/sidebar/`, and Drive in `packages/ui/src/components/layout/drive/`.
+`packages/ui/src/components/layout/sidebar/`, and Drive in `packages/ui/src/components/drive/`.
 Anything else: [SHARED-PRIMITIVES.md](SHARED-PRIMITIVES.md).

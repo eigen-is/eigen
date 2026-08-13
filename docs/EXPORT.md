@@ -202,7 +202,7 @@ Export submenu rendered via `onExport` prop, positioned after Rename:
 New document > Open > Rename > Export > [separator] > Share > ... > Print > Delete
 ```
 
-### Drive Context Menu (`packages/ui/src/components/layout/drive/drive-table.tsx`)
+### Drive Context Menu (`packages/ui/src/components/drive/drive-table.tsx`)
 
 Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onExport` callback.
 

@@ -120,7 +120,7 @@ can cancel) — delete `file_events` older than **90 days**, then trim each `pat
   means a *direct* watch; a path covered by an ancestor watch reads "Watching via *{folder}*".
 - **Recent activity** — `RecentActivity` in the Drive details panel: the 5 newest events (a folder
   includes its descendants), rendered by the shared `ActivityEventList`.
-- **Activity panel** — `packages/ui/src/components/layout/comments/activity-panel.tsx`, hosted by
+- **Activity panel** — `packages/ui/src/components/comments/activity-panel.tsx`, hosted by
   docs, sheets, slides and stickies through `PanelColumn`, up to 50 events, rows opening the comment
   card they reference.
 - **Watched view** — `apps/drive/src/routes/_auth.watched.tsx`, reached from the *Watched* sidebar

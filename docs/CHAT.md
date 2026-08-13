@@ -90,7 +90,7 @@ Chat invites (`/invite` command or `POST .../invite`) bubble ACL to the outermos
 
 ## New-Chat Wizard
 
-`ChatCreateWizard` (`packages/ui/src/components/layout/chat/chat-create-wizard.tsx`) is a two-step dialog for
+`ChatCreateWizard` (`packages/ui/src/components/chat/chat-create-wizard.tsx`) is a two-step dialog for
 starting a chat with picked people (or a whole team) instead of the bare drive-file create: step 1 picks who
 (share-dialog-style `ContactAddRow`, guest emails allowed, "Team chat" footer dropdown) and applies the
 open-vs-create rule (any existing match → primary opens the first, "Create new chat" advances); step 2 confirms name
@@ -308,7 +308,7 @@ Messages use `useInfiniteQuery` with cursor-based pagination:
 Backend: `apps/api/src/lib/chat/` (`ChatRoom`, schemas + db-config, command parsing, `findChatsByMembers`, the
 comment index, SSE builders) and `apps/api/src/routes/chat.ts`. Frontend: `packages/lib/src/core/chat/` (query and
 wizard hooks, emotes, FE commands, SSE handler), shared types in `packages/lib/src/types/chat.ts`, shared validation
-in `packages/lib/src/validation/command.ts`, and UI in `packages/ui/src/components/layout/chat/` (input, message
+in `packages/lib/src/validation/command.ts`, and UI in `packages/ui/src/components/chat/` (input, message
 list, suggests, `ChatCreateWizard`).
 
 See [COMMENTS.md](COMMENTS.md) for the comment index system.

@@ -128,7 +128,7 @@ Reading the source contradicts the 2026-07-03 section of [ROADMAP.md](ROADMAP.md
 
 All "new doc/board/sheet/chat" entry points (drive New menu, palette `create.*` commands, the four
 eigendoc sidebars, chat sidebar) funnel into the shared `DriveCreateEigenDoc` dialog
-(`packages/ui/src/components/layout/drive/drive-create-eigendoc.tsx`) → `useCreateDriveItem`
+(`packages/ui/src/components/drive/drive-create-eigendoc.tsx`) → `useCreateDriveItem`
 (`packages/lib/src/core/drive/hooks/use-drive.ts`). One dialog, one hook — one place to fix.
 
 **Pending state.** Today `DriveLocationPicker.handleSubmit` calls `onConfirm(...)` and

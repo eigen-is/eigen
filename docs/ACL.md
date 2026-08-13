@@ -242,7 +242,7 @@ Defined in `apps/api/src/routes/drive.ts`.
 `useIsEffectiveOwner()` (`packages/lib/src/core/drive/hooks/use-drive-access.ts`) decides what the share dialog
 renders: a restricted non-owner gets the read-only `DriveAccessList`, everyone else `DriveAccessListEdit` with its
 "Editors can share" checkbox (checked = not restricted). The flag is only included in the save payload for effective
-owners. Both components sit in `packages/ui/src/components/layout/drive/`.
+owners. Both components sit in `packages/ui/src/components/drive/`.
 
 ### Design Decisions
 
