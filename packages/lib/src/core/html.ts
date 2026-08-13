@@ -7,15 +7,9 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
-export function htmlToPlainText(html: string): string {
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    return div.textContent ?? '';
-}
-
-// Server-side HTML → plain-text. Browser code should keep using `htmlToPlainText`
-// which delegates to the DOM parser; this regex variant is intended for Node/Bun
-// where there's no `document`. Used by the email composers to populate the
+// Server-side HTML → plain-text. Browser code should use `htmlToPlainText` from
+// ./html-dom, which delegates to the DOM parser; this regex variant is intended for
+// Node/Bun where there's no `document`. Used by the email composers to populate the
 // plain-text fallback (`OutboundMail.text`) for spam filters.
 export function stripTagsServer(html: string): string {
     if (!html) return '';
