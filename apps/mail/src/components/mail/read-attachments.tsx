@@ -4,7 +4,7 @@ import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { TooltipButton } from '@workspace/ui';
 import { SimpleAttachmentChip } from '@workspace/ui/components/attachment';
-import { DriveLocationPicker } from '@workspace/ui/components/drive/drive-location-picker';
+import { DriveLocationPicker } from '@workspace/ui/components/drive';
 import { Download } from 'lucide-react';
 import { useState } from 'react';
 

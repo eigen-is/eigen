@@ -1,12 +1,10 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
 import type { AddressObject, Attachment, Email, EmailAddress, MaildirMailbox } from '@workspace/lib/types/mail';
-import { Toolbar, TooltipButton } from '@workspace/ui';
+import { KebabTrigger, ShadowContent, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
-import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Separator } from '@workspace/ui/components/separator';
-import { ShadowContent } from '@workspace/ui/components/shadow-content';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { AlertTriangle, Archive, ChevronDown, Forward, Reply, ReplyAll, Trash2 } from 'lucide-react';
