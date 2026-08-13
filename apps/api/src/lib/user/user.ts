@@ -1,6 +1,6 @@
 import { and, eq } from 'drizzle-orm';
-import { member, teamMember, user } from '../../../auth-schema.ts';
-import { type auth, getAuthDrizzleDb } from '../auth/auth.ts';
+import { member, teamMember, user } from '../../../auth-schema';
+import { type auth, getAuthDrizzleDb } from '../auth/auth';
 import { getServerConfig } from '../config/server-config';
 
 // Canonical User type — the better-auth session user, including plugin columns

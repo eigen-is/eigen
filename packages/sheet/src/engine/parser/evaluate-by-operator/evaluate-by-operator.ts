@@ -1,18 +1,18 @@
-import type { FormulaArg, FormulaOutput } from '../../types.ts';
-import { ERROR_NAME } from '../error.ts';
-import add from './operator/add.ts';
-import ampersand from './operator/ampersand.ts';
-import divide from './operator/divide.ts';
-import equal from './operator/equal.ts';
-import formulaFunction from './operator/formula-function.ts';
-import greaterThan from './operator/greater-than.ts';
-import greaterThanOrEqual from './operator/greater-than-or-equal.ts';
-import lessThan from './operator/less-than.ts';
-import lessThanOrEqual from './operator/less-than-or-equal.ts';
-import minus from './operator/minus.ts';
-import multiply from './operator/multiply.ts';
-import notEqual from './operator/not-equal.ts';
-import power from './operator/power.ts';
+import type { FormulaArg, FormulaOutput } from '../../types';
+import { ERROR_NAME } from '../error';
+import add from './operator/add';
+import ampersand from './operator/ampersand';
+import divide from './operator/divide';
+import equal from './operator/equal';
+import formulaFunction from './operator/formula-function';
+import greaterThan from './operator/greater-than';
+import greaterThanOrEqual from './operator/greater-than-or-equal';
+import lessThan from './operator/less-than';
+import lessThanOrEqual from './operator/less-than-or-equal';
+import minus from './operator/minus';
+import multiply from './operator/multiply';
+import notEqual from './operator/not-equal';
+import power from './operator/power';
 
 type OperatorCallable = (...args: FormulaArg[]) => FormulaOutput;
 

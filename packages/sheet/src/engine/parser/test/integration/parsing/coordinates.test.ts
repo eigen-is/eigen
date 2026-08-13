@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import type { CellInfo, ParserDoneCallback, ParserOptions, RangeCell } from '../../../../types.ts';
-import Parser from '../../../parser.ts';
+import type { CellInfo, ParserDoneCallback, ParserOptions, RangeCell } from '../../../../types';
+import Parser from '../../../parser';
 
 describe('.parse() coordinates', () => {
     let parser: Parser | null;

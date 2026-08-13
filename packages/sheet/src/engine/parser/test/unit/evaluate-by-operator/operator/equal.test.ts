@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import func from '../../../../evaluate-by-operator/operator/equal.ts';
+import func from '../../../../evaluate-by-operator/operator/equal';
 
 describe('equal operator', () => {
     test('should set SYMBOL const', () => {

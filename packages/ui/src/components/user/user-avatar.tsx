@@ -2,7 +2,7 @@ import { useResolvedUser } from '@workspace/lib/public';
 import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes } from 'react';
 import { Avatar, AvatarImage } from '../avatar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip.tsx';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip';
 import { OwnerInfoPopover } from './owner-info-popover';
 
 export type UserAvatarProps = Omit<HTMLAttributes<HTMLDivElement>, 'popover'> & {

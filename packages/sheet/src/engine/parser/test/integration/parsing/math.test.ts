@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import Parser from '../../../parser.ts';
+import Parser from '../../../parser';
 
 describe('.parse() math', () => {
     let parser: Parser | null;

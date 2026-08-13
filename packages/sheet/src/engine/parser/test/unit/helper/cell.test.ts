@@ -6,7 +6,7 @@ import {
     rowIndexToLabel,
     rowLabelToIndex,
     toLabel,
-} from '../../../helper/cell.ts';
+} from '../../../helper/cell';
 
 describe('sheet/formula-parser/helper/cell', () => {
     describe('.extractLabel()', () => {

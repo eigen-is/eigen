@@ -20,11 +20,6 @@ export function handleChatSSEvent(event: SSEvent, queryClient: QueryClient): boo
             invalidateComments(queryClient, chat.ownerId, chat.mountId, chat.chatId);
             return true;
 
-        case SSEventType.CHAT_MEMBER_ENTERED:
-        case SSEventType.CHAT_MEMBER_LEFT:
-        case SSEventType.CHAT_TYPING:
-            return true;
-
         default:
             return false;
     }

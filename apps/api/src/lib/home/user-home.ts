@@ -1,15 +1,15 @@
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
-import { getUserHomePath } from '../config/paths.ts';
+import { getUserHomePath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
-import { Contacts } from '../contacts/contacts.ts';
+import { Contacts } from '../contacts/contacts';
 import { JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
-import { Mail } from '../mail/mail-domain.ts';
-import { MaildirStore } from '../mail/maildir-store.ts';
+import { Mail } from '../mail/mail-domain';
+import { MaildirStore } from '../mail/maildir-store';
 import { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
-import { Home } from './home.ts';
+import { Home } from './home';
 
 export class UserHome extends Home {
     public declare settings: JsonStore<UserSettings>;

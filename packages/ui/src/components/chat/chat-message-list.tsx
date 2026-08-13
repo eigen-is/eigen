@@ -11,7 +11,7 @@ import { useLongPress } from '../../hooks/use-long-press';
 import { cn } from '../../lib/utils';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
-import { EigenLoader } from '../braket/eigen-loader.tsx';
+import { EigenLoader } from '../braket/eigen-loader';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveLocationPicker } from '../drive/drive-location-picker';
 import { DropdownMenuItem } from '../dropdown-menu';

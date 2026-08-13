@@ -23,7 +23,7 @@ import { useListSelection } from '../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
-import { useLayout } from '../layout/app/layout-context.tsx';
+import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
 import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';

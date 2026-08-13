@@ -1,5 +1,5 @@
-import { cn } from '../../../lib/utils.ts';
-import { EigenLoader } from '../../braket/eigen-loader.tsx';
+import { cn } from '../../../lib/utils';
+import { EigenLoader } from '../../braket/eigen-loader';
 
 type LoadingScreenProps = {
     className?: string;

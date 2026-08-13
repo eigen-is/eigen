@@ -1,4 +1,4 @@
-import { cn } from '../../lib/utils.ts';
+import { cn } from '../../lib/utils';
 
 type BarProps = {
     className?: string;

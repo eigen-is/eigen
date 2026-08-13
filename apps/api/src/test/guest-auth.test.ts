@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, spyOn, test } from '
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
-import { user as userSchema, verification as verificationSchema } from '../../auth-schema.ts';
+import { user as userSchema, verification as verificationSchema } from '../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { _resetOtpRateLimitForTests } from '../lib/auth/otp-rate-limit';
 import { updateServerConfig } from '../lib/config/server-config';

@@ -6,8 +6,6 @@ import { handleContactsSSEvent } from '@workspace/lib/contacts';
 import { handleDriveSSEvent } from '@workspace/lib/drive';
 import { handleMailSSEvent } from '@workspace/lib/mail';
 import { handleNotificationSSEvent } from '@workspace/lib/notification';
-import { handleSpaceSSEvent } from '@workspace/lib/space';
-import { handleTeamSSEvent } from '@workspace/lib/team';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { useCallback, useEffect, useRef } from 'react';
 import { getSSEEventsUrl } from '../../api';
@@ -28,8 +26,6 @@ export function useSSE() {
             handleChatSSEvent(event, queryClient);
             handleCalendarSSEvent(event, queryClient, userId);
             handleNotificationSSEvent(event, queryClient, userId);
-            handleSpaceSSEvent(event, queryClient, userId);
-            handleTeamSSEvent(event, queryClient);
         },
         [queryClient],
     );

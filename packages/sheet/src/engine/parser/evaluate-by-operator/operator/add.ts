@@ -1,6 +1,6 @@
-import type { FormulaArg } from '../../../types.ts';
-import { ERROR_VALUE } from '../../error.ts';
-import { toNumber } from '../../helper/number.ts';
+import type { FormulaArg } from '../../../types';
+import { ERROR_VALUE } from '../../error';
+import { toNumber } from '../../helper/number';
 
 export const SYMBOL = '+';
 

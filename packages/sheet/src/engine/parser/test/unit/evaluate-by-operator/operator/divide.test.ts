@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import func from '../../../../evaluate-by-operator/operator/divide.ts';
+import func from '../../../../evaluate-by-operator/operator/divide';
 
 describe('sheet/formula-parser/operator/divide', () => {
     test('should set SYMBOL const', () => {

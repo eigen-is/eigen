@@ -1,5 +1,5 @@
-export { Bar } from './bar.tsx';
-export { EigenCyclingLogo } from './eigen-cycling-logo.tsx';
-export { EigenLoader } from './eigen-loader.tsx';
-export { EigenLogo } from './eigen-logo.tsx';
-export { Ket } from './ket.tsx';
+export { Bar } from './bar';
+export { EigenCyclingLogo } from './eigen-cycling-logo';
+export { EigenLoader } from './eigen-loader';
+export { EigenLogo } from './eigen-logo';
+export { Ket } from './ket';

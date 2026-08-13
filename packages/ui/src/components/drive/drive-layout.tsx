@@ -2,8 +2,8 @@ import { getDriveComparator, useDriveViewPreferences } from '@workspace/lib/driv
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
-import { Column, ColumnLayout } from '../layout/app/column-layout.tsx';
-import { useLayout } from '../layout/app/layout-context.tsx';
+import { Column, ColumnLayout } from '../layout/app/column-layout';
+import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
 import type { DriveCapabilities } from './drive-capabilities';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';

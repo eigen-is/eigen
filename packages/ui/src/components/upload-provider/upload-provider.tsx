@@ -1,6 +1,6 @@
 import type React from 'react';
 import { createContext, useContext, useState } from 'react';
-import { UploadContainer } from './upload-container.tsx';
+import { UploadContainer } from './upload-container';
 
 type UploadStatus = 'uploading' | 'completed' | 'error';
 type UploadId = string;

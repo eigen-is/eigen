@@ -1,7 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '../../../lib/utils';
-import { Button } from '../../button.tsx';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip.tsx';
+import { Button } from '../../button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
 
 export type TooltipButtonProps = {
     icon: LucideIcon;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { invertNumber, toNumber } from '../../../helper/number.ts';
+import { invertNumber, toNumber } from '../../../helper/number';
 
 describe('.toNumber()', () => {
     test('should correctly convert passed value into number', () => {
