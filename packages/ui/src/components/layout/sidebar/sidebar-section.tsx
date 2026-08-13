@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
-import { EigenLoader } from '../braket/eigen-loader';
+import { EigenLoader } from '../../braket/eigen-loader';
 
 export type SidebarSectionProps = {
     title?: string;

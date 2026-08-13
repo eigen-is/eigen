@@ -8,7 +8,9 @@ import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { cn } from '@workspace/ui/lib/utils.ts';
 import { Grip, LifeBuoy, LogOut, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { EigenLogo } from '../../braket/eigen-logo.tsx';
 import { Button } from '../../button.tsx';
+import { ConfirmDialog } from '../../confirm-dialog.tsx';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,10 +24,8 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '../../dropdown-menu.tsx';
-import { EigenLogo } from '../braket/eigen-logo.tsx';
-import { ConfirmDialog } from '../confirm-dialog.tsx';
-import { UserAvatar } from '../user-avatar.tsx';
-import { UserItem } from '../user-item.tsx';
+import { UserAvatar } from '../../user/user-avatar.tsx';
+import { UserItem } from '../../user/user-item.tsx';
 import { AboutDialog } from './about-dialog.tsx';
 import { AppLogo } from './app-logo.tsx';
 import { CommandPaletteTrigger } from './command-palette/command-palette-trigger.tsx';

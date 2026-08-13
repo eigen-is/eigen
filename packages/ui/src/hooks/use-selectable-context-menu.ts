@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useContextMenu } from '../components/layout/context-menu';
+import { useContextMenu } from '../components/context-menu';
 import type { UseListSelectionReturn } from './use-list-selection';
 
 type UseSelectableContextMenuOptions<T> = {

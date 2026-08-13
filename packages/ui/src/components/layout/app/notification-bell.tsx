@@ -14,10 +14,10 @@ import type { Notification } from '@workspace/lib/types/notification';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { Bell, Check, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ActivityRow } from '../../activity-row';
 import { Button } from '../../button';
+import { CountBadge } from '../../count-badge';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
-import { ActivityRow } from '../activity-row';
-import { CountBadge } from '../count-badge';
 import { NotificationBadge } from './notification-badge';
 
 type NotificationItemProps = {

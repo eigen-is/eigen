@@ -9,7 +9,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
-import { useFindBarRefocus } from '../search/find-in-document-button';
+import { useFindBarRefocus } from '../../search/find-in-document-button';
 
 type EditMenuProps = {
     // Gates the undo/redo section — pass the same condition the surface used for its icon
