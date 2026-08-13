@@ -12,9 +12,9 @@ import {
 import { useMyTeams } from '@workspace/lib/home';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
+import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { UserName } from '@workspace/ui/components/layout/user-name';
+import { UserName } from '@workspace/ui/components/user/user-name';
 import {
     AlignLeft,
     Calendar,

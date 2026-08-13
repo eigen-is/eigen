@@ -1,7 +1,7 @@
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { S3CheckResult, ServerStorageType } from '@workspace/lib/types/settings';
 import { Label } from '@workspace/ui/components/label';
-import { S3ConfigCard } from '@workspace/ui/components/layout/mount/s3-config-card';
+import { S3ConfigCard } from '@workspace/ui/components/mount/s3-config-card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useEffect, useState } from 'react';
 

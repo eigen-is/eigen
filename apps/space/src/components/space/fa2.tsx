@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent } from '@workspace/ui/components/card';
+import { CopyInput } from '@workspace/ui/components/copy-input';
 import {
     Form,
     FormControl,
@@ -11,7 +12,6 @@ import {
     FormMessage,
 } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
-import { CopyInput } from '@workspace/ui/components/layout/copy-input';
 import { Separator } from '@workspace/ui/components/separator';
 import { Check, Copy, InfoIcon } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';

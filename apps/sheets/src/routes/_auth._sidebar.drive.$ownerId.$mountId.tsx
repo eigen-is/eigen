@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { EigenDocListView, eigenDocValidateSearch, SHEETS_CONFIG } from '@workspace/ui/components/layout/drive';
+import { EigenDocListView, eigenDocValidateSearch, SHEETS_CONFIG } from '@workspace/ui/components/drive';
 
 export const Route = createFileRoute('/_auth/_sidebar/drive/$ownerId/$mountId')({
     component: TeamDriveRoute,

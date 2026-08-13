@@ -4,7 +4,7 @@ import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { Label } from '@workspace/lib/types/label';
 import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
-import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
+import { LabelManager } from '@workspace/ui/components/labels/label-manager';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';

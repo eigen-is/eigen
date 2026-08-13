@@ -1,3 +1,5 @@
+import { CommentMenuItems } from '@workspace/ui/components/comments';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -6,8 +8,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { CommentMenuItems } from '@workspace/ui/components/layout/comments';
-import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import {
     ArrowDownAZ,
     ArrowDownZA,

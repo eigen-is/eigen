@@ -4,10 +4,10 @@ import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useAllWatches, usePathInfo } from '@workspace/lib/drive';
 import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { LoadingState } from '@workspace/ui';
+import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
+import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
+import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
-import { DRIVE_CAPABILITIES } from '@workspace/ui/components/layout/drive/drive-capabilities';
-import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
-import { useDriveListRoute } from '@workspace/ui/components/layout/drive/use-drive-list-route';
 
 export const Route = createFileRoute('/_auth/watched')({
     component: WatchedRoute,

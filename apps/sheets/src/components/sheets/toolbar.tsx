@@ -1,8 +1,8 @@
 import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
 
-import { DocumentImportPicker } from '@workspace/ui/components/layout/drive/document-import-picker';
-import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/layout/drive/use-document-export';
+import { DocumentImportPicker } from '@workspace/ui/components/drive/document-import-picker';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Sheet } from 'lucide-react';
 import { useState } from 'react';

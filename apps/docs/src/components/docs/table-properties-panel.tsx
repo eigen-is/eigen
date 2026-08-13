@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/react';
 import { Button } from '@workspace/ui/components/button';
-import { PropertiesPanel, PropertySection } from '@workspace/ui/components/layout/properties-panel';
+import { PropertiesPanel, PropertySection } from '@workspace/ui/components/properties-panel';
 import { Columns2, GripHorizontal, GripVertical, Merge, RowsIcon, Split, ToggleLeft, Trash2 } from 'lucide-react';
 
 type TablePropertiesPanelProps = {

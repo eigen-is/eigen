@@ -1,8 +1,8 @@
 import { useMediaQuery } from '@workspace/lib/media';
-import { ColorPickerButton } from '@workspace/ui/components/layout/media/color-picker-button';
-import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import { ToolbarSeparator } from '@workspace/ui/components/layout/toolbar/toolbar-separator';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
+import { ColorPickerButton } from '@workspace/ui/components/media/color-picker-button';
+import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';

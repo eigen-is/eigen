@@ -1,4 +1,4 @@
-import { ImagePlaceholder } from '@workspace/ui/components/layout/media/image-placeholder';
+import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';

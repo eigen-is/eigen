@@ -4,9 +4,9 @@ import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
+import { DriveDetail, DriveDetailToolbar } from '@workspace/ui/components/drive/drive-detail';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { DriveDetail, DriveDetailToolbar } from '@workspace/ui/components/layout/drive/drive-detail';
 import { lazy, Suspense, useState } from 'react';
 import { ViewToolbar } from './editor-toolbar';
 

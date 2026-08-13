@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { apps } from '@workspace/lib/apps';
+import { EigenCyclingLogo } from '@workspace/ui/components/braket';
 import { Card, CardContent } from '@workspace/ui/components/card';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { EigenCyclingLogo } from '@workspace/ui/components/layout/braket';
 
 export const Route = createFileRoute('/_auth/')({
     component: HomeComponent,

@@ -4,7 +4,7 @@ import { useChatSections, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { StorageUsage, UnreadDot, UserAvatar } from '@workspace/ui';
-import { ChatCreateWizard } from '@workspace/ui/components/layout/chat/chat-create-wizard';
+import { ChatCreateWizard } from '@workspace/ui/components/chat/chat-create-wizard';
 import { SidebarBody } from '@workspace/ui/components/layout/sidebar/sidebar-body';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
