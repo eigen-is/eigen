@@ -552,9 +552,12 @@
     }
 
     /* The mail body's screen scale-to-fit (shadow-content) is cloned with its inline
-       transform; paper gets the unscaled layout. */
+       transform; paper gets the unscaled layout. !important is the only way a stylesheet
+       rule can override a cloned inline style. */
     .printable .shadow-host {
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline transform */
         transform: none !important;
+        /* biome-ignore lint/complexity/noImportantStyles: must beat the cloned inline margin */
         margin-bottom: 0 !important;
     }
 }
