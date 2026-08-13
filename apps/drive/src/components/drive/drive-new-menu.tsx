@@ -1,8 +1,8 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import { DEFAULT_MOUNT_ID, usePathInfo } from '@workspace/lib/drive';
 import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType } from '@workspace/lib/types/drive';
+import { DriveCreateEigenDoc } from '@workspace/ui/components/drive';
 import { getCreateMenuItems } from '@workspace/ui/components/drive/create-menu';
-import { DriveCreateEigenDoc } from '@workspace/ui/components/drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '@workspace/ui/components/drive/drive-create-folder';
 import { DriveUploadFiles } from '@workspace/ui/components/drive/drive-upload-files';
 import {
