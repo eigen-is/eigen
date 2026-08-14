@@ -2,6 +2,7 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
 import { checkPathAccess } from '@workspace/lib/drive';
 import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
+import { canonicalRecipients } from '@workspace/lib/mail/addresses';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, isContainerType } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
@@ -28,28 +29,19 @@ import { DraftAttachments } from './draft-attachments';
 import { useDraft } from './hooks/use-draft';
 import { ShareAndSendDialog, type ShareGrant } from './share-and-send-dialog';
 
-// Recipients as the backend will see them at send: flatten one level of RFC 2822 groups, drop
-// empties, dedupe case-insensitively with to > cc > bcc precedence (an address in both To and Bcc
-// classifies as To), and exclude the sender's own address. `bcc` holds the lowercased addresses
-// that resolved as Bcc-only — the set the backend never grants.
+// Recipients as the backend will see them at send, minus the sender: the shared canonicaliser
+// flattens RFC 2822 groups and dedupes case-insensitively with to > cc > bcc precedence (an address
+// in both To and Bcc classifies as To), so this preview's grant set matches what the server grants.
+// `bcc` holds the lowercased addresses that resolved as Bcc-only — the set the backend never grants.
 function collectRecipientEmails(draft: NewDraft, ownEmail: string | undefined): { all: string[]; bcc: Set<string> } {
     const own = ownEmail?.toLowerCase();
-    const seen = new Set<string>();
     const all: string[] = [];
     const bcc = new Set<string>();
-    for (const field of ['to', 'cc', 'bcc'] as const) {
-        const addr = draft[field];
-        if (!addr) continue;
-        const flat = addr.value.flatMap((entry) => (entry.group ? entry.group : [entry]));
-        for (const entry of flat) {
-            const email = entry.address?.trim();
-            if (!email) continue;
-            const key = email.toLowerCase();
-            if (key === own || seen.has(key)) continue;
-            seen.add(key);
-            all.push(email);
-            if (field === 'bcc') bcc.add(key);
-        }
+    for (const { address, field } of canonicalRecipients(draft)) {
+        const key = address.toLowerCase();
+        if (key === own) continue;
+        all.push(address);
+        if (field === 'bcc') bcc.add(key);
     }
     return { all, bcc };
 }
@@ -123,7 +115,6 @@ export function EmailDraft({
     // send plus the aggregated dialog contents. Null closes the Share & send dialog.
     const [shareState, setShareState] = useState<{
         draft: NewDraft;
-        grantRefIds: string[];
         grants: ShareGrant[];
         notes: string[];
     } | null>(null);
@@ -276,7 +267,6 @@ export function EmailDraft({
             );
 
             const grants: ShareGrant[] = [];
-            const grantRefIds: string[] = [];
             const notes: string[] = [];
             let hasShareableBcc = false;
             for (const check of checks) {
@@ -299,7 +289,6 @@ export function EmailDraft({
                 if (needing.length > needingToCc.length) hasShareableBcc = true;
                 if (needingToCc.length === 0) continue;
                 grants.push({ id: ref.id, name: ref.name, recipients: needingToCc.map((r) => r.email) });
-                grantRefIds.push(ref.id);
             }
             if (hasShareableBcc) notes.push('Bcc recipients are not granted access');
 
@@ -308,7 +297,7 @@ export function EmailDraft({
                 return;
             }
             // Dedupe collapses the repeated chat note when several chat references are linked.
-            setShareState({ draft, grantRefIds, grants, notes: [...new Set(notes)] });
+            setShareState({ draft, grants, notes: [...new Set(notes)] });
         } finally {
             sendingRef.current = false;
         }
@@ -495,7 +484,10 @@ export function EmailDraft({
                     grants={shareState.grants}
                     notes={shareState.notes}
                     onShareAndSend={async () => {
-                        await dispatchSend(shareState.draft, shareState.grantRefIds);
+                        await dispatchSend(
+                            shareState.draft,
+                            shareState.grants.map((g) => g.id),
+                        );
                     }}
                     onSendWithoutAccess={async () => {
                         await dispatchSend(shareState.draft);

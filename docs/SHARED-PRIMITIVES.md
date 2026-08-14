@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-891 primitives across 6 kinds. `packages/sheet` internals are excluded.
+895 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -399,7 +399,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (246)
+## Types (248)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -420,6 +420,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `InheritedAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
+| `CanonicalRecipient` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
+| `RecipientField` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
 | `BorderInfo` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -650,7 +652,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (277)
+## Utilities & constants (279)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -837,6 +839,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
 | `sendDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `updateDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `canonicalRecipients` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
+| `flattenAddresses` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
 | `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |

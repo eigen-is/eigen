@@ -48,6 +48,7 @@
     "./editor": "./src/core/editor/index.ts",
     "./home": "./src/core/home/index.ts",
     "./mail": "./src/core/mail/index.ts",
+    "./mail/addresses": "./src/core/mail/addresses.ts",
     "./media": "./src/core/media/index.ts",
     "./notification": "./src/core/notification/index.ts",
     "./admin": "./src/core/admin/index.ts",

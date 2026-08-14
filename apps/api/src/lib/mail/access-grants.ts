@@ -53,7 +53,14 @@ export async function grantAccessForReferences(
         // write:false would silently revoke write from a write-only entry on the path itself.
         const needingAcl = recipients
             .filter((r) => !r.hasReadAccess)
-            .map((r) => ({ id: r.email, read: true, write: path.acl?.find((a) => a.id === r.email)?.write ?? false }));
+            .map((r) => ({
+                id: r.email,
+                read: true,
+                // Case-insensitive match: r.email is lowercased, but a legacy ACL entry may be mixed-case,
+                // and mergeACLDelta's replace is case-insensitive — a case-sensitive miss here would
+                // silently drop that entry's write bit on upsert.
+                write: path.acl?.find((a) => a.id.toLowerCase() === r.email)?.write ?? false,
+            }));
         if (needingAcl.length > 0) {
             await drive.updateACLDelta(ref.mountId, ref.id, { add: needingAcl }, undefined, undefined, user, {
                 suppressShareEmail: 'all',

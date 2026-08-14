@@ -1,7 +1,7 @@
+import { flattenAddresses } from '@workspace/lib/mail/addresses';
 import type { AddressObject } from '@workspace/lib/types/mail';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { buildMessageId } from './mailutils';
-import { flattenAddresses } from './recipients';
 
 export type EmlAttachment = {
     filename: string;
