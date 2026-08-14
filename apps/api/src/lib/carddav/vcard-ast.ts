@@ -1,8 +1,8 @@
 // Hand-rolled vCard content-line AST (RFC 2426 / RFC 6350 §3). Parses a vCard into logical lines and
 // serializes them back, keeping the exact source bytes of any line we don't rewrite so an untouched
-// card round-trips byte-for-byte through a CardDAV GET. The 75-octet fold is shared with the CalDAV
-// serializer — one source of truth for the RFC folding algorithm.
-import { foldLine } from '../caldav/ical-serialize';
+// card round-trips byte-for-byte through a CardDAV GET. The fold and TEXT-escape algorithms are the
+// shared MIME-directory primitives in core/content-line.
+import { foldLine, neuterParamValue } from '../core/content-line';
 
 export class VCardError extends Error {}
 
@@ -115,10 +115,9 @@ export function parseVCardLines(text: string): VCardLine[] {
 
 // parseLine strips the surrounding quotes off a param value, so a rewritten line must re-quote it: a value
 // with ';' ':' or ',' has to be double-quoted or it would truncate the param section / mint bogus params.
-// vCard 3.0 has no quote-escape mechanism, so a literal quote or CR/LF is neutered the way the iCal twin
-// (escapeICalParamValue) does — '"' -> "'" and CRLF dropped — closing the injection path.
+// vCard 3.0 has no quote-escape mechanism, so a literal quote or CR/LF is neutered first.
 function buildParamValue(value: string): string {
-    const clean = value.replace(/"/g, "'").replace(/[\r\n]/g, '');
+    const clean = neuterParamValue(value);
     return /[;:,]/.test(clean) ? `"${clean}"` : clean;
 }
 
@@ -148,12 +147,8 @@ export function makeLine(
     };
 }
 
-// RFC 2426 §2.4.2 — escape TEXT values: backslash, semicolon, comma, and newline. A bare CR is dropped
-// (mirroring the iCal twin escapeICalText): it isn't a TEXT char, and a stray CR would split the value into
-// a new property line on the next parse — a property-injection primitive through notes/name/company.
-export function escapeText(v: string): string {
-    return v.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n').replace(/\r/g, '');
-}
+// RFC 2426 §2.4.2 TEXT escaping — identical to iCal's, so the one implementation lives in core/content-line.
+export { escapeContentText as escapeText } from '../core/content-line';
 
 // One left-to-right pass so an escaped backslash (\\) can't recombine with the next char into a new
 // escape. `\n`/`\N` become newline; every other `\x` drops the backslash.

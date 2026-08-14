@@ -1,0 +1,43 @@
+// RFC 2425 §5.8.1 MIME-directory content-line primitives, shared by the iCalendar (caldav) and vCard
+// (carddav) serializers — the fold and escape algorithms are identical across both formats, so they live
+// here as the one source of truth.
+
+// RFC 5545 §3.3.11 / RFC 2426 §2.4.2 — escape TEXT values: backslash, semicolon, comma, and newline. A
+// bare CR is dropped: it isn't a TEXT char, and a stray CR would split the value into a new property line
+// on the next parse — a property-injection primitive through user-supplied fields.
+export function escapeContentText(s: string): string {
+    return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n').replace(/\r/g, '');
+}
+
+// Neuter a value for use inside a PARAM-VALUE (e.g. CN="..."): double quotes would break out of the
+// parameter (neither format has a quote escape), CRLF could inject properties.
+export function neuterParamValue(s: string): string {
+    return s.replace(/"/g, "'").replace(/[\r\n]/g, '');
+}
+
+// RFC 5545 §3.1 / RFC 2425 §5.8.1 — fold lines longer than 75 octets with CRLF + single space.
+export function foldLine(line: string): string {
+    const bytes = new TextEncoder().encode(line);
+    if (bytes.length <= 75) return line;
+
+    const parts: string[] = [];
+    let offset = 0;
+    let first = true;
+
+    while (offset < bytes.length) {
+        const limit = first ? 75 : 74; // continuation lines lose 1 octet to the leading space
+        first = false;
+
+        // Walk back from limit so we never split a multi-byte character
+        let end = Math.min(offset + limit, bytes.length);
+        // If the byte at `end` is a UTF-8 continuation byte (10xxxxxx), back up
+        while (end < bytes.length && (bytes[end] & 0xc0) === 0x80) {
+            end--;
+        }
+
+        parts.push(new TextDecoder().decode(bytes.slice(offset, end)));
+        offset = end;
+    }
+
+    return parts.join('\r\n ');
+}

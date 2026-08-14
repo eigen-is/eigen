@@ -1,49 +1,14 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
+import {
+    neuterParamValue as escapeICalParamValue,
+    escapeContentText as escapeICalText,
+    foldLine,
+} from '../core/content-line';
 import { buildVTimezone } from './vtimezone';
 
 const pad = (n: number) => n.toString().padStart(2, '0');
-
-// RFC 5545 §3.3.11 — escape TEXT values
-function escapeICalText(s: string): string {
-    return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n').replace(/\r/g, '');
-}
-
-// Escape a value for use inside a double-quoted PARAM-VALUE (e.g. CN="...").
-// Double quotes would break out of the parameter; CRLF could inject properties.
-function escapeICalParamValue(s: string): string {
-    return s.replace(/"/g, "'").replace(/[\r\n]/g, '');
-}
-
-// RFC 5545 §3.1 / RFC 2425 §5.8.1 — fold lines longer than 75 octets with CRLF + single space.
-// Shared with the vCard serializer (carddav/vcard-ast.ts): the algorithm is identical across both
-// directory formats, so it lives here as the one source of truth.
-export function foldLine(line: string): string {
-    const bytes = new TextEncoder().encode(line);
-    if (bytes.length <= 75) return line;
-
-    const parts: string[] = [];
-    let offset = 0;
-    let first = true;
-
-    while (offset < bytes.length) {
-        const limit = first ? 75 : 74; // continuation lines lose 1 octet to the leading space
-        first = false;
-
-        // Walk back from limit so we never split a multi-byte character
-        let end = Math.min(offset + limit, bytes.length);
-        // If the byte at `end` is a UTF-8 continuation byte (10xxxxxx), back up
-        while (end < bytes.length && (bytes[end] & 0xc0) === 0x80) {
-            end--;
-        }
-
-        parts.push(new TextDecoder().decode(bytes.slice(offset, end)));
-        offset = end;
-    }
-
-    return parts.join('\r\n ');
-}
 
 function formatDateTimeUTC(d: Date): string {
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
