@@ -30,7 +30,7 @@ async function sharpResize(
         const width = rotated ? metadata.pageHeight || metadata.height! : metadata.width;
         const height = rotated ? metadata.width : metadata.pageHeight || metadata.height!;
 
-        if (width > 128000 || height > 128000) return null;
+        if (width > 32000 || height > 32000) return null;
 
         const data = await image
             .rotate()
