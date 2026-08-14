@@ -1,7 +1,18 @@
 import { parseOwnerId } from '@workspace/lib/types';
-import { type DriveACL, type DriveACLDelta, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import {
+    type DriveACL,
+    type DriveACLDelta,
+    type DrivePath,
+    type DriveVisibility,
+    isCollabType,
+} from '@workspace/lib/types/drive';
 import type { User } from '../user';
 import type { Memberships } from '../user/';
+
+// Public visibility that grants read: both public-read and public-write let anyone read.
+export function grantsPublicRead(visibility: DriveVisibility): boolean {
+    return visibility === 'public-read' || visibility === 'public-write';
+}
 
 export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
     for (const path of ancestors) {
@@ -12,7 +23,7 @@ export function canReadFromAncestors(ancestors: DrivePath[], user: User, members
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
 
-        if (path.visibility === 'public-read' || path.visibility === 'public-write') return true;
+        if (grantsPublicRead(path.visibility)) return true;
 
         if (path.acl) {
             if (matchesACL(path.acl, user, memberships, 'read')) return true;

@@ -60,6 +60,7 @@ import {
     canWriteFromAncestors,
     filterRedundantACL,
     findContainerFromAncestors,
+    grantsPublicRead,
     matchesACL,
     mergeACLDelta,
     normalizeACL,
@@ -889,7 +890,13 @@ export default class Drive {
         const path = await mount.getPath(pathId);
         if (!path) throw new ApiError(404, 'Path not found');
         const crumbs = await mount.getBreadcrumb(pathId);
+        return this.membersFromCrumbs(crumbs);
+    }
 
+    // Resolves the effective individual members from a pre-fetched breadcrumb (path + ancestors).
+    // Split out of getEffectiveMembers so checkAccessForEmails can reuse the single getBreadcrumb
+    // walk it already needs for visibility instead of paying for a second recursive CTE.
+    private async membersFromCrumbs(crumbs: DrivePath[]): Promise<EffectiveMember[]> {
         // Collect ACL entries from the path and all ancestors
         const allACL: DriveACL[] = [];
         for (const crumb of crumbs) {
@@ -931,24 +938,30 @@ export default class Drive {
     // have read access to this path, and would it need admin admission to become a guest? Raw Drive
     // is the owner, so canShare is always true — the SharedDrive wrapper narrows it for shared callers.
     async checkAccessForEmails(mountId: string, pathId: string, emails: string[]): Promise<DriveAccessCheckResult> {
-        const members = await this.getEffectiveMembers(mountId, pathId); // throws 404 if the path is gone
-        const memberByEmail = new Map(members.map((m) => [m.email, m]));
-
+        // One breadcrumb walk feeds both membership and visibility (an empty chain means the path is gone).
         const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
-        const ancestorPublic = crumbs.some(
-            (crumb) => crumb.visibility === 'public-read' || crumb.visibility === 'public-write',
-        );
+        if (crumbs.length === 0) throw new ApiError(404, 'Path not found');
+
+        const members = await this.membersFromCrumbs(crumbs);
+        const memberByEmail = new Map(members.map((m) => [m.email, m]));
+        const ancestorPublic = crumbs.some((crumb) => grantsPublicRead(crumb.visibility));
 
         const openSignup = getServerSettings().guests.openSignup;
 
         const recipients: DriveAccessRecipient[] = [];
+        const seen = new Set<string>();
         for (const rawEmail of emails) {
             const email = rawEmail.toLowerCase();
+            if (seen.has(email)) continue;
+            seen.add(email);
             // member.read is the honest read flag — a write-only (read:false) entry does NOT grant read.
             const hasReadAccess = ancestorPublic || (memberByEmail.get(email)?.read ?? false);
-            const user = await getUserByEmail(email);
-            const registryEntries = await getEntriesForTarget(email);
-            const needsGuestAdmission = !user && !openSignup && registryEntries.length === 0;
+            // Only an unknown email under closed signup can need admission: open signup clears everyone,
+            // and a known user never does — so skip the registry query in both of those cases.
+            let needsGuestAdmission = false;
+            if (!openSignup && !(await getUserByEmail(email))) {
+                needsGuestAdmission = (await getEntriesForTarget(email)).length === 0;
+            }
             recipients.push({ email, hasReadAccess, needsGuestAdmission });
         }
 
