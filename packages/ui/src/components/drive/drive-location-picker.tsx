@@ -3,6 +3,7 @@ import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { cn } from '@workspace/ui/lib/utils';
 import { Download } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -47,7 +48,7 @@ export function DriveLocationPicker({
     const { user } = useAuth();
     const [name, setName] = useState(defaultName);
     const [expanded, setExpanded] = useState(mode !== 'create');
-    const [pending, setPending] = useState(false);
+    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
     const [location, setLocation] = useState<DriveLocationValue>({
         ownerId: defaultOwnerId || user?.id || '',
         mountId: defaultMountId,
@@ -65,24 +66,16 @@ export function DriveLocationPicker({
 
     const hasName = mode === 'create' || mode === 'save-as';
 
-    // Own the async lifecycle: disable actions in-flight (no double-submit), close only after the
-    // create/save fulfils, and stay open on rejection so the caller's error toast reads with the retry.
-    const handleSubmit = async () => {
-        if ((hasName && !name.trim()) || pending) return;
-        setPending(true);
-        try {
-            await onConfirm({
+    const handleSubmit = () => {
+        if (hasName && !name.trim()) return;
+        return run(() =>
+            onConfirm({
                 ownerId: location.ownerId || user.id,
                 mountId: location.mountId,
                 folderId: location.folderId,
                 name: hasName ? name.trim() : undefined,
-            });
-            onOpenChange(false);
-        } catch {
-            // Stay open for retry; the mutation's onMutationError already surfaced the toast.
-        } finally {
-            setPending(false);
-        }
+            }),
+        );
     };
 
     const resolvedTitle =
@@ -92,9 +85,7 @@ export function DriveLocationPicker({
     const resolvedNameLabel = nameLabel ?? (mode === 'save-as' ? 'Save as' : 'Name');
 
     return (
-        // While pending, ignore every close path (Escape/backdrop/X) so the retry surface survives;
-        // opening is always allowed.
-        <Dialog open={open} onOpenChange={(o) => (o || !pending) && onOpenChange(o)}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent
                 abovePreview={abovePreview}
                 className={cn(

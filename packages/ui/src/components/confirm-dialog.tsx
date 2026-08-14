@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useDialogPending } from '../hooks/use-dialog-pending';
 import { Button } from './button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
 
@@ -24,27 +24,10 @@ export function ConfirmDialog({
     confirmText = 'Confirm',
     destructive = false,
 }: ConfirmDialogProps) {
-    const [pending, setPending] = useState(false);
-
-    // Own the async lifecycle: disable both actions in-flight (no double-submit), close only after
-    // the callback fulfils, and stay open on rejection so the caller's error toast reads with the retry.
-    const handleConfirm = async () => {
-        if (pending) return;
-        setPending(true);
-        try {
-            await onConfirm();
-            onOpenChange(false);
-        } catch {
-            // Stay open for retry; the mutation's onMutationError already surfaced the toast.
-        } finally {
-            setPending(false);
-        }
-    };
+    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
 
     return (
-        // While pending, ignore every close path (Escape/backdrop/X) so the retry surface survives;
-        // opening is always allowed.
-        <Dialog open={open} onOpenChange={(o) => (o || !pending) && onOpenChange(o)}>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
@@ -56,7 +39,7 @@ export function ConfirmDialog({
                     </Button>
                     <Button
                         variant={destructive ? 'destructive' : 'default'}
-                        onClick={handleConfirm}
+                        onClick={() => run(onConfirm)}
                         disabled={pending}
                     >
                         {confirmText}
