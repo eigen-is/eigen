@@ -118,6 +118,31 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(photoBlock(readFileSync(cardPathOf(dir, id), 'utf8'))).toBe(before);
     });
 
+    test('a changed avatar whose staged file is gone fails the save and keeps the existing photo', async () => {
+        const { contacts, user, dir } = await makeContacts();
+        const staged = await stageAvatar(contacts);
+        const id = await contacts.addContact(validContact({ firstName: 'Hold', lastName: 'Photo', avatar: staged }));
+
+        const photoBefore = photoBlock(readFileSync(cardPathOf(dir, id), 'utf8'));
+        const avatarBefore = (await contacts.getContactById(id))?.avatar;
+        expect(photoBefore).not.toBe('');
+        expect(avatarBefore).not.toBe('');
+
+        // A non-empty avatar URL that differs from the stored cache URL but points at no staged file — the
+        // shape cleanupAvatarImages leaves when it sweeps a freshly-staged-but-unsaved file. Silently clearing
+        // the existing photo would lose it, so the save must hard-fail.
+        await expect(
+            contacts.updateContact(
+                id,
+                validContact({ firstName: 'Hold', lastName: 'Photo', avatar: `contacts/${user.id}/avatar/gone.webp` }),
+            ),
+        ).rejects.toThrow('Avatar upload could not be found');
+
+        // The throw is before the file write: the PHOTO line and the projection URL are untouched.
+        expect(photoBlock(readFileSync(cardPathOf(dir, id), 'utf8'))).toBe(photoBefore);
+        expect((await contacts.getContactById(id))?.avatar).toBe(avatarBefore);
+    });
+
     test('clearing the avatar removes the PHOTO line and empties the projection URL', async () => {
         const { contacts, dir } = await makeContacts();
         const staged = await stageAvatar(contacts);

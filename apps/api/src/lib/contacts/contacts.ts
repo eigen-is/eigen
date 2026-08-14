@@ -427,11 +427,20 @@ export class Contacts {
                 categories,
             };
             // PHOTO is presence-triggered: only touch it when the avatar changed against the stored row. A new
-            // avatar resolves the staged webp to an embedded JPEG; a cleared one removes PHOTO. The derived
-            // cache + projection URL are rebuilt from the embed after the write.
+            // avatar resolves the staged webp to an embedded JPEG; an explicit clear (avatar === '') removes
+            // PHOTO. The derived cache + projection URL are rebuilt from the embed after the write.
             const avatarChanged = contact.avatar !== (row.data?.avatar ?? '');
-            const photo = avatarChanged && contact.avatar ? await this.resolveStagedAvatar(contact.avatar) : null;
-            if (avatarChanged) edits.photo = photo;
+            let photo: { bytes: Uint8Array; mediaType: string } | null = null;
+            if (avatarChanged) {
+                if (contact.avatar) {
+                    photo = await this.resolveStagedAvatar(contact.avatar);
+                    // A changed, non-empty avatar whose staged file has vanished (cleanupAvatarImages can sweep a
+                    // freshly-staged-but-unsaved file) fails the save — silently stripping the existing PHOTO
+                    // would lose a photo the user meant to replace.
+                    if (!photo) throw new ApiError(400, 'Avatar upload could not be found — please upload it again');
+                }
+                edits.photo = photo;
+            }
 
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
@@ -729,7 +738,7 @@ export class Contacts {
     // bytes' hash makes a superseded photo's file fall out of reference, so cleanupAvatarImages sweeps it. A
     // uri-kind or absent photo caches nothing — remote URIs are never fetched (SSRF, spec Non-goals).
     private async cacheCardPhoto(contactId: string, photo: ParsedCardPhoto | null): Promise<string> {
-        if (!photo || photo.kind !== 'inline') return '';
+        if (photo?.kind !== 'inline') return '';
         const result = await generateImagePreview(
             Buffer.from(photo.bytes),
             photo.mediaType ?? 'image/jpeg',
