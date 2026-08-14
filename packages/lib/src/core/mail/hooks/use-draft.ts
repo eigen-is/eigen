@@ -1,7 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getDriveAppUrl, getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import type { DraftAttachmentUpload, DraftInput, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import type {
+    DraftAttachmentUpload,
+    DraftInput,
+    EmailDraft,
+    NewDraft,
+    SentMailResult,
+} from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateItemCreated } from '../../drive/hooks/keys';
@@ -40,7 +46,7 @@ export async function updateDraftEmail(
     return response.data || null;
 }
 
-export async function sendDraftEmail(draft: NewDraft, ownerId: string): Promise<EmailDraft | null> {
+export async function sendDraftEmail(draft: NewDraft, ownerId: string): Promise<SentMailResult | null> {
     const response = await mailApi({ ownerId }).message.send.post({
         mail: draft,
     });
@@ -119,11 +125,15 @@ export function useSendDraft() {
 
     return useMutation({
         mutationFn: (draft: NewDraft) => sendDraftEmail(draft, ownerId),
-        onSuccess: () => {
+        onSuccess: (data) => {
             invalidateMailboxes(queryClient, ownerId);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
             invalidateHomeSize(queryClient, ownerId);
-            toast.success('Email sent');
+            if (data?.failedRecipients?.length) {
+                toast.error(`Delivery to ${data.failedRecipients.join(', ')} failed`);
+            } else {
+                toast.success('Email sent');
+            }
         },
         onError: onMutationError,
     });
