@@ -13,7 +13,7 @@ import type {
 import { SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { isDemo } from '../config/env';
-import { getMailDomain, isInternalAddress } from '../config/server-config';
+import { isInternalAddress } from '../config/server-config';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
 import { type OutboundMail, sendMail } from '../core/mailer';
@@ -24,7 +24,7 @@ import { simpleParser } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
-import { canonicalizeRecipients, MAX_SEND_REFERENCES } from './recipients';
+import { MAX_SEND_REFERENCES } from './recipients';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
@@ -557,7 +557,7 @@ export class Mail {
         // (for the frontend). Re-bake here so the outbound SMTP body matches the Sent copy.
         const mail = await this.draftFullSave(mailToSend, (mailToSend as EmailDraft).id?.trim(), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
-        const recipients = canonicalizeRecipients(mail);
+        const allRecipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])];
 
         // Capture the pre-bake bodies: external copies personalise these per-recipient, while the
         // internal copy and the single-send path bake bare links off the same base.
@@ -582,10 +582,10 @@ export class Mail {
             );
         }
 
-        const externals = refs.length ? recipients.filter((r) => !isInternalAddress(r.address)) : [];
+        const externals = allRecipients.filter((r) => !isInternalAddress(r.address));
         const failedRecipients: string[] = [];
 
-        if (!externals.length) {
+        if (!refs.length || !externals.length) {
             // No refs, or every recipient is on this mail domain: one send, no per-recipient envelope.
             message.html = appendReferenceLinks(baseHtml, refs);
             message.text = appendReferenceLinksText(baseText, refs);
@@ -595,7 +595,7 @@ export class Mail {
         } else {
             // Split into a bare internal copy plus one personalised copy per external recipient, each
             // with its own SMTP envelope so a leaked `?email=` link can never reach the wrong person.
-            const envelopeFrom = message.from?.address ?? `noreply@${getMailDomain()}`;
+            const envelopeFrom = message.from!.address;
             const { bcc: _bcc, ...base } = message;
             const buildCopy = (recipientEmail: string | undefined, envelopeTo: string[]): OutboundMail => ({
                 ...base,
@@ -604,17 +604,17 @@ export class Mail {
                 envelope: { from: envelopeFrom, to: envelopeTo },
             });
 
-            const copies: { message: OutboundMail; envelopeTo: string[] }[] = [];
-            const internal = recipients.filter((r) => isInternalAddress(r.address)).map((r) => r.address);
-            if (internal.length) copies.push({ message: buildCopy(undefined, internal), envelopeTo: internal });
+            const copies: OutboundMail[] = [];
+            const internal = allRecipients.filter((r) => isInternalAddress(r.address)).map((r) => r.address);
+            if (internal.length) copies.push(buildCopy(undefined, internal));
             for (const ext of externals) {
-                copies.push({ message: buildCopy(ext.address, [ext.address]), envelopeTo: [ext.address] });
+                copies.push(buildCopy(ext.address, [ext.address]));
             }
 
             let anyAccepted = false;
             for (const copy of copies) {
-                if (await sendMail(copy.message)) anyAccepted = true;
-                else failedRecipients.push(...copy.envelopeTo);
+                if (await sendMail(copy)) anyAccepted = true;
+                else failedRecipients.push(...copy.envelope!.to);
             }
             if (!anyAccepted) {
                 throw new ApiError(500, 'Failed to send email');

@@ -1,5 +1,6 @@
 import { hostname } from 'node:os';
 import type { AddressObject, EmailSummary } from '@workspace/lib/types/mail';
+import { getMailDomain } from '../config/server-config';
 import type { MailFlag } from './mail-store';
 
 let deliveryCounter = 0;
@@ -29,6 +30,10 @@ export function createUniqueMessageId(): string {
     const seq = deliveryCounter++;
     const host = hostname().replace(/\//g, '\\057').replace(/:/g, '\\072');
     return `${time}.M${usec}P${pid}Q${seq}.${host}`;
+}
+
+export function buildMessageId(id: string): string {
+    return `<${id}@${getMailDomain()}>`;
 }
 
 export function getMailIDfromFileName(fileName: string): string {

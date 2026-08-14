@@ -1,6 +1,6 @@
 import type { EmailDraft } from '@workspace/lib/types/mail';
-import { getMailDomain } from '../config/server-config';
 import type { OutboundAttachment, OutboundMail } from '../core/mailer';
+import { buildMessageId } from './mailutils';
 import { canonicalizeRecipients } from './recipients';
 
 export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMail {
@@ -24,7 +24,7 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
         text: draft.text || '',
         // Pin the wire Message-ID to the value the Sent EML carries (mailfile.ts), so a reply to
         // our sent mail threads against a header the recipient actually saw.
-        messageId: `<${draft.id}@${getMailDomain()}>`,
+        messageId: buildMessageId(draft.id),
     };
 
     if (cc.length) message.cc = cc;

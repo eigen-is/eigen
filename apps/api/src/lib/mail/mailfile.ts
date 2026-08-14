@@ -1,6 +1,6 @@
 import type { AddressObject } from '@workspace/lib/types/mail';
 import MailComposer from 'nodemailer/lib/mail-composer';
-import { getMailDomain } from '../config/server-config';
+import { buildMessageId } from './mailutils';
 
 export type EmlAttachment = {
     filename: string;
@@ -43,7 +43,7 @@ export async function createEmlContent(input: EmlInput): Promise<string> {
         text: input.text || '',
         html: input.html || '',
         date: input.date ?? new Date(),
-        messageId: `<${input.id}@${getMailDomain()}>`,
+        messageId: buildMessageId(input.id),
         inReplyTo: input.inReplyTo,
         references: input.references,
         attachments: input.attachments?.map((a) => ({

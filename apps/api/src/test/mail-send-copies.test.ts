@@ -1,12 +1,10 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import type { AddressObject, EmailDraft } from '@workspace/lib/types/mail';
+import type { AddressObject, EmailDraft, SentMailResult } from '@workspace/lib/types/mail';
 import * as mailer from '../lib/core/mailer';
 import { assertJson, authedRequest, getTestContext } from './setup';
 
 const isWindows = process.platform === 'win32';
-
-type SentResult = EmailDraft & { failedRecipients?: string[] };
 
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let sent: mailer.OutboundMail[] = [];
@@ -186,7 +184,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
     test('partial delivery failure still sends, reports failedRecipients, moves to Sent', async () => {
         startCapture((m) => m.envelope?.to.includes('ext1@x.com') ?? false);
         const { draft, res } = await sendDraftWithRef('bob@test.eigen.is, ext1@x.com', { cc: 'ext2@y.com' });
-        const body = await assertJson<SentResult>(res);
+        const body = await assertJson<SentMailResult>(res);
         expect(body.failedRecipients).toEqual(['ext1@x.com']);
 
         const getRes = await authedRequest(
