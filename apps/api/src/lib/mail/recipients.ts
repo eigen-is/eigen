@@ -8,7 +8,7 @@ export type CanonicalRecipient = { name: string; address: string; field: 'to' | 
 
 // Flattens RFC 2822 address groups (`Team: a@x, b@x;`) into their leaf members, dropping the bare
 // group containers, which carry a name but no address.
-function flattenAddresses(value: EmailAddress[] | undefined, out: { name: string; address: string }[]): void {
+export function flattenAddresses(value: EmailAddress[] | undefined, out: { name: string; address: string }[]): void {
     for (const entry of value ?? []) {
         if (entry.group) flattenAddresses(entry.group, out);
         if (entry.address) out.push({ name: entry.name || '', address: entry.address });

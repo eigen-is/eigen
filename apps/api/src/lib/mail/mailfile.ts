@@ -1,6 +1,7 @@
 import type { AddressObject } from '@workspace/lib/types/mail';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { buildMessageId } from './mailutils';
+import { flattenAddresses } from './recipients';
 
 export type EmlAttachment = {
     filename: string;
@@ -25,12 +26,12 @@ export type EmlInput = {
 
 function formatAddresses(field: AddressObject | undefined): string {
     if (!field?.value || !Array.isArray(field.value)) return '';
-    return field.value
-        .map((addr) => {
-            if (addr.name && addr.address) return `${addr.name.trim()} <${addr.address.trim()}>`;
-            return addr.address || addr.name || '';
-        })
-        .join(', ');
+    // Flatten groups into their leaf members so group recipients survive the compose → re-parse
+    // round-trip: the send path's canonicaliser only ever sees the re-parsed header, so a bare
+    // group name here would drop every member. One source of truth — shared with the send path.
+    const flat: { name: string; address: string }[] = [];
+    flattenAddresses(field.value, flat);
+    return flat.map(({ name, address }) => (name ? `${name.trim()} <${address.trim()}>` : address.trim())).join(', ');
 }
 
 export async function createEmlContent(input: EmlInput): Promise<string> {
