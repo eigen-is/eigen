@@ -439,6 +439,8 @@ export class Mail {
             text: email.text || '',
             html: bakedHtml,
             date: new Date(),
+            inReplyTo: email.inReplyTo,
+            references: email.references,
             attachments: allAttachments.length ? allAttachments : undefined,
         });
 
@@ -473,6 +475,10 @@ export class Mail {
         // Overlay the clean html so the client's compose view doesn't re-render the
         // baked card block that's in the parsed EML.
         saved.html = cleanHtml;
+        // Mirror the threading headers so messageSend keeps them: the EML re-parse recovers them,
+        // but don't rely on it — the fast-save path sets them here too (draftFastSave).
+        saved.inReplyTo = email.inReplyTo;
+        saved.references = email.references;
         (saved as EmailDraft).driveReferences = driveReferences ?? [];
         return saved as EmailDraft;
     }

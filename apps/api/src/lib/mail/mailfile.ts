@@ -18,6 +18,8 @@ export type EmlInput = {
     text: string;
     html: string;
     date?: Date;
+    inReplyTo?: string;
+    references?: string | string[];
     attachments?: EmlAttachment[];
 };
 
@@ -42,6 +44,8 @@ export async function createEmlContent(input: EmlInput): Promise<string> {
         html: input.html || '',
         date: input.date ?? new Date(),
         messageId: `<${input.id}@${getMailDomain()}>`,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
         attachments: input.attachments?.map((a) => ({
             filename: a.filename,
             content: a.content,

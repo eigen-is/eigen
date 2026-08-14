@@ -33,6 +33,10 @@ export type OutboundMail = {
     html?: string;
     attachments?: OutboundAttachment[];
     icalEvent?: OutboundICalEvent;
+    messageId?: string;
+    inReplyTo?: string;
+    references?: string | string[];
+    envelope?: { from: string; to: string[] };
 };
 
 export function createTransport(): Mail {
@@ -54,7 +58,7 @@ export function createTransport(): Mail {
     });
 }
 
-function buildMailOptions(message: OutboundMail): Mail.Options {
+export function buildMailOptions(message: OutboundMail): Mail.Options {
     const options: Mail.Options = {
         from: message.from ?? { name: '', address: `noreply@${getMailDomain()}` },
         to: message.to,
@@ -65,6 +69,10 @@ function buildMailOptions(message: OutboundMail): Mail.Options {
     if (message.cc?.length) options.cc = message.cc;
     if (message.bcc?.length) options.bcc = message.bcc;
     if (message.html) options.html = message.html;
+    if (message.messageId) options.messageId = message.messageId;
+    if (message.inReplyTo) options.inReplyTo = message.inReplyTo;
+    if (message.references) options.references = message.references;
+    if (message.envelope) options.envelope = message.envelope;
     if (message.attachments?.length) {
         options.attachments = message.attachments.map((a) => ({
             filename: a.filename,
