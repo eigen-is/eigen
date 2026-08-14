@@ -9,7 +9,7 @@ import {
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { getDomain, getMailDomain } from '../config/server-config';
+import { getDomain, isInternalAddress } from '../config/server-config';
 
 const EMAIL_BORDER = '#e0e0e0';
 const EMAIL_TEXT = '#1a1a1a';
@@ -72,7 +72,7 @@ function buildReferenceUrl(ref: AttachmentReference): string {
 // see the bare URL.
 export function buildAttachmentUrl(ref: AttachmentReference, recipientEmail?: string): string {
     const url = buildReferenceUrl(ref);
-    if (!recipientEmail || recipientEmail.endsWith(`@${getMailDomain()}`)) return url;
+    if (!recipientEmail || isInternalAddress(recipientEmail)) return url;
     return `${url}${url.includes('?') ? '&' : '?'}email=${encodeURIComponent(recipientEmail)}`;
 }
 

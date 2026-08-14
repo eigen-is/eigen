@@ -72,6 +72,12 @@ export function getMailDomain(): string {
     return process.env['MAIL_DOMAIN'] || getDomain();
 }
 
+// True when the address belongs to this server's mail domain — i.e. an Eigen user here, not an
+// external recipient. Case-insensitive suffix match on the `@domain` boundary.
+export function isInternalAddress(address: string): boolean {
+    return address.toLowerCase().endsWith(`@${getMailDomain().toLowerCase()}`);
+}
+
 // Display name for the deployment. Used in email shells and similar branding spots — falls
 // back to "Eigen" before setup completes (when orgName is empty) or if config isn't loaded.
 export function getOrgName(): string {
