@@ -40,7 +40,7 @@ function ContactsRoute() {
     const deleteDialogOpen = deleteTargets.length > 0;
 
     const handleConfirmDelete = async () => {
-        await Promise.all(deleteTargets.map((c) => deleteMutation.mutateAsync(c.id)));
+        await Promise.all(deleteTargets.map((c) => deleteMutation.mutateAsync({ id: c.id, etag: c.etag! })));
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },

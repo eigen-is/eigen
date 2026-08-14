@@ -54,6 +54,9 @@ function EditContactRoute() {
             await updateContactMutation.mutateAsync({
                 id: contactId,
                 ...contactData,
+                // The form strips unknown fields, so thread the etag the loaded contact carried — without it the
+                // conditional-write route rejects the save with a 400.
+                etag: contact?.etag,
             });
         } else {
             const newId = await addContactMutation.mutateAsync(contactData);

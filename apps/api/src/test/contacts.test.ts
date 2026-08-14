@@ -60,6 +60,12 @@ describe('Contacts', () => {
         });
 
         test('update contact', async () => {
+            const beforeRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+            );
+            const before = await assertJson<Contact>(beforeRes);
+
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
@@ -71,6 +77,7 @@ describe('Contacts', () => {
                         lastName: 'Updated',
                         email: ['charlie@test.eigen.is'],
                         phone: [],
+                        etag: before.etag,
                     }),
                 },
             );
@@ -85,9 +92,15 @@ describe('Contacts', () => {
         });
 
         test('delete contact', async () => {
-            const res = await authedRequest(
+            const beforeRes = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+            );
+            const before = await assertJson<Contact>(beforeRes);
+
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}?etag=${encodeURIComponent(before.etag!)}`,
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
@@ -98,12 +111,87 @@ describe('Contacts', () => {
         });
 
         test('delete contact is idempotent for non-existing contact', async () => {
+            // The row is already gone, so the etag is never evaluated — any value still yields a 200 no-op.
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}?etag=x`,
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
+        });
+    });
+
+    describe('Conditional writes (etag preconditions)', () => {
+        // A stale etag means the card was rewritten (a device sync, another tab) since the form loaded; the
+        // second write must be refused with 412 rather than clobbering the newer state (spec § 3).
+        test('updating with a stale etag is rejected with 412', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Stale',
+                    lastName: 'Etag',
+                    email: ['stale-etag@test.eigen.is'],
+                    phone: [],
+                }),
+            });
+            const id = (await createRes.text()).replace(/^"|"$/g, '');
+
+            const beforeRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${id}`);
+            const staleEtag = (await assertJson<Contact>(beforeRes)).etag;
+
+            const first = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Stale',
+                    lastName: 'Fresh',
+                    email: ['stale-etag@test.eigen.is'],
+                    phone: [],
+                    etag: staleEtag,
+                }),
+            });
+            expect(first.status).toBe(200);
+
+            const second = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Stale',
+                    lastName: 'Loser',
+                    email: ['stale-etag@test.eigen.is'],
+                    phone: [],
+                    etag: staleEtag,
+                }),
+            });
+            expect(second.status).toBe(412);
+        });
+
+        test('deleting an existing contact with a wrong etag is rejected with 412', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Wrong',
+                    lastName: 'Etag',
+                    email: ['wrong-etag@test.eigen.is'],
+                    phone: [],
+                }),
+            });
+            const id = (await createRes.text()).replace(/^"|"$/g, '');
+
+            const del = await authedRequest(
+                token,
+                `/contacts/${ctx.alice.user.id}/contacts/${id}?etag=not-the-real-etag`,
+                { method: 'DELETE' },
+            );
+            expect(del.status).toBe(412);
+
+            // A precondition failure must leave the contact intact.
+            const stillThere = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${id}`);
+            expect((await assertJson<Contact>(stillThere)).id).toBe(id);
         });
     });
 
@@ -355,7 +443,7 @@ describe('Contacts', () => {
 
             const deleteRes = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${me.id}`,
+                `/contacts/${ctx.alice.user.id}/contacts/${me.id}?etag=${encodeURIComponent(me.etag!)}`,
                 { method: 'DELETE' },
             );
 

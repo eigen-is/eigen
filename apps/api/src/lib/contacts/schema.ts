@@ -11,7 +11,9 @@ export const contacts = sqliteTable('contacts', {
     lastName: text('lastName').notNull(),
     eigenId: text('eigenId').notNull().default(''),
     isGroup: integer('isGroup', { mode: 'boolean' }).notNull().default(false),
-    data: text('data', { mode: 'json' }).$type<Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'labels'>>(),
+    data: text('data', { mode: 'json' }).$type<
+        Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'labels' | 'etag'>
+    >(),
     etag: text('etag').notNull(),
     cardCtag: integer('cardCtag').notNull(),
     mtime: integer('mtime').notNull(),

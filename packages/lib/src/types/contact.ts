@@ -20,6 +20,9 @@ export type Contact = {
     avatar?: string;
     labels?: string[];
     eigenId?: string;
+    // sha256 of the card file's bytes; a write must echo the one it loaded so a stale form 412s (spec § 3).
+    // Absent on a create payload and on emptyContact — the server assigns it.
+    etag?: string;
 };
 
 // Projection produced by useContactSuggestions: the de-duped union of personal

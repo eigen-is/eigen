@@ -28,6 +28,8 @@ const ContactSchema = t.Object({
     avatar: t.Optional(t.String()),
     labels: t.Optional(t.Array(t.String())),
     eigenId: t.Optional(t.String()),
+    // Optional in the schema so POST (create) can omit it; PUT enforces its presence in the handler.
+    etag: t.Optional(t.String()),
 });
 
 const LabelSchema = t.Object({
@@ -74,7 +76,8 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await (await getContacts(user)).updateContact(params.id, body);
+            if (!body.etag) throw new ApiError(400, 'etag is required');
+            return await (await getContacts(user)).updateContact(params.id, body, body.etag);
         },
         {
             body: ContactSchema,
@@ -83,12 +86,15 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .delete(
         '/contacts/:ownerId/contacts/:id',
-        async ({ params, user }) => {
+        async ({ params, query, user }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await (await getContacts(user)).deleteContact(params.id);
+            return await (await getContacts(user)).deleteContact(params.id, query.etag);
         },
-        { auth: true },
+        {
+            query: t.Object({ etag: t.String() }),
+            auth: true,
+        },
     )
     .get(
         '/contacts/:ownerId/labels',

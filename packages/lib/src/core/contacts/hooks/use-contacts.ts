@@ -3,8 +3,13 @@ import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Contact } from '@workspace/lib/types/contact';
+import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated } from './keys';
+
+// A write echoes the etag its form loaded; a 412 means the card changed elsewhere first. Reload list + detail so
+// the form shows current state, tell the user, and swallow it. All handling stays in the hook (NOTIFICATIONS.md).
+const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
 
 // Fetch all contacts
 export function useContacts() {
@@ -54,7 +59,14 @@ export function useUpdateContact() {
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, ownerId, variables.id),
-        onError: onMutationError,
+        onError: (error, variables) => {
+            if (error instanceof AppError && error.status === 412) {
+                invalidateContactUpdated(queryClient, ownerId, variables.id);
+                toast.error(STALE_WRITE_TOAST);
+                return;
+            }
+            onMutationError(error);
+        },
     });
 }
 
@@ -65,13 +77,21 @@ export function useDeleteContact() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (id: string) => {
-            const response = await contactsApi({ ownerId }).contacts({ id }).delete();
+        mutationFn: async ({ id, etag }: { id: string; etag: string }) => {
+            const response = await contactsApi({ ownerId }).contacts({ id }).delete({}, { query: { etag } });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, id) => invalidateContactDeleted(queryClient, ownerId, id),
-        onError: onMutationError,
+        onSuccess: (_data, { id }) => invalidateContactDeleted(queryClient, ownerId, id),
+        onError: (error, { id }) => {
+            // A refused delete (412) leaves the contact present, so reload it like an update, not a deletion.
+            if (error instanceof AppError && error.status === 412) {
+                invalidateContactUpdated(queryClient, ownerId, id);
+                toast.error(STALE_WRITE_TOAST);
+                return;
+            }
+            onMutationError(error);
+        },
     });
 }
 

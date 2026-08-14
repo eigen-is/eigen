@@ -964,6 +964,7 @@ export class Contacts {
             firstName: row.firstName.trim(),
             lastName: row.lastName.trim(),
             eigenId: row.eigenId,
+            etag: row.etag,
             ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
             labels,
         };
