@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
@@ -25,6 +26,26 @@ export class LocalFilesystem {
             fs.mkdirSync(dir, { recursive: true });
         }
         return await Bun.write(fullPath, data);
+    }
+
+    // Durable, crash-safe write: stage a sibling temp file, fsync it, then rename over the target so a
+    // reader ever only sees the whole old file or the whole new one. Used for the vCard cards where a
+    // torn write would corrupt the source of truth; the temp is `.`-prefixed so cleanup can sweep leftovers.
+    async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
+        const fullPath = this.getFilePath(filePath);
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        const tempPath = path.join(dir, `.${path.basename(fullPath)}.tmp-${randomUUID()}`);
+        const handle = await fsPromises.open(tempPath, 'w');
+        try {
+            await handle.writeFile(data);
+            await handle.sync();
+        } finally {
+            await handle.close();
+        }
+        await fsPromises.rename(tempPath, fullPath);
     }
 
     async delete(filePath: string): Promise<boolean> {
