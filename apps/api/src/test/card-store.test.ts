@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { join } from 'node:path';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { Contact } from '@workspace/lib/types/contact';
-import type { SSEvent } from '@workspace/lib/types/sse';
+import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import {
@@ -325,5 +325,122 @@ describe('Contacts (file-backed store)', () => {
         const list = await contacts.getContacts();
         expect(list.some((c) => c.id === id)).toBe(true);
         expect(JSON.stringify(list)).not.toContain(photoBase64.slice(0, 40));
+    });
+});
+
+describe('Contacts label membership (CATEGORIES)', () => {
+    const readCard = (dir: string, uri: string) => readFileSync(join(dir, 'eigen.contacts', 'cards', uri), 'utf8');
+
+    test('renaming a label rewrites its member cards, rotates their etag, and keeps membership', async () => {
+        const { contacts, broadcasts, db, dir } = await makeContacts();
+        const labelId = await contacts.addLabel({ name: 'Rename Me', color: '#abcdef' });
+        const contactId = await contacts.addContact(validContact({ firstName: 'Member', labels: [labelId] }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, contactId)).get()!;
+        expect(readCard(dir, row.uri)).toContain('CATEGORIES:Rename Me');
+        const etagBefore = row.etag;
+        broadcasts.length = 0;
+
+        await contacts.updateLabel(labelId, { name: 'Renamed', color: '#abcdef' });
+
+        const card = readCard(dir, row.uri);
+        expect(card).toContain('CATEGORIES:Renamed');
+        expect(card).not.toContain('Rename Me');
+
+        const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, contactId)).get()!;
+        expect(after.etag).not.toBe(etagBefore);
+
+        // CATEGORIES stays membership truth: the renamed category re-resolves to the same label.
+        const links = db
+            .select({ labelId: contactsSchema.contactsToLabels.labelId })
+            .from(contactsSchema.contactsToLabels)
+            .where(eq(contactsSchema.contactsToLabels.contactId, contactId))
+            .all();
+        expect(links.map((l) => l.labelId)).toEqual([labelId]);
+        expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
+    });
+
+    test('a rename matches a case-variant CATEGORIES value in a member card', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const work = db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.nameKey, 'work')).get()!;
+
+        // Plant a card whose CATEGORIES case differs from the label's stored name, with its index row and
+        // membership link — as an external CardDAV client that lowercases categories might have written it.
+        const id = randomUUID();
+        const uri = `${id}.vcf`;
+        const bytes = new TextEncoder().encode(
+            `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${id}\r\nN:Doe;Jane;;;\r\nFN:Jane Doe\r\nCATEGORIES:work\r\nEND:VCARD\r\n`,
+        );
+        mkdirSync(join(dir, 'eigen.contacts', 'cards'), { recursive: true });
+        writeFileSync(join(dir, 'eigen.contacts', 'cards', uri), bytes);
+        db.insert(contactsSchema.contacts)
+            .values({
+                id,
+                uri,
+                uriKey: uriKeyOf(uri),
+                uid: id,
+                firstName: 'Jane',
+                lastName: 'Doe',
+                eigenId: '',
+                isGroup: false,
+                data: { email: [], phone: [] },
+                etag: computeCardEtag(bytes),
+                cardCtag: 0,
+                mtime: 0,
+                size: bytes.byteLength,
+            })
+            .run();
+        db.insert(contactsSchema.contactsToLabels).values({ contactId: id, labelId: work.id }).run();
+
+        await contacts.updateLabel(work.id, { name: 'Boss', color: work.color });
+
+        expect(readCard(dir, uri)).toContain('CATEGORIES:Boss');
+    });
+
+    test('a color-only label update leaves member cards untouched', async () => {
+        const { contacts, broadcasts, db, dir } = await makeContacts();
+        const labelId = await contacts.addLabel({ name: 'Keepers', color: '#111111' });
+        const contactId = await contacts.addContact(validContact({ firstName: 'Kept', labels: [labelId] }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, contactId)).get()!;
+        const cardBefore = readCard(dir, row.uri);
+        const etagBefore = row.etag;
+        broadcasts.length = 0;
+
+        await contacts.updateLabel(labelId, { name: 'Keepers', color: '#222222' });
+
+        expect(readCard(dir, row.uri)).toBe(cardBefore);
+        const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, contactId)).get()!;
+        expect(after.etag).toBe(etagBefore);
+        expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(false);
+    });
+
+    test('deleting a label removes it from member cards and keeps co-labels', async () => {
+        const { contacts, broadcasts, db, dir } = await makeContacts();
+        const familyId = db
+            .select()
+            .from(contactsSchema.labels)
+            .where(eq(contactsSchema.labels.nameKey, 'family'))
+            .get()!.id;
+        const dropId = await contacts.addLabel({ name: 'Drop Me', color: '#333333' });
+        const contactId = await contacts.addContact(validContact({ firstName: 'Dual', labels: [familyId, dropId] }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, contactId)).get()!;
+        expect(readCard(dir, row.uri)).toContain('Drop Me');
+        broadcasts.length = 0;
+
+        await contacts.deleteLabel(dropId);
+
+        const card = readCard(dir, row.uri);
+        expect(card).not.toContain('Drop Me');
+        expect(card).toContain('Family');
+        expect(
+            db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.id, dropId)).get(),
+        ).toBeUndefined();
+
+        const links = db
+            .select({ labelId: contactsSchema.contactsToLabels.labelId })
+            .from(contactsSchema.contactsToLabels)
+            .where(eq(contactsSchema.contactsToLabels.contactId, contactId))
+            .all();
+        expect(links.map((l) => l.labelId)).toEqual([familyId]);
+        expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
     });
 });

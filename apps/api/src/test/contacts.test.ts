@@ -208,6 +208,78 @@ describe('Contacts', () => {
         });
     });
 
+    describe('Label ↔ contact membership', () => {
+        // The rename/delete fan-outs rewrite each member card's CATEGORIES; the observable REST contract is
+        // that membership survives a rename and drops on a delete, end to end through the route + writeLock.
+        test('renaming a label keeps it assigned to its contacts and surfaces the new name', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const labelRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Renamable', color: '#654321' }),
+            });
+            const renamableId = (await labelRes.text()).replace(/^"|"$/g, '');
+
+            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Renamed',
+                    lastName: 'Member',
+                    email: ['renamed-member@test.eigen.is'],
+                    phone: [],
+                    labels: [renamableId],
+                }),
+            });
+            const memberId = (await createRes.text()).replace(/^"|"$/g, '');
+
+            const rename = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels/${renamableId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Renamed Label', color: '#654321' }),
+            });
+            expect(rename.status).toBe(200);
+
+            const byIdRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${memberId}`);
+            expect((await assertJson<Contact>(byIdRes)).labels).toEqual([renamableId]);
+
+            const labelsRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`);
+            const labels = await assertJson<Label[]>(labelsRes);
+            expect(findOrFail(labels, (l) => l.id === renamableId).name).toBe('Renamed Label');
+        });
+
+        test('deleting a label removes it from its contacts', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const labelRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Deletable', color: '#0000ff' }),
+            });
+            const deletableId = (await labelRes.text()).replace(/^"|"$/g, '');
+
+            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Delete',
+                    lastName: 'Member',
+                    email: ['delete-member@test.eigen.is'],
+                    phone: [],
+                    labels: [deletableId],
+                }),
+            });
+            const memberId = (await createRes.text()).replace(/^"|"$/g, '');
+
+            const del = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels/${deletableId}`, {
+                method: 'DELETE',
+            });
+            expect(del.status).toBe(200);
+
+            const byIdRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${memberId}`);
+            expect((await assertJson<Contact>(byIdRes)).labels).toEqual([]);
+        });
+    });
+
     describe('Contact labels round-trip', () => {
         // Exercises the batched label grouping in getContacts: a contact with labels must come back
         // with them both from the list (one grouped query) and by id (per-contact query).

@@ -484,6 +484,56 @@ export class Contacts {
         return this.db.select().from(schema.labels).all();
     }
 
+    // A label rename/delete fans out to every member card so CATEGORIES stays the membership truth: each
+    // card is re-read, its category names remapped by `transform`, then written and re-indexed through the
+    // same file→commit pipeline as a contact edit (its etag/cardCtag bump, so DAV clients re-fetch). Callers
+    // hold the writeLock and drive it directly rather than via updateContact, which would re-enter the
+    // non-reentrant lock.
+    private async rewriteLabelInMemberCards(labelId: string, transform: (names: string[]) => string[]): Promise<void> {
+        const memberIds = this.db
+            .select({ contactId: schema.contactsToLabels.contactId })
+            .from(schema.contactsToLabels)
+            .where(eq(schema.contactsToLabels.labelId, labelId))
+            .all()
+            .map((r) => r.contactId);
+
+        for (const contactId of memberIds) {
+            const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, contactId)).get();
+            if (!row) continue;
+
+            const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
+            const categories = transform(card.categories);
+            const bytes = new TextEncoder().encode(mergeVCard(card, { categories }));
+
+            const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
+            try {
+                this.commitCard({
+                    row: {
+                        id: row.id,
+                        uri: row.uri,
+                        uriKey: row.uriKey,
+                        uid: row.uid,
+                        firstName: row.firstName,
+                        lastName: row.lastName,
+                        eigenId: row.eigenId,
+                        isGroup: row.isGroup,
+                        data: row.data,
+                        etag: computeCardEtag(bytes),
+                        mtime: Math.round(mtime),
+                        size,
+                    },
+                    categories,
+                });
+            } catch (e) {
+                this.markCardDirty(row.uri);
+                throw e;
+            }
+
+            this.cardsBytes += size - row.size;
+            this.emitContact(SSEventType.CONTACT_UPDATED, row.id);
+        }
+    }
+
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
         const labelId = randomUUID();
 
@@ -506,33 +556,58 @@ export class Contacts {
     }
 
     public async updateLabel(id: string, label: Omit<Label, 'id'>) {
-        try {
-            await this.db
-                .update(schema.labels)
-                .set({
-                    name: label.name.trim(),
-                    nameKey: normalizeLabelName(label.name),
-                    color: label.color,
-                    updatedAt: sql`unixepoch()`,
-                })
-                .where(eq(schema.labels.id, id));
-        } catch (e) {
-            rethrowDuplicateLabelName(e);
-        }
+        return this.writeLock.run(async () => {
+            await this.drainDirty();
 
-        const updatedLabel = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+            const before = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
 
-        this.emitLabel(SSEventType.LABEL_UPDATED, id);
+            try {
+                await this.db
+                    .update(schema.labels)
+                    .set({
+                        name: label.name.trim(),
+                        nameKey: normalizeLabelName(label.name),
+                        color: label.color,
+                        updatedAt: sql`unixepoch()`,
+                    })
+                    .where(eq(schema.labels.id, id));
+            } catch (e) {
+                rethrowDuplicateLabelName(e);
+            }
 
-        return updatedLabel;
+            // Only a display-name change touches cards — the color never appears in a vCard. The old name is
+            // matched case-insensitively (CATEGORIES may carry a different case than the label's stored name).
+            const newName = label.name.trim();
+            if (before && before.name !== newName) {
+                const oldNameKey = before.nameKey;
+                await this.rewriteLabelInMemberCards(id, (names) =>
+                    names.map((n) => (normalizeLabelName(n) === oldNameKey ? newName : n)),
+                );
+            }
+
+            const updatedLabel = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+            this.emitLabel(SSEventType.LABEL_UPDATED, id);
+            return updatedLabel;
+        });
     }
 
     public async deleteLabel(id: string) {
-        this.db.transaction((tx) => {
-            tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id)).run();
-            tx.delete(schema.labels).where(eq(schema.labels.id, id)).run();
+        return this.writeLock.run(async () => {
+            await this.drainDirty();
+
+            const label = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+            if (label) {
+                const { nameKey } = label;
+                await this.rewriteLabelInMemberCards(id, (names) =>
+                    names.filter((n) => normalizeLabelName(n) !== nameKey),
+                );
+            }
+
+            // The junction rows cascade with the label row (FK ON DELETE CASCADE); the fan-out has already
+            // rewritten every member's CATEGORIES.
+            this.db.delete(schema.labels).where(eq(schema.labels.id, id)).run();
+            this.emitLabel(SSEventType.LABEL_DELETED, id);
         });
-        this.emitLabel(SSEventType.LABEL_DELETED, id);
     }
 
     private dbRowToContact(row: typeof schema.contacts.$inferSelect, labels: string[]): Contact {
