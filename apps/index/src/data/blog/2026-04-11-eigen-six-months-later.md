@@ -4,9 +4,7 @@ title: "Eigen: Six Months Later"
 description: "Six months after the proof of concept, Eigen grew from five basic apps to a full workspace with calendar, spreadsheets, slides, chat, IMAP and CalDAV. Now I need testers, and people who can help figure out what's next."
 ---
 
-Six months ago I [wrote about Eigen](https://eigen.is/blog/eigen-proof-of-concept): a European Google Workspace alternative where you
-own your data. Back then I had five basic apps, built in two months of spare time. Mail, drive, docs, contacts and kanban
-boards. Minimal, but functional.
+Six months ago I [wrote about Eigen](https://eigen.is/blog/eigen-proof-of-concept): a European Google Workspace alternative where you own your data. Back then I had five basic apps, built in two months of spare time. Mail, drive, docs, contacts and kanban boards. Minimal, but functional.
 
 I kept building. Here is where it stands.
 
