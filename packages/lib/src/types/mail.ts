@@ -127,6 +127,10 @@ export function isEmailDraft(email: Email | null | undefined): email is EmailDra
     return !!email?.isDraft;
 }
 
+// Result of a send: the finalized draft plus the addresses whose per-recipient copy failed
+// delivery. `failedRecipients` is present only when a partial failure occurred.
+export type SentMailResult = EmailDraft & { failedRecipients?: string[] };
+
 export type NewDraft = {
     id?: string;
     subject?: string;

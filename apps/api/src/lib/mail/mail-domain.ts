@@ -8,13 +8,15 @@ import type {
     EmailSummary,
     MaildirMailbox,
     NewDraft,
+    SentMailResult,
 } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { isDemo } from '../config/env';
+import { getMailDomain, isInternalAddress } from '../config/server-config';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
-import { sendMail } from '../core/mailer';
+import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
@@ -22,6 +24,7 @@ import { simpleParser } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
+import { canonicalizeRecipients, MAX_SEND_REFERENCES } from './recipients';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
@@ -483,6 +486,9 @@ export class Mail {
         // but don't rely on it — the fast-save path sets them here too (draftFastSave).
         saved.inReplyTo = email.inReplyTo;
         saved.references = email.references;
+        // MailComposer strips Bcc from the compiled EML (bcc is envelope-only), so the re-parse
+        // never recovers it — mirror it too, or messageSend can't address the bcc recipients.
+        saved.bcc = email.bcc;
         (saved as EmailDraft).driveReferences = driveReferences ?? [];
         return saved as EmailDraft;
     }
@@ -545,16 +551,23 @@ export class Mail {
         );
     }
 
-    async messageSend(mailToSend: NewDraft | EmailDraft): Promise<EmailDraft> {
+    async messageSend(mailToSend: NewDraft | EmailDraft): Promise<SentMailResult> {
         // Full EML rebuild so attachment content is available for SMTP. draftFullSave bakes
         // ref cards into the Sent-folder EML and returns `mail` with the *clean* html
         // (for the frontend). Re-bake here so the outbound SMTP body matches the Sent copy.
         const mail = await this.draftFullSave(mailToSend, (mailToSend as EmailDraft).id?.trim(), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
-        if (mail.driveReferences?.length) {
-            message.html = appendReferenceLinks(message.html || '', mail.driveReferences);
-        }
+        const recipients = canonicalizeRecipients(mail);
 
+        // Capture the pre-bake bodies: external copies personalise these per-recipient, while the
+        // internal copy and the single-send path bake bare links off the same base.
+        const refs = mail.driveReferences ?? [];
+        const baseHtml = message.html || '';
+        const baseText = message.text;
+
+        if (refs.length > MAX_SEND_REFERENCES) {
+            throw new ApiError(400, `A message can have at most ${MAX_SEND_REFERENCES} attachment links`);
+        }
         if (!message.subject.trim() && !message.text.trim() && !message.html) {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
         }
@@ -569,10 +582,43 @@ export class Mail {
             );
         }
 
-        const sent = await sendMail(message);
+        const externals = refs.length ? recipients.filter((r) => !isInternalAddress(r.address)) : [];
+        const failedRecipients: string[] = [];
 
-        if (!sent) {
-            throw new ApiError(500, 'Failed to send email');
+        if (!externals.length) {
+            // No refs, or every recipient is on this mail domain: one send, no per-recipient envelope.
+            message.html = appendReferenceLinks(baseHtml, refs);
+            message.text = appendReferenceLinksText(baseText, refs);
+            if (!(await sendMail(message))) {
+                throw new ApiError(500, 'Failed to send email');
+            }
+        } else {
+            // Split into a bare internal copy plus one personalised copy per external recipient, each
+            // with its own SMTP envelope so a leaked `?email=` link can never reach the wrong person.
+            const envelopeFrom = message.from?.address ?? `noreply@${getMailDomain()}`;
+            const { bcc: _bcc, ...base } = message;
+            const buildCopy = (recipientEmail: string | undefined, envelopeTo: string[]): OutboundMail => ({
+                ...base,
+                html: appendReferenceLinks(baseHtml, refs, recipientEmail),
+                text: appendReferenceLinksText(baseText, refs, recipientEmail),
+                envelope: { from: envelopeFrom, to: envelopeTo },
+            });
+
+            const copies: { message: OutboundMail; envelopeTo: string[] }[] = [];
+            const internal = recipients.filter((r) => isInternalAddress(r.address)).map((r) => r.address);
+            if (internal.length) copies.push({ message: buildCopy(undefined, internal), envelopeTo: internal });
+            for (const ext of externals) {
+                copies.push({ message: buildCopy(ext.address, [ext.address]), envelopeTo: [ext.address] });
+            }
+
+            let anyAccepted = false;
+            for (const copy of copies) {
+                if (await sendMail(copy.message)) anyAccepted = true;
+                else failedRecipients.push(...copy.envelopeTo);
+            }
+            if (!anyAccepted) {
+                throw new ApiError(500, 'Failed to send email');
+            }
         }
 
         await this.store.deleteDraftMeta(mail.id);
@@ -581,7 +627,7 @@ export class Mail {
         this.emit(SSEventType.MAIL_FLAGS_CHANGED, { messageId: mail.id, mailbox: 'Sent' });
         this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
 
-        return mail;
+        return failedRecipients.length ? { ...mail, failedRecipients } : mail;
     }
 
     async destruct(): Promise<void> {

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-886 primitives across 6 kinds. `packages/sheet` internals are excluded.
+887 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -398,7 +398,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (243)
+## Types (244)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -555,6 +555,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `SearchResponse` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SearchSource` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
+| `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `ServerSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ServerStorageType` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SharedCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |

@@ -1,3 +1,4 @@
+import type { SentMailResult } from '@workspace/lib/types/mail';
 import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
@@ -220,7 +221,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     )
     .post(
         '/mail/:ownerId/message/send',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<SentMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getMailClient(user)).messageSend(body.mail);
