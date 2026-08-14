@@ -153,6 +153,8 @@ export type DraftInput = {
     subject?: string;
     text?: string;
     html?: string;
+    inReplyTo?: string;
+    references?: string[] | string;
 };
 
 export type DraftAttachmentUpload = {

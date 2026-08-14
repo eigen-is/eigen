@@ -12,7 +12,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
-import type { Email, NewDraft } from '@workspace/lib/types/mail';
+import type { DraftInput, Email, NewDraft } from '@workspace/lib/types/mail';
 import { useRef } from 'react';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
@@ -341,6 +341,15 @@ export function useMailActions() {
         return `<br><br><p>${header}</p><blockquote>${content}</blockquote>`;
     };
 
+    // Seed RFC 5322 threading from the message being replied to: In-Reply-To points at its
+    // Message-ID, References appends it to whatever chain it already carried. Skipped when the
+    // original has no Message-ID (nothing to thread against).
+    const replyThreadingHeaders = (email: Email): Pick<DraftInput, 'inReplyTo' | 'references'> => {
+        if (!email.messageId) return {};
+        const prior = email.references ? (Array.isArray(email.references) ? email.references : [email.references]) : [];
+        return { inReplyTo: email.messageId, references: [...prior, email.messageId] };
+    };
+
     const handleReplyEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) return;
@@ -349,6 +358,7 @@ export function useMailActions() {
                 to: email.replyTo || email.from,
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
                 html: formatEmailQuote(email),
+                ...replyThreadingHeaders(email),
             }),
         );
     };
@@ -368,6 +378,7 @@ export function useMailActions() {
                 to: { value: allRecipients, html: '', text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
                 html: formatEmailQuote(email),
+                ...replyThreadingHeaders(email),
             }),
         );
     };

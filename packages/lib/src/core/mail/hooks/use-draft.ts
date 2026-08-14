@@ -22,6 +22,8 @@ export function createDraftEmail(input: DraftInput): NewDraft {
         to: input.to,
         cc: input.cc,
         bcc: input.bcc,
+        inReplyTo: input.inReplyTo,
+        references: input.references,
     };
 }
 
