@@ -4,9 +4,7 @@
 
 **Try the live demo at [demo.eigen.is](https://demo.eigen.is).** It is a shared workspace that resets every hour.
 
-Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email,
-file storage, documents, spreadsheets, presentations, calendar, contacts, and real-time chat — all sharing one API,
-one auth system, and one UI.
+Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email, file storage, documents, spreadsheets, presentations, kanban boards, calendar, contacts, and real-time chat — all sharing one API, one auth system, and one UI.
 
 The name *Eigen* is Dutch and German for "own." You own your data, you own your infrastructure, you own your workspace.
 
@@ -84,8 +82,7 @@ Eigen ships as a monorepo with a single API server and a set of tightly integrat
   and @mentions. Chat rooms live inside Drive (inheriting its ACL), and can be embedded inside documents and
   kanban cards as comment threads.
 - **Space** — Personal account settings, profile, and preferences.
-- **People** — Organization and team administration. Manage members, roles, shared drives, team calendars, quotas,
-  and server-wide settings.
+- **Admin** — Organization and team administration. Manage members, roles, shared drives, team calendars, quotas, and server-wide settings. Includes the first-run setup wizard.
 
 ### Protocol support
 
@@ -120,10 +117,7 @@ storage.
 
 ### Docker deployment
 
-For production, Eigen runs as four Docker containers: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API**
-(Bun), **Postfix** (email), and **Dovecot** (IMAP). See the [VPS Setup Guide](docker/SETUP-GUIDE.md) for
-step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to try the full stack on your
-machine.
+For production, Eigen runs as five Docker containers: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API** (Bun), **Postfix** (email), **Dovecot** (IMAP), and **Unbound** (DNS resolver for Postfix). See the [VPS Setup Guide](docker/SETUP-GUIDE.md) for step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to try the full stack on your machine.
 
 ```bash
 git clone https://github.com/eigen-is/eigen.git /opt/eigen
@@ -141,7 +135,7 @@ bun run lint           # Lint + format check (Biome)
 bun run lint:fix       # Auto-fix
 bun run typecheck      # Type check all packages
 bun run test           # Run all tests
-bun run check          # lint + typecheck + test
+bun run check          # lint + typecheck + repo guards + tests
 ```
 
 ## Architecture
@@ -152,6 +146,7 @@ are trivial — just copy a user's directory.
 
 ```
 data/home/{userId}/
+├── settings.json         # Per-user settings
 ├── mounts/default/       # Drive files + metadata.db
 ├── eigen.mail/           # Maildir + mail.db
 ├── eigen.contacts/       # contacts.db + avatars
@@ -159,8 +154,7 @@ data/home/{userId}/
 └── eigen.notifications/  # notifications.db
 ```
 
-Organizations and teams add shared resources on top: team drives, team calendars, and group-based ACL. Real-time
-collaboration runs through Yjs over WebSocket, while Server-Sent Events push live updates to all connected clients.
+Organizations and teams follow the same pattern in sibling `data/team/{teamId}/` and `data/org/{orgId}/` trees: team drives, team calendars, and group-based ACL. Real-time collaboration runs through Yjs over WebSocket, while Server-Sent Events push live updates to all connected clients.
 
 ## Tech stack
 
@@ -193,10 +187,10 @@ Architecture docs live in `docs/`:
 
 | Area | Docs |
 |------|------|
-| Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md) |
-| Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [Testing](docs/TESTING.md) |
+| Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md), [Search](docs/SEARCH.md), [Scalability](docs/SCALABILITY.md) |
+| Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [Local Testing](docker/LOCAL-TESTING.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
 | Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
-| Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md) |
+| Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md), [WebDAV](docs/WEBDAV.md) |
 | Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |
 | Operations | [Quota](docs/QUOTA.md), [Server Settings](docs/SERVER-SETTINGS.md), [Export](docs/EXPORT.md), [Organizations](docs/ORGANISATIONS-AND-TEAMS.md) |
 
