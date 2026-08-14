@@ -13,7 +13,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { processInboundImip, summarizeCalendarInvite } from '../calendar/imip';
 import { isDemo } from '../config/env';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
-import { renderAttachmentPills } from '../core/mail-template';
+import { renderAttachmentLinksText, renderAttachmentPills } from '../core/mail-template';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
@@ -54,12 +54,16 @@ function canonicalMailbox(name: string): string {
     return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === name.toLowerCase()) ?? name;
 }
 
-function appendReferenceLinks(html: string, refs: AttachmentReference[]): string {
-    const refHtml = renderAttachmentPills(refs);
+function appendReferenceLinks(html: string, refs: AttachmentReference[], recipientEmail?: string): string {
+    const refHtml = renderAttachmentPills(refs, recipientEmail);
     if (!refHtml) return html;
     if (!html) return refHtml;
     const replaced = html.replace(/<\/body>/i, `${refHtml}</body>`);
     return replaced !== html ? replaced : html + refHtml;
+}
+
+function appendReferenceLinksText(text: string, refs: AttachmentReference[], recipientEmail?: string): string {
+    return text + renderAttachmentLinksText(refs, recipientEmail);
 }
 
 function extractRefs(email: NewDraft | EmailDraft): AttachmentReference[] | undefined {

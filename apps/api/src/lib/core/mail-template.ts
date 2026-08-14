@@ -91,6 +91,16 @@ export function renderAttachmentPills(references: AttachmentReference[], recipie
     return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid ${EMAIL_BORDER};">${cards.join('')}</div>`;
 }
 
+// Plain-text sibling of renderAttachmentPills for the text/plain alternative: one
+// `name: url` line per reference, prefixed with a blank line to separate from the body.
+export function renderAttachmentLinksText(references: AttachmentReference[], recipientEmail?: string): string {
+    if (references.length === 0) return '';
+    const lines = references.map(
+        (ref) => `${stripEigenExtension(ref.name)}: ${buildAttachmentUrl(ref, recipientEmail)}`,
+    );
+    return `\n\n${lines.join('\n')}`;
+}
+
 function renderBanner(banner: string): string {
     return `<div style="background:${EMAIL_BANNER_BG};color:${EMAIL_BANNER_FG};font-weight:600;font-size:13px;padding:8px 12px;border-radius:4px;margin-bottom:16px">${escapeHtml(banner)}</div>`;
 }

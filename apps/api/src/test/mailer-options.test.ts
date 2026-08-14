@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { EmailDraft } from '@workspace/lib/types/mail';
+import { renderAttachmentLinksText } from '../lib/core/mail-template';
 import { buildMailOptions, composeRfc822, type OutboundMail } from '../lib/core/mailer';
 import { draftToOutboundMail } from '../lib/mail/sender';
 
@@ -37,6 +39,36 @@ describe('composeRfc822 with pinned Message-ID', () => {
         ).toString();
         expect(raw).toContain('Message-ID: <id-1@localhost>');
         expect(raw).not.toContain('hidden@x.com');
+    });
+});
+
+describe('renderAttachmentLinksText', () => {
+    const docRef: AttachmentReference = {
+        type: 'reference',
+        ownerId: 'owner-1',
+        mountId: 'mount-1',
+        id: 'doc-1',
+        name: 'Quarterly Plan.eigendoc',
+        driveType: 'doc',
+        mimeType: 'application/eigendoc',
+    };
+
+    test('external recipient gets a per-line email prefill and the stripped doc name', () => {
+        const text = renderAttachmentLinksText([docRef], 'ext@x.com'); // preload sets domain test.eigen.is
+        expect(text).toStartWith('\n\n');
+        expect(text).toContain('Quarterly Plan:');
+        expect(text).not.toContain('.eigendoc');
+        expect(text).toContain('?email=ext%40x.com');
+    });
+
+    test('internal recipient sees the bare URL, no email prefill', () => {
+        const text = renderAttachmentLinksText([docRef], 'bob@test.eigen.is');
+        expect(text).toContain('Quarterly Plan:');
+        expect(text).not.toContain('?email=');
+    });
+
+    test('empty references produce an empty string', () => {
+        expect(renderAttachmentLinksText([])).toBe('');
     });
 });
 
