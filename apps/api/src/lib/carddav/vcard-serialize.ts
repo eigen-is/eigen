@@ -43,7 +43,7 @@ function photoBase64(bytes: Uint8Array): string {
 }
 
 // vCard 3.0 PHOTO TYPE is the bare, uppercased image subtype ('image/jpeg' -> 'JPEG').
-function photoParams(mediaType: string): [string, string][] {
+export function photoParams(mediaType: string): [string, string][] {
     const subtype = mediaType.split('/')[1] ?? mediaType;
     return [
         ['ENCODING', 'b'],

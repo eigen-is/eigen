@@ -12,6 +12,7 @@ import {
 } from '../lib/carddav/vcard-ast';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { createVCard, mergeVCard } from '../lib/carddav/vcard-serialize';
+import { transcodeTo30 } from '../lib/carddav/vcard-transcode';
 
 // Wrap a single content line in a minimal valid vCard so it can go through the public parser.
 const parseCard = (line: string) => parseVCardLines(`BEGIN:VCARD\r\nVERSION:3.0\r\n${line}\r\nEND:VCARD\r\n`);
@@ -341,5 +342,56 @@ describe('vCard merge + builder', () => {
         expect(text).not.toContain('PHOTO');
         expect(text).toContain('N:Lovelace;Ada;;;');
         expect(text).toContain('FN:Ada Lovelace');
+    });
+});
+
+describe('vCard 4.0 -> 3.0 transcode', () => {
+    // Thunderbird-102+ shape: VERSION:4.0, a data: URI PHOTO, a VALUE=uri TEL, and a grouped ITEM1.EMAIL.
+    const photoBytes = Uint8Array.from({ length: 96 }, (_, i) => (i * 11) % 256);
+    const photoB64 = Buffer.from(photoBytes).toString('base64');
+    const THUNDERBIRD_FIXTURE =
+        [
+            'BEGIN:VCARD',
+            'VERSION:4.0',
+            'UID:urn:uuid:5c2a9e10-3d4b-4a2f-9c1e-7b6f0a1d2e3f',
+            'FN:Grace Hopper',
+            'N:Hopper;Grace;;;',
+            'ITEM1.EMAIL;PREF=1:grace.hopper@example.com',
+            'TEL;VALUE=uri;TYPE=cell:tel:+31 6 87654321',
+            `PHOTO:data:image/jpeg;base64,${photoB64}`,
+            'END:VCARD',
+        ].join('\r\n') + '\r\n';
+
+    test('transcodes a Thunderbird 4.0 card to 3.0 with an inline ENCODING=b photo', () => {
+        const out = transcodeTo30(THUNDERBIRD_FIXTURE);
+        const card = parseVCard(out);
+        expect(card.version).toBe('3.0');
+        expect(card.photo).toEqual({ kind: 'inline', bytes: Buffer.from(photoBytes), mediaType: 'image/jpeg' });
+        expect(out).toContain('VERSION:3.0');
+        expect(out).toContain('PHOTO;ENCODING=b;TYPE=JPEG:');
+        expect(out).not.toContain('VERSION:4.0');
+        expect(out).not.toContain('data:image/jpeg');
+        // Lines we don't rewrite ride through verbatim — 4.0-only params and grouping included.
+        expect(out).toContain('TEL;VALUE=uri;TYPE=cell:tel:+31 6 87654321');
+        expect(out).toContain('ITEM1.EMAIL;PREF=1:grace.hopper@example.com');
+    });
+
+    test('leaves a 3.0 card untouched, returning the same reference', () => {
+        expect(transcodeTo30(APPLE_FIXTURE)).toBe(APPLE_FIXTURE);
+    });
+
+    test('rewrites a remote 4.0 PHOTO to the 3.0 VALUE=uri form', () => {
+        const input =
+            [
+                'BEGIN:VCARD',
+                'VERSION:4.0',
+                'FN:Remote Photo',
+                'PHOTO;MEDIATYPE=image/png:https://example.com/p.png',
+                'END:VCARD',
+            ].join('\r\n') + '\r\n';
+        const out = transcodeTo30(input);
+        expect(out).toContain('PHOTO;VALUE=uri:https://example.com/p.png');
+        expect(out).not.toContain('MEDIATYPE');
+        expect(parseVCard(out).photo).toEqual({ kind: 'uri', uri: 'https://example.com/p.png' });
     });
 });
