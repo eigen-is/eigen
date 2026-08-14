@@ -59,7 +59,14 @@ type UseDraftOptions = {
 };
 
 function addressObjectToString(addr?: AddressObject): string {
-    return addr?.text || '';
+    if (!addr) return '';
+    if (addr.text) return addr.text;
+    // Fall back to the value list when text is empty — reply-all builds AddressObjects with only
+    // `value` populated. Inverse of stringToAddressObject: `name <address>`, else bare address.
+    return addr.value
+        .map((a) => (a.name ? `${a.name} <${a.address ?? ''}>` : (a.address ?? '')))
+        .filter(Boolean)
+        .join(', ');
 }
 
 function stringToAddressObject(text: string): AddressObject | undefined {
