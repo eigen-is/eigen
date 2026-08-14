@@ -37,15 +37,18 @@ export function ProfileEditor() {
     });
 
     useEffect(() => {
-        if (contact && !initializedRef.current) {
-            initializedRef.current = true;
-            loadedEtagRef.current = contact.etag;
-            form.reset({
-                firstName: contact.firstName || '',
-                lastName: contact.lastName || '',
-            });
-            setAvatar(contact.avatar || null);
-        }
+        if (!contact) return;
+        // Seed once on first load, and re-seed whenever a refetch (e.g. after a 412 recovery) advances the etag
+        // past the frozen snapshot — otherwise the form keeps stale fields + a stale etag and the next save
+        // 412s again, an unbreakable loop.
+        if (initializedRef.current && contact.etag === loadedEtagRef.current) return;
+        initializedRef.current = true;
+        loadedEtagRef.current = contact.etag;
+        form.reset({
+            firstName: contact.firstName || '',
+            lastName: contact.lastName || '',
+        });
+        setAvatar(contact.avatar || null);
     }, [contact, form]);
 
     const navigate = useNavigate();

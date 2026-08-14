@@ -31,6 +31,9 @@ export function invalidateContactCreated(queryClient: QueryClient, ownerId: stri
 export function invalidateContactUpdated(queryClient: QueryClient, ownerId: string, contactId: string): void {
     queryClient.invalidateQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
     queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
+    // The self/profile card reads through contactKeys.me, not the detail/list keys — invalidate it too so a
+    // 412 recovery (or any edit to your own card) refetches the profile editor's frozen etag snapshot.
+    queryClient.invalidateQueries({ queryKey: contactKeys.me(ownerId) });
     invalidateHomeSize(queryClient, ownerId);
 }
 

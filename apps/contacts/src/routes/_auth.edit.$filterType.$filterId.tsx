@@ -104,7 +104,14 @@ function EditContactRoute() {
     return (
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew} />}>
-                <ContactEdit contact={contact || emptyContact} onSave={handleSave} onCancel={handleCancel} />
+                <ContactEdit
+                    // Remount when the loaded card's etag changes (e.g. after a 412 refetch) so the form fields
+                    // and the snapshotted etag re-seed together and the next save carries the fresh etag.
+                    key={(contact || emptyContact).etag}
+                    contact={contact || emptyContact}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                />
             </Column>
         </ColumnLayout>
     );
