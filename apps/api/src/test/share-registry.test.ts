@@ -1,6 +1,11 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { type MountInfo, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import type { AddressObject, EmailDraft } from '@workspace/lib/types/mail';
+import type { Notification } from '@workspace/lib/types/notification';
 import { getServerConfig } from '../lib/config/server-config';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
@@ -332,6 +337,241 @@ describe('Share Registry', () => {
             const drivePaths = await assertJson<DrivePath[]>(driveRes);
             const driveMatches = drivePaths.filter((s) => s.name === 'registry-pending-test');
             expect(driveMatches.length).toBe(1);
+        });
+
+        test('new user receives a team-owned drive item from a team_ registry source', async () => {
+            const orgId = getServerConfig()!.orgId;
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
+
+            const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: `Team Source ${randomUUID()}`, organizationId: orgId }),
+            });
+            const team = (await teamRes.json()) as { id: string; name: string };
+            const teamOwner = teamOwnerId(team.id);
+
+            // Alice must be a team member to write to the team drive.
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team.id, userId: ctx.alice.user.id }),
+            });
+
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwner}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Drive', storageType: 'local', maxSizeMB: 500 }),
+            });
+            const mounts = await assertJson<MountInfo[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`),
+            );
+            const teamMountId = mounts[0].id;
+            const teamRoot = await assertJson<DrivePath>(
+                await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/${teamMountId}/root`),
+            );
+
+            // A folder OWNED by the team — sharing it to an unknown email mints a team_ SOURCE entry.
+            const folderRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/${teamMountId}/folder/${teamRoot.id}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderName: 'team-source-registry-test' }),
+                },
+            );
+            const folder = (await folderRes.json()) as DrivePath;
+
+            const email = `team-source-${randomUUID()}@test.eigen.is`;
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/${teamMountId}/path/${folder.id}/acl`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ add: [{ id: email, read: true, write: false }] }),
+                },
+            );
+
+            const { getEntriesForTarget } = await import('../lib/share/registry');
+            expect(await getEntriesForTarget(email)).toContain(teamOwner);
+
+            // Signing up fires reconciliation — the team_ source must now be delivered.
+            const { auth } = await import('../lib/auth/auth');
+            const signUp = await auth.api.signUpEmail({
+                body: { email, password: 'testpassword123', name: 'Team Source User' },
+            });
+            const newUserId = signUp.user.id;
+            const signIn = await auth.api.signInEmail({
+                returnHeaders: true,
+                body: { email, password: 'testpassword123' },
+            });
+            const setCookie = signIn.headers.get('set-cookie') || '';
+            const sessionToken = setCookie.match(/better-auth\.session_token=([^;]+)/)?.[1] || '';
+
+            const drivePaths = await assertJson<DrivePath[]>(
+                await authedRequest(sessionToken, `/drive/${newUserId}/shared/with-me`),
+            );
+            findOrFail(drivePaths, (s) => s.name === 'team-source-registry-test');
+
+            // Idempotency: a second reconcile produces no duplicate row.
+            const { reconcileSharesForNewUser } = await import('../lib/share');
+            const { getUserByEmail } = await import('../lib/user');
+            const user = await getUserByEmail(email);
+            await reconcileSharesForNewUser(user!);
+
+            const drivePaths2 = await assertJson<DrivePath[]>(
+                await authedRequest(sessionToken, `/drive/${newUserId}/shared/with-me`),
+            );
+            expect(drivePaths2.filter((s) => s.name === 'team-source-registry-test').length).toBe(1);
+        });
+
+        test('mail-grant on a team doc admits a closed-signup guest and delivers the item + notification', async () => {
+            const orgId = getServerConfig()!.orgId;
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
+            const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: `Team Grant ${randomUUID()}`, organizationId: orgId }),
+            });
+            const team = (await teamRes.json()) as { id: string; name: string };
+            const teamOwner = teamOwnerId(team.id);
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team.id, userId: ctx.alice.user.id }),
+            });
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwner}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Drive', storageType: 'local', maxSizeMB: 500 }),
+            });
+            const mounts = await assertJson<MountInfo[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`),
+            );
+            const teamMountId = mounts[0].id;
+            const teamRoot = await assertJson<DrivePath>(
+                await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/${teamMountId}/root`),
+            );
+
+            const docRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/${teamMountId}/folder/${teamRoot.id}/create/doc`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ fileName: `team-grant-doc-${randomUUID()}` }),
+                },
+            );
+            const doc = (await docRes.json()) as DrivePath;
+
+            const guestEmail = `team-guest-${randomUUID()}@external.com`;
+
+            const { updateServerSettings } = await import('../lib/config/server-settings');
+            await updateServerSettings({ guests: { openSignup: false } });
+
+            const mailer = await import('../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            try {
+                // Mail-grant the team-owned doc to the unknown external email (Task 9 send path).
+                const ref: AttachmentReference = {
+                    type: 'reference',
+                    ownerId: teamOwner,
+                    mountId: teamMountId,
+                    id: doc.id,
+                    name: doc.name,
+                    driveType: 'doc',
+                    mimeType: 'application/eigendoc',
+                };
+                const to: AddressObject = { value: [{ address: guestEmail, name: '' }], html: '', text: guestEmail };
+                const mail = {
+                    subject: 'Team grant',
+                    text: 'see attached',
+                    html: '<p>see attached</p>',
+                    to,
+                    driveReferences: [ref],
+                };
+                const draft = await assertJson<EmailDraft>(
+                    await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ mail }),
+                    }),
+                );
+                const sendRes = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/mail/${ctx.alice.user.id}/message/send`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            mail: { ...draft, to, driveReferences: [ref] },
+                            grantAccessRefIds: [doc.id],
+                        }),
+                    },
+                );
+                expect(sendRes.status).toBe(200);
+
+                const { getEntriesForTarget } = await import('../lib/share/registry');
+                expect(await getEntriesForTarget(guestEmail)).toContain(teamOwner);
+
+                // request-otp admits the closed-signup guest solely on the registry entry — Phase 2 payoff.
+                spy.mockClear();
+                const otpRes = await ctx.app.handle(
+                    new Request('http://localhost/guest-auth/request-otp', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: guestEmail }),
+                    }),
+                );
+                expect(otpRes.status).toBe(200);
+
+                const otpCall = spy.mock.calls.find((c) => c[0].to.some((t) => t.address === guestEmail));
+                if (!otpCall) throw new Error('OTP email not sent');
+                const otp = otpCall[0].text.match(/\b(\d{6})\b/)?.[1];
+                if (!otp) throw new Error('OTP not found in email body');
+
+                const verifyRes = await ctx.app.handle(
+                    new Request('http://localhost/guest-auth/verify-otp', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: guestEmail, otp }),
+                    }),
+                );
+                expect(verifyRes.status).toBe(200);
+                const guestToken =
+                    (verifyRes.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/)?.[1] || '';
+
+                const { getUserByEmail } = await import('../lib/user');
+                const guest = await getUserByEmail(guestEmail);
+                if (!guest) throw new Error('guest user not created');
+
+                // The team-owned doc reaches the guest's shared-with-me mirror via reconciliation.
+                const shared = await assertJson<DrivePath[]>(
+                    await authedRequest(guestToken, `/drive/${guest.id}/shared/with-me`),
+                );
+                expect(shared.some((p) => p.id === doc.id)).toBe(true);
+
+                // ...and a share notification is persisted for the guest.
+                const notifs = await assertJson<Notification[]>(
+                    await authedRequest(guestToken, `/notifications/${guest.id}`),
+                );
+                expect(notifs.some((n) => n.tag === `share:${teamOwner}:${teamMountId}:${doc.id}`)).toBe(true);
+            } finally {
+                spy.mockRestore();
+                await updateServerSettings({ guests: { openSignup: true } });
+            }
         });
     });
 });

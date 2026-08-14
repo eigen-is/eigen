@@ -1,6 +1,7 @@
-import { teamOwnerId } from '@workspace/lib/types';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import { getHome } from '../home';
 import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
+import { getTeam } from '../team';
 import type { User } from '../user';
 import { getMemberships, getUserById } from '../user';
 import { getEntriesForTarget } from './registry';
@@ -13,6 +14,21 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
 
     for (const fromUserId of fromUserIds) {
         try {
+            // A team-owned source (e.g. a mail-grant on a team drive path) has no user row and
+            // shares only drive paths — no calendars or invitations. Deliver its shared paths
+            // attributed to the team, then move on. Without this, guests granted a team-owned
+            // doc never receive their shared-path mirror.
+            const parsed = parseOwnerId(fromUserId);
+            if (parsed.type === 'team') {
+                const team = await getTeam(parsed.id);
+                if (!team) continue;
+                const teamPaths = await pullSharedPaths(fromUserId, user);
+                for (const path of teamPaths) {
+                    await targetHome.drive.receiveSharedPathChange(path, path.acl, undefined, team.name);
+                }
+                continue;
+            }
+
             const owner = await getUserById(fromUserId);
             if (!owner) continue;
 
