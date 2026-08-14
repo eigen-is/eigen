@@ -5,7 +5,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
-import type { ParsedCardPhoto } from '../carddav/vcard-parse';
+import type { ParsedCard, ParsedCardPhoto } from '../carddav/vcard-parse';
 import { parseVCard } from '../carddav/vcard-parse';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
 import { getServerSettings } from '../config/server-settings';
@@ -167,6 +167,7 @@ export class Contacts {
     }
 
     public async size(): Promise<number> {
+        await this.ensureDrained();
         return this.cardsBytes + this.avatarsBytes;
     }
 
@@ -346,34 +347,17 @@ export class Contacts {
         }
     }
 
-    // Read one card file into the index row + label names to (re)commit for it, running the eigenId rematch
-    // (§ 2 — a card carrying this user's id, or the owner's email with the X-EIGEN-ID stripped, claims the single
-    // self-link slot via `claimSelf`; an email-only match rewrites the property back into the file) and
-    // regenerating a missing inline-photo cache (Task 10 seam). `id` is the stable contact id (an existing row's
-    // or a fresh one), `existingUid` the uid fallback for a card with none.
+    // Read one card file into the index row + label names to (re)commit for it, regenerating a missing
+    // inline-photo cache (Task 10 seam). The self-link is left `''` here and assigned to the single ranked
+    // winner afterwards (see `selfClaimRank`/`applySelfLink`) so no loser is ever written or indexed as self.
+    // `id` is the stable contact id (an existing row's or a fresh one), `existingUid` the uid fallback.
     private async prepareCardRow(
         uri: string,
         id: string,
         existingUid: string | undefined,
-        claimSelf: () => boolean,
-    ): Promise<{ row: CardRowInput; categories: string[] }> {
-        let bytes = new Uint8Array(await this.storage.file(cardPath(uri)).arrayBuffer());
+    ): Promise<{ row: CardRowInput; categories: string[]; parsed: ParsedCard }> {
+        const bytes = new Uint8Array(await this.storage.file(cardPath(uri)).arrayBuffer());
         const parsed = this.parseCardFile(bytes);
-
-        const ownerEmail = this.home.user.email.toLowerCase();
-        const wantsSelf =
-            parsed.eigenId === this.home.user.id ||
-            (!parsed.eigenId && parsed.email.some((e) => e.toLowerCase() === ownerEmail));
-        let eigenId = '';
-        if (wantsSelf && claimSelf()) {
-            eigenId = this.home.user.id;
-            // An email-only rematch restores the stripped link into the file; a card already carrying the id
-            // keeps its exact bytes.
-            if (!parsed.eigenId) {
-                bytes = new TextEncoder().encode(mergeVCard(parsed, { eigenId: this.home.user.id }));
-                await writeCardFile(this.storage, uri, bytes);
-            }
-        }
 
         // The projection avatar is the derived cache URL; regenerate it only when the file has an inline photo
         // whose hashed cache file is missing (out-of-band drift / a rebuild after a cache wipe).
@@ -395,7 +379,7 @@ export class Contacts {
                 uid: parsed.uid ?? existingUid ?? randomUUID(),
                 firstName: parsed.firstName.trim(),
                 lastName: parsed.lastName.trim(),
-                eigenId,
+                eigenId: '',
                 isGroup: parsed.isGroup,
                 data: {
                     email: parsed.email,
@@ -412,7 +396,45 @@ export class Contacts {
                 size: stat.size,
             },
             categories: parsed.categories,
+            parsed,
         };
+    }
+
+    // Strength of a card's claim to the single self-link slot (spec § 2), highest wins; ties break by uri sort
+    // (candidates are pre-sorted). 3 incumbent — the card's existing index row already held the link; 2 strong —
+    // the file asserts X-EIGEN-ID = user.id; 1 email-only — no X-EIGEN-ID but an exact owner-email match (a weak
+    // claim that only rewrites the file if it actually wins). A forged foreign X-EIGEN-ID scores 0 — it stays in
+    // the file verbatim and drives nothing.
+    private selfClaimRank(parsed: ParsedCard, incumbentEigenId: string | undefined): 0 | 1 | 2 | 3 {
+        if (incumbentEigenId === this.home.user.id) return 3;
+        if (parsed.eigenId === this.home.user.id) return 2;
+        const ownerEmail = this.home.user.email.toLowerCase();
+        if (!parsed.eigenId && parsed.email.some((e) => e.toLowerCase() === ownerEmail)) return 1;
+        return 0;
+    }
+
+    // Pick the highest-ranked self-link claimant (first in the pre-sorted list on a tie); a strictly-greater rank
+    // is required to displace, so the earliest max-rank card wins.
+    private pickSelfWinner<T extends { rank: number }>(candidates: T[]): T | undefined {
+        let winner: T | undefined;
+        for (const c of candidates) {
+            if (c.rank > 0 && (!winner || c.rank > winner.rank)) winner = c;
+        }
+        return winner;
+    }
+
+    // Stamp the chosen winner's row with the self-link and, when its file does not already assert the link,
+    // restore X-EIGEN-ID into that one file and re-stat/re-etag it — the § 2 durability rewrite, covering an
+    // email-only claim and an incumbent whose file a client stripped. No loser's file is ever touched.
+    private async applySelfLink(winner: { row: CardRowInput; parsed: ParsedCard }): Promise<void> {
+        winner.row.eigenId = this.home.user.id;
+        if (winner.parsed.eigenId === this.home.user.id) return;
+        const bytes = new TextEncoder().encode(mergeVCard(winner.parsed, { eigenId: this.home.user.id }));
+        await writeCardFile(this.storage, winner.row.uri, bytes);
+        const stat = await this.storage.stat(cardPath(winner.row.uri));
+        winner.row.etag = computeCardEtag(bytes);
+        winner.row.mtime = Math.round(stat.mtimeMs);
+        winner.row.size = stat.size;
     }
 
     // Stat-only reconcile: list cards/, compare (mtime,size) to the index, and re-read only what drifted — the
@@ -446,24 +468,27 @@ export class Contacts {
 
             reindex.sort((a, b) => (a.uri < b.uri ? -1 : 1)); // stable order for the self-link tie-break
 
-            // One self-link slot: a surviving self row this pass is NOT re-indexing already holds it.
-            const reindexKeys = new Set(reindex.map((r) => uriKeyOf(r.uri)));
-            let selfClaimed = rows.some((r) => r.eigenId === this.home.user.id && !reindexKeys.has(r.uriKey));
-            const claimSelf = () => {
-                if (selfClaimed) return false;
-                selfClaimed = true;
-                return true;
-            };
-
-            const prepared: { row: CardRowInput; categories: string[]; isNew: boolean }[] = [];
+            // Phase 1: parse + prepare every candidate without touching the self-link, ranking each claim.
+            const prepared: {
+                row: CardRowInput;
+                categories: string[];
+                parsed: ParsedCard;
+                isNew: boolean;
+                rank: 0 | 1 | 2 | 3;
+            }[] = [];
             for (const { uri, existing } of reindex) {
-                const { row, categories } = await this.prepareCardRow(
-                    uri,
-                    existing?.id ?? randomUUID(),
-                    existing?.uid,
-                    claimSelf,
-                );
-                prepared.push({ row, categories, isNew: !existing });
+                const p = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
+                prepared.push({ ...p, isNew: !existing, rank: this.selfClaimRank(p.parsed, existing?.eigenId) });
+            }
+
+            // Phase 2: choose the one self-link winner. A surviving self row this pass is NOT re-indexing holds
+            // the slot outright, so no candidate claims it; otherwise the highest-ranked candidate wins and only
+            // an email-only winner has its file rewritten.
+            const reindexKeys = new Set(reindex.map((r) => uriKeyOf(r.uri)));
+            const survivingSelf = rows.some((r) => r.eigenId === this.home.user.id && !reindexKeys.has(r.uriKey));
+            if (!survivingSelf) {
+                const winner = this.pickSelfWinner(prepared);
+                if (winner) await this.applySelfLink(winner);
             }
 
             const createdLabelIds: string[] = [];
@@ -540,24 +565,23 @@ export class Contacts {
             }
             names.sort(); // stable order for the self-link tie-break
 
-            let selfClaimed = false;
-            const claimSelf = () => {
-                if (selfClaimed) return false;
-                selfClaimed = true;
-                return true;
-            };
-
-            const prepared: { row: CardRowInput; categories: string[] }[] = [];
+            // Phase 1: parse + prepare every card without touching the self-link, ranking each claim against the
+            // pre-clear index so the incumbent self row still outranks an email-only twin that sorts earlier.
+            const prepared: {
+                row: CardRowInput;
+                categories: string[];
+                parsed: ParsedCard;
+                rank: 0 | 1 | 2 | 3;
+            }[] = [];
             for (const uri of names) {
                 const existing = existingByKey.get(uriKeyOf(uri));
-                const { row, categories } = await this.prepareCardRow(
-                    uri,
-                    existing?.id ?? randomUUID(),
-                    existing?.uid,
-                    claimSelf,
-                );
-                prepared.push({ row, categories });
+                const p = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
+                prepared.push({ ...p, rank: this.selfClaimRank(p.parsed, existing?.eigenId) });
             }
+
+            // Phase 2: the highest-ranked card claims the single self-link; only an email-only winner is rewritten.
+            const winner = this.pickSelfWinner(prepared);
+            if (winner) await this.applySelfLink(winner);
 
             const createdLabelIds: string[] = [];
             this.db.transaction((tx) => {

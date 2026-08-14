@@ -218,6 +218,93 @@ describe('eigenId rematch', () => {
     });
 });
 
+// The self-link is a single ranked slot: incumbent (existing indexed link) beats a strong X-EIGEN-ID claim,
+// which beats a weak owner-email match. Iteration is uri-sorted, so these plant a claimant that sorts BEFORE
+// the self card to prove rank — not lexical order — decides the winner.
+describe('self-link ranking', () => {
+    // `0.vcf` / `00.vcf` are lexically < any `<uuid>.vcf`, so the claimant is always visited first.
+    const emailTwin = (email: string) =>
+        `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${randomUUID()}\r\nN:Twin;Email;;;\r\nFN:Email Twin\r\nEMAIL:${email}\r\nEND:VCARD\r\n`;
+    const forgedCard = (userId: string) =>
+        `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${randomUUID()}\r\nN:Impostor;An;;;\r\nFN:An Impostor\r\nEMAIL:impostor@example.com\r\nX-EIGEN-ID:${userId}\r\nEND:VCARD\r\n`;
+    const selfLinkRows = (db: Awaited<ReturnType<typeof makeContacts>>['db'], userId: string) =>
+        db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.eigenId, userId))
+            .all()
+            .map((r) => r.id);
+
+    test('a drifting self card outranks an earlier owner-email twin (reconcile)', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+        const selfUri = uriOf(db, me.id);
+
+        writeFileSync(cardPathOf(dir, '0.vcf'), emailTwin(user.email));
+        expect('0.vcf' < selfUri).toBe(true);
+        const future = new Date(Date.now() + 5000);
+        utimesSync(cardPathOf(dir, selfUri), future, future); // drift the self card, content intact
+
+        await contacts.init();
+
+        expect((await contacts.getMe())?.id).toBe(me.id);
+        expect(selfLinkRows(db, user.id)).toEqual([me.id]);
+        const twin = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, uriKeyOf('0.vcf')))
+            .get()!;
+        expect(twin.eigenId).toBe('');
+        // The loser's file is never given X-EIGEN-ID.
+        expect(readFileSync(cardPathOf(dir, '0.vcf'), 'utf8')).not.toContain('X-EIGEN-ID');
+    });
+
+    test('rebuild keeps the self-link on the incumbent over an earlier owner-email twin', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+        writeFileSync(cardPathOf(dir, '0.vcf'), emailTwin(user.email));
+        await contacts.init(); // index the twin (loses to the clean incumbent self row)
+        const syncGenBefore = db.select().from(contactsSchema.book).get()!.syncGen;
+
+        await contacts.rebuildIndex();
+
+        expect((await contacts.getMe())?.id).toBe(me.id);
+        expect(selfLinkRows(db, user.id)).toEqual([me.id]);
+        const twin = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, uriKeyOf('0.vcf')))
+            .get()!;
+        expect(twin.eigenId).toBe('');
+        expect(readFileSync(cardPathOf(dir, '0.vcf'), 'utf8')).not.toContain('X-EIGEN-ID');
+        expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(syncGenBefore + 1);
+    });
+
+    test('a drifting self card outranks an earlier forged X-EIGEN-ID card, whose file keeps it verbatim', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+        const selfUri = uriOf(db, me.id);
+
+        writeFileSync(cardPathOf(dir, '00.vcf'), forgedCard(user.id));
+        expect('00.vcf' < selfUri).toBe(true);
+        const future = new Date(Date.now() + 5000);
+        utimesSync(cardPathOf(dir, selfUri), future, future);
+
+        await contacts.init();
+
+        expect((await contacts.getMe())?.id).toBe(me.id);
+        expect(selfLinkRows(db, user.id)).toEqual([me.id]);
+        const forged = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, uriKeyOf('00.vcf')))
+            .get()!;
+        expect(forged.eigenId).toBe('');
+        // We never strip an unowned claim — the forged property rides through the file verbatim, just unindexed.
+        expect(readFileSync(cardPathOf(dir, '00.vcf'), 'utf8')).toContain(`X-EIGEN-ID:${user.id}`);
+    });
+});
+
 describe('rebuildIndex', () => {
     test('rebuilding a populated book reproduces projections + etags, rotates syncGen, clears tombstones', async () => {
         const { contacts, db } = await makeContacts();
@@ -366,5 +453,40 @@ describe('fail-closed drain guard', () => {
                 .where(eq(contactsSchema.contactTombstones.uri, uri))
                 .get(),
         ).toBeTruthy();
+    });
+
+    test('size() drains a pending failure so the total reflects the healed card', async () => {
+        const { contacts } = await makeContacts();
+        const sizeBefore = await contacts.size(); // clean baseline, before any orphan exists
+
+        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
+        const origCommit = priv.commitCard;
+        let thrown = false;
+        priv.commitCard = function (this: Contacts, o: unknown) {
+            if (!thrown) {
+                thrown = true;
+                throw new Error('commit boom');
+            }
+            return origCommit.call(this, o);
+        };
+        await expect(
+            contacts.addContact(validContact({ firstName: 'Sized', email: ['sized@example.com'] })),
+        ).rejects.toThrow('commit boom');
+        priv.commitCard = origCommit;
+
+        // Spy AFTER the failure so the very next read is the one that must drain (size() has not run since).
+        let drainCalls = 0;
+        const proto = Object.getPrototypeOf(contacts) as { drainDirty: () => Promise<void> };
+        const origDrain = proto.drainDirty;
+        (contacts as unknown as { drainDirty: () => Promise<void> }).drainDirty = function (this: Contacts) {
+            drainCalls++;
+            return origDrain.apply(this);
+        };
+
+        // The failed create left the file staged but unindexed; size() drains it in and grows the total.
+        const healed = await contacts.size();
+        expect(drainCalls).toBe(1);
+        expect(healed).toBeGreaterThan(sizeBefore);
+        expect((await contacts.getContacts()).some((c) => c.firstName === 'Sized')).toBe(true);
     });
 });
