@@ -101,6 +101,34 @@ describe('ManagedDatabase migration rollback', () => {
     });
 });
 
+describe('ManagedDatabase future-version guard', () => {
+    test('refuses to open a database newer than the binary supports', async () => {
+        // A rollback to an older binary after a schema bump would otherwise silently open the
+        // newer on-disk schema and mangle it. The guard reads __schema_version before migrating
+        // and refuses anything past currentVersion.
+        const dbPath = nextDbPath();
+        const raw = new BunDatabase(dbPath, { create: true });
+        raw.exec(`CREATE TABLE __schema_version (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL DEFAULT 0);
+                  INSERT INTO __schema_version (id, version) VALUES (1, 99);`);
+        raw.close();
+
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
+        await expect(db.open(0)).rejects.toThrow(/newer/);
+    });
+
+    test('opens a database sitting at exactly currentVersion', async () => {
+        // The guard is `>`, not `>=`: an already-migrated db reopens cleanly at currentVersion.
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {});
+        await db.open(0);
+        await db.close({ skipFinalSnapshot: true });
+
+        const reopened = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
+        await reopened.open(0);
+        await reopened.close({ skipFinalSnapshot: true });
+    });
+});
+
 describe('ManagedDatabase snapshot lifecycle', () => {
     test('flush() pushes writes to storage but does NOT take a version snapshot', async () => {
         // Regression: flush() used to run the snapshot trigger, so a snapshot

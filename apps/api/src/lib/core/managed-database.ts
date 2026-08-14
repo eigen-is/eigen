@@ -128,6 +128,15 @@ export class ManagedDatabase<S extends SchemaType> {
         const row = this.rawDb.query('SELECT version FROM __schema_version WHERE id = 1').get() as { version: number };
         let currentVersion = row?.version ?? 0;
 
+        // A db written by a newer binary carries a schema past what we know how to migrate. Rolling
+        // back to an older server and silently opening it would corrupt it — refuse loudly instead.
+        if (currentVersion > this.config.currentVersion) {
+            throw new ApiError(
+                503,
+                `${this.config.name}: database is at schema v${currentVersion}, newer than this server supports (v${this.config.currentVersion})`,
+            );
+        }
+
         const pending = this.config.migrations
             .filter((m) => m.version > currentVersion)
             .sort((a, b) => a.version - b.version);
