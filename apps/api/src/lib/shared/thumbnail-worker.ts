@@ -9,7 +9,7 @@ type WorkerInput = {
     fileName: string;
     tmpDir: string;
     pathId: string;
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover' };
+    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: 'webp' | 'jpeg' };
 };
 
 type WorkerOutput = { ok: true; data: ArrayBuffer; width: number; height: number; duration?: number } | { ok: false };
@@ -18,7 +18,7 @@ type ImageResult = { data: Buffer; width: number; height: number; duration?: num
 
 async function sharpResize(
     source: Buffer | string,
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover' },
+    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: 'webp' | 'jpeg' },
 ): Promise<ImageResult | null> {
     try {
         const image = sharp(source, { animated: true });
@@ -32,15 +32,15 @@ async function sharpResize(
 
         if (width > 32000 || height > 32000) return null;
 
-        const data = await image
-            .rotate()
-            .resize(options.maxSize, options.maxSize, {
-                fit: options.fit,
-                position: 'center',
-                withoutEnlargement: options.fit === 'inside',
-            })
-            .webp({ quality: options.quality })
-            .toBuffer();
+        const resized = image.rotate().resize(options.maxSize, options.maxSize, {
+            fit: options.fit,
+            position: 'center',
+            withoutEnlargement: options.fit === 'inside',
+        });
+        const data = await (options.format === 'jpeg'
+            ? resized.jpeg({ quality: options.quality })
+            : resized.webp({ quality: options.quality })
+        ).toBuffer();
 
         return { data, width, height };
     } catch {

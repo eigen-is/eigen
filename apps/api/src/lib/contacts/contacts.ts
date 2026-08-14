@@ -5,6 +5,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
+import type { ParsedCardPhoto } from '../carddav/vcard-parse';
 import { parseVCard } from '../carddav/vcard-parse';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
 import { getServerSettings } from '../config/server-settings';
@@ -326,6 +327,7 @@ export class Contacts {
             const id = randomUUID();
             const uri = `${id}.vcf`;
             const categories = this.labelNamesFor(contact.labels ?? []);
+            const photo = await this.resolveStagedAvatar(contact.avatar);
 
             const bytes = new TextEncoder().encode(
                 createVCard(
@@ -341,13 +343,18 @@ export class Contacts {
                         notes: contact.notes,
                         categories,
                         eigenId: contact.eigenId || undefined,
-                        photo: undefined, // inline PHOTO embedding lands in Task 10
+                        photo: photo ?? undefined,
                     },
                     id,
                 ),
             );
 
             const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
+            // The avatar cache is derived from the embed; the projection stores its hashed URL (or '' if none).
+            contact.avatar = await this.cacheCardPhoto(
+                id,
+                photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
+            );
             try {
                 this.commitCard({
                     row: {
@@ -405,8 +412,8 @@ export class Contacts {
             const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
             const categories = this.labelNamesFor(contact.labels ?? []);
             // REST is a full replacement, so every owned key is present; the merge is value-keyed, so
-            // unchanged values keep their exact bytes. eigenId/photo are omitted — the file's X-EIGEN-ID and
-            // PHOTO are not REST-owned here (rematch is Task 11, PHOTO embedding is Task 10).
+            // unchanged values keep their exact bytes. eigenId is omitted — the file's X-EIGEN-ID isn't
+            // REST-owned here (rematch is Task 11).
             const edits: CardEdits = {
                 firstName: contact.firstName.trim(),
                 lastName: contact.lastName.trim(),
@@ -419,9 +426,22 @@ export class Contacts {
                 notes: contact.notes ?? '',
                 categories,
             };
+            // PHOTO is presence-triggered: only touch it when the avatar changed against the stored row. A new
+            // avatar resolves the staged webp to an embedded JPEG; a cleared one removes PHOTO. The derived
+            // cache + projection URL are rebuilt from the embed after the write.
+            const avatarChanged = contact.avatar !== (row.data?.avatar ?? '');
+            const photo = avatarChanged && contact.avatar ? await this.resolveStagedAvatar(contact.avatar) : null;
+            if (avatarChanged) edits.photo = photo;
+
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
             const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
+            if (avatarChanged) {
+                contact.avatar = await this.cacheCardPhoto(
+                    id,
+                    photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
+                );
+            }
             try {
                 this.commitCard({
                     row: {
@@ -685,6 +705,44 @@ export class Contacts {
             return null;
         }
         return file.arrayBuffer();
+    }
+
+    // A staged avatar (uploadAvatar's webp) transcoded to the JPEG we embed as the canonical PHOTO — Apple
+    // Contacts can't decode webp contact photos (its list is JPEG/BMP/PNG/GIF), and a 512px q80 JPEG stays
+    // under Apple's 224 KB per-photo ceiling so cards survive iCloud round-trips. Null for an empty/missing url.
+    private async resolveStagedAvatar(
+        avatarUrl: string | undefined,
+    ): Promise<{ bytes: Uint8Array; mediaType: string } | null> {
+        if (!avatarUrl) return null;
+        const data = await this.downloadAvatar(avatarUrl.split('/').pop()!);
+        if (!data) return null;
+        const result = await generateImagePreview(Buffer.from(data), 'image/webp', 'avatar', '', 'avatar', {
+            maxSize: 512,
+            quality: 80,
+            fit: 'cover',
+            format: 'jpeg',
+        });
+        return result ? { bytes: result.data, mediaType: 'image/jpeg' } : null;
+    }
+
+    // Derive the webp avatar cache from an inline PHOTO and return its projection URL. Naming by the embedded
+    // bytes' hash makes a superseded photo's file fall out of reference, so cleanupAvatarImages sweeps it. A
+    // uri-kind or absent photo caches nothing — remote URIs are never fetched (SSRF, spec Non-goals).
+    private async cacheCardPhoto(contactId: string, photo: ParsedCardPhoto | null): Promise<string> {
+        if (!photo || photo.kind !== 'inline') return '';
+        const result = await generateImagePreview(
+            Buffer.from(photo.bytes),
+            photo.mediaType ?? 'image/jpeg',
+            'avatar',
+            '',
+            'avatar',
+            { maxSize: 512, quality: 80, fit: 'cover' },
+        );
+        if (!result) return '';
+        const name = `${contactId}-${computeCardEtag(photo.bytes).slice(0, 8)}.webp`;
+        await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${name}`, result.data);
+        this.avatarsBytes += result.data.byteLength;
+        return `contacts/${this.home.user.id}/avatar/${name}`;
     }
 
     private async cleanupAvatarImages() {

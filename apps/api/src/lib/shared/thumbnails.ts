@@ -18,12 +18,14 @@ type ThumbnailOptions = {
     maxSize?: number;
     quality?: number;
     fit?: 'inside' | 'cover';
+    format?: 'webp' | 'jpeg';
 };
 
 const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
     maxSize: 512,
     quality: 80,
     fit: 'inside',
+    format: 'webp',
 };
 
 type ImageResult = ImageDimensions & {
