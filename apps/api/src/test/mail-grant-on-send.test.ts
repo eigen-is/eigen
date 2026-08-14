@@ -366,4 +366,37 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
         expect(await getAcl(docId)).toEqual(before);
         expect((await getAcl(docId))?.some((a) => a.id === email) ?? false).toBe(false);
     });
+
+    // 11. Duplicated ref ids are deduped: one grant, one propagation — not one per copy.
+    test('duplicated grant ref ids produce a single grant and a single propagation', async () => {
+        startCapture();
+        daclSpy = spyOn(Drive.prototype, 'updateACLDelta');
+        const docId = await createDoc(`grant-dupe-${randomUUID()}`);
+        const email = `grant-dupe-ext-${randomUUID()}@external.example`;
+
+        const { res } = await sendWithGrant({ to: email, refs: [ref(docId)], grant: [docId, docId, docId] });
+        expect(res.status).toBe(200);
+
+        expect((await getAcl(docId))?.filter((a) => a.id === email)).toEqual([{ id: email, read: true, write: false }]);
+        expect(daclSpy.mock.calls.filter((c: unknown[]) => c[1] === docId).length).toBe(1);
+    });
+
+    // 12. More than MAX_SEND_REFERENCES distinct grant ids is rejected before any side effect.
+    test('over the reference cap is rejected with 400 before any grant', async () => {
+        startCapture();
+        daclSpy = spyOn(Drive.prototype, 'updateACLDelta');
+        const docId = await createDoc(`grant-cap-${randomUUID()}`);
+        const before = await getAcl(docId);
+        const grant = Array.from({ length: 21 }, () => randomUUID());
+
+        const { res } = await sendWithGrant({
+            to: `grant-cap-ext-${randomUUID()}@external.example`,
+            refs: [ref(docId)],
+            grant,
+        });
+        expect(res.status).toBe(400);
+        expect(sent.length).toBe(0);
+        expect(daclSpy.mock.calls.length).toBe(0);
+        expect(await getAcl(docId)).toEqual(before);
+    });
 });

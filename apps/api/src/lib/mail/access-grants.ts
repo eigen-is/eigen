@@ -4,6 +4,7 @@ import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { addRegistryEntry } from '../share/registry';
 import type { User } from '../user';
+import { MAX_SEND_REFERENCES } from './recipients';
 
 // Grants read access to the referenced documents a sender opted to share when sending mail. Every
 // ref is fully validated before any ACL is written (preflight-all): a single unshareable ref aborts
@@ -15,7 +16,14 @@ export async function grantAccessForReferences(
     grantRefIds: string[],
     emails: string[],
 ): Promise<void> {
-    const grantRefs = grantRefIds.map((id) => {
+    // Dedupe and cap before any resolution or side effect: without this, N copies of one id would
+    // fan out into N full ACL writes — the amplification the send-reference cap exists to prevent.
+    const uniqueRefIds = [...new Set(grantRefIds)];
+    if (uniqueRefIds.length > MAX_SEND_REFERENCES) {
+        throw new ApiError(400, `A message can grant access to at most ${MAX_SEND_REFERENCES} references`);
+    }
+
+    const grantRefs = uniqueRefIds.map((id) => {
         const ref = refs.find((r) => r.id === id);
         if (!ref) throw new ApiError(400, `Unknown attachment reference '${id}'`);
         return ref;
