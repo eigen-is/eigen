@@ -1,5 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type { Notification } from '@workspace/lib/types/notification';
+import { drainACLFanOuts } from '../lib/drive/acl-propagation';
+import { getHome } from '../lib/home';
 import { assertJson, authedRequest, driveDelete, driveGet, drivePost, drivePut, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -160,5 +162,81 @@ describe('ACL share email', () => {
         const reshared = afterRestore.find((n) => n.tag === `share:${ctx.alice.user.id}:${aliceMountId}:${doc.id}`);
         expect(reshared?.title).toBe(`${ctx.alice.user.name} shared a doc`);
         expect(afterRestore.every((n) => !n.title.includes('undefined'))).toBe(true);
+    });
+
+    // suppressShareEmail: 'all' — internal callers (e.g. mailed-document grants) suppress the
+    // share email for everyone, including account-less addresses whose only invite vehicle it is.
+    // The route has no options param, so these drive the domain method directly.
+    test("suppressShareEmail 'all' does not email an account-less address", async () => {
+        const aliceHome = await getHome(ctx.alice.user.id);
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+
+        const noAccount = 'noaccount-all@external.example';
+        const doc = await createDoc('suppress-all-account-less');
+        await aliceHome.drive.updateACLDelta(
+            aliceMountId,
+            doc.id,
+            { add: [{ id: noAccount, read: true, write: false }] },
+            undefined,
+            undefined,
+            aliceHome.user,
+            { suppressShareEmail: 'all' },
+        );
+        await new Promise((r) => setTimeout(r, 10));
+
+        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === noAccount));
+        expect(calls.length).toBe(0);
+        spy.mockRestore();
+    });
+
+    test("suppressShareEmail 'all' does not email a registered user", async () => {
+        await setEmailToggle('userOnAclAdd', true);
+        const aliceHome = await getHome(ctx.alice.user.id);
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+
+        const doc = await createDoc('suppress-all-registered');
+        await aliceHome.drive.updateACLDelta(
+            aliceMountId,
+            doc.id,
+            { add: [{ id: ctx.bob.user.email, read: true, write: false }] },
+            undefined,
+            undefined,
+            aliceHome.user,
+            { suppressShareEmail: 'all' },
+        );
+        await new Promise((r) => setTimeout(r, 10));
+
+        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
+        expect(calls.length).toBe(0);
+        await drainACLFanOuts();
+        spy.mockRestore();
+    });
+
+    test('suppressShareEmail true still emails an account-less address', async () => {
+        const aliceHome = await getHome(ctx.alice.user.id);
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
+
+        const noAccount = 'noaccount-true@external.example';
+        const doc = await createDoc('suppress-true-account-less');
+        await aliceHome.drive.updateACLDelta(
+            aliceMountId,
+            doc.id,
+            { add: [{ id: noAccount, read: true, write: false }] },
+            undefined,
+            undefined,
+            aliceHome.user,
+            { suppressShareEmail: true },
+        );
+        await new Promise((r) => setTimeout(r, 10));
+
+        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === noAccount));
+        expect(calls.length).toBe(1);
+        spy.mockRestore();
     });
 });

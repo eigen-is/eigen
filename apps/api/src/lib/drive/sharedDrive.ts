@@ -19,6 +19,7 @@ import type { StorageFile } from '../storage';
 import type { User } from '../user';
 import { getMemberships, type Memberships } from '../user/';
 import { canReadFromAncestors } from './acl';
+import type { ACLPropagationOptions } from './acl-propagation';
 import type Drive from './drive';
 
 // Composition over inheritance: SharedDrive deliberately does NOT extend Drive. Pairing this
@@ -302,6 +303,7 @@ export default class SharedDrive {
         // Param exists to match Drive.updateACLDelta's union signature; SharedDrive
         // derives the actor from this.user, so the route's value is intentionally ignored.
         _actor?: User | null,
+        options?: ACLPropagationOptions,
     ) {
         const memberships = await this.getUserMemberships();
         if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
@@ -324,6 +326,7 @@ export default class SharedDrive {
             visibility,
             effectiveOwner ? sharingRestricted : undefined,
             this.user,
+            options,
         );
     }
 

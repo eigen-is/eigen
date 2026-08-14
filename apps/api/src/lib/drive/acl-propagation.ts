@@ -9,10 +9,11 @@ import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
 
-// Opt-in (default share behaviour stays byte-identical): skips the share email for entries that
-// resolve to a registered user — mirror fan-out, SSE, and in-app notification still fire.
-// Account-less emails keep the email as their only invite vehicle. Used by the new-chat wizard.
-export type ACLPropagationOptions = { suppressShareEmail?: boolean };
+// Opt-in (default share behaviour stays byte-identical): `true` skips the share email for entries
+// that resolve to a registered user — mirror fan-out, SSE, and in-app notification still fire, and
+// account-less emails keep the email as their only invite vehicle (used by the new-chat wizard).
+// `'all'` additionally skips account-less emails — for internal grants that carry their own invite.
+export type ACLPropagationOptions = { suppressShareEmail?: boolean | 'all' };
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
@@ -86,13 +87,15 @@ async function emailNewlyAddedAclEntries(
     path: DrivePath,
     addedUserEmails: string[],
     actor: { name: string; email: string },
-    suppressForRegistered: boolean,
+    suppress: boolean | 'all',
 ): Promise<void> {
+    // 'all' suppresses every share email, including account-less invites the caller replaces itself.
+    if (suppress === 'all') return;
     const settings = getServerSettings();
     for (const email of addedUserEmails) {
         const target = await getUserByEmail(email);
         // Suppression only covers users reachable in-app; an account-less email still needs the invite.
-        if (suppressForRegistered && target) continue;
+        if (suppress && target) continue;
         const isGuest = !target || target.role === 'guest';
         const enabled = isGuest
             ? settings.notifications.email.guestOnAclAdd
