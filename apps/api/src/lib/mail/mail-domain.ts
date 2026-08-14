@@ -20,6 +20,7 @@ import { type OutboundMail, sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
+import { grantAccessForReferences } from './access-grants';
 import { simpleParser } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
@@ -562,7 +563,10 @@ export class Mail {
         );
     }
 
-    async messageSend(mailToSend: NewDraft | EmailDraft): Promise<SentMailResult> {
+    async messageSend(
+        mailToSend: NewDraft | EmailDraft,
+        options?: { grantAccessRefIds?: string[] },
+    ): Promise<SentMailResult> {
         // Full EML rebuild so attachment content is available for SMTP. draftFullSave bakes
         // ref cards into the Sent-folder EML and returns `mail` with the *clean* html
         // (for the frontend). Re-bake here so the outbound SMTP body matches the Sent copy.
@@ -592,6 +596,19 @@ export class Mail {
             throw new ApiError(
                 403,
                 'This is a shared demo, so outgoing email is turned off. Your message is saved in Drafts.',
+            );
+        }
+
+        // Grant read access to any referenced documents the sender opted to share. Runs after the
+        // demo guard (so a demo send grants nothing) and before delivery (so a grant failure aborts
+        // the send). Grantable emails are the To/Cc set — the canonicaliser already deduped with
+        // to > cc > bcc precedence, so pure-Bcc addresses are excluded by construction.
+        if (options?.grantAccessRefIds?.length) {
+            await grantAccessForReferences(
+                this.home.user,
+                refs,
+                options.grantAccessRefIds,
+                [...message.to, ...(message.cc ?? [])].map((a) => a.address),
             );
         }
 
