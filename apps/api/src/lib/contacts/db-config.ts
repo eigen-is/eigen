@@ -53,8 +53,6 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 DROP TABLE IF EXISTS contacts_to_labels;
                 DROP TABLE IF EXISTS contacts;
                 DROP TABLE IF EXISTS labels;
-                DROP INDEX IF EXISTS idx_contacts_eigenId;
-                DROP INDEX IF EXISTS idx_contacts_to_labels_labelId;
 
                 CREATE TABLE IF NOT EXISTS contacts (
                     id TEXT PRIMARY KEY,
