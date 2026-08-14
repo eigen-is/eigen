@@ -126,8 +126,8 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleSendEmail = async (mail: NewDraft) => {
-        await sendDraftMutation.mutateAsync(mail);
+    const handleSendEmail = async (mail: NewDraft, grantAccessRefIds?: string[]) => {
+        await sendDraftMutation.mutateAsync({ draft: mail, grantAccessRefIds });
         navigateToList();
     };
 

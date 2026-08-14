@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DriveACL, DriveAccessCheckResult, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -143,4 +143,17 @@ export function useRequestAccess(ownerId: string, mountId: string, pathId: strin
         },
         onError: onMutationError,
     });
+}
+
+// CHECK ACCESS FOR EMAILS — imperative, time-of-send probe for the mail share-and-send dialog. Not a
+// query hook: the answer is only good at the moment of send and must never be cached or reused.
+export async function checkPathAccess(
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    emails: string[],
+): Promise<DriveAccessCheckResult> {
+    const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['access-check'].post({ emails });
+    if (response.error) throw new AppError(response);
+    return response.data;
 }

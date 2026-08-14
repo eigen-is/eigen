@@ -1,8 +1,9 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
+import { checkPathAccess } from '@workspace/lib/drive';
 import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isContainerType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, isContainerType } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ConfirmDialog, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -25,6 +26,33 @@ import { Paperclip, Send, Trash2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
 import { useDraft } from './hooks/use-draft';
+import { ShareAndSendDialog, type ShareGrant } from './share-and-send-dialog';
+
+// Recipients as the backend will see them at send: flatten one level of RFC 2822 groups, drop
+// empties, dedupe case-insensitively with to > cc > bcc precedence (an address in both To and Bcc
+// classifies as To), and exclude the sender's own address. `bcc` holds the lowercased addresses
+// that resolved as Bcc-only — the set the backend never grants.
+function collectRecipientEmails(draft: NewDraft, ownEmail: string | undefined): { all: string[]; bcc: Set<string> } {
+    const own = ownEmail?.toLowerCase();
+    const seen = new Set<string>();
+    const all: string[] = [];
+    const bcc = new Set<string>();
+    for (const field of ['to', 'cc', 'bcc'] as const) {
+        const addr = draft[field];
+        if (!addr) continue;
+        const flat = addr.value.flatMap((entry) => (entry.group ? entry.group : [entry]));
+        for (const entry of flat) {
+            const email = entry.address?.trim();
+            if (!email) continue;
+            const key = email.toLowerCase();
+            if (key === own || seen.has(key)) continue;
+            seen.add(key);
+            all.push(email);
+            if (field === 'bcc') bcc.add(key);
+        }
+    }
+    return { all, bcc };
+}
 
 export function EmailDraftToolbar({
     onDelete,
@@ -63,7 +91,7 @@ type EmailDraftProps = {
     // useAttachFromDrive. Fired once per compose session.
     initialDriveAttachments?: DrivePath[];
     signatureHtml?: string;
-    sendDraft: (mail: NewDraft) => Promise<unknown>;
+    sendDraft: (mail: NewDraft, grantAccessRefIds?: string[]) => Promise<unknown>;
     onAutoSave?: (
         mail: NewDraft,
         options?: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[]; forceFullSave?: boolean },
@@ -91,6 +119,14 @@ export function EmailDraft({
 }: EmailDraftProps) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
+    // Set once the time-of-send access check finds a grantable reference: holds the flushed draft to
+    // send plus the aggregated dialog contents. Null closes the Share & send dialog.
+    const [shareState, setShareState] = useState<{
+        draft: NewDraft;
+        grantRefIds: string[];
+        grants: ShareGrant[];
+        notes: string[];
+    } | null>(null);
     const { user } = useAuth();
     const uploadMutation = useUploadDraftAttachment();
     const attachFromDriveMutation = useAttachFromDrive();
@@ -195,8 +231,65 @@ export function EmailDraft({
         applyInitialAttachments(initialDriveAttachments);
     }, [initialDriveAttachments]);
 
+    // Both send entry points funnel here (the Send button via handleSendEmail, and the no-subject
+    // ConfirmDialog). When the draft links documents, offer a read grant to recipients who need it
+    // before sending; otherwise send exactly as today.
     const sendWithFreshDraft = async () => {
-        await sendDraft(await flushAndGetDraft());
+        const draft = await flushAndGetDraft();
+        const refs = draft.driveReferences ?? [];
+        if (refs.length === 0) {
+            await sendDraft(draft);
+            return;
+        }
+        const { all: emails, bcc } = collectRecipientEmails(draft, user?.email);
+        if (emails.length === 0) {
+            await sendDraft(draft);
+            return;
+        }
+
+        // Probe each reference for the current recipient set. A failed check (stale 404, network)
+        // makes that reference non-checkable — excluded from the dialog entirely, so the mail sends
+        // as-is with whatever access already exists (the link may be dead, exactly as today).
+        const checks = await Promise.all(
+            refs.map((ref) =>
+                checkPathAccess(ref.ownerId, ref.mountId, ref.id, emails)
+                    .then((result) => ({ ref, result }))
+                    .catch(() => null),
+            ),
+        );
+
+        const grants: ShareGrant[] = [];
+        const grantRefIds: string[] = [];
+        const notes: string[] = [];
+        let hasGrantableBcc = false;
+        for (const check of checks) {
+            if (!check) continue;
+            const { ref, result } = check;
+            const needing = result.recipients.filter((r) => !r.hasReadAccess || r.needsGuestAdmission);
+            if (needing.length === 0) continue;
+            if (ref.driveType === DRIVE_TYPE_CHAT) {
+                notes.push("Chat invitations aren't granted from mail");
+                continue;
+            }
+            if (!result.canShare) {
+                notes.push(`You can't share ${ref.name} — recipients can request access`);
+                continue;
+            }
+            // The backend only grants To/Cc recipients; a Bcc grant would leak the Bcc identity.
+            const needingToCc = needing.filter((r) => !bcc.has(r.email));
+            if (needingToCc.length === 0) continue;
+            grants.push({ id: ref.id, name: ref.name, recipients: needingToCc.map((r) => r.email) });
+            grantRefIds.push(ref.id);
+            if (needing.length > needingToCc.length) hasGrantableBcc = true;
+        }
+        if (hasGrantableBcc) notes.push('Bcc recipients are not granted access');
+
+        if (grants.length === 0) {
+            await sendDraft(draft);
+            return;
+        }
+        // Dedupe collapses the repeated chat note when several chat references are linked.
+        setShareState({ draft, grantRefIds, grants, notes: [...new Set(notes)] });
     };
 
     const handleSendEmail = async () => {
@@ -368,6 +461,20 @@ export function EmailDraft({
                 description="This message has no subject. Send anyway?"
                 confirmText="Send"
                 onConfirm={sendWithFreshDraft}
+            />
+            <ShareAndSendDialog
+                open={!!shareState}
+                onOpenChange={(open) => {
+                    if (!open) setShareState(null);
+                }}
+                grants={shareState?.grants ?? []}
+                notes={shareState?.notes ?? []}
+                onShareAndSend={async () => {
+                    if (shareState) await sendDraft(shareState.draft, shareState.grantRefIds);
+                }}
+                onSendWithoutAccess={async () => {
+                    if (shareState) await sendDraft(shareState.draft);
+                }}
             />
         </div>
     );
