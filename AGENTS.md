@@ -64,6 +64,7 @@ Two things that aren't written down anywhere else: the API serves every app from
   thing you reached for should have been exported
 - **Fix broken windows** — fix pre-existing issues if the fix is straightforward
 - **Keep docs up to date** — update `docs/` and this file when changes affect architecture
+- **No hard line-wrapping in Markdown prose** — when writing `.md` content (docs, blog posts, proposals), keep each paragraph on one line; never insert manual line breaks to satisfy a maximum line length. Editors soft-wrap, and rendered HTML is unaffected either way
 
 ## Working Method (multi-step changes)
 
