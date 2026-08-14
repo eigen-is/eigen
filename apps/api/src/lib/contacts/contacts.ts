@@ -137,7 +137,8 @@ export class Contacts {
         const contactId = randomUUID();
         const { data, contactData, labels } = extractContactData(contact);
 
-        // Placeholder file-sync fields — Task 8 writes the vCard and fills these from the card bytes.
+        // Placeholder file-sync fields — filled from the card bytes once the file-backed refit
+        // writes the vCard; the DB-only path here has no file to derive them from yet.
         const uri = `${contactId}.vcf`;
         await this.db.insert(schema.contacts).values({
             id: contactId,
