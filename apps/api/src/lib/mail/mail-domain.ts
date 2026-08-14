@@ -47,6 +47,8 @@ export type DraftMeta = {
     html: string;
     attachments: Array<{ filename: string; contentType: string; size: number }>;
     driveReferences?: AttachmentReference[];
+    inReplyTo?: string;
+    references?: string[] | string;
     lastFullSaveAt?: number;
 };
 
@@ -315,6 +317,8 @@ export class Mail {
             html: email.html || '',
             attachments: prevMeta.attachments,
             driveReferences,
+            inReplyTo: email.inReplyTo,
+            references: email.references,
             lastFullSaveAt: prevMeta.lastFullSaveAt,
         };
         await this.store.writeDraftMeta(existingId, meta);
@@ -387,6 +391,8 @@ export class Mail {
                     to: email.to ?? meta.to,
                     cc: email.cc ?? meta.cc,
                     bcc: email.bcc ?? meta.bcc,
+                    inReplyTo: email.inReplyTo ?? meta.inReplyTo,
+                    references: email.references ?? meta.references,
                 };
                 driveReferences = driveReferences ?? meta.driveReferences;
             }
@@ -451,7 +457,10 @@ export class Mail {
             attachments: allAttachments.length ? allAttachments : undefined,
         });
 
-        const saved = await this.store.saveDraft(emlContent, existingId);
+        // Persist under the id baked into the EML header (newId), not existingId: on an id-less
+        // save saveDraft would otherwise mint its own id, leaving saved.id out of sync with the
+        // header — so the wire Message-ID (buildMessageId(saved.id)) wouldn't match the Sent EML.
+        const saved = await this.store.saveDraft(emlContent, newId);
 
         for (const tempId of options.tempAttachmentIds ?? []) {
             await this.store.cleanupDraftTemp(tempId);
@@ -474,6 +483,8 @@ export class Mail {
                 size: a.size,
             })),
             driveReferences,
+            inReplyTo: email.inReplyTo,
+            references: email.references,
             lastFullSaveAt: Date.now(),
         } satisfies DraftMeta);
 
@@ -555,7 +566,9 @@ export class Mail {
         // Full EML rebuild so attachment content is available for SMTP. draftFullSave bakes
         // ref cards into the Sent-folder EML and returns `mail` with the *clean* html
         // (for the frontend). Re-bake here so the outbound SMTP body matches the Sent copy.
-        const mail = await this.draftFullSave(mailToSend, (mailToSend as EmailDraft).id?.trim(), {});
+        // Normalise a blank id to undefined (as messageHandleDraft does): an empty string would
+        // survive `?? createUniqueMessageId()` and bake a `Message-ID: <@domain>` into the EML.
+        const mail = await this.draftFullSave(mailToSend, (mailToSend as EmailDraft).id?.trim() || undefined, {});
         const message = draftToOutboundMail(mail, this.home.user.email);
         const allRecipients = [...message.to, ...(message.cc ?? []), ...(message.bcc ?? [])];
 
@@ -657,6 +670,8 @@ export class Mail {
                         cc: meta.cc,
                         bcc: meta.bcc,
                         driveReferences: meta.driveReferences,
+                        inReplyTo: meta.inReplyTo,
+                        references: meta.references,
                     },
                     id,
                     {},

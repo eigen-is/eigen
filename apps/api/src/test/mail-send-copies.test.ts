@@ -241,4 +241,89 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         const raw = await rawRes.text();
         expect(raw).toMatch(/In-Reply-To/i);
     });
+
+    // Sends a mail directly (no prior PUT) so both the wire header and the Sent EML are minted
+    // in one shot — the id-less path that used to hand them two different ids.
+    async function sendMailBody(mail: Record<string, unknown>): Promise<Response> {
+        return authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mail }),
+        });
+    }
+
+    test('an RFC 2822 group in To is flattened into the delivered recipients on the send path', async () => {
+        startCapture();
+        const groupTo: AddressObject = {
+            value: [
+                {
+                    name: 'Team',
+                    group: [
+                        { name: 'Alpha', address: 'alpha@x.com' },
+                        { name: 'Beta', address: 'beta@x.com' },
+                    ],
+                },
+            ],
+            html: '',
+            text: 'Team: alpha@x.com, beta@x.com;',
+        };
+        const res = await sendMailBody({ subject: 'Group send', to: groupTo, text: 'hi team', html: '<p>hi team</p>' });
+        expect(res.status).toBe(200);
+        expect(sent.length).toBe(1);
+        expect(addresses(sent[0].to)).toEqual(['alpha@x.com', 'beta@x.com']);
+    });
+
+    test('an id-less send pins the wire Message-ID to the Sent EML header', async () => {
+        startCapture();
+        const res = await sendMailBody({
+            subject: 'No prior save',
+            to: addr('ext1@x.com'),
+            text: 'hi',
+            html: '<p>hi</p>',
+        });
+        expect(res.status).toBe(200);
+        const result = await assertJson<SentMailResult>(res);
+
+        expect(sent.length).toBe(1);
+        const wireId = sent[0].messageId;
+        expect(wireId).toBe(`<${result.id}@test.eigen.is>`);
+
+        const rawRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${result.id}/download`,
+        );
+        const raw = await rawRes.text();
+        const headerId = raw.match(/^Message-ID:\s*(<[^>]+>)/im)?.[1];
+        expect(headerId).toBe(wireId);
+    });
+
+    test('an empty-string draft id does not mint a <@domain> Message-ID', async () => {
+        startCapture();
+        const res = await sendMailBody({
+            id: '',
+            subject: 'Empty id',
+            to: addr('ext1@x.com'),
+            text: 'hi',
+            html: '<p>hi</p>',
+        });
+        expect(res.status).toBe(200);
+        expect(sent.length).toBe(1);
+        expect(sent[0].messageId).not.toBe('<@test.eigen.is>');
+        expect(sent[0].messageId).toMatch(/^<.+@test\.eigen\.is>$/);
+    });
+
+    test('a ref-only send with empty subject and body is allowed and carries the pills', async () => {
+        startCapture();
+        const res = await sendMailBody({
+            subject: '',
+            to: addr('bob@test.eigen.is'),
+            text: '',
+            html: '',
+            driveReferences: [makeRef('doc-refonly')],
+        });
+        expect(res.status).toBe(200);
+        expect(sent.length).toBe(1);
+        expect(sent[0].text).toContain('Release Notes');
+        expect(String(sent[0].html)).toContain('doc-refonly');
+    });
 });

@@ -504,4 +504,69 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(existsSync(join(homeDir, staleId))).toBe(false);
         expect(existsSync(join(homeDir, `${staleId}.json`))).toBe(false);
     });
+
+    test('threading headers survive a fast-save then a sidecar-driven full save', async () => {
+        const uploaded = await uploadDraftAttachment(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            new File(['thread-bytes'], 'thread.txt', { type: 'text/plain' }),
+        );
+
+        // Full save #1: seeds the EML + sidecar with the threading headers and one attachment.
+        const first = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                subject: 'Threaded reply',
+                to: {
+                    value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
+                    text: 'Bob <bob@test.eigen.is>',
+                    html: '',
+                },
+                text: 'v1',
+                html: '<p>v1</p>',
+                inReplyTo: '<parent@x.com>',
+                references: ['<r1@x.com>'],
+            },
+            { tempAttachmentIds: [uploaded.tempId] },
+        );
+        expect(first.attachments.length).toBe(1);
+
+        // Fast save: body-only edit, attachment kept — rewrites the sidecar from the request body.
+        await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                id: first.id,
+                subject: 'Threaded reply',
+                to: first.to,
+                text: 'v2',
+                html: '<p>v2</p>',
+                inReplyTo: '<parent@x.com>',
+                references: ['<r1@x.com>'],
+            },
+            { keepAttachmentIndexes: [0] },
+        );
+
+        // Staleness-style full save that rebuilds from the sidecar: the request omits the threading
+        // headers, so they can only reach the EML if the sidecar preserved them.
+        const forceRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mail: { id: first.id, subject: 'Threaded reply', to: first.to, text: 'v3', html: '<p>v3</p>' },
+                keepAttachmentIndexes: [0],
+                forceFullSave: true,
+            }),
+        });
+        expect(forceRes.status).toBe(200);
+
+        const rawRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${first.id}/download`,
+        );
+        const raw = await rawRes.text();
+        expect(raw).toMatch(/In-Reply-To:\s*<parent@x\.com>/i);
+        expect(raw).toContain('<r1@x.com>');
+    });
 });
