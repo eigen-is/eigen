@@ -1,5 +1,6 @@
 import type {
     DriveACLDelta,
+    DriveAccessCheckResult,
     DriveContainerType,
     DrivePath,
     DrivePathDetails,
@@ -292,6 +293,29 @@ export default class SharedDrive {
 
         // Delegate directly — Drive.inviteToChat would resolve the container again
         return this.sharedDrive.inviteToChat(mountId, chatId, email, this.user);
+    }
+
+    public async checkAccessForEmails(
+        mountId: string,
+        pathId: string,
+        emails: string[],
+    ): Promise<DriveAccessCheckResult> {
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canRead(mountId, pathId, this.user, memberships))) {
+            throw new ApiError(403, 'No read permission');
+        }
+
+        const path = await this.sharedDrive.getPath(mountId, pathId);
+        if (!path) throw new ApiError(404, 'Path not found');
+
+        // Same gate as updateACLDelta: write access, unless sharing is owner-restricted and the
+        // caller is not an (effective team) owner.
+        const canWrite = await this.canWrite(mountId, pathId, this.user, memberships);
+        const effectiveOwner = this.isEffectiveOwnerSync(path.ownerId, memberships);
+        const canShare = canWrite && !(path.sharingRestricted && !effectiveOwner);
+
+        const { recipients } = await this.sharedDrive.checkAccessForEmails(mountId, pathId, emails);
+        return { canShare, recipients };
     }
 
     public async updateACLDelta(

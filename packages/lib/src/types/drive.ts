@@ -387,3 +387,6 @@ export type EditorSaveResult = {
 };
 
 export type EffectiveMember = { email: string; read: boolean; write: boolean };
+
+export type DriveAccessRecipient = { email: string; hasReadAccess: boolean; needsGuestAdmission: boolean };
+export type DriveAccessCheckResult = { canShare: boolean; recipients: DriveAccessRecipient[] };

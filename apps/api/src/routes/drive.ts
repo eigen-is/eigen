@@ -1,4 +1,4 @@
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveAccessCheckResult, DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
@@ -13,6 +13,7 @@ import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
+import { MAX_SEND_RECIPIENTS } from '../lib/mail/recipients';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { SNAPSHOT_NAME_FORMAT } from '../lib/versioning/timestamp';
@@ -464,6 +465,24 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return await drive.getEffectiveMembers(params.mountId, params.pathId);
         },
         { auth: true },
+    )
+    // Per-email access probe for the mail-a-link share dialog. Guests can't share, so gate them out
+    // here; the sender's own address is stripped so the domain method stays a pure recipient probe.
+    .post(
+        '/drive/:ownerId/:mountId/path/:pathId/access-check',
+        async ({ params, body, user }): Promise<DriveAccessCheckResult> => {
+            requireNonGuest(user);
+            const self = user.email.toLowerCase();
+            const emails = body.emails.filter((email) => email.toLowerCase() !== self);
+            const drive = await getSharedDrive(params.ownerId, user);
+            return await drive.checkAccessForEmails(params.mountId, params.pathId, emails);
+        },
+        {
+            body: t.Object({
+                emails: t.Array(t.String({ maxLength: 254 }), { maxItems: MAX_SEND_RECIPIENTS }),
+            }),
+            auth: true,
+        },
     )
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/email-collaborators',

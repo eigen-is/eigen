@@ -14,6 +14,8 @@ import {
     DRIVE_EXTENSIONS,
     type DriveACL,
     type DriveACLDelta,
+    type DriveAccessCheckResult,
+    type DriveAccessRecipient,
     type DriveContainerType,
     type DrivePath,
     type DrivePathDetails,
@@ -38,16 +40,18 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom } from '../chat';
 import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
 import CollabDocument from '../collab/collabDocument';
+import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { extractText } from '../search/extract-text';
+import { getEntriesForTarget } from '../share';
 import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
 import type { User } from '../user';
-import { getMemberships, type Memberships } from '../user/';
+import { getMemberships, getUserByEmail, type Memberships } from '../user/';
 import { listVersions } from '../versioning/list';
 import { restoreContainer } from '../versioning/restore';
 import { saveVersion } from '../versioning/save';
@@ -921,6 +925,34 @@ export default class Drive {
         }
 
         return [...members.values()];
+    }
+
+    // Per-email access probe for the mail-a-link share dialog: for each recipient, does it already
+    // have read access to this path, and would it need admin admission to become a guest? Raw Drive
+    // is the owner, so canShare is always true — the SharedDrive wrapper narrows it for shared callers.
+    async checkAccessForEmails(mountId: string, pathId: string, emails: string[]): Promise<DriveAccessCheckResult> {
+        const members = await this.getEffectiveMembers(mountId, pathId); // throws 404 if the path is gone
+        const memberByEmail = new Map(members.map((m) => [m.email, m]));
+
+        const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
+        const ancestorPublic = crumbs.some(
+            (crumb) => crumb.visibility === 'public-read' || crumb.visibility === 'public-write',
+        );
+
+        const openSignup = getServerSettings().guests.openSignup;
+
+        const recipients: DriveAccessRecipient[] = [];
+        for (const rawEmail of emails) {
+            const email = rawEmail.toLowerCase();
+            // member.read is the honest read flag — a write-only (read:false) entry does NOT grant read.
+            const hasReadAccess = ancestorPublic || (memberByEmail.get(email)?.read ?? false);
+            const user = await getUserByEmail(email);
+            const registryEntries = await getEntriesForTarget(email);
+            const needsGuestAdmission = !user && !openSignup && registryEntries.length === 0;
+            recipients.push({ email, hasReadAccess, needsGuestAdmission });
+        }
+
+        return { canShare: true, recipients };
     }
 
     async emailCollaborators(

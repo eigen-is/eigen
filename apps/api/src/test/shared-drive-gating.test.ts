@@ -174,6 +174,11 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'read-gated',
             call: (sd) => sd.getEffectiveMembers(mountId, fileId),
         },
+        checkAccessForEmails: {
+            gate: 'denies',
+            reason: 'read-gated (403 unless the caller can read the path)',
+            call: (sd) => sd.checkAccessForEmails(mountId, fileId, ['probe@example.com']),
+        },
         openDatabase: {
             gate: 'denies',
             reason: 'read-gated (opening a container db reads it)',
