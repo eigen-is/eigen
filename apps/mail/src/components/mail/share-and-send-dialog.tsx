@@ -7,10 +7,11 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef } from 'react';
 
-// One grantable reference: the document and the To/Cc recipients that will receive read access.
+// One grantable reference: the document and the To/Cc recipients that will receive view access.
 export type ShareGrant = { id: string; name: string; recipients: string[] };
 
 type ShareAndSendDialogProps = {
@@ -29,7 +30,7 @@ function joinList(items: string[]): string {
     return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 }
 
-// Collapse long recipient lists to a count past five, matching the share dialog's density.
+// Collapse long recipient lists to a count past five so a large Cc set stays one short line.
 function formatRecipients(emails: string[]): string {
     return emails.length > 5 ? `${emails.length} recipients` : joinList(emails);
 }
@@ -48,22 +49,10 @@ export function ShareAndSendDialog({
     onShareAndSend,
     onSendWithoutAccess,
 }: ShareAndSendDialogProps) {
-    const [pending, setPending] = useState(false);
-
-    // Own the async lifecycle like ConfirmDialog: disable both actions in-flight, close only after
-    // the send fulfils, and stay open on rejection so the mutation's error toast reads with the retry.
-    const run = async (action: () => Promise<void>) => {
-        if (pending) return;
-        setPending(true);
-        try {
-            await action();
-            onOpenChange(false);
-        } catch {
-            // Stay open for retry; the mutation's onMutationError already surfaced the toast.
-        } finally {
-            setPending(false);
-        }
-    };
+    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
+    // Both footer send actions dispatch; focus the recommended primary so a keyboard user's reflexive
+    // Enter shares rather than sending without access (Radix would otherwise focus the first tabbable).
+    const primaryRef = useRef<HTMLButtonElement>(null);
 
     // All grantable documents share one recipient set → one sentence; otherwise a row per document.
     const sharedSet = grants.length > 0 && grants.every((g) => sameRecipients(g.recipients, grants[0].recipients));
@@ -71,11 +60,9 @@ export function ShareAndSendDialog({
     let description: ReactNode;
     let rows: ReactNode = null;
     if (sharedSet) {
-        description = `Give ${formatRecipients(grants[0].recipients)} read access to ${joinList(
-            grants.map((g) => g.name),
-        )}?`;
+        description = `Let ${formatRecipients(grants[0].recipients)} view ${joinList(grants.map((g) => g.name))}?`;
     } else {
-        description = 'Give recipients read access to the documents you are sharing?';
+        description = 'Let these recipients view the linked documents?';
         rows = (
             <div className="space-y-2 text-sm">
                 {grants.map((g) => (
@@ -89,10 +76,13 @@ export function ShareAndSendDialog({
     }
 
     return (
-        // While pending, ignore every close path (Escape/backdrop/X) so the retry surface survives;
-        // opening is always allowed.
-        <Dialog open={open} onOpenChange={(o) => (o || !pending) && onOpenChange(o)}>
-            <DialogContent>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+            <DialogContent
+                onOpenAutoFocus={(e) => {
+                    e.preventDefault();
+                    primaryRef.current?.focus();
+                }}
+            >
                 <DialogHeader>
                     <DialogTitle>Share before sending?</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
@@ -106,11 +96,14 @@ export function ShareAndSendDialog({
                     </div>
                 )}
                 <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+                        Cancel
+                    </Button>
                     <Button variant="outline" onClick={() => run(onSendWithoutAccess)} disabled={pending}>
                         Send without access
                     </Button>
-                    <Button onClick={() => run(onShareAndSend)} disabled={pending}>
-                        Share &amp; send
+                    <Button ref={primaryRef} onClick={() => run(onShareAndSend)} disabled={pending}>
+                        Share & send
                     </Button>
                 </DialogFooter>
             </DialogContent>

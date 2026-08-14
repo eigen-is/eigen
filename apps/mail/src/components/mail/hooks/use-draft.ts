@@ -426,9 +426,18 @@ export function useDraft({
         markEditorReady,
         isSendable: !!state.fields.to.trim(),
 
-        // Send path: flush any pending/in-flight save, disable further saves, and return a
-        // NewDraft with the server-assigned id spliced in (the dispatch from the first save may
-        // not have rendered yet — callers can't await React state propagation).
+        // Kill auto-save + unmount-save. Called the moment a send is actually dispatched, NOT at
+        // flush time — so abandoning a send-time dialog ("Share before sending?") returns to a draft
+        // that still auto-saves. A dispatched send navigates away and its own draftFullSave owns the
+        // write, so no unmount save should fire behind it.
+        disableSaves: () => {
+            disabledRef.current = true;
+        },
+
+        // Send path: flush any pending/in-flight save and return a NewDraft with the server-assigned
+        // id spliced in (the dispatch from the first save may not have rendered yet — callers can't
+        // await React state propagation). Saves stay enabled; the caller disables them via
+        // disableSaves() only once it commits to sending.
         flushAndGetDraft: async (): Promise<NewDraft> => {
             let result: EmailDraft | null | undefined = null;
             if (fingerprintFields(state.fields) !== state.lastSavedFingerprint) {
@@ -436,7 +445,6 @@ export function useDraft({
             } else if (inFlightRef.current) {
                 await inFlightRef.current.catch(() => {});
             }
-            disabledRef.current = true;
             // Read latest after the awaits — user may have edited during the in-flight save.
             const { state: s, user: u } = latestRef.current;
             const draft = fieldsToDraft(s.fields, u);

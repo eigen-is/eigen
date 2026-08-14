@@ -140,6 +140,7 @@ export function EmailDraft({
         removeDriveReference,
         isSendable,
         flushAndGetDraft,
+        disableSaves,
         markEditorReady,
     } = useDraft({
         email,
@@ -231,65 +232,86 @@ export function EmailDraft({
         applyInitialAttachments(initialDriveAttachments);
     }, [initialDriveAttachments]);
 
+    // Every actual send funnels through here: stop auto-saving (we're leaving this draft behind) then
+    // dispatch. Deferring disableSaves() to dispatch time is what keeps the draft editable when the
+    // user backs out of the "Share before sending?" dialog.
+    const dispatchSend = (mail: NewDraft, grantAccessRefIds?: string[]) => {
+        disableSaves();
+        return sendDraft(mail, grantAccessRefIds);
+    };
+
+    // Guards the two-network-hop gap between the send click and the dispatch, where the Send button
+    // isn't disabled yet (isSending flips only once the mutation runs) — a rapid double-click would
+    // otherwise start two sends. Reset in `finally`, including the dialog-open path.
+    const sendingRef = useRef(false);
+
     // Both send entry points funnel here (the Send button via handleSendEmail, and the no-subject
-    // ConfirmDialog). When the draft links documents, offer a read grant to recipients who need it
-    // before sending; otherwise send exactly as today.
+    // ConfirmDialog). When the draft links documents, offer recipients who need it view access before
+    // sending; otherwise send exactly as today.
     const sendWithFreshDraft = async () => {
-        const draft = await flushAndGetDraft();
-        const refs = draft.driveReferences ?? [];
-        if (refs.length === 0) {
-            await sendDraft(draft);
-            return;
-        }
-        const { all: emails, bcc } = collectRecipientEmails(draft, user?.email);
-        if (emails.length === 0) {
-            await sendDraft(draft);
-            return;
-        }
-
-        // Probe each reference for the current recipient set. A failed check (stale 404, network)
-        // makes that reference non-checkable — excluded from the dialog entirely, so the mail sends
-        // as-is with whatever access already exists (the link may be dead, exactly as today).
-        const checks = await Promise.all(
-            refs.map((ref) =>
-                checkPathAccess(ref.ownerId, ref.mountId, ref.id, emails)
-                    .then((result) => ({ ref, result }))
-                    .catch(() => null),
-            ),
-        );
-
-        const grants: ShareGrant[] = [];
-        const grantRefIds: string[] = [];
-        const notes: string[] = [];
-        let hasGrantableBcc = false;
-        for (const check of checks) {
-            if (!check) continue;
-            const { ref, result } = check;
-            const needing = result.recipients.filter((r) => !r.hasReadAccess || r.needsGuestAdmission);
-            if (needing.length === 0) continue;
-            if (ref.driveType === DRIVE_TYPE_CHAT) {
-                notes.push("Chat invitations aren't granted from mail");
-                continue;
+        if (sendingRef.current) return;
+        sendingRef.current = true;
+        try {
+            const draft = await flushAndGetDraft();
+            const refs = draft.driveReferences ?? [];
+            if (refs.length === 0) {
+                await dispatchSend(draft);
+                return;
             }
-            if (!result.canShare) {
-                notes.push(`You can't share ${ref.name} — recipients can request access`);
-                continue;
+            const { all: emails, bcc } = collectRecipientEmails(draft, user?.email);
+            if (emails.length === 0) {
+                await dispatchSend(draft);
+                return;
             }
-            // The backend only grants To/Cc recipients; a Bcc grant would leak the Bcc identity.
-            const needingToCc = needing.filter((r) => !bcc.has(r.email));
-            if (needingToCc.length === 0) continue;
-            grants.push({ id: ref.id, name: ref.name, recipients: needingToCc.map((r) => r.email) });
-            grantRefIds.push(ref.id);
-            if (needing.length > needingToCc.length) hasGrantableBcc = true;
-        }
-        if (hasGrantableBcc) notes.push('Bcc recipients are not granted access');
 
-        if (grants.length === 0) {
-            await sendDraft(draft);
-            return;
+            // Probe each reference for the current recipient set. A failed check (stale 404, network)
+            // makes that reference non-checkable — excluded from the dialog entirely, so the mail
+            // sends as-is with whatever access already exists (the link may be dead, exactly as today).
+            const checks = await Promise.all(
+                refs.map((ref) =>
+                    checkPathAccess(ref.ownerId, ref.mountId, ref.id, emails)
+                        .then((result) => ({ ref, result }))
+                        .catch(() => null),
+                ),
+            );
+
+            const grants: ShareGrant[] = [];
+            const grantRefIds: string[] = [];
+            const notes: string[] = [];
+            let hasShareableBcc = false;
+            for (const check of checks) {
+                if (!check) continue;
+                const { ref, result } = check;
+                const needing = result.recipients.filter((r) => !r.hasReadAccess || r.needsGuestAdmission);
+                if (needing.length === 0) continue;
+                if (ref.driveType === DRIVE_TYPE_CHAT) {
+                    notes.push("Chat invitations aren't granted from mail");
+                    continue;
+                }
+                if (!result.canShare) {
+                    notes.push(`You can't share ${ref.name}. Recipients can request access.`);
+                    continue;
+                }
+                // The backend only grants To/Cc recipients; a Bcc grant would leak the Bcc identity to
+                // every reader. Flag any shareable ref with a needing Bcc recipient — even one whose
+                // needing recipients are all Bcc — so the exclusion note shows once the dialog opens.
+                const needingToCc = needing.filter((r) => !bcc.has(r.email));
+                if (needing.length > needingToCc.length) hasShareableBcc = true;
+                if (needingToCc.length === 0) continue;
+                grants.push({ id: ref.id, name: ref.name, recipients: needingToCc.map((r) => r.email) });
+                grantRefIds.push(ref.id);
+            }
+            if (hasShareableBcc) notes.push('Bcc recipients are not granted access');
+
+            if (grants.length === 0) {
+                await dispatchSend(draft);
+                return;
+            }
+            // Dedupe collapses the repeated chat note when several chat references are linked.
+            setShareState({ draft, grantRefIds, grants, notes: [...new Set(notes)] });
+        } finally {
+            sendingRef.current = false;
         }
-        // Dedupe collapses the repeated chat note when several chat references are linked.
-        setShareState({ draft, grantRefIds, grants, notes: [...new Set(notes)] });
     };
 
     const handleSendEmail = async () => {
@@ -462,20 +484,24 @@ export function EmailDraft({
                 confirmText="Send"
                 onConfirm={sendWithFreshDraft}
             />
-            <ShareAndSendDialog
-                open={!!shareState}
-                onOpenChange={(open) => {
-                    if (!open) setShareState(null);
-                }}
-                grants={shareState?.grants ?? []}
-                notes={shareState?.notes ?? []}
-                onShareAndSend={async () => {
-                    if (shareState) await sendDraft(shareState.draft, shareState.grantRefIds);
-                }}
-                onSendWithoutAccess={async () => {
-                    if (shareState) await sendDraft(shareState.draft);
-                }}
-            />
+            {shareState && (
+                // Conditionally mounted so the copy can't flash to empty during an exit animation —
+                // the whole dialog leaves the tree the instant it closes (drive-access-dialog idiom).
+                <ShareAndSendDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setShareState(null);
+                    }}
+                    grants={shareState.grants}
+                    notes={shareState.notes}
+                    onShareAndSend={async () => {
+                        await dispatchSend(shareState.draft, shareState.grantRefIds);
+                    }}
+                    onSendWithoutAccess={async () => {
+                        await dispatchSend(shareState.draft);
+                    }}
+                />
+            )}
         </div>
     );
 }
