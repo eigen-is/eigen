@@ -16,8 +16,10 @@ function escapeICalParamValue(s: string): string {
     return s.replace(/"/g, "'").replace(/[\r\n]/g, '');
 }
 
-// RFC 5545 §3.1 — fold lines longer than 75 octets with CRLF + single space
-function foldLine(line: string): string {
+// RFC 5545 §3.1 / RFC 2425 §5.8.1 — fold lines longer than 75 octets with CRLF + single space.
+// Shared with the vCard serializer (carddav/vcard-ast.ts): the algorithm is identical across both
+// directory formats, so it lives here as the one source of truth.
+export function foldLine(line: string): string {
     const bytes = new TextEncoder().encode(line);
     if (bytes.length <= 75) return line;
 
