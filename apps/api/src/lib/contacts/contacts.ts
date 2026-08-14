@@ -6,7 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import type { ParsedCard, ParsedCardPhoto } from '../carddav/vcard-parse';
-import { parseVCard } from '../carddav/vcard-parse';
+import { normalizeBirthday, parseVCard } from '../carddav/vcard-parse';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
 import { getServerSettings } from '../config/server-settings';
 import { DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
@@ -19,6 +19,8 @@ import { generateImagePreview } from '../shared/thumbnails';
 import type { User } from '../user';
 import { getOrgOwner } from '../user/';
 import {
+    avatarCacheName,
+    avatarUrl,
     CARDS_DIR,
     cardPath,
     cleanupTempCardFiles,
@@ -47,18 +49,25 @@ type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag' | 'crea
 
 // The index-stored projection: the owned properties minus what lives in dedicated columns (names/eigenId)
 // or the junction (labels). `avatar` is the cache URL only — inline photo bytes never enter the index.
+// Optionals collapse to '' / [] so this emits the exact same canonical shape prepareCardRow does — the
+// update seam's `avatarChanged` diff (and any projection compare) then can't misfire on `undefined !== ''`.
 function toData(contact: Omit<Contact, 'id'>): (typeof schema.contacts.$inferInsert)['data'] {
     return {
         email: contact.email,
         phone: contact.phone,
-        company: contact.company,
-        jobTitle: contact.jobTitle,
-        address: contact.address,
-        birthday: contact.birthday,
-        notes: contact.notes,
-        avatar: contact.avatar,
+        company: contact.company ?? '',
+        jobTitle: contact.jobTitle ?? '',
+        address: contact.address ?? [],
+        birthday: contact.birthday ?? '',
+        notes: contact.notes ?? '',
+        avatar: contact.avatar ?? '',
     };
 }
+
+// A freshly-staged avatar has no card referencing it yet — the user is still filling in the form. Give an
+// upload an hour before the unreferenced-avatar sweep may reclaim it, so an in-progress edit's staged webp
+// isn't deleted out from under the save.
+const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;
 
 // The v2 UNIQUE index on labels(nameKey) closes duplicate/case-variant label names. bun:sqlite names the
 // column in the violation message ("UNIQUE constraint failed: labels.nameKey"); match on it so an unrelated
@@ -142,24 +151,32 @@ export class Contacts {
         }
 
         const settings = getServerSettings();
-        if (settings.onboarding.autoAddOwnerContact) {
+        const bookRow = this.db.select().from(schema.book).where(eq(schema.book.id, 1)).get();
+        if (settings.onboarding.autoAddOwnerContact && bookRow && !bookRow.ownerSeeded) {
             const owner = await getOrgOwner();
-            if (owner && owner.id !== this.home.user.id && !this.hasContactWithEmail(owner.email)) {
-                const [firstName, ...rest] = (owner.name || '').split(' ');
-                await this.addContact({
-                    eigenId: owner.id,
-                    firstName: firstName || '',
-                    lastName: rest.join(' '),
-                    email: [owner.email],
-                    phone: [],
-                    company: '',
-                    jobTitle: '',
-                    address: [],
-                    birthday: '',
-                    notes: '',
-                    avatar: '',
-                    labels: [],
-                });
+            if (owner) {
+                if (owner.id !== this.home.user.id && !this.hasContactWithEmail(owner.email)) {
+                    const [firstName, ...rest] = (owner.name || '').split(' ');
+                    await this.addContact({
+                        eigenId: owner.id,
+                        firstName: firstName || '',
+                        lastName: rest.join(' '),
+                        email: [owner.email],
+                        phone: [],
+                        company: '',
+                        jobTitle: '',
+                        address: [],
+                        birthday: '',
+                        notes: '',
+                        avatar: '',
+                        labels: [],
+                    });
+                }
+                // Latch the one-shot seed once a real owner has been considered (added, already present, or
+                // self): a later deliberate delete of the owner contact then stays deleted instead of
+                // resurrecting on every init. Left unlatched while no owner exists so a later-configured owner
+                // can still seed once.
+                this.db.update(schema.book).set({ ownerSeeded: 1 }).where(eq(schema.book.id, 1)).run();
             }
         }
 
@@ -260,7 +277,9 @@ export class Contacts {
             this.syncCardLabels(tx, opts.row.id, opts.categories, createdLabelIds);
 
             if (opts.tombstoneCleared) {
-                tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uri, opts.row.uri)).run();
+                // Clear by the folded key so a re-created card at a case-variant uri still clears its own
+                // tombstone rather than leaving a stale removal in the sync log.
+                tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, opts.row.uriKey)).run();
             }
         });
 
@@ -278,44 +297,24 @@ export class Contacts {
                 .from(schema.contacts)
                 .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
                 .get();
-            const file = this.storage.file(cardPath(uri));
-            if (await file.exists()) {
-                const bytes = new Uint8Array(await file.arrayBuffer());
-                const stat = await this.storage.stat(cardPath(uri));
-                const parsed = this.parseCardFile(bytes);
-                this.commitCard({
-                    row: {
-                        id: existing?.id ?? randomUUID(),
-                        uri,
-                        uriKey: uriKeyOf(uri),
-                        uid: parsed.uid ?? existing?.uid ?? randomUUID(),
-                        firstName: parsed.firstName.trim(),
-                        lastName: parsed.lastName.trim(),
-                        eigenId: existing?.eigenId ?? '',
-                        isGroup: parsed.isGroup,
-                        data: {
-                            email: parsed.email,
-                            phone: parsed.phone,
-                            company: parsed.company,
-                            jobTitle: parsed.jobTitle,
-                            address: parsed.address,
-                            birthday: parsed.birthday,
-                            notes: parsed.notes,
-                            avatar: existing?.data?.avatar,
-                        },
-                        etag: computeCardEtag(bytes),
-                        mtime: Math.round(stat.mtimeMs),
-                        size: stat.size,
-                    },
-                    categories: parsed.categories,
-                });
-                this.cardsBytes += stat.size - (existing?.size ?? 0);
+            if (await this.storage.exists(cardPath(uri))) {
+                // Re-index through the shared prepare path so the healed row gets the canonical projection
+                // shape and a regenerated photo cache. prepareCardRow leaves eigenId '' for the ranked pass;
+                // here we preserve an incumbent's self-link and let a strong X-EIGEN-ID file take a still-free
+                // slot, but never demote the current self row.
+                const prep = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
+                prep.row.eigenId =
+                    existing?.eigenId === this.home.user.id
+                        ? this.home.user.id
+                        : this.resolveSelfLink(prep.parsed.eigenId ?? undefined);
+                this.commitCard({ row: prep.row, categories: prep.categories });
+                this.cardsBytes += prep.row.size - (existing?.size ?? 0);
             } else if (existing) {
                 this.db.transaction((tx) => {
                     const ctag = this.bumpCtag(tx);
                     tx.delete(schema.contacts).where(eq(schema.contacts.id, existing.id)).run();
                     tx.insert(schema.contactTombstones)
-                        .values({ uri, deletedAtCtag: ctag })
+                        .values({ uri, uriKey: uriKeyOf(uri), deletedAtCtag: ctag })
                         .onConflictDoUpdate({ target: schema.contactTombstones.uri, set: { deletedAtCtag: ctag } })
                         .run();
                 });
@@ -363,8 +362,8 @@ export class Contacts {
         // whose hashed cache file is missing (out-of-band drift / a rebuild after a cache wipe).
         let avatar = '';
         if (parsed.photo?.kind === 'inline') {
-            const cacheName = `${id}-${computeCardEtag(parsed.photo.bytes).slice(0, 8)}.webp`;
-            avatar = `contacts/${this.home.user.id}/avatar/${cacheName}`;
+            const cacheName = avatarCacheName(id, parsed.photo.bytes);
+            avatar = avatarUrl(this.home.user.id, cacheName);
             if (!(await this.storage.exists(`${PATHS.CONTACTS.AVATARS}/${cacheName}`))) {
                 avatar = await this.cacheCardPhoto(id, parsed.photo);
             }
@@ -437,6 +436,22 @@ export class Contacts {
         winner.row.size = stat.size;
     }
 
+    // Drop prepared rows whose uid another card in this pass already claims — the idx_contacts_uid UNIQUE
+    // would otherwise throw inside the write transaction and brick the whole pass (spec § 1). Candidates
+    // arrive uri-sorted so the earliest uri wins; `claimed` seeds the uids of rows that survive untouched.
+    private dedupeByUid<T extends { row: CardRowInput }>(candidates: T[], claimed: Set<string>): T[] {
+        const kept: T[] = [];
+        for (const c of candidates) {
+            if (claimed.has(c.row.uid)) {
+                console.warn(`contacts: skipping ${c.row.uri} — UID ${c.row.uid} already claimed by another card`);
+                continue;
+            }
+            claimed.add(c.row.uid);
+            kept.push(c);
+        }
+        return kept;
+    }
+
     // Stat-only reconcile: list cards/, compare (mtime,size) to the index, and re-read only what drifted — the
     // clean case (always, in practice) is one listing plus stats, zero file reads. New/drifted cards are
     // re-indexed and vanished rows tombstoned under a single ctag bump; a fully clean pass parses nothing and
@@ -445,11 +460,28 @@ export class Contacts {
     public async reconcileIndex(): Promise<void> {
         return this.writeLock.run(async () => {
             const present = new Map<string, { uri: string; mtime: number; size: number }>();
-            for (const name of await this.storage.list(CARDS_DIR)) {
+            // Sort the listing so a uriKey collision (case/normalization twins) resolves to the same winner
+            // every pass — first-by-sort — and stat failures/non-conforming names never brick the pass.
+            for (const name of (await this.storage.list(CARDS_DIR)).sort()) {
                 const uri = sanitizeCardUri(name);
-                if (!uri) continue; // a non-conforming leftover cleanupTempCardFiles missed — never trust the name
-                const stat = await this.storage.stat(cardPath(uri));
-                present.set(uriKeyOf(uri), { uri, mtime: Math.round(stat.mtimeMs), size: stat.size });
+                if (!uri) {
+                    // A stray non-conforming entry (README, csv, mixed-case .VCF) cleanupTempCardFiles leaves on
+                    // disk deliberately — log it, never index it, never trust the raw name.
+                    console.warn(`contacts: ignoring non-conforming entry ${name} in cards/`);
+                    continue;
+                }
+                const key = uriKeyOf(uri);
+                if (present.has(key)) {
+                    console.warn(`contacts: ignoring case-variant duplicate ${name} in cards/`);
+                    continue;
+                }
+                try {
+                    const stat = await this.storage.stat(cardPath(uri));
+                    present.set(key, { uri, mtime: Math.round(stat.mtimeMs), size: stat.size });
+                } catch (e) {
+                    // File vanished between list and stat — skip it; the next pass catches up.
+                    console.warn(`contacts: skipping ${uri} — could not stat card file: ${e}`);
+                }
             }
 
             const rows = this.db.select().from(schema.contacts).all();
@@ -467,9 +499,12 @@ export class Contacts {
             if (reindex.length === 0 && vanished.length === 0) return; // clean pass: zero parses, zero bump
 
             reindex.sort((a, b) => (a.uri < b.uri ? -1 : 1)); // stable order for the self-link tie-break
+            const reindexKeys = new Set(reindex.map((r) => uriKeyOf(r.uri)));
 
-            // Phase 1: parse + prepare every candidate without touching the self-link, ranking each claim.
-            const prepared: {
+            // Phase 1: parse + prepare every candidate without touching the self-link, ranking each claim. A
+            // card that can't be read (garbage vCard, or one that vanished mid-pass) is skipped-and-logged
+            // rather than failing the whole pass (spec § 1).
+            const candidates: {
                 row: CardRowInput;
                 categories: string[];
                 parsed: ParsedCard;
@@ -477,15 +512,28 @@ export class Contacts {
                 rank: 0 | 1 | 2 | 3;
             }[] = [];
             for (const { uri, existing } of reindex) {
-                const p = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
-                prepared.push({ ...p, isNew: !existing, rank: this.selfClaimRank(p.parsed, existing?.eigenId) });
+                try {
+                    const p = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
+                    candidates.push({ ...p, isNew: !existing, rank: this.selfClaimRank(p.parsed, existing?.eigenId) });
+                } catch (e) {
+                    console.warn(`contacts: skipping unreadable card ${uri}: ${e}`);
+                }
             }
 
-            // Phase 2: choose the one self-link winner. A surviving self row this pass is NOT re-indexing holds
-            // the slot outright, so no candidate claims it; otherwise the highest-ranked candidate wins and only
-            // an email-only winner has its file rewritten.
-            const reindexKeys = new Set(reindex.map((r) => uriKeyOf(r.uri)));
-            const survivingSelf = rows.some((r) => r.eigenId === this.home.user.id && !reindexKeys.has(r.uriKey));
+            // Rows that stay in the table untouched keep their uid; seed the collision guard with them so a
+            // drifted/new card carrying a duplicate UID loses to the incumbent instead of tripping the UNIQUE
+            // index inside the transaction.
+            const claimedUids = new Set(
+                rows.filter((r) => present.has(r.uriKey) && !reindexKeys.has(r.uriKey)).map((r) => r.uid),
+            );
+            const prepared = this.dedupeByUid(candidates, claimedUids);
+
+            // Phase 2: choose the one self-link winner. A self row that survives this pass untouched (file
+            // present AND not re-indexing) holds the slot outright; the present() guard stops a self row whose
+            // file vanished — tombstoned this same pass — from blocking a twin's claim.
+            const survivingSelf = rows.some(
+                (r) => r.eigenId === this.home.user.id && !reindexKeys.has(r.uriKey) && present.has(r.uriKey),
+            );
             if (!survivingSelf) {
                 const winner = this.pickSelfWinner(prepared);
                 if (winner) await this.applySelfLink(winner);
@@ -494,6 +542,16 @@ export class Contacts {
             const createdLabelIds: string[] = [];
             this.db.transaction((tx) => {
                 const ctag = this.bumpCtag(tx);
+                // Delete vanished rows before inserting prepared ones so a card renamed within this pass (old
+                // uri gone, new uri carrying the same UID) can't collide with the row it replaces on the uid
+                // UNIQUE index.
+                for (const r of vanished) {
+                    tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
+                    tx.insert(schema.contactTombstones)
+                        .values({ uri: r.uri, uriKey: r.uriKey, deletedAtCtag: ctag })
+                        .onConflictDoUpdate({ target: schema.contactTombstones.uri, set: { deletedAtCtag: ctag } })
+                        .run();
+                }
                 for (const { row } of prepared) {
                     tx.insert(schema.contacts)
                         .values({ ...row, cardCtag: ctag })
@@ -516,16 +574,10 @@ export class Contacts {
                 }
                 for (const { row, categories } of prepared)
                     this.syncCardLabels(tx, row.id, categories, createdLabelIds);
-                for (const r of vanished) {
-                    tx.delete(schema.contacts).where(eq(schema.contacts.id, r.id)).run();
-                    tx.insert(schema.contactTombstones)
-                        .values({ uri: r.uri, deletedAtCtag: ctag })
-                        .onConflictDoUpdate({ target: schema.contactTombstones.uri, set: { deletedAtCtag: ctag } })
-                        .run();
-                }
             });
 
-            // cardsBytes is authoritative from the pass's final sizes (post-rewrite for any rematched card).
+            // cardsBytes is authoritative from the pass's final sizes (post-rewrite for any rematched card; a
+            // skipped card keeps its present size — its file is still on disk).
             const finalSize = new Map<string, number>();
             for (const [key, info] of present) finalSize.set(key, info.size);
             for (const { row } of prepared) finalSize.set(row.uriKey, row.size);
@@ -558,16 +610,29 @@ export class Contacts {
             const newCtag = Math.max(book?.ctag ?? 0, 0) + 1;
             const newSyncGen = (book?.syncGen ?? 1) + 1;
 
+            // Sort the listing so a uriKey collision resolves first-by-sort every pass, and warn-skip both a
+            // non-conforming name and a case-variant duplicate rather than trusting or deleting it.
             const names: string[] = [];
-            for (const name of await this.storage.list(CARDS_DIR)) {
+            const seenKeys = new Set<string>();
+            for (const name of (await this.storage.list(CARDS_DIR)).sort()) {
                 const uri = sanitizeCardUri(name);
-                if (uri) names.push(uri);
+                if (!uri) {
+                    console.warn(`contacts: ignoring non-conforming entry ${name} in cards/`);
+                    continue;
+                }
+                const key = uriKeyOf(uri);
+                if (seenKeys.has(key)) {
+                    console.warn(`contacts: ignoring case-variant duplicate ${name} in cards/`);
+                    continue;
+                }
+                seenKeys.add(key);
+                names.push(uri); // already in sorted order — stable self-link tie-break
             }
-            names.sort(); // stable order for the self-link tie-break
 
             // Phase 1: parse + prepare every card without touching the self-link, ranking each claim against the
-            // pre-clear index so the incumbent self row still outranks an email-only twin that sorts earlier.
-            const prepared: {
+            // pre-clear index so the incumbent self row still outranks an email-only twin that sorts earlier. An
+            // unreadable card is skipped-and-logged rather than failing the whole rebuild (spec § 1).
+            const candidates: {
                 row: CardRowInput;
                 categories: string[];
                 parsed: ParsedCard;
@@ -575,9 +640,16 @@ export class Contacts {
             }[] = [];
             for (const uri of names) {
                 const existing = existingByKey.get(uriKeyOf(uri));
-                const p = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
-                prepared.push({ ...p, rank: this.selfClaimRank(p.parsed, existing?.eigenId) });
+                try {
+                    const p = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
+                    candidates.push({ ...p, rank: this.selfClaimRank(p.parsed, existing?.eigenId) });
+                } catch (e) {
+                    console.warn(`contacts: skipping unreadable card ${uri}: ${e}`);
+                }
             }
+            // The whole index is cleared and rebuilt below, so nothing survives to seed the collision guard —
+            // two files sharing a UID resolve purely first-by-uri.
+            const prepared = this.dedupeByUid(candidates, new Set());
 
             // Phase 2: the highest-ranked card claims the single self-link; only an email-only winner is rewritten.
             const winner = this.pickSelfWinner(prepared);
@@ -633,10 +705,19 @@ export class Contacts {
         return this.writeLock.run(async () => {
             await this.drainDirty();
 
+            // Normalize the birthday to a bare date at the seam so every writer (createVCard + toData) agrees
+            // and an app-set ISO datetime reaches the file as a plain BDAY (spec files-as-truth).
+            contact.birthday = normalizeBirthday(contact.birthday ?? '');
+
             const id = randomUUID();
             const uri = `${id}.vcf`;
             const categories = this.labelNamesFor(contact.labels ?? []);
             const photo = await this.resolveStagedAvatar(contact.avatar);
+            // A non-empty avatar whose staged file has vanished must not be silently dropped — fail the create
+            // so the caller re-uploads, mirroring updateContact's guard.
+            if (contact.avatar && !photo) {
+                throw new ApiError(400, 'Avatar upload could not be found — please upload it again');
+            }
 
             const bytes = new TextEncoder().encode(
                 createVCard(
@@ -696,6 +777,10 @@ export class Contacts {
     public async updateContact(id: string, contact: Omit<Contact, 'id'>, expectedEtag?: string): Promise<void> {
         return this.writeLock.run(async () => {
             await this.drainDirty();
+
+            // Normalize the birthday at the seam (see addContact) so the merge diff and toData see the same
+            // bare date — echoing a phone's BDAY is then a no-op, and an app edit reaches the file.
+            contact.birthday = normalizeBirthday(contact.birthday ?? '');
 
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
             if (!row) throw new ApiError(404, 'Contact not found');
@@ -811,7 +896,7 @@ export class Contacts {
                     const ctag = this.bumpCtag(tx);
                     tx.delete(schema.contacts).where(eq(schema.contacts.id, id)).run();
                     tx.insert(schema.contactTombstones)
-                        .values({ uri: row.uri, deletedAtCtag: ctag })
+                        .values({ uri: row.uri, uriKey: row.uriKey, deletedAtCtag: ctag })
                         .onConflictDoUpdate({ target: schema.contactTombstones.uri, set: { deletedAtCtag: ctag } })
                         .run();
                 });
@@ -1022,7 +1107,7 @@ export class Contacts {
         await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, result.data);
         this.avatarsBytes += result.data.byteLength;
 
-        return `contacts/${this.home.user.id}/avatar/${fileName}`;
+        return avatarUrl(this.home.user.id, fileName);
     }
 
     public async downloadAvatar(filename: string) {
@@ -1068,22 +1153,32 @@ export class Contacts {
             { maxSize: 512, quality: 80, fit: 'cover' },
         );
         if (!result) return '';
-        const name = `${contactId}-${computeCardEtag(photo.bytes).slice(0, 8)}.webp`;
+        const name = avatarCacheName(contactId, photo.bytes);
         await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${name}`, result.data);
         this.avatarsBytes += result.data.byteLength;
-        return `contacts/${this.home.user.id}/avatar/${name}`;
+        return avatarUrl(this.home.user.id, name);
     }
 
     private async cleanupAvatarImages() {
         await this.storage.mkdir('avatars');
         const files = await this.storage.list('avatars');
-        const contacts = await this.getContacts();
-        for (const file of files) {
-            const contact = contacts.find((c) => c.avatar?.includes(file));
-            if (!contact) {
-                await this.storage.delete(`avatars/${file}`);
-            }
+
+        // Build the referenced-filename set once, then sweep — O(avatars + contacts), not O(avatars × contacts).
+        const referenced = new Set<string>();
+        for (const c of await this.getContacts()) {
+            if (c.avatar) referenced.add(c.avatar.split('/').pop()!);
         }
+
+        const now = Date.now();
+        for (const file of files) {
+            if (referenced.has(file)) continue;
+            // A freshly-staged upload has no card pointing at it yet; leave it inside the grace window so an
+            // in-progress edit's avatar isn't swept out from under the save.
+            const stat = await this.storage.stat(`avatars/${file}`);
+            if (now - stat.mtimeMs < AVATAR_STAGE_GRACE_MS) continue;
+            await this.storage.delete(`avatars/${file}`);
+        }
+
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
     }
 

@@ -280,6 +280,34 @@ describe('self-link ranking', () => {
         expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(syncGenBefore + 1);
     });
 
+    test('a deleted self card lets an owner-email twin claim the slot without duplicating me', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+        const selfUri = uriOf(db, me.id);
+
+        // Plant an owner-email twin, then delete the self card's file out-of-band so the self row is tombstoned
+        // this same pass. The twin must be free to claim the slot — the self row being removed cannot count as
+        // a "surviving self" that blocks it.
+        writeFileSync(cardPathOf(dir, 'twin.vcf'), emailTwin(user.email));
+        rmSync(cardPathOf(dir, selfUri));
+
+        await contacts.init();
+
+        const selfRows = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.eigenId, user.id))
+            .all();
+        expect(selfRows.length).toBe(1);
+        const twin = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, uriKeyOf('twin.vcf')))
+            .get()!;
+        expect(twin.eigenId).toBe(user.id);
+        expect(readFileSync(cardPathOf(dir, 'twin.vcf'), 'utf8')).toContain(`X-EIGEN-ID:${user.id}`);
+    });
+
     test('a drifting self card outranks an earlier forged X-EIGEN-ID card, whose file keeps it verbatim', async () => {
         const { contacts, db, dir, user } = await makeContacts();
         const me = (await contacts.getMe())!;
@@ -384,6 +412,106 @@ describe('rebuildIndex', () => {
         const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
         expect(after.etag).not.toBe(before.etag);
         expect(db.select().from(contactsSchema.book).get()!.syncGen).toBe(syncGenBefore + 1);
+    });
+});
+
+// Init must survive a hostile cards/ directory: a garbage file, a file that vanishes mid-pass, or two files
+// claiming one UID can never brick the whole account (spec § 1 — one bad card is skipped-and-logged, not fatal).
+describe('per-file fault tolerance', () => {
+    const captureWarnings = async (fn: () => Promise<void>): Promise<string[]> => {
+        const warnings: string[] = [];
+        const origWarn = console.warn;
+        console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+        try {
+            await fn();
+        } finally {
+            console.warn = origWarn;
+        }
+        return warnings;
+    };
+
+    test('a garbage .vcf is skipped and logged while a valid card still indexes', async () => {
+        const { contacts, dir } = await makeContacts();
+        mkdirSync(cardsDirOf(dir), { recursive: true });
+        writeFileSync(cardPathOf(dir, 'garbage.vcf'), 'this is not a vcard at all\r\n');
+        const goodId = randomUUID();
+        writeFileSync(
+            cardPathOf(dir, 'good.vcf'),
+            `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${goodId}\r\nN:Real;Ada;;;\r\nFN:Ada Real\r\nEMAIL:ada2@example.com\r\nEND:VCARD\r\n`,
+        );
+
+        const warnings = await captureWarnings(() => contacts.init());
+
+        expect((await contacts.getContacts()).some((c) => c.firstName === 'Ada' && c.lastName === 'Real')).toBe(true);
+        // The garbage file is invisible-but-logged and left on disk, not deleted.
+        expect(existsSync(cardPathOf(dir, 'garbage.vcf'))).toBe(true);
+        expect(warnings.some((w) => w.includes('garbage.vcf'))).toBe(true);
+    });
+
+    test('two card files sharing a UID index the first by uri and skip the second', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Twin', email: ['twin@example.com'] }));
+        const uri = uriOf(db, id);
+        const uid = parseVCard(readFileSync(cardPathOf(dir, uri), 'utf8')).uid!;
+
+        // A byte-for-byte copy at a lexically-later name → a second file carrying the same UID.
+        const twinUri = `zzz-${uri}`;
+        writeFileSync(cardPathOf(dir, twinUri), readFileSync(cardPathOf(dir, uri), 'utf8'));
+
+        const warnings = await captureWarnings(() => contacts.init());
+
+        const withUid = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.uid, uid)).all();
+        expect(withUid.length).toBe(1);
+        expect(withUid[0].uriKey).toBe(uriKeyOf(uri));
+        // The loser is never indexed and its file is untouched.
+        expect(existsSync(cardPathOf(dir, twinUri))).toBe(true);
+        expect(warnings.some((w) => w.toUpperCase().includes('UID'))).toBe(true);
+    });
+});
+
+// The FE sends birthdays as ISO datetimes ('1990-01-01T00:00:00.000Z'); the seam normalizes to the date part
+// so files stay the source of truth — an app edit reaches the file, and echoing a phone's BDAY is a no-op.
+describe('birthday normalization at the seam', () => {
+    test('addContact normalizes an ISO-datetime birthday to a date BDAY and round-trips it', async () => {
+        const { contacts, dir } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Born', email: ['born@example.com'], birthday: '1990-01-01T00:00:00.000Z' }),
+        );
+
+        expect(readFileSync(cardPathOf(dir, `${id}.vcf`), 'utf8')).toContain('BDAY:1990-01-01');
+        expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
+        await contacts.rebuildIndex();
+        expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
+    });
+
+    test('updateContact echoing a phone-synced BDAY leaves the BDAY line untouched', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const cardId = randomUUID();
+        mkdirSync(cardsDirOf(dir), { recursive: true });
+        writeFileSync(
+            cardPathOf(dir, 'phone.vcf'),
+            `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${cardId}\r\nN:Sync;Phone;;;\r\nFN:Phone Sync\r\nEMAIL:phone@example.com\r\nBDAY:19731003\r\nEND:VCARD\r\n`,
+        );
+        await contacts.init();
+        const row = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, uriKeyOf('phone.vcf')))
+            .get()!;
+        expect((await contacts.getContactById(row.id))?.birthday).toBe('1973-10-03');
+
+        // The app echoes the projection back as an ISO datetime (the edit form's shape); same calendar date, so
+        // the phone's compact BDAY must survive byte-for-byte.
+        await contacts.updateContact(row.id, {
+            firstName: 'Phone',
+            lastName: 'Sync',
+            email: ['phone@example.com'],
+            phone: [],
+            birthday: '1973-10-03T00:00:00.000Z',
+            labels: [],
+        });
+
+        expect(readFileSync(cardPathOf(dir, 'phone.vcf'), 'utf8')).toContain('BDAY:19731003');
     });
 });
 

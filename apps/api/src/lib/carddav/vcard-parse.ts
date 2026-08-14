@@ -85,12 +85,16 @@ function parsePhoto(line: VCardLine): ParsedCardPhoto | null {
     return { kind: 'uri', uri: line.value };
 }
 
-// BDAY normalized to YYYY-MM-DD; '' for the 4.0 year-less '--MMDD' form or anything unparseable.
-function normalizeBirthday(value: string): string {
+// BDAY normalized to YYYY-MM-DD; '' for the 4.0 year-less '--MMDD' form or anything unparseable. Also the
+// seam the Contacts writers run incoming birthdays through, so it accepts the app's ISO datetime
+// ('1990-01-01T00:00:00.000Z') and keeps just its date prefix when the whole value is a valid ISO datetime.
+export function normalizeBirthday(value: string): string {
     const v = value.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
     const compact = v.match(/^(\d{4})(\d{2})(\d{2})$/);
-    return compact ? `${compact[1]}-${compact[2]}-${compact[3]}` : '';
+    if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(v) && !Number.isNaN(Date.parse(v))) return v.slice(0, 10);
+    return '';
 }
 
 export function parseVCard(text: string): ParsedCard {

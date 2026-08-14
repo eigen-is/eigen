@@ -155,6 +155,50 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect((await contacts.getContactById(id))?.avatar).toBe('');
     });
 
+    test('a create whose staged avatar is gone fails before writing any card', async () => {
+        const { contacts, user, dir } = await makeContacts();
+        const cardsDir = join(dir, 'eigen.contacts', 'cards');
+        const before = existsSync(cardsDir) ? readdirSync(cardsDir).length : 0;
+
+        await expect(
+            contacts.addContact(validContact({ firstName: 'NoPic', avatar: `contacts/${user.id}/avatar/gone.webp` })),
+        ).rejects.toThrow('Avatar upload could not be found');
+
+        // The guard fires before writeCardFile — no new card landed on disk, and nothing was indexed.
+        const after = existsSync(cardsDir) ? readdirSync(cardsDir).length : 0;
+        expect(after).toBe(before);
+        expect((await contacts.getContacts()).some((c) => c.firstName === 'NoPic')).toBe(false);
+    });
+
+    test('a failed create with an inline photo heals on drain with its avatar cache', async () => {
+        const { contacts, dir } = await makeContacts();
+        const staged = await stageAvatar(contacts);
+
+        // Make the first commit throw after the card file and its photo cache are already written.
+        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
+        const origCommit = priv.commitCard;
+        let thrown = false;
+        priv.commitCard = function (this: Contacts, o: unknown) {
+            if (!thrown) {
+                thrown = true;
+                throw new Error('commit boom');
+            }
+            return origCommit.call(this, o);
+        };
+        await expect(
+            contacts.addContact(validContact({ firstName: 'Healed', lastName: 'Photo', avatar: staged })),
+        ).rejects.toThrow('commit boom');
+        priv.commitCard = origCommit;
+
+        // The next read drains the orphan through the shared prepare path: the healed row carries the derived
+        // avatar URL and its hash-named cache file exists on disk.
+        const healed = (await contacts.getContacts()).find((c) => c.firstName === 'Healed')!;
+        expect(healed).toBeTruthy();
+        expect(healed.avatar).toContain(`/avatar/${healed.id}-`);
+        const cacheName = healed.avatar!.split('/').pop()!;
+        expect(existsSync(join(avatarsDirOf(dir), cacheName))).toBe(true);
+    });
+
     test('cacheCardPhoto with a uri-kind photo returns empty and writes nothing', async () => {
         const { contacts, dir } = await makeContacts();
         const priv = contacts as unknown as {
