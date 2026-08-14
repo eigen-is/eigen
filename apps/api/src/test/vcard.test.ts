@@ -83,6 +83,40 @@ describe('vCard content-line AST', () => {
         expect(unescapeText(escapeText(raw))).toBe(raw);
     });
 
+    test('escapeText drops a bare CR so a value cannot split into a new property line', () => {
+        expect(escapeText('hi\rX-ANYTHING:v')).toBe('hiX-ANYTHING:v');
+        expect(escapeText('a\r\nb')).toBe('a\\nb');
+    });
+
+    test('buildLine re-quotes and neuters param values so a rewritten line cannot be corrupted or injected', () => {
+        const serialized = serializeVCardLines([
+            makeLine('BEGIN', 'VCARD'),
+            makeLine('VERSION', '3.0'),
+            makeLine('NOTE', 'hello', [
+                ['X-P', 'a:b'], // a colon would truncate the param section unless the value is re-quoted
+                ['X-Q', 'c"d\r\nX-EVIL:1'], // a literal quote + CRLF must be neutered, not injected
+            ]),
+            makeLine('END', 'VCARD'),
+        ]);
+        expect(serialized).toContain(`NOTE;X-P="a:b";X-Q="c'dX-EVIL:1":hello`);
+        expect(serialized).not.toContain('\r\nX-EVIL:1');
+
+        // parse -> rewrite -> parse is stable: the re-quoted line re-parses to the same param values.
+        const reparsed = parseVCardLines(serialized).find((l) => l.name === 'NOTE')!;
+        expect(reparsed.params).toEqual([
+            ['X-P', 'a:b'],
+            ['X-Q', "c'dX-EVIL:1"],
+        ]);
+        expect(reparsed.value).toBe('hello');
+    });
+
+    test('blank lines in a card are skipped rather than throwing', () => {
+        const withBlanks = 'BEGIN:VCARD\r\nVERSION:3.0\r\n\r\nFN:Blank Liner\r\nN:Liner;Blank;;;\r\nEND:VCARD\r\n\r\n';
+        const card = parseVCard(withBlanks);
+        expect(card.firstName).toBe('Blank');
+        expect(card.lastName).toBe('Liner');
+    });
+
     test('serializeVCardLines reproduces an untouched Apple card byte-for-byte', () => {
         expect(serializeVCardLines(parseVCardLines(APPLE_FIXTURE))).toBe(APPLE_FIXTURE);
     });
@@ -180,6 +214,10 @@ describe('vCard projection parse', () => {
         });
     });
 
+    test('a comma-less data: PHOTO degrades to no photo', () => {
+        expect(parseLineCard('PHOTO:data:junk').photo).toBeNull();
+    });
+
     test('normalizes a compact BDAY to YYYY-MM-DD', () => {
         expect(parseLineCard('BDAY:19850412').birthday).toBe('1985-04-12');
     });
@@ -219,6 +257,47 @@ describe('vCard merge + builder', () => {
         const out = mergeVCard(parseVCard(APPLE_FIXTURE), { phone: ['+31 30 1234567'] });
         expect(out).toContain('TEL;type=HOME:+31 30 1234567');
         expect(out).not.toContain('+31 6 12345678');
+    });
+
+    test('removing one of two addresses keeps the other ADR line byte-for-byte', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), {
+            address: [{ street: '123 Main St', city: 'Springfield', state: 'IL', zipCode: '62704', country: 'USA' }],
+        });
+        expect(out).toContain('ADR;type=HOME:;;123 Main St;Springfield;IL;62704;USA');
+        expect(out).not.toContain('1 Market Sq');
+    });
+
+    test('a notes edit with a bare CR cannot inject a new property line', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { notes: 'hi\rX-EVIL:1' });
+        expect(out).not.toContain('\r\nX-EVIL:1');
+        const reparsed = parseVCard(out);
+        expect(reparsed.notes).toBe('hiX-EVIL:1');
+        expect(reparsed.lines.filter((l) => l.name === 'X-EVIL')).toHaveLength(0);
+    });
+
+    test('a birthday that is not a strict YYYY-MM-DD is treated as a clear, never written or injected', () => {
+        const inject = mergeVCard(parseVCard(APPLE_FIXTURE), { birthday: '1990-01-01\r\nX-EVIL:1' });
+        expect(inject).not.toContain('X-EVIL');
+        expect(inject).not.toContain('1990-01-01');
+        expect(inject).not.toContain('BDAY'); // treated as a clear -> the existing BDAY line is removed
+
+        const garbage = mergeVCard(parseVCard(APPLE_FIXTURE), { birthday: 'not-a-date' });
+        expect(garbage).not.toContain('BDAY');
+
+        const created = createVCard(
+            { firstName: 'A', lastName: 'B', email: [], phone: [], birthday: 'not-a-date' },
+            'uid-bday',
+        );
+        expect(created).not.toContain('BDAY');
+    });
+
+    test('editing a field whose line carried a quoted param re-quotes it instead of corrupting the line', () => {
+        const card = parseVCard('BEGIN:VCARD\r\nVERSION:3.0\r\nNOTE;X-P="a:b":old note\r\nEND:VCARD\r\n');
+        const out = mergeVCard(card, { notes: 'new note' });
+        expect(out).toContain('NOTE;X-P="a:b":new note');
+        const reparsed = parseVCard(out);
+        expect(reparsed.notes).toBe('new note');
+        expect(reparsed.lines.find((l) => l.name === 'NOTE')!.params).toEqual([['X-P', 'a:b']]);
     });
 
     test('adding an email appends a bare EMAIL line before END:VCARD', () => {
@@ -378,6 +457,11 @@ describe('vCard 4.0 -> 3.0 transcode', () => {
 
     test('leaves a 3.0 card untouched, returning the same reference', () => {
         expect(transcodeTo30(APPLE_FIXTURE)).toBe(APPLE_FIXTURE);
+    });
+
+    test('a comma-less data: PHOTO transcodes to the VALUE=uri form', () => {
+        const out = transcodeTo30('BEGIN:VCARD\r\nVERSION:4.0\r\nFN:No Comma\r\nPHOTO:data:junk\r\nEND:VCARD\r\n');
+        expect(out).toContain('PHOTO;VALUE=uri:data:junk');
     });
 
     test('rewrites a remote 4.0 PHOTO to the 3.0 VALUE=uri form', () => {

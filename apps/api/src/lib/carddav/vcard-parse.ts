@@ -2,7 +2,7 @@
 // layer diffs against. Only the properties Eigen owns are extracted; the untouched AST rides along in
 // `lines` so a write can merge edits back without disturbing properties we don't understand.
 import type { Address } from '@workspace/lib/types/contact';
-import { getVersion, parseVCardLines, unescapeText, type VCardLine } from './vcard-ast';
+import { getVersion, parseVCardLines, splitDataUri, unescapeText, type VCardLine } from './vcard-ast';
 
 export type ParsedCardPhoto =
     | { kind: 'inline'; bytes: Uint8Array; mediaType: string | null }
@@ -68,11 +68,10 @@ function decodeBase64(value: string): Uint8Array | null {
 
 // data:[<mediatype>];base64,<payload> — the 4.0 inline PHOTO form.
 function decodeDataUri(value: string): ParsedCardPhoto | null {
-    const comma = value.indexOf(',');
-    const header = value.slice('data:'.length, comma);
-    if (comma === -1 || !header.endsWith(';base64')) return null;
-    const bytes = decodeBase64(value.slice(comma + 1));
-    return bytes ? { kind: 'inline', bytes, mediaType: header.slice(0, -';base64'.length) || null } : null;
+    const split = splitDataUri(value);
+    if (!split) return null;
+    const bytes = decodeBase64(split.base64);
+    return bytes ? { kind: 'inline', bytes, mediaType: split.mediaType } : null;
 }
 
 function parsePhoto(line: VCardLine): ParsedCardPhoto | null {

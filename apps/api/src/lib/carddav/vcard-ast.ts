@@ -74,7 +74,10 @@ function unfold(text: string): { raw: string; logical: string }[] {
             lines.push({ start, end: j, logical: content });
         }
     }
-    return lines.map((l) => ({ raw: text.slice(l.start, l.end), logical: l.logical }));
+    // Drop empty logical lines (blank physical lines, e.g. the trailing CRLF Outlook exports leave): they
+    // carry no property and would otherwise reach parseLine without a colon. Byte-identity of a card with
+    // blanks isn't preserved — the blanks simply don't round-trip.
+    return lines.filter((l) => l.logical !== '').map((l) => ({ raw: text.slice(l.start, l.end), logical: l.logical }));
 }
 
 function parseLine(raw: string, logical: string): VCardLine {
@@ -110,9 +113,18 @@ export function parseVCardLines(text: string): VCardLine[] {
     return lines;
 }
 
+// parseLine strips the surrounding quotes off a param value, so a rewritten line must re-quote it: a value
+// with ';' ':' or ',' has to be double-quoted or it would truncate the param section / mint bogus params.
+// vCard 3.0 has no quote-escape mechanism, so a literal quote or CR/LF is neutered the way the iCal twin
+// (escapeICalParamValue) does — '"' -> "'" and CRLF dropped — closing the injection path.
+function buildParamValue(value: string): string {
+    const clean = value.replace(/"/g, "'").replace(/[\r\n]/g, '');
+    return /[;:,]/.test(clean) ? `"${clean}"` : clean;
+}
+
 function buildLine(line: VCardLine): string {
     let s = line.group ? `${line.group}.${line.name}` : line.name;
-    for (const [name, value] of line.params) s += `;${name}=${value}`;
+    for (const [name, value] of line.params) s += `;${name}=${buildParamValue(value)}`;
     return foldLine(`${s}:${line.value}`);
 }
 
@@ -136,9 +148,11 @@ export function makeLine(
     };
 }
 
-// RFC 2426 §2.4.2 — escape TEXT values: backslash, semicolon, comma, and newline.
+// RFC 2426 §2.4.2 — escape TEXT values: backslash, semicolon, comma, and newline. A bare CR is dropped
+// (mirroring the iCal twin escapeICalText): it isn't a TEXT char, and a stray CR would split the value into
+// a new property line on the next parse — a property-injection primitive through notes/name/company.
 export function escapeText(v: string): string {
-    return v.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
+    return v.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n').replace(/\r/g, '');
 }
 
 // One left-to-right pass so an escaped backslash (\\) can't recombine with the next char into a new
@@ -149,4 +163,15 @@ export function unescapeText(v: string): string {
 
 export function getVersion(lines: VCardLine[]): string | null {
     return lines.find((l) => l.name === 'VERSION')?.value ?? null;
+}
+
+// data:[<mediatype>];base64,<payload> — split a 4.0 inline-photo data: URI into its media type (null when
+// none) and base64 payload. Returns null when it isn't a `;base64` data: URI (no comma, or no base64
+// marker) so both the parser (-> photo: null) and the transcoder (-> VALUE=uri) can fall back cleanly.
+export function splitDataUri(value: string): { mediaType: string | null; base64: string } | null {
+    const comma = value.indexOf(',');
+    if (comma === -1) return null;
+    const header = value.slice('data:'.length, comma);
+    if (!header.endsWith(';base64')) return null;
+    return { mediaType: header.slice(0, -';base64'.length) || null, base64: value.slice(comma + 1) };
 }

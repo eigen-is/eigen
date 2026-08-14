@@ -23,6 +23,11 @@ export type CardEdits = Partial<{
     photo: { bytes: Uint8Array; mediaType: string } | null; // null = remove PHOTO; absent key = keep
 }>;
 
+// BDAY is written verbatim (dates aren't TEXT-escaped), so only a strict YYYY-MM-DD value is ever emitted —
+// exactly what the parse side can produce. Any other non-empty value is treated as a clear, closing the
+// CR/newline injection path a raw BDAY string would otherwise open.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 function addressEquals(a: Address, b: Address): boolean {
     return (
         (a.street ?? '') === (b.street ?? '') &&
@@ -189,8 +194,9 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'TITLE', edits.jobTitle !== card.jobTitle, value);
     }
     if (edits.birthday !== undefined) {
-        const value = edits.birthday === '' ? null : edits.birthday;
-        result = writeSingle(result, 'BDAY', edits.birthday !== card.birthday, value);
+        const birthday = ISO_DATE.test(edits.birthday) ? edits.birthday : '';
+        const value = birthday === '' ? null : birthday;
+        result = writeSingle(result, 'BDAY', birthday !== card.birthday, value);
     }
     if (edits.notes !== undefined) {
         const value = edits.notes === '' ? null : escapeText(edits.notes);
@@ -241,7 +247,7 @@ export function createVCard(
     for (const a of input.address ?? []) lines.push(makeLine('ADR', buildAddressValue(a)));
     if (input.company) lines.push(makeLine('ORG', escapeText(input.company)));
     if (input.jobTitle) lines.push(makeLine('TITLE', escapeText(input.jobTitle)));
-    if (input.birthday) lines.push(makeLine('BDAY', input.birthday));
+    if (input.birthday && ISO_DATE.test(input.birthday)) lines.push(makeLine('BDAY', input.birthday));
     if (input.notes) lines.push(makeLine('NOTE', escapeText(input.notes)));
     if (input.categories?.length) lines.push(makeLine('CATEGORIES', input.categories.map(escapeText).join(',')));
     if (input.eigenId) lines.push(makeLine('X-EIGEN-ID', input.eigenId));
