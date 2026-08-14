@@ -176,6 +176,38 @@ describe('Contacts', () => {
         });
     });
 
+    describe('Label uniqueness', () => {
+        // A v2 UNIQUE index on nameKey guards duplicate names; the raw SQLite violation must surface as a
+        // 409, not a generic 500. 'Work' and 'Family' are seeded default labels, so they always collide.
+        test('creating a whitespace/case variant of an existing label name is rejected with 409', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: ' Work ', color: '#ff0000' }),
+            });
+            expect(res.status).toBe(409);
+            expect(await res.text()).toContain('already exists');
+        });
+
+        test('renaming a label to a case-variant of another label name is rejected with 409', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Colleagues', color: '#123456' }),
+            });
+            const colleaguesId = (await createRes.text()).replace(/^"|"$/g, '');
+
+            const rename = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels/${colleaguesId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'FAMILY', color: '#123456' }),
+            });
+            expect(rename.status).toBe(409);
+            expect(await rename.text()).toContain('already exists');
+        });
+    });
+
     describe('Contact labels round-trip', () => {
         // Exercises the batched label grouping in getContacts: a contact with labels must come back
         // with them both from the list (one grouped query) and by id (per-contact query).

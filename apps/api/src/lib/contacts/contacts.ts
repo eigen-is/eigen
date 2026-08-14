@@ -45,6 +45,16 @@ function extractContactData(contact: Omit<Contact, 'id'>) {
     };
 }
 
+// The v2 UNIQUE index on labels(nameKey) closes duplicate/case-variant label names. bun:sqlite names the
+// column in the violation message ("UNIQUE constraint failed: labels.nameKey"); match on it so an unrelated
+// UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
+function rethrowDuplicateLabelName(e: unknown): never {
+    if (e instanceof Error && e.message.includes('labels.nameKey')) {
+        throw new ApiError(409, 'A label with this name already exists');
+    }
+    throw e;
+}
+
 export class Contacts {
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
@@ -218,14 +228,18 @@ export class Contacts {
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
         const labelId = randomUUID();
 
-        await this.db.insert(schema.labels).values({
-            id: labelId,
-            name: label.name.trim(),
-            nameKey: label.name.trim().toLowerCase(),
-            color: label.color,
-            createdAt: sql`unixepoch()`,
-            updatedAt: sql`unixepoch()`,
-        });
+        try {
+            await this.db.insert(schema.labels).values({
+                id: labelId,
+                name: label.name.trim(),
+                nameKey: label.name.trim().toLowerCase(),
+                color: label.color,
+                createdAt: sql`unixepoch()`,
+                updatedAt: sql`unixepoch()`,
+            });
+        } catch (e) {
+            rethrowDuplicateLabelName(e);
+        }
 
         this.emitLabel(SSEventType.LABEL_CREATED, labelId);
 
@@ -233,15 +247,19 @@ export class Contacts {
     }
 
     public async updateLabel(id: string, label: Omit<Label, 'id'>) {
-        await this.db
-            .update(schema.labels)
-            .set({
-                name: label.name.trim(),
-                nameKey: label.name.trim().toLowerCase(),
-                color: label.color,
-                updatedAt: sql`unixepoch()`,
-            })
-            .where(eq(schema.labels.id, id));
+        try {
+            await this.db
+                .update(schema.labels)
+                .set({
+                    name: label.name.trim(),
+                    nameKey: label.name.trim().toLowerCase(),
+                    color: label.color,
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.labels.id, id));
+        } catch (e) {
+            rethrowDuplicateLabelName(e);
+        }
 
         const updatedLabel = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
 
