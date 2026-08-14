@@ -97,7 +97,7 @@ or reviewing one; an implementer working on a single file doesn't need it.
 | **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas, storage default (`defaults.mount.{storageType,s3Config}`), onboarding, guests   |
 | **Quota resolution**  | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
 | **Quota enforcement** | `apps/api/src/lib/config/enforcement.ts`     | `getUploadMaxSize`, `enforceAvatarUpload`                                                                  |
-| **Mailer**            | `apps/api/src/lib/core/mailer.ts`            | `sendMail(OutboundMail)` — sendmail transport, skips in dev + demo mode, supports replyTo/attachments      |
+| **Mailer**            | `apps/api/src/lib/core/mailer.ts`            | `sendMail(OutboundMail)` — sendmail transport, skips in dev + demo mode, supports replyTo/attachments/envelope/messageId/threading (inReplyTo + references) |
 | **Environment**       | `apps/api/src/lib/config/env.ts`             | `isProduction()` (`PRODUCTION=1`/`NODE_ENV=production`); `isDemo()` (`EIGEN_DEMO=1`) — demo-instance deployment shape, see [DEMO_MODE.md](docs/DEMO_MODE.md) |
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
 | **Home relay**        | `apps/api/src/lib/home/home-relay.ts`        | Cross-home messaging via `sendToHome()`; reads via `pull*()`. See [SCALABILITY.md](docs/SCALABILITY.md)    |
