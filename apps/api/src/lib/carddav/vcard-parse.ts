@@ -61,6 +61,8 @@ function photoMediaType(type: string | null): string | null {
 // Decode base64, tolerating any whitespace 3.0 folding left in the value. Returns null for a value that
 // isn't valid base64 so a malformed PHOTO degrades to "no photo" rather than throwing.
 function decodeBase64(value: string): Uint8Array | null {
+    // Well-formed unfolded payloads skip the whitespace-strip, which allocates a full copy of a photo value.
+    if (/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return Buffer.from(value, 'base64');
     const cleaned = value.replace(/\s/g, '');
     if (!cleaned || !/^[A-Za-z0-9+/]+={0,2}$/.test(cleaned)) return null;
     return Buffer.from(cleaned, 'base64');

@@ -62,12 +62,13 @@ function insertBeforeEnd(lines: VCardLine[], added: VCardLine[]): VCardLine[] {
     return [...lines.slice(0, idx), ...added, ...lines.slice(idx)];
 }
 
-// Rewrite the first line named `name` in place (keeping its group + params), or insert it before END.
-function rewriteFirst(lines: VCardLine[], name: string, value: string): VCardLine[] {
+// Rewrite the first line named `name` in place (keeping its group; params replaced only when given), or
+// insert it before END.
+function rewriteFirst(lines: VCardLine[], name: string, value: string, params?: [string, string][]): VCardLine[] {
     const idx = lines.findIndex((l) => l.name === name);
-    if (idx === -1) return insertBeforeEnd(lines, [makeLine(name, value)]);
+    if (idx === -1) return insertBeforeEnd(lines, [makeLine(name, value, params)]);
     const next = lines.slice();
-    next[idx] = { ...lines[idx], value, raw: null };
+    next[idx] = { ...lines[idx], value, ...(params && { params }), raw: null };
     return next;
 }
 
@@ -78,18 +79,6 @@ function writeSingle(lines: VCardLine[], name: string, changed: boolean, value: 
     if (!changed) return lines;
     if (value === null) return lines.filter((l) => l.name !== name);
     return rewriteFirst(lines, name, value);
-}
-
-// Rewrite PHOTO in place with fresh ENCODING=b params, or insert it. Presence-triggered: its callers only
-// pass the key when the photo actually changed.
-function setPhoto(lines: VCardLine[], photo: { bytes: Uint8Array; mediaType: string }): VCardLine[] {
-    const value = photoBase64(photo.bytes);
-    const params = photoParams(photo.mediaType);
-    const idx = lines.findIndex((l) => l.name === 'PHOTO');
-    if (idx === -1) return insertBeforeEnd(lines, [makeLine('PHOTO', value, params)]);
-    const next = lines.slice();
-    next[idx] = { ...lines[idx], value, params, raw: null };
-    return next;
 }
 
 // Index of the first unescaped ';' in a structured value, or -1 — a preceding backslash escapes it.
@@ -211,7 +200,11 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'X-EIGEN-ID', changed, edits.eigenId ? edits.eigenId : null);
     }
     if (edits.photo !== undefined) {
-        result = edits.photo ? setPhoto(result, edits.photo) : result.filter((l) => l.name !== 'PHOTO');
+        // Presence-triggered: callers only pass the key when the photo actually changed. Fresh ENCODING=b
+        // params replace whatever the old PHOTO line carried.
+        result = edits.photo
+            ? rewriteFirst(result, 'PHOTO', photoBase64(edits.photo.bytes), photoParams(edits.photo.mediaType))
+            : result.filter((l) => l.name !== 'PHOTO');
     }
 
     return serializeVCardLines(insertBeforeEnd(result, toAppend));

@@ -7,6 +7,13 @@ import { getVersion, makeLine, parseVCardLines, serializeVCardLines, splitDataUr
 import { photoParams } from './vcard-serialize';
 
 export function transcodeTo30(text: string): string {
+    // VERSION must come right after BEGIN:VCARD (RFC 2426 §2.1.1 / RFC 6350 §6.7.9). When the head reads
+    // that shape unfolded — every real client — a non-4.0 card returns without the full parse, which would
+    // otherwise unfold a multi-MiB PHOTO payload just to be discarded. Anything else (PRODID-first,
+    // pathological folding) falls through to the exact path below.
+    const head = /^BEGIN:VCARD\r?\nVERSION:([^\r\n]+)\r?\n[^ \t]/.exec(text.slice(0, 64));
+    if (head && head[1].trim() !== '4.0') return text;
+
     const lines = parseVCardLines(text);
     if (getVersion(lines) !== '4.0') return text;
 
