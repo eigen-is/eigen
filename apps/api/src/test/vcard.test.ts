@@ -11,6 +11,7 @@ import {
     VCardError,
 } from '../lib/carddav/vcard-ast';
 import { parseVCard } from '../lib/carddav/vcard-parse';
+import { createVCard, mergeVCard } from '../lib/carddav/vcard-serialize';
 
 // Wrap a single content line in a minimal valid vCard so it can go through the public parser.
 const parseCard = (line: string) => parseVCardLines(`BEGIN:VCARD\r\nVERSION:3.0\r\n${line}\r\nEND:VCARD\r\n`);
@@ -180,5 +181,129 @@ describe('vCard projection parse', () => {
 
     test('normalizes a compact BDAY to YYYY-MM-DD', () => {
         expect(parseLineCard('BDAY:19850412').birthday).toBe('1985-04-12');
+    });
+});
+
+describe('vCard merge + builder', () => {
+    test('a name-only edit leaves every typed TEL/EMAIL/ADR/X- line byte-identical', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { firstName: 'Bob' });
+        // The owned name lines are rewritten from the projection...
+        expect(out).toContain('N:Doe;Bob;;;');
+        expect(out).toContain('FN:Bob Doe');
+        expect(out).not.toContain('N:Doe;John;Quinlan;;');
+        expect(out).not.toContain('FN:John Quinlan Doe');
+        // ...every other typed line keeps its exact source bytes — lower-case params and grouping intact.
+        for (const line of [
+            'TEL;type=CELL;type=pref:+31 6 12345678',
+            'TEL;type=HOME:+31 30 1234567',
+            'item1.EMAIL;type=INTERNET;type=pref:john.quinlan.doe@example.com',
+            'item1.X-ABLabel:_$!<Work>!$_',
+            'ADR;type=HOME:;;123 Main St;Springfield;IL;62704;USA',
+            'ADR;type=WORK:;;1 Market Sq;Utrecht;;3500;Netherlands',
+            'X-SOCIALPROFILE;type=twitter:https://twitter.com/johnqdoe',
+        ]) {
+            expect(out).toContain(line);
+        }
+    });
+
+    test('removing a grouped email value also drops its orphaned X-ABLabel', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { email: [] });
+        expect(out).not.toContain('item1.EMAIL');
+        expect(out).not.toContain('X-ABLabel');
+        // A grouped-less X- line is not collateral damage.
+        expect(out).toContain('X-SOCIALPROFILE;type=twitter:https://twitter.com/johnqdoe');
+    });
+
+    test('removing one of two values keeps the other line byte-for-byte', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { phone: ['+31 30 1234567'] });
+        expect(out).toContain('TEL;type=HOME:+31 30 1234567');
+        expect(out).not.toContain('+31 6 12345678');
+    });
+
+    test('adding an email appends a bare EMAIL line before END:VCARD', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), {
+            email: ['john.quinlan.doe@example.com', 'bob@example.com'],
+        });
+        expect(out).toContain('item1.EMAIL;type=INTERNET;type=pref:john.quinlan.doe@example.com');
+        expect(out).toContain('\r\nEMAIL:bob@example.com\r\n');
+        expect(out.indexOf('EMAIL:bob@example.com')).toBeLessThan(out.indexOf('END:VCARD'));
+    });
+
+    test('a categories edit writes an RFC-escaped CATEGORIES line', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { categories: ['A,B', 'C'] });
+        expect(out).toContain('CATEGORIES:A\\,B,C');
+        expect(out).not.toContain('CATEGORIES:Engineering,Utrecht');
+    });
+
+    test('a photo edit writes a folded ENCODING=b PHOTO that decodes back to the input bytes', () => {
+        const bytes = Uint8Array.from({ length: 120 }, (_, i) => (i * 7) % 256);
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { photo: { bytes, mediaType: 'image/jpeg' } });
+        expect(out).toContain('PHOTO;ENCODING=b;TYPE=JPEG:');
+        expect(out.slice(out.indexOf('PHOTO;ENCODING=b;TYPE=JPEG:'))).toContain('\r\n '); // long base64 folds
+        expect(parseVCard(out).photo).toEqual({ kind: 'inline', bytes: Buffer.from(bytes), mediaType: 'image/jpeg' });
+    });
+
+    test('photo: null removes the PHOTO line', () => {
+        expect(mergeVCard(parseVCard(APPLE_FIXTURE), { photo: null })).not.toContain('PHOTO');
+    });
+
+    test('merging with no edits reproduces the stored card byte-for-byte', () => {
+        expect(mergeVCard(parseVCard(APPLE_FIXTURE), {})).toBe(APPLE_FIXTURE);
+        const edited = mergeVCard(parseVCard(APPLE_FIXTURE), { firstName: 'Bob' });
+        expect(mergeVCard(parseVCard(edited), {})).toBe(edited);
+    });
+
+    test('createVCard emits a minimal clean 3.0 card that parses back to its projection', () => {
+        const bytes = Uint8Array.from({ length: 90 }, (_, i) => (i * 5) % 256);
+        const uid = '9AE52DC7-B1D0-4EC6-A705-71F04F3B4E85';
+        const text = createVCard(
+            {
+                firstName: 'Bob',
+                lastName: 'Vance',
+                email: ['bob@vance.com'],
+                phone: ['+1 555 0100'],
+                company: 'Vance Refrigeration',
+                jobTitle: 'Owner',
+                address: [{ street: '1 Cold St', city: 'Scranton', state: 'PA', zipCode: '18503', country: 'USA' }],
+                birthday: '1970-01-02',
+                notes: 'Fridge guy',
+                categories: ['Work'],
+                eigenId: 'eig_1',
+                photo: { bytes, mediaType: 'image/png' },
+            },
+            uid,
+        );
+        expect(text.startsWith('BEGIN:VCARD\r\n')).toBe(true);
+        expect(text).toContain('VERSION:3.0\r\n');
+        expect(text).toContain('PRODID:-//Eigen//CardDAV//EN\r\n');
+        expect(text).toContain(`UID:${uid}\r\n`);
+        expect(text).toContain('X-EIGEN-ID:eig_1');
+        expect(text.endsWith('END:VCARD\r\n')).toBe(true);
+
+        const card = parseVCard(text);
+        expect(card.version).toBe('3.0');
+        expect(card.uid).toBe(uid);
+        expect(card.firstName).toBe('Bob');
+        expect(card.lastName).toBe('Vance');
+        expect(card.email).toEqual(['bob@vance.com']);
+        expect(card.phone).toEqual(['+1 555 0100']);
+        expect(card.company).toBe('Vance Refrigeration');
+        expect(card.jobTitle).toBe('Owner');
+        expect(card.address).toEqual([
+            { street: '1 Cold St', city: 'Scranton', state: 'PA', zipCode: '18503', country: 'USA' },
+        ]);
+        expect(card.birthday).toBe('1970-01-02');
+        expect(card.notes).toBe('Fridge guy');
+        expect(card.categories).toEqual(['Work']);
+        expect(card.eigenId).toBe('eig_1');
+        expect(card.photo).toEqual({ kind: 'inline', bytes: Buffer.from(bytes), mediaType: 'image/png' });
+    });
+
+    test('createVCard omits X-EIGEN-ID and PHOTO when not supplied', () => {
+        const text = createVCard({ firstName: 'Ada', lastName: 'Lovelace', email: [], phone: [] }, 'uid-1');
+        expect(text).not.toContain('X-EIGEN-ID');
+        expect(text).not.toContain('PHOTO');
+        expect(text).toContain('N:Lovelace;Ada;;;');
+        expect(text).toContain('FN:Ada Lovelace');
     });
 });
