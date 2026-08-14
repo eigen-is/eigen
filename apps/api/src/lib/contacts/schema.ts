@@ -26,10 +26,16 @@ export const book = sqliteTable('book', {
     id: integer('id').primaryKey(),
     ctag: integer('ctag').notNull().default(0),
     syncGen: integer('syncGen').notNull().default(1),
+    // One-shot latch for the onboarding owner-contact seed: set once init has considered a real org owner
+    // (added them or found them already present) so a later deliberate delete is never resurrected.
+    ownerSeeded: integer('ownerSeeded').notNull().default(0),
 });
 
 export const contactTombstones = sqliteTable('contact_tombstones', {
     uri: text('uri').primaryKey(),
+    // Case/normalization-folded key so a tombstone clears (and re-creates match) by the same identity the
+    // contacts index uses — a re-created card at a case-variant uri must clear its own tombstone.
+    uriKey: text('uriKey').notNull(),
     deletedAtCtag: integer('deletedAtCtag').notNull(),
 });
 

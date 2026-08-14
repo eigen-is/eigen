@@ -79,6 +79,14 @@ describe('Contacts v2 index-schema migration', () => {
         const cols = (mdb.db.all(sql`PRAGMA table_info(contacts)`) as { name: string }[]).map((c) => c.name);
         expect(cols).toContain('uriKey');
 
+        // The onboarding owner-seed latch lives on book; tombstones carry a folded uriKey for case-safe clears.
+        const bookCols = (mdb.db.all(sql`PRAGMA table_info(book)`) as { name: string }[]).map((c) => c.name);
+        expect(bookCols).toContain('ownerSeeded');
+        const tombstoneCols = (mdb.db.all(sql`PRAGMA table_info(contact_tombstones)`) as { name: string }[]).map(
+            (c) => c.name,
+        );
+        expect(tombstoneCols).toContain('uriKey');
+
         // The junction labelId index is dropped with the v1 table and must be recreated — label
         // rename/delete fan-outs seek contacts_to_labels by labelId.
         const indexes = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='index'`) as { name: string }[]).map(
@@ -89,8 +97,12 @@ describe('Contacts v2 index-schema migration', () => {
         // v1 data is dropped by design, not migrated (the vCard files become the source of truth).
         expect(mdb.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
 
-        const bookRow = mdb.db.all(sql`SELECT ctag, syncGen FROM book`)[0] as { ctag: number; syncGen: number };
-        expect(bookRow).toEqual({ ctag: 0, syncGen: 1 });
+        const bookRow = mdb.db.all(sql`SELECT ctag, syncGen, ownerSeeded FROM book`)[0] as {
+            ctag: number;
+            syncGen: number;
+            ownerSeeded: number;
+        };
+        expect(bookRow).toEqual({ ctag: 0, syncGen: 1, ownerSeeded: 0 });
 
         await mdb.close();
     });
@@ -113,8 +125,12 @@ describe('Contacts v2 index-schema migration', () => {
         expect(cols).not.toContain('avatar');
 
         expect(mdb.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
-        const bookRow = mdb.db.all(sql`SELECT ctag, syncGen FROM book`)[0] as { ctag: number; syncGen: number };
-        expect(bookRow).toEqual({ ctag: 0, syncGen: 1 });
+        const bookRow = mdb.db.all(sql`SELECT ctag, syncGen, ownerSeeded FROM book`)[0] as {
+            ctag: number;
+            syncGen: number;
+            ownerSeeded: number;
+        };
+        expect(bookRow).toEqual({ ctag: 0, syncGen: 1, ownerSeeded: 0 });
 
         await mdb.close();
     });

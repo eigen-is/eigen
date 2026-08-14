@@ -75,11 +75,13 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE TABLE IF NOT EXISTS book (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     ctag INTEGER NOT NULL DEFAULT 0,
-                    syncGen INTEGER NOT NULL DEFAULT 1
+                    syncGen INTEGER NOT NULL DEFAULT 1,
+                    ownerSeeded INTEGER NOT NULL DEFAULT 0
                 );
 
                 CREATE TABLE IF NOT EXISTS contact_tombstones (
                     uri TEXT PRIMARY KEY,
+                    uriKey TEXT NOT NULL,
                     deletedAtCtag INTEGER NOT NULL
                 );
 
@@ -106,6 +108,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_contacts_cardCtag ON contacts(cardCtag);
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_nameKey ON labels(nameKey);
                 CREATE INDEX IF NOT EXISTS idx_contact_tombstones_ctag ON contact_tombstones(deletedAtCtag);
+                CREATE INDEX IF NOT EXISTS idx_contact_tombstones_uriKey ON contact_tombstones(uriKey);
                 CREATE INDEX IF NOT EXISTS idx_contacts_to_labels_labelId ON contacts_to_labels(labelId);
 
                 INSERT OR IGNORE INTO book (id, ctag, syncGen) VALUES (1, 0, 1);

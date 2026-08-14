@@ -14,10 +14,11 @@ export function cardPath(uri: string): string {
 
 // A client-chosen resource name that is safe as both a filename and a DAV href. NFC-normalized, a leading
 // alphanumeric, then only `A-Za-z0-9._@-` — which excludes `/`, `..`, leading dots and control characters —
-// capped at 255 bytes and required to end in a literal lowercase `.vcf` (iOS/DAVx⁵/Thunderbird all emit it).
+// capped at 200 chars (spec § 4, so writeAtomic's `.`-prefixed temp name stays under NAME_MAX) and required
+// to end in a literal lowercase `.vcf` (iOS/DAVx⁵/Thunderbird all emit it).
 export function sanitizeCardUri(raw: string): string | null {
     const uri = raw.normalize('NFC');
-    const valid = uri.length <= 255 && uri.endsWith('.vcf') && /^[A-Za-z0-9][A-Za-z0-9._@-]{0,250}$/.test(uri);
+    const valid = uri.length <= 200 && uri.endsWith('.vcf') && /^[A-Za-z0-9][A-Za-z0-9._@-]{0,195}$/.test(uri);
     return valid ? uri : null;
 }
 
@@ -29,6 +30,18 @@ export function uriKeyOf(uri: string): string {
 
 export function computeCardEtag(bytes: Uint8Array): string {
     return new Bun.CryptoHasher('sha256').update(bytes).digest('hex');
+}
+
+// The derived avatar cache lives under `avatars/` as `<contactId>-<hash8>.webp`, hashed by the embedded
+// photo bytes so a superseded photo's cache file falls out of reference and the sweep reclaims it.
+export function avatarCacheName(contactId: string, bytes: Uint8Array): string {
+    return `${contactId}-${computeCardEtag(bytes).slice(0, 8)}.webp`;
+}
+
+// The projection URL the contact index stores for an avatar (cache or staged upload), one home for the shape
+// so the reconcile/cache/upload seams can't drift on it.
+export function avatarUrl(userId: string, name: string): string {
+    return `contacts/${userId}/avatar/${name}`;
 }
 
 export function normalizeLabelName(name: string): string {
@@ -57,11 +70,12 @@ export async function writeCardFile(
     return { mtime: stat.mtimeMs, size: stat.size };
 }
 
-// Sweep crash leftovers from `cards/`: the `.`-prefixed temp files a torn writeAtomic can leave, plus any
-// stray non-`.vcf` entry. Safe to run under init's lock, before the directory is scanned into the index.
+// Sweep crash leftovers from `cards/`: ONLY the `.`-prefixed temp files a torn writeAtomic can leave. A
+// stray non-`.vcf` (a README, a csv, a mixed-case `.VCF`) is not temp debris and is left on disk — reconcile
+// and rebuild warn-skip it rather than deleting data we didn't create. Safe to run under init's lock.
 export async function cleanupTempCardFiles(storage: LocalFilesystem): Promise<void> {
     for (const name of await storage.list(CARDS_DIR)) {
-        if (name.startsWith('.') || !name.endsWith('.vcf')) {
+        if (name.startsWith('.')) {
             await storage.delete(cardPath(name));
         }
     }
