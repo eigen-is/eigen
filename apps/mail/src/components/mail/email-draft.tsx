@@ -4,7 +4,7 @@ import { checkPathAccess } from '@workspace/lib/drive';
 import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
 import { canonicalRecipients } from '@workspace/lib/mail/addresses';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_CHAT, isContainerType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, isContainerType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ConfirmDialog, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -279,7 +279,7 @@ export function EmailDraft({
                     continue;
                 }
                 if (!result.canShare) {
-                    notes.push(`You can't share ${ref.name}. Recipients can request access.`);
+                    notes.push(`You can't share ${stripEigenExtension(ref.name)}. Recipients can request access.`);
                     continue;
                 }
                 // The backend only grants To/Cc recipients; a Bcc grant would leak the Bcc identity to
@@ -288,7 +288,11 @@ export function EmailDraft({
                 const needingToCc = needing.filter((r) => !bcc.has(r.email));
                 if (needing.length > needingToCc.length) hasShareableBcc = true;
                 if (needingToCc.length === 0) continue;
-                grants.push({ id: ref.id, name: ref.name, recipients: needingToCc.map((r) => r.email) });
+                grants.push({
+                    id: ref.id,
+                    name: stripEigenExtension(ref.name),
+                    recipients: needingToCc.map((r) => r.email),
+                });
             }
             if (hasShareableBcc) notes.push('Bcc recipients are not granted access');
 
