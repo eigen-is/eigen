@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'contacts',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -39,6 +39,77 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
 
                 CREATE INDEX IF NOT EXISTS idx_contacts_eigenId ON contacts(eigenId);
                 CREATE INDEX IF NOT EXISTS idx_contacts_to_labels_labelId ON contacts_to_labels(labelId);
+            `),
+        },
+        {
+            // CardDAV refit: reshape the index around cards-as-truth (uri/uid/etag + a one-row book
+            // carrying the ctag/syncGen, plus a tombstone log for sync-collection removals). The v1
+            // rows are DROPPED, not migrated — Task 8 rebuilds the index from the vCard files on disk,
+            // which become the source of truth (Decision 2). Runs inside ManagedDatabase's
+            // BEGIN/ROLLBACK, so a failure leaves the db at v1 untouched.
+            version: 2,
+            up: (db) =>
+                db.exec(`
+                DROP TABLE IF EXISTS contacts_to_labels;
+                DROP TABLE IF EXISTS contacts;
+                DROP TABLE IF EXISTS labels;
+                DROP INDEX IF EXISTS idx_contacts_eigenId;
+                DROP INDEX IF EXISTS idx_contacts_to_labels_labelId;
+
+                CREATE TABLE IF NOT EXISTS contacts (
+                    id TEXT PRIMARY KEY,
+                    uri TEXT NOT NULL,
+                    uriKey TEXT NOT NULL,
+                    uid TEXT NOT NULL,
+                    firstName TEXT NOT NULL,
+                    lastName TEXT NOT NULL,
+                    eigenId TEXT NOT NULL DEFAULT '',
+                    isGroup INTEGER NOT NULL DEFAULT 0,
+                    data TEXT,
+                    etag TEXT NOT NULL,
+                    cardCtag INTEGER NOT NULL,
+                    mtime INTEGER NOT NULL,
+                    size INTEGER NOT NULL,
+                    createdAt INTEGER DEFAULT (unixepoch()),
+                    updatedAt INTEGER DEFAULT (unixepoch())
+                );
+
+                CREATE TABLE IF NOT EXISTS book (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    ctag INTEGER NOT NULL DEFAULT 0,
+                    syncGen INTEGER NOT NULL DEFAULT 1
+                );
+
+                CREATE TABLE IF NOT EXISTS contact_tombstones (
+                    uri TEXT PRIMARY KEY,
+                    deletedAtCtag INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS labels (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    nameKey TEXT NOT NULL,
+                    color TEXT NOT NULL,
+                    createdAt INTEGER DEFAULT (unixepoch()),
+                    updatedAt INTEGER DEFAULT (unixepoch())
+                );
+
+                CREATE TABLE IF NOT EXISTS contacts_to_labels (
+                    contactId TEXT NOT NULL,
+                    labelId TEXT NOT NULL,
+                    PRIMARY KEY (contactId, labelId),
+                    FOREIGN KEY (contactId) REFERENCES contacts(id) ON DELETE CASCADE,
+                    FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_uriKey ON contacts(uriKey);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_uid ON contacts(uid);
+                CREATE INDEX IF NOT EXISTS idx_contacts_eigenId ON contacts(eigenId);
+                CREATE INDEX IF NOT EXISTS idx_contacts_cardCtag ON contacts(cardCtag);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_nameKey ON labels(nameKey);
+                CREATE INDEX IF NOT EXISTS idx_contact_tombstones_ctag ON contact_tombstones(deletedAtCtag);
+
+                INSERT OR IGNORE INTO book (id, ctag, syncGen) VALUES (1, 0, 1);
             `),
         },
     ],

@@ -74,6 +74,7 @@ export class Contacts {
                 await this.db.insert(schema.labels).values({
                     id: randomUUID(),
                     name: label.name,
+                    nameKey: label.name.trim().toLowerCase(),
                     color: label.color,
                 });
             }
@@ -136,12 +137,22 @@ export class Contacts {
         const contactId = randomUUID();
         const { data, contactData, labels } = extractContactData(contact);
 
+        // Placeholder file-sync fields — Task 8 writes the vCard and fills these from the card bytes.
+        const uri = `${contactId}.vcf`;
         await this.db.insert(schema.contacts).values({
             id: contactId,
+            uri,
+            uriKey: uri.toLowerCase(),
+            uid: contactId,
             firstName: contactData.firstName.trim(),
             lastName: contactData.lastName.trim(),
             eigenId: contactData.eigenId || '',
+            isGroup: false,
             data,
+            etag: '',
+            cardCtag: 0,
+            mtime: 0,
+            size: 0,
             createdAt: sql`unixepoch()`,
             updatedAt: sql`unixepoch()`,
         });
@@ -209,6 +220,7 @@ export class Contacts {
         await this.db.insert(schema.labels).values({
             id: labelId,
             name: label.name.trim(),
+            nameKey: label.name.trim().toLowerCase(),
             color: label.color,
             createdAt: sql`unixepoch()`,
             updatedAt: sql`unixepoch()`,
@@ -224,6 +236,7 @@ export class Contacts {
             .update(schema.labels)
             .set({
                 name: label.name.trim(),
+                nameKey: label.name.trim().toLowerCase(),
                 color: label.color,
                 updatedAt: sql`unixepoch()`,
             })
