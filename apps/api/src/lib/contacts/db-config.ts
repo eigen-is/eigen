@@ -44,9 +44,9 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
         {
             // CardDAV refit: reshape the index around cards-as-truth (uri/uid/etag + a one-row book
             // carrying the ctag/syncGen, plus a tombstone log for sync-collection removals). The v1
-            // rows are DROPPED, not migrated — Task 8 rebuilds the index from the vCard files on disk,
-            // which become the source of truth (Decision 2). Runs inside ManagedDatabase's
-            // BEGIN/ROLLBACK, so a failure leaves the db at v1 untouched.
+            // rows are DROPPED, not migrated — once the file-backed refit lands the index is rebuilt
+            // at init from the vCard files on disk, which become the source of truth (Decision 2).
+            // Runs inside ManagedDatabase's BEGIN/ROLLBACK, so a failure leaves the db at v1 untouched.
             version: 2,
             up: (db) =>
                 db.exec(`
@@ -108,6 +108,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_contacts_cardCtag ON contacts(cardCtag);
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_nameKey ON labels(nameKey);
                 CREATE INDEX IF NOT EXISTS idx_contact_tombstones_ctag ON contact_tombstones(deletedAtCtag);
+                CREATE INDEX IF NOT EXISTS idx_contacts_to_labels_labelId ON contacts_to_labels(labelId);
 
                 INSERT OR IGNORE INTO book (id, ctag, syncGen) VALUES (1, 0, 1);
             `),

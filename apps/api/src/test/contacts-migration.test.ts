@@ -79,7 +79,14 @@ describe('Contacts v2 index-schema migration', () => {
         const cols = (mdb.db.all(sql`PRAGMA table_info(contacts)`) as { name: string }[]).map((c) => c.name);
         expect(cols).toContain('uriKey');
 
-        // v1 data is dropped by design, not migrated (cards are the source of truth from Task 8).
+        // The junction labelId index is dropped with the v1 table and must be recreated — label
+        // rename/delete fan-outs seek contacts_to_labels by labelId.
+        const indexes = (mdb.db.all(sql`SELECT name FROM sqlite_master WHERE type='index'`) as { name: string }[]).map(
+            (r) => r.name,
+        );
+        expect(indexes).toContain('idx_contacts_to_labels_labelId');
+
+        // v1 data is dropped by design, not migrated (the vCard files become the source of truth).
         expect(mdb.db.all(sql`SELECT * FROM contacts`).length).toBe(0);
 
         const bookRow = mdb.db.all(sql`SELECT ctag, syncGen FROM book`)[0] as { ctag: number; syncGen: number };
