@@ -66,15 +66,51 @@ function rewriteFirst(lines: VCardLine[], name: string, value: string): VCardLin
     return next;
 }
 
-// A cleared value (empty string / null) removes every line named `name`; otherwise rewrite the first in
-// place. `params` replaces the existing params (PHOTO only); omitted keeps them.
-function setOrRemove(lines: VCardLine[], name: string, value: string | null, params?: [string, string][]): VCardLine[] {
-    if (value === null || value === '') return lines.filter((l) => l.name !== name);
-    const idx = lines.findIndex((l) => l.name === name);
-    if (idx === -1) return insertBeforeEnd(lines, [makeLine(name, value, params)]);
+// Value-keyed write for a single-value owned prop: an unchanged value leaves the line byte-identical (the
+// Task 8 full-replacement seam echoes every owned key on every save, so presence alone must not rewrite).
+// A changed value rewrites the first line in place; a cleared value removes every line named `name`.
+function writeSingle(lines: VCardLine[], name: string, changed: boolean, value: string | null): VCardLine[] {
+    if (!changed) return lines;
+    if (value === null) return lines.filter((l) => l.name !== name);
+    return rewriteFirst(lines, name, value);
+}
+
+// Rewrite PHOTO in place with fresh ENCODING=b params, or insert it. Presence-triggered: its callers only
+// pass the key when the photo actually changed.
+function setPhoto(lines: VCardLine[], photo: { bytes: Uint8Array; mediaType: string }): VCardLine[] {
+    const value = photoBase64(photo.bytes);
+    const params = photoParams(photo.mediaType);
+    const idx = lines.findIndex((l) => l.name === 'PHOTO');
+    if (idx === -1) return insertBeforeEnd(lines, [makeLine('PHOTO', value, params)]);
     const next = lines.slice();
-    next[idx] = { ...lines[idx], value, params: params ?? lines[idx].params, raw: null };
+    next[idx] = { ...lines[idx], value, params, raw: null };
     return next;
+}
+
+// Index of the first unescaped ';' in a structured value, or -1 — a preceding backslash escapes it.
+function firstUnescapedSemi(value: string): number {
+    for (let i = 0; i < value.length; i++) {
+        if (value[i] === '\\') i++;
+        else if (value[i] === ';') return i;
+    }
+    return -1;
+}
+
+// A company change keeps the card's existing trailing ORG components verbatim (`Acme;Engineering` +
+// `NewCorp` -> `NewCorp;Engineering`) — the department is unowned bytes, not ours to destroy.
+function buildOrgValue(card: ParsedCard, company: string): string {
+    const existing = card.lines.find((l) => l.name === 'ORG');
+    if (!existing) return escapeText(company);
+    const semi = firstUnescapedSemi(existing.value);
+    return escapeText(company) + (semi === -1 ? '' : existing.value.slice(semi));
+}
+
+// Order-insensitive multiset equality — CATEGORIES is a set of labels, order carries no meaning.
+function sameNames(a: string[], b: string[]): boolean {
+    if (a.length !== b.length) return false;
+    const x = [...a].sort();
+    const y = [...b].sort();
+    return x.every((v, i) => v === y[i]);
 }
 
 // Diff a text-valued multi-value property (EMAIL/TEL): kept lines stay byte-for-byte, unmatched lines are
@@ -133,25 +169,43 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
 
     let result = card.lines.filter((l) => !toRemove.has(l));
 
-    // Single-value owned props rewrite the first line in place (or remove it when the edit clears it).
+    // Single-value owned props are value-keyed: only a genuinely changed value rewrites its line, so an
+    // unchanged name/company/… on a full-projection save keeps its exact bytes (Apple's N middle name, an
+    // ORG department). N/FN are rewritten as a pair, or skipped entirely when neither name changed.
     if (edits.firstName !== undefined || edits.lastName !== undefined) {
         const first = edits.firstName ?? card.firstName;
         const last = edits.lastName ?? card.lastName;
-        result = rewriteFirst(result, 'N', `${escapeText(last)};${escapeText(first)};;;`);
-        result = rewriteFirst(result, 'FN', escapeText(`${first} ${last}`.trim()));
+        if (first !== card.firstName || last !== card.lastName) {
+            result = rewriteFirst(result, 'N', `${escapeText(last)};${escapeText(first)};;;`);
+            result = rewriteFirst(result, 'FN', escapeText(`${first} ${last}`.trim()));
+        }
     }
-    if (edits.company !== undefined) result = setOrRemove(result, 'ORG', escapeText(edits.company));
-    if (edits.jobTitle !== undefined) result = setOrRemove(result, 'TITLE', escapeText(edits.jobTitle));
-    if (edits.birthday !== undefined) result = setOrRemove(result, 'BDAY', edits.birthday);
-    if (edits.notes !== undefined) result = setOrRemove(result, 'NOTE', escapeText(edits.notes));
+    if (edits.company !== undefined) {
+        const changed = edits.company !== card.company;
+        result = writeSingle(result, 'ORG', changed, edits.company === '' ? null : buildOrgValue(card, edits.company));
+    }
+    if (edits.jobTitle !== undefined) {
+        const value = edits.jobTitle === '' ? null : escapeText(edits.jobTitle);
+        result = writeSingle(result, 'TITLE', edits.jobTitle !== card.jobTitle, value);
+    }
+    if (edits.birthday !== undefined) {
+        const value = edits.birthday === '' ? null : edits.birthday;
+        result = writeSingle(result, 'BDAY', edits.birthday !== card.birthday, value);
+    }
+    if (edits.notes !== undefined) {
+        const value = edits.notes === '' ? null : escapeText(edits.notes);
+        result = writeSingle(result, 'NOTE', edits.notes !== card.notes, value);
+    }
     if (edits.categories !== undefined) {
-        result = setOrRemove(result, 'CATEGORIES', edits.categories.map(escapeText).join(','));
+        const value = edits.categories.length === 0 ? null : edits.categories.map(escapeText).join(',');
+        result = writeSingle(result, 'CATEGORIES', !sameNames(edits.categories, card.categories), value);
     }
-    if (edits.eigenId !== undefined) result = setOrRemove(result, 'X-EIGEN-ID', edits.eigenId);
+    if (edits.eigenId !== undefined) {
+        const changed = (edits.eigenId ?? '') !== (card.eigenId ?? '');
+        result = writeSingle(result, 'X-EIGEN-ID', changed, edits.eigenId ? edits.eigenId : null);
+    }
     if (edits.photo !== undefined) {
-        result = edits.photo
-            ? setOrRemove(result, 'PHOTO', photoBase64(edits.photo.bytes), photoParams(edits.photo.mediaType))
-            : setOrRemove(result, 'PHOTO', null);
+        result = edits.photo ? setPhoto(result, edits.photo) : result.filter((l) => l.name !== 'PHOTO');
     }
 
     return serializeVCardLines(insertBeforeEnd(result, toAppend));

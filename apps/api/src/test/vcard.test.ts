@@ -253,6 +253,42 @@ describe('vCard merge + builder', () => {
         expect(mergeVCard(parseVCard(edited), {})).toBe(edited);
     });
 
+    test('the REST seam echoing the full projection with unchanged values is a byte-for-byte no-op', () => {
+        // Task 8's updateContact sends every owned key on every save; value-keyed single-value merges must
+        // rewrite nothing when the value is unchanged, or the ORG department and N middle name are lost.
+        const card = parseVCard(APPLE_FIXTURE);
+        const out = mergeVCard(card, {
+            firstName: card.firstName,
+            lastName: card.lastName,
+            email: card.email,
+            phone: card.phone,
+            address: card.address,
+            company: card.company,
+            jobTitle: card.jobTitle,
+            birthday: card.birthday,
+            notes: card.notes,
+            categories: card.categories,
+            eigenId: card.eigenId,
+        });
+        expect(out).toBe(APPLE_FIXTURE);
+    });
+
+    test('a genuine company change keeps the existing ORG department component', () => {
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { company: 'NewCorp' });
+        expect(out).toContain('ORG:NewCorp;Reliability Engineering');
+        expect(out).not.toContain('ORG:Example Corporation');
+    });
+
+    test('unchanged names keep the N middle name byte-for-byte; a real change pays the pinned form', () => {
+        const unchanged = mergeVCard(parseVCard(APPLE_FIXTURE), { firstName: 'John', lastName: 'Doe' });
+        expect(unchanged).toContain('N:Doe;John;Quinlan;;');
+        expect(unchanged).toContain('FN:John Quinlan Doe');
+
+        const changed = mergeVCard(parseVCard(APPLE_FIXTURE), { lastName: 'Smith' });
+        expect(changed).toContain('N:Smith;John;;;');
+        expect(changed).toContain('FN:John Smith');
+    });
+
     test('createVCard emits a minimal clean 3.0 card that parses back to its projection', () => {
         const bytes = Uint8Array.from({ length: 90 }, (_, i) => (i * 5) % 256);
         const uid = '9AE52DC7-B1D0-4EC6-A705-71F04F3B4E85';
