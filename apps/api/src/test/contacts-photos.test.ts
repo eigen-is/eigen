@@ -66,7 +66,7 @@ async function stageAvatar(contacts: Contacts): Promise<string> {
     const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 10, g: 120, b: 200 } } })
         .png()
         .toBuffer();
-    return contacts.uploadAvatar(new File([png], 'avatar.png', { type: 'image/png' }));
+    return contacts.uploadAvatar(new File([new Uint8Array(png)], 'avatar.png', { type: 'image/png' }));
 }
 
 const cardPathOf = (dir: string, id: string) => join(dir, 'eigen.contacts', 'cards', `${id}.vcf`);
