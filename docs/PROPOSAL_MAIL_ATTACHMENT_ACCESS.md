@@ -20,6 +20,8 @@
 > `openSignup: false` servers. Revised 2026-08-14 after two independent review passes; all
 > findings are folded in below.
 
+> **Shipped 2026-08-14.** As-built with two deviations from this design, which stays the design record: (1) the send payload carries `grantAccessRefIds: string[]` (the reference ids to share) rather than `grantReadAccess: boolean`, since an array lets one send grant some references and not others; (2) the pinned Message-ID and threading headers apply to *every* `messageSend`, not only split sends, because a copy-count-conditional Message-ID would be two behaviours for one fact. Both surfaces are documented in [MAIL.md § Send path](MAIL.md#send-path) and [§ Send-time access grants](MAIL.md#send-time-access-grants).
+
 ## Goals
 
 1. **External recipients land on a working login.** A mailed doc link carries

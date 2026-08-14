@@ -145,7 +145,7 @@ identically.
 1. **Before guest account exists**: share → `resolveACLUserIds` → user not found → registry entry created, and
    `emailNewlyAddedAclEntries` (`apps/api/src/lib/drive/acl-propagation.ts`) mails the address. That mail is the
    guest-onboarding trigger — without it nobody knows to come and OTP in. Gated by
-   `notifications.email.guestOnAclAdd` (default true)
+   `notifications.email.guestOnAclAdd` (default true). Send-time mail grants ([MAIL.md § Send-time access grants](MAIL.md#send-time-access-grants)) mint the same registry entries but suppress this mail (`suppressShareEmail: 'all'`); the user's own message carries the `?email=` invite link
 2. **Guest verifies OTP**: account created → `reconcileSharesForNewUser()` reads (does not delete) from
    registry → idempotently writes to `shared.db` via `Drive.receiveSharedPathChange`
 3. **After guest account exists**: share → `resolveACLUserIds` → user found → `receiveSharedPathChange()` called
@@ -153,6 +153,8 @@ identically.
 4. **Guest deleted**: `deleteUserCompletely` removes the home directory, sessions, and FROM-this-user
    registry entries. TO-this-email entries are preserved. Re-OTP later rebuilds the home and re-reads the
    same registry rows.
+
+**Team-owned sources.** A mail-send grant on a team drive path stores `team_<id>` as the registry source. `reconcileSharesForNewUser` resolves it through the team home (`getTeam`) instead of treating it as a user id: it delivers the team's shared paths attributed to the team name, and drive paths only, since teams have no calendars or invitations to reconcile. Without this a guest granted a team-owned doc got OTP admission but never the shared-path mirror or notification.
 
 For non-guest users, deletion still purges TO-this-email entries (the registry-as-pending-queue semantics
 make sense for users who can't reappear with the same email + a new identity).
@@ -197,6 +199,7 @@ Two pages in `apps/admin/src/routes/`:
 - **Registry GC for revoked shares**: when an owner removes an email from an ACL, the registry entry
   isn't proactively removed (the share might still be reachable via another path). Bounded leak — only
   matters at very long lifetimes / very high revoke rates.
+- **Access-check email probing**: on `openSignup=false` servers the drive access-check (`checkAccessForEmails`, used by the mail Share & send dialog) returns `needsGuestAdmission` per email, so any non-guest user who can read a path can probe an arbitrary address for "has an account, or was ever shared with anything". Same information class `request-otp` already exposes (and rate-limits); accepted.
 
 See: [ACL.md](ACL.md) for the sharing model, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the `guests` and
 `notifications.email` settings, [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for user deletion
