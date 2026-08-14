@@ -10,7 +10,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -84,13 +84,17 @@ function RepeatableField({ label, onAdd, children }: RepeatableFieldProps) {
 
 type ContactEditProps = {
     contact: Contact;
-    onSave: (data: ContactFormValues) => void;
+    onSave: (data: ContactFormValues, etag?: string) => void;
     onCancel: () => void;
 };
 
 export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     const { data: labels = [], error: labelsError } = useLabels();
     const [avatar, setAvatar] = useState<string | null>(contact?.avatar ?? null);
+    // Snapshot the etag from the same first-render contact that seeds the form fields below. The route's live
+    // useContacts() copy is refetched by SSE, so reading its etag at submit would pair fresh-server etag with
+    // stale field values and silently clobber a concurrent edit; this ref stays paired with the loaded fields.
+    const loadedEtagRef = useRef(contact?.etag);
 
     const uploadAvatar = useContactAvatarUpload(setAvatar);
     const form = useForm<ContactFormValues>({
@@ -138,7 +142,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     });
 
     const handleSubmit = form.handleSubmit(async (data) => {
-        await onSave({ ...data, avatar });
+        await onSave({ ...data, avatar }, loadedEtagRef.current);
     });
 
     const isLoading = form.formState.isSubmitting;

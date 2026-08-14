@@ -21,6 +21,9 @@ export function ProfileEditor() {
     const { data: contact, isLoading, error: fetchError } = useMeContact();
     const [avatar, setAvatar] = useState<string | null>(null);
     const initializedRef = useRef(false);
+    // Captured alongside the field values when the form first initializes, so the save submits the etag it
+    // loaded rather than one a later refetch advanced past — pairing a stale form with a fresh etag would clobber.
+    const loadedEtagRef = useRef<string | undefined>(undefined);
 
     const uploadAvatar = useContactAvatarUpload(setAvatar);
     const updateContactMutation = useUpdateContact();
@@ -36,6 +39,7 @@ export function ProfileEditor() {
     useEffect(() => {
         if (contact && !initializedRef.current) {
             initializedRef.current = true;
+            loadedEtagRef.current = contact.etag;
             form.reset({
                 firstName: contact.firstName || '',
                 lastName: contact.lastName || '',
@@ -54,6 +58,7 @@ export function ProfileEditor() {
             firstName: data.firstName,
             lastName: data.lastName || '',
             avatar: avatar || '',
+            etag: loadedEtagRef.current,
         };
 
         await updateContactMutation.mutateAsync(updateData);

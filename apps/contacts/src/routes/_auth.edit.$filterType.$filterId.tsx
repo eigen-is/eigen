@@ -40,7 +40,7 @@ function EditContactRoute() {
     const updateContactMutation = useUpdateContact();
     const addContactMutation = useAddContact();
 
-    const handleSave = async (data: ContactFormValues) => {
+    const handleSave = async (data: ContactFormValues, etag?: string) => {
         const contactData: Omit<Contact, 'id'> = {
             ...data,
             firstName: data.firstName || '',
@@ -54,9 +54,9 @@ function EditContactRoute() {
             await updateContactMutation.mutateAsync({
                 id: contactId,
                 ...contactData,
-                // The form strips unknown fields, so thread the etag the loaded contact carried — without it the
-                // conditional-write route rejects the save with a 400.
-                etag: contact?.etag,
+                // The etag ContactEdit snapshotted when it loaded these fields — not the live query's, which SSE
+                // can advance mid-edit. A drifted card then 412s instead of silently clobbering the newer write.
+                etag,
             });
         } else {
             const newId = await addContactMutation.mutateAsync(contactData);
