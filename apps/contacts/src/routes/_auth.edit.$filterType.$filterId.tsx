@@ -54,7 +54,6 @@ function EditContactRoute() {
             ...data,
             firstName: data.firstName || '',
             lastName: data.lastName || '',
-            birthday: data.birthday?.toISOString(),
             labels: data.labels || [],
             avatar: data.avatar ?? '',
         };

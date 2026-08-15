@@ -91,7 +91,11 @@ export async function cleanupTempCardFiles(storage: LocalFilesystem): Promise<vo
 export async function listCardUris(storage: LocalFilesystem): Promise<{ uri: string; key: string }[]> {
     const seen = new Set<string>();
     const entries: { uri: string; key: string }[] = [];
-    for (const name of (await storage.list(CARDS_DIR)).sort()) {
+    const names = (await storage.readdir(CARDS_DIR, { withFileTypes: true }))
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name)
+        .sort();
+    for (const name of names) {
         const uri = sanitizeCardUri(name);
         if (!uri) {
             console.warn(`contacts: ignoring non-conforming entry ${name} in cards/`);

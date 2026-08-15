@@ -20,6 +20,7 @@ import { getOrgOwner } from '../user/';
 import {
     avatarCacheName,
     avatarUrl,
+    CARDS_DIR,
     cardPath,
     cleanupTempCardFiles,
     computeCardEtag,
@@ -139,6 +140,7 @@ export class Contacts {
         this.managedDb = await getContactsDatabase(this.home);
         this.db = this.managedDb.db;
 
+        await this.storage.mkdir(CARDS_DIR);
         await cleanupTempCardFiles(this.storage);
 
         // Seed the avatar byte total from disk once; every avatar write/delete adjusts it by delta thereafter.
@@ -787,10 +789,10 @@ export class Contacts {
                 ),
             );
 
-            const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
-            // Fail closed on any step past the file write: the derived-cache build and the index commit both
-            // sit inside the guard, so a throw marks the uri dirty for the next drain and rethrows.
+            // Fail closed on the canonical write or any later step: a throw marks the uri dirty for the next
+            // drain and rethrows.
             try {
+                const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
                 // The avatar cache is derived from the embed; the projection stores its hashed URL (or '' if none).
                 contact.avatar = await this.cacheCardPhoto(
                     id,
@@ -813,12 +815,12 @@ export class Contacts {
                     },
                     categories,
                 });
+                this.cardsBytes += size;
             } catch (e) {
                 this.markCardDirty(uri);
                 throw e;
             }
 
-            this.cardsBytes += size;
             this.emitContact(SSEventType.CONTACT_CREATED, id);
             return id;
         });
@@ -893,10 +895,10 @@ export class Contacts {
 
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
-            const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
-            // Fail closed on any step past the file write: the derived-cache build and the index commit both
-            // sit inside the guard, so a throw marks the uri dirty for the next drain and rethrows.
+            // Fail closed on the canonical write or any later step: a throw marks the uri dirty for the next
+            // drain and rethrows.
             try {
+                const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
                 if (avatarChanged) {
                     contact.avatar = await this.cacheCardPhoto(
                         id,
@@ -920,12 +922,12 @@ export class Contacts {
                     },
                     categories,
                 });
+                this.cardsBytes += size - row.size;
             } catch (e) {
                 this.markCardDirty(row.uri);
                 throw e;
             }
 
-            this.cardsBytes += size - row.size;
             // The card saved — now it is safe to rename the user's org-wide profile (a failed write never did).
             if (isSelf) await pushUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
             this.emitContact(SSEventType.CONTACT_UPDATED, id);
@@ -947,7 +949,11 @@ export class Contacts {
                 throw new ApiError(412, 'Contact was changed elsewhere');
             }
 
-            await this.storage.delete(cardPath(row.uri));
+            try {
+                await this.storage.unlink(cardPath(row.uri));
+            } catch (e) {
+                if (!(e instanceof Error && 'code' in e && e.code === 'ENOENT')) throw e;
+            }
             // Fail closed if the index step throws after the file is already gone: mark the uri so the next
             // drain's vanished-file branch tombstones it, mirroring the create/update seams.
             try {

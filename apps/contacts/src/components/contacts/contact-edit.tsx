@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLabels } from '@workspace/lib/contacts';
-import { formatInputDate } from '@workspace/lib/date';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AvatarEditor, Toolbar, ToolbarTitle, useContactAvatarUpload } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
@@ -32,7 +31,7 @@ const formSchema = z
                 country: z.string().optional(),
             }),
         ),
-        birthday: z.date().nullable(),
+        birthday: z.string().optional(),
         notes: z.string().optional(),
         labels: z.array(z.string()).optional(),
         avatar: z.string().nullable().optional(),
@@ -107,7 +106,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
             email: contact?.email || [''],
             phone: contact?.phone || [''],
             address: contact?.address?.length ? contact.address : [{}],
-            birthday: contact?.birthday ? new Date(contact.birthday) : null,
+            birthday: contact?.birthday || '',
             notes: contact?.notes || '',
             labels: contact?.labels || [],
         },
@@ -525,19 +524,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                 <FormLabel>Birthday</FormLabel>
 
                                                 <FormControl>
-                                                    <Input
-                                                        type="date"
-                                                        defaultValue={field.value ? formatInputDate(field.value) : ''}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            // Build the date at UTC midnight, not local: the route
-                                                            // sends toISOString() and the server slices the ISO date
-                                                            // prefix, so a local-midnight instant east of UTC would
-                                                            // store the previous day. formatInputDate reads UTC too,
-                                                            // so the picker and the stored value stay in step.
-                                                            field.onChange(val ? new Date(`${val}T00:00:00Z`) : null);
-                                                        }}
-                                                    />
+                                                    <Input type="date" {...field} value={field.value || ''} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>

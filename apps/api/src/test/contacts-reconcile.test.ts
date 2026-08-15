@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -35,6 +35,33 @@ describe('reconcileIndex (stat-only pass)', () => {
 
         expect(parseCount(contacts)).toBe(parsesBefore);
         expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+    });
+
+    test('a cards directory enumeration failure leaves rows, ctag, and tombstones untouched', async () => {
+        const { contacts, db } = await makeContacts();
+        const keepId = await contacts.addContact(validContact({ firstName: 'Keep', email: ['keep@example.com'] }));
+        const goneId = await contacts.addContact(validContact({ firstName: 'Gone', email: ['gone@example.com'] }));
+        await contacts.deleteContact(goneId);
+
+        const rowsBefore = db.select().from(contactsSchema.contacts).all();
+        const bookBefore = db.select().from(contactsSchema.book).get();
+        const tombstonesBefore = db.select().from(contactsSchema.contactTombstones).all();
+        const storage = (contacts as unknown as { storage: { readdir: () => Promise<string[]> } }).storage;
+        const originalReaddir = storage.readdir;
+        storage.readdir = async () => {
+            throw new Error('readdir boom');
+        };
+
+        try {
+            await expect(contacts.reconcileIndex()).rejects.toThrow('readdir boom');
+        } finally {
+            storage.readdir = originalReaddir;
+        }
+
+        expect(db.select().from(contactsSchema.contacts).all()).toEqual(rowsBefore);
+        expect(db.select().from(contactsSchema.book).get()).toEqual(bookBefore);
+        expect(db.select().from(contactsSchema.contactTombstones).all()).toEqual(tombstonesBefore);
+        expect((await contacts.getContactById(keepId))?.firstName).toBe('Keep');
     });
 
     test('a hand-written card is indexed, its label auto-created, with one ctag bump', async () => {
@@ -513,13 +540,13 @@ describe('per-file fault tolerance', () => {
     });
 });
 
-// The FE sends birthdays as ISO datetimes ('1990-01-01T00:00:00.000Z'); the seam normalizes to the date part
-// so files stay the source of truth — an app edit reaches the file, and echoing a phone's BDAY is a no-op.
+// The app sends birthdays as bare dates; the seam also normalizes external ISO datetime input so files stay
+// the source of truth and echoing a phone's BDAY remains a no-op.
 describe('birthday normalization at the seam', () => {
-    test('addContact normalizes an ISO-datetime birthday to a date BDAY and round-trips it', async () => {
+    test('addContact stores a date-only birthday as a date BDAY and round-trips it', async () => {
         const { contacts, dir } = await makeContacts();
         const id = await contacts.addContact(
-            validContact({ firstName: 'Born', email: ['born@example.com'], birthday: '1990-01-01T00:00:00.000Z' }),
+            validContact({ firstName: 'Born', email: ['born@example.com'], birthday: '1990-01-01' }),
         );
 
         expect(readFileSync(cardPathOf(dir, `${id}.vcf`), 'utf8')).toContain('BDAY:1990-01-01');
@@ -528,10 +555,7 @@ describe('birthday normalization at the seam', () => {
         expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
     });
 
-    test('the seam keeps the ISO date prefix verbatim — a late-evening UTC instant is not shifted a day', async () => {
-        // The FE now builds birthdays at UTC midnight, but pin the seam contract it relies on: the incoming
-        // instant is sliced to its date prefix, never run through timezone math. A '1989-12-31T22:00Z' instant
-        // must land as BDAY:1989-12-31, not roll forward to 1990-01-01.
+    test('external ISO input keeps its date prefix verbatim instead of shifting by timezone', async () => {
         const { contacts, dir } = await makeContacts();
         const id = await contacts.addContact(
             validContact({ firstName: 'Eve', email: ['eve@example.com'], birthday: '1989-12-31T22:00:00.000Z' }),
@@ -557,18 +581,136 @@ describe('birthday normalization at the seam', () => {
             .get()!;
         expect((await contacts.getContactById(row.id))?.birthday).toBe('1973-10-03');
 
-        // The app echoes the projection back as an ISO datetime (the edit form's shape); same calendar date, so
-        // the phone's compact BDAY must survive byte-for-byte.
+        // The app echoes the bare-date projection; the phone's compact BDAY must survive byte-for-byte.
         await contacts.updateContact(row.id, {
             firstName: 'Phone',
             lastName: 'Sync',
             email: ['phone@example.com'],
             phone: [],
-            birthday: '1973-10-03T00:00:00.000Z',
+            birthday: '1973-10-03',
             labels: [],
         });
 
         expect(readFileSync(cardPathOf(dir, 'phone.vcf'), 'utf8')).toContain('BDAY:19731003');
+    });
+});
+
+describe('canonical file operation failures', () => {
+    test('a non-ENOENT unlink failure leaves the row, ctag, tombstones, and file untouched', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Keep', email: ['keep-unlink@example.com'] }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+        const tombstonesBefore = db.select().from(contactsSchema.contactTombstones).all();
+        const storage = (contacts as unknown as { storage: { unlink: (filePath: string) => Promise<void> } }).storage;
+        const originalUnlink = storage.unlink;
+        storage.unlink = async () => {
+            throw Object.assign(new Error('unlink boom'), { code: 'EIO' });
+        };
+
+        try {
+            await expect(contacts.deleteContact(id)).rejects.toThrow('unlink boom');
+        } finally {
+            storage.unlink = originalUnlink;
+        }
+
+        expect(existsSync(cardPathOf(dir, row.uri))).toBe(true);
+        expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()).toEqual(row);
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+        expect(db.select().from(contactsSchema.contactTombstones).all()).toEqual(tombstonesBefore);
+    });
+
+    test('a missing canonical file is treated as already deleted', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Gone', email: ['gone-file@example.com'] }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+        rmSync(cardPathOf(dir, row.uri));
+
+        await contacts.deleteContact(id);
+
+        expect(
+            db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get(),
+        ).toBeUndefined();
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore + 1);
+        expect(
+            db
+                .select()
+                .from(contactsSchema.contactTombstones)
+                .where(eq(contactsSchema.contactTombstones.uri, row.uri))
+                .get(),
+        ).toBeTruthy();
+    });
+
+    test('an update post-rename stat failure heals the changed file on the next read', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Before', email: ['before@example.com'] }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const storage = (
+            contacts as unknown as {
+                storage: { stat: (filePath: string) => Promise<{ mtimeMs: number; size: number }> };
+            }
+        ).storage;
+        const originalStat = storage.stat;
+        let failed = false;
+        storage.stat = async (filePath) => {
+            if (!failed && filePath === `cards/${row.uri}`) {
+                failed = true;
+                throw new Error('stat boom');
+            }
+            return originalStat.call(storage, filePath);
+        };
+
+        try {
+            await expect(
+                contacts.updateContact(
+                    id,
+                    validContact({ firstName: 'After', email: ['before@example.com'], notes: 'post-rename update' }),
+                ),
+            ).rejects.toThrow('stat boom');
+        } finally {
+            storage.stat = originalStat;
+        }
+
+        expect(readFileSync(cardPathOf(dir, row.uri), 'utf8')).toContain('NOTE:post-rename update');
+        expect((await contacts.getContactById(id))?.firstName).toBe('After');
+        expect((await contacts.getContactById(id))?.notes).toBe('post-rename update');
+        expect(
+            db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.etag,
+        ).not.toBe(row.etag);
+    });
+
+    test('a create post-rename stat failure heals the orphaned file on the next read', async () => {
+        const { contacts, dir } = await makeContacts();
+        const cardsDir = cardsDirOf(dir);
+        const filesBefore = new Set(readdirSync(cardsDir));
+        const storage = (
+            contacts as unknown as {
+                storage: { stat: (filePath: string) => Promise<{ mtimeMs: number; size: number }> };
+            }
+        ).storage;
+        const originalStat = storage.stat;
+        let failed = false;
+        storage.stat = async (filePath) => {
+            if (!failed && filePath.startsWith('cards/')) {
+                failed = true;
+                throw new Error('stat boom');
+            }
+            return originalStat.call(storage, filePath);
+        };
+
+        try {
+            await expect(
+                contacts.addContact(validContact({ firstName: 'Orphan', email: ['orphan-stat@example.com'] })),
+            ).rejects.toThrow('stat boom');
+        } finally {
+            storage.stat = originalStat;
+        }
+
+        const orphanUri = readdirSync(cardsDir).find((name) => !filesBefore.has(name));
+        expect(orphanUri).toBeTruthy();
+        expect(readFileSync(cardPathOf(dir, orphanUri!), 'utf8')).toContain('FN:Orphan Lovelace');
+        expect((await contacts.getContacts()).some((contact) => contact.firstName === 'Orphan')).toBe(true);
     });
 });
 
