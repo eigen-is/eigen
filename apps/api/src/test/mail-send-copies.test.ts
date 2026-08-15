@@ -326,4 +326,53 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(sent[0].text).toContain('Release Notes');
         expect(String(sent[0].html)).toContain('doc-refonly');
     });
+
+    // Clearing a recipient field on an existing draft (the FE sends `undefined` for a cleared
+    // field) must not be resurrected from the draft-meta sidecar on the next full save or send.
+    test('clearing Cc on a saved draft drops it from the reloaded draft and the sent copies', async () => {
+        startCapture();
+        const put = (mail: Record<string, unknown>) =>
+            authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mail }),
+            });
+
+        // 1. Save a draft addressed To + Cc — a full save that writes the sidecar with cc=bob.
+        const first = await assertJson<EmailDraft>(
+            await put({
+                subject: 'Clear cc',
+                to: addr('to@x.com'),
+                cc: addr('bob@x.com'),
+                text: 'hi',
+                html: '<p>hi</p>',
+            }),
+        );
+        expect(first.cc?.value.map((a) => a.address)).toEqual(['bob@x.com']);
+
+        // 2. Save again with Cc cleared (omitted → undefined).
+        const cleared = await assertJson<EmailDraft>(
+            await put({ id: first.id, subject: 'Clear cc', to: addr('to@x.com'), text: 'hi', html: '<p>hi</p>' }),
+        );
+        expect(cleared.cc?.value ?? []).toEqual([]);
+
+        // 3. Reloading the draft still shows no Cc.
+        const reloaded = await assertJson<EmailDraft>(
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/${first.id}`),
+        );
+        expect(reloaded.cc?.value ?? []).toEqual([]);
+
+        // 4. Sending the cleared draft must not deliver to the removed Cc recipient.
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mail: { id: first.id, subject: 'Clear cc', to: addr('to@x.com'), text: 'hi', html: '<p>hi</p>' },
+            }),
+        });
+        expect(res.status).toBe(200);
+        expect(sent.length).toBe(1);
+        expect(sent[0].cc).toBeUndefined();
+        expect(addresses(sent[0].to)).toEqual(['to@x.com']);
+    });
 });

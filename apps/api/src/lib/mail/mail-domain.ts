@@ -379,8 +379,12 @@ export class Mail {
         // Caller-supplied refs win; otherwise carry forward whatever was last persisted.
         let driveReferences = extractRefs(email);
 
-        // When a draft-meta sidecar exists, prefer its header/body values (they may be newer
-        // than the stale EML on disk from a previous fast-path save).
+        // When a draft-meta sidecar exists, prefer its header/body values when the request omits
+        // them (they may be newer than the stale EML from a previous fast-path save). But to/cc/bcc
+        // are taken request-verbatim: the FE sends `undefined` to mean "user cleared this field", so
+        // a `?? meta.X` fallback would resurrect a removed recipient (as draftFastSave already avoids).
+        // The staleness-flush rebuild is unaffected — it constructs `email` from meta, so those
+        // values are already present verbatim.
         if (existingId) {
             const meta = await this.store.readDraftMeta<DraftMeta>(existingId);
             if (meta) {
@@ -389,9 +393,6 @@ export class Mail {
                     subject: email.subject ?? meta.subject,
                     text: email.text ?? meta.text,
                     html: email.html || meta.html, // || not ?? — empty html also falls back to the sidecar
-                    to: email.to ?? meta.to,
-                    cc: email.cc ?? meta.cc,
-                    bcc: email.bcc ?? meta.bcc,
                     inReplyTo: email.inReplyTo ?? meta.inReplyTo,
                     references: email.references ?? meta.references,
                 };
