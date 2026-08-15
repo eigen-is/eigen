@@ -1,6 +1,7 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
-import type { AddressObject, Attachment, Email, EmailAddress, MaildirMailbox } from '@workspace/lib/types/mail';
+import { flattenAddresses } from '@workspace/lib/mail/addresses';
+import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { KebabTrigger, ShadowContent, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
@@ -155,9 +156,14 @@ function formatContactObjects(contacts: AddressObject | AddressObject[], compact
         : formatContactObject(contacts, compact);
 }
 
-function flattenAddresses(contacts?: AddressObject | AddressObject[]): EmailAddress[] {
-    if (!contacts) return [];
-    return Array.isArray(contacts) ? contacts.flatMap((c) => c.value) : contacts.value;
+// Collect the leaf recipients of a header field: normalise the ParsedMail AddressObject | AddressObject[]
+// container, then expand RFC 2822 groups via the shared send-path helper so group members appear here too.
+function collectRecipients(field?: AddressObject | AddressObject[]): { name: string; address: string }[] {
+    const out: { name: string; address: string }[] = [];
+    for (const obj of Array.isArray(field) ? field : field ? [field] : []) {
+        flattenAddresses(obj.value, out);
+    }
+    return out;
 }
 
 function MailHeaderDetails({ email, formattedDate }: { email: Email; formattedDate: string }) {
@@ -184,7 +190,11 @@ function MailHeaderDetails({ email, formattedDate }: { email: Email; formattedDa
 
 function MailHeader({ email, formattedDate }: { email: Email; formattedDate: string }) {
     const isSent = email.mailbox === 'Sent';
-    const recipients = [...flattenAddresses(email.to), ...flattenAddresses(email.cc), ...flattenAddresses(email.bcc)];
+    const recipients = [
+        ...collectRecipients(email.to),
+        ...collectRecipients(email.cc),
+        ...collectRecipients(email.bcc),
+    ];
     const primary = isSent ? recipients[0] : email.from?.value[0];
     const primaryName = primary?.name || primary?.address || 'Unknown';
     const primaryEmail = primary?.address || '';
