@@ -100,6 +100,7 @@ export function useDeleteContact() {
 
 export function useMeContact() {
     const { user } = useAuth();
+    const isGuest = useIsGuest();
     const ownerId = user?.id || '';
 
     return useQuery({
@@ -109,7 +110,7 @@ export function useMeContact() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!ownerId,
+        enabled: !!ownerId && !isGuest,
         staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }

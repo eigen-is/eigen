@@ -15,6 +15,14 @@ export function neuterParamValue(s: string): string {
     return s.replace(/"/g, "'").replace(/[\r\n]/g, '');
 }
 
+// Strip CR/LF from a value written into a content line verbatim — an opaque id/token (vCard X-EIGEN-ID) or a
+// mailto address that is neither TEXT-escaped nor quoted. Only the two bytes that could split the value into a
+// new content line (RFC 2425 §5.8.1) are removed, so the value keeps its shape (escaping/neutering would
+// reshape an arbitrary id) while the injection path stays closed.
+export function stripLineBreaks(s: string): string {
+    return s.replace(/[\r\n]/g, '');
+}
+
 // RFC 5545 §3.1 / RFC 2425 §5.8.1 — fold lines longer than 75 octets with CRLF + single space.
 export function foldLine(line: string): string {
     const bytes = new TextEncoder().encode(line);

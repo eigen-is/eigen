@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, sql } from 'drizzle-orm';
@@ -66,6 +66,18 @@ function toData(contact: Omit<Contact, 'id'>): (typeof schema.contacts.$inferIns
         notes: contact.notes ?? '',
         avatar: contact.avatar ?? '',
     };
+}
+
+// The web form seeds a blank email, a blank phone, and an all-empty address (emptyContact). Drop those at the
+// write seam so form-created cards never carry a bare EMAIL:/TEL:/ADR: line out to DAV clients.
+function isBlankAddress(a: Address): boolean {
+    return (
+        !(a.street ?? '').trim() &&
+        !(a.city ?? '').trim() &&
+        !(a.state ?? '').trim() &&
+        !(a.zipCode ?? '').trim() &&
+        !(a.country ?? '').trim()
+    );
 }
 
 // A freshly-staged avatar has no card referencing it yet — the user is still filling in the form. Give an
@@ -520,13 +532,18 @@ export class Contacts {
     public async reconcileIndex(): Promise<void> {
         return this.writeLock.run(async () => {
             const present = new Map<string, { uri: string; mtime: number; size: number }>();
+            // A stat that failed (transient IO, not a real removal) must not tombstone a live row, so track its
+            // key and exclude it from the vanished set below.
+            const skipped = new Set<string>();
             // listCardUris hands back the sanitized, sorted, case-deduped uris; stat each to capture drift.
             for (const { uri, key } of await listCardUris(this.storage)) {
                 try {
                     const stat = await this.storage.stat(cardPath(uri));
                     present.set(key, { uri, mtime: Math.round(stat.mtimeMs), size: stat.size });
                 } catch (e) {
-                    // File vanished between list and stat — skip it; the next pass catches up.
+                    // Listed but un-stattable — skip it this pass; the next one catches up. Its row is NOT
+                    // treated as vanished, so a transient failure can't delete + tombstone a live card.
+                    skipped.add(key);
                     console.warn(`contacts: skipping ${uri} — could not stat card file: ${e}`);
                 }
             }
@@ -553,7 +570,7 @@ export class Contacts {
                     reindex.push({ uri: info.uri, existing });
                 }
             }
-            const vanished = rows.filter((r) => !present.has(r.uriKey));
+            const vanished = rows.filter((r) => !present.has(r.uriKey) && !skipped.has(r.uriKey));
 
             if (reindex.length === 0 && vanished.length === 0) {
                 // A clean pass still owns cardsBytes: the present files ARE the indexed cards, so sum them here
@@ -739,6 +756,11 @@ export class Contacts {
             // and an app-set ISO datetime reaches the file as a plain BDAY (spec files-as-truth).
             contact.birthday = normalizeBirthday(contact.birthday ?? '');
 
+            // Drop the form's placeholder blank email/phone/address so no bare property line reaches the file.
+            contact.email = contact.email.filter((e) => e.trim() !== '');
+            contact.phone = contact.phone.filter((p) => p.trim() !== '');
+            contact.address = (contact.address ?? []).filter((a) => !isBlankAddress(a));
+
             const id = randomUUID();
             const uri = `${id}.vcf`;
             const categories = this.labelNamesFor(contact.labels ?? []);
@@ -767,12 +789,14 @@ export class Contacts {
             );
 
             const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
-            // The avatar cache is derived from the embed; the projection stores its hashed URL (or '' if none).
-            contact.avatar = await this.cacheCardPhoto(
-                id,
-                photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
-            );
+            // Fail closed on any step past the file write: the derived-cache build and the index commit both
+            // sit inside the guard, so a throw marks the uri dirty for the next drain and rethrows.
             try {
+                // The avatar cache is derived from the embed; the projection stores its hashed URL (or '' if none).
+                contact.avatar = await this.cacheCardPhoto(
+                    id,
+                    photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
+                );
                 this.commitCard({
                     row: {
                         id,
@@ -809,22 +833,30 @@ export class Contacts {
             // bare date — echoing a phone's BDAY is then a no-op, and an app edit reaches the file.
             contact.birthday = normalizeBirthday(contact.birthday ?? '');
 
+            // Drop the form's placeholder blank email/phone/address (before the self-card own-email prepend
+            // below) so no bare property line reaches the file.
+            contact.email = contact.email.filter((e) => e.trim() !== '');
+            contact.phone = contact.phone.filter((p) => p.trim() !== '');
+            contact.address = (contact.address ?? []).filter((a) => !isBlankAddress(a));
+
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
             if (!row) throw new ApiError(404, 'Contact not found');
             if (expectedEtag !== undefined && expectedEtag !== row.etag) {
                 throw new ApiError(412, 'Contact was changed elsewhere');
             }
 
-            if (row.eigenId === this.home.user.id) {
-                const name = `${contact.firstName} ${contact.lastName}`;
-                let avatarBuffer: Buffer | null = null;
+            // A self-card edit also renames the user org-wide, but that push must not fire until the card has
+            // actually saved — capture its inputs here (the avatar bytes from the incoming staged URL, before
+            // the write replaces it with the cache URL) and push only after the commit succeeds. The own-email
+            // prepend stays here: it must happen before the merge builds edits.
+            const isSelf = row.eigenId === this.home.user.id;
+            const selfName = `${contact.firstName} ${contact.lastName}`;
+            let selfAvatarBuffer: Buffer | null = null;
+            if (isSelf) {
                 if (contact.avatar) {
-                    const filename = contact.avatar.split('/').pop()!;
-                    const data = await this.downloadAvatar(filename);
-                    if (data) avatarBuffer = Buffer.from(data);
+                    const data = await this.downloadAvatar(contact.avatar.split('/').pop()!);
+                    if (data) selfAvatarBuffer = Buffer.from(data);
                 }
-                await pushUserProfile(this.home.user.id, name, avatarBuffer);
-
                 if (!contact.email.includes(this.home.user.email)) {
                     contact.email = [this.home.user.email, ...contact.email];
                 }
@@ -863,13 +895,15 @@ export class Contacts {
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
             const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
-            if (avatarChanged) {
-                contact.avatar = await this.cacheCardPhoto(
-                    id,
-                    photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
-                );
-            }
+            // Fail closed on any step past the file write: the derived-cache build and the index commit both
+            // sit inside the guard, so a throw marks the uri dirty for the next drain and rethrows.
             try {
+                if (avatarChanged) {
+                    contact.avatar = await this.cacheCardPhoto(
+                        id,
+                        photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
+                    );
+                }
                 this.commitCard({
                     row: {
                         id,
@@ -893,6 +927,8 @@ export class Contacts {
             }
 
             this.cardsBytes += size - row.size;
+            // The card saved — now it is safe to rename the user's org-wide profile (a failed write never did).
+            if (isSelf) await pushUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
             this.emitContact(SSEventType.CONTACT_UPDATED, id);
         });
     }

@@ -181,6 +181,27 @@ describe('Contacts (file-backed store)', () => {
         expect(parsed.uid).toBe(id);
     });
 
+    test('addContact drops the form-seeded blank email/phone/address so no bare line reaches the file', async () => {
+        const { contacts, dir } = await makeContacts();
+        // emptyContact shape: one blank email, one blank phone, one all-empty address.
+        const id = await contacts.addContact({
+            firstName: 'Blank',
+            lastName: 'Fields',
+            email: [''],
+            phone: [''],
+            address: [{}],
+            birthday: '',
+            notes: '',
+            avatar: '',
+            labels: [],
+        });
+
+        const card = readFileSync(join(dir, 'eigen.contacts', 'cards', `${id}.vcf`), 'utf8');
+        expect(card).not.toMatch(/^EMAIL:/m);
+        expect(card).not.toMatch(/^TEL:/m);
+        expect(card).not.toMatch(/^ADR/m);
+    });
+
     test('updateContact with a stale etag throws 412', async () => {
         const { contacts, db } = await makeContacts();
         const id = await contacts.addContact(validContact({ firstName: 'Stale', email: ['stale@example.com'] }));

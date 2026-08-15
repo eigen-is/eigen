@@ -415,6 +415,20 @@ describe('vCard merge + builder', () => {
         expect(card.photo).toEqual({ kind: 'inline', bytes: Buffer.from(bytes), mediaType: 'image/png' });
     });
 
+    test('an eigenId carrying a CR/LF cannot inject a second vCard (create + merge strip it)', () => {
+        const created = createVCard(
+            { firstName: 'A', lastName: 'B', email: [], phone: [], eigenId: 'x\r\nBEGIN:VCARD' },
+            'uid-inject',
+        );
+        // Parses as exactly ONE vCard (a leaked BEGIN would throw 'multiple') with a single sanitized line.
+        expect(parseVCard(created).eigenId).toBe('xBEGIN:VCARD');
+        expect(parseVCardLines(created).filter((l) => l.name === 'X-EIGEN-ID')).toHaveLength(1);
+
+        const merged = mergeVCard(parseVCard(APPLE_FIXTURE), { eigenId: 'x\r\nBEGIN:VCARD' });
+        expect(parseVCard(merged).eigenId).toBe('xBEGIN:VCARD');
+        expect(parseVCardLines(merged).filter((l) => l.name === 'X-EIGEN-ID')).toHaveLength(1);
+    });
+
     test('createVCard omits X-EIGEN-ID and PHOTO when not supplied', () => {
         const text = createVCard({ firstName: 'Ada', lastName: 'Lovelace', email: [], phone: [] }, 'uid-1');
         expect(text).not.toContain('X-EIGEN-ID');

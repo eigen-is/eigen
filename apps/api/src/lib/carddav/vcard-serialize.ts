@@ -5,6 +5,7 @@
 // Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
 import type { Address } from '@workspace/lib/types/contact';
+import { stripLineBreaks } from '../core/content-line';
 import { escapeText, makeLine, serializeVCardLines, unescapeText, type VCardLine } from './vcard-ast';
 import type { ParsedCard } from './vcard-parse';
 
@@ -196,8 +197,11 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'CATEGORIES', !sameNames(edits.categories, card.categories), value);
     }
     if (edits.eigenId !== undefined) {
-        const changed = (edits.eigenId ?? '') !== (card.eigenId ?? '');
-        result = writeSingle(result, 'X-EIGEN-ID', changed, edits.eigenId ? edits.eigenId : null);
+        // X-EIGEN-ID is written verbatim (an arbitrary id from another server rides through by shape), so the
+        // only sanitize is stripping CR/LF that would otherwise inject a new content line off the REST body.
+        const eigenId = edits.eigenId === null ? null : stripLineBreaks(edits.eigenId);
+        const changed = (eigenId ?? '') !== (card.eigenId ?? '');
+        result = writeSingle(result, 'X-EIGEN-ID', changed, eigenId ? eigenId : null);
     }
     if (edits.photo !== undefined) {
         // Presence-triggered: callers only pass the key when the photo actually changed. Fresh ENCODING=b
@@ -243,7 +247,8 @@ export function createVCard(
     if (input.birthday && ISO_DATE.test(input.birthday)) lines.push(makeLine('BDAY', input.birthday));
     if (input.notes) lines.push(makeLine('NOTE', escapeText(input.notes)));
     if (input.categories?.length) lines.push(makeLine('CATEGORIES', input.categories.map(escapeText).join(',')));
-    if (input.eigenId) lines.push(makeLine('X-EIGEN-ID', input.eigenId));
+    // Verbatim id, minus the CR/LF that would inject a second content line off the REST body (mirrors the BDAY guard).
+    if (input.eigenId) lines.push(makeLine('X-EIGEN-ID', stripLineBreaks(input.eigenId)));
     if (input.photo) lines.push(makeLine('PHOTO', photoBase64(input.photo.bytes), photoParams(input.photo.mediaType)));
     lines.push(makeLine('END', 'VCARD'));
     return serializeVCardLines(lines);
