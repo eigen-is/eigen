@@ -471,6 +471,19 @@ describe('birthday normalization at the seam', () => {
         expect((await contacts.getContactById(id))?.birthday).toBe('1990-01-01');
     });
 
+    test('the seam keeps the ISO date prefix verbatim — a late-evening UTC instant is not shifted a day', async () => {
+        // The FE now builds birthdays at UTC midnight, but pin the seam contract it relies on: the incoming
+        // instant is sliced to its date prefix, never run through timezone math. A '1989-12-31T22:00Z' instant
+        // must land as BDAY:1989-12-31, not roll forward to 1990-01-01.
+        const { contacts, dir } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Eve', email: ['eve@example.com'], birthday: '1989-12-31T22:00:00.000Z' }),
+        );
+
+        expect(readFileSync(cardPathOf(dir, `${id}.vcf`), 'utf8')).toContain('BDAY:1989-12-31');
+        expect((await contacts.getContactById(id))?.birthday).toBe('1989-12-31');
+    });
+
     test('updateContact echoing a phone-synced BDAY leaves the BDAY line untouched', async () => {
         const { contacts, db, dir } = await makeContacts();
         const cardId = randomUUID();

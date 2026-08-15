@@ -530,7 +530,12 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                         defaultValue={field.value ? formatInputDate(field.value) : ''}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            field.onChange(val ? new Date(`${val}T00:00:00`) : null);
+                                                            // Build the date at UTC midnight, not local: the route
+                                                            // sends toISOString() and the server slices the ISO date
+                                                            // prefix, so a local-midnight instant east of UTC would
+                                                            // store the previous day. formatInputDate reads UTC too,
+                                                            // so the picker and the stored value stay in step.
+                                                            field.onChange(val ? new Date(`${val}T00:00:00Z`) : null);
                                                         }}
                                                     />
                                                 </FormControl>
