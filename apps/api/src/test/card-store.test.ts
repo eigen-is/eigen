@@ -6,6 +6,7 @@ import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
+import { mergeVCard } from '../lib/carddav/vcard-serialize';
 import {
     CARDS_DIR,
     cardPath,
@@ -347,6 +348,97 @@ describe('Contacts label membership (CATEGORIES)', () => {
             .all();
         expect(links.map((l) => l.labelId)).toEqual([labelId]);
         expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
+    });
+
+    test('a failed label rename compensates member cards and the exact retry converges', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const labelId = await contacts.addLabel({ name: 'Before', color: '#111111' });
+        await contacts.addContact(validContact({ firstName: 'First', labels: [labelId] }));
+        await contacts.addContact(validContact({ firstName: 'Second', labels: [labelId] }));
+        const memberIds = db
+            .select({ contactId: contactsSchema.contactsToLabels.contactId })
+            .from(contactsSchema.contactsToLabels)
+            .where(eq(contactsSchema.contactsToLabels.labelId, labelId))
+            .all()
+            .map((link) => link.contactId);
+        expect(memberIds).toHaveLength(2);
+        const rows = memberIds.map(
+            (id) => db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!,
+        );
+
+        const photoBytes = Uint8Array.from({ length: 96 }, (_, index) => (index * 13) % 256);
+        const photoCard = mergeVCard(parseVCard(readCard(dir, rows[0].uri)), {
+            photo: { bytes: photoBytes, mediaType: 'image/jpeg' },
+        });
+        writeFileSync(join(dir, 'eigen.contacts', 'cards', rows[0].uri), photoCard);
+        const photoBlock = (raw: string) => raw.match(/PHOTO[^\r\n]*(?:\r\n[ \t][^\r\n]*)*/)?.[0] ?? '';
+        const photoBefore = photoBlock(photoCard);
+        expect(photoBefore).not.toBe('');
+
+        const oldUpdatedAt = new Date(Date.now() - 60_000);
+        db.update(contactsSchema.labels)
+            .set({ updatedAt: oldUpdatedAt })
+            .where(eq(contactsSchema.labels.id, labelId))
+            .run();
+        const labelBefore = db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.id, labelId)).get()!;
+        const labelCountBefore = db.select().from(contactsSchema.labels).all().length;
+        const linksBefore = [...memberIds].sort();
+
+        const storage = (
+            contacts as unknown as {
+                storage: { stat: (filePath: string) => Promise<{ mtimeMs: number; size: number }> };
+            }
+        ).storage;
+        const originalStat = storage.stat;
+        let cardStats = 0;
+        storage.stat = async (filePath) => {
+            if (filePath.startsWith('cards/') && ++cardStats === 2) throw new Error('later card stat boom');
+            return originalStat.call(storage, filePath);
+        };
+
+        try {
+            await expect(contacts.updateLabel(labelId, { name: 'After', color: '#222222' })).rejects.toThrow(
+                'later card stat boom',
+            );
+        } finally {
+            storage.stat = originalStat;
+        }
+
+        expect(db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.id, labelId)).get()).toEqual(
+            labelBefore,
+        );
+        for (const row of rows) {
+            expect(parseVCard(readCard(dir, row.uri)).categories).toEqual(['Before']);
+        }
+        expect(photoBlock(readCard(dir, rows[0].uri))).toBe(photoBefore);
+
+        await contacts.updateLabel(labelId, { name: 'After', color: '#222222' });
+
+        const labelAfter = db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.id, labelId)).get()!;
+        expect(labelAfter.id).toBe(labelId);
+        expect(labelAfter.name).toBe('After');
+        expect(labelAfter.nameKey).toBe('after');
+        expect(labelAfter.color).toBe('#222222');
+        expect(
+            db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.nameKey, 'after')).all(),
+        ).toHaveLength(1);
+        expect(
+            db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.nameKey, 'before')).all(),
+        ).toEqual([]);
+        expect(db.select().from(contactsSchema.labels).all()).toHaveLength(labelCountBefore);
+        expect(
+            db
+                .select({ contactId: contactsSchema.contactsToLabels.contactId })
+                .from(contactsSchema.contactsToLabels)
+                .where(eq(contactsSchema.contactsToLabels.labelId, labelId))
+                .all()
+                .map((link) => link.contactId)
+                .sort(),
+        ).toEqual(linksBefore);
+        for (const row of rows) {
+            expect(parseVCard(readCard(dir, row.uri)).categories).toEqual(['After']);
+        }
+        expect(photoBlock(readCard(dir, rows[0].uri))).toBe(photoBefore);
     });
 
     test('a rename matches a case-variant CATEGORIES value in a member card', async () => {

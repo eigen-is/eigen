@@ -994,12 +994,14 @@ export class Contacts {
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, contactId)).get();
             if (!row) continue;
 
-            const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
+            const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)), {
+                decodePhoto: false,
+            });
             const categories = transform(card.categories);
             const bytes = new TextEncoder().encode(mergeVCard(card, { categories }));
 
-            const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
             try {
+                const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
                 this.commitCard({
                     row: {
                         id: row.id,
@@ -1017,12 +1019,12 @@ export class Contacts {
                     },
                     categories,
                 });
+                this.cardsBytes += size - row.size;
             } catch (e) {
                 this.markCardDirty(row.uri);
                 throw e;
             }
 
-            this.cardsBytes += size - row.size;
             this.emitContact(SSEventType.CONTACT_UPDATED, row.id);
         }
     }
@@ -1073,9 +1075,30 @@ export class Contacts {
             const newName = label.name.trim();
             if (before && before.name !== newName) {
                 const oldNameKey = before.nameKey;
-                await this.rewriteLabelInMemberCards(id, (names) =>
-                    names.map((n) => (normalizeLabelName(n) === oldNameKey ? newName : n)),
-                );
+                try {
+                    await this.rewriteLabelInMemberCards(id, (names) =>
+                        names.map((n) => (normalizeLabelName(n) === oldNameKey ? newName : n)),
+                    );
+                } catch (forwardError) {
+                    try {
+                        await this.db
+                            .update(schema.labels)
+                            .set({
+                                name: before.name,
+                                nameKey: before.nameKey,
+                                color: before.color,
+                                updatedAt: before.updatedAt,
+                            })
+                            .where(eq(schema.labels.id, id));
+                        const newNameKey = normalizeLabelName(newName);
+                        await this.rewriteLabelInMemberCards(id, (names) =>
+                            names.map((n) => (normalizeLabelName(n) === newNameKey ? before.name : n)),
+                        );
+                    } catch (rollbackError) {
+                        console.error(`contacts: failed to compensate label rename ${id}:`, rollbackError);
+                    }
+                    throw forwardError;
+                }
             }
 
             const updatedLabel = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();

@@ -97,7 +97,7 @@ export function normalizeBirthday(value: string): string {
     return '';
 }
 
-export function parseVCard(text: string): ParsedCard {
+export function parseVCard(text: string, options: { decodePhoto?: boolean } = {}): ParsedCard {
     const lines = parseVCardLines(text);
     const first = (name: string) => lines.find((l) => l.name === name);
     const values = (name: string) =>
@@ -157,6 +157,6 @@ export function parseVCard(text: string): ParsedCard {
         categories: categories?.value ? splitValue(categories.value, ',').map(unescapeText) : [],
         eigenId: first('X-EIGEN-ID')?.value ?? null,
         isGroup: kind?.value.trim().toLowerCase() === 'group',
-        photo: photo ? parsePhoto(photo) : null,
+        photo: photo && options.decodePhoto !== false ? parsePhoto(photo) : null,
     };
 }
