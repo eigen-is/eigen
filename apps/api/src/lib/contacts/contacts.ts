@@ -284,6 +284,12 @@ export class Contacts {
                 .onConflictDoUpdate({
                     target: schema.contacts.id,
                     set: {
+                        // uri/uriKey/uid follow the file (a re-created card at a case-variant uri keeps the id
+                        // but moves on disk); eigenId is deliberately omitted — the self-link is managed only by
+                        // resolveSelfLink and the reconcile rematch (§ 2 trust rule), never a blind upsert.
+                        uri: opts.row.uri,
+                        uriKey: opts.row.uriKey,
+                        uid: opts.row.uid,
                         firstName: opts.row.firstName,
                         lastName: opts.row.lastName,
                         isGroup: opts.row.isGroup,
@@ -322,14 +328,11 @@ export class Contacts {
                 .get();
             if (await this.storage.exists(cardPath(uri))) {
                 // Re-index through the shared prepare path so the healed row gets the canonical projection
-                // shape and a regenerated photo cache. prepareCardRow leaves eigenId '' for the ranked pass;
-                // here we preserve an incumbent's self-link and let a strong X-EIGEN-ID file take a still-free
-                // slot, but never demote the current self row.
+                // shape and a regenerated photo cache. commitCard's UPDATE set omits eigenId (§ 2 trust rule),
+                // so this value drives only a freshly-INSERTED row; an incumbent's self-link rides through the
+                // omission untouched, which is why ranking against the incumbent here would be dead code.
                 const prep = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
-                prep.row.eigenId =
-                    existing?.eigenId === this.home.user.id
-                        ? this.home.user.id
-                        : this.resolveSelfLink(prep.parsed.eigenId ?? undefined);
+                prep.row.eigenId = this.resolveSelfLink(prep.parsed.eigenId ?? undefined);
                 // A present file is alive: commitCard clears any live tombstone for its uri (by uriKey), so a
                 // card re-planted at a deleted uri drops its stale removal instead of resurrecting it.
                 this.commitCard({ row: prep.row, categories: prep.categories, tombstoneCleared: true });
@@ -458,17 +461,21 @@ export class Contacts {
         winner.row.size = stat.size;
     }
 
-    // Drop prepared rows whose uid another card in this pass already claims — the idx_contacts_uid UNIQUE
-    // would otherwise throw inside the write transaction and brick the whole pass (spec § 1). Candidates
-    // arrive uri-sorted so the earliest uri wins; `claimed` seeds the uids of rows that survive untouched.
-    private dedupeByUid<T extends { row: CardRowInput }>(candidates: T[], claimed: Set<string>): T[] {
+    // Drop prepared rows whose uid is already owned by a row the transaction will leave in place — the
+    // idx_contacts_uid UNIQUE would otherwise throw inside the write and brick the whole pass (spec § 1).
+    // `uidOwner` maps each uid to the row id that will hold it after the pass: seeded with every surviving
+    // row (reconcile) or empty (rebuild clears the table first). A candidate updating its own incumbent keeps
+    // that row's slot (owner === its id); any other collision is skipped-and-warned, earliest uri winning
+    // since candidates arrive uri-sorted.
+    private dedupeByUid<T extends { row: CardRowInput }>(candidates: T[], uidOwner: Map<string, string>): T[] {
         const kept: T[] = [];
         for (const c of candidates) {
-            if (claimed.has(c.row.uid)) {
+            const owner = uidOwner.get(c.row.uid);
+            if (owner !== undefined && owner !== c.row.id) {
                 console.warn(`contacts: skipping ${c.row.uri} — UID ${c.row.uid} already claimed by another card`);
                 continue;
             }
-            claimed.add(c.row.uid);
+            uidOwner.set(c.row.uid, c.row.id);
             kept.push(c);
         }
         return kept;
@@ -560,13 +567,13 @@ export class Contacts {
 
             const candidates = await this.buildCandidates(reindex);
 
-            // Rows that stay in the table untouched keep their uid; seed the collision guard with them so a
-            // drifted/new card carrying a duplicate UID loses to the incumbent instead of tripping the UNIQUE
-            // index inside the transaction.
-            const claimedUids = new Set(
-                rows.filter((r) => present.has(r.uriKey) && !reindexKeys.has(r.uriKey)).map((r) => r.uid),
-            );
-            const prepared = this.dedupeByUid(candidates, claimedUids);
+            // Seed the uid→owner guard with every row that will REMAIN after the vanished deletes (not just the
+            // untouched ones): a reindexing incumbent whose candidate is skipped-as-garbage or loses dedupe keeps
+            // its stored uid, so a new same-UID card must lose to it rather than trip the UNIQUE index inside the
+            // transaction. A candidate updating its own incumbent (owner === its id) is free to keep that uid.
+            const vanishedIds = new Set(vanished.map((r) => r.id));
+            const uidOwner = new Map(rows.filter((r) => !vanishedIds.has(r.id)).map((r) => [r.uid, r.id] as const));
+            const prepared = this.dedupeByUid(candidates, uidOwner);
 
             // Phase 2: choose the one self-link winner. A self row that survives this pass untouched (file
             // present AND not re-indexing) holds the slot outright; the present() guard stops a self row whose
@@ -595,6 +602,12 @@ export class Contacts {
                         .onConflictDoUpdate({
                             target: schema.contacts.id,
                             set: {
+                                // uri/uriKey/uid follow the file: a delete + case-variant recreate reuses the
+                                // contact id but changes the on-disk name, so the stored uri must refresh or
+                                // every later read ENOENTs on a case-sensitive FS.
+                                uri: row.uri,
+                                uriKey: row.uriKey,
+                                uid: row.uid,
                                 firstName: row.firstName,
                                 lastName: row.lastName,
                                 eigenId: row.eigenId,
@@ -666,7 +679,7 @@ export class Contacts {
             const candidates = await this.buildCandidates(entries);
             // The whole index is cleared and rebuilt below, so nothing survives to seed the collision guard —
             // two files sharing a UID resolve purely first-by-uri.
-            const prepared = this.dedupeByUid(candidates, new Set());
+            const prepared = this.dedupeByUid(candidates, new Map());
 
             // Phase 2: the highest-ranked card claims the single self-link; only an email-only winner is rewritten.
             const winner = this.pickSelfWinner(prepared);

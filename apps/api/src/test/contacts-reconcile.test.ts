@@ -123,6 +123,38 @@ describe('reconcileIndex (stat-only pass)', () => {
         ).toBeUndefined();
     });
 
+    test('a delete + case-variant recreate refreshes the stored uri so reads still resolve', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        mkdirSync(cardsDirOf(dir), { recursive: true });
+        const uid = randomUUID();
+        const card = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nN:Case;Variant;;;\r\nFN:Variant Case\r\nEMAIL:cv@example.com\r\nEND:VCARD\r\n`;
+        writeFileSync(cardPathOf(dir, 'A.vcf'), card);
+        await contacts.init();
+        const before = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, 'a.vcf'))
+            .get()!;
+        expect(before.uri).toBe('A.vcf');
+
+        // Delete A.vcf and recreate the same content + UID at the case-variant a.vcf. Without refreshing the
+        // stored uri, the row keeps pointing at A.vcf and every later read ENOENTs on a case-sensitive FS.
+        rmSync(cardPathOf(dir, 'A.vcf'));
+        writeFileSync(cardPathOf(dir, 'a.vcf'), card);
+        const future = new Date(Date.now() + 5000);
+        utimesSync(cardPathOf(dir, 'a.vcf'), future, future); // force a stat drift so reconcile re-reads it
+        await contacts.init();
+
+        const after = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, 'a.vcf'))
+            .get()!;
+        expect(after.id).toBe(before.id); // same contact, updated in place
+        expect(after.uri).toBe('a.vcf'); // uri refreshed to the on-disk name
+        expect((await contacts.getContactById(after.id))?.firstName).toBe('Variant');
+    });
+
     test('an out-of-band file edit refreshes the row etag/notes and bumps cardCtag', async () => {
         const { contacts, db, dir } = await makeContacts();
         const id = await contacts.addContact(validContact({ firstName: 'Edit', email: ['edit@example.com'] }));
@@ -452,6 +484,31 @@ describe('per-file fault tolerance', () => {
         expect(withUid[0].uriKey).toBe(uriKeyOf(uri));
         // The loser is never indexed and its file is untouched.
         expect(existsSync(cardPathOf(dir, twinUri))).toBe(true);
+        expect(warnings.some((w) => w.toUpperCase().includes('UID'))).toBe(true);
+    });
+
+    test('a same-UID copy planted at an earlier name while the original drifts does not brick init', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Keep', email: ['keep@example.com'] }));
+        const uri = uriOf(db, id);
+        const uid = parseVCard(readFileSync(cardPathOf(dir, uri), 'utf8')).uid!;
+
+        // Drift the original so it re-indexes this pass, then drop a byte-copy carrying the same UID at a
+        // lexically-EARLIER name so it is visited first. The incumbent still owns the uid, so seeding the
+        // collision guard with every surviving row (not just the untouched ones) keeps the copy from tripping
+        // the UNIQUE index inside the transaction and bricking the whole account.
+        const future = new Date(Date.now() + 5000);
+        utimesSync(cardPathOf(dir, uri), future, future);
+        const earlierUri = '0-collision.vcf';
+        expect(earlierUri < uri).toBe(true);
+        writeFileSync(cardPathOf(dir, earlierUri), readFileSync(cardPathOf(dir, uri), 'utf8'));
+
+        const warnings = await captureWarnings(() => contacts.init());
+
+        // Init survived, exactly one row owns the uid, and it is the incumbent (not the earlier-sorting copy).
+        const withUid = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.uid, uid)).all();
+        expect(withUid.length).toBe(1);
+        expect(withUid[0].id).toBe(id);
         expect(warnings.some((w) => w.toUpperCase().includes('UID'))).toBe(true);
     });
 });
