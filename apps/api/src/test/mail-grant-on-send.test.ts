@@ -381,8 +381,11 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
         expect(daclSpy.mock.calls.filter((c: unknown[]) => c[1] === docId).length).toBe(1);
     });
 
-    // 12. More than MAX_SEND_REFERENCES distinct grant ids is rejected before any side effect.
-    test('over the reference cap is rejected with 400 before any grant', async () => {
+    // 12. More than MAX_SEND_REFERENCES distinct grant ids is now rejected at the schema (maxItems),
+    // so the TypeBox violation surfaces as a 422 before the handler runs — mirroring the drive
+    // access-check route's bounded emails body (see drive-access-check.test.ts's over-cap test → 422).
+    // The helper's internal dedupe+cap stays as defense in depth for direct (non-route) callers.
+    test('over the reference cap is rejected with 422 before any grant', async () => {
         startCapture();
         daclSpy = spyOn(Drive.prototype, 'updateACLDelta');
         const docId = await createDoc(`grant-cap-${randomUUID()}`);
@@ -394,7 +397,7 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
             refs: [ref(docId)],
             grant,
         });
-        expect(res.status).toBe(400);
+        expect(res.status).toBe(422);
         expect(sent.length).toBe(0);
         expect(daclSpy.mock.calls.length).toBe(0);
         expect(await getAcl(docId)).toEqual(before);

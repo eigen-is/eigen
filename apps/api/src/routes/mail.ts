@@ -11,6 +11,7 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
+import { MAX_SEND_REFERENCES } from '../lib/mail/recipients';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -230,7 +231,10 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
-            body: t.Object({ mail: MailDraftSchema, grantAccessRefIds: t.Optional(t.Array(t.String())) }),
+            body: t.Object({
+                mail: MailDraftSchema,
+                grantAccessRefIds: t.Optional(t.Array(t.String(), { maxItems: MAX_SEND_REFERENCES })),
+            }),
         },
     )
     .put(
