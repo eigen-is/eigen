@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
@@ -10,6 +10,18 @@ import { contactKeys, invalidateContactCreated, invalidateContactDeleted, invali
 // A write echoes the etag its form loaded; a 412 means the card changed elsewhere first. Reload list + detail so
 // the form shows current state, tell the user, and swallow it. All handling stays in the hook (NOTIFICATIONS.md).
 const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
+
+// Both the update and delete onError paths recover a 412 the same way — reload the contact as an update (a
+// refused delete leaves it present), toast, and swallow. Shared so the two callbacks can't drift; returns true
+// when it handled the 412 so the caller skips onMutationError.
+function handleStaleWrite(queryClient: QueryClient, ownerId: string, id: string, error: unknown): boolean {
+    if (error instanceof AppError && error.status === 412) {
+        invalidateContactUpdated(queryClient, ownerId, id);
+        toast.error(STALE_WRITE_TOAST);
+        return true;
+    }
+    return false;
+}
 
 // Fetch all contacts
 export function useContacts() {
@@ -60,11 +72,7 @@ export function useUpdateContact() {
         },
         onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, ownerId, variables.id),
         onError: (error, variables) => {
-            if (error instanceof AppError && error.status === 412) {
-                invalidateContactUpdated(queryClient, ownerId, variables.id);
-                toast.error(STALE_WRITE_TOAST);
-                return;
-            }
+            if (handleStaleWrite(queryClient, ownerId, variables.id, error)) return;
             onMutationError(error);
         },
     });
@@ -84,12 +92,7 @@ export function useDeleteContact() {
         },
         onSuccess: (_data, { id }) => invalidateContactDeleted(queryClient, ownerId, id),
         onError: (error, { id }) => {
-            // A refused delete (412) leaves the contact present, so reload it like an update, not a deletion.
-            if (error instanceof AppError && error.status === 412) {
-                invalidateContactUpdated(queryClient, ownerId, id);
-                toast.error(STALE_WRITE_TOAST);
-                return;
-            }
+            if (handleStaleWrite(queryClient, ownerId, id, error)) return;
             onMutationError(error);
         },
     });

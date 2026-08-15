@@ -1,66 +1,21 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Contact } from '@workspace/lib/types/contact';
-import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { mergeVCard } from '../lib/carddav/vcard-serialize';
 import { labelColorFor, normalizeLabelName, uriKeyOf } from '../lib/contacts/card-store';
-import { Contacts } from '../lib/contacts/contacts';
+import type { Contacts } from '../lib/contacts/contacts';
 import * as contactsSchema from '../lib/contacts/schema';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
-import type { Home } from '../lib/home';
+import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from './contacts-test-helpers';
 
-const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-contacts-reconcile-${Date.now()}`);
-let counter = 0;
-
-beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
 afterAll(() => {
     try {
-        rmSync(TEST_DIR, { recursive: true, force: true });
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
     } catch {}
-});
-
-// Isolated Contacts instance over a temp home dir (card-store.test.ts's pattern): a stub Home supplies only
-// the members Contacts touches — a memoized getLocalDatabase (so a second init() reuses the same connection),
-// the current user, and a broadcast sink.
-async function makeContacts() {
-    const dir = join(TEST_DIR, `home-${counter++}`);
-    const broadcasts: SSEvent[] = [];
-    const user = { id: randomUUID(), email: `me-${counter}@test.local`, name: 'Ada Lovelace' };
-    const dbCache = new Map<string, Promise<ManagedDatabase<SchemaType>>>();
-    const getLocalDatabase = ((config: DatabaseConfig<SchemaType>, relativePath: string) => {
-        let entry = dbCache.get(relativePath);
-        if (!entry) {
-            entry = (async () => {
-                const mdb = new ManagedDatabase(config, join(dir, relativePath));
-                await mdb.open(0);
-                return mdb;
-            })();
-            dbCache.set(relativePath, entry);
-        }
-        return entry;
-    }) as Home['getLocalDatabase'];
-    const home = {
-        homeDir: dir,
-        user,
-        getLocalDatabase,
-        broadcast: (e: SSEvent) => broadcasts.push(e),
-    } as unknown as Home;
-    const contacts = new Contacts(home);
-    await contacts.init();
-    const managed = (await dbCache.get('eigen.contacts/contacts.db')!) as ManagedDatabase<typeof contactsSchema>;
-    return { contacts, broadcasts, user, dir, db: managed.db };
-}
-
-const validContact = (over: Partial<Omit<Contact, 'id'>>): Omit<Contact, 'id'> => ({
-    firstName: 'Ada',
-    lastName: 'Lovelace',
-    email: ['ada@example.com'],
-    phone: [],
-    ...over,
 });
 
 const cardsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'cards');
@@ -69,14 +24,6 @@ const avatarsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'avatars');
 const parseCount = (contacts: Contacts) => contacts.cardParseCount;
 const uriOf = (db: Awaited<ReturnType<typeof makeContacts>>['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.uri;
-
-async function stageAvatar(contacts: Contacts): Promise<string> {
-    const sharp = (await import('sharp')).default;
-    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 10, g: 120, b: 200 } } })
-        .png()
-        .toBuffer();
-    return contacts.uploadAvatar(new File([new Uint8Array(png)], 'avatar.png', { type: 'image/png' }));
-}
 
 describe('reconcileIndex (stat-only pass)', () => {
     test('a clean second init re-parses zero files and leaves the ctag untouched', async () => {

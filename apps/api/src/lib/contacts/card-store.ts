@@ -80,3 +80,28 @@ export async function cleanupTempCardFiles(storage: LocalFilesystem): Promise<vo
         }
     }
 }
+
+// The one enumerate seam the reconcile, rebuild (and future DAV) passes share: list `cards/`, sort so a
+// uriKey collision resolves first-by-sort every pass, sanitize each name to a valid uri (warn-skip a
+// non-conforming entry), and fold to its case/normalization key (warn-skip a case-variant duplicate). Returns
+// the surviving `{ uri, key }` in sorted order so the self-link tie-break stays stable and the two byte-identical
+// warn strings live in exactly one place.
+export async function listCardUris(storage: LocalFilesystem): Promise<{ uri: string; key: string }[]> {
+    const seen = new Set<string>();
+    const entries: { uri: string; key: string }[] = [];
+    for (const name of (await storage.list(CARDS_DIR)).sort()) {
+        const uri = sanitizeCardUri(name);
+        if (!uri) {
+            console.warn(`contacts: ignoring non-conforming entry ${name} in cards/`);
+            continue;
+        }
+        const key = uriKeyOf(uri);
+        if (seen.has(key)) {
+            console.warn(`contacts: ignoring case-variant duplicate ${name} in cards/`);
+            continue;
+        }
+        seen.add(key);
+        entries.push({ uri, key });
+    }
+    return entries;
+}

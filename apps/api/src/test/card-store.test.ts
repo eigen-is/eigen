@@ -3,8 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
-import type { Contact } from '@workspace/lib/types/contact';
-import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import {
@@ -18,10 +17,9 @@ import {
     uriKeyOf,
     writeCardFile,
 } from '../lib/contacts/card-store';
-import { Contacts } from '../lib/contacts/contacts';
 import * as contactsSchema from '../lib/contacts/schema';
-import { type DatabaseConfig, LocalFilesystem, ManagedDatabase, type SchemaType } from '../lib/core';
-import type { Home } from '../lib/home';
+import { LocalFilesystem } from '../lib/core';
+import { CONTACTS_TEST_ROOT, makeContacts, validContact } from './contacts-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-card-store-${Date.now()}`);
 let counter = 0;
@@ -34,6 +32,7 @@ beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
 afterAll(() => {
     try {
         rmSync(TEST_DIR, { recursive: true, force: true });
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
     } catch {}
 });
 
@@ -154,46 +153,6 @@ describe('card file helpers', () => {
 
         expect(readdirSync(cardsDir).sort()).toEqual(['real.vcf', 'stray.txt', 'x.VCF']);
     });
-});
-
-// Isolated Contacts instance over a temp home dir (mount.test.ts's pattern): a stub Home supplies only the
-// members Contacts touches — a memoized getLocalDatabase (so a second init() reuses the same connection),
-// the current user, and a broadcast sink.
-async function makeContacts() {
-    const dir = join(TEST_DIR, `home-${counter++}`);
-    const broadcasts: SSEvent[] = [];
-    const user = { id: randomUUID(), email: `me-${counter}@test.local`, name: 'Ada Lovelace' };
-    const dbCache = new Map<string, Promise<ManagedDatabase<SchemaType>>>();
-    const getLocalDatabase = ((config: DatabaseConfig<SchemaType>, relativePath: string) => {
-        let entry = dbCache.get(relativePath);
-        if (!entry) {
-            entry = (async () => {
-                const mdb = new ManagedDatabase(config, join(dir, relativePath));
-                await mdb.open(0);
-                return mdb;
-            })();
-            dbCache.set(relativePath, entry);
-        }
-        return entry;
-    }) as Home['getLocalDatabase'];
-    const home = {
-        homeDir: dir,
-        user,
-        getLocalDatabase,
-        broadcast: (e: SSEvent) => broadcasts.push(e),
-    } as unknown as Home;
-    const contacts = new Contacts(home);
-    await contacts.init();
-    const managed = (await dbCache.get('eigen.contacts/contacts.db')!) as ManagedDatabase<typeof contactsSchema>;
-    return { contacts, broadcasts, user, dir, db: managed.db };
-}
-
-const validContact = (over: Partial<Omit<Contact, 'id'>>): Omit<Contact, 'id'> => ({
-    firstName: 'Ada',
-    lastName: 'Lovelace',
-    email: ['ada@example.com'],
-    phone: [],
-    ...over,
 });
 
 describe('Contacts (file-backed store)', () => {

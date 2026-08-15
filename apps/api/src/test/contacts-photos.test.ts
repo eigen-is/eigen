@@ -1,73 +1,18 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Contact } from '@workspace/lib/types/contact';
-import type { SSEvent } from '@workspace/lib/types/sse';
 import type { ParsedCardPhoto } from '../lib/carddav/vcard-parse';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { computeCardEtag } from '../lib/contacts/card-store';
-import { Contacts } from '../lib/contacts/contacts';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
-import type { Home } from '../lib/home';
+import type { Contacts } from '../lib/contacts/contacts';
+import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from './contacts-test-helpers';
 
-const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-contacts-photos-${Date.now()}`);
-let counter = 0;
-
-beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
 afterAll(() => {
     try {
-        rmSync(TEST_DIR, { recursive: true, force: true });
+        rmSync(CONTACTS_TEST_ROOT, { recursive: true, force: true });
     } catch {}
 });
-
-// Isolated Contacts instance over a temp home dir — the card-store.test.ts pattern: a stub Home supplies
-// only the members Contacts touches (a memoized getLocalDatabase, the current user, a broadcast sink).
-async function makeContacts() {
-    const dir = join(TEST_DIR, `home-${counter++}`);
-    const broadcasts: SSEvent[] = [];
-    const user = { id: randomUUID(), email: `me-${counter}@test.local`, name: 'Ada Lovelace' };
-    const dbCache = new Map<string, Promise<ManagedDatabase<SchemaType>>>();
-    const getLocalDatabase = ((config: DatabaseConfig<SchemaType>, relativePath: string) => {
-        let entry = dbCache.get(relativePath);
-        if (!entry) {
-            entry = (async () => {
-                const mdb = new ManagedDatabase(config, join(dir, relativePath));
-                await mdb.open(0);
-                return mdb;
-            })();
-            dbCache.set(relativePath, entry);
-        }
-        return entry;
-    }) as Home['getLocalDatabase'];
-    const home = {
-        homeDir: dir,
-        user,
-        getLocalDatabase,
-        broadcast: (e: SSEvent) => broadcasts.push(e),
-    } as unknown as Home;
-    const contacts = new Contacts(home);
-    await contacts.init();
-    return { contacts, broadcasts, user, dir };
-}
-
-const validContact = (over: Partial<Omit<Contact, 'id'>>): Omit<Contact, 'id'> => ({
-    firstName: 'Ada',
-    lastName: 'Lovelace',
-    email: ['ada@example.com'],
-    phone: [],
-    ...over,
-});
-
-// A real image through the staging endpoint, exactly as the REST avatar upload does: uploadAvatar
-// transcodes it to a webp and returns the `contacts/{userId}/avatar/{uuid}.webp` staged URL.
-async function stageAvatar(contacts: Contacts): Promise<string> {
-    const sharp = (await import('sharp')).default;
-    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: { r: 10, g: 120, b: 200 } } })
-        .png()
-        .toBuffer();
-    return contacts.uploadAvatar(new File([new Uint8Array(png)], 'avatar.png', { type: 'image/png' }));
-}
 
 const cardPathOf = (dir: string, id: string) => join(dir, 'eigen.contacts', 'cards', `${id}.vcf`);
 const avatarsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'avatars');
