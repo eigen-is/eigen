@@ -327,6 +327,26 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(String(sent[0].html)).toContain('doc-refonly');
     });
 
+    test('a truly empty send (no subject, body, or refs) is rejected with 400', async () => {
+        startCapture();
+        const res = await sendMailBody({ subject: '', to: addr('bob@test.eigen.is'), text: '', html: '' });
+        expect(res.status).toBe(400);
+        expect(sent.length).toBe(0);
+    });
+
+    test('an empty-subject send with a body goes out with an empty Subject, not a placeholder', async () => {
+        startCapture();
+        const res = await sendMailBody({
+            subject: '',
+            to: addr('ext1@x.com'),
+            text: 'has a body',
+            html: '<p>has a body</p>',
+        });
+        expect(res.status).toBe(200);
+        expect(sent.length).toBe(1);
+        expect(sent[0].subject).toBe('');
+    });
+
     // Clearing a recipient field on an existing draft (the FE sends `undefined` for a cleared
     // field) must not be resurrected from the draft-meta sidecar on the next full save or send.
     test('clearing Cc on a saved draft drops it from the reloaded draft and the sent copies', async () => {

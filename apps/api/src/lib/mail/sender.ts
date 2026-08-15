@@ -20,7 +20,7 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
             ? { name: fromValue.name || '', address: fromValue.address }
             : { name: '', address: fallbackEmail },
         to,
-        subject: draft.subject || '(No subject)',
+        subject: draft.subject || '',
         text: draft.text || '',
         // Pin the wire Message-ID to the value the Sent EML carries (mailfile.ts), so a reply to
         // our sent mail threads against a header the recipient actually saw.

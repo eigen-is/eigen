@@ -586,7 +586,9 @@ export class Mail {
         if (refs.length > MAX_SEND_REFERENCES) {
             throw new ApiError(400, `A message can have at most ${MAX_SEND_REFERENCES} attachment links`);
         }
-        if (!message.subject.trim() && !message.text.trim() && !message.html) {
+        // driveReferences count as content: a ref-only send (empty subject/body but with attachment
+        // links) is legitimate. Reject only when subject, body AND refs are all empty.
+        if (!message.subject.trim() && !message.text.trim() && !message.html && !refs.length) {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
         }
 
