@@ -3,6 +3,7 @@ import { emptyContact } from '@workspace/lib/constants/contact';
 import { useAddContact, useContacts, useUpdateContact } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
+import { useEffect } from 'react';
 import { z } from 'zod';
 import { ContactEdit, ContactEditToolbar, type ContactFormValues } from '../components/contacts/contact-edit';
 
@@ -39,6 +40,14 @@ function EditContactRoute() {
     const contact = contactId ? contacts.find((c): c is Contact => c.id === contactId) : undefined;
     const updateContactMutation = useUpdateContact();
     const addContactMutation = useAddContact();
+
+    // Redirect away from a contactId that no longer exists (e.g. deleted elsewhere) from an effect, not the
+    // render body — matching the sibling list route's idiom rather than calling navigate() while rendering.
+    useEffect(() => {
+        if (!contactsLoading && contactId && !contact) {
+            navigate({ to: '/$filterType/$filterId', params: { filterType, filterId }, search: {} });
+        }
+    }, [contactsLoading, contactId, contact, navigate, filterType, filterId]);
 
     const handleSave = async (data: ContactFormValues, etag?: string) => {
         const contactData: Omit<Contact, 'id'> = {
@@ -90,12 +99,8 @@ function EditContactRoute() {
         return <LoadingState />;
     }
 
+    // The effect above is redirecting; render nothing rather than flash the editor over emptyContact.
     if (contactId && !contact) {
-        navigate({
-            to: '/$filterType/$filterId',
-            params: { filterType, filterId },
-            search: {},
-        });
         return null;
     }
 

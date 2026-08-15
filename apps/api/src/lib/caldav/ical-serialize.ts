@@ -5,6 +5,7 @@ import {
     neuterParamValue as escapeICalParamValue,
     escapeContentText as escapeICalText,
     foldLine,
+    stripLineBreaks,
 } from '../core/content-line';
 import { buildVTimezone } from './vtimezone';
 
@@ -130,20 +131,23 @@ function buildVEvent(
     const organizer = event.data?.organizer;
     if (organizer) {
         const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
-        prop(`ORGANIZER${cn}:mailto:${organizer.email}`);
+        // The email rides through unescaped after mailto:, so strip CR/LF that would otherwise inject a line.
+        prop(`ORGANIZER${cn}:mailto:${stripLineBreaks(organizer.email)}`);
     }
 
     // ATTENDEE lines — for iMIP, include the organizer as ACCEPTED attendee (RFC 5546)
     const attendees = event.data?.attendees ?? [];
     if (options?.rsvp && organizer && !attendees.some((a) => a.email === organizer.email)) {
         const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
-        prop(`ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED${cn}:mailto:${organizer.email}`);
+        prop(
+            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED${cn}:mailto:${stripLineBreaks(organizer.email)}`,
+        );
     }
     for (const attendee of attendees) {
         const cn = attendee.name ? `;CN="${escapeICalParamValue(attendee.name)}"` : '';
         const rsvp = options?.rsvp ? ';RSVP=TRUE' : '';
         prop(
-            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${attendee.email}`,
+            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${stripLineBreaks(attendee.email)}`,
         );
     }
 

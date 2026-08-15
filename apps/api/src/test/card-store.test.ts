@@ -79,11 +79,11 @@ describe('sanitizeCardUri', () => {
     test('rejects empty and over-long names', () => {
         expect(sanitizeCardUri('')).toBeNull();
         expect(sanitizeCardUri(`${'a'.repeat(256)}.vcf`)).toBeNull();
-        // The cap is 200 (spec § 4) so writeAtomic's `.`-prefixed temp name stays under NAME_MAX: a name that
-        // would have passed the old 255 cap is now rejected, and the 196-char regex ceiling is the real bound.
+        // The cap is 200 (spec § 4) so writeAtomic's `.`-prefixed temp name stays under NAME_MAX. The bound
+        // lives in the length check alone (the regex owns only the charset): 200 chars pass, 201 fail.
         expect(sanitizeCardUri(`${'a'.repeat(210)}.vcf`)).toBeNull();
-        expect(sanitizeCardUri(`${'a'.repeat(192)}.vcf`)).toBe(`${'a'.repeat(192)}.vcf`);
-        expect(sanitizeCardUri(`${'a'.repeat(193)}.vcf`)).toBeNull();
+        expect(sanitizeCardUri(`${'a'.repeat(196)}.vcf`)).toBe(`${'a'.repeat(196)}.vcf`);
+        expect(sanitizeCardUri(`${'a'.repeat(197)}.vcf`)).toBeNull();
     });
 });
 
@@ -138,20 +138,22 @@ describe('card file helpers', () => {
         expect(new Uint8Array(await store.file('cards/card.vcf').arrayBuffer())).toEqual(bytes);
     });
 
-    test('cleanupTempCardFiles removes only the dot-prefixed temp leftovers', async () => {
+    test('cleanupTempCardFiles removes only the dot-prefixed .tmp- leftovers', async () => {
         const { store, base } = nextStore();
         await store.mkdir('cards');
         const cardsDir = join(base, 'cards');
         writeFileSync(join(cardsDir, 'real.vcf'), 'x');
         writeFileSync(join(cardsDir, '.real.vcf.tmp-abc'), 'x');
         // A stray non-`.vcf` (README, csv, a mixed-case .VCF) is NOT temp debris — it survives the sweep and is
-        // warn-skipped by reconcile/rebuild instead of being silently deleted.
+        // warn-skipped by reconcile/rebuild instead of being silently deleted. A hand-placed dotfile without
+        // the `.tmp-` infix (a `.backup.vcf`) is not writeAtomic debris either and must survive.
         writeFileSync(join(cardsDir, 'stray.txt'), 'x');
         writeFileSync(join(cardsDir, 'x.VCF'), 'x');
+        writeFileSync(join(cardsDir, '.backup.vcf'), 'x');
 
         await cleanupTempCardFiles(store);
 
-        expect(readdirSync(cardsDir).sort()).toEqual(['real.vcf', 'stray.txt', 'x.VCF']);
+        expect(readdirSync(cardsDir).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt', 'x.VCF']);
     });
 });
 

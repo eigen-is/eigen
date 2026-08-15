@@ -15,10 +15,11 @@ export function cardPath(uri: string): string {
 // A client-chosen resource name that is safe as both a filename and a DAV href. NFC-normalized, a leading
 // alphanumeric, then only `A-Za-z0-9._@-` — which excludes `/`, `..`, leading dots and control characters —
 // capped at 200 chars (spec § 4, so writeAtomic's `.`-prefixed temp name stays under NAME_MAX) and required
-// to end in a literal lowercase `.vcf` (iOS/DAVx⁵/Thunderbird all emit it).
+// to end in a literal lowercase `.vcf` (iOS/DAVx⁵/Thunderbird all emit it). The length lives in the
+// `length <= 200` check alone; the regex owns only the charset, so the two facts can't drift.
 export function sanitizeCardUri(raw: string): string | null {
     const uri = raw.normalize('NFC');
-    const valid = uri.length <= 200 && uri.endsWith('.vcf') && /^[A-Za-z0-9][A-Za-z0-9._@-]{0,195}$/.test(uri);
+    const valid = uri.length <= 200 && uri.endsWith('.vcf') && /^[A-Za-z0-9][A-Za-z0-9._@-]*$/.test(uri);
     return valid ? uri : null;
 }
 
@@ -70,12 +71,13 @@ export async function writeCardFile(
     return { mtime: stat.mtimeMs, size: stat.size };
 }
 
-// Sweep crash leftovers from `cards/`: ONLY the `.`-prefixed temp files a torn writeAtomic can leave. A
-// stray non-`.vcf` (a README, a csv, a mixed-case `.VCF`) is not temp debris and is left on disk — reconcile
-// and rebuild warn-skip it rather than deleting data we didn't create. Safe to run under init's lock.
+// Sweep crash leftovers from `cards/`: ONLY writeAtomic's own temp files — `.`-prefixed AND carrying the
+// `.tmp-` infix it stamps (`.<name>.tmp-<uuid>`). A stray non-`.vcf` (a README, a csv, a mixed-case `.VCF`)
+// or a hand-placed dotfile (a `.backup.vcf`) is not temp debris and is left on disk — reconcile and rebuild
+// warn-skip it rather than deleting data we didn't create. Safe to run under init's lock.
 export async function cleanupTempCardFiles(storage: LocalFilesystem): Promise<void> {
     for (const name of await storage.list(CARDS_DIR)) {
-        if (name.startsWith('.')) {
+        if (name.startsWith('.') && name.includes('.tmp-')) {
             await storage.delete(cardPath(name));
         }
     }

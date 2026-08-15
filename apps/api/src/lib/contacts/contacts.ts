@@ -9,9 +9,8 @@ import type { ParsedCard, ParsedCardPhoto } from '../carddav/vcard-parse';
 import { normalizeBirthday, parseVCard } from '../carddav/vcard-parse';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
 import { getServerSettings } from '../config/server-settings';
-import { DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
-import type { ManagedDatabase } from '../core/';
-import { ApiError } from '../core/';
+import type { ManagedDatabase } from '../core';
+import { ApiError, DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
 import { getHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
@@ -1167,7 +1166,7 @@ export class Contacts {
         if (/[/\\]/.test(filename) || filename.includes('..')) {
             return null;
         }
-        const file = this.storage.file(`avatars/${filename}`);
+        const file = this.storage.file(`${PATHS.CONTACTS.AVATARS}/${filename}`);
         if (!(await file.exists())) {
             return null;
         }
@@ -1215,8 +1214,8 @@ export class Contacts {
     }
 
     private async cleanupAvatarImages() {
-        await this.storage.mkdir('avatars');
-        const files = await this.storage.list('avatars');
+        await this.storage.mkdir(PATHS.CONTACTS.AVATARS);
+        const files = await this.storage.list(PATHS.CONTACTS.AVATARS);
 
         // Build the referenced-filename set once, then sweep — O(avatars + contacts), not O(avatars × contacts).
         const referenced = new Set<string>();
@@ -1229,9 +1228,9 @@ export class Contacts {
             if (referenced.has(file)) continue;
             // A freshly-staged upload has no card pointing at it yet; leave it inside the grace window so an
             // in-progress edit's avatar isn't swept out from under the save.
-            const stat = await this.storage.stat(`avatars/${file}`);
+            const stat = await this.storage.stat(`${PATHS.CONTACTS.AVATARS}/${file}`);
             if (now - stat.mtimeMs < AVATAR_STAGE_GRACE_MS) continue;
-            await this.storage.delete(`avatars/${file}`);
+            await this.storage.delete(`${PATHS.CONTACTS.AVATARS}/${file}`);
         }
 
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
