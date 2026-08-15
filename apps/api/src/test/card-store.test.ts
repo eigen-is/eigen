@@ -109,8 +109,8 @@ describe('computeCardEtag', () => {
 });
 
 describe('CARD_MAX_BYTES', () => {
-    test('caps the whole vCard resource at 256 KiB', () => {
-        expect(CARD_MAX_BYTES).toBe(262_144);
+    test('caps the whole vCard resource at the 5 MiB safety ceiling', () => {
+        expect(CARD_MAX_BYTES).toBe(5_242_880);
     });
 });
 

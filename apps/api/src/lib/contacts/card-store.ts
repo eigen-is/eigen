@@ -6,7 +6,7 @@ import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import type { LocalFilesystem } from '../core/local-filesystem';
 
 export const CARDS_DIR = 'cards';
-export const CARD_MAX_BYTES = 262_144;
+export const CARD_MAX_BYTES = 5_242_880;
 
 export function cardPath(uri: string): string {
     return `${CARDS_DIR}/${uri}`;
