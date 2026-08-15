@@ -83,6 +83,46 @@ describe('reconcileIndex (stat-only pass)', () => {
         ).toBeTruthy();
     });
 
+    test('a card re-planted at a deleted uri clears its tombstone on reconcile', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Reborn', email: ['reborn@example.com'] }));
+        const uri = uriOf(db, id);
+
+        await contacts.deleteContact(id);
+        // The delete leaves a live tombstone for that uriKey and removes the card file.
+        expect(
+            db
+                .select()
+                .from(contactsSchema.contactTombstones)
+                .where(eq(contactsSchema.contactTombstones.uriKey, uriKeyOf(uri)))
+                .get(),
+        ).toBeTruthy();
+
+        // A device re-adds a card FILE at the very same uri — it is alive again, not a lingering removal.
+        writeFileSync(
+            cardPathOf(dir, uri),
+            `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${randomUUID()}\r\nN:Reborn;Again;;;\r\nFN:Again Reborn\r\nEMAIL:reborn@example.com\r\nEND:VCARD\r\n`,
+        );
+
+        await contacts.init();
+
+        // The present file re-indexes AND its stale tombstone is cleared by the folded uriKey.
+        expect(
+            db
+                .select()
+                .from(contactsSchema.contacts)
+                .where(eq(contactsSchema.contacts.uriKey, uriKeyOf(uri)))
+                .get(),
+        ).toBeTruthy();
+        expect(
+            db
+                .select()
+                .from(contactsSchema.contactTombstones)
+                .where(eq(contactsSchema.contactTombstones.uriKey, uriKeyOf(uri)))
+                .get(),
+        ).toBeUndefined();
+    });
+
     test('an out-of-band file edit refreshes the row etag/notes and bumps cardCtag', async () => {
         const { contacts, db, dir } = await makeContacts();
         const id = await contacts.addContact(validContact({ firstName: 'Edit', email: ['edit@example.com'] }));

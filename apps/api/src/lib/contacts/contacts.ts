@@ -330,7 +330,9 @@ export class Contacts {
                     existing?.eigenId === this.home.user.id
                         ? this.home.user.id
                         : this.resolveSelfLink(prep.parsed.eigenId ?? undefined);
-                this.commitCard({ row: prep.row, categories: prep.categories });
+                // A present file is alive: commitCard clears any live tombstone for its uri (by uriKey), so a
+                // card re-planted at a deleted uri drops its stale removal instead of resurrecting it.
+                this.commitCard({ row: prep.row, categories: prep.categories, tombstoneCleared: true });
                 this.cardsBytes += prep.row.size - (existing?.size ?? 0);
             } else if (existing) {
                 this.db.transaction((tx) => {
@@ -606,6 +608,9 @@ export class Contacts {
                             },
                         })
                         .run();
+                    // A present card is alive again: clear any live tombstone for its uri (by the folded key, as
+                    // commitCard does) so a card re-planted at a deleted uri drops its stale removal.
+                    tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
                 }
                 for (const { row, categories } of prepared)
                     this.syncCardLabels(tx, row.id, categories, createdLabelIds);
