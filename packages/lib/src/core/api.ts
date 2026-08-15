@@ -37,7 +37,12 @@ export const api = treaty<app>(API_HOST, {
     },
 });
 
-export const contactsApi = api.contacts;
+export const contactsApi = treaty<app>(API_HOST, {
+    fetch: {
+        credentials: 'include',
+    },
+    parseDate: false,
+}).contacts;
 export const mailApi = api.mail;
 export const publicApi = api.p;
 export const driveApi = api.drive;
