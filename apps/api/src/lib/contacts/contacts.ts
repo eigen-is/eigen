@@ -87,7 +87,7 @@ const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;
 
 // Every contact-photo transcode shares one preview shape: a 512px q80 square-cropped image. The upload/cache
 // seams keep webp; resolveStagedAvatar spreads it with format:'jpeg' because Apple Contacts can't decode webp
-// contact photos and a q80 JPEG stays under its 224 KB per-photo ceiling.
+// contact photos. Even a high-entropy q80 fixture keeps the folded card below our 256 KiB resource policy.
 const AVATAR_PREVIEW = { maxSize: 512, quality: 80, fit: 'cover' } as const;
 
 // The v2 UNIQUE index on labels(nameKey) closes duplicate/case-variant label names. bun:sqlite names the
@@ -1223,8 +1223,8 @@ export class Contacts {
     }
 
     // A staged avatar (uploadAvatar's webp) transcoded to the JPEG we embed as the canonical PHOTO — Apple
-    // Contacts can't decode webp contact photos (its list is JPEG/BMP/PNG/GIF), and a 512px q80 JPEG stays
-    // under Apple's 224 KB per-photo ceiling so cards survive iCloud round-trips. Null for an empty url; a
+    // Contacts can't decode webp contact photos (its list is JPEG/BMP/PNG/GIF). The shared 512px q80 shape
+    // leaves measured headroom under our 256 KiB whole-card policy. Null for an empty url; a
     // non-empty url that resolves to nothing (the staged file was swept, a torn transcode) throws so the caller
     // re-uploads rather than silently dropping a photo the user meant to set.
     private async resolveStagedAvatar(
