@@ -1,11 +1,13 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { eq } from 'drizzle-orm';
 import type { ParsedCardPhoto } from '../lib/carddav/vcard-parse';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { computeCardEtag } from '../lib/contacts/card-store';
 import type { Contacts } from '../lib/contacts/contacts';
+import * as contactsSchema from '../lib/contacts/schema';
 import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from './contacts-test-helpers';
 
 afterAll(() => {
@@ -142,6 +144,96 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(healed.avatar).toContain(`/avatar/${healed.id}-`);
         const cacheName = healed.avatar!.split('/').pop()!;
         expect(existsSync(join(avatarsDirOf(dir), cacheName))).toBe(true);
+    });
+
+    test('deleting a contact removes only its derived avatar and keeps size accounting exact', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const labelId = await contacts.addLabel({ name: 'Delete Photo', color: '#123456' });
+        const deletedId = await contacts.addContact(
+            validContact({ firstName: 'Delete', avatar: await stageAvatar(contacts), labels: [labelId] }),
+        );
+        const keptId = await contacts.addContact(
+            validContact({ firstName: 'Keep', avatar: await stageAvatar(contacts) }),
+        );
+        const deletedRow = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.id, deletedId))
+            .get()!;
+        const selfRow = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.eigenId, user.id))
+            .get()!;
+        const deletedAvatar = (await contacts.getContactById(deletedId))!.avatar!.split('/').pop()!;
+        const keptAvatar = (await contacts.getContactById(keptId))!.avatar!.split('/').pop()!;
+        const deletedAvatarPath = join(avatarsDirOf(dir), deletedAvatar);
+        const keptAvatarPath = join(avatarsDirOf(dir), keptAvatar);
+        const sizeBefore = await contacts.size();
+        const deletedAvatarBytes = statSync(deletedAvatarPath).size;
+
+        expect(
+            db
+                .select()
+                .from(contactsSchema.contactsToLabels)
+                .where(eq(contactsSchema.contactsToLabels.contactId, deletedId))
+                .all(),
+        ).toHaveLength(1);
+        expect(existsSync(keptAvatarPath)).toBe(true);
+
+        await contacts.deleteContact(deletedId);
+
+        expect(existsSync(cardPathOf(dir, deletedId))).toBe(false);
+        expect(existsSync(deletedAvatarPath)).toBe(false);
+        expect(existsSync(keptAvatarPath)).toBe(true);
+        expect(existsSync(join(dir, 'eigen.contacts', 'cards', selfRow.uri))).toBe(true);
+        expect(
+            db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, deletedId)).get(),
+        ).toBeUndefined();
+        expect(
+            db
+                .select()
+                .from(contactsSchema.contactsToLabels)
+                .where(eq(contactsSchema.contactsToLabels.contactId, deletedId))
+                .all(),
+        ).toEqual([]);
+        expect(await contacts.size()).toBe(sizeBefore - deletedRow.size - deletedAvatarBytes);
+    });
+
+    test('a derived-avatar cleanup failure does not fail a committed contact deletion', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Cache Failure', avatar: await stageAvatar(contacts) }),
+        );
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const avatar = (await contacts.getContactById(id))!.avatar!.split('/').pop()!;
+        const avatarPath = join(avatarsDirOf(dir), avatar);
+        const sizeBefore = await contacts.size();
+        const storage = (contacts as unknown as { storage: { unlink: (filePath: string) => Promise<void> } }).storage;
+        const originalUnlink = storage.unlink;
+        const errorSpy = spyOn(console, 'error').mockImplementation(() => {});
+        storage.unlink = async (filePath) => {
+            if (filePath.startsWith('avatars/')) throw new Error('avatar unlink boom');
+            return originalUnlink.call(storage, filePath);
+        };
+
+        try {
+            await contacts.deleteContact(id);
+            expect(errorSpy).toHaveBeenCalledWith(
+                `contacts: failed to delete derived avatar ${avatar}:`,
+                expect.any(Error),
+            );
+        } finally {
+            storage.unlink = originalUnlink;
+            errorSpy.mockRestore();
+        }
+
+        expect(existsSync(cardPathOf(dir, id))).toBe(false);
+        expect(existsSync(avatarPath)).toBe(true);
+        expect(
+            db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get(),
+        ).toBeUndefined();
+        expect(await contacts.size()).toBe(sizeBefore - row.size);
     });
 
     test('cacheCardPhoto with a uri-kind photo returns empty and writes nothing', async () => {

@@ -8,6 +8,7 @@ import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { mergeVCard } from '../lib/carddav/vcard-serialize';
 import {
+    CARD_MAX_BYTES,
     CARDS_DIR,
     cardPath,
     cleanupTempCardFiles,
@@ -104,6 +105,12 @@ describe('computeCardEtag', () => {
         expect(computeCardEtag(new TextEncoder().encode('x'))).toBe(
             '2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881',
         );
+    });
+});
+
+describe('CARD_MAX_BYTES', () => {
+    test('caps the whole vCard resource at 256 KiB', () => {
+        expect(CARD_MAX_BYTES).toBe(262_144);
     });
 });
 

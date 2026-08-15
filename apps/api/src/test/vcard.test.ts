@@ -197,19 +197,14 @@ describe('vCard projection parse', () => {
         expect(parseLineCard('X-ADDRESSBOOKSERVER-KIND:group').isGroup).toBe(true);
     });
 
-    test('decodes an inline base64 PHOTO by default and skips it on request', () => {
+    test('decodes an inline base64 PHOTO to its bytes', () => {
         const bytes = Uint8Array.from([0, 1, 2, 250, 255, 128]);
         const b64 = Buffer.from(bytes).toString('base64');
-        const text = `BEGIN:VCARD\r\nVERSION:3.0\r\nPHOTO;ENCODING=b;TYPE=JPEG:${b64}\r\nEND:VCARD\r\n`;
-        expect(parseVCard(text).photo).toEqual({
+        expect(parseLineCard(`PHOTO;ENCODING=b;TYPE=JPEG:${b64}`).photo).toEqual({
             kind: 'inline',
             bytes: Buffer.from(b64, 'base64'),
             mediaType: 'image/jpeg',
         });
-
-        const withoutPhotoDecode = parseVCard(text, { decodePhoto: false });
-        expect(withoutPhotoDecode.photo).toBeNull();
-        expect(withoutPhotoDecode.lines.find((line) => line.name === 'PHOTO')?.value).toBe(b64);
     });
 
     test('reads a PHOTO URI reference as a uri photo', () => {

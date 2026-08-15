@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'contacts',
-    currentVersion: 2,
+    currentVersion: 3,
     schema,
     migrations: [
         {
@@ -113,6 +113,24 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
 
                 INSERT OR IGNORE INTO book (id, ctag, syncGen) VALUES (1, 0, 1);
             `),
+        },
+        {
+            // Some persistent v2 databases predate uriKey being added to the unshipped v2 tombstone shape.
+            // Heal those databases forward; fresh databases already have the column and only ensure the index.
+            version: 3,
+            up: (db) => {
+                const hasUriKey = db
+                    .query<{ name: string }, []>('PRAGMA table_info(contact_tombstones)')
+                    .all()
+                    .some((column) => column.name === 'uriKey');
+                if (!hasUriKey) {
+                    db.exec(`
+                        ALTER TABLE contact_tombstones ADD COLUMN uriKey TEXT NOT NULL DEFAULT '';
+                        UPDATE contact_tombstones SET uriKey = lower(uri);
+                    `);
+                }
+                db.exec('CREATE INDEX IF NOT EXISTS idx_contact_tombstones_uriKey ON contact_tombstones(uriKey);');
+            },
         },
     ],
 };

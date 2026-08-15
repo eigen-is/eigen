@@ -968,6 +968,20 @@ export class Contacts {
             }
 
             this.cardsBytes -= row.size;
+            const avatarName = row.data?.avatar?.split('/').pop();
+            if (avatarName) {
+                const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
+                try {
+                    const avatarSize = await this.storage.size(avatarPath);
+                    if (avatarSize !== null) {
+                        await this.storage.unlink(avatarPath);
+                        this.avatarsBytes -= avatarSize;
+                    }
+                } catch (e) {
+                    // The card and index deletion are already committed; a derived-cache failure is cleanup-only.
+                    console.error(`contacts: failed to delete derived avatar ${avatarName}:`, e);
+                }
+            }
             this.emitContact(SSEventType.CONTACT_DELETED, id);
         });
     }
@@ -994,9 +1008,7 @@ export class Contacts {
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, contactId)).get();
             if (!row) continue;
 
-            const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)), {
-                decodePhoto: false,
-            });
+            const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
             const categories = transform(card.categories);
             const bytes = new TextEncoder().encode(mergeVCard(card, { categories }));
 
