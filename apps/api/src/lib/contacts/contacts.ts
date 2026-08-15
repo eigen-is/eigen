@@ -969,7 +969,12 @@ export class Contacts {
 
             this.cardsBytes -= row.size;
             const avatarName = row.data?.avatar?.split('/').pop();
-            if (avatarName) {
+            const ownedAvatarPrefix = `${row.id}-`;
+            // Historical rows may share staged or legacy names; only this row's hash cache is safe to unlink.
+            if (
+                avatarName?.startsWith(ownedAvatarPrefix) &&
+                /^[0-9a-f]{8}\.webp$/.test(avatarName.slice(ownedAvatarPrefix.length))
+            ) {
                 const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
                 try {
                     const avatarSize = await this.storage.size(avatarPath);
@@ -1042,24 +1047,27 @@ export class Contacts {
     }
 
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
-        const labelId = randomUUID();
+        return this.writeLock.run(async () => {
+            await this.drainDirty();
+            const labelId = randomUUID();
 
-        try {
-            await this.db.insert(schema.labels).values({
-                id: labelId,
-                name: label.name.trim(),
-                nameKey: normalizeLabelName(label.name),
-                color: label.color,
-                createdAt: sql`unixepoch()`,
-                updatedAt: sql`unixepoch()`,
-            });
-        } catch (e) {
-            rethrowDuplicateLabelName(e);
-        }
+            try {
+                await this.db.insert(schema.labels).values({
+                    id: labelId,
+                    name: label.name.trim(),
+                    nameKey: normalizeLabelName(label.name),
+                    color: label.color,
+                    createdAt: sql`unixepoch()`,
+                    updatedAt: sql`unixepoch()`,
+                });
+            } catch (e) {
+                rethrowDuplicateLabelName(e);
+            }
 
-        this.emitLabel(SSEventType.LABEL_CREATED, labelId);
+            this.emitLabel(SSEventType.LABEL_CREATED, labelId);
 
-        return labelId;
+            return labelId;
+        });
     }
 
     public async updateLabel(id: string, label: Omit<Label, 'id'>) {

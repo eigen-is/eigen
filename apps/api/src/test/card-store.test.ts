@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -357,7 +357,7 @@ describe('Contacts label membership (CATEGORIES)', () => {
         expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
     });
 
-    test('a failed label rename compensates member cards and the exact retry converges', async () => {
+    test('a concurrent old-name add waits for failed rename compensation, rejects, and retry converges', async () => {
         const { contacts, db, dir } = await makeContacts();
         const labelId = await contacts.addLabel({ name: 'Before', color: '#111111' });
         await contacts.addContact(validContact({ firstName: 'First', labels: [labelId] }));
@@ -398,19 +398,55 @@ describe('Contacts label membership (CATEGORIES)', () => {
         ).storage;
         const originalStat = storage.stat;
         let cardStats = 0;
+        let reachFailure!: () => void;
+        const failureReached = new Promise<void>((resolve) => {
+            reachFailure = resolve;
+        });
+        let releaseFailure!: () => void;
+        const failureReleased = new Promise<void>((resolve) => {
+            releaseFailure = resolve;
+        });
         storage.stat = async (filePath) => {
-            if (filePath.startsWith('cards/') && ++cardStats === 2) throw new Error('later card stat boom');
+            if (filePath.startsWith('cards/') && ++cardStats === 2) {
+                reachFailure();
+                await failureReleased;
+                throw new Error('later card stat boom');
+            }
             return originalStat.call(storage, filePath);
         };
 
+        const insertSpy = spyOn(db, 'insert');
+        const rename = contacts.updateLabel(labelId, { name: 'After', color: '#222222' });
+        await failureReached;
+        insertSpy.mockClear();
+        const queuedAdd = contacts.addLabel({ name: 'Before', color: '#333333' });
+        const addEnteredBeforeRelease = insertSpy.mock.calls.length > 0;
+        // On the broken path addLabel is outside the semaphore. Let it claim the old name before the failed
+        // rename resumes, deterministically recreating the compensation conflict this regression guards.
         try {
-            await expect(contacts.updateLabel(labelId, { name: 'After', color: '#222222' })).rejects.toThrow(
-                'later card stat boom',
-            );
+            if (addEnteredBeforeRelease) await queuedAdd;
         } finally {
-            storage.stat = originalStat;
+            releaseFailure();
         }
 
+        try {
+            await expect(rename).rejects.toThrow('later card stat boom');
+        } finally {
+            storage.stat = originalStat;
+            insertSpy.mockRestore();
+        }
+
+        let queuedError: unknown;
+        try {
+            await queuedAdd;
+        } catch (error) {
+            queuedError = error;
+        }
+        expect(addEnteredBeforeRelease).toBe(false);
+        expect(queuedError).toBeInstanceOf(Error);
+        if (queuedError instanceof Error) {
+            expect(queuedError.message).toBe('A label with this name already exists');
+        }
         expect(db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.id, labelId)).get()).toEqual(
             labelBefore,
         );

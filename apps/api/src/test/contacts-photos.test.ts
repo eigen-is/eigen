@@ -200,6 +200,31 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(await contacts.size()).toBe(sizeBefore - deletedRow.size - deletedAvatarBytes);
     });
 
+    test('deleting one of two legacy rows sharing a staged avatar leaves the file and survivor', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const sharedAvatar = await stageAvatar(contacts);
+        const deletedId = await contacts.addContact(validContact({ firstName: 'Delete Shared' }));
+        const keptId = await contacts.addContact(validContact({ firstName: 'Keep Shared' }));
+
+        for (const id of [deletedId, keptId]) {
+            const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+            db.update(contactsSchema.contacts)
+                .set({ data: { ...row.data!, avatar: sharedAvatar } })
+                .where(eq(contactsSchema.contacts.id, id))
+                .run();
+        }
+
+        const sharedName = sharedAvatar.split('/').pop()!;
+        const sharedPath = join(avatarsDirOf(dir), sharedName);
+        expect(existsSync(sharedPath)).toBe(true);
+
+        await contacts.deleteContact(deletedId);
+
+        expect(existsSync(sharedPath)).toBe(true);
+        expect((await contacts.getContactById(keptId))?.avatar).toBe(sharedAvatar);
+        expect(await contacts.downloadAvatar(sharedName)).not.toBeNull();
+    });
+
     test('a derived-avatar cleanup failure does not fail a committed contact deletion', async () => {
         const { contacts, db, dir } = await makeContacts();
         const id = await contacts.addContact(
