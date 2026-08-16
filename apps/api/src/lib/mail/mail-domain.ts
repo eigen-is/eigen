@@ -1,3 +1,4 @@
+import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type {
     AddressObject,
@@ -25,7 +26,7 @@ import { simpleParser } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
-import { MAX_PERSONALISED_SEND_BYTES, MAX_SEND_REFERENCES } from './recipients';
+import { MAX_PERSONALISED_SEND_BYTES } from './recipients';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';

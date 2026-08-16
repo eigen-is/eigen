@@ -1,5 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
+import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { checkPathAccess } from '@workspace/lib/drive';
 import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
 import { canonicalRecipients } from '@workspace/lib/mail/addresses';
@@ -109,7 +110,7 @@ export function EmailDraft({
     filePickerOpen,
     onFilePickerOpenChange,
 }: EmailDraftProps) {
-    const [alertMessage, setAlertMessage] = useState<string | null>(null);
+    const [alertState, setAlertState] = useState<{ title: string; message: string } | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
     // Set once the time-of-send access check finds a grantable reference: holds the flushed draft to
     // send plus the aggregated dialog contents. Null closes the Share & send dialog.
@@ -170,18 +171,28 @@ export function EmailDraft({
     };
 
     const handleDriveAttach = async (paths: DrivePath[]) => {
-        for (const path of paths) {
-            if (isContainerType(path.type)) {
-                addDriveReference({
-                    type: 'reference',
-                    ownerId: path.ownerId,
-                    mountId: path.mountId,
-                    id: path.id,
-                    name: path.name,
-                    driveType: path.type,
-                    mimeType: path.mimeType,
-                });
-            }
+        // The one seam both attach paths pass through (the picker and initialDriveAttachments), so
+        // the reference cap is enforced here: past it the draft schema 422s every auto-save and the
+        // draft stops persisting entirely. Already-linked ids cost no slot — the reducer dedupes them.
+        const containers = paths.filter((p) => isContainerType(p.type));
+        const fresh = containers.filter((p) => !state.driveReferences.some((r) => r.id === p.id));
+        const room = Math.max(0, MAX_SEND_REFERENCES - state.driveReferences.length);
+        if (fresh.length > room) {
+            setAlertState({
+                title: 'Cannot attach',
+                message: `You can link at most ${MAX_SEND_REFERENCES} documents.`,
+            });
+        }
+        for (const path of fresh.slice(0, room)) {
+            addDriveReference({
+                type: 'reference',
+                ownerId: path.ownerId,
+                mountId: path.mountId,
+                id: path.id,
+                name: path.name,
+                driveType: path.type,
+                mimeType: path.mimeType,
+            });
         }
         const files = paths.filter((p) => !isContainerType(p.type));
         const results = await Promise.all(
@@ -314,12 +325,12 @@ export function EmailDraft({
 
     const handleSendEmail = async () => {
         if (!isSendable) {
-            setAlertMessage('Please specify at least one recipient.');
+            setAlertState({ title: 'Cannot send', message: 'Please specify at least one recipient.' });
             return;
         }
         // Linked documents count as content, mirroring messageSend's ref-only allowance.
         if (!state.subject.trim() && !state.bodyText.trim() && state.driveReferences.length === 0) {
-            setAlertMessage('Please add a subject or message.');
+            setAlertState({ title: 'Cannot send', message: 'Please add a subject or message.' });
             return;
         }
         if (!state.subject.trim()) {
@@ -465,17 +476,20 @@ export function EmailDraft({
                     Drop files to attach
                 </div>
             </div>
-            <Dialog open={!!alertMessage} onOpenChange={() => setAlertMessage(null)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Cannot send</DialogTitle>
-                        <DialogDescription>{alertMessage}</DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button onClick={() => setAlertMessage(null)}>OK</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {alertState && (
+                // Conditionally mounted so the copy can't flash to empty during an exit animation.
+                <Dialog open onOpenChange={() => setAlertState(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>{alertState.title}</DialogTitle>
+                            <DialogDescription>{alertState.message}</DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button onClick={() => setAlertState(null)}>OK</Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
             <ConfirmDialog
                 open={confirmNoSubject}
                 onOpenChange={setConfirmNoSubject}

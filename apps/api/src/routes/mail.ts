@@ -1,3 +1,4 @@
+import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import type { SentMailResult } from '@workspace/lib/types/mail';
 import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
@@ -11,7 +12,6 @@ import {
     saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
-import { MAX_SEND_REFERENCES } from '../lib/mail/recipients';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 

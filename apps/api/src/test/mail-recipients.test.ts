@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { AddressObject } from '@workspace/lib/types/mail';
 import { isInternalAddress } from '../lib/config/server-config';
-import { canonicalizeRecipients, MAX_SEND_RECIPIENTS } from '../lib/mail/recipients';
+import { canonicalizeRecipients } from '../lib/mail/recipients';
 
 // The preload runs setup.ts, which completes first-run setup with domain 'test.eigen.is' —
 // that IS the mail domain in EVERY preloaded test run, unit-style included. Never 'localhost'.

@@ -1,10 +1,10 @@
+import { MAX_SEND_REFERENCES } from '@workspace/lib/constants/mail';
 import { DRIVE_TYPE_CHAT } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { addRegistryEntry } from '../share/registry';
 import type { User } from '../user';
-import { MAX_SEND_REFERENCES } from './recipients';
 
 // Grants read access to the referenced documents a sender opted to share when sending mail. Every
 // ref is fully validated before any ACL is written (preflight-all): a single unshareable ref aborts
