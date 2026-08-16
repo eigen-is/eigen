@@ -4,6 +4,9 @@ import { ApiError } from '../core/errors';
 
 export const MAX_SEND_RECIPIENTS = 100;
 export const MAX_SEND_REFERENCES = 20;
+// Personalised copies carry the file attachments once per external recipient. Past this much
+// fan-out the send drops to a single bare-link copy instead.
+export const MAX_PERSONALISED_SEND_BYTES = 20 * 1024 * 1024;
 
 export type { CanonicalRecipient };
 

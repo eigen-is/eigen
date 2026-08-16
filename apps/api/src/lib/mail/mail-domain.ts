@@ -25,7 +25,7 @@ import { simpleParser } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
-import { MAX_SEND_REFERENCES } from './recipients';
+import { MAX_PERSONALISED_SEND_BYTES, MAX_SEND_REFERENCES } from './recipients';
 import { draftToOutboundMail } from './sender';
 import { buildMailEvent } from './sse-events';
 import { welcomeMail } from './welcome';
@@ -623,8 +623,14 @@ export class Mail {
         const externals = allRecipients.filter((r) => !isInternalAddress(r.address));
         const failedRecipients: string[] = [];
 
-        if (!refs.length || !externals.length) {
-            // No refs, or every recipient is on this mail domain: one send, no per-recipient envelope.
+        // Personalising re-sends every file attachment once per external recipient, so a big deck to a
+        // big list would push hundreds of megabytes through the MTA while the browser waits on us.
+        const attachmentBytes = (message.attachments ?? []).reduce((sum, a) => sum + Buffer.byteLength(a.content), 0);
+        const overBudget = externals.length * attachmentBytes > MAX_PERSONALISED_SEND_BYTES;
+
+        if (!refs.length || !externals.length || overBudget) {
+            // No refs, every recipient on this mail domain, or too many bytes to fan out: one send
+            // with bare links, no per-recipient envelope.
             message.html = appendReferenceLinks(baseHtml, refs);
             message.text = appendReferenceLinksText(baseText, refs);
             if (!(await sendMail(message))) {

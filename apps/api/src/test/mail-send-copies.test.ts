@@ -179,6 +179,37 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(sent[0].envelope).toBeUndefined();
     });
 
+    test('a small attachment stays inside the personalisation budget', async () => {
+        startCapture();
+        const tempId = await uploadAttachment(1024);
+        const { res } = await sendDraftWithRef('ext1@x.com, ext2@y.com', { tempAttachmentIds: [tempId] });
+        expect(res.status).toBe(200);
+
+        expect(sent.length).toBe(2);
+        for (const m of sent) {
+            expect(m.envelope).toBeDefined();
+            expect(m.attachments?.length).toBe(1);
+        }
+        expect(sent.find((m) => m.envelope!.to[0] === 'ext1@x.com')!.html).toContain('email=ext1%40x.com');
+        expect(sent.find((m) => m.envelope!.to[0] === 'ext2@y.com')!.html).toContain('email=ext2%40y.com');
+    });
+
+    test('past the personalisation byte budget every recipient gets one bare-link copy', async () => {
+        startCapture();
+        // 50 externals x 512 KB of attachment = 25 MB of fan-out, past the 20 MB budget.
+        const tempId = await uploadAttachment(512 * 1024);
+        const to = Array.from({ length: 50 }, (_, i) => `bulk${i}@x.com`).join(', ');
+        const { res } = await sendDraftWithRef(to, { tempAttachmentIds: [tempId] });
+        expect(res.status).toBe(200);
+
+        expect(sent.length).toBe(1);
+        expect(sent[0].envelope).toBeUndefined();
+        expect(sent[0].to.length).toBe(50);
+        expect(sent[0].html).not.toContain('email=');
+        expect(sent[0].text).not.toContain('email=');
+        expect(sent[0].text).toContain('doc-send');
+    });
+
     test('a bcc external gets a personalised copy whose envelope and headers hide the bcc', async () => {
         startCapture();
         const { res } = await sendDraftWithRef('bob@test.eigen.is', { bcc: 'bcc-ext@z.com' });
