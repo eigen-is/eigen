@@ -66,9 +66,9 @@ function insertBeforeEnd(lines: VCardLine[], added: VCardLine[]): VCardLine[] {
 
 // Rewrite `name` as one line at the position of its first occurrence (keeping that line's group; params
 // replaced only when given) and drop every further line of the same name, or insert before END when the card
-// has none. Editing an owned property takes the whole name: CATEGORIES and NOTE are legally repeatable, but
-// the projection reads only the first line, so a second one would stay invisible to the app forever while
-// still being served to DAV clients.
+// has none. Editing an owned property takes the whole name: CATEGORIES and NOTE are legally repeatable, but an
+// owned edit replaces the whole property, so any repeated line — even one the projection folded in (CATEGORIES
+// aggregates every line) — can't survive to drift from what the app just wrote.
 function rewriteOwned(lines: VCardLine[], name: string, value: string, params?: [string, string][]): VCardLine[] {
     const idx = lines.findIndex((l) => l.name === name);
     if (idx === -1) return insertBeforeEnd(lines, [makeLine(name, value, params)]);

@@ -54,6 +54,17 @@ const APPLE_FIXTURE = vcard([
     'END:VCARD',
 ]);
 
+// A 3.0 card whose labels are split across two CATEGORIES lines — the way external clients legitimately
+// write them. The second line carries an escaped comma that must survive as a literal in one label name.
+const TWO_CATEGORY_LINES = vcard([
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    'FN:Multi Cat',
+    'CATEGORIES:Friends,Work',
+    'CATEGORIES:Chess\\,Club',
+    'END:VCARD',
+]);
+
 describe('vCard content-line AST', () => {
     test('unfolds a continuation, consuming only the single leading whitespace char', () => {
         const oneSpace = parseCard('NOTE:ab\r\n cd');
@@ -204,6 +215,10 @@ describe('vCard projection parse', () => {
         expect(parseLineCard('CATEGORIES:Friends,Wo\\,rk').categories).toEqual(['Friends', 'Wo,rk']);
     });
 
+    test('aggregates every CATEGORIES line, preserving an escaped comma as a literal', () => {
+        expect(parseVCard(TWO_CATEGORY_LINES).categories).toEqual(['Friends', 'Work', 'Chess,Club']);
+    });
+
     test('reads a group card via X-ADDRESSBOOKSERVER-KIND', () => {
         expect(parseLineCard('X-ADDRESSBOOKSERVER-KIND:group').isGroup).toBe(true);
     });
@@ -324,6 +339,18 @@ describe('vCard merge + builder', () => {
         const out = mergeVCard(parseVCard(APPLE_FIXTURE), { categories: ['A,B', 'C'] });
         expect(out).toContain('CATEGORIES:A\\,B,C');
         expect(out).not.toContain('CATEGORIES:Engineering,Utrecht');
+    });
+
+    test('merging the same multiset of categories spread across lines leaves the card byte-identical', () => {
+        const out = mergeVCard(parseVCard(TWO_CATEGORY_LINES), { categories: ['Chess,Club', 'Friends', 'Work'] });
+        expect(out).toBe(TWO_CATEGORY_LINES);
+    });
+
+    test('dropping a category that lived on the second line collapses CATEGORIES to one line', () => {
+        const out = mergeVCard(parseVCard(TWO_CATEGORY_LINES), { categories: ['Friends', 'Work'] });
+        expect(parseVCardLines(out).filter((l) => l.name === 'CATEGORIES')).toHaveLength(1);
+        expect(out).toContain('CATEGORIES:Friends,Work');
+        expect(out).not.toContain('Chess');
     });
 
     test('editing a repeatable owned property replaces every line of that name', () => {

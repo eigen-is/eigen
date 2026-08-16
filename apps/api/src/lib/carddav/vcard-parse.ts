@@ -137,7 +137,11 @@ export function parseVCard(text: string): ParsedCard {
             return addr;
         });
 
-    const categories = first('CATEGORIES');
+    // Aggregate every CATEGORIES line (external clients legitimately split labels across several); membership
+    // resolves by normalized name downstream, which dedupes, so order-preserving concat with no dedupe is fine.
+    const categories = lines
+        .filter((l) => l.name === 'CATEGORIES')
+        .flatMap((l) => (l.value ? splitValue(l.value, ',').map(unescapeText) : []));
     const kind = first('KIND') ?? first('X-ADDRESSBOOKSERVER-KIND');
     const photo = first('PHOTO');
 
@@ -154,7 +158,7 @@ export function parseVCard(text: string): ParsedCard {
         address,
         birthday: normalizeBirthday(first('BDAY')?.value ?? ''),
         notes: unescapeText(first('NOTE')?.value ?? ''),
-        categories: categories?.value ? splitValue(categories.value, ',').map(unescapeText) : [],
+        categories,
         eigenId: first('X-EIGEN-ID')?.value ?? null,
         isGroup: kind?.value.trim().toLowerCase() === 'group',
         photo: photo ? parsePhoto(photo) : null,
