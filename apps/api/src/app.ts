@@ -5,6 +5,7 @@ import Elysia from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
 import { trustedOrigins } from './lib/auth/auth';
 import { caldavRouter } from './lib/caldav/caldav-router';
+import { carddavRouter } from './lib/carddav/carddav-router';
 import { isProduction } from './lib/config/env';
 import { clientIpKey } from './lib/core/access';
 import { ApiError } from './lib/core/errors';
@@ -33,10 +34,12 @@ import { waitlistRouter } from './routes/waitlist';
 
 const SLOW_REQUEST_MS = 200;
 
-// CalDAV adds class-3, calendar-access, REPORT, MKCALENDAR on top of WebDAV.
-// Advertising REPORT/MKCALENDAR on /webdav would lie about supported verbs.
-const CALDAV_CAPABILITY_HEADERS = {
-    DAV: '1, 2, 3, calendar-access',
+// The /dav tree serves both CalDAV and CardDAV: class-3, calendar-access + addressbook, REPORT, MKCALENDAR on
+// top of WebDAV. Clients check for the `addressbook` token before trusting the account (sabre/Radicale shape).
+// MKADDRESSBOOK is deliberately absent — one fixed book per user, we 403 it. Advertising REPORT/MKCALENDAR on
+// /webdav would lie about supported verbs, so that tree keeps its own headers.
+const DAV_CAPABILITY_HEADERS = {
+    DAV: '1, 2, 3, calendar-access, addressbook',
     Allow: 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, MOVE, COPY, LOCK, UNLOCK, REPORT, MKCALENDAR',
 };
 const WEBDAV_CAPABILITY_HEADERS = {
@@ -68,7 +71,7 @@ export const app = new Elysia({
             return new Response(null, { status: 204, headers: WEBDAV_CAPABILITY_HEADERS });
         }
         if (pathname.startsWith('/dav')) {
-            return new Response(null, { status: 204, headers: CALDAV_CAPABILITY_HEADERS });
+            return new Response(null, { status: 204, headers: DAV_CAPABILITY_HEADERS });
         }
     })
     .use(
@@ -127,6 +130,7 @@ export const app = new Elysia({
     .use(sseRouter)
     .use(internalRouter)
     .use(caldavRouter)
+    .use(carddavRouter)
     .use(webdavRouter)
 
     .onError(({ error, set, code, request }) => {
@@ -137,7 +141,7 @@ export const app = new Elysia({
             if (err.status === 401) {
                 const pathname = new URL(request.url).pathname;
                 if (pathname.startsWith('/dav')) {
-                    set.headers['WWW-Authenticate'] = 'Basic realm="Eigen CalDAV"';
+                    set.headers['WWW-Authenticate'] = 'Basic realm="Eigen DAV"';
                 } else if (pathname.startsWith('/webdav')) {
                     set.headers['WWW-Authenticate'] = 'Basic realm="Eigen Drive"';
                 }

@@ -79,6 +79,8 @@ describe('CalDAV', () => {
         const xml = await res.text();
         expect(xml).toContain('calendar');
         expect(xml).toContain('displayname');
+        // macOS Contacts/Calendar keys on this to pick sync-collection (broken window #1).
+        expect(xml).toContain('supported-report-set');
     });
 
     test('PUT creates event, GET retrieves it', async () => {
