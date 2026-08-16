@@ -1,6 +1,7 @@
 // vCard content-line AST (RFC 2426 / RFC 6350 §3) — parsing, serialization, and byte-preserving
 // round-trip. All Phase-1 CardDAV vCard tasks extend this file.
 import { describe, expect, test } from 'bun:test';
+import { projectAddressData } from '../lib/carddav/address-data';
 import {
     matchCard,
     type ParamFilter,
@@ -679,5 +680,61 @@ describe('addressbook-query matcher', () => {
     test('a prop-filter name matches a grouped property (item1.EMAIL) group-insensitively', () => {
         const card = linesOf(['FN:X', 'item1.EMAIL;TYPE=INTERNET:grace@example.org']);
         expect(matchCard(card, filter([prop({ name: 'EMAIL', textMatches: [text({ value: 'grace' })] })]))).toBe(true);
+    });
+});
+
+describe('address-data partial projection', () => {
+    test('keeps the requested property, its grouped X- label, and the skeleton; drops the rest', () => {
+        const out = projectAddressData(APPLE_FIXTURE, ['EMAIL']);
+        // The requested property is byte-identical — lower-case params and grouping survive via the raw slice.
+        expect(out).toContain('item1.EMAIL;type=INTERNET;type=pref:john.quinlan.doe@example.com');
+        // Its same-group label rides along (Apple pairs item1.EMAIL with item1.X-ABLabel).
+        expect(out).toContain('item1.X-ABLabel:_$!<Work>!$_');
+        // The mandatory skeleton stays even though none of it was requested.
+        expect(out).toContain('BEGIN:VCARD');
+        expect(out).toContain('VERSION:3.0');
+        expect(out).toContain('UID:john-quinlan-doe-1234');
+        expect(out).toContain('N:Doe;John;Quinlan;;');
+        expect(out).toContain('FN:John Quinlan Doe');
+        expect(out).toContain('END:VCARD');
+        // Everything unrequested is gone — including a group-less X- property and PRODID.
+        for (const dropped of [
+            'ORG:',
+            'TITLE:',
+            'TEL;',
+            'ADR;',
+            'NOTE:',
+            'BDAY:',
+            'CATEGORIES:',
+            'X-EIGEN-ID:',
+            'PHOTO;',
+            'X-SOCIALPROFILE',
+            'PRODID:',
+        ]) {
+            expect(out).not.toContain(dropped);
+        }
+        // The projection is itself a valid, parseable vCard envelope.
+        expect(() => parseVCardLines(out)).not.toThrow();
+    });
+
+    test('a kept folded property keeps its fold bytes verbatim', () => {
+        const out = projectAddressData(APPLE_FIXTURE, ['NOTE']);
+        expect(out).toContain(
+            'NOTE:Met at the 2026 distributed-systems summit in Utrecht; follow up abo\r\n ut the CardDAV sync proposal next quarter.',
+        );
+        expect(out).not.toContain('item1.EMAIL');
+    });
+
+    test('a grouped X- label is dropped when its anchor property is not requested', () => {
+        const out = projectAddressData(APPLE_FIXTURE, ['TEL']);
+        expect(out).toContain('TEL;type=CELL;type=pref:+31 6 12345678');
+        expect(out).toContain('TEL;type=HOME:+31 30 1234567');
+        expect(out).not.toContain('item1.EMAIL'); // EMAIL not requested → its group loses its anchor...
+        expect(out).not.toContain('X-ABLabel'); // ...and the orphaned label goes with it
+    });
+
+    test('property names match case-insensitively', () => {
+        const out = projectAddressData(APPLE_FIXTURE, ['email']);
+        expect(out).toContain('item1.EMAIL;type=INTERNET;type=pref:john.quinlan.doe@example.com');
     });
 });

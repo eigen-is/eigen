@@ -606,4 +606,86 @@ describe('CardDAV', () => {
             `</CARD:addressbook-query>`;
         expect((await report(body)).status).toBe(400);
     });
+
+    // --- Partial address-data retrieval (RFC 6352 § 10.4.2): <CARD:address-data> carrying a <CARD:prop
+    // name="…"/> subset projects each returned card down to those properties plus the mandatory skeleton
+    // (BEGIN/END/VERSION/UID/FN/N); a kept grouped property keeps its same-group X- label. No prop children
+    // means full bytes. ---
+
+    // A card with a grouped item1.EMAIL + its item1.X-ABLabel, plus TEL/NOTE/X-SOCIALPROFILE a subset drops.
+    // Values carry no XML-special chars, so their lines appear verbatim in the escaped address-data.
+    const partialExtra = [
+        'item1.EMAIL;TYPE=INTERNET:grace@example.org',
+        'item1.X-ABLabel:Work',
+        'TEL;TYPE=CELL:+31 6 12345678',
+        'NOTE:met at the summit',
+        'X-SOCIALPROFILE;type=twitter:https://twitter.com/example',
+    ];
+
+    const propChildren = (propNames: string[]) => propNames.map((n) => `<CARD:prop name="${n}"/>`).join('');
+
+    const partialMultigetBody = (hrefs: string[], propNames: string[]) =>
+        `<?xml version="1.0" encoding="utf-8"?>\n` +
+        `<CARD:addressbook-multiget xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav">\n` +
+        `<D:prop><D:getetag/><CARD:address-data>${propChildren(propNames)}</CARD:address-data></D:prop>\n` +
+        `${hrefs.map((h) => `<D:href>${h}</D:href>`).join('\n')}\n` +
+        `</CARD:addressbook-multiget>`;
+
+    const partialQueryBody = (filterInner: string, propNames: string[]) =>
+        `<?xml version="1.0" encoding="utf-8"?>\n` +
+        `<CARD:addressbook-query xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav">\n` +
+        `<D:prop><D:getetag/><CARD:address-data>${propChildren(propNames)}</CARD:address-data></D:prop>\n` +
+        `<CARD:filter test="anyof">${filterInner}</CARD:filter>\n` +
+        `</CARD:addressbook-query>`;
+
+    test('addressbook-multiget with a prop subset projects to EMAIL + skeleton and drops the rest', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid, partialExtra), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const xml = await (await report(partialMultigetBody([cardHref(uri)], ['EMAIL']))).text();
+        // The requested property and its grouped label, byte-identical.
+        expect(xml).toContain('item1.EMAIL;TYPE=INTERNET:grace@example.org');
+        expect(xml).toContain('item1.X-ABLabel:Work');
+        // The mandatory skeleton.
+        expect(xml).toContain('BEGIN:VCARD');
+        expect(xml).toContain('VERSION:3.0');
+        expect(xml).toContain(`UID:${uid}`);
+        expect(xml).toContain('N:Doe;John;;;');
+        expect(xml).toContain('FN:John Doe');
+        // The unrequested properties are gone.
+        expect(xml).not.toContain('TEL;TYPE=CELL');
+        expect(xml).not.toContain('met at the summit');
+        expect(xml).not.toContain('X-SOCIALPROFILE');
+    });
+
+    test('addressbook-multiget with an empty address-data (no prop children) returns the full bytes', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        const body = vcard(uid, partialExtra);
+        expect((await putCard(uri, body, { 'If-None-Match': '*' })).status).toBe(201);
+
+        // multigetBody emits <CARD:address-data/> with no children → full retrieval, byte-identical to the PUT.
+        const xml = await (await report(multigetBody([cardHref(uri)]))).text();
+        expect(xml).toContain(body);
+    });
+
+    test('addressbook-query with a prop subset applies the same projection to matching cards', async () => {
+        const marker = `P${randomUUID().replace(/-/g, '')}`;
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        const body =
+            `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Bob ${marker}\r\nN:${marker};Bob;;;\r\n` +
+            `item1.EMAIL;TYPE=INTERNET:bob@example.org\r\nitem1.X-ABLabel:Work\r\n` +
+            `TEL;TYPE=CELL:+31 6 99999999\r\nNOTE:query note\r\nEND:VCARD\r\n`;
+        expect((await putCard(uri, body, { 'If-None-Match': '*' })).status).toBe(201);
+
+        const xml = await (await report(partialQueryBody(fnFilter(marker), ['EMAIL']))).text();
+        expect(xml).toContain(cardHref(uri));
+        expect(xml).toContain('item1.EMAIL;TYPE=INTERNET:bob@example.org');
+        expect(xml).toContain('item1.X-ABLabel:Work');
+        expect(xml).toContain(`UID:${uid}`);
+        expect(xml).not.toContain('TEL;TYPE=CELL');
+        expect(xml).not.toContain('query note');
+    });
 });

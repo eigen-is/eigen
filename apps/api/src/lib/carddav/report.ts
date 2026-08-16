@@ -1,4 +1,5 @@
 import type { CardRow, Contacts } from '../contacts/contacts';
+import { projectAddressData } from './address-data';
 import { ADDRESSBOOK_ID } from './discovery';
 import { matchCard, UnsupportedCollationError, UnsupportedFilterError } from './query-filter';
 import { parseVCardLines, type VCardLine } from './vcard-ast';
@@ -74,6 +75,21 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
     }
 }
 
+// The address-data body a REPORT row serves: the full stored bytes, or — when the client asked for a property
+// subset (partial retrieval, RFC 6352 § 10.4.2) — the projection down to that subset plus the mandatory
+// skeleton. partialProps is null for full retrieval (the parser never yields an empty list), so a non-empty
+// subset is the only projection trigger. A stored card that won't parse can't be projected, so it's served
+// whole rather than 500-ing the whole REPORT — the same skip-on-throw stance the query loop takes below.
+function resolveAddressData(bytes: Uint8Array, partialProps: string[] | null): string {
+    const text = new TextDecoder().decode(bytes);
+    if (!partialProps?.length) return text;
+    try {
+        return projectAddressData(text, partialProps);
+    } catch {
+        return text;
+    }
+}
+
 async function handleMultiget(
     contacts: Contacts,
     ownerId: string,
@@ -107,8 +123,8 @@ async function handleMultiget(
             continue;
         }
         const props = [...cardEtagProp(card.etag)];
-        // Task 16 serves full bytes verbatim; the partialProps projection is Task 18.
-        if (report.wantsData) props.push(addressDataProp(new TextDecoder().decode(card.bytes)));
+        // Full bytes verbatim, or the partial-retrieval projection when the client asked for a prop subset.
+        if (report.wantsData) props.push(addressDataProp(resolveAddressData(card.bytes, report.partialProps)));
         responses.push(response(cardHref(ownerId, uri), [propstatOk(props)]));
     }
     return xmlResponse(responses);
@@ -152,8 +168,8 @@ async function handleQuery(
 
     const responses = results.map((r) => {
         const props = [...cardEtagProp(r.etag)];
-        // wantsData serves the full bytes verbatim, as multiget does; the partial-retrieval projection is separate.
-        if (report.wantsData) props.push(addressDataProp(new TextDecoder().decode(r.bytes)));
+        // Full bytes verbatim, or the partial-retrieval projection when the client asked for a prop subset.
+        if (report.wantsData) props.push(addressDataProp(resolveAddressData(r.bytes, report.partialProps)));
         return response(cardHref(ownerId, r.uri), [propstatOk(props)]);
     });
     return xmlResponse(responses);
