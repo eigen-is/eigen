@@ -42,9 +42,9 @@ Two things that aren't written down anywhere else: the API serves every app from
   module-eval. BE-safe by design: `types/*`, `constants`(`/*`), `validation`, `sheets`(`/*`), `slides`,
   `docs/eigendoc`, and the React-free leaf modules (`date`, `format`, `html`). For a React-free
   module that lives *inside* a domain dir, lib's exports map carves out an explicit subpath —
-  `calendar/calendar-utils`, `chat/emotes`, `chat/built-in-emotes`, `chat/format-preview`, `collab/yjs-utils` —
-  import those, not the barrel. Need a new one? Add the exports entry next to these and keep the module
-  React-free; lib has no wildcard exports into `core/`, so an uncarved deep import simply won't resolve
+  `calendar/calendar-utils`, `chat/emotes`, `chat/built-in-emotes`, `chat/format-preview`, `collab/yjs-utils`,
+  `mail/addresses` — import those, not the barrel. Need a new one? Add the exports entry next to these and keep
+  the module React-free; lib has no wildcard exports into `core/`, so an uncarved deep import simply won't resolve
 - **Don't break the type chain** — types flow from Elysia route handlers → Eden Treaty → hooks → components
   automatically. No `as any`, no `as Type` casts. Fix types at the source (add return type annotations to backend
   handlers using shared types from `packages/lib/src/types/`). See CODE-STANDARDS.md § Typing

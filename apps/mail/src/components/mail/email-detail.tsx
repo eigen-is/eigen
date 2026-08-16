@@ -1,6 +1,6 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
-import { flattenAddresses } from '@workspace/lib/mail/addresses';
+import { flattenAddresses } from '@workspace/lib/mail';
 import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { KebabTrigger, ShadowContent, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
@@ -159,11 +159,8 @@ function formatContactObjects(contacts: AddressObject | AddressObject[], compact
 // Collect the leaf recipients of a header field: normalise the ParsedMail AddressObject | AddressObject[]
 // container, then expand RFC 2822 groups via the shared send-path helper so group members appear here too.
 function collectRecipients(field?: AddressObject | AddressObject[]): { name: string; address: string }[] {
-    const out: { name: string; address: string }[] = [];
-    for (const obj of Array.isArray(field) ? field : field ? [field] : []) {
-        flattenAddresses(obj.value, out);
-    }
-    return out;
+    const objects = Array.isArray(field) ? field : field ? [field] : [];
+    return objects.flatMap((obj) => flattenAddresses(obj.value));
 }
 
 function MailHeaderDetails({ email, formattedDate }: { email: Email; formattedDate: string }) {

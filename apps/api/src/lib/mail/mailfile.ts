@@ -29,9 +29,9 @@ function formatAddresses(field: AddressObject | undefined): string {
     // Flatten groups into their leaf members so group recipients survive the compose → re-parse
     // round-trip: the send path's canonicaliser only ever sees the re-parsed header, so a bare
     // group name here would drop every member. One source of truth — shared with the send path.
-    const flat: { name: string; address: string }[] = [];
-    flattenAddresses(field.value, flat);
-    return flat.map(({ name, address }) => (name ? `${name.trim()} <${address.trim()}>` : address.trim())).join(', ');
+    return flattenAddresses(field.value)
+        .map(({ name, address }) => (name ? `${name.trim()} <${address.trim()}>` : address.trim()))
+        .join(', ');
 }
 
 export async function createEmlContent(input: EmlInput): Promise<string> {

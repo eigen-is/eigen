@@ -420,8 +420,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `InheritedAccessItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
-| `CanonicalRecipient` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
-| `RecipientField` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
+| `CanonicalRecipient` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
+| `RecipientField` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `BorderInfo` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -836,13 +836,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `stripTagsServer` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `htmlToPlainText` | `@workspace/lib/html-dom` | packages/lib/src/core/html-dom.ts |
 | `beginOptimisticMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
+| `canonicalRecipients` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `consumeRecentMailMutation` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-emails.ts |
 | `createDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
+| `flattenAddresses` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `handleMailSSEvent` | `@workspace/lib/mail` | packages/lib/src/core/mail/sse-handlers.ts |
 | `sendDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
 | `updateDraftEmail` | `@workspace/lib/mail` | packages/lib/src/core/mail/hooks/use-draft.ts |
-| `canonicalRecipients` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
-| `flattenAddresses` | `@workspace/lib/mail/addresses` | packages/lib/src/core/mail/addresses.ts |
 | `CHAT_TEXT_NOTIFICATION_TYPES` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `describeNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/describe.ts |
 | `handleNotificationSSEvent` | `@workspace/lib/notification` | packages/lib/src/core/notification/sse-handlers.ts |

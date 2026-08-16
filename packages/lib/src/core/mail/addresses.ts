@@ -6,11 +6,13 @@ export type CanonicalRecipient = { name: string; address: string; field: Recipie
 
 // Flattens RFC 2822 address groups (`Team: a@x, b@x;`) into their leaf members, dropping the bare
 // group containers, which carry a name but no address. Recurses so nested groups are fully expanded.
-export function flattenAddresses(value: EmailAddress[] | undefined, out: { name: string; address: string }[]): void {
+export function flattenAddresses(value: EmailAddress[] | undefined): { name: string; address: string }[] {
+    const flat: { name: string; address: string }[] = [];
     for (const entry of value ?? []) {
-        if (entry.group) flattenAddresses(entry.group, out);
-        if (entry.address) out.push({ name: entry.name || '', address: entry.address });
+        if (entry.group) flat.push(...flattenAddresses(entry.group));
+        if (entry.address) flat.push({ name: entry.name || '', address: entry.address });
     }
+    return flat;
 }
 
 // Flattens to/cc/bcc into one ordered list of unique recipients: iterate to > cc > bcc so a
@@ -27,9 +29,7 @@ export function canonicalRecipients(draft: {
     const seen = new Set<string>();
 
     for (const field of ['to', 'cc', 'bcc'] as const) {
-        const flat: { name: string; address: string }[] = [];
-        flattenAddresses(draft[field]?.value, flat);
-        for (const { name, address } of flat) {
+        for (const { name, address } of flattenAddresses(draft[field]?.value)) {
             const key = address.toLowerCase();
             if (seen.has(key)) continue;
             seen.add(key);
