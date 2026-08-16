@@ -8,11 +8,12 @@ import { Semaphore } from '../../utils/semaphore';
 import type { ParsedCard, ParsedCardPhoto } from '../carddav/vcard-parse';
 import { normalizeBirthday, parseVCard } from '../carddav/vcard-parse';
 import { type CardEdits, createVCard, mergeVCard } from '../carddav/vcard-serialize';
+import { enforceContactsIngest } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase } from '../core';
 import { ApiError, DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
 import type { Home } from '../home';
-import { getHome } from '../home';
+import { atHome, getHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
 import { generateImagePreview } from '../shared/thumbnails';
 import type { User } from '../user';
@@ -20,6 +21,7 @@ import { getOrgOwner } from '../user/';
 import {
     avatarCacheName,
     avatarUrl,
+    CARD_MAX_BYTES,
     CARDS_DIR,
     cardPath,
     cleanupTempCardFiles,
@@ -120,10 +122,14 @@ export class Contacts {
     // machinery bumps this (via `parseCardFile`); the mutation paths parse for their own merges.
     private cardParses = 0;
 
-    // Running byte totals so size() answers from memory — enforceContactsIngest calls it on every DAV PUT,
-    // and a directory walk per call would make an N-card device sync O(N²) stats (spec Performance invariants).
+    // Running byte totals so size() answers from memory — enforceContactsIngest calls it on every metered
+    // write, and a directory walk per call would make an N-card device sync O(N²) stats (spec Performance
+    // invariants).
     private cardsBytes = 0;
     private avatarsBytes = 0;
+
+    // Whether card writes are quota-metered — see the assignment in init() for what turns it on.
+    private meteredIngest = false;
 
     constructor(home: Home) {
         this.home = home;
@@ -207,6 +213,13 @@ export class Contacts {
                 this.db.update(schema.book).set({ ownerSeeded: 1 }).where(eq(schema.book.id, 1)).run();
             }
         }
+
+        // Ingest metering starts here. Everything written before this point is init's own seed (the self card,
+        // the org owner's) and has no quota to resolve yet: the lookup goes through getHome, which during this
+        // home's init would await the very init doing the write. An unregistered home — an isolated Contacts
+        // in a test harness or a seeding script — has no home to resolve at all and stays unmetered; the
+        // CARD_MAX_BYTES ceiling still applies to every card either way.
+        this.meteredIngest = atHome(this.home.user.id);
 
         this.cleanupAvatarImages().catch(() => {});
     }
@@ -785,6 +798,20 @@ export class Contacts {
         return claimed ? '' : eigenId;
     }
 
+    // What a card must fit through before it is written: the 5 MiB resource ceiling (spec § 4 — it bounds
+    // what a device sync and every later reconcile has to parse) and the mail+contacts quota, credited with
+    // the bytes of the card this one replaces. Called inside the writeLock, after the index is drained (so
+    // the size() behind the quota lookup can't re-enter the lock) and before any write intent is recorded —
+    // a refusal leaves nothing on disk and nothing for a drain to chase.
+    private async enforceCardBudget(bytes: Uint8Array, creditBytes: number): Promise<void> {
+        if (bytes.byteLength > CARD_MAX_BYTES) {
+            throw new ApiError(413, 'Contact card is too large');
+        }
+        if (this.meteredIngest) {
+            await enforceContactsIngest(this.home.user.id, bytes.byteLength, creditBytes);
+        }
+    }
+
     private labelNamesFor(labelIds: string[]): string[] {
         if (labelIds.length === 0) return [];
         const byId = new Map(
@@ -836,6 +863,8 @@ export class Contacts {
                     id,
                 ),
             );
+
+            await this.enforceCardBudget(bytes, 0);
 
             // Fail closed on the canonical write or any later step: a throw marks the uri dirty for the next
             // drain and rethrows, and the durable intent recorded first covers a process death.
@@ -943,6 +972,9 @@ export class Contacts {
             }
 
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
+
+            // The stored card's bytes are credited: a rewrite that shrinks a card is never refused on quota.
+            await this.enforceCardBudget(bytes, row.size);
 
             // Fail closed on the canonical write or any later step: a throw marks the uri dirty for the next
             // drain and rethrows, and the durable intent recorded first covers a process death.

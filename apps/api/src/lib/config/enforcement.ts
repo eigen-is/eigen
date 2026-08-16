@@ -54,11 +54,17 @@ export async function getUploadMaxSize(ownerId: string, userId: string, mountId:
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
+// The other half of the storage budget — mail and contacts share one quota. Mirrors getMountQuotaState.
+async function getMailAndContactsQuotaState(userId: string): Promise<{ used: number; max: number }> {
+    const { home, quotas } = await resolveQuotas(userId, userId, 'default');
+    const used = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
+    return { used, max: quotas.mailAndContactsMax };
+}
+
 export async function getMailUploadMaxSize(userId: string): Promise<number> {
     const maxUpload = Math.min(getMaxUploadSize(), MAX_ATTACHMENT_SIZE);
-    const { home, quotas } = await resolveQuotas(userId, userId, 'default');
-    const mailContactsSize = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
-    const remainingQuota = quotas.mailAndContactsMax - mailContactsSize;
+    const { used, max } = await getMailAndContactsQuotaState(userId);
+    const remainingQuota = max - used;
     if (remainingQuota <= 0) {
         throw new ApiError(507, 'Insufficient Storage');
     }
@@ -73,9 +79,18 @@ export function enforceMaxUploadSize(fileSize: number): void {
 
 export async function enforceAvatarUpload(userId: string, fileSize: number): Promise<void> {
     enforceMaxUploadSize(fileSize);
-    const { home, quotas } = await resolveQuotas(userId, userId, 'default');
-    const mailContactsSize = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
-    if (mailContactsSize + fileSize > quotas.mailAndContactsMax) {
+    const { used, max } = await getMailAndContactsQuotaState(userId);
+    if (used + fileSize > max) {
+        throw new ApiError(507, 'Insufficient Storage');
+    }
+}
+
+// A contact card about to be written: addBytes is the new card's size, creditBytes the size of the card it
+// replaces (subtracted from the projection, so a rewrite that shrinks a card is never refused). Same credit
+// convention as enforceMountQuota, for the mail+contacts half of the budget.
+export async function enforceContactsIngest(userId: string, addBytes: number, creditBytes = 0): Promise<void> {
+    const { used, max } = await getMailAndContactsQuotaState(userId);
+    if (used + addBytes - creditBytes > max) {
         throw new ApiError(507, 'Insufficient Storage');
     }
 }

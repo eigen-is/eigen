@@ -1,13 +1,14 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, fstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, fstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
+import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
-import { mergeVCard } from '../lib/carddav/vcard-serialize';
+import { createVCard, mergeVCard } from '../lib/carddav/vcard-serialize';
 import {
     CARD_MAX_BYTES,
     CARDS_DIR,
@@ -134,12 +135,6 @@ describe('computeCardEtag', () => {
     });
 });
 
-describe('CARD_MAX_BYTES', () => {
-    test('caps the whole vCard resource at the 5 MiB safety ceiling', () => {
-        expect(CARD_MAX_BYTES).toBe(5_242_880);
-    });
-});
-
 describe('normalizeLabelName', () => {
     test('trims, lowercases and NFC-normalizes', () => {
         expect(normalizeLabelName('  Work  ')).toBe('work');
@@ -188,6 +183,74 @@ describe('card file helpers', () => {
         await cleanupTempCardFiles(store);
 
         expect(readdirSync(cardsDir).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt', 'x.VCF']);
+    });
+});
+
+// The 5 MiB ceiling is a property of the assembled card, not of any single field, so a test that wants to
+// sit exactly on it has to pad one: NOTE carries the bulk (folded, so its cost per character isn't 1) and a
+// short ORG line — which never folds — tops the card up to the exact byte. createVCard is the same
+// serializer addContact writes through, so the file it produces lands on the searched-for size.
+function contactOfExactly(bytes: number, uid: string): Omit<Contact, 'id'> {
+    const base = { firstName: 'Max', lastName: 'Bytes', email: [], phone: [] };
+    const sizeOf = (notesLength: number, companyLength: number) =>
+        new TextEncoder().encode(
+            createVCard({ ...base, company: 'c'.repeat(companyLength), notes: 'n'.repeat(notesLength) }, uid),
+        ).byteLength;
+
+    // Largest NOTE that still leaves room for the ORG top-up (its line is 'ORG:' + padding + CRLF).
+    let low = 0;
+    let high = bytes;
+    while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (sizeOf(mid, 0) <= bytes - 64) low = mid;
+        else high = mid - 1;
+    }
+    const companyLength = bytes - sizeOf(low, 0) - 6;
+    if (sizeOf(low, companyLength) !== bytes) throw new Error('could not build a card of exactly the target size');
+    return { ...base, company: 'c'.repeat(companyLength), notes: 'n'.repeat(low) };
+}
+
+describe('CARD_MAX_BYTES', () => {
+    const cardsDir = (dir: string) => join(dir, 'eigen.contacts', 'cards');
+
+    test('a card exactly at the ceiling is written', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(contactOfExactly(CARD_MAX_BYTES, randomUUID()));
+
+        expect(statSync(join(cardsDir(dir), `${id}.vcf`)).size).toBe(CARD_MAX_BYTES);
+        expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.size).toBe(
+            CARD_MAX_BYTES,
+        );
+    });
+
+    test('one byte over the ceiling is refused with 413, before anything is written', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const exact = contactOfExactly(CARD_MAX_BYTES, randomUUID());
+        const before = readdirSync(cardsDir(dir)).length;
+
+        // One more ORG character is one more byte on the card.
+        await expect(contacts.addContact({ ...exact, company: `${exact.company}c` })).rejects.toThrow(/too large/i);
+
+        // Refused before the write intent is recorded: no card file, and no pending row for a drain to chase.
+        expect(readdirSync(cardsDir(dir)).length).toBe(before);
+        expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+    });
+
+    test('an update that would push a card over the ceiling is refused and leaves the stored card intact', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Grower' }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+        const cardBefore = readFileSync(join(cardsDir(dir), row.uri), 'utf8');
+
+        await expect(
+            contacts.updateContact(id, validContact({ firstName: 'Grower', notes: 'n'.repeat(CARD_MAX_BYTES) })),
+        ).rejects.toThrow(/too large/i);
+
+        expect(readFileSync(join(cardsDir(dir), row.uri), 'utf8')).toBe(cardBefore);
+        expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.etag).toBe(
+            row.etag,
+        );
+        expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
     });
 });
 

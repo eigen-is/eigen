@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
+import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
+import { getHome } from '../lib/home';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 describe('Contacts', () => {
@@ -422,6 +424,71 @@ describe('Contacts', () => {
         test('ownerId spoofing is rejected with 403', async () => {
             const spoofRes = await authedRequest(ctx.bob.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
             expect(spoofRes.status).toBe(403);
+        });
+    });
+
+    // The card write seam is the only metered contacts ingest: it projects the mail+contacts usage the write
+    // would leave behind, crediting the bytes of the card it replaces, and refuses the overflow with 507.
+    describe('Storage quota (mail + contacts)', () => {
+        const MB = 1024 * 1024;
+        const body = (over: Partial<Contact>) => ({
+            firstName: 'Quota',
+            lastName: 'Subject',
+            email: ['quota@test.eigen.is'],
+            phone: [],
+            ...over,
+        });
+
+        test('a create overflows at 507, a growing update too, and a shrinking rewrite still fits', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const url = `/contacts/${ctx.alice.user.id}/contacts`;
+            const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
+
+            // A fat card first (under the default quota), so the book's total is dominated by bytes this test
+            // owns and can later shrink away, whatever the fixtures seeded.
+            const createRes = await authedRequest(token, url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body({ notes: 'n'.repeat(2 * MB) })),
+            });
+            expect(createRes.status).toBe(200);
+            const fatId = (await createRes.text()).replace(/^"|"$/g, '');
+
+            try {
+                const home = await getHome(ctx.alice.user.id);
+                const used = (await home.mail.size()) + (await home.contacts.size());
+                // Floor to whole MB (the setting's unit): the ceiling now sits at or just under what the book
+                // already uses, so anything that adds bytes overflows and only a shrinking rewrite fits.
+                await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) } });
+
+                const create = await authedRequest(token, url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body({ firstName: 'Refused' })),
+                });
+                expect(create.status).toBe(507);
+
+                const fat = await assertJson<Contact>(await authedRequest(token, `${url}/${fatId}`));
+                const grow = await authedRequest(token, `${url}/${fatId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body({ notes: 'n'.repeat(3 * MB), etag: fat.etag })),
+                });
+                expect(grow.status).toBe(507);
+
+                const shrink = await authedRequest(token, `${url}/${fatId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body({ notes: '', etag: fat.etag })),
+                });
+                expect(shrink.status).toBe(200);
+            } finally {
+                await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+                const left = await assertJson<Contact>(await authedRequest(token, `${url}/${fatId}`));
+                await authedRequest(token, `${url}/${fatId}?etag=${encodeURIComponent(left.etag!)}`, {
+                    method: 'DELETE',
+                });
+            }
         });
     });
 
