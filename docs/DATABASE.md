@@ -13,7 +13,7 @@
 | Notifications   | `{home}/eigen.notifications/notifications.db`   | Per-user notification history                            |
 | Mount metadata  | `{home}/mounts/{id}/metadata.db`                | Drive file/folder structure. Also `pending_uploads` (write-behind S3 queue), `file_events` + `path_watchers` (history/watching) and the `paths_fts` name index (`apps/api/src/lib/mount/schema.ts`) |
 | Shared paths    | `{home}/mounts/shared.db`                       | Files shared with this user                              |
-| Contacts        | `{home}/eigen.contacts/contacts.db`             | Contact data                                             |
+| Contacts        | `{home}/eigen.contacts/contacts.db`             | Index over the canonical vCard files in `eigen.contacts/cards/` — **plus** the metadata that lives only here: label ids + colors, the one-row `book` (`ctag`, `syncGen`, `ownerSeeded`), `contact_tombstones`, and the `pending_card_writes` + `pending_label_renames` recovery journals (`apps/api/src/lib/contacts/schema.ts`). Card projections, etags and label membership re-derive from the files; the rest does not. `CONTACTS_DB_CONFIG` is at `currentVersion: 4`. See [PROPOSAL_CARDDAV.md](PROPOSAL_CARDDAV.md) |
 | Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata + FTS5 full-text index (`emails_fts`). `MAIL_DB_CONFIG` is at `currentVersion: 4`. See [SEARCH.md](SEARCH.md) |
 | Calendar        | `{home}/eigen.calendar/calendar.db`             | Calendars, events, shared calendars                      |
 | Collab docs     | Via storage backend (`{dataDbPathId}`)           | Yjs snapshots + updates                                  |
