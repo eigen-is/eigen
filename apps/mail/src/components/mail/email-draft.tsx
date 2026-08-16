@@ -90,6 +90,9 @@ type EmailDraftProps = {
     ) => Promise<EmailDraftType | null | undefined>;
     onDraftIdAssigned?: (id: string) => void;
     isSending: boolean;
+    // The send mutation only starts once the draft flush and the access probe are done; the route
+    // folds this earlier window into the isSending it feeds back here and to the toolbar.
+    onPreparingSendChange: (preparing: boolean) => void;
     // File picker state lives in the route (the toolbar's attach button sits outside this
     // component), so open/close is controlled via props.
     filePickerOpen: boolean;
@@ -106,6 +109,7 @@ export function EmailDraft({
     onAutoSave,
     onDraftIdAssigned,
     isSending,
+    onPreparingSendChange,
     filePickerOpen,
     onFilePickerOpenChange,
 }: EmailDraftProps) {
@@ -245,9 +249,10 @@ export function EmailDraft({
         });
     };
 
-    // Guards the two-network-hop gap between the send click and the dispatch, where the Send button
-    // isn't disabled yet (isSending flips only once the mutation runs) — a rapid double-click would
-    // otherwise start two sends. Reset in `finally`, including the dialog-open path.
+    // Covers the two-network-hop gap between the send click and the dispatch, where the mutation
+    // hasn't started yet: the ref stops a rapid double-click synchronously (state alone re-renders
+    // too late), while onPreparingSendChange gives the Send button its busy state. Both reset in
+    // `finally`, the dialog-open path included — from there the dialog owns the pending state.
     const sendingRef = useRef(false);
 
     // Both send entry points funnel here (the Send button via handleSendEmail, and the no-subject
@@ -256,6 +261,7 @@ export function EmailDraft({
     const sendWithFreshDraft = async () => {
         if (sendingRef.current) return;
         sendingRef.current = true;
+        onPreparingSendChange(true);
         try {
             const draft = await flushAndGetDraft();
             const refs = draft.driveReferences ?? [];
@@ -319,6 +325,7 @@ export function EmailDraft({
             setShareState({ draft, grants, notes: [...new Set(notes)] });
         } finally {
             sendingRef.current = false;
+            onPreparingSendChange(false);
         }
     };
 

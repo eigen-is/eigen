@@ -269,6 +269,11 @@ function MailRoute() {
     });
 
     const [filePickerOpen, setFilePickerOpen] = useState(false);
+    // The composer flushes the draft and probes document access before the send mutation starts, so
+    // isSendPending alone would leave the Send button live for two round-trips. EmailDraft reports
+    // that window here; both it and the toolbar read one "a send is under way" flag.
+    const [preparingSend, setPreparingSend] = useState(false);
+    const isSending = actions.isSendPending || preparingSend;
     const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!(selectedEmail || mode === 'compose');
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
@@ -286,7 +291,7 @@ function MailRoute() {
         <EmailDraftToolbar
             onDelete={() => isEmailDraft(selectedEmail) && handleDeleteEmail(selectedEmail)}
             onAttach={() => setFilePickerOpen(true)}
-            isSending={actions.isSendPending}
+            isSending={isSending}
             hasId={!!selectedEmail?.id}
         />
     ) : selectedEmail ? (
@@ -386,7 +391,8 @@ function MailRoute() {
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}
                                 onDraftIdAssigned={actions.handleDraftIdAssigned}
-                                isSending={actions.isSendPending}
+                                isSending={isSending}
+                                onPreparingSendChange={setPreparingSend}
                                 filePickerOpen={filePickerOpen}
                                 onFilePickerOpenChange={setFilePickerOpen}
                             />
