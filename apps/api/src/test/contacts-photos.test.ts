@@ -47,6 +47,38 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(stored?.avatar).toBe(`contacts/${user.id}/avatar/${cacheName}`);
     });
 
+    test('an animated avatar embeds its first frame, not a stacked filmstrip', async () => {
+        const { contacts, dir } = await makeContacts();
+        const sharp = (await import('sharp')).default;
+        const frames = await Promise.all(
+            [
+                { r: 220, g: 20, b: 20 },
+                { r: 20, g: 220, b: 20 },
+                { r: 20, g: 20, b: 220 },
+            ].map((background) =>
+                sharp({ create: { width: 64, height: 64, channels: 3, background } })
+                    .png()
+                    .toBuffer(),
+            ),
+        );
+        const gif = await sharp(frames, { join: { animated: true } })
+            .gif()
+            .toBuffer();
+        const staged = await contacts.uploadAvatar(
+            new File([new Uint8Array(gif)], 'avatar.gif', { type: 'image/gif' }),
+        );
+
+        const id = await contacts.addContact(validContact({ firstName: 'Anim', lastName: 'Gif', avatar: staged }));
+
+        // JPEG cannot hold animation: reading the staged webp's three pages at once would stack them into one
+        // 512x1536 strip, which Apple Contacts renders as a filmstrip.
+        const photo = parseVCard(readFileSync(cardPathOf(dir, id), 'utf8')).photo;
+        const bytes = (photo as Extract<ParsedCardPhoto, { kind: 'inline' }>).bytes;
+        const meta = await sharp(bytes).metadata();
+        expect(meta.width).toBe(512);
+        expect(meta.height).toBe(512);
+    });
+
     test('updating without changing the avatar leaves the PHOTO bytes byte-identical', async () => {
         const { contacts, dir } = await makeContacts();
         const staged = await stageAvatar(contacts);

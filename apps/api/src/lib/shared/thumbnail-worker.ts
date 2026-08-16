@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import sharp from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
@@ -21,7 +23,9 @@ async function sharpResize(
     options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: 'webp' | 'jpeg' },
 ): Promise<ImageResult | null> {
     try {
-        const image = sharp(source, { animated: true });
+        // JPEG can't hold animation — reading every page of an animated source would stack the frames into
+        // one tall filmstrip, so a JPEG target decodes the first frame only.
+        const image = sharp(source, { animated: options.format !== 'jpeg' });
         const metadata = await image.metadata();
 
         if (!metadata.width || !metadata.height) return null;
@@ -78,20 +82,23 @@ async function processImage(input: WorkerInput): Promise<ImageResult | null> {
         }
     }
 
-    // Exiftool fallback — needs a file on disk
-    let filePath: string;
+    // Exiftool fallback — needs a file on disk. Avatar conversions pass no tmpDir, and their scratch names
+    // are derived from a fixed pathId: without a private dir they collide in the process CWD, so concurrent
+    // conversions would read each other's bytes.
+    const scratchDir = input.tmpDir || fs.mkdtempSync(path.join(os.tmpdir(), 'eigen-thumb-'));
     let tempFile: string | null = null;
 
-    if (typeof source === 'string') {
-        filePath = source;
-    } else {
-        tempFile = path.join(input.tmpDir, `${input.pathId}-src.tmp`);
-        await Bun.write(tempFile, source);
-        filePath = tempFile;
-    }
-
     try {
-        const extractPath = await extractEmbeddedPreview(filePath, input.tmpDir, input.pathId);
+        let filePath: string;
+        if (typeof source === 'string') {
+            filePath = source;
+        } else {
+            tempFile = path.join(scratchDir, `${input.pathId}-src.tmp`);
+            await Bun.write(tempFile, source);
+            filePath = tempFile;
+        }
+
+        const extractPath = await extractEmbeddedPreview(filePath, scratchDir, input.pathId);
         if (!extractPath) return null;
 
         try {
@@ -101,6 +108,7 @@ async function processImage(input: WorkerInput): Promise<ImageResult | null> {
         }
     } finally {
         if (tempFile) await cleanupExtract(tempFile);
+        if (scratchDir !== input.tmpDir) fs.rmSync(scratchDir, { recursive: true, force: true });
     }
 }
 
