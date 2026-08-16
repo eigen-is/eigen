@@ -101,14 +101,22 @@ function parseLine(raw: string, logical: string): VCardLine {
     return { group, name, params, value: logical.slice(colon + 1), raw };
 }
 
+// Exact envelope framing (RFC 6350 §6.1.1/6.1.2): BEGIN:VCARD is the first line, END:VCARD the last, one of
+// each, nothing outside. A payload with a second card, a trailing END, or bytes around the envelope is
+// rejected rather than stored and re-served to every DAV client.
 export function parseVCardLines(text: string): VCardLine[] {
     const lines = unfold(text).map(({ raw, logical }) => parseLine(raw, logical));
 
-    const count = (name: string) => lines.filter((l) => l.name === name && l.value.toUpperCase() === 'VCARD').length;
-    const begins = count('BEGIN');
-    if (begins === 0) throw new VCardError('missing BEGIN:VCARD');
-    if (count('END') === 0) throw new VCardError('missing END:VCARD');
-    if (begins > 1) throw new VCardError('multiple vCards in one payload');
+    const frames = (name: string) => lines.filter((l) => l.name === name && l.value.toUpperCase() === 'VCARD');
+    const begins = frames('BEGIN');
+    const ends = frames('END');
+    if (begins.length === 0) throw new VCardError('missing BEGIN:VCARD');
+    if (ends.length === 0) throw new VCardError('missing END:VCARD');
+    if (begins.length > 1) throw new VCardError('multiple vCards in one payload');
+    if (ends.length > 1) throw new VCardError('multiple END:VCARD lines');
+    if (begins[0] !== lines[0] || ends[0] !== lines[lines.length - 1]) {
+        throw new VCardError('content outside the vCard envelope');
+    }
 
     return lines;
 }

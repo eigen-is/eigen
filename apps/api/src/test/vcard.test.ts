@@ -136,6 +136,15 @@ describe('vCard content-line AST', () => {
         expect(() => parseVCardLines('FN:John Doe\r\nEND:VCARD\r\n')).toThrow('BEGIN');
     });
 
+    test('rejects content outside the envelope and a second END:VCARD', () => {
+        // Bytes outside BEGIN/END would be stored and re-served to every DAV client.
+        expect(() => parseVCardLines(`X-STRAY:leading\r\n${APPLE_FIXTURE}`)).toThrow(VCardError);
+        expect(() => parseVCardLines(`X-STRAY:leading\r\n${APPLE_FIXTURE}`)).toThrow('outside');
+        expect(() => parseVCardLines(`${APPLE_FIXTURE}X-STRAY:trailing\r\n`)).toThrow('outside');
+        expect(() => parseVCardLines(`${APPLE_FIXTURE}END:VCARD\r\n`)).toThrow(VCardError);
+        expect(() => parseVCardLines(`${APPLE_FIXTURE}END:VCARD\r\n`)).toThrow('multiple END');
+    });
+
     test('a built line over 75 octets folds and re-parses to the same value (UTF-8 safe)', () => {
         // é (2 bytes) sits right on the 75-octet boundary of `NOTE:` + value, so a naive byte split
         // would cut it in half.
@@ -315,6 +324,24 @@ describe('vCard merge + builder', () => {
         expect(out).not.toContain('CATEGORIES:Engineering,Utrecht');
     });
 
+    test('editing a repeatable owned property replaces every line of that name', () => {
+        // CATEGORIES and NOTE are legally repeatable in 3.0, but the projection reads only the first line: a
+        // second line the app never showed must not survive an edit of the property it belongs to.
+        const repeated =
+            'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Two Liner\r\nCATEGORIES:Friends\r\nCATEGORIES:Work\r\nNOTE:first\r\nNOTE:second\r\nEND:VCARD\r\n';
+
+        const labelled = mergeVCard(parseVCard(repeated), { categories: ['Friends', 'Colleagues'] });
+        expect(parseVCardLines(labelled).filter((l) => l.name === 'CATEGORIES')).toHaveLength(1);
+        expect(labelled).toContain('CATEGORIES:Friends,Colleagues');
+        // An untouched repeatable property keeps both of its lines.
+        expect(parseVCardLines(labelled).filter((l) => l.name === 'NOTE')).toHaveLength(2);
+
+        const noted = mergeVCard(parseVCard(repeated), { notes: 'merged' });
+        expect(parseVCardLines(noted).filter((l) => l.name === 'NOTE')).toHaveLength(1);
+        expect(noted).toContain('NOTE:merged');
+        expect(parseVCardLines(noted).filter((l) => l.name === 'CATEGORIES')).toHaveLength(2);
+    });
+
     test('a photo edit writes a folded ENCODING=b PHOTO that decodes back to the input bytes', () => {
         const bytes = Uint8Array.from({ length: 120 }, (_, i) => (i * 7) % 256);
         const out = mergeVCard(parseVCard(APPLE_FIXTURE), { photo: { bytes, mediaType: 'image/jpeg' } });
@@ -439,7 +466,8 @@ describe('vCard merge + builder', () => {
 });
 
 describe('vCard 4.0 -> 3.0 transcode', () => {
-    // Thunderbird-102+ shape: VERSION:4.0, a data: URI PHOTO, a VALUE=uri TEL, and a grouped ITEM1.EMAIL.
+    // Thunderbird-102+ shape: VERSION:4.0, a data: URI PHOTO, VALUE=uri TEL values carrying tel: URIs,
+    // numeric PREF, an ISO-basic BDAY, plus a 4.0-only ANNIVERSARY and an Apple-style grouped EMAIL.
     const photoBytes = Uint8Array.from({ length: 96 }, (_, i) => (i * 11) % 256);
     const photoB64 = Buffer.from(photoBytes).toString('base64');
     const THUNDERBIRD_FIXTURE =
@@ -450,7 +478,12 @@ describe('vCard 4.0 -> 3.0 transcode', () => {
             'FN:Grace Hopper',
             'N:Hopper;Grace;;;',
             'ITEM1.EMAIL;PREF=1:grace.hopper@example.com',
-            'TEL;VALUE=uri;TYPE=cell:tel:+31 6 87654321',
+            'EMAIL;PREF=2:ghopper@navy.example',
+            'TEL;VALUE=uri;TYPE=cell;PREF=1:tel:+31 6 87654321',
+            'TEL;VALUE=uri;TYPE=work:tel:+31 30 1234567',
+            'ORG:US Navy',
+            'BDAY;VALUE=date:19061209',
+            'ANNIVERSARY:19301215',
             `PHOTO:data:image/jpeg;base64,${photoB64}`,
             'END:VCARD',
         ].join('\r\n') + '\r\n';
@@ -464,9 +497,40 @@ describe('vCard 4.0 -> 3.0 transcode', () => {
         expect(out).toContain('PHOTO;ENCODING=b;TYPE=JPEG:');
         expect(out).not.toContain('VERSION:4.0');
         expect(out).not.toContain('data:image/jpeg');
-        // Lines we don't rewrite ride through verbatim — 4.0-only params and grouping included.
-        expect(out).toContain('TEL;VALUE=uri;TYPE=cell:tel:+31 6 87654321');
-        expect(out).toContain('ITEM1.EMAIL;PREF=1:grace.hopper@example.com');
+    });
+
+    test('maps 4.0 TEL URIs, numeric PREF and ISO-basic BDAY to their real 3.0 forms', () => {
+        const out = transcodeTo30(THUNDERBIRD_FIXTURE);
+        // A tel: URI is not a 3.0 phone-number value: strip the scheme, drop VALUE=uri, keep the TYPE.
+        expect(out).toContain('TEL;TYPE=cell;TYPE=PREF:+31 6 87654321');
+        expect(out).toContain('TEL;TYPE=work:+31 30 1234567');
+        expect(out).not.toContain('tel:+31');
+        expect(out).not.toContain('VALUE=uri');
+        // PREF=n (lowest wins) has one 3.0 spelling, on one line per property.
+        expect(out).toContain('ITEM1.EMAIL;TYPE=PREF:grace.hopper@example.com');
+        expect(out).toContain('EMAIL:ghopper@navy.example');
+        expect(out).not.toContain('PREF=');
+        expect(out).toContain('BDAY;VALUE=date:1906-12-09');
+
+        // ...and the stored card projects the way the web UI shows it.
+        const card = parseVCard(out);
+        expect(card.phone).toEqual(['+31 6 87654321', '+31 30 1234567']);
+        expect(card.email).toEqual(['grace.hopper@example.com', 'ghopper@navy.example']);
+        expect(card.birthday).toBe('1906-12-09');
+    });
+
+    test('rides unmappable 4.0 constructs through verbatim rather than rejecting the card', () => {
+        const out = transcodeTo30(THUNDERBIRD_FIXTURE);
+        expect(out).toContain('ANNIVERSARY:19301215'); // no 3.0 equivalent
+        expect(out).toContain('ORG:US Navy');
+        expect(out).toContain('UID:urn:uuid:5c2a9e10-3d4b-4a2f-9c1e-7b6f0a1d2e3f');
+
+        // A year-less BDAY and a non-tel TEL URI have no 3.0 form either.
+        const odd = transcodeTo30(
+            'BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Odd One\r\nBDAY:--1209\r\nTEL;VALUE=uri:sip:odd@example.com\r\nEND:VCARD\r\n',
+        );
+        expect(odd).toContain('BDAY:--1209');
+        expect(odd).toContain('TEL;VALUE=uri:sip:odd@example.com');
     });
 
     test('leaves a 3.0 card untouched, returning the same reference', () => {

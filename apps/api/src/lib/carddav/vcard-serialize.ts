@@ -1,7 +1,8 @@
 // Writes Eigen-owned edits back into a stored vCard while preserving every byte we don't own. Owned
 // properties are diffed against the parsed projection (Task 3): a multi-value line (EMAIL/TEL/ADR) whose
 // value is unchanged keeps its exact source bytes, a removed value drops its line (plus any now-orphaned
-// same-group X- label), and a single-value property is rewritten in place keeping its group and params.
+// same-group X- label), and an edited single-value property is rewritten in place — keeping the first line's
+// group and params, and taking the whole property name so no repeated line of it survives the edit.
 // Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
 import type { Address } from '@workspace/lib/types/contact';
@@ -63,23 +64,29 @@ function insertBeforeEnd(lines: VCardLine[], added: VCardLine[]): VCardLine[] {
     return [...lines.slice(0, idx), ...added, ...lines.slice(idx)];
 }
 
-// Rewrite the first line named `name` in place (keeping its group; params replaced only when given), or
-// insert it before END.
-function rewriteFirst(lines: VCardLine[], name: string, value: string, params?: [string, string][]): VCardLine[] {
+// Rewrite `name` as one line at the position of its first occurrence (keeping that line's group; params
+// replaced only when given) and drop every further line of the same name, or insert before END when the card
+// has none. Editing an owned property takes the whole name: CATEGORIES and NOTE are legally repeatable, but
+// the projection reads only the first line, so a second one would stay invisible to the app forever while
+// still being served to DAV clients.
+function rewriteOwned(lines: VCardLine[], name: string, value: string, params?: [string, string][]): VCardLine[] {
     const idx = lines.findIndex((l) => l.name === name);
     if (idx === -1) return insertBeforeEnd(lines, [makeLine(name, value, params)]);
-    const next = lines.slice();
-    next[idx] = { ...lines[idx], value, ...(params && { params }), raw: null };
+    const next: VCardLine[] = [];
+    for (const [i, line] of lines.entries()) {
+        if (line.name !== name) next.push(line);
+        else if (i === idx) next.push({ ...line, value, ...(params && { params }), raw: null });
+    }
     return next;
 }
 
 // Value-keyed write for a single-value owned prop: an unchanged value leaves the line byte-identical (the
 // Task 8 full-replacement seam echoes every owned key on every save, so presence alone must not rewrite).
-// A changed value rewrites the first line in place; a cleared value removes every line named `name`.
+// A changed or cleared value owns every line named `name`.
 function writeSingle(lines: VCardLine[], name: string, changed: boolean, value: string | null): VCardLine[] {
     if (!changed) return lines;
     if (value === null) return lines.filter((l) => l.name !== name);
-    return rewriteFirst(lines, name, value);
+    return rewriteOwned(lines, name, value);
 }
 
 // Index of the first unescaped ';' in a structured value, or -1 — a preceding backslash escapes it.
@@ -171,8 +178,8 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         const first = edits.firstName ?? card.firstName;
         const last = edits.lastName ?? card.lastName;
         if (first !== card.firstName || last !== card.lastName) {
-            result = rewriteFirst(result, 'N', `${escapeText(last)};${escapeText(first)};;;`);
-            result = rewriteFirst(result, 'FN', escapeText(`${first} ${last}`.trim()));
+            result = rewriteOwned(result, 'N', `${escapeText(last)};${escapeText(first)};;;`);
+            result = rewriteOwned(result, 'FN', escapeText(`${first} ${last}`.trim()));
         }
     }
     if (edits.company !== undefined) {
@@ -207,7 +214,7 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         // Presence-triggered: callers only pass the key when the photo actually changed. Fresh ENCODING=b
         // params replace whatever the old PHOTO line carried.
         result = edits.photo
-            ? rewriteFirst(result, 'PHOTO', photoBase64(edits.photo.bytes), photoParams(edits.photo.mediaType))
+            ? rewriteOwned(result, 'PHOTO', photoBase64(edits.photo.bytes), photoParams(edits.photo.mediaType))
             : result.filter((l) => l.name !== 'PHOTO');
     }
 
