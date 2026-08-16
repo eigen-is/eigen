@@ -6,8 +6,6 @@ import { ApiError } from '../core/errors';
 // Past this much attachment fan-out the send drops to one bare-link copy instead of personalising.
 export const MAX_PERSONALISED_SEND_BYTES = 20 * 1024 * 1024;
 
-export type { CanonicalRecipient };
-
 // Send-path wrapper over the shared canonicaliser: same flatten + first-wins dedupe the compose
 // preview uses, plus the '@' check and recipient cap the send path enforces.
 export function canonicalizeRecipients(draft: {
