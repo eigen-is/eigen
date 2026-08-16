@@ -1,15 +1,28 @@
 import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, EmailDraft } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
+import { getServerConfig } from '../lib/config/server-config';
 import { updateServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
 import * as mailer from '../lib/core/mailer';
 import Drive from '../lib/drive/drive';
 import { getEntriesForTarget } from '../lib/share/registry';
-import { assertJson, authedRequest, driveGet, drivePost, drivePut, getTestContext } from './setup';
+import {
+    addMember,
+    addTeamMount,
+    assertJson,
+    authedRequest,
+    createTeam,
+    driveGet,
+    drivePost,
+    drivePut,
+    firstMountId,
+    getTestContext,
+} from './setup';
 
 const isWindows = process.platform === 'win32';
 
@@ -209,6 +222,47 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
             expect(await getAcl(docId)).toEqual(before);
             expect((await getAcl(docId))?.some((a) => a.id === email) ?? false).toBe(false);
             expect(await getEntriesForTarget(email)).toContain(ctx.alice.user.id);
+        } finally {
+            await updateServerSettings({ guests: { openSignup: true } });
+        }
+    });
+
+    // 4b. The registry source is the OWNER of the granted path, never the sender: on a team-owned
+    //     doc the entry must read `team_*`, so reconciliation delivers the team's shared paths.
+    test('public team doc: the registry entry is sourced from the path owner, not the sender', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const orgId = getServerConfig()!.orgId;
+        await authedRequest(token, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+        const teamId = await createTeam(ctx, orgId, `Grant Source ${randomUUID()}`);
+        // Alice must be a member to write to (and share from) the team drive.
+        await addMember(ctx, teamId, ctx.alice.user.id);
+        await addTeamMount(ctx, teamId, 'Team Drive');
+
+        const teamOwner = teamOwnerId(teamId);
+        const teamMountId = await firstMountId(token, teamOwner);
+        const teamRoot = await driveGet<DrivePath>(token, teamOwner, teamMountId, 'root');
+        const doc = await drivePost<DrivePath>(token, teamOwner, teamMountId, `folder/${teamRoot.id}/create/doc`, {
+            fileName: `grant-team-public-${randomUUID()}`,
+        });
+        await drivePut(token, teamOwner, teamMountId, `path/${doc.id}/acl`, { visibility: 'public-read' });
+
+        await updateServerSettings({ guests: { openSignup: false } });
+        try {
+            startCapture();
+            const email = `grant-team-ext-${randomUUID()}@example.com`;
+
+            const { res } = await sendWithGrant({
+                to: email,
+                refs: [ref(doc.id, { ownerId: teamOwner, mountId: teamMountId })],
+                grant: [doc.id],
+            });
+            expect(res.status).toBe(200);
+
+            expect(await getEntriesForTarget(email)).toEqual([teamOwner]);
         } finally {
             await updateServerSettings({ guests: { openSignup: true } });
         }
