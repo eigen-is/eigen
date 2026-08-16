@@ -402,4 +402,23 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
         expect(daclSpy.mock.calls.length).toBe(0);
         expect(await getAcl(docId)).toEqual(before);
     });
+
+    // 13. The send path accepts a dotless domain but parseOwnerId rejects it as an ACL entry. It is
+    //     skipped, so one such recipient no longer aborts the whole send with an unretryable 400.
+    test('a dotless-domain recipient is skipped, not granted, and the send still succeeds', async () => {
+        startCapture();
+        const docId = await createDoc(`grant-dotless-${randomUUID()}`);
+        const dotless = `grant-dotless-${randomUUID()}@intranet`;
+        const normal = `grant-dotless-ext-${randomUUID()}@external.example`;
+
+        const { res } = await sendWithGrant({ to: `${dotless}, ${normal}`, refs: [ref(docId)], grant: [docId] });
+        expect(res.status).toBe(200);
+
+        const acl = await getAcl(docId);
+        expect(acl).toContainEqual({ id: normal, read: true, write: false });
+        expect(acl?.some((a) => a.id === dotless)).toBe(false);
+
+        expect(sent.some((m) => m.envelope?.to.includes(dotless))).toBe(true);
+        expect(sent.some((m) => m.envelope?.to.includes(normal))).toBe(true);
+    });
 });

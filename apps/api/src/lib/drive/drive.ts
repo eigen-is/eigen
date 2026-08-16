@@ -952,6 +952,9 @@ export default class Drive {
         const seen = new Set<string>();
         for (const rawEmail of emails) {
             const email = rawEmail.toLowerCase();
+            // The send path admits dotless domains (`@localhost` on a LAN box) that parseOwnerId
+            // rejects as ACL ids — offering a grant here could only fail with an unretryable 400.
+            if (!validateEmailAddress(email)) continue;
             if (seen.has(email)) continue;
             seen.add(email);
             // member.read is the honest read flag — a write-only (read:false) entry does NOT grant read.
