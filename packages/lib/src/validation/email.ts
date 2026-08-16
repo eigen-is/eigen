@@ -1,8 +1,7 @@
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const EMAIL_FIND_REGEX = /[^\s@([]+@[^\s@]+\.[^\s@.,;:!?\])]+/g;
 
-// RFC 5321's practical maximum: the SMTP path is capped at 256 octets including the angle
-// brackets, so no conforming address is longer. The single bound for every email input.
+// RFC 5321 caps the SMTP path at 256 octets including the angle brackets, so 254 bounds any address.
 export const MAX_EMAIL_LENGTH = 254;
 
 export function validateEmailAddress(value: string): boolean {

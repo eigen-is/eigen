@@ -269,9 +269,8 @@ function MailRoute() {
     });
 
     const [filePickerOpen, setFilePickerOpen] = useState(false);
-    // The composer flushes the draft and probes document access before the send mutation starts, so
-    // isSendPending alone would leave the Send button live for two round-trips. EmailDraft reports
-    // that window here; both it and the toolbar read one "a send is under way" flag.
+    // isSendPending alone would leave the Send button live for the composer's flush + access probe,
+    // so EmailDraft reports that earlier window here and both it and the toolbar read one flag.
     const [preparingSend, setPreparingSend] = useState(false);
     const isSending = actions.isSendPending || preparingSend;
     const listWidth = isTablet ? '320px' : '400px';

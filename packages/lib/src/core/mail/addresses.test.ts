@@ -51,7 +51,7 @@ describe('flattenAddresses', () => {
         expect(flat.map((a) => a.address)).toEqual(['alice@test.eigen.is', 'bob@test.eigen.is']);
     });
 
-    test('defaults a missing name to an empty string', () => {
+    test('keeps a bare address with an empty name', () => {
         expect(flattenAddresses([{ name: '', address: 'alice@test.eigen.is' }])).toEqual([
             { name: '', address: 'alice@test.eigen.is' },
         ]);

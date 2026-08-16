@@ -90,8 +90,8 @@ type EmailDraftProps = {
     ) => Promise<EmailDraftType | null | undefined>;
     onDraftIdAssigned?: (id: string) => void;
     isSending: boolean;
-    // The send mutation only starts once the draft flush and the access probe are done; the route
-    // folds this earlier window into the isSending it feeds back here and to the toolbar.
+    // The draft flush and the access probe run before the send mutation starts; the route folds
+    // that earlier window into the isSending it feeds back here and to the toolbar.
     onPreparingSendChange: (preparing: boolean) => void;
     // File picker state lives in the route (the toolbar's attach button sits outside this
     // component), so open/close is controlled via props.
@@ -174,11 +174,9 @@ export function EmailDraft({
     };
 
     const handleDriveAttach = async (paths: DrivePath[]) => {
-        // The one seam both attach paths pass through (the picker and initialDriveAttachments), so
-        // the reference cap is enforced here: past it the draft schema 422s every auto-save and the
-        // draft stops persisting entirely. Already-linked ids cost no slot — the reducer dedupes them.
-        const containers = paths.filter((p) => isContainerType(p.type));
-        const fresh = containers.filter((p) => !state.driveReferences.some((r) => r.id === p.id));
+        // Both attach paths (picker and initialDriveAttachments) pass through here, so the reference
+        // cap is enforced here too: past it the draft schema 422s every save and the draft is lost.
+        const fresh = paths.filter((p) => isContainerType(p.type) && !state.driveReferences.some((r) => r.id === p.id));
         const room = Math.max(0, MAX_SEND_REFERENCES - state.driveReferences.length);
         if (fresh.length > room) {
             setAlertState({
@@ -249,10 +247,8 @@ export function EmailDraft({
         });
     };
 
-    // Covers the two-network-hop gap between the send click and the dispatch, where the mutation
-    // hasn't started yet: the ref stops a rapid double-click synchronously (state alone re-renders
-    // too late), while onPreparingSendChange gives the Send button its busy state. Both reset in
-    // `finally`, the dialog-open path included — from there the dialog owns the pending state.
+    // Stops a rapid double-click in the two-network-hop gap between the send click and the dispatch,
+    // where the mutation hasn't started yet: state alone would re-render too late to disable Send.
     const sendingRef = useRef(false);
 
     // Both send entry points funnel here (the Send button via handleSendEmail, and the no-subject
@@ -483,7 +479,6 @@ export function EmailDraft({
                 </div>
             </div>
             {alertState && (
-                // Conditionally mounted so the copy can't flash to empty during an exit animation.
                 <Dialog open onOpenChange={() => setAlertState(null)}>
                     <DialogContent>
                         <DialogHeader>
