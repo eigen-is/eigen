@@ -219,17 +219,25 @@ export class Calendar {
         this.incrementCtag(calendarId);
         const newCtag = this.getCalendarById(calendarId)!.ctag;
 
+        const uri =
+            input.uri ||
+            (input.parentEventId && input.recurrenceDate ? `${uid}-exc-${input.recurrenceDate}.ics` : `${uid}.ics`);
+
+        // A create re-using a previously deleted uri clears its tombstone in the same step as the insert, so a
+        // delete-then-recreate never lists one href as both a 200 (changed) and a 404 (deleted) in a single
+        // sync response (RFC 6578 forbids duplicate member URLs; spec § 1, CalDAV broken window #2).
+        this.db
+            .delete(schema.eventTombstones)
+            .where(and(eq(schema.eventTombstones.calendarId, calendarId), eq(schema.eventTombstones.uri, uri)))
+            .run();
+
         this.db
             .insert(schema.events)
             .values({
                 id,
                 calendarId,
                 uid,
-                uri:
-                    input.uri ||
-                    (input.parentEventId && input.recurrenceDate
-                        ? `${uid}-exc-${input.recurrenceDate}.ics`
-                        : `${uid}.ics`),
+                uri,
                 title: input.title.trim(),
                 description: input.description ?? null,
                 location: input.location ?? null,
