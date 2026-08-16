@@ -667,6 +667,42 @@ describe('per-file fault tolerance', () => {
         expect(withUid[0].id).toBe(id);
         expect(warnings.some((w) => w.toUpperCase().includes('UID'))).toBe(true);
     });
+
+    test('an unparseable member card is skipped by a label rename instead of bricking every label write', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const labelId = await contacts.addLabel({ name: 'Crew', color: '#abcdef' });
+        const goodId = await contacts.addContact(
+            validContact({ firstName: 'Good', email: ['good-member@example.com'], labels: [labelId] }),
+        );
+        const brokenId = await contacts.addContact(
+            validContact({ firstName: 'Broken', email: ['broken-member@example.com'], labels: [labelId] }),
+        );
+        const goodUri = uriOf(db, goodId);
+        const brokenUri = uriOf(db, brokenId);
+
+        // Corrupted out of band after it was indexed: nothing re-reads the file, so its junction row survives
+        // and the rename fans out to a card that can no longer be parsed.
+        const garbage = 'not a vcard anymore\r\n';
+        writeFileSync(cardPathOf(dir, brokenUri), garbage);
+
+        const warnings = await captureWarnings(async () => {
+            await contacts.updateLabel(labelId, { name: 'Team', color: '#abcdef' });
+        });
+
+        // The readable member is renamed, the broken one is left exactly as found and logged.
+        expect(parseVCard(readFileSync(cardPathOf(dir, goodUri), 'utf8')).categories).toEqual(['Team']);
+        expect(readFileSync(cardPathOf(dir, brokenUri), 'utf8')).toBe(garbage);
+        expect(warnings.some((w) => w.includes(brokenUri))).toBe(true);
+
+        // The journal cleared, so no later label mutation replays the doomed fan-out and 500s on it.
+        expect(db.select().from(contactsSchema.pendingLabelRenames).all()).toEqual([]);
+        await captureWarnings(async () => {
+            await contacts.addLabel({ name: 'Later', color: '#abcdef' });
+            await contacts.deleteLabel(labelId);
+        });
+        expect((await contacts.getLabels()).some((l) => l.name === 'Later')).toBe(true);
+        expect(await contacts.getContactById(brokenId)).toBeTruthy();
+    });
 });
 
 // The app sends birthdays as bare dates; the seam also normalizes external ISO datetime input so files stay
@@ -1048,6 +1084,103 @@ describe('crash recovery (durable journals)', () => {
             ).not.toBe(before.etag);
             // The intent is satisfied, so a second restart has nothing to drain.
             expect(restarted.db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a recovery drain that fails transiently keeps its write intent for the next init', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Retry', email: ['retry-crash@example.com'], notes: 'ZZZZ' }),
+        );
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+
+        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
+        priv.commitCard = () => {
+            throw new Error('commit boom');
+        };
+        await expect(
+            contacts.updateContact(
+                id,
+                validContact({ firstName: 'Retry', email: ['retry-crash@example.com'], notes: 'QQQQ' }),
+            ),
+        ).rejects.toThrow('commit boom');
+
+        // Same-length bytes with the indexed mtime pinned back: the journal is the only thing that can find
+        // this card, which is exactly why a failed drain may not throw it away.
+        utimesSync(cardPathOf(dir, before.uri), new Date(), new Date(before.mtime));
+        expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([{ uri: before.uri }]);
+
+        // An IO blip inside the recovery drain: init survives it (a home that cannot open is worse), but the
+        // durable intent must outlive it so the next init retries.
+        const proto = Object.getPrototypeOf(contacts) as { prepareCardRow: (...args: unknown[]) => Promise<unknown> };
+        const originalPrepare = proto.prepareCardRow;
+        proto.prepareCardRow = async () => {
+            throw new Error('io blip');
+        };
+        let restarted!: Awaited<ReturnType<typeof restart>>;
+        let warnings: string[] = [];
+        try {
+            warnings = await captureWarnings(async () => {
+                restarted = await restart(dir, user);
+            });
+        } finally {
+            proto.prepareCardRow = originalPrepare;
+        }
+
+        try {
+            expect(warnings.some((w) => w.includes(before.uri))).toBe(true);
+            expect((await restarted.contacts.getContactById(id))?.notes).toBe('ZZZZ'); // the stale row survives
+            expect(restarted.db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([{ uri: before.uri }]);
+
+            // The next init retries the intent and pays the debt.
+            await restarted.contacts.init();
+            expect((await restarted.contacts.getContactById(id))?.notes).toBe('QQQQ');
+            expect(restarted.db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a card the reconcile already re-indexed is not drained a second time', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Drift', email: ['drift-crash@example.com'], notes: 'short' }),
+        );
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+
+        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
+        priv.commitCard = () => {
+            throw new Error('commit boom');
+        };
+        await expect(
+            contacts.updateContact(
+                id,
+                validContact({
+                    firstName: 'Drift',
+                    email: ['drift-crash@example.com'],
+                    notes: 'a considerably longer note than the one before it',
+                }),
+            ),
+        ).rejects.toThrow('commit boom');
+
+        // The file grew, so the stat-only reconcile sees the drift and re-indexes the card itself — the
+        // recovery drain that follows must find its debt already paid.
+        expect(statSync(cardPathOf(dir, before.uri)).size).not.toBe(before.size);
+        expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([{ uri: before.uri }]);
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+
+        const restarted = await restart(dir, user);
+        try {
+            expect((await restarted.contacts.getContactById(id))?.notes).toBe(
+                'a considerably longer note than the one before it',
+            );
+            expect(restarted.db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+            // One parse and one ctag bump for the pass — not a second round through the drain, which would
+            // send every client into a no-op delta poll per crash recovery.
+            expect(restarted.contacts.cardParseCount).toBe(1);
+            expect(restarted.db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore + 1);
         } finally {
             await restarted.close();
         }

@@ -436,9 +436,11 @@ export class Contacts {
             try {
                 await this.drainDirty();
             } catch (e) {
+                // Only the in-memory marker goes, so init survives and later reads aren't gated on a card that
+                // cannot be indexed. The durable intent stays: a same-stat rewrite is invisible to every other
+                // pass, so forfeiting it on a transient failure would strand the stale row until a rebuild.
                 console.warn(`contacts: could not recover the pending write of ${uri}: ${e}`);
                 this.dirtyCards.delete(uri);
-                this.clearCardWrite(uri);
             }
         }
 
@@ -735,6 +737,10 @@ export class Contacts {
                     // A present card is alive again: clear any live tombstone for its uri (by the folded key, as
                     // commitCard does) so a card re-planted at a deleted uri drops its stale removal.
                     tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, row.uriKey)).run();
+                    // This pass just paid whatever write intent the uri carried — a crashed write whose file
+                    // drifted. Clearing it here (as commitCard does for its own) keeps the recovery drain that
+                    // follows init's reconcile from re-parsing and re-bumping the very card it re-indexed.
+                    tx.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, row.uri)).run();
                 }
                 for (const { row, categories } of prepared)
                     this.syncCardLabels(tx, row.id, categories, createdLabelIds);
@@ -1132,7 +1138,17 @@ export class Contacts {
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, contactId)).get();
             if (!row) continue;
 
-            const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
+            // One member corrupted out of band may not take the fan-out down with it: a throw here strands the
+            // rename's journal record, and every later label mutation resumes it and fails again — one bad file
+            // would brick all label writes. Skip-and-log instead (as buildCandidates does), leaving that card's
+            // CATEGORIES for the reconcile/rebuild that can read the file again to converge (spec § 1).
+            let card: ParsedCard;
+            try {
+                card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
+            } catch (e) {
+                console.warn(`contacts: skipping unreadable card ${row.uri} in the label fan-out: ${e}`);
+                continue;
+            }
             const categories = transform(card.categories);
             // A card the transform doesn't touch — one a resumed fan-out already reached, or whose CATEGORIES
             // never carried the name — keeps its exact bytes: no etag rotation, nothing for clients to refetch.
@@ -1155,6 +1171,10 @@ export class Contacts {
                         lastName: row.lastName,
                         eigenId: row.eigenId,
                         isGroup: row.isGroup,
+                        // Deliberately the stored projection, not the fresh parse: committing it with the
+                        // rewritten file's stats hides an out-of-band edit from the stat-only reconcile. Only
+                        // hand-editing a card file under a live server can produce that, so projecting from the
+                        // parse above is deferred to the phase-2 DAV PUT seam (REVIEW checkpoint 1, ruling 1).
                         data: row.data,
                         etag: computeCardEtag(bytes),
                         mtime: Math.round(mtime),

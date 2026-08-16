@@ -655,6 +655,14 @@ describe('Contacts', () => {
             const after = await assertJson<Contact>(await authedRequest(token, `/contacts/${ctx.alice.user.id}/me`));
             expect(after.notes).toBe('propagation failed');
             expect(after.etag).not.toBe(me.etag);
+
+            // One data dir is shared by every test file in the run, so put Alice's self card back as found.
+            const restored = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${me.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...after, notes: me.notes }),
+            });
+            expect(restored.status).toBe(200);
         });
 
         test('cannot delete own profile contact', async () => {
