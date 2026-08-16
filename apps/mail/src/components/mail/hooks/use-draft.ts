@@ -434,6 +434,11 @@ export function useDraft({
             disabledRef.current = true;
         },
 
+        // Revive them: a rejected send never left, so the draft is still the user's to edit.
+        enableSaves: () => {
+            disabledRef.current = false;
+        },
+
         // Send path: flush any pending/in-flight save and return a NewDraft with the server-assigned
         // id spliced in (the dispatch from the first save may not have rendered yet — callers can't
         // await React state propagation). Saves stay enabled; the caller disables them via

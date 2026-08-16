@@ -17,6 +17,7 @@ export type ShareGrant = { id: string; name: string; recipients: string[] };
 type ShareAndSendDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    // Empty when nothing is grantable: the dialog is then a notes-only send confirm.
     grants: ShareGrant[];
     // Muted informational lines: unshareable refs, chat refs, and the Bcc exclusion.
     notes: string[];
@@ -50,16 +51,20 @@ export function ShareAndSendDialog({
     onSendWithoutAccess,
 }: ShareAndSendDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
-    // Both footer send actions dispatch; focus the recommended primary so a keyboard user's reflexive
+    // Every footer send action dispatches; focus the recommended primary so a keyboard user's reflexive
     // Enter shares rather than sending without access (Radix would otherwise focus the first tabbable).
     const primaryRef = useRef<HTMLButtonElement>(null);
 
+    // Nothing to grant: the dialog is notes-only, a plain confirm over what won't be shared.
+    const hasGrants = grants.length > 0;
     // All grantable documents share one recipient set → one sentence; otherwise a row per document.
-    const sharedSet = grants.length > 0 && grants.every((g) => sameRecipients(g.recipients, grants[0].recipients));
+    const sharedSet = hasGrants && grants.every((g) => sameRecipients(g.recipients, grants[0].recipients));
 
     let description: ReactNode;
     let rows: ReactNode = null;
-    if (sharedSet) {
+    if (!hasGrants) {
+        description = "Some recipients won't get access to the linked documents.";
+    } else if (sharedSet) {
         description = `Let ${formatRecipients(grants[0].recipients)} view ${joinList(grants.map((g) => g.name))}?`;
     } else {
         description = 'Let these recipients view the linked documents?';
@@ -84,7 +89,7 @@ export function ShareAndSendDialog({
                 }}
             >
                 <DialogHeader>
-                    <DialogTitle>Share before sending?</DialogTitle>
+                    <DialogTitle>{hasGrants ? 'Share before sending?' : 'Send without sharing?'}</DialogTitle>
                     <DialogDescription>{description}</DialogDescription>
                 </DialogHeader>
                 {rows}
@@ -99,11 +104,17 @@ export function ShareAndSendDialog({
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
                         Cancel
                     </Button>
-                    <Button variant="outline" onClick={() => run(onSendWithoutAccess)} disabled={pending}>
-                        Send without access
-                    </Button>
-                    <Button ref={primaryRef} onClick={() => run(onShareAndSend)} disabled={pending}>
-                        Share & send
+                    {hasGrants && (
+                        <Button variant="outline" onClick={() => run(onSendWithoutAccess)} disabled={pending}>
+                            Send without access
+                        </Button>
+                    )}
+                    <Button
+                        ref={primaryRef}
+                        onClick={() => run(hasGrants ? onShareAndSend : onSendWithoutAccess)}
+                        disabled={pending}
+                    >
+                        {hasGrants ? 'Share & send' : 'Send'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

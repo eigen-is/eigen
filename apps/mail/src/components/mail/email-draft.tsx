@@ -132,6 +132,7 @@ export function EmailDraft({
         isSendable,
         flushAndGetDraft,
         disableSaves,
+        enableSaves,
         markEditorReady,
     } = useDraft({
         email,
@@ -224,11 +225,17 @@ export function EmailDraft({
     }, [initialDriveAttachments]);
 
     // Every actual send funnels through here: stop auto-saving (we're leaving this draft behind) then
-    // dispatch. Deferring disableSaves() to dispatch time is what keeps the draft editable when the
-    // user backs out of the "Share before sending?" dialog.
-    const dispatchSend = (mail: NewDraft, grantAccessRefIds?: string[]) => {
+    // dispatch. Deferring disableSaves() to dispatch time keeps the draft editable when the user backs
+    // out of the "Share before sending?" dialog; restoring them on rejection keeps it editable — and
+    // still auto-saving — when the send itself fails and the user is left in the composer.
+    const dispatchSend = async (mail: NewDraft, grantAccessRefIds?: string[]) => {
         disableSaves();
-        return sendDraft(mail, grantAccessRefIds);
+        try {
+            await sendDraft(mail, grantAccessRefIds);
+        } catch (err) {
+            enableSaves();
+            throw err;
+        }
     };
 
     // Guards the two-network-hop gap between the send click and the dispatch, where the Send button
@@ -296,11 +303,13 @@ export function EmailDraft({
             }
             if (hasShareableBcc) notes.push('Bcc recipients are not granted access');
 
-            if (grants.length === 0) {
+            if (grants.length === 0 && notes.length === 0) {
                 await dispatchSend(draft);
                 return;
             }
-            // Dedupe collapses the repeated chat note when several chat references are linked.
+            // Notes alone still open the dialog (as a notes-only confirm): dropping them would leave
+            // the sender unaware the link lands on request-access. Dedupe collapses the repeated chat
+            // note when several chat references are linked.
             setShareState({ draft, grants, notes: [...new Set(notes)] });
         } finally {
             sendingRef.current = false;
@@ -312,7 +321,9 @@ export function EmailDraft({
             setAlertMessage('Please specify at least one recipient.');
             return;
         }
-        if (!state.subject.trim() && !state.bodyText.trim()) {
+        // Linked documents count as content, mirroring messageSend's ref-only allowance: a mail whose
+        // whole point is the attached document links is a legitimate send.
+        if (!state.subject.trim() && !state.bodyText.trim() && state.driveReferences.length === 0) {
             setAlertMessage('Please add a subject or message.');
             return;
         }
@@ -326,7 +337,9 @@ export function EmailDraft({
     // ⌘/Ctrl+Enter sends from subject, recipients, or body. Mod+Enter is a modifier
     // combo so the app-wide hotkey listener fires it even while an input/editor is
     // focused; the body editor's submitOnModEnter keeps HardBreak from firing first.
-    useHotkey('Mod+Enter', () => void handleSendEmail(), { enabled: !isSending });
+    // Inert while the Share & send dialog decides: that listener is document-wide, so it is the one
+    // send entry point the modal doesn't already block, and re-running would send behind the dialog.
+    useHotkey('Mod+Enter', () => void handleSendEmail(), { enabled: !isSending && !shareState });
 
     const { targetProps, isDragging } = useFileDropTarget(uploadFiles);
     const { onPaste } = useFilePasteTarget(uploadFiles);
