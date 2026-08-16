@@ -359,10 +359,10 @@ describe('CardDAV', () => {
         expect(res.status).toBe(403);
     });
 
-    // --- REPORTs (Task 16): addressbook-multiget + generation-stamped sync-collection. The addressbook-query
-    // filter engine is Task 17; until then any query REPORT is answered with the honest supported-filter
-    // precondition, so these pin the multiget byte-identity + the two CalDAV sync bugs the design must not
-    // inherit (a future token stalling the client; a recreated href listed as both 200 and 404). ---
+    // --- REPORTs: addressbook-multiget + generation-stamped sync-collection + addressbook-query filtering.
+    // These pin the multiget byte-identity, the two CalDAV sync bugs the design must not inherit (a future
+    // token stalling the client; a recreated href listed as both 200 and 404), and the match-only query
+    // contract (RFC 6352 § 8.6 — only matching cards come back). ---
 
     const report = (body: string) =>
         app.handle(
@@ -533,17 +533,77 @@ describe('CardDAV', () => {
         }
     });
 
-    test('an addressbook-query is answered with the interim supported-filter precondition', async () => {
+    // A card with a caller-chosen FN, so a query can target it precisely amid the book's other accumulated cards.
+    const fnCard = (uid: string, fn: string) =>
+        `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:${fn}\r\nN:${fn};;;;\r\nEND:VCARD\r\n`;
+
+    const queryBody = (filterInner: string, opts: { limit?: number } = {}) =>
+        `<?xml version="1.0" encoding="utf-8"?>\n` +
+        `<CARD:addressbook-query xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav">\n` +
+        `<D:prop><D:getetag/><CARD:address-data/></D:prop>\n` +
+        `<CARD:filter test="anyof">${filterInner}</CARD:filter>\n` +
+        `${opts.limit !== undefined ? `<CARD:limit><CARD:nresults>${opts.limit}</CARD:nresults></CARD:limit>\n` : ''}` +
+        `</CARD:addressbook-query>`;
+
+    const fnFilter = (value: string, collation = 'i;unicode-casemap') =>
+        `<CARD:prop-filter name="FN"><CARD:text-match collation="${collation}" match-type="contains">${value}</CARD:text-match></CARD:prop-filter>`;
+
+    test('addressbook-query (DAVx5 shape) returns only matching cards with byte-exact address-data', async () => {
+        const marker = `Q${randomUUID().replace(/-/g, '')}`;
+        const um = randomUUID();
+        const un = randomUUID();
+        const uriMatch = `${um}.vcf`;
+        const uriMiss = `${un}.vcf`;
+        const bodyMatch = fnCard(um, `Bob ${marker}`);
+        expect((await putCard(uriMatch, bodyMatch, { 'If-None-Match': '*' })).status).toBe(201);
+        expect((await putCard(uriMiss, fnCard(un, `Carol ${marker}`), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await report(queryBody(fnFilter('bob')));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain(cardHref(uriMatch));
+        expect(xml).toContain(bodyMatch); // address-data verbatim (no XML-special chars in the body)
+        expect(xml).not.toContain(cardHref(uriMiss));
+    });
+
+    test('a query that matches nothing is an empty 207 with no card responses', async () => {
+        const res = await report(queryBody(fnFilter(`none-${randomUUID()}`)));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain('multistatus');
+        expect(xml).not.toContain('<D:response>');
+    });
+
+    test('a query naming an unsupported collation is 403 supported-collation', async () => {
+        const res = await report(queryBody(fnFilter('bob', 'x;bogus-collation')));
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('supported-collation');
+    });
+
+    test('a filter carrying an unmappable element is 403 supported-filter', async () => {
+        const res = await report(queryBody(`<CARD:prop-filter name="FN"/><CARD:not-a-real-filter/>`));
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('supported-filter');
+    });
+
+    test('the limit element caps the number of responses', async () => {
+        const marker = `L${randomUUID().replace(/-/g, '')}`;
+        for (let i = 0; i < 3; i++) {
+            const uid = randomUUID();
+            expect((await putCard(`${uid}.vcf`, fnCard(uid, `Lim ${marker}`), { 'If-None-Match': '*' })).status).toBe(
+                201,
+            );
+        }
+        const xml = await (await report(queryBody(fnFilter(marker), { limit: 2 }))).text();
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(2);
+    });
+
+    test('an addressbook-query with no filter element is 400', async () => {
         const body =
             `<?xml version="1.0" encoding="utf-8"?>\n` +
             `<CARD:addressbook-query xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav">\n` +
-            `<D:prop><D:getetag/><CARD:address-data/></D:prop>\n` +
-            `<CARD:filter><CARD:prop-filter name="FN">` +
-            `<CARD:text-match collation="i;unicode-casemap" match-type="contains">bob</CARD:text-match>` +
-            `</CARD:prop-filter></CARD:filter>\n` +
+            `<D:prop><D:getetag/></D:prop>\n` +
             `</CARD:addressbook-query>`;
-        const res = await report(body);
-        expect(res.status).toBe(403);
-        expect(await res.text()).toContain('supported-filter');
+        expect((await report(body)).status).toBe(400);
     });
 });

@@ -1,5 +1,7 @@
 import type { CardRow, Contacts } from '../contacts/contacts';
 import { ADDRESSBOOK_ID } from './discovery';
+import { matchCard, UnsupportedCollationError, UnsupportedFilterError } from './query-filter';
+import { parseVCardLines, type VCardLine } from './vcard-ast';
 import {
     addressDataProp,
     cardEtagProp,
@@ -12,9 +14,11 @@ import {
 import { type CardReportRequest, parseCardReport } from './xml-parser';
 
 // Request bounds (spec § 4): the router rejects a REPORT body over this before it reaches the XML unfolder,
-// and multiget refuses a client that asks for more than this many resources in one round-trip.
+// multiget refuses a client that asks for more than this many resources in one round-trip, and a query result
+// set is truncated to the cap rather than assembling an unbounded response.
 export const REPORT_BODY_MAX_BYTES = 1_048_576;
 const MULTIGET_HREF_LIMIT = 500;
+const QUERY_RESULT_CAP = 1000;
 
 const bookPrefix = (ownerId: string) => `/dav/addressbooks/${ownerId}/${ADDRESSBOOK_ID}/`;
 // Card names are client-chosen, so every emitted href percent-encodes the resource segment — the
@@ -37,12 +41,26 @@ function invalidSyncToken(): Response {
     );
 }
 
+// A 403 carrying a single CardDAV precondition element (CARD:supported-collation / CARD:supported-filter). RFC
+// 6352 § 8.6 requires match-only query responses, so an unevaluable filter is refused rather than answered with
+// a superset a client would treat as all-matching.
+function davPrecondition(element: string): Response {
+    return new Response(
+        `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav"><CARD:${element}/></D:error>`,
+        { status: 403, headers: { 'Content-Type': XML_CONTENT_TYPE } },
+    );
+}
+
 // REPORT on /dav/addressbooks/:ownerId/contacts/ — addressbook-multiget, addressbook-query, or sync-collection.
 export async function handleCardReport(contacts: Contacts, ownerId: string, body: string): Promise<Response> {
     let report: CardReportRequest;
     try {
         report = parseCardReport(body);
-    } catch {
+    } catch (e) {
+        // The filter parser throws these two when a query names an unsupported collation or an unmappable
+        // element; everything else (malformed XML, unknown root) is a plain 400.
+        if (e instanceof UnsupportedCollationError) return davPrecondition('supported-collation');
+        if (e instanceof UnsupportedFilterError) return davPrecondition('supported-filter');
         return new Response('Bad Request: invalid REPORT', { status: 400 });
     }
 
@@ -52,13 +70,7 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
         case 'sync-collection':
             return handleSyncCollection(contacts, ownerId, report);
         case 'addressbook-query':
-            // The addressbook-query filter engine is Task 17. Until it lands, every query REPORT — with a
-            // filter or not — is answered with the honest supported-filter precondition rather than a
-            // full-set superset, which RFC 6352 § 8.6 forbids (clients treat every returned card as a match).
-            return new Response(
-                `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav"><CARD:supported-filter/></D:error>`,
-                { status: 403, headers: { 'Content-Type': XML_CONTENT_TYPE } },
-            );
+            return handleQuery(contacts, ownerId, report);
     }
 }
 
@@ -99,6 +111,51 @@ async function handleMultiget(
         if (report.wantsData) props.push(addressDataProp(new TextDecoder().decode(card.bytes)));
         responses.push(response(cardHref(ownerId, uri), [propstatOk(props)]));
     }
+    return xmlResponse(responses);
+}
+
+// addressbook-query: match-only server-side filtering (RFC 6352 § 8.6 — clients treat every returned card as a
+// match). Matching runs in-memory over every parsed card, group cards included (DAV sees the whole book); books
+// are small and queries rare, so this never touches an app hot path (spec § Performance).
+async function handleQuery(
+    contacts: Contacts,
+    ownerId: string,
+    report: Extract<CardReportRequest, { type: 'addressbook-query' }>,
+): Promise<Response> {
+    // RFC 6352 § 8.6 requires a CARDDAV:filter in the report; a body without one is malformed.
+    if (!report.filter) return new Response('Bad Request: addressbook-query requires a filter', { status: 400 });
+    const filter = report.filter;
+
+    // Each card's bytes are read once and kept, so a matching card is never fetched twice (the query's payload
+    // is the card, like multiget).
+    const matched: { uri: string; etag: string; bytes: Uint8Array }[] = [];
+    for (const card of await contacts.listCards()) {
+        const got = await contacts.getCard(card.uri);
+        if (!got) continue; // vanished under us — the drain tombstones it, this query just skips it
+        let lines: VCardLine[];
+        try {
+            lines = parseVCardLines(new TextDecoder().decode(got.bytes));
+        } catch {
+            continue; // a stored card that won't parse can't match a filter (the same-stat replacement edge)
+        }
+        if (matchCard(lines, filter)) matched.push({ uri: card.uri, etag: got.etag, bytes: got.bytes });
+    }
+
+    // Client limit first, then the server cap: over the cap we truncate and log once rather than assemble an
+    // unbounded response (spec § 4 pins truncate + log).
+    let results = matched;
+    if (report.limit !== null && results.length > report.limit) results = results.slice(0, report.limit);
+    if (results.length > QUERY_RESULT_CAP) {
+        console.warn(`carddav: addressbook-query matched ${results.length} cards, truncating to ${QUERY_RESULT_CAP}`);
+        results = results.slice(0, QUERY_RESULT_CAP);
+    }
+
+    const responses = results.map((r) => {
+        const props = [...cardEtagProp(r.etag)];
+        // wantsData serves the full bytes verbatim, as multiget does; the partial-retrieval projection is separate.
+        if (report.wantsData) props.push(addressDataProp(new TextDecoder().decode(r.bytes)));
+        return response(cardHref(ownerId, r.uri), [propstatOk(props)]);
+    });
     return xmlResponse(responses);
 }
 
