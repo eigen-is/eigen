@@ -13,7 +13,6 @@ import { useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-// Define the form schema
 const formSchema = z
     .object({
         firstName: z.string().optional(),
@@ -61,7 +60,7 @@ export function ContactEditToolbar({ isNew }: ContactEditToolbarProps) {
 }
 
 type RepeatableFieldProps = {
-    label: React.ReactNode;
+    label: string;
     onAdd: () => void;
     children: React.ReactNode;
 };
