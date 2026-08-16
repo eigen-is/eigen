@@ -214,7 +214,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             return await drive.inviteToChat(params.mountId, params.chatId, body.email, user);
         },
         {
-            body: t.Object({ email: t.String() }),
+            body: t.Object({ email: t.String({ maxLength: MAX_EMAIL_LENGTH }) }),
             auth: true,
         },
     )

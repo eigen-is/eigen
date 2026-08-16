@@ -5,6 +5,7 @@ import type {
     CalendarShare,
     FreeBusyBlock,
 } from '@workspace/lib/types/calendar';
+import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { checkCalendarAccess, resolveCalendar, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { storedRecurrenceKey } from '../lib/calendar/recurrence';
@@ -46,7 +47,7 @@ const ReminderSchema = t.Object({
 });
 
 const AttendeeSchema = t.Object({
-    email: t.String(),
+    email: t.String({ maxLength: MAX_EMAIL_LENGTH }),
     name: t.Optional(t.String()),
     status: t.Union([t.Literal('pending'), t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
     role: t.Union([t.Literal('required'), t.Literal('optional')]),

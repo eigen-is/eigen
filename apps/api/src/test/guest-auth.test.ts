@@ -101,6 +101,18 @@ describe('Guest Auth', () => {
         expect(await res.text()).toContain('Too many');
     });
 
+    test('request-otp rejects an over-length email with 422', async () => {
+        const res = await ctx.app.handle(
+            new Request('http://localhost/guest-auth/request-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: `${'a'.repeat(300)}@example.com` }),
+            }),
+        );
+        // maxLength violation → Elysia validation error, before the limiter keys a bucket by it.
+        expect(res.status).toBe(422);
+    });
+
     describe('request-otp and verify-otp flow', () => {
         const guestEmail = 'guest@external.com';
 

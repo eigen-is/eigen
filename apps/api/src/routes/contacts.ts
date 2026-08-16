@@ -1,3 +1,4 @@
+import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { getContacts } from '../lib/contacts/contacts';
@@ -18,7 +19,7 @@ const ContactSchema = t.Object({
     id: t.Optional(t.String()),
     firstName: t.String(),
     lastName: t.String(),
-    email: t.Array(t.String()),
+    email: t.Array(t.String({ maxLength: MAX_EMAIL_LENGTH })),
     phone: t.Array(t.String()),
     company: t.Optional(t.String()),
     jobTitle: t.Optional(t.String()),
