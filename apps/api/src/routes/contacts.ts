@@ -1,3 +1,5 @@
+import type { Contact } from '@workspace/lib/types/contact';
+import type { Label } from '@workspace/lib/types/label';
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { CARD_MAX_BYTES } from '../lib/contacts/card-store';
@@ -21,8 +23,8 @@ const AddressSchema = t.Object({
     country: t.Optional(t.String(TEXT)),
 });
 
-const ContactSchema = t.Object({
-    id: t.Optional(t.String(TEXT)),
+// The client-writable fields — the create body. The id and the etag are the server's to assign.
+const CreateContactSchema = t.Object({
     firstName: t.String(TEXT),
     lastName: t.String(TEXT),
     email: t.Array(t.String(TEXT), { maxItems: 100 }),
@@ -35,8 +37,13 @@ const ContactSchema = t.Object({
     avatar: t.Optional(t.String(TEXT)),
     labels: t.Optional(t.Array(t.String(TEXT), { maxItems: 200 })),
     eigenId: t.Optional(t.String(TEXT)),
-    // Optional in the schema so POST (create) can omit it; PUT enforces its presence in the handler.
-    etag: t.Optional(t.String(TEXT)),
+});
+
+// The update body: the same fields plus the etag the client loaded, required by the schema so a write that
+// carries no precondition is refused before any handler runs (UpdateContactInput).
+const UpdateContactSchema = t.Object({
+    ...CreateContactSchema.properties,
+    etag: t.String({ ...TEXT, minLength: 1 }),
 });
 
 const LabelSchema = t.Object({
@@ -50,7 +57,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     .use(betterAuth)
     .get(
         '/contacts/:ownerId/contacts',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<Contact[]> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContacts();
@@ -59,7 +66,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .get(
         '/contacts/:ownerId/contacts/:id',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<Contact | null> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContactById(params.id);
@@ -68,35 +75,34 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .post(
         '/contacts/:ownerId/contacts',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<string> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).addContact(body);
         },
         {
-            body: ContactSchema,
+            body: CreateContactSchema,
             auth: true,
         },
     )
     .put(
         '/contacts/:ownerId/contacts/:id',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<void> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            if (!body.etag) throw new ApiError(400, 'etag is required');
-            return await (await getContacts(user)).updateContact(params.id, body, body.etag);
+            await (await getContacts(user)).updateContact(params.id, body, body.etag);
         },
         {
-            body: ContactSchema,
+            body: UpdateContactSchema,
             auth: true,
         },
     )
     .delete(
         '/contacts/:ownerId/contacts/:id',
-        async ({ params, query, user }) => {
+        async ({ params, query, user }): Promise<void> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await (await getContacts(user)).deleteContact(params.id, query.etag);
+            await (await getContacts(user)).deleteContact(params.id, query.etag);
         },
         {
             query: t.Object({ etag: t.String() }),
@@ -105,7 +111,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .get(
         '/contacts/:ownerId/labels',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<Label[]> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getLabels();
@@ -114,7 +120,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .post(
         '/contacts/:ownerId/labels',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<string> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).addLabel(body);
@@ -126,7 +132,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .put(
         '/contacts/:ownerId/labels/:id',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<Label> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).updateLabel(params.id, body);
@@ -138,16 +144,16 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .delete(
         '/contacts/:ownerId/labels/:id',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<void> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await (await getContacts(user)).deleteLabel(params.id);
+            await (await getContacts(user)).deleteLabel(params.id);
         },
         { auth: true },
     )
     .post(
         '/contacts/:ownerId/avatar',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<string> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             await enforceAvatarUpload(user.id, body.file.size);
@@ -162,7 +168,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .get(
         '/contacts/:ownerId/avatar/:filename',
-        async ({ params, user, set }) => {
+        async ({ params, user, set }): Promise<Response> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const data = await (await getContacts(user)).downloadAvatar(params.filename);
@@ -175,7 +181,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .get(
         '/contacts/:ownerId/me',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<Contact | null> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getMe();

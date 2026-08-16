@@ -1,4 +1,4 @@
-import type { Contact } from '@workspace/lib/types/contact';
+import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { relations, sql } from 'drizzle-orm';
 import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
@@ -12,7 +12,7 @@ export const contacts = sqliteTable('contacts', {
     eigenId: text('eigenId').notNull().default(''),
     isGroup: integer('isGroup', { mode: 'boolean' }).notNull().default(false),
     data: text('data', { mode: 'json' }).$type<
-        Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'labels' | 'etag'>
+        Omit<CreateContactInput, 'firstName' | 'lastName' | 'eigenId' | 'labels'>
     >(),
     etag: text('etag').notNull(),
     cardCtag: integer('cardCtag').notNull(),

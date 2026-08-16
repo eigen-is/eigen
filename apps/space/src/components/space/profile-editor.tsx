@@ -20,10 +20,10 @@ type ProfileFormValues = z.infer<typeof formSchema>;
 export function ProfileEditor() {
     const { data: contact, isLoading, error: fetchError } = useMeContact();
     const [avatar, setAvatar] = useState<string | null>(null);
-    const initializedRef = useRef(false);
     // Captured alongside the field values when the form first initializes, so the save submits the etag it
     // loaded rather than one a later refetch advanced past — pairing a stale form with a fresh etag would clobber.
-    const loadedEtagRef = useRef<string | undefined>(undefined);
+    // Empty until the profile has loaded; a stored card's etag is never empty, so it doubles as the seeded flag.
+    const loadedEtagRef = useRef('');
 
     const uploadAvatar = useContactAvatarUpload(setAvatar);
     const updateContactMutation = useUpdateContact();
@@ -41,8 +41,7 @@ export function ProfileEditor() {
         // Seed once on first load, and re-seed whenever a refetch (e.g. after a 412 recovery) advances the etag
         // past the frozen snapshot — otherwise the form keeps stale fields + a stale etag and the next save
         // 412s again, an unbreakable loop.
-        if (initializedRef.current && contact.etag === loadedEtagRef.current) return;
-        initializedRef.current = true;
+        if (contact.etag === loadedEtagRef.current) return;
         loadedEtagRef.current = contact.etag;
         form.reset({
             firstName: contact.firstName || '',
@@ -56,15 +55,13 @@ export function ProfileEditor() {
     const handleSubmit = form.handleSubmit(async (data) => {
         if (!contact) return;
 
-        const updateData = {
+        await updateContactMutation.mutateAsync({
             ...contact,
             firstName: data.firstName,
             lastName: data.lastName || '',
             avatar: avatar || '',
             etag: loadedEtagRef.current,
-        };
-
-        await updateContactMutation.mutateAsync(updateData);
+        });
         await navigate({ to: '/' });
     });
 

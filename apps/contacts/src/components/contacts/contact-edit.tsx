@@ -83,7 +83,7 @@ function RepeatableField({ label, onAdd, children }: RepeatableFieldProps) {
 
 type ContactEditProps = {
     contact: Contact;
-    onSave: (data: ContactFormValues, etag?: string) => void;
+    onSave: (data: ContactFormValues, etag: string) => void;
     onCancel: () => void;
 };
 

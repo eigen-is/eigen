@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { CreateContactInput } from '@workspace/lib/types/contact';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { Contacts } from '../lib/contacts/contacts';
 import type * as contactsSchema from '../lib/contacts/schema';
@@ -46,7 +46,7 @@ export async function makeContacts() {
     return { contacts, broadcasts, user, dir, db: managed.db };
 }
 
-export const validContact = (over: Partial<Omit<Contact, 'id'>>): Omit<Contact, 'id'> => ({
+export const validContact = (over: Partial<CreateContactInput>): CreateContactInput => ({
     firstName: 'Ada',
     lastName: 'Lovelace',
     email: ['ada@example.com'],

@@ -2,7 +2,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tansta
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated } from './keys';
@@ -48,7 +48,7 @@ export function useAddContact() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (newContact: Omit<Contact, 'id'>) => {
+        mutationFn: async (newContact: CreateContactInput) => {
             const response = await contactsApi({ ownerId }).contacts.post(newContact);
             if (response.error) throw new AppError(response);
             return response.data;
@@ -65,7 +65,7 @@ export function useUpdateContact() {
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({ id, ...data }: Contact) => {
+        mutationFn: async ({ id, ...data }: UpdateContactInput & { id: string }) => {
             const response = await contactsApi({ ownerId }).contacts({ id }).put(data);
             if (response.error) throw new AppError(response);
             return response.data;

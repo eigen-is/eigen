@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
@@ -102,7 +103,7 @@ describe('Contacts', () => {
 
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${contactId}?etag=${encodeURIComponent(before.etag!)}`,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}?etag=${encodeURIComponent(before.etag)}`,
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
@@ -218,12 +219,14 @@ describe('Contacts', () => {
             expect(labelId.length).toBeGreaterThan(0);
         });
 
-        test('list labels includes new label', async () => {
+        test('list labels includes new label and serves the Label DTO only', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
             const data = await assertJson<Label[]>(res);
             expect(Array.isArray(data)).toBe(true);
             expect(data.length).toBe(initialLabelCount + 1);
-            findOrFail(data, (l) => l.name === 'VIP');
+            const vip = findOrFail(data, (l) => l.name === 'VIP');
+            // Index bookkeeping (nameKey, timestamps) is not part of the contract.
+            expect(Object.keys(vip).sort()).toEqual(['color', 'id', 'name']);
         });
 
         test('update label', async () => {
@@ -238,8 +241,20 @@ describe('Contacts', () => {
             );
             expect(res.status).toBe(200);
             const data = await assertJson<Label>(res);
-            expect(data.name).toBe('VIP Updated');
-            expect(data.color).toBe('#00ff00');
+            expect(data).toEqual({ id: labelId, name: 'VIP Updated', color: '#00ff00' });
+        });
+
+        test('updating a label that does not exist is rejected with 404', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/labels/${randomUUID()}`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'Ghost', color: '#000000' }),
+                },
+            );
+            expect(res.status).toBe(404);
         });
 
         test('list labels reflects updated label', async () => {
@@ -552,7 +567,7 @@ describe('Contacts', () => {
             } finally {
                 await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
                 const left = await assertJson<Contact>(await authedRequest(token, `${url}/${fatId}`));
-                await authedRequest(token, `${url}/${fatId}?etag=${encodeURIComponent(left.etag!)}`, {
+                await authedRequest(token, `${url}/${fatId}?etag=${encodeURIComponent(left.etag)}`, {
                     method: 'DELETE',
                 });
             }
@@ -609,7 +624,7 @@ describe('Contacts', () => {
 
             const deleteRes = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${me.id}?etag=${encodeURIComponent(me.etag!)}`,
+                `/contacts/${ctx.alice.user.id}/contacts/${me.id}?etag=${encodeURIComponent(me.etag)}`,
                 { method: 'DELETE' },
             );
 

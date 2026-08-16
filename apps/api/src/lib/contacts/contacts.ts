@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Address, Contact } from '@workspace/lib/types/contact';
+import type { Address, Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq, inArray, sql } from 'drizzle-orm';
@@ -36,7 +36,7 @@ import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 import { buildContactEvent, buildLabelEvent } from './sse-events';
 
-export async function getContacts(user: User) {
+export async function getContacts(user: User): Promise<Contacts> {
     const home = await getHome(user.id);
     return home.contacts;
 }
@@ -55,9 +55,11 @@ type IndexIncumbent = Pick<typeof schema.contacts.$inferSelect, 'id' | 'uid' | '
 
 // The index-stored projection: the owned properties minus what lives in dedicated columns (names/eigenId)
 // or the junction (labels). `avatar` is the cache URL only — inline photo bytes never enter the index.
+type CardData = NonNullable<(typeof schema.contacts.$inferSelect)['data']>;
+
 // Optionals collapse to '' / [] so this emits the exact same canonical shape prepareCardRow does — the
 // update seam's `avatarChanged` diff (and any projection compare) then can't misfire on `undefined !== ''`.
-function toData(contact: Omit<Contact, 'id'>): (typeof schema.contacts.$inferInsert)['data'] {
+function toData(contact: CreateContactInput): CardData {
     return {
         email: contact.email,
         phone: contact.phone,
@@ -69,6 +71,10 @@ function toData(contact: Omit<Contact, 'id'>): (typeof schema.contacts.$inferIns
         avatar: contact.avatar ?? '',
     };
 }
+
+// What a row whose `data` column is NULL reads as — a pre-projection row, or one a torn write left bare.
+// Derived from toData so the fallback can never drift from the shape every write stores.
+const EMPTY_CARD_DATA: CardData = toData({ firstName: '', lastName: '', email: [], phone: [] });
 
 // The web form seeds a blank email, a blank phone, and an all-empty address (emptyContact). Drop those at the
 // write seam so form-created cards never carry a bare EMAIL:/TEL:/ADR: line out to DAV clients.
@@ -149,7 +155,7 @@ export class Contacts {
         this.home.broadcast(buildLabelEvent(type, labelId));
     }
 
-    public async init() {
+    public async init(): Promise<void> {
         this.managedDb = await getContactsDatabase(this.home);
         this.db = this.managedDb.db;
 
@@ -865,7 +871,7 @@ export class Contacts {
         return labelIds.map((id) => byId.get(id)).filter((name): name is string => name !== undefined);
     }
 
-    public async addContact(contact: Omit<Contact, 'id'>): Promise<string> {
+    public async addContact(contact: CreateContactInput): Promise<string> {
         return this.writeLock.run(async () => {
             await this.drainDirty();
 
@@ -945,7 +951,7 @@ export class Contacts {
         });
     }
 
-    public async updateContact(id: string, contact: Omit<Contact, 'id'>, expectedEtag?: string): Promise<void> {
+    public async updateContact(id: string, contact: CreateContactInput, expectedEtag?: string): Promise<void> {
         return this.writeLock.run(async () => {
             await this.drainDirty();
 
@@ -1123,9 +1129,13 @@ export class Contacts {
         });
     }
 
+    // Projected to the DTO: nameKey and the timestamps are index bookkeeping, not part of the wire contract.
     public async getLabels(): Promise<Label[]> {
         await this.ensureDrained();
-        return this.db.select().from(schema.labels).all();
+        return this.db
+            .select({ id: schema.labels.id, name: schema.labels.name, color: schema.labels.color })
+            .from(schema.labels)
+            .all();
     }
 
     // The contacts linked to any of these labels, deduped — the fan-out set for a rename or a delete.
@@ -1256,7 +1266,7 @@ export class Contacts {
         });
     }
 
-    public async updateLabel(id: string, label: Omit<Label, 'id'>) {
+    public async updateLabel(id: string, label: Omit<Label, 'id'>): Promise<Label> {
         // Same refusal as addLabel, and before the rename fan-out: an empty name would rewrite every member
         // card's CATEGORIES to a value the junction can no longer resolve.
         const nameKey = normalizeLabelName(label.name);
@@ -1267,9 +1277,10 @@ export class Contacts {
             await this.resumeLabelRenames();
 
             const before = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+            if (!before) throw new ApiError(404, 'Label not found');
             // Only a display-name change touches cards — the color never appears in a vCard.
             const newName = label.name.trim();
-            const renamedFrom = before && before.name !== newName ? before : undefined;
+            const renamedFrom = before.name !== newName ? before : undefined;
 
             try {
                 this.db.transaction((tx) => {
@@ -1329,13 +1340,14 @@ export class Contacts {
                 }
             }
 
-            const updatedLabel = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
             this.emitLabel(SSEventType.LABEL_UPDATED, id);
-            return updatedLabel;
+            // Reaching here means the row committed this exact name and color — the fan-out's only other exit
+            // is a throw — so the DTO is assembled instead of read back with the bookkeeping columns.
+            return { id, name: newName, color: label.color };
         });
     }
 
-    public async deleteLabel(id: string) {
+    public async deleteLabel(id: string): Promise<void> {
         return this.writeLock.run(async () => {
             await this.drainDirty();
             // Converge a half-applied rename first, so the delete below removes the name the cards actually
@@ -1358,7 +1370,7 @@ export class Contacts {
     }
 
     private dbRowToContact(row: typeof schema.contacts.$inferSelect, labels: string[]): Contact {
-        const data = row.data ?? {};
+        const data = row.data ?? EMPTY_CARD_DATA;
 
         return {
             id: row.id,
@@ -1366,7 +1378,7 @@ export class Contacts {
             lastName: row.lastName.trim(),
             eigenId: row.eigenId,
             etag: row.etag,
-            ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
+            ...data,
             labels,
         };
     }
@@ -1405,7 +1417,7 @@ export class Contacts {
         return rows.map((row) => this.dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
-    public async uploadAvatar(file: File) {
+    public async uploadAvatar(file: File): Promise<string> {
         this.cleanupAvatarImages().catch(() => {});
 
         const buffer = Buffer.from(await file.arrayBuffer());
@@ -1426,7 +1438,7 @@ export class Contacts {
         return avatarUrl(this.home.user.id, fileName);
     }
 
-    public async downloadAvatar(filename: string) {
+    public async downloadAvatar(filename: string): Promise<ArrayBuffer | null> {
         if (!AVATAR_FILENAME.test(filename)) {
             return null;
         }
@@ -1528,7 +1540,7 @@ export class Contacts {
             .some((row) => (row.data?.email ?? []).some((e) => e.toLowerCase() === target));
     }
 
-    private async addYourself() {
+    private async addYourself(): Promise<string> {
         const user = this.home.user;
         const nameParts = (user.name || '').split(' ');
         return await this.addContact({
@@ -1547,7 +1559,7 @@ export class Contacts {
         });
     }
 
-    public async getMe() {
+    public async getMe(): Promise<Contact | null> {
         await this.ensureDrained();
         const found = this.selfRow();
         if (found) {

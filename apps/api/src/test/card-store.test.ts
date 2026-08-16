@@ -4,7 +4,7 @@ import { existsSync, fstatSync, mkdirSync, readdirSync, readFileSync, rmSync, st
 import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { CreateContactInput } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
@@ -203,7 +203,7 @@ describe('card file helpers', () => {
 // sit exactly on it has to pad one: NOTE carries the bulk (folded, so its cost per character isn't 1) and a
 // short ORG line — which never folds — tops the card up to the exact byte. createVCard is the same
 // serializer addContact writes through, so the file it produces lands on the searched-for size.
-function contactOfExactly(bytes: number, uid: string): Omit<Contact, 'id'> {
+function contactOfExactly(bytes: number, uid: string): CreateContactInput {
     const base = { firstName: 'Max', lastName: 'Bytes', email: [], phone: [] };
     const sizeOf = (notesLength: number, companyLength: number) =>
         new TextEncoder().encode(
@@ -623,6 +623,17 @@ describe('Contacts label membership (CATEGORIES)', () => {
         expect(readCard(dir, uri)).toContain('CATEGORIES:Boss');
     });
 
+    test('updating a label that does not exist is refused before anything is emitted', async () => {
+        const { contacts, broadcasts } = await makeContacts();
+        broadcasts.length = 0;
+
+        await expect(contacts.updateLabel(randomUUID(), { name: 'Ghost', color: '#000000' })).rejects.toThrow(
+            'Label not found',
+        );
+
+        expect(broadcasts).toEqual([]);
+    });
+
     test('a color-only label update leaves member cards untouched', async () => {
         const { contacts, broadcasts, db, dir } = await makeContacts();
         const labelId = await contacts.addLabel({ name: 'Keepers', color: '#111111' });
@@ -632,8 +643,10 @@ describe('Contacts label membership (CATEGORIES)', () => {
         const etagBefore = row.etag;
         broadcasts.length = 0;
 
-        await contacts.updateLabel(labelId, { name: 'Keepers', color: '#222222' });
+        const updated = await contacts.updateLabel(labelId, { name: 'Keepers', color: '#222222' });
 
+        // The wire contract is the Label DTO — no nameKey, no timestamps.
+        expect(updated).toEqual({ id: labelId, name: 'Keepers', color: '#222222' });
         expect(readCard(dir, row.uri)).toBe(cardBefore);
         const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, contactId)).get()!;
         expect(after.etag).toBe(etagBefore);

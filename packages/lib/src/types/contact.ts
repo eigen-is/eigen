@@ -6,8 +6,9 @@ export type Address = {
     country?: string;
 };
 
-export type Contact = {
-    id: string;
+// The fields a card owns and a client may write — the POST body. The server assigns everything else: it
+// mints the id and computes the etag from the card file's bytes.
+export type CreateContactInput = {
     firstName: string;
     lastName: string;
     email: string[];
@@ -20,9 +21,19 @@ export type Contact = {
     avatar?: string;
     labels?: string[];
     eigenId?: string;
-    // sha256 of the card file's bytes; a write must echo the one it loaded so a stale form 412s (spec § 3).
-    // Absent on a create payload and on emptyContact — the server assigns it.
-    etag?: string;
+};
+
+// A stored contact as every read serves it: the server-assigned id and the etag of the card it was read from.
+export type Contact = CreateContactInput & {
+    id: string;
+    // sha256 of the card file's bytes.
+    etag: string;
+};
+
+// The PUT body: a write must echo the etag it loaded so a stale form 412s instead of clobbering a card that
+// changed meanwhile (spec § 3). The id travels in the path, not the body.
+export type UpdateContactInput = CreateContactInput & {
+    etag: string;
 };
 
 // Projection produced by useContactSuggestions: the de-duped union of personal

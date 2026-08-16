@@ -13,10 +13,18 @@ type TeamMemberDetailProps = {
 
 export function TeamMemberDetail({ member }: TeamMemberDetailProps) {
     // A team member is a person with one known address — render the shared contact detail
-    // instead of duplicating its sections.
+    // instead of duplicating its sections. A member is not a stored card, so the id and etag
+    // are stand-ins — this pane reads neither.
     return (
         <ContactDetail
-            contact={{ id: member.email, firstName: member.name, lastName: '', email: [member.email], phone: [] }}
+            contact={{
+                id: member.email,
+                etag: '',
+                firstName: member.name,
+                lastName: '',
+                email: [member.email],
+                phone: [],
+            }}
         />
     );
 }

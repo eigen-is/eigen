@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { emptyContact } from '@workspace/lib/constants/contact';
 import { useAddContact, useContacts, useUpdateContact } from '@workspace/lib/contacts';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
 import { useEffect } from 'react';
 import { z } from 'zod';
@@ -49,8 +49,8 @@ function EditContactRoute() {
         }
     }, [contactsLoading, contactId, contact, navigate, filterType, filterId]);
 
-    const handleSave = async (data: ContactFormValues, etag?: string) => {
-        const contactData: Omit<Contact, 'id'> = {
+    const handleSave = async (data: ContactFormValues, etag: string) => {
+        const contactData: CreateContactInput = {
             ...data,
             firstName: data.firstName || '',
             lastName: data.lastName || '',
