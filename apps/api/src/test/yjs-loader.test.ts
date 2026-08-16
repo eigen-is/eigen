@@ -1,5 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { mkdirSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as Y from 'yjs';
 import { compressBlob } from '../lib/collab/blob-codec';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
@@ -17,13 +19,14 @@ import { ManagedDatabase } from '../lib/core';
 const GARBAGE = Buffer.from([0xde, 0xad, 0xbe, 0xef, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]);
 
 let dbCounter = 0;
+// mkdtemp, not a pid-keyed name: pids recycle, and a recycled pid would reopen a leftover data-N.db
+// whose rows collide with the fixed-id inserts below.
+const testDir = mkdtempSync(join(tmpdir(), 'eigen-yjs-loader-'));
 
 // A data.db shaped exactly like DbProvider leaves it: one snapshot row whose
 // lastUpdateId points at the consolidation point, plus tail update rows.
 async function makeCollabDb(): Promise<{ managedDb: ManagedDatabase<typeof schema>; localPath: string; doc: Y.Doc }> {
-    const dir = `/tmp/eigen-yjs-loader-test-${process.pid}`;
-    mkdirSync(dir, { recursive: true });
-    const localPath = `${dir}/data-${++dbCounter}.db`;
+    const localPath = `${testDir}/data-${++dbCounter}.db`;
     const managedDb = new ManagedDatabase(COLLAB_DB_CONFIG, localPath);
     await managedDb.open(0);
 
