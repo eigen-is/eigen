@@ -1,7 +1,7 @@
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
 import { DRIVE_EXTENSIONS, DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { validateEmailTarget } from '@workspace/lib/validation';
+import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { requireNonGuest, requireSelf, requireTeamAccess } from '../lib/core/access';
@@ -44,8 +44,10 @@ export const chatRouter = new Elysia({ name: 'chat' })
             return { matches: await findChatsByMembers(drive, user, emails) };
         },
         {
-            // 321 = one ≤320-char address plus its comma, so the string cap matches the member cap.
-            query: t.Object({ emails: t.Optional(t.String({ maxLength: MAX_CHAT_MEMBERS * 321 })) }),
+            // One address plus its comma per member, so the string cap matches the member cap.
+            query: t.Object({
+                emails: t.Optional(t.String({ maxLength: MAX_CHAT_MEMBERS * (MAX_EMAIL_LENGTH + 1) })),
+            }),
             auth: true,
         },
     )
@@ -123,7 +125,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             body: t.Object({
                 parentId: t.Optional(t.String()),
                 fileName: t.String({ maxLength: 255 }),
-                members: t.Optional(t.Array(t.String({ maxLength: 320 }), { maxItems: MAX_CHAT_MEMBERS })),
+                members: t.Optional(t.Array(t.String({ maxLength: MAX_EMAIL_LENGTH }), { maxItems: MAX_CHAT_MEMBERS })),
                 dedupeName: t.Optional(t.Boolean()),
             }),
             auth: true,

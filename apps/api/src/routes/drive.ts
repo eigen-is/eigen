@@ -1,6 +1,7 @@
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
+import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
@@ -479,7 +480,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             body: t.Object({
-                emails: t.Array(t.String({ maxLength: 254 }), { maxItems: MAX_SEND_RECIPIENTS }),
+                emails: t.Array(t.String({ maxLength: MAX_EMAIL_LENGTH }), { maxItems: MAX_SEND_RECIPIENTS }),
             }),
             auth: true,
         },

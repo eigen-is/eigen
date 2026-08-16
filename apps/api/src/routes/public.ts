@@ -1,4 +1,5 @@
 import type { PublicUser } from '@workspace/lib/types/public';
+import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { isDemo } from '../lib/config/env';
 import { getPublicConfig } from '../lib/config/server-config';
@@ -40,7 +41,7 @@ export const publicRouter = new Elysia({ name: 'public' })
         },
         {
             body: t.Object({
-                email: t.String({ maxLength: 320 }),
+                email: t.String({ maxLength: MAX_EMAIL_LENGTH }),
                 notes: t.String({ maxLength: 1000 }),
             }),
         },
