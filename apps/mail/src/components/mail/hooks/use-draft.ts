@@ -1,4 +1,5 @@
 import { type AuthUser, useAuth } from '@workspace/lib/auth';
+import { flattenAddresses } from '@workspace/lib/mail';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useEffect, useReducer, useRef } from 'react';
@@ -63,9 +64,9 @@ function addressObjectToString(addr?: AddressObject): string {
     if (addr.text) return addr.text;
     // Fall back to the value list when text is empty — reply-all builds AddressObjects with only
     // `value` populated. Inverse of stringToAddressObject: `name <address>`, else bare address.
-    return addr.value
-        .map((a) => (a.name ? `${a.name} <${a.address ?? ''}>` : (a.address ?? '')))
-        .filter(Boolean)
+    // Flattened so an RFC 2822 group can never render as `Team <>`.
+    return flattenAddresses(addr.value)
+        .map(({ name, address }) => (name ? `${name} <${address}>` : address))
         .join(', ');
 }
 

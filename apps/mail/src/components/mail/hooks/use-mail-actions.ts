@@ -4,6 +4,7 @@ import { formatFullDateTime } from '@workspace/lib/date';
 import { escapeHtml } from '@workspace/lib/html';
 import {
     createDraftEmail,
+    flattenAddresses,
     useDeleteEmail,
     useEmailById,
     useMoveEmail,
@@ -367,11 +368,17 @@ export function useMailActions() {
         const email = await getEmailById(emailId);
         if (!email) return;
         const myEmail = user?.email?.toLowerCase();
-        const toValues = Array.isArray(email.to) ? email.to.flatMap((t) => t.value) : email.to?.value || [];
-        const ccValues = Array.isArray(email.cc) ? email.cc.flatMap((c) => c.value) : email.cc?.value || [];
-        const replyTo = (email.replyTo || email.from)?.value || [];
+        // Expand RFC 2822 groups: a bare group container carries a name but no address, and would
+        // reach the composer as `Team <>` and fail the send-path canonicaliser.
+        const toValues = Array.isArray(email.to)
+            ? email.to.flatMap((t) => flattenAddresses(t.value))
+            : flattenAddresses(email.to?.value);
+        const ccValues = Array.isArray(email.cc)
+            ? email.cc.flatMap((c) => flattenAddresses(c.value))
+            : flattenAddresses(email.cc?.value);
+        const replyTo = flattenAddresses((email.replyTo || email.from)?.value);
         const allRecipients = [...replyTo, ...toValues, ...ccValues].filter(
-            (addr) => addr.address?.toLowerCase() !== myEmail,
+            (addr) => addr.address.toLowerCase() !== myEmail,
         );
         openPrefilledCompose(
             createDraftEmail({

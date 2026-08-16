@@ -141,26 +141,21 @@ export function MailLink({
     );
 }
 
-function formatContactObject(contact: AddressObject, compact: boolean = false) {
-    return contact.value.map((address, idx, arr) => (
-        <span key={address.address || idx}>
-            <MailLink email={address.address} name={address.name} mailLink={!compact} compact={compact} />
-            {idx < arr.length - 1 ? ', ' : ''}
-        </span>
-    ));
+// Collect the leaf addresses of a header field: normalise the ParsedMail AddressObject | AddressObject[]
+// container, then expand RFC 2822 groups via the shared send-path helper so group members appear here too.
+function collectAddresses(field?: AddressObject | AddressObject[]): { name: string; address: string }[] {
+    const objects = Array.isArray(field) ? field : field ? [field] : [];
+    return objects.flatMap((obj) => flattenAddresses(obj.value));
 }
 
 function formatContactObjects(contacts: AddressObject | AddressObject[], compact: boolean = false) {
-    return Array.isArray(contacts)
-        ? contacts.map((contact) => formatContactObject(contact, compact))
-        : formatContactObject(contacts, compact);
-}
-
-// Collect the leaf recipients of a header field: normalise the ParsedMail AddressObject | AddressObject[]
-// container, then expand RFC 2822 groups via the shared send-path helper so group members appear here too.
-function collectRecipients(field?: AddressObject | AddressObject[]): { name: string; address: string }[] {
-    const objects = Array.isArray(field) ? field : field ? [field] : [];
-    return objects.flatMap((obj) => flattenAddresses(obj.value));
+    const addresses = collectAddresses(contacts);
+    return addresses.map(({ name, address }, idx) => (
+        <span key={address}>
+            <MailLink email={address} name={name} mailLink={!compact} compact={compact} />
+            {idx < addresses.length - 1 ? ', ' : ''}
+        </span>
+    ));
 }
 
 function MailHeaderDetails({ email, formattedDate }: { email: Email; formattedDate: string }) {
@@ -187,16 +182,12 @@ function MailHeaderDetails({ email, formattedDate }: { email: Email; formattedDa
 
 function MailHeader({ email, formattedDate }: { email: Email; formattedDate: string }) {
     const isSent = email.mailbox === 'Sent';
-    const recipients = [
-        ...collectRecipients(email.to),
-        ...collectRecipients(email.cc),
-        ...collectRecipients(email.bcc),
-    ];
+    const recipients = [...collectAddresses(email.to), ...collectAddresses(email.cc), ...collectAddresses(email.bcc)];
     const primary = isSent ? recipients[0] : email.from?.value[0];
     const primaryName = primary?.name || primary?.address || 'Unknown';
     const primaryEmail = primary?.address || '';
 
-    const summaryNames = recipients.map((a) => a.name || a.address || '').filter(Boolean);
+    const summaryNames = recipients.map((a) => a.name || a.address);
 
     return (
         <div className="flex items-center">
