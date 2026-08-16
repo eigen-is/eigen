@@ -434,7 +434,7 @@ export function useDraft({
             disabledRef.current = true;
         },
 
-        // Revive them: a rejected send never left, so the draft is still the user's to edit.
+        // A rejected send never left, so the draft is still the user's to edit.
         enableSaves: () => {
             disabledRef.current = false;
         },

@@ -194,9 +194,7 @@ export class Mail {
                 message.subject = meta.subject;
                 message.html = meta.html;
                 message.text = meta.text;
-                // Recipients verbatim, never conditional: both save paths write the full field set, so
-                // an absent one means the user cleared it and `if (meta.cc)` would hand back the stale
-                // EML's Cc (the write side avoids the same trap in draftFullSave).
+                // Unconditional: both save paths write the full field set, so an absent one means cleared.
                 message.to = meta.to;
                 message.cc = meta.cc;
                 message.bcc = meta.bcc;
@@ -586,8 +584,7 @@ export class Mail {
         const baseHtml = message.html || '';
         const baseText = message.text;
 
-        // Also bounded at the route schema — kept because `refs` may come from the draft sidecar,
-        // which this request never submitted for validation.
+        // Also bounded at the route schema; re-checked because `refs` can come from the draft sidecar.
         if (refs.length > MAX_SEND_REFERENCES) {
             throw new ApiError(400, `A message can have at most ${MAX_SEND_REFERENCES} attachment links`);
         }
@@ -625,12 +622,11 @@ export class Mail {
 
         // Personalising re-sends every file attachment once per external recipient, so a big deck to a
         // big list would push hundreds of megabytes through the MTA while the browser waits on us.
-        const attachmentBytes = (message.attachments ?? []).reduce((sum, a) => sum + Buffer.byteLength(a.content), 0);
-        const overBudget = externals.length * attachmentBytes > MAX_PERSONALISED_SEND_BYTES;
+        const fanOutBytes =
+            externals.length * (message.attachments ?? []).reduce((sum, a) => sum + Buffer.byteLength(a.content), 0);
 
-        if (!refs.length || !externals.length || overBudget) {
-            // No refs, every recipient on this mail domain, or too many bytes to fan out: one send
-            // with bare links, no per-recipient envelope.
+        if (!refs.length || !externals.length || fanOutBytes > MAX_PERSONALISED_SEND_BYTES) {
+            // One send with bare links, no per-recipient envelope.
             message.html = appendReferenceLinks(baseHtml, refs);
             message.text = appendReferenceLinksText(baseText, refs);
             if (!(await sendMail(message))) {

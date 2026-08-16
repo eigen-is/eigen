@@ -403,8 +403,7 @@ describe.skipIf(isWindows)('Mail — grant access to references at send', () => 
         expect(await getAcl(docId)).toEqual(before);
     });
 
-    // 13. The send path accepts a dotless domain but parseOwnerId rejects it as an ACL entry. It is
-    //     skipped, so one such recipient no longer aborts the whole send with an unretryable 400.
+    // 13. A dotless-domain recipient can't be an ACL id, so it is skipped instead of aborting the send.
     test('a dotless-domain recipient is skipped, not granted, and the send still succeeds', async () => {
         startCapture();
         const docId = await createDoc(`grant-dotless-${randomUUID()}`);

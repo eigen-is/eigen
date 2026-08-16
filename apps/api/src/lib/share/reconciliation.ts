@@ -96,8 +96,7 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
 
     for (const fromUserId of fromUserIds) {
         try {
-            // Same team-owned source as in reconcileSharesForNewUser — drive paths only, attributed
-            // to the team — but relayed, since this targets another user's home.
+            // Team-owned source (see reconcileSharesForNewUser): drive paths only, attributed to the team.
             const parsed = parseOwnerId(fromUserId);
             if (parsed.type === 'team') {
                 const team = await getTeam(parsed.id);

@@ -277,13 +277,13 @@ describe('Drive access check', () => {
         });
     });
 
-    // 8. The send path accepts dotless domains (`@localhost` on a LAN box), but parseOwnerId rejects
-    //    them as ACL entries — so they are skipped here rather than offered as an ungrantable grant.
+    // 8. Addresses parseOwnerId can't turn into an ACL id (the dotless domains the send path accepts).
     describe('non-ACL-able addresses', () => {
+        const dotless = 'ac-dotless@intranet';
+        const normal = 'ac-dotless-normal@example.com';
+
         test('a dotless-domain address is skipped; a normal one alongside it still reports', async () => {
             const folderId = await createFolder('dotless');
-            const dotless = `ac-dotless-${randomUUID()}@intranet`;
-            const normal = `ac-dotless-normal-${randomUUID()}@example.com`;
             const body = await assertJson<DriveAccessCheckResult>(
                 await accessCheck(ctx.alice.user.sessionToken, ctx.alice.user.id, folderId, [dotless, normal]),
             );

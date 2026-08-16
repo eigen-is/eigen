@@ -55,7 +55,6 @@ export function ShareAndSendDialog({
     // Enter shares rather than sending without access (Radix would otherwise focus the first tabbable).
     const primaryRef = useRef<HTMLButtonElement>(null);
 
-    // Nothing to grant: the dialog is notes-only, a plain confirm over what won't be shared.
     const hasGrants = grants.length > 0;
     // All grantable documents share one recipient set → one sentence; otherwise a row per document.
     const sharedSet = hasGrants && grants.every((g) => sameRecipients(g.recipients, grants[0].recipients));

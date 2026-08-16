@@ -59,9 +59,16 @@ async function uploadAttachment(bytes: number): Promise<string> {
     return (await assertJson<{ tempId: string }>(res)).tempId;
 }
 
-// PUT a draft carrying a doc reference, then POST send. The send body is the same mail plus the
-// saved id — never the PUT response — so the assertions never depend on the EML round-trip's field
-// order, and no attachment bytes travel back out.
+async function sendMailBody(mail: Record<string, unknown>): Promise<Response> {
+    return authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mail }),
+    });
+}
+
+// PUT a draft carrying a doc reference, then POST send. The send body is the same mail plus the saved
+// id — never the PUT response — so the assertions never depend on the EML round-trip's field order.
 async function sendDraftWithRef(
     to: string,
     opts: {
@@ -73,20 +80,16 @@ async function sendDraftWithRef(
         tempAttachmentIds?: string[];
     } = {},
 ): Promise<{ draft: EmailDraft; res: Response }> {
-    const refs = opts.refs ?? [makeRef('doc-send')];
-    const fields = {
-        ...(opts.cc ? { cc: addr(opts.cc) } : {}),
-        ...(opts.bcc ? { bcc: addr(opts.bcc) } : {}),
-        ...(opts.inReplyTo ? { inReplyTo: opts.inReplyTo } : {}),
-        ...(opts.references ? { references: opts.references } : {}),
-    };
     const mail = {
         subject: 'Ref send',
         to: addr(to),
         text: 'see attached doc',
         html: '<p>see attached doc</p>',
-        driveReferences: refs,
-        ...fields,
+        driveReferences: opts.refs ?? [makeRef('doc-send')],
+        ...(opts.cc ? { cc: addr(opts.cc) } : {}),
+        ...(opts.bcc ? { bcc: addr(opts.bcc) } : {}),
+        ...(opts.inReplyTo ? { inReplyTo: opts.inReplyTo } : {}),
+        ...(opts.references ? { references: opts.references } : {}),
     };
 
     const putRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
@@ -96,13 +99,7 @@ async function sendDraftWithRef(
     });
     const draft = await assertJson<EmailDraft>(putRes);
 
-    const sendBody = { ...mail, id: draft.id };
-
-    const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mail: sendBody }),
-    });
+    const res = await sendMailBody({ ...mail, id: draft.id });
     return { draft, res };
 }
 
@@ -256,8 +253,7 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
     });
 
     // Bounded at the schema (maxItems) on both the draft PUT and the send POST, so the TypeBox
-    // violation surfaces as a 422 before the handler renders a pill per reference — mirroring the
-    // grantAccessRefIds bound (mail-grant-on-send.test.ts) and the drive access-check route.
+    // violation surfaces as a 422 before the handler renders a pill per reference.
     test('too many drive references is rejected with 422, before any save or send', async () => {
         startCapture();
         const driveReferences = Array.from({ length: 21 }, (_, i) => makeRef(`doc-${i}`));
@@ -300,16 +296,6 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(raw).toMatch(/In-Reply-To/i);
     });
 
-    // Sends a mail directly (no prior PUT) so both the wire header and the Sent EML are minted
-    // in one shot — the id-less path that used to hand them two different ids.
-    async function sendMailBody(mail: Record<string, unknown>): Promise<Response> {
-        return authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mail }),
-        });
-    }
-
     test('an RFC 2822 group in To is flattened into the delivered recipients on the send path', async () => {
         startCapture();
         const groupTo: AddressObject = {
@@ -331,6 +317,8 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(addresses(sent[0].to)).toEqual(['alpha@x.com', 'beta@x.com']);
     });
 
+    // No prior PUT, so the wire header and the Sent EML are minted in one shot — the path that used
+    // to hand them two different ids.
     test('an id-less send pins the wire Message-ID to the Sent EML header', async () => {
         startCapture();
         const res = await sendMailBody({
