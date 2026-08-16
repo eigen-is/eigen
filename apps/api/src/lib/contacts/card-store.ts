@@ -74,11 +74,13 @@ export async function writeCardFile(
 // Sweep crash leftovers from `cards/`: ONLY writeAtomic's own temp files — `.`-prefixed AND carrying the
 // `.tmp-` infix it stamps (`.<name>.tmp-<uuid>`). A stray non-`.vcf` (a README, a csv, a mixed-case `.VCF`)
 // or a hand-placed dotfile (a `.backup.vcf`) is not temp debris and is left on disk — reconcile and rebuild
-// warn-skip it rather than deleting data we didn't create. Safe to run under init's lock.
+// warn-skip it rather than deleting data we didn't create. Safe to run under init's lock. Unlinks rather
+// than deletes (as deleteContact does): `delete` reaps newly-empty parents, which on a book whose only
+// content is debris would remove `cards/` out from under the init that just created it.
 export async function cleanupTempCardFiles(storage: LocalFilesystem): Promise<void> {
     for (const name of await storage.list(CARDS_DIR)) {
         if (name.startsWith('.') && name.includes('.tmp-')) {
-            await storage.delete(cardPath(name));
+            await storage.unlink(cardPath(name));
         }
     }
 }

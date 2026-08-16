@@ -93,6 +93,11 @@ const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;
 // not a resource limit or guarantee.
 const AVATAR_PREVIEW = { maxSize: 512, quality: 80, fit: 'cover' } as const;
 
+// The only two names anything ever writes into `avatars/`: a staged upload (`<uuid>.webp`) and a derived card
+// photo cache (`<uuid>-<hash8>.webp`). Serving is allowlisted to exactly those, so separators, `..` and
+// control characters are refused by construction rather than one blocklist at a time.
+const AVATAR_FILENAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-[0-9a-f]{8})?\.webp$/;
+
 // The v2 UNIQUE index on labels(nameKey) closes duplicate/case-variant label names. bun:sqlite names the
 // column in the violation message ("UNIQUE constraint failed: labels.nameKey"); match on it so an unrelated
 // UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
@@ -587,11 +592,11 @@ export class Contacts {
         return candidates;
     }
 
-    // Stat-only reconcile: list cards/, compare (mtime,size) to the index, and re-read only what drifted — the
-    // clean case (always, in practice) is one listing plus stats, zero file reads. New/drifted cards are
-    // re-indexed and vanished rows tombstoned under a single ctag bump; a fully clean pass parses nothing and
-    // bumps nothing (spec § 1). A same-size, timestamp-preserving replacement is invisible here — that needs
-    // `rebuildIndex`.
+    // Stat-only reconcile: list cards/, compare (mtime,size) to the index, and re-read only what drifted (plus
+    // any row whose derived avatar cache is gone) — the clean case (always, in practice) is two listings plus
+    // stats, zero file reads. New/drifted cards are re-indexed and vanished rows tombstoned under a single ctag
+    // bump; a fully clean pass parses nothing and bumps nothing (spec § 1). A same-size, timestamp-preserving
+    // replacement is invisible here — that needs `rebuildIndex`.
     public async reconcileIndex(): Promise<void> {
         return this.writeLock.run(async () => {
             const present = new Map<string, { uri: string; mtime: number; size: number }>();
@@ -611,7 +616,8 @@ export class Contacts {
                 }
             }
 
-            // Project only the scalars the pass reads — never the `data` JSON — so a clean init parses nothing.
+            // Project the scalars the pass reads plus the stored projection's avatar URL — no card file is
+            // read, so a clean init still parses nothing.
             const rows = this.db
                 .select({
                     id: schema.contacts.id,
@@ -621,15 +627,23 @@ export class Contacts {
                     mtime: schema.contacts.mtime,
                     size: schema.contacts.size,
                     eigenId: schema.contacts.eigenId,
+                    data: schema.contacts.data,
                 })
                 .from(schema.contacts)
                 .all();
             const rowByKey = new Map(rows.map((r) => [r.uriKey, r] as const));
 
+            // One listing answers "is this row's derived avatar cache still there?" for every row. Without it,
+            // restoring cards/ + contacts.db without avatars/ leaves stat-clean cards whose avatar URL 404s
+            // forever — no card ever drifts on its own, so nothing would ever regenerate the cache.
+            const avatarFiles = new Set(await this.storage.list(PATHS.CONTACTS.AVATARS));
+
             const reindex: { uri: string; existing?: (typeof rows)[number] }[] = [];
             for (const [key, info] of present) {
                 const existing = rowByKey.get(key);
-                if (!existing || info.mtime !== existing.mtime || info.size !== existing.size) {
+                const avatarName = existing?.data?.avatar?.split('/').pop();
+                const cacheMissing = !!avatarName && !avatarFiles.has(avatarName);
+                if (!existing || info.mtime !== existing.mtime || info.size !== existing.size || cacheMissing) {
                     reindex.push({ uri: info.uri, existing });
                 }
             }
@@ -1213,6 +1227,11 @@ export class Contacts {
     }
 
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
+        // A name that normalizes to nothing is not storable: syncCardLabels skips the empty key, so every
+        // membership assigned to such a label would be dropped while the save reported success.
+        const nameKey = normalizeLabelName(label.name);
+        if (!nameKey) throw new ApiError(400, 'Label name is required');
+
         return this.writeLock.run(async () => {
             await this.drainDirty();
             await this.resumeLabelRenames();
@@ -1222,7 +1241,7 @@ export class Contacts {
                 await this.db.insert(schema.labels).values({
                     id: labelId,
                     name: label.name.trim(),
-                    nameKey: normalizeLabelName(label.name),
+                    nameKey,
                     color: label.color,
                     createdAt: sql`unixepoch()`,
                     updatedAt: sql`unixepoch()`,
@@ -1238,6 +1257,11 @@ export class Contacts {
     }
 
     public async updateLabel(id: string, label: Omit<Label, 'id'>) {
+        // Same refusal as addLabel, and before the rename fan-out: an empty name would rewrite every member
+        // card's CATEGORIES to a value the junction can no longer resolve.
+        const nameKey = normalizeLabelName(label.name);
+        if (!nameKey) throw new ApiError(400, 'Label name is required');
+
         return this.writeLock.run(async () => {
             await this.drainDirty();
             await this.resumeLabelRenames();
@@ -1252,7 +1276,7 @@ export class Contacts {
                     tx.update(schema.labels)
                         .set({
                             name: newName,
-                            nameKey: normalizeLabelName(label.name),
+                            nameKey,
                             color: label.color,
                             updatedAt: sql`unixepoch()`,
                         })
@@ -1292,9 +1316,8 @@ export class Contacts {
                                 updatedAt: renamedFrom.updatedAt,
                             })
                             .where(eq(schema.labels.id, id));
-                        const newNameKey = normalizeLabelName(newName);
                         await this.rewriteCardCategories(this.labelMemberIds([id]), (names) =>
-                            names.map((n) => (normalizeLabelName(n) === newNameKey ? renamedFrom.name : n)),
+                            names.map((n) => (normalizeLabelName(n) === nameKey ? renamedFrom.name : n)),
                         );
                         this.clearPendingRename(id);
                     } catch (rollbackError) {
@@ -1393,14 +1416,18 @@ export class Contacts {
         }
 
         const fileName = `${randomUUID()}.webp`;
-        await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, result.data);
-        this.avatarsBytes += result.data.byteLength;
+        // The transcode stays outside the lock (it is the slow part and touches no accounting); the write and
+        // its byte delta take it, so the sweep's recount can never land between them and lose the increment.
+        await this.writeLock.run(async () => {
+            await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, result.data);
+            this.avatarsBytes += result.data.byteLength;
+        });
 
         return avatarUrl(this.home.user.id, fileName);
     }
 
     public async downloadAvatar(filename: string) {
-        if (/[/\\]/.test(filename) || filename.includes('..')) {
+        if (!AVATAR_FILENAME.test(filename)) {
             return null;
         }
         const file = this.storage.file(`${PATHS.CONTACTS.AVATARS}/${filename}`);
@@ -1445,32 +1472,47 @@ export class Contacts {
         );
         if (!result) return '';
         const name = avatarCacheName(contactId, photo.bytes);
-        await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${name}`, result.data);
-        this.avatarsBytes += result.data.byteLength;
+        const path = `${PATHS.CONTACTS.AVATARS}/${name}`;
+        // Re-deriving the same photo (a drained write, a reconcile, a re-upload of the same image) overwrites
+        // the hash-named file rather than adding one, so credit the bytes it replaces.
+        const replaced = (await this.storage.size(path)) ?? 0;
+        await this.storage.write(path, result.data);
+        this.avatarsBytes += result.data.byteLength - replaced;
         return avatarUrl(this.home.user.id, name);
     }
 
-    private async cleanupAvatarImages() {
-        await this.storage.mkdir(PATHS.CONTACTS.AVATARS);
-        const files = await this.storage.list(PATHS.CONTACTS.AVATARS);
+    // Reclaim avatar files no indexed row references any more, then re-seed the running total from disk.
+    // Runs under the write lock — every other avatarsBytes mutation holds it too, so the closing recount can
+    // no longer clobber a delta an interleaved write applied mid-sweep.
+    private cleanupAvatarImages(): Promise<void> {
+        return this.writeLock.run(async () => {
+            await this.storage.mkdir(PATHS.CONTACTS.AVATARS);
+            const files = await this.storage.list(PATHS.CONTACTS.AVATARS);
 
-        // Build the referenced-filename set once, then sweep — O(avatars + contacts), not O(avatars × contacts).
-        const referenced = new Set<string>();
-        for (const c of await this.getContacts()) {
-            if (c.avatar) referenced.add(c.avatar.split('/').pop()!);
-        }
+            // Build the referenced-filename set once, then sweep — O(avatars + contacts), not O(avatars × contacts).
+            // Read the projection straight from the index: the public list would re-enter the lock this holds,
+            // and it hides group rows, whose photo caches are referenced all the same.
+            const referenced = new Set(
+                this.db
+                    .select({ data: schema.contacts.data })
+                    .from(schema.contacts)
+                    .all()
+                    .map((row) => row.data?.avatar?.split('/').pop())
+                    .filter((name): name is string => !!name),
+            );
 
-        const now = Date.now();
-        for (const file of files) {
-            if (referenced.has(file)) continue;
-            // A freshly-staged upload has no card pointing at it yet; leave it inside the grace window so an
-            // in-progress edit's avatar isn't swept out from under the save.
-            const stat = await this.storage.stat(`${PATHS.CONTACTS.AVATARS}/${file}`);
-            if (now - stat.mtimeMs < AVATAR_STAGE_GRACE_MS) continue;
-            await this.storage.delete(`${PATHS.CONTACTS.AVATARS}/${file}`);
-        }
+            const now = Date.now();
+            for (const file of files) {
+                if (referenced.has(file)) continue;
+                // A freshly-staged upload has no card pointing at it yet; leave it inside the grace window so an
+                // in-progress edit's avatar isn't swept out from under the save.
+                const stat = await this.storage.stat(`${PATHS.CONTACTS.AVATARS}/${file}`);
+                if (now - stat.mtimeMs < AVATAR_STAGE_GRACE_MS) continue;
+                await this.storage.delete(`${PATHS.CONTACTS.AVATARS}/${file}`);
+            }
 
-        this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
+            this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
+        });
     }
 
     private selfRow() {

@@ -16,6 +16,7 @@ import {
     cleanupTempCardFiles,
     computeCardEtag,
     labelColorFor,
+    listCardUris,
     normalizeLabelName,
     sanitizeCardUri,
     uriKeyOf,
@@ -183,6 +184,18 @@ describe('card file helpers', () => {
         await cleanupTempCardFiles(store);
 
         expect(readdirSync(cardsDir).sort()).toEqual(['.backup.vcf', 'real.vcf', 'stray.txt', 'x.VCF']);
+    });
+
+    test('a cards directory holding nothing but temp debris survives the sweep', async () => {
+        const { store, base } = nextStore();
+        await store.mkdir(CARDS_DIR);
+        writeFileSync(join(base, CARDS_DIR, `.x.vcf.tmp-${randomUUID()}`), 'x');
+
+        await cleanupTempCardFiles(store);
+
+        // Emptying the directory must not take it with it: the very same init enumerates it next.
+        expect(existsSync(join(base, CARDS_DIR))).toBe(true);
+        expect(await listCardUris(store)).toEqual([]);
     });
 });
 

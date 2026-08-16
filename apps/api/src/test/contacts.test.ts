@@ -298,6 +298,73 @@ describe('Contacts', () => {
         });
     });
 
+    describe('Label name validation', () => {
+        // A whitespace-only name normalizes to the empty key, which the CATEGORIES sync skips: the label row
+        // would exist while every membership silently dropped. Both write seams refuse it up front.
+        test('creating a whitespace-only label is rejected with 400 and creates nothing', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const before = await assertJson<Label[]>(
+                await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`),
+            );
+
+            const res = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: '   ', color: '#ff0000' }),
+            });
+
+            expect(res.status).toBe(400);
+            const after = await assertJson<Label[]>(
+                await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`),
+            );
+            expect(after.length).toBe(before.length);
+        });
+
+        test('renaming a label to whitespace is rejected with 400 and touches no member card', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Blankable', color: '#222222' }),
+            });
+            const blankableId = (await createRes.text()).replace(/^"|"$/g, '');
+            await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Blank',
+                    lastName: 'Member',
+                    email: ['blank@test.eigen.is'],
+                    phone: [],
+                    labels: [blankableId],
+                }),
+            });
+            const listBefore = await assertJson<Contact[]>(
+                await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`),
+            );
+            const memberBefore = findOrFail(listBefore, (c) => c.firstName === 'Blank');
+
+            const rename = await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels/${blankableId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: ' \t ', color: '#222222' }),
+            });
+
+            expect(rename.status).toBe(400);
+            const labels = await assertJson<Label[]>(
+                await authedRequest(token, `/contacts/${ctx.alice.user.id}/labels`),
+            );
+            expect(findOrFail(labels, (l) => l.id === blankableId).name).toBe('Blankable');
+            const listAfter = await assertJson<Contact[]>(
+                await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`),
+            );
+            const memberAfter = findOrFail(listAfter, (c) => c.firstName === 'Blank');
+            // No card was rewritten: the etag (a hash of the card bytes) and the membership are untouched.
+            expect(memberAfter.etag).toBe(memberBefore.etag);
+            expect(memberAfter.labels).toEqual([blankableId]);
+        });
+    });
+
     describe('Label ↔ contact membership', () => {
         // The rename/delete fan-outs rewrite each member card's CATEGORIES; the observable REST contract is
         // that membership survives a rename and drops on a delete, end to end through the route + writeLock.

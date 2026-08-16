@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { ParsedCardPhoto } from '../lib/carddav/vcard-parse';
@@ -18,6 +18,12 @@ afterAll(() => {
 
 const cardPathOf = (dir: string, id: string) => join(dir, 'eigen.contacts', 'cards', `${id}.vcf`);
 const avatarsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'avatars');
+// What the book actually occupies on disk — the truth size() must keep answering from its running totals.
+const diskBytesOf = (dir: string) =>
+    [join(dir, 'eigen.contacts', 'cards'), avatarsDirOf(dir)]
+        .filter((d) => existsSync(d))
+        .flatMap((d) => readdirSync(d).map((name) => statSync(join(d, name)).size))
+        .reduce((sum, size) => sum + size, 0);
 // The folded PHOTO logical line's exact source bytes: the property line plus every space-prefixed continuation.
 const photoBlock = (raw: string) => raw.match(/PHOTO[^\r\n]*(?:\r\n[ \t][^\r\n]*)*/)?.[0] ?? '';
 
@@ -291,6 +297,90 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
             db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get(),
         ).toBeUndefined();
         expect(await contacts.size()).toBe(sizeBefore - row.size);
+    });
+
+    test('re-deriving the same photo replaces its cache file instead of double-counting it', async () => {
+        const { contacts, dir } = await makeContacts();
+        const priv = contacts as unknown as {
+            cacheCardPhoto(contactId: string, photo: ParsedCardPhoto | null): Promise<string>;
+            cleanupAvatarImages(): Promise<void>;
+        };
+        // Settle init's detached sweep so the running total starts out equal to what is on disk.
+        await priv.cleanupAvatarImages();
+        const sharp = (await import('sharp')).default;
+        const jpeg = await sharp({ create: { width: 16, height: 16, channels: 3, background: { r: 9, g: 9, b: 9 } } })
+            .jpeg()
+            .toBuffer();
+        const photo = { kind: 'inline', bytes: new Uint8Array(jpeg), mediaType: 'image/jpeg' } as const;
+        const contactId = randomUUID();
+
+        const first = await priv.cacheCardPhoto(contactId, photo);
+        const second = await priv.cacheCardPhoto(contactId, photo);
+
+        // Same bytes, same hash, same file — the second write replaced the first one's bytes.
+        expect(second).toBe(first);
+        expect(readdirSync(avatarsDirOf(dir)).filter((n) => n.startsWith(contactId))).toHaveLength(1);
+        expect(await contacts.size()).toBe(diskBytesOf(dir));
+    });
+
+    test('the avatar sweep holds the write lock, so a card write cannot interleave its recount', async () => {
+        const { contacts, dir } = await makeContacts();
+        const id = await contacts.addContact(validContact({ firstName: 'Swept', avatar: await stageAvatar(contacts) }));
+        const priv = contacts as unknown as {
+            cleanupAvatarImages(): Promise<void>;
+            storage: { dirSize(dirPath: string): Promise<number> };
+        };
+        await priv.cleanupAvatarImages();
+
+        // Park the sweep on its closing recount; while it waits there it must still own the write lock.
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        const originalDirSize = priv.storage.dirSize;
+        let gated = true;
+        priv.storage.dirSize = async (dirPath: string) => {
+            if (gated) {
+                gated = false;
+                await gate;
+            }
+            return originalDirSize.call(priv.storage, dirPath);
+        };
+
+        try {
+            const sweep = priv.cleanupAvatarImages();
+            let deleted = false;
+            const deletion = contacts.deleteContact(id).then(() => {
+                deleted = true;
+            });
+            await new Promise((resolve) => setTimeout(resolve, 50));
+
+            // Unserialized, the delete's byte credit lands inside the scan and the recount overwrites it.
+            expect(deleted).toBe(false);
+
+            release();
+            await Promise.all([sweep, deletion]);
+        } finally {
+            release();
+            priv.storage.dirSize = originalDirSize;
+        }
+
+        expect(await contacts.size()).toBe(diskBytesOf(dir));
+    });
+
+    test('downloadAvatar serves only the staged and derived cache-name shapes', async () => {
+        const { contacts, dir } = await makeContacts();
+        const staged = (await stageAvatar(contacts)).split('/').pop()!;
+        const derived = `${randomUUID()}-0123abcd.webp`;
+        // Names outside those two shapes are refused even when the file is really there — a control
+        // character or an arbitrary name never reaches the filesystem read.
+        const rogue = ['evil\n.webp', 'plain.webp', `${randomUUID()}.png`, `${randomUUID()}-XY.webp`];
+        for (const name of [derived, ...rogue]) writeFileSync(join(avatarsDirOf(dir), name), 'x');
+
+        expect(await contacts.downloadAvatar(staged)).not.toBeNull();
+        expect(await contacts.downloadAvatar(derived)).not.toBeNull();
+        for (const name of rogue) expect(await contacts.downloadAvatar(name)).toBeNull();
+        expect(await contacts.downloadAvatar('../contacts.db')).toBeNull();
     });
 
     test('cacheCardPhoto with a uri-kind photo returns empty and writes nothing', async () => {

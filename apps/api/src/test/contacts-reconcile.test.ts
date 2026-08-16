@@ -232,6 +232,29 @@ describe('reconcileIndex (stat-only pass)', () => {
         expect(existsSync(join(avatarsDirOf(dir), cacheName))).toBe(true);
         expect((await contacts.getContactById(id))?.avatar).toBe(`contacts/${user.id}/avatar/${cacheName}`);
     });
+
+    test('a wiped avatars directory is rebuilt on init for the cards that reference it', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const picId = await contacts.addContact(
+            validContact({ firstName: 'Restored', avatar: await stageAvatar(contacts) }),
+        );
+        await contacts.addContact(validContact({ firstName: 'Plain', email: ['plain@example.com'] }));
+        const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, picId)).get()!;
+        const cacheName = (row.data?.avatar ?? '').split('/').pop()!;
+
+        // Restoring cards/ + contacts.db without avatars/: every card file is stat-clean, so only the
+        // projection can tell that a derived cache is gone.
+        rmSync(avatarsDirOf(dir), { recursive: true, force: true });
+        const parsesBefore = parseCount(contacts);
+
+        await contacts.init();
+
+        expect(existsSync(join(avatarsDirOf(dir), cacheName))).toBe(true);
+        expect(await contacts.downloadAvatar(cacheName)).not.toBeNull();
+        expect((await contacts.getContactById(picId))?.avatar).toBe(`contacts/${user.id}/avatar/${cacheName}`);
+        // Only the card whose cache was missing is re-read; the photoless ones stay stat-clean.
+        expect(parseCount(contacts) - parsesBefore).toBe(1);
+    });
 });
 
 describe('eigenId rematch', () => {
