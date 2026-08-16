@@ -358,4 +358,192 @@ describe('CardDAV', () => {
         const res = await deleteCard(await findSelfCardUri());
         expect(res.status).toBe(403);
     });
+
+    // --- REPORTs (Task 16): addressbook-multiget + generation-stamped sync-collection. The addressbook-query
+    // filter engine is Task 17; until then any query REPORT is answered with the honest supported-filter
+    // precondition, so these pin the multiget byte-identity + the two CalDAV sync bugs the design must not
+    // inherit (a future token stalling the client; a recreated href listed as both 200 and 404). ---
+
+    const report = (body: string) =>
+        app.handle(
+            new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
+                method: 'REPORT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'application/xml',
+                    Depth: '1',
+                },
+                body,
+            }),
+        );
+
+    const cardHref = (uri: string) => `/dav/addressbooks/${userId}/contacts/${uri}`;
+
+    const multigetBody = (hrefs: string[], wantData = true) =>
+        `<?xml version="1.0" encoding="utf-8"?>\n` +
+        `<CARD:addressbook-multiget xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav">\n` +
+        `<D:prop><D:getetag/>${wantData ? '<CARD:address-data/>' : ''}</D:prop>\n` +
+        `${hrefs.map((h) => `<D:href>${h}</D:href>`).join('\n')}\n` +
+        `</CARD:addressbook-multiget>`;
+
+    const syncBody = (token?: string) =>
+        `<?xml version="1.0" encoding="utf-8"?>\n` +
+        `<D:sync-collection xmlns:D="DAV:">\n` +
+        `${token === undefined ? '<D:sync-token/>' : `<D:sync-token>${token}</D:sync-token>`}\n` +
+        `<D:prop><D:getetag/></D:prop>\n` +
+        `</D:sync-collection>`;
+
+    // The <D:sync-token> the server appends after the responses (urn:eigen:sync:<syncGen>-<ctag>).
+    const syncTokenOf = (xml: string) => xml.match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+
+    test('addressbook-multiget returns address-data for existing hrefs and a 404 row for a missing one', async () => {
+        const uidA = randomUUID();
+        const uidB = randomUUID();
+        const uriA = `${uidA}.vcf`;
+        const uriB = `${uidB}.vcf`;
+        const bodyA = vcard(uidA, ['EMAIL:a@example.org']);
+        const bodyB = vcard(uidB, ['EMAIL:b@example.org']);
+        expect((await putCard(uriA, bodyA, { 'If-None-Match': '*' })).status).toBe(201);
+        expect((await putCard(uriB, bodyB, { 'If-None-Match': '*' })).status).toBe(201);
+        const missing = `${randomUUID()}.vcf`;
+
+        const res = await report(multigetBody([cardHref(uriA), cardHref(uriB), cardHref(missing)]));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // address-data is XML-escaped, but these bodies carry no XML-special chars, so they appear verbatim.
+        expect(xml).toContain(bodyA);
+        expect(xml).toContain(bodyB);
+        expect(xml).toContain(cardHref(missing));
+        expect(xml).toContain('404 Not Found');
+    });
+
+    test('addressbook-multiget resolves a percent-encoded href', async () => {
+        const uid = randomUUID();
+        const body = vcard(uid);
+        // P%40Q.vcf decodes to P@Q.vcf — a name the server must percent-decode before matching and re-encode
+        // on emission (unlike CalDAV, where server-generated uris never need it).
+        expect((await putCard('P%40Q.vcf', body, { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await report(multigetBody([cardHref('P%40Q.vcf')]));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain(body);
+        expect(xml).toContain(cardHref('P%40Q.vcf'));
+    });
+
+    test('addressbook-multiget without address-data returns etags only', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await report(multigetBody([cardHref(uri)], false));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain('<D:getetag>');
+        expect(xml).not.toContain('address-data');
+    });
+
+    test('addressbook-multiget with more than 500 hrefs is 400', async () => {
+        const hrefs = Array.from({ length: 501 }, () => cardHref(`${randomUUID()}.vcf`));
+        const res = await report(multigetBody(hrefs));
+        expect(res.status).toBe(400);
+    });
+
+    test('a REPORT body over 1 MiB is 413 before parsing', async () => {
+        const res = await report('a'.repeat(1_048_577));
+        expect(res.status).toBe(413);
+    });
+
+    test('sync-collection without a token lists all cards and a generation-stamped token', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const res = await report(syncBody());
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain(cardHref(uri));
+        expect(syncTokenOf(xml)).toMatch(/^urn:eigen:sync:\d+-\d+$/);
+    });
+
+    test('sync-collection from a prior token returns exactly the card changed since it', async () => {
+        const uidA = randomUUID();
+        const uriA = `${uidA}.vcf`;
+        expect((await putCard(uriA, vcard(uidA), { 'If-None-Match': '*' })).status).toBe(201);
+        const token = syncTokenOf(await (await report(syncBody())).text());
+
+        const uidB = randomUUID();
+        const uriB = `${uidB}.vcf`;
+        expect((await putCard(uriB, vcard(uidB), { 'If-None-Match': '*' })).status).toBe(201);
+
+        const xml = await (await report(syncBody(token))).text();
+        expect(xml).toContain(cardHref(uriB));
+        expect(xml).not.toContain(cardHref(uriA));
+    });
+
+    test('sync-collection reports a deleted card as a 404 row', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+        const token = syncTokenOf(await (await report(syncBody())).text());
+
+        expect((await deleteCard(uri)).status).toBe(204);
+
+        const xml = await (await report(syncBody(token))).text();
+        expect(xml).toContain(cardHref(uri));
+        expect(xml).toContain('404 Not Found');
+    });
+
+    test('sync-collection lists a delete-then-recreate as a single 200 with no 404 row', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+        const token = syncTokenOf(await (await report(syncBody())).text());
+
+        expect((await deleteCard(uri)).status).toBe(204);
+        expect((await putCard(uri, vcard(uid, ['EMAIL:again@example.org']), { 'If-None-Match': '*' })).status).toBe(
+            201,
+        );
+
+        const xml = await (await report(syncBody(token))).text();
+        expect(xml).toContain(cardHref(uri));
+        expect(xml).not.toContain('404 Not Found');
+    });
+
+    test('sync-collection with a stale generation token is 412 valid-sync-token', async () => {
+        const res = await report(syncBody('urn:eigen:sync:0-1'));
+        expect(res.status).toBe(412);
+        expect(await res.text()).toContain('valid-sync-token');
+    });
+
+    test('sync-collection with a future ctag token is 412 valid-sync-token', async () => {
+        const token = syncTokenOf(await (await report(syncBody())).text());
+        const [, gen, ctag] = token.match(/^urn:eigen:sync:(\d+)-(\d+)$/)!;
+        const future = `urn:eigen:sync:${gen}-${Number(ctag) + 999}`;
+        const res = await report(syncBody(future));
+        expect(res.status).toBe(412);
+        expect(await res.text()).toContain('valid-sync-token');
+    });
+
+    test('sync-collection with a malformed token is 412 valid-sync-token', async () => {
+        for (const token of ['urn:eigen:sync:abc', 'nonsense']) {
+            const res = await report(syncBody(token));
+            expect(res.status).toBe(412);
+            expect(await res.text()).toContain('valid-sync-token');
+        }
+    });
+
+    test('an addressbook-query is answered with the interim supported-filter precondition', async () => {
+        const body =
+            `<?xml version="1.0" encoding="utf-8"?>\n` +
+            `<CARD:addressbook-query xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav">\n` +
+            `<D:prop><D:getetag/><CARD:address-data/></D:prop>\n` +
+            `<CARD:filter><CARD:prop-filter name="FN">` +
+            `<CARD:text-match collation="i;unicode-casemap" match-type="contains">bob</CARD:text-match>` +
+            `</CARD:prop-filter></CARD:filter>\n` +
+            `</CARD:addressbook-query>`;
+        const res = await report(body);
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('supported-filter');
+    });
 });

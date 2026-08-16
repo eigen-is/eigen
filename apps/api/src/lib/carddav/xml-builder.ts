@@ -47,3 +47,9 @@ export function cardEtagProp(etag: string): string[] {
         `<D:getcontenttype>text/vcard; charset=utf-8</D:getcontenttype>`,
     ];
 }
+
+// The card body inside a REPORT response — the stored vCard bytes, XML-escaped, in a CARD:address-data
+// element. Task 16 always emits the full bytes; Task 18 wires the partial-retrieval projection.
+export function addressDataProp(vcf: string): string {
+    return `<CARD:address-data>${escapeXml(vcf)}</CARD:address-data>`;
+}
