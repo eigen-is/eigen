@@ -680,3 +680,32 @@ describe('Contacts', () => {
         });
     });
 });
+
+// enforceContactsIngest's mail half is an O(N) maildir walk; a metered device sync must not walk once per card.
+// makeContacts homes are deliberately unmetered (never registered, so atHome is false), so this pins the burst
+// cache against a real registered home where putCard's quota gate actually runs.
+describe('CardDAV quota burst cache', () => {
+    test('a burst of metered putCards walks the maildir at most once', async () => {
+        const ctx = await getTestContext();
+        const home = await getHome(ctx.bob.user.id);
+        const contacts = home.contacts;
+        const mailSizeSpy = spyOn(home.mail, 'size');
+
+        const created: string[] = [];
+        for (let i = 0; i < 12; i++) {
+            const uid = randomUUID();
+            const uri = `${uid}.vcf`;
+            const body = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nN:Burst;Card${i};;;\r\nFN:Card${i} Burst\r\nEMAIL:burst-${uid}@example.org\r\nEND:VCARD\r\n`;
+            const res = await contacts.putCard(uri, body, { ifMatch: null, ifNoneMatch: null });
+            expect(res.ok).toBe(true);
+            created.push(uri);
+        }
+
+        // Without the cache each metered PUT walks the maildir (12 walks); the cache collapses the burst to one
+        // (or zero if a prior read already warmed it inside the TTL). A regression that bypasses it walks 12×.
+        expect(mailSizeSpy.mock.calls.length).toBeLessThanOrEqual(1);
+
+        mailSizeSpy.mockRestore();
+        for (const uri of created) await contacts.deleteCard(uri, { ifMatch: null });
+    });
+});
