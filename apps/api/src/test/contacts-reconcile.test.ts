@@ -28,6 +28,19 @@ const parseCount = (contacts: Contacts) => contacts.cardParseCount;
 const uriOf = (db: Awaited<ReturnType<typeof makeContacts>>['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.uri;
 
+// Skipped cards are logged, not thrown — capture the warnings so a test can assert them and the run stays quiet.
+const captureWarnings = async (fn: () => Promise<void>): Promise<string[]> => {
+    const warnings: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+    try {
+        await fn();
+    } finally {
+        console.warn = origWarn;
+    }
+    return warnings;
+};
+
 describe('reconcileIndex (stat-only pass)', () => {
     test('a clean second init re-parses zero files and leaves the ctag untouched', async () => {
         const { contacts, db } = await makeContacts();
@@ -357,6 +370,45 @@ describe('self-link ranking', () => {
         expect(readFileSync(cardPathOf(dir, 'twin.vcf'), 'utf8')).toContain(`X-EIGEN-ID:${user.id}`);
     });
 
+    test('a self card whose stat fails keeps the slot from an owner-email twin drifting in the same pass', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+        const selfUri = uriOf(db, me.id);
+
+        // A transient IO failure hides the self card from the stat pass: its row is deliberately kept alive
+        // (never tombstoned), so it must keep holding the self slot too — otherwise the twin drifting in this
+        // same pass mints a second eigenId row that no later clean pass can repair.
+        writeFileSync(cardPathOf(dir, '0.vcf'), emailTwin(user.email));
+        const storage = (
+            contacts as unknown as {
+                storage: { stat: (filePath: string) => Promise<{ mtimeMs: number; size: number }> };
+            }
+        ).storage;
+        const originalStat = storage.stat;
+        storage.stat = async (filePath) => {
+            if (filePath === `cards/${selfUri}`) throw new Error('stat boom');
+            return originalStat.call(storage, filePath);
+        };
+
+        const warnings = await captureWarnings(async () => {
+            try {
+                await contacts.reconcileIndex();
+            } finally {
+                storage.stat = originalStat;
+            }
+        });
+
+        expect(warnings.some((w) => w.includes(selfUri))).toBe(true);
+        expect(selfLinkRows(db, user.id)).toEqual([me.id]);
+        const twin = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, uriKeyOf('0.vcf')))
+            .get()!;
+        expect(twin.eigenId).toBe('');
+        expect(readFileSync(cardPathOf(dir, '0.vcf'), 'utf8')).not.toContain('X-EIGEN-ID');
+    });
+
     test('a drifting self card outranks an earlier forged X-EIGEN-ID card, whose file keeps it verbatim', async () => {
         const { contacts, db, dir, user } = await makeContacts();
         const me = (await contacts.getMe())!;
@@ -467,18 +519,6 @@ describe('rebuildIndex', () => {
 // Init must survive a hostile cards/ directory: a garbage file, a file that vanishes mid-pass, or two files
 // claiming one UID can never brick the whole account (spec § 1 — one bad card is skipped-and-logged, not fatal).
 describe('per-file fault tolerance', () => {
-    const captureWarnings = async (fn: () => Promise<void>): Promise<string[]> => {
-        const warnings: string[] = [];
-        const origWarn = console.warn;
-        console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
-        try {
-            await fn();
-        } finally {
-            console.warn = origWarn;
-        }
-        return warnings;
-    };
-
     test('a garbage .vcf is skipped and logged while a valid card still indexes', async () => {
         const { contacts, dir } = await makeContacts();
         mkdirSync(cardsDirOf(dir), { recursive: true });
@@ -495,6 +535,33 @@ describe('per-file fault tolerance', () => {
         // The garbage file is invisible-but-logged and left on disk, not deleted.
         expect(existsSync(cardPathOf(dir, 'garbage.vcf'))).toBe(true);
         expect(warnings.some((w) => w.includes('garbage.vcf'))).toBe(true);
+    });
+
+    test('a garbage .vcf never bumps the ctag and is counted on disk by both passes', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        mkdirSync(cardsDirOf(dir), { recursive: true });
+        writeFileSync(cardPathOf(dir, 'garbage.vcf'), 'this is not a vcard at all\r\n');
+        const garbageSize = statSync(cardPathOf(dir, 'garbage.vcf')).size;
+        const ctagBefore = db.select().from(contactsSchema.book).get()!.ctag;
+
+        // The file can never be indexed, so it lands in every pass's re-read set forever. Nothing changes in
+        // the book, so nothing may tell clients to poll for a change — not on this restart, not on the next.
+        await captureWarnings(() => contacts.init());
+        const bytesAfterReconcile = await contacts.size();
+        await captureWarnings(() => contacts.init());
+
+        expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore);
+        expect(await contacts.size()).toBe(bytesAfterReconcile);
+
+        // Both passes answer the same question — how many bytes cards/ holds — so unindexable bytes count in
+        // both. Otherwise a rebuild would silently hand the user back quota the files still occupy.
+        await captureWarnings(() => contacts.rebuildIndex());
+        expect(await contacts.size()).toBe(bytesAfterReconcile);
+
+        // Deleting it gives back exactly its bytes — proof both totals really carried them.
+        rmSync(cardPathOf(dir, 'garbage.vcf'));
+        await contacts.init();
+        expect(await contacts.size()).toBe(bytesAfterReconcile - garbageSize);
     });
 
     test('two card files sharing a UID index the first by uri and skip the second', async () => {
@@ -595,6 +662,52 @@ describe('birthday normalization at the seam', () => {
         });
 
         expect(readFileSync(cardPathOf(dir, 'phone.vcf'), 'utf8')).toContain('BDAY:19731003');
+    });
+});
+
+// Renaming yourself in Contacts also renames you org-wide, but that push happens after the card is committed:
+// it may never turn a saved edit into a reported failure.
+describe('self-profile propagation', () => {
+    test('a failed profile push still reports the committed self-card edit as saved', async () => {
+        const { contacts, broadcasts, db, dir, user } = await makeContacts();
+        const me = (await contacts.getMe())!;
+        const uri = uriOf(db, me.id);
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, me.id)).get()!;
+
+        const relay = await import('../lib/home/home-relay');
+        let pushed = false;
+        const push = spyOn(relay, 'pushUserProfile').mockImplementation(async () => {
+            pushed = true;
+            throw new Error('push boom');
+        });
+        const origError = console.error;
+        console.error = () => {};
+        broadcasts.length = 0;
+
+        try {
+            await contacts.updateContact(
+                me.id,
+                validContact({
+                    firstName: 'Augusta',
+                    lastName: 'King',
+                    email: [user.email],
+                    notes: 'propagation failed',
+                }),
+            );
+        } finally {
+            push.mockRestore();
+            console.error = origError;
+        }
+
+        expect(pushed).toBe(true);
+        // The card and its index row committed before the push ran, so the client must be told they did —
+        // a reported failure would send the next save back with a stale etag that 412s.
+        expect(readFileSync(cardPathOf(dir, uri), 'utf8')).toContain('NOTE:propagation failed');
+        const after = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, me.id)).get()!;
+        expect(after.firstName).toBe('Augusta');
+        expect(after.etag).not.toBe(before.etag);
+        expect((await contacts.getContactById(me.id))?.notes).toBe('propagation failed');
+        expect(broadcasts.some((e) => e.type === SSEventType.CONTACT_UPDATED)).toBe(true);
     });
 });
 

@@ -152,7 +152,8 @@ export class Contacts {
         await cleanupTempCardFiles(this.storage);
 
         // Seed the avatar byte total from disk once; every avatar write/delete adjusts it by delta thereafter.
-        // cardsBytes is owned by the reconcile/rebuild pass below (it sums the cards it indexes, garbage excluded).
+        // cardsBytes is owned by the reconcile/rebuild pass below (both sum every card file cards/ holds,
+        // including the ones neither pass could index).
         this.avatarsBytes = await this.storage.dirSize(PATHS.CONTACTS.AVATARS);
 
         // Bring the index in line with cards/ before seeding: a stat-only reconcile on a healthy book, or a
@@ -634,10 +635,13 @@ export class Contacts {
             }
             const vanished = rows.filter((r) => !present.has(r.uriKey) && !skipped.has(r.uriKey));
 
+            // What cards/ holds right now — cardsBytes whenever this pass commits nothing. Unindexable bytes
+            // count: the file occupies storage (and quota) whether or not the index can make sense of it, and
+            // rebuildIndex counts the same way.
+            const presentBytes = [...present.values()].reduce((sum, p) => sum + p.size, 0);
+
             if (reindex.length === 0 && vanished.length === 0) {
-                // A clean pass still owns cardsBytes: the present files ARE the indexed cards, so sum them here
-                // (the seam init once did from disk) without any parse or ctag bump.
-                this.cardsBytes = [...present.values()].reduce((sum, p) => sum + p.size, 0);
+                this.cardsBytes = presentBytes;
                 return; // clean pass: zero parses, zero bump
             }
 
@@ -654,11 +658,24 @@ export class Contacts {
             const uidOwner = new Map(rows.filter((r) => !vanishedIds.has(r.id)).map((r) => [r.uid, r.id] as const));
             const prepared = this.dedupeByUid(candidates, uidOwner);
 
+            // Nothing survived to commit — every drifted card was skipped as unreadable or dropped by the uid
+            // guard — and nothing vanished. A card that can never be indexed drifts into this set on every
+            // restart, so running the transaction here would bump the ctag for a book that never changed and
+            // send every client into a no-op delta poll per restart (spec § 1).
+            if (prepared.length === 0 && vanished.length === 0) {
+                this.cardsBytes = presentBytes;
+                return;
+            }
+
             // Phase 2: choose the one self-link winner. A self row that survives this pass untouched (file
-            // present AND not re-indexing) holds the slot outright; the present() guard stops a self row whose
-            // file vanished — tombstoned this same pass — from blocking a twin's claim.
+            // present or un-stattable, and not re-indexing) holds the slot outright; only a self row whose file
+            // is really gone — tombstoned this same pass — frees the slot for a twin's claim. A skipped stat is
+            // explicitly not a removal above, so it may not silently mint a second eigenId row here either.
             const survivingSelf = rows.some(
-                (r) => r.eigenId === this.home.user.id && !reindexKeys.has(r.uriKey) && present.has(r.uriKey),
+                (r) =>
+                    r.eigenId === this.home.user.id &&
+                    !reindexKeys.has(r.uriKey) &&
+                    (present.has(r.uriKey) || skipped.has(r.uriKey)),
             );
             if (!survivingSelf) {
                 const winner = this.pickSelfWinner(prepared);
@@ -753,6 +770,7 @@ export class Contacts {
             // email-only twin that sorts earlier.
             const entries = (await listCardUris(this.storage)).map(({ uri, key }) => ({
                 uri,
+                key,
                 existing: existingByKey.get(key),
             }));
             const candidates = await this.buildCandidates(entries);
@@ -781,7 +799,16 @@ export class Contacts {
                     this.syncCardLabels(tx, row.id, categories, createdLabelIds);
             });
 
-            this.cardsBytes = prepared.reduce((sum, p) => sum + p.row.size, 0);
+            // cardsBytes answers what cards/ holds, not what the index understood — the same rule the reconcile
+            // pass follows, so the two passes never disagree about the book's size. A card skipped as unreadable
+            // or dropped by the uid guard still occupies storage, so its bytes are still counted.
+            const indexedKeys = new Set(prepared.map((p) => p.row.uriKey));
+            let bytes = prepared.reduce((sum, p) => sum + p.row.size, 0);
+            for (const { uri, key } of entries) {
+                if (!indexedKeys.has(key)) bytes += (await this.storage.size(cardPath(uri))) ?? 0;
+            }
+            this.cardsBytes = bytes;
+
             for (const labelId of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, labelId);
         });
     }
@@ -1011,7 +1038,16 @@ export class Contacts {
             }
 
             // The card saved — now it is safe to rename the user's org-wide profile (a failed write never did).
-            if (isSelf) await pushUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
+            // Propagation is downstream of a settled mutation and may not rewrite its outcome: reporting a
+            // failure here would hand the client back the etag it started with while the card already carries
+            // a new one, so its retry 412s on an edit that succeeded.
+            if (isSelf) {
+                try {
+                    await pushUserProfile(this.home.user.id, selfName, selfAvatarBuffer);
+                } catch (e) {
+                    console.error(`contacts: failed to propagate the profile of ${this.home.user.id}:`, e);
+                }
+            }
             this.emitContact(SSEventType.CONTACT_UPDATED, id);
         });
     }

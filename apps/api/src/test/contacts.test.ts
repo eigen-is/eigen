@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
@@ -502,6 +502,38 @@ describe('Contacts', () => {
         test('ownerId spoofing on me endpoint is rejected with 403', async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken, `/contacts/${ctx.alice.user.id}/me`);
             expect(res.status).toBe(403);
+        });
+
+        // The org-wide profile push runs after the card committed, so its failure cannot be the answer the
+        // client gets: a 5xx here would leave the user holding a stale etag that 412s on every retry.
+        test('a self-card update that fails to propagate is still saved and reported as saved', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const me = await assertJson<Contact>(await authedRequest(token, `/contacts/${ctx.alice.user.id}/me`));
+
+            const relay = await import('../lib/home/home-relay');
+            let pushed = false;
+            const push = spyOn(relay, 'pushUserProfile').mockImplementation(async () => {
+                pushed = true;
+                throw new Error('push boom');
+            });
+            const errorLog = spyOn(console, 'error').mockImplementation(() => {});
+
+            try {
+                const res = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts/${me.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...me, notes: 'propagation failed' }),
+                });
+                expect(res.status).toBe(200);
+            } finally {
+                push.mockRestore();
+                errorLog.mockRestore();
+            }
+            expect(pushed).toBe(true);
+
+            const after = await assertJson<Contact>(await authedRequest(token, `/contacts/${ctx.alice.user.id}/me`));
+            expect(after.notes).toBe('propagation failed');
+            expect(after.etag).not.toBe(me.etag);
         });
 
         test('cannot delete own profile contact', async () => {
