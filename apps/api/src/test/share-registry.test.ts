@@ -432,6 +432,106 @@ describe('Share Registry', () => {
             expect(drivePaths2.filter((s) => s.name === 'team-source-registry-test').length).toBe(1);
         });
 
+        test('new team member receives a team-owned drive item from a team_ registry source', async () => {
+            const orgId = getServerConfig()!.orgId;
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
+
+            // Two teams: the source owns the drive path, the target is the ACL entry it is granted to.
+            const createTeam = async (label: string) => {
+                const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: `${label} ${randomUUID()}`, organizationId: orgId }),
+                });
+                return (await res.json()) as { id: string; name: string };
+            };
+            const sourceTeam = await createTeam('Member Source');
+            const targetTeam = await createTeam('Member Target');
+            const sourceOwner = teamOwnerId(sourceTeam.id);
+            const targetOwner = teamOwnerId(targetTeam.id);
+
+            // Alice must be a source-team member to write to its drive.
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: sourceTeam.id, userId: ctx.alice.user.id }),
+            });
+
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${sourceOwner}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Team Drive', storageType: 'local', maxSizeMB: 500 }),
+            });
+            const mounts = await assertJson<MountInfo[]>(
+                await authedRequest(ctx.alice.user.sessionToken, `/drive/${sourceOwner}/mounts`),
+            );
+            const sourceMountId = mounts[0].id;
+            const sourceRoot = await assertJson<DrivePath>(
+                await authedRequest(ctx.alice.user.sessionToken, `/drive/${sourceOwner}/${sourceMountId}/root`),
+            );
+
+            const folderRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${sourceOwner}/${sourceMountId}/folder/${sourceRoot.id}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderName: 'team-member-source-test' }),
+                },
+            );
+            const folder = (await folderRes.json()) as DrivePath;
+
+            // Team-to-team grant on a team-owned path: mints a team_ SOURCE entry for the target team.
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${sourceOwner}/${sourceMountId}/path/${folder.id}/acl`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ add: [{ id: targetOwner, read: true, write: false }] }),
+                },
+            );
+
+            const { getEntriesForTarget } = await import('../lib/share/registry');
+            expect(await getEntriesForTarget(targetOwner)).toContain(sourceOwner);
+
+            // A user who joins the target team only afterwards — the ACL fan-out already passed them by.
+            const email = `team-member-${randomUUID()}@test.eigen.is`;
+            const { auth } = await import('../lib/auth/auth');
+            const signUp = await auth.api.signUpEmail({
+                body: { email, password: 'testpassword123', name: 'Team Member User' },
+            });
+            const memberId = signUp.user.id;
+            const signIn = await auth.api.signInEmail({
+                returnHeaders: true,
+                body: { email, password: 'testpassword123' },
+            });
+            const memberToken =
+                (signIn.headers.get('set-cookie') || '').match(/better-auth\.session_token=([^;]+)/)?.[1] || '';
+
+            const preShared = await assertJson<DrivePath[]>(
+                await authedRequest(memberToken, `/drive/${memberId}/shared/with-me`),
+            );
+            expect(preShared.some((p) => p.id === folder.id)).toBe(false);
+
+            // Joining fires afterAddTeamMember → reconcileSharesForNewTeamMember.
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: targetTeam.id, userId: memberId }),
+            });
+
+            const shared = await assertJson<DrivePath[]>(
+                await authedRequest(memberToken, `/drive/${memberId}/shared/with-me`),
+            );
+            findOrFail(shared, (s) => s.id === folder.id);
+        });
+
         test('mail-grant on a team doc admits a closed-signup guest and delivers the item + notification', async () => {
             const orgId = getServerConfig()!.orgId;
 

@@ -96,6 +96,24 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
 
     for (const fromUserId of fromUserIds) {
         try {
+            // Same team-owned source as in reconcileSharesForNewUser — drive paths only, attributed
+            // to the team — but relayed, since this targets another user's home.
+            const parsed = parseOwnerId(fromUserId);
+            if (parsed.type === 'team') {
+                const team = await getTeam(parsed.id);
+                if (!team) continue;
+                const teamPaths = await pullSharedPaths(fromUserId, user);
+                for (const path of teamPaths) {
+                    await sendToHome(userId, {
+                        type: 'drive:acl-change',
+                        path,
+                        acl: path.acl,
+                        actorName: team.name,
+                    });
+                }
+                continue;
+            }
+
             const owner = await getUserById(fromUserId);
             if (!owner) continue;
 
