@@ -354,8 +354,9 @@ describe('vCard merge + builder', () => {
     });
 
     test('editing a repeatable owned property replaces every line of that name', () => {
-        // CATEGORIES and NOTE are legally repeatable in 3.0, but the projection reads only the first line: a
-        // second line the app never showed must not survive an edit of the property it belongs to.
+        // CATEGORIES and NOTE are legally repeatable in 3.0, but an owned edit replaces the whole property, so
+        // no repeated line survives to drift from what the app just wrote — whether the projection aggregated
+        // every line (CATEGORIES) or kept only the first (NOTE).
         const repeated =
             'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Two Liner\r\nCATEGORIES:Friends\r\nCATEGORIES:Work\r\nNOTE:first\r\nNOTE:second\r\nEND:VCARD\r\n';
 

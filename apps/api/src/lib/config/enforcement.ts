@@ -69,6 +69,11 @@ async function cachedMailSize(userId: string, home: Home): Promise<number> {
     const now = Date.now();
     const cached = mailSizeCache.get(userId);
     if (cached && cached.expiresAt > now) return cached.value;
+    // A miss already pays a maildir walk, so sweep every closed window here too — otherwise the map keeps one
+    // entry per user who ever synced, forever. This bounds it to users active within the last TTL.
+    for (const [key, entry] of mailSizeCache) {
+        if (entry.expiresAt <= now) mailSizeCache.delete(key);
+    }
     const value = (await home.mail?.size()) || 0;
     mailSizeCache.set(userId, { value, expiresAt: now + MAIL_SIZE_TTL_MS });
     return value;

@@ -685,27 +685,50 @@ describe('Contacts', () => {
 // makeContacts homes are deliberately unmetered (never registered, so atHome is false), so this pins the burst
 // cache against a real registered home where putCard's quota gate actually runs.
 describe('CardDAV quota burst cache', () => {
-    test('a burst of metered putCards walks the maildir at most once', async () => {
+    const burstCard = (i: number) => {
+        const uid = randomUUID();
+        const body = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nN:Burst;Card${i};;;\r\nFN:Card${i} Burst\r\nEMAIL:burst-${uid}@example.org\r\nEND:VCARD\r\n`;
+        return { uri: `${uid}.vcf`, body };
+    };
+
+    test('a burst of metered putCards walks the maildir at most once, and the quota gate still refuses overflow', async () => {
+        const MB = 1024 * 1024;
         const ctx = await getTestContext();
         const home = await getHome(ctx.bob.user.id);
         const contacts = home.contacts;
         const mailSizeSpy = spyOn(home.mail, 'size');
+        const originalMaxMB = getServerSettings().quotas.mailAndContactsMaxMB;
 
         const created: string[] = [];
-        for (let i = 0; i < 12; i++) {
-            const uid = randomUUID();
-            const uri = `${uid}.vcf`;
-            const body = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nN:Burst;Card${i};;;\r\nFN:Card${i} Burst\r\nEMAIL:burst-${uid}@example.org\r\nEND:VCARD\r\n`;
-            const res = await contacts.putCard(uri, body, { ifMatch: null, ifNoneMatch: null });
-            expect(res.ok).toBe(true);
-            created.push(uri);
+        try {
+            for (let i = 0; i < 12; i++) {
+                const { uri, body } = burstCard(i);
+                const res = await contacts.putCard(uri, body, { ifMatch: null, ifNoneMatch: null });
+                expect(res.ok).toBe(true);
+                created.push(uri);
+            }
+
+            // Without the cache each metered PUT walks the maildir (12 walks); the cache collapses the burst to
+            // one — or zero if a read inside the same 15s TTL already warmed bob, so the upper bound is the
+            // real invariant. A hard >=1 floor would be flaky (legit zero on a warm cache); the metered path is
+            // proven live instead by the quota refusal below, which only reaches 'quota' through the same gate.
+            expect(mailSizeSpy.mock.calls.length).toBeLessThanOrEqual(1);
+
+            // The gate is genuinely engaged: squeeze the shared budget under what the book already uses, and the
+            // next metered PUT is refused with the typed 'quota' result (putCard's 507→'quota' mapping), not
+            // silently accepted. An unmetered regression would return ok — making the bound above vacuous.
+            const used = (await home.mail.size()) + (await home.contacts.size());
+            await updateServerSettings({ quotas: { mailAndContactsMaxMB: Math.floor(used / MB) } });
+            const over = burstCard(99);
+            expect(await contacts.putCard(over.uri, over.body, { ifMatch: null, ifNoneMatch: null })).toEqual({
+                ok: false,
+                error: 'quota',
+            });
+            expect(await contacts.getCard(over.uri)).toBeNull();
+        } finally {
+            await updateServerSettings({ quotas: { mailAndContactsMaxMB: originalMaxMB } });
+            mailSizeSpy.mockRestore();
+            for (const uri of created) await contacts.deleteCard(uri, { ifMatch: null });
         }
-
-        // Without the cache each metered PUT walks the maildir (12 walks); the cache collapses the burst to one
-        // (or zero if a prior read already warmed it inside the TTL). A regression that bypasses it walks 12×.
-        expect(mailSizeSpy.mock.calls.length).toBeLessThanOrEqual(1);
-
-        mailSizeSpy.mockRestore();
-        for (const uri of created) await contacts.deleteCard(uri, { ifMatch: null });
     });
 });

@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { rmSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { CARD_MAX_BYTES, computeCardEtag, uriKeyOf } from '../lib/contacts/card-store';
 import type { Contacts } from '../lib/contacts/contacts';
 import * as contactsSchema from '../lib/contacts/schema';
-import { CONTACTS_TEST_ROOT, makeContacts } from './contacts-test-helpers';
+import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts } from './contacts-test-helpers';
 
 afterAll(() => {
     try {
@@ -92,6 +92,60 @@ describe('putCard — create and read', () => {
     });
 });
 
+describe('putCard — path safety', () => {
+    test('a traversal uri never becomes a filesystem path and is refused as invalid', async () => {
+        const { contacts } = await makeContacts();
+        const res = await put(contacts, '../contacts.db', card({ uid: randomUUID() }));
+
+        expect(res).toEqual({ ok: false, error: 'invalid' });
+        // Nothing was written or indexed under the traversal name — the index db is untouched.
+        expect((await contacts.listCards()).some((c) => c.uri === '../contacts.db')).toBe(false);
+        expect(await contacts.getCard('../contacts.db')).toBeNull();
+    });
+
+    test('a dot-prefixed uri is refused as invalid', async () => {
+        const { contacts } = await makeContacts();
+        expect(await put(contacts, '.hidden.vcf', card({ uid: randomUUID() }))).toEqual({
+            ok: false,
+            error: 'invalid',
+        });
+    });
+});
+
+describe('putCard — case-variant uri (incumbent spelling wins)', () => {
+    test('a case-variant update rewrites the incumbent file in place and reconcile leaves it', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        const uid = randomUUID();
+
+        // Create under a mixed-case spelling, then PUT the same card (same UID) under a different case.
+        expect((await put(contacts, 'Abc.vcf', card({ uid, email: ['first@example.org'] }))).ok).toBe(true);
+        expect((await put(contacts, 'abc.vcf', card({ uid, email: ['second@example.org'] }))).ok).toBe(true);
+
+        // Exactly one file backs this card, still under the incumbent spelling — no stale sibling stranded on
+        // a case-sensitive fs (the seeded self-card is filtered out by folding to the same key).
+        const cardFiles = readdirSync(cardsDirOf(dir)).filter((n) => uriKeyOf(n) === uriKeyOf('abc.vcf'));
+        expect(cardFiles).toEqual(['Abc.vcf']);
+
+        // The index keeps the incumbent spelling (uri AND uriKey), so a case-sensitive reconcile that sorts
+        // 'Abc.vcf' first cannot warn-skip the accepted write and re-index the row from the stale bytes.
+        const row = rowByUri(db, 'ABC.vcf')!;
+        expect(row.uri).toBe('Abc.vcf');
+        expect(row.uriKey).toBe(uriKeyOf('Abc.vcf'));
+
+        // getCard (any case) returns the second PUT's bytes.
+        const got = await contacts.getCard('ABC.vcf');
+        const stored = new TextDecoder().decode(got!.bytes);
+        expect(stored).toContain('second@example.org');
+        expect(stored).not.toContain('first@example.org');
+
+        // A stat-only reconcile changes nothing: no re-parse, stable etag.
+        const parsesBefore = contacts.cardParseCount;
+        await contacts.reconcileIndex();
+        expect(contacts.cardParseCount).toBe(parsesBefore);
+        expect((await contacts.getCard('ABC.vcf'))!.etag).toBe(got!.etag);
+    });
+});
+
 describe('putCard — 4.0 transcode', () => {
     test('a 4.0 PUT is stored as 3.0 with the photo in ENCODING=b form', async () => {
         const { contacts } = await makeContacts();
@@ -156,6 +210,60 @@ describe('putCard — preconditions', () => {
         const results = [a, b];
         expect(results.filter((r) => r.ok).length).toBe(1);
         expect(results.filter((r) => !r.ok && r.error === 'precondition').length).toBe(1);
+    });
+});
+
+describe('putCard — precondition shapes (RFC 7232)', () => {
+    const seed = async (contacts: Contacts) => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        const res = await put(contacts, uri, card({ uid }));
+        return { uid, uri, etag: (res as { etag: string }).etag };
+    };
+
+    test('If-Match:* succeeds against an existing card (means "exists", not a literal etag)', async () => {
+        const { contacts } = await makeContacts();
+        const { uid, uri } = await seed(contacts);
+        const res = await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifMatch: '*' });
+        expect(res.ok).toBe(true);
+        expect((res as { created: boolean }).created).toBe(false);
+    });
+
+    test('If-Match:* against a missing card is a precondition failure', async () => {
+        const { contacts } = await makeContacts();
+        const uid = randomUUID();
+        expect(await put(contacts, `${uid}.vcf`, card({ uid }), { ifMatch: '*' })).toEqual({
+            ok: false,
+            error: 'precondition',
+        });
+    });
+
+    test('If-Match with a multi-etag list matches any member', async () => {
+        const { contacts } = await makeContacts();
+        const { uid, uri, etag } = await seed(contacts);
+        const res = await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifMatch: `"deadbeef", "${etag}"` });
+        expect(res.ok).toBe(true);
+    });
+
+    test('a specific If-None-Match matching the current etag is a precondition failure', async () => {
+        const { contacts } = await makeContacts();
+        const { uid, uri, etag } = await seed(contacts);
+        expect(await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifNoneMatch: `"${etag}"` })).toEqual({
+            ok: false,
+            error: 'precondition',
+        });
+    });
+
+    test('a specific If-None-Match not matching the current etag succeeds', async () => {
+        const { contacts } = await makeContacts();
+        const { uid, uri } = await seed(contacts);
+        expect((await put(contacts, uri, card({ uid, fn: 'Updated' }), { ifNoneMatch: '"deadbeef"' })).ok).toBe(true);
+    });
+
+    test('deleteCard honors If-Match:* as an existence check', async () => {
+        const { contacts } = await makeContacts();
+        const { uri } = await seed(contacts);
+        expect(await contacts.deleteCard(uri, { ifMatch: '*' })).toEqual({ ok: true });
     });
 });
 

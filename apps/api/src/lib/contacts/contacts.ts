@@ -32,6 +32,7 @@ import {
     labelColorFor,
     listCardUris,
     normalizeLabelName,
+    sanitizeCardUri,
     uriKeyOf,
     writeCardFile,
 } from './card-store';
@@ -145,6 +146,17 @@ export type CardRow = { uri: string; etag: string; isGroup: boolean };
 export type PutCardResult =
     | { ok: true; etag: string; created: boolean }
     | { ok: false; error: 'precondition' | 'uid-conflict' | 'invalid' | 'too-large' | 'quota'; message?: string };
+
+// RFC 7232 precondition matching for the DAV write seam. `*` means "the resource exists" (not a literal
+// etag); a value is a comma-separated list of entity-tags, each optionally weak (`W/`) and quoted — it
+// matches when any member equals the current (unquoted) etag. Stored etags are bare content hashes, so a
+// header entry is compared after stripping its weak prefix and surrounding quotes. Used by both putCard
+// (If-Match / If-None-Match) and deleteCard (If-Match).
+function preconditionMatches(header: string, etag: string | null): boolean {
+    if (header === '*') return etag !== null;
+    if (etag === null) return false;
+    return header.split(',').some((raw) => raw.trim().replace(/^W\//, '').replace(/^"|"$/g, '') === etag);
+}
 
 export class Contacts {
     private managedDb!: ManagedDatabase<typeof schema>;
@@ -1679,14 +1691,16 @@ export class Contacts {
 
     // A DAV PUT: store the client's card verbatim (after the 4.0→3.0 transcode) as the resource, with every
     // precondition, UID rule, quota gate, and self-link decision evaluated INSIDE the writeLock against the
-    // state the write overwrites (§ 3). The uri is the client-chosen filename; callers pass one already run
-    // through the router's sanitizeCardUri (§ 4), so putCard trusts it and never re-sanitizes. Mirrors the
+    // state the write overwrites (§ 3). The uri is the client-chosen filename; the router sanitizes it (§ 4)
+    // but this is a public method that turns the uri into a filesystem path, so it re-validates before any
+    // write — a traversal or otherwise-unsafe name is refused, never renamed over a sibling file. Mirrors the
     // addContact/updateContact write seam.
     public async putCard(
         uri: string,
         body: string,
         pre: { ifMatch: string | null; ifNoneMatch: string | null },
     ): Promise<PutCardResult> {
+        if (sanitizeCardUri(uri) !== uri) return { ok: false, error: 'invalid' };
         return this.writeLock.run(async (): Promise<PutCardResult> => {
             await this.drainDirty();
 
@@ -1712,10 +1726,19 @@ export class Contacts {
                 .from(schema.contacts)
                 .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
                 .get();
-            if (pre.ifNoneMatch === '*' && existing) return { ok: false, error: 'precondition' };
-            if (pre.ifMatch !== null && (!existing || pre.ifMatch.replace(/"/g, '') !== existing.etag)) {
+            const currentEtag = existing?.etag ?? null;
+            if (pre.ifNoneMatch !== null && preconditionMatches(pre.ifNoneMatch, currentEtag)) {
                 return { ok: false, error: 'precondition' };
             }
+            if (pre.ifMatch !== null && !preconditionMatches(pre.ifMatch, currentEtag)) {
+                return { ok: false, error: 'precondition' };
+            }
+
+            // On update, the write keeps the incumbent's on-disk spelling: matching is case/normalization
+            // insensitive (uriKey), but a case-variant PUT must rewrite the existing file in place — writing
+            // under the caller's spelling would strand the old file on a case-sensitive fs and let the next
+            // reconcile re-index from its stale bytes (silently reverting the accepted write).
+            const storedUri = existing?.uri ?? uri;
 
             // A card carries one UID for its life: it is required, immutable on update, and a UID already owned
             // by another resource is a conflict, never a raw idx_contacts_uid 500 (§ 3/§ 4).
@@ -1756,16 +1779,16 @@ export class Contacts {
             let projectionAvatar = '';
             let etag = '';
             try {
-                this.recordCardWrite(uri);
-                const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
+                this.recordCardWrite(storedUri);
+                const { mtime, size } = await writeCardFile(this.storage, storedUri, bytes);
                 etag = computeCardEtag(bytes);
                 // Inline PHOTO → derived webp cache; the projection stores its URL (a uri/absent photo → '').
                 projectionAvatar = await this.cacheCardPhoto(id, parsed.photo);
                 this.commitCard({
                     row: {
                         id,
-                        uri,
-                        uriKey: uriKeyOf(uri),
+                        uri: storedUri,
+                        uriKey: uriKeyOf(storedUri),
                         uid: parsed.uid,
                         firstName: parsed.firstName.trim(),
                         lastName: parsed.lastName.trim(),
@@ -1792,7 +1815,7 @@ export class Contacts {
                 });
                 this.cardsBytes += size - (existing?.size ?? 0);
             } catch (e) {
-                this.markCardDirty(uri);
+                this.markCardDirty(storedUri);
                 throw e;
             }
 
@@ -1839,7 +1862,7 @@ export class Contacts {
                 if (!row) return { ok: false, error: 'not-found' };
                 // Self before etag, mirroring deleteContact: your own card cannot be removed regardless of token.
                 if (row.eigenId === this.home.user.id) return { ok: false, error: 'self-delete' };
-                if (pre.ifMatch !== null && pre.ifMatch.replace(/"/g, '') !== row.etag) {
+                if (pre.ifMatch !== null && !preconditionMatches(pre.ifMatch, row.etag)) {
                     return { ok: false, error: 'precondition' };
                 }
                 await this.purgeCard(row);
