@@ -194,9 +194,12 @@ export class Mail {
                 message.subject = meta.subject;
                 message.html = meta.html;
                 message.text = meta.text;
-                if (meta.to) message.to = meta.to;
-                if (meta.cc) message.cc = meta.cc;
-                if (meta.bcc) message.bcc = meta.bcc;
+                // Recipients verbatim, never conditional: both save paths write the full field set, so
+                // an absent one means the user cleared it and `if (meta.cc)` would hand back the stale
+                // EML's Cc (the write side avoids the same trap in draftFullSave).
+                message.to = meta.to;
+                message.cc = meta.cc;
+                message.bcc = meta.bcc;
                 message.driveReferences = meta.driveReferences ?? [];
             }
         }

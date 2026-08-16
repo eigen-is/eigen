@@ -45,8 +45,23 @@ function makeRef(id: string): AttachmentReference {
     };
 }
 
-// PUT a draft carrying a doc reference, then POST send. to/cc/bcc are re-applied on the send
-// body from the known inputs so the assertions never depend on the EML round-trip's field order.
+async function uploadAttachment(bytes: number): Promise<string> {
+    const form = new FormData();
+    form.append('file', new File(['a'.repeat(bytes)], 'deck.pdf', { type: 'application/pdf' }));
+    const res = await authedRequest(
+        ctx.alice.user.sessionToken,
+        `/mail/${ctx.alice.user.id}/message/draft/attachment`,
+        {
+            method: 'POST',
+            body: form,
+        },
+    );
+    return (await assertJson<{ tempId: string }>(res)).tempId;
+}
+
+// PUT a draft carrying a doc reference, then POST send. The send body is the same mail plus the
+// saved id — never the PUT response — so the assertions never depend on the EML round-trip's field
+// order, and no attachment bytes travel back out.
 async function sendDraftWithRef(
     to: string,
     opts: {
@@ -55,6 +70,7 @@ async function sendDraftWithRef(
         refs?: AttachmentReference[];
         inReplyTo?: string;
         references?: string | string[];
+        tempAttachmentIds?: string[];
     } = {},
 ): Promise<{ draft: EmailDraft; res: Response }> {
     const refs = opts.refs ?? [makeRef('doc-send')];
@@ -76,11 +92,11 @@ async function sendDraftWithRef(
     const putRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mail }),
+        body: JSON.stringify({ mail, tempAttachmentIds: opts.tempAttachmentIds }),
     });
     const draft = await assertJson<EmailDraft>(putRes);
 
-    const sendBody = { ...draft, to: addr(to), driveReferences: refs, ...fields };
+    const sendBody = { ...mail, id: draft.id };
 
     const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/send`, {
         method: 'POST',
@@ -394,5 +410,48 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(sent.length).toBe(1);
         expect(sent[0].cc).toBeUndefined();
         expect(addresses(sent[0].to)).toEqual(['to@x.com']);
+    });
+
+    // The read-side sibling of the test above: a fast save rewrites only the sidecar, leaving the
+    // EML stale, so a cleared Cc survives the reload only if messageGet takes the sidecar verbatim.
+    test('a Cc cleared on the fast-save path stays cleared when the draft is reloaded', async () => {
+        const tempId = await uploadAttachment(16);
+        const put = (mail: Record<string, unknown>, options: Record<string, unknown>) =>
+            authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mail, ...options }),
+            });
+
+        // 1. Full save with an attachment: bakes Cc into the EML and arms the fast path.
+        const first = await assertJson<EmailDraft>(
+            await put(
+                { subject: 'Fast clear', to: addr('to@x.com'), cc: addr('bob@x.com'), text: 'hi', html: '<p>hi</p>' },
+                { tempAttachmentIds: [tempId] },
+            ),
+        );
+        expect(first.attachments.length).toBe(1);
+
+        // 2. Fast save with Cc omitted (cleared) — attachments untouched, so no EML rebuild.
+        const cleared = await assertJson<EmailDraft>(
+            await put(
+                { id: first.id, subject: 'Fast clear', to: addr('to@x.com'), text: 'hi', html: '<p>hi</p>' },
+                { keepAttachmentIndexes: [0] },
+            ),
+        );
+        expect(cleared.cc?.value ?? []).toEqual([]);
+
+        // 3. The EML on disk is indeed stale and still carries the Cc — that is what must not win.
+        const rawRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/message/${first.id}/download`,
+        );
+        expect(await rawRes.text()).toMatch(/^Cc:.*bob@x\.com/im);
+
+        // 4. Reloading the draft still shows no Cc.
+        const reloaded = await assertJson<EmailDraft>(
+            await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/${first.id}`),
+        );
+        expect(reloaded.cc?.value ?? []).toEqual([]);
     });
 });
