@@ -69,10 +69,6 @@ function appendReferenceLinks(html: string, refs: AttachmentReference[], recipie
     return replaced !== html ? replaced : html + refHtml;
 }
 
-function appendReferenceLinksText(text: string, refs: AttachmentReference[], recipientEmail?: string): string {
-    return text + renderAttachmentLinksText(refs, recipientEmail);
-}
-
 function extractRefs(email: NewDraft | EmailDraft): AttachmentReference[] | undefined {
     return 'driveReferences' in email ? email.driveReferences : undefined;
 }
@@ -629,7 +625,7 @@ export class Mail {
         if (!refs.length || !externals.length || fanOutBytes > MAX_PERSONALISED_SEND_BYTES) {
             // One send with bare links, no per-recipient envelope.
             message.html = appendReferenceLinks(baseHtml, refs);
-            message.text = appendReferenceLinksText(baseText, refs);
+            message.text = baseText + renderAttachmentLinksText(refs);
             if (!(await sendMail(message))) {
                 throw new ApiError(500, 'Failed to send email');
             }
@@ -641,7 +637,7 @@ export class Mail {
             const buildCopy = (recipientEmail: string | undefined, envelopeTo: string[]): OutboundMail => ({
                 ...base,
                 html: appendReferenceLinks(baseHtml, refs, recipientEmail),
-                text: appendReferenceLinksText(baseText, refs, recipientEmail),
+                text: baseText + renderAttachmentLinksText(refs, recipientEmail),
                 envelope: { from: envelopeFrom, to: envelopeTo },
             });
 
