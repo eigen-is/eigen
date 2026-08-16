@@ -37,6 +37,8 @@ export const api = treaty<app>(API_HOST, {
     },
 });
 
+// The one treaty without date revival: a birthday is a date-only string ("1990-01-01") and reviving it
+// into a Date shifts the day by timezone. Deliberate break from the Date wire convention, pinned by api.test.ts.
 export const contactsApi = treaty<app>(API_HOST, {
     fetch: {
         credentials: 'include',
