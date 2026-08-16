@@ -20,7 +20,7 @@ const formSchema = z
         lastName: z.string().optional(),
         company: z.string().optional(),
         jobTitle: z.string().optional(),
-        email: z.array(z.email().or(z.string().length(0))),
+        email: z.array(z.email('Enter a valid email address').or(z.literal(''))),
         phone: z.array(z.string()),
         address: z.array(
             z.object({
@@ -183,9 +183,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                             name="firstName"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>
-                                                        First name<span className="text-muted-foreground">*</span>
-                                                    </FormLabel>
+                                                    <FormLabel>First name</FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
@@ -199,9 +197,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                             name="lastName"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>
-                                                        Last name<span className="text-muted-foreground">*</span>
-                                                    </FormLabel>
+                                                    <FormLabel>Last name</FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
@@ -322,69 +318,65 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                 </div>
 
                                 <div className="grid gap-6">
-                                    <RepeatableField
-                                        label={
-                                            <>
-                                                Email Addresses
-                                                <span className="text-muted-foreground">*</span>
-                                            </>
-                                        }
-                                        onAdd={() => appendEmail('' as never)}
-                                    >
+                                    <RepeatableField label="Email Addresses" onAdd={() => appendEmail('' as never)}>
                                         {emailFields.map((item, index) => (
-                                            <div key={item.id} className="flex gap-2 items-center">
-                                                <FormField
-                                                    control={form.control}
-                                                    name={`email.${index}`}
-                                                    render={({ field }) => (
-                                                        <FormItem className="flex-1 space-y-0">
+                                            <FormField
+                                                key={item.id}
+                                                control={form.control}
+                                                name={`email.${index}`}
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <div className="flex gap-2 items-center">
                                                             <FormControl>
                                                                 <Input {...field} placeholder="Email address" />
                                                             </FormControl>
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                {emailFields.length > 1 && (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 w-7 p-0"
-                                                        onClick={() => removeEmail(index)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                            {emailFields.length > 1 && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-7 w-7 p-0"
+                                                                    onClick={() => removeEmail(index)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
                                                 )}
-                                            </div>
+                                            />
                                         ))}
                                     </RepeatableField>
 
                                     <RepeatableField label="Phone Numbers" onAdd={() => appendPhone('' as never)}>
                                         {phoneFields.map((item, index) => (
-                                            <div key={item.id} className="flex gap-2 items-center">
-                                                <FormField
-                                                    control={form.control}
-                                                    name={`phone.${index}`}
-                                                    render={({ field }) => (
-                                                        <FormItem className="flex-1 space-y-0">
+                                            <FormField
+                                                key={item.id}
+                                                control={form.control}
+                                                name={`phone.${index}`}
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <div className="flex gap-2 items-center">
                                                             <FormControl>
                                                                 <Input {...field} placeholder="Phone number" />
                                                             </FormControl>
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                {phoneFields.length > 1 && (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 w-7 p-0"
-                                                        onClick={() => removePhone(index)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                            {phoneFields.length > 1 && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-7 w-7 p-0"
+                                                                    onClick={() => removePhone(index)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
                                                 )}
-                                            </div>
+                                            />
                                         ))}
                                     </RepeatableField>
 
