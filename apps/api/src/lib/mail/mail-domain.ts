@@ -586,6 +586,8 @@ export class Mail {
         const baseHtml = message.html || '';
         const baseText = message.text;
 
+        // Also bounded at the route schema — kept because `refs` may come from the draft sidecar,
+        // which this request never submitted for validation.
         if (refs.length > MAX_SEND_REFERENCES) {
             throw new ApiError(400, `A message can have at most ${MAX_SEND_REFERENCES} attachment links`);
         }

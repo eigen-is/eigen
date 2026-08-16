@@ -39,7 +39,7 @@ const MailDraftSchema = t.Object({
     messageId: t.Optional(t.String()),
     inReplyTo: t.Optional(t.String()),
     references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
-    driveReferences: t.Optional(t.Array(attachmentReferenceSchema)),
+    driveReferences: t.Optional(t.Array(attachmentReferenceSchema, { maxItems: MAX_SEND_REFERENCES })),
 });
 
 export const mailRouter = new Elysia({ name: 'mail' })

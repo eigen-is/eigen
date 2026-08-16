@@ -224,11 +224,22 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
         expect(stored.isDraft).toBe(true);
     });
 
-    test('too many drive references is rejected with 400', async () => {
+    // Bounded at the schema (maxItems) on both the draft PUT and the send POST, so the TypeBox
+    // violation surfaces as a 422 before the handler renders a pill per reference — mirroring the
+    // grantAccessRefIds bound (mail-grant-on-send.test.ts) and the drive access-check route.
+    test('too many drive references is rejected with 422, before any save or send', async () => {
         startCapture();
-        const refs = Array.from({ length: 21 }, (_, i) => makeRef(`doc-${i}`));
-        const { res } = await sendDraftWithRef('bob@test.eigen.is', { refs });
-        expect(res.status).toBe(400);
+        const driveReferences = Array.from({ length: 21 }, (_, i) => makeRef(`doc-${i}`));
+        const mail = { subject: 'Too many refs', to: addr('bob@test.eigen.is'), text: 'hi', driveReferences };
+
+        const putRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mail }),
+        });
+        expect(putRes.status).toBe(422);
+        expect((await sendMailBody(mail)).status).toBe(422);
+        expect(sent.length).toBe(0);
     });
 
     test('too many recipients is rejected with 400', async () => {
