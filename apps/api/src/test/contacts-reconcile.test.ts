@@ -7,6 +7,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { mergeVCard } from '../lib/carddav/vcard-serialize';
+import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { labelColorFor, normalizeLabelName, uriKeyOf } from '../lib/contacts/card-store';
 import { Contacts } from '../lib/contacts/contacts';
 import { CONTACTS_DB_CONFIG } from '../lib/contacts/db-config';
@@ -106,6 +107,36 @@ describe('reconcileIndex (stat-only pass)', () => {
 
         // Exactly one bump for the whole pass.
         expect(db.select().from(contactsSchema.book).get()!.ctag).toBe(ctagBefore + 1);
+    });
+
+    test('a planted KIND:group card indexes as a group and stays out of the contact list', async () => {
+        const { contacts, db, dir } = await makeContacts();
+        mkdirSync(cardsDirOf(dir), { recursive: true });
+        writeFileSync(
+            cardPathOf(dir, 'group.vcf'),
+            `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${randomUUID()}\r\nN:Design Team;;;;\r\nFN:Design Team\r\nKIND:group\r\nX-ADDRESSBOOKSERVER-MEMBER:urn:uuid:${randomUUID()}\r\nEND:VCARD\r\n`,
+        );
+
+        await contacts.init();
+
+        // Indexed (so DAV can serve it and the file is left alone), just never projected to the app.
+        const row = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.uriKey, 'group.vcf'))
+            .get()!;
+        expect(row.isGroup).toBe(true);
+        expect(
+            db
+                .select()
+                .from(contactsSchema.contactTombstones)
+                .where(eq(contactsSchema.contactTombstones.uriKey, 'group.vcf'))
+                .get(),
+        ).toBeUndefined();
+        expect(existsSync(cardPathOf(dir, 'group.vcf'))).toBe(true);
+
+        expect((await contacts.getContacts()).some((c) => c.id === row.id)).toBe(false);
+        expect(await contacts.getContactById(row.id)).toBeNull();
     });
 
     test('a card file removed on disk is tombstoned and drops out of the list', async () => {
@@ -1108,5 +1139,60 @@ describe('crash recovery (durable journals)', () => {
 
         expect(db.select().from(contactsSchema.pendingLabelRenames).all()).toEqual([]);
         expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+    });
+});
+
+// Seeding the org owner into a fresh book is one-shot, latched in book.ownerSeeded once a real owner has been
+// considered — and only then, so an instance that has no owner yet still seeds the one it gets later.
+describe('owner-contact seeding (one-shot latch)', () => {
+    const ownerSeededFlag = (db: Awaited<ReturnType<typeof makeContacts>>['db']) =>
+        db.select().from(contactsSchema.book).where(eq(contactsSchema.book.id, 1)).get()!.ownerSeeded;
+
+    test('a deleted owner contact stays deleted across a re-init', async () => {
+        const { getOrgOwner } = await import('../lib/user/user');
+        const owner = (await getOrgOwner())!;
+        const setting = getServerSettings().onboarding.autoAddOwnerContact;
+        await updateServerSettings({ onboarding: { autoAddOwnerContact: true } });
+
+        try {
+            const { contacts, db } = await makeContacts();
+            const seeded = (await contacts.getContacts()).find((c) => c.email.includes(owner.email))!;
+            expect(seeded).toBeTruthy();
+            expect(ownerSeededFlag(db)).toBe(1);
+
+            await contacts.deleteContact(seeded.id);
+            await contacts.init();
+
+            // The latch outlives the card: the user meant to remove it, so no init may put it back.
+            expect((await contacts.getContacts()).some((c) => c.email.includes(owner.email))).toBe(false);
+        } finally {
+            await updateServerSettings({ onboarding: { autoAddOwnerContact: setting } });
+        }
+    });
+
+    test('an owner configured only later still seeds exactly once', async () => {
+        const userModule = await import('../lib/user/user');
+        const owner = (await userModule.getOrgOwner())!;
+        let configured = false;
+        const lookup = spyOn(userModule, 'getOrgOwner').mockImplementation(async () => (configured ? owner : null));
+        const setting = getServerSettings().onboarding.autoAddOwnerContact;
+        await updateServerSettings({ onboarding: { autoAddOwnerContact: true } });
+
+        try {
+            // No owner to consider yet — nothing is seeded and the latch must stay open.
+            const { contacts, db } = await makeContacts();
+            expect((await contacts.getContacts()).some((c) => c.email.includes(owner.email))).toBe(false);
+            expect(ownerSeededFlag(db)).toBe(0);
+
+            configured = true;
+            await contacts.init();
+            await contacts.init();
+
+            expect((await contacts.getContacts()).filter((c) => c.email.includes(owner.email)).length).toBe(1);
+            expect(ownerSeededFlag(db)).toBe(1);
+        } finally {
+            lookup.mockRestore();
+            await updateServerSettings({ onboarding: { autoAddOwnerContact: setting } });
+        }
     });
 });

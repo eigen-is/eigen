@@ -171,6 +171,45 @@ describe('Contacts', () => {
             expect(second.status).toBe(412);
         });
 
+        // Two tabs saving the same loaded card at once: both carry the etag they read, both are in flight
+        // before either answers. The writeLock orders them and evaluates each precondition against the state
+        // it is about to overwrite, so the second one loses instead of clobbering the first.
+        test('two concurrent writes from one etag leave exactly one winner and one 412', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const url = `/contacts/${ctx.alice.user.id}/contacts`;
+            const createRes = await authedRequest(token, url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'Race',
+                    lastName: 'Start',
+                    email: ['race@test.eigen.is'],
+                    phone: [],
+                }),
+            });
+            const id = (await createRes.text()).replace(/^"|"$/g, '');
+            const loaded = await assertJson<Contact>(await authedRequest(token, `${url}/${id}`));
+
+            const save = (lastName: string) =>
+                authedRequest(token, `${url}/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        firstName: 'Race',
+                        lastName,
+                        email: ['race@test.eigen.is'],
+                        phone: [],
+                        etag: loaded.etag,
+                    }),
+                });
+            const [first, second] = await Promise.all([save('First'), save('Second')]);
+
+            expect([first.status, second.status].sort()).toEqual([200, 412]);
+            const stored = await assertJson<Contact>(await authedRequest(token, `${url}/${id}`));
+            expect(stored.lastName).toBe(first.status === 200 ? 'First' : 'Second');
+            expect(stored.etag).not.toBe(loaded.etag);
+        });
+
         test('deleting an existing contact with a wrong etag is rejected with 412', async () => {
             const token = ctx.alice.user.sessionToken;
             const createRes = await authedRequest(token, `/contacts/${ctx.alice.user.id}/contacts`, {
