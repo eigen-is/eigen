@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'contacts',
-    currentVersion: 3,
+    currentVersion: 4,
     schema,
     migrations: [
         {
@@ -131,6 +131,26 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 }
                 db.exec('CREATE INDEX IF NOT EXISTS idx_contact_tombstones_uriKey ON contact_tombstones(uriKey);');
             },
+        },
+        {
+            // The two recovery journals: a card write intent that outlives a crash between the file rename
+            // and its index commit, and a label rename whose member-card fan-out was cut short. Both are
+            // written and cleared by the mutation seams; init drains whatever survived. Pure table adds —
+            // an existing book keeps every row.
+            version: 4,
+            up: (db) =>
+                db.exec(`
+                CREATE TABLE IF NOT EXISTS pending_card_writes (
+                    uri TEXT PRIMARY KEY
+                );
+
+                CREATE TABLE IF NOT EXISTS pending_label_renames (
+                    labelId TEXT PRIMARY KEY,
+                    oldName TEXT NOT NULL,
+                    newName TEXT NOT NULL,
+                    FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
+                );
+            `),
         },
     ],
 };

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { Semaphore } from '../../utils/semaphore';
 import type { ParsedCard, ParsedCardPhoto } from '../carddav/vcard-parse';
@@ -113,6 +113,7 @@ export class Contacts {
 
     // A card whose file wrote but whose index commit threw lands here; the next public call (mutation OR read)
     // re-indexes it before it observes the index (fail-closed, spec § 1) — see `ensureDrained`/`drainDirty`.
+    // Process death takes this set with it, which is what `pending_card_writes` is for (`recoverPendingWork`).
     private dirtyCards = new Set<string>();
 
     // Backs `cardParseCount`, the spec's performance-invariant test hook: only the reconcile/rebuild/drain
@@ -152,6 +153,10 @@ export class Contacts {
         // full rebuild if the book/sync bookkeeping is gone (rebuild re-derives it from the files).
         if (this.indexIsIntact()) await this.reconcileIndex();
         else await this.rebuildIndex();
+
+        // Then finish what a crash left half-applied. Runs after the index pass (which guarantees the book
+        // row the ctag bumps need) and before anything is served.
+        await this.writeLock.run(() => this.recoverPendingWork());
 
         // Each seed is guarded independently: a crash between them no longer skips a later one forever (spec § 3).
         const existingLabels = this.db.select().from(schema.labels).all();
@@ -324,6 +329,10 @@ export class Contacts {
                 // tombstone rather than leaving a stale removal in the sync log.
                 tx.delete(schema.contactTombstones).where(eq(schema.contactTombstones.uriKey, opts.row.uriKey)).run();
             }
+
+            // The pair is complete: the write intent recorded before the file rename is settled here, in the
+            // very transaction that settles it — a crash anywhere earlier leaves the row for init to drain.
+            tx.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, opts.row.uri)).run();
         });
 
         for (const id of createdLabelIds) this.emitLabel(SSEventType.LABEL_CREATED, id);
@@ -359,12 +368,50 @@ export class Contacts {
                 });
                 this.cardsBytes -= existing.size;
             }
+            // Both markers clear together — commitCard already dropped the durable one for a re-indexed card,
+            // this covers the tombstoned and the nothing-left-to-do branches.
+            this.clearCardWrite(uri);
             this.dirtyCards.delete(uri);
         }
     }
 
     private markCardDirty(uri: string): void {
         this.dirtyCards.add(uri);
+    }
+
+    // Durable write intent, recorded before a card file is written: while it exists, the index owes that uri
+    // a commit. commitCard clears it inside the transaction that pays the debt.
+    private recordCardWrite(uri: string): void {
+        this.db.insert(schema.pendingCardWrites).values({ uri }).onConflictDoNothing().run();
+    }
+
+    private clearCardWrite(uri: string): void {
+        this.db.delete(schema.pendingCardWrites).where(eq(schema.pendingCardWrites.uri, uri)).run();
+    }
+
+    // Init's recovery seam: finish the work a process death cut in half. Every surviving write intent drains
+    // exactly as an in-process failure does — one uri per pass, so a failure is isolated to its own card —
+    // then any interrupted label rename resumes. Neither half may be fatal: a home whose init throws is a
+    // home the user cannot open at all, so an unrecoverable card is dropped with a warning and left on disk
+    // for the next reconcile (spec § 1: one bad card is never fatal), and a rename that cannot finish stays
+    // recorded for the next label mutation to retry. Caller holds the writeLock.
+    private async recoverPendingWork(): Promise<void> {
+        for (const { uri } of this.db.select().from(schema.pendingCardWrites).all()) {
+            this.markCardDirty(uri);
+            try {
+                await this.drainDirty();
+            } catch (e) {
+                console.warn(`contacts: could not recover the pending write of ${uri}: ${e}`);
+                this.dirtyCards.delete(uri);
+                this.clearCardWrite(uri);
+            }
+        }
+
+        try {
+            await this.resumeLabelRenames();
+        } catch (e) {
+            console.warn(`contacts: could not resume a pending label rename: ${e}`);
+        }
     }
 
     // Fail-closed read/mutation guard: a card whose file wrote but whose index commit threw must be re-indexed
@@ -791,8 +838,9 @@ export class Contacts {
             );
 
             // Fail closed on the canonical write or any later step: a throw marks the uri dirty for the next
-            // drain and rethrows.
+            // drain and rethrows, and the durable intent recorded first covers a process death.
             try {
+                this.recordCardWrite(uri);
                 const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
                 // The avatar cache is derived from the embed; the projection stores its hashed URL (or '' if none).
                 contact.avatar = await this.cacheCardPhoto(
@@ -897,8 +945,9 @@ export class Contacts {
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
 
             // Fail closed on the canonical write or any later step: a throw marks the uri dirty for the next
-            // drain and rethrows.
+            // drain and rethrows, and the durable intent recorded first covers a process death.
             try {
+                this.recordCardWrite(row.uri);
                 const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
                 if (avatarChanged) {
                     contact.avatar = await this.cacheCardPhoto(
@@ -997,28 +1046,38 @@ export class Contacts {
         return this.db.select().from(schema.labels).all();
     }
 
-    // A label rename/delete fans out to every member card so CATEGORIES stays the membership truth: each
-    // card is re-read, its category names remapped by `transform`, then written and re-indexed through the
-    // same file→commit pipeline as a contact edit (its etag/cardCtag bump, so DAV clients re-fetch). Callers
-    // hold the writeLock and drive it directly rather than via updateContact, which would re-enter the
-    // non-reentrant lock.
-    private async rewriteLabelInMemberCards(labelId: string, transform: (names: string[]) => string[]): Promise<void> {
-        const memberIds = this.db
+    // The contacts linked to any of these labels, deduped — the fan-out set for a rename or a delete.
+    private labelMemberIds(labelIds: string[]): string[] {
+        const rows = this.db
             .select({ contactId: schema.contactsToLabels.contactId })
             .from(schema.contactsToLabels)
-            .where(eq(schema.contactsToLabels.labelId, labelId))
-            .all()
-            .map((r) => r.contactId);
+            .where(inArray(schema.contactsToLabels.labelId, labelIds))
+            .all();
+        return [...new Set(rows.map((r) => r.contactId))];
+    }
 
-        for (const contactId of memberIds) {
+    // A label rename/delete fans out to its member cards so CATEGORIES stays the membership truth: each card
+    // is re-read, its category names remapped by `transform`, then written and re-indexed through the same
+    // file→commit pipeline as a contact edit (its etag/cardCtag bump, so DAV clients re-fetch). Callers hold
+    // the writeLock and drive it directly rather than via updateContact, which would re-enter the
+    // non-reentrant lock.
+    private async rewriteCardCategories(contactIds: string[], transform: (names: string[]) => string[]): Promise<void> {
+        for (const contactId of contactIds) {
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, contactId)).get();
             if (!row) continue;
 
             const card = parseVCard(new TextDecoder().decode(await this.readCardBytes(row.uri)));
             const categories = transform(card.categories);
+            // A card the transform doesn't touch — one a resumed fan-out already reached, or whose CATEGORIES
+            // never carried the name — keeps its exact bytes: no etag rotation, nothing for clients to refetch.
+            const unchanged =
+                categories.length === card.categories.length && categories.every((n, i) => n === card.categories[i]);
+            if (unchanged) continue;
+
             const bytes = new TextEncoder().encode(mergeVCard(card, { categories }));
 
             try {
+                this.recordCardWrite(row.uri);
                 const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
                 this.commitCard({
                     row: {
@@ -1047,9 +1106,48 @@ export class Contacts {
         }
     }
 
+    // Finish a label rename whose member-card fan-out never completed — process death mid-fan-out, or a
+    // compensation that itself failed. The label row is the truth for the final name, so every member card
+    // carrying either spelling is remapped onto it (a forward fan-out resumes, a half-compensated one rolls
+    // back, a case-only rename still lands its casing). The transform is keyed on the name, so re-running it
+    // rewrites nothing once the cards agree, and the record clears only after every member committed. Caller
+    // holds the writeLock, as drainDirty's callers do.
+    private async resumeLabelRenames(): Promise<void> {
+        for (const pending of this.db.select().from(schema.pendingLabelRenames).all()) {
+            // The record cascades with its label row, so the label is always there.
+            const label = this.db.select().from(schema.labels).where(eq(schema.labels.id, pending.labelId)).get()!;
+            const keys = [...new Set([normalizeLabelName(pending.oldName), normalizeLabelName(pending.newName)])];
+            // A member the fan-out never reached re-mints the name it still carries as a label of its own the
+            // moment membership is re-derived from CATEGORIES (the drain above, a rebuild). Those cards are
+            // this rename's members too; their stand-in label rows go once the cards are back on the real one.
+            const duplicateIds = this.db
+                .select({ id: schema.labels.id })
+                .from(schema.labels)
+                .where(inArray(schema.labels.nameKey, keys))
+                .all()
+                .map((l) => l.id)
+                .filter((id) => id !== pending.labelId);
+
+            await this.rewriteCardCategories(this.labelMemberIds([pending.labelId, ...duplicateIds]), (names) => [
+                ...new Set(names.map((n) => (keys.includes(normalizeLabelName(n)) ? label.name : n))),
+            ]);
+
+            for (const id of duplicateIds) {
+                this.db.delete(schema.labels).where(eq(schema.labels.id, id)).run();
+                this.emitLabel(SSEventType.LABEL_DELETED, id);
+            }
+            this.clearPendingRename(pending.labelId);
+        }
+    }
+
+    private clearPendingRename(labelId: string): void {
+        this.db.delete(schema.pendingLabelRenames).where(eq(schema.pendingLabelRenames.labelId, labelId)).run();
+    }
+
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
         return this.writeLock.run(async () => {
             await this.drainDirty();
+            await this.resumeLabelRenames();
             const labelId = randomUUID();
 
             try {
@@ -1074,48 +1172,66 @@ export class Contacts {
     public async updateLabel(id: string, label: Omit<Label, 'id'>) {
         return this.writeLock.run(async () => {
             await this.drainDirty();
+            await this.resumeLabelRenames();
 
             const before = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+            // Only a display-name change touches cards — the color never appears in a vCard.
+            const newName = label.name.trim();
+            const renamedFrom = before && before.name !== newName ? before : undefined;
 
             try {
-                await this.db
-                    .update(schema.labels)
-                    .set({
-                        name: label.name.trim(),
-                        nameKey: normalizeLabelName(label.name),
-                        color: label.color,
-                        updatedAt: sql`unixepoch()`,
-                    })
-                    .where(eq(schema.labels.id, id));
+                this.db.transaction((tx) => {
+                    tx.update(schema.labels)
+                        .set({
+                            name: newName,
+                            nameKey: normalizeLabelName(label.name),
+                            color: label.color,
+                            updatedAt: sql`unixepoch()`,
+                        })
+                        .where(eq(schema.labels.id, id))
+                        .run();
+
+                    // The fan-out is owed from the moment the row changes, so the intent is durable from that
+                    // same moment: the member files a crash never reaches stay stat-clean, and no reconcile
+                    // can find them (the proposal assumed it could — see REVIEW_CARDDAV_FINAL M-03).
+                    if (renamedFrom) {
+                        tx.insert(schema.pendingLabelRenames)
+                            .values({ labelId: id, oldName: renamedFrom.name, newName })
+                            .run();
+                    }
+                });
             } catch (e) {
                 rethrowDuplicateLabelName(e);
             }
 
-            // Only a display-name change touches cards — the color never appears in a vCard. The old name is
-            // matched case-insensitively (CATEGORIES may carry a different case than the label's stored name).
-            const newName = label.name.trim();
-            if (before && before.name !== newName) {
-                const oldNameKey = before.nameKey;
+            // The old name is matched case-insensitively (CATEGORIES may carry a different case than the
+            // label's stored name).
+            if (renamedFrom) {
+                const oldNameKey = renamedFrom.nameKey;
                 try {
-                    await this.rewriteLabelInMemberCards(id, (names) =>
+                    await this.rewriteCardCategories(this.labelMemberIds([id]), (names) =>
                         names.map((n) => (normalizeLabelName(n) === oldNameKey ? newName : n)),
                     );
+                    this.clearPendingRename(id);
                 } catch (forwardError) {
                     try {
                         await this.db
                             .update(schema.labels)
                             .set({
-                                name: before.name,
-                                nameKey: before.nameKey,
-                                color: before.color,
-                                updatedAt: before.updatedAt,
+                                name: renamedFrom.name,
+                                nameKey: renamedFrom.nameKey,
+                                color: renamedFrom.color,
+                                updatedAt: renamedFrom.updatedAt,
                             })
                             .where(eq(schema.labels.id, id));
                         const newNameKey = normalizeLabelName(newName);
-                        await this.rewriteLabelInMemberCards(id, (names) =>
-                            names.map((n) => (normalizeLabelName(n) === newNameKey ? before.name : n)),
+                        await this.rewriteCardCategories(this.labelMemberIds([id]), (names) =>
+                            names.map((n) => (normalizeLabelName(n) === newNameKey ? renamedFrom.name : n)),
                         );
+                        this.clearPendingRename(id);
                     } catch (rollbackError) {
+                        // The record stays: the next init (or label mutation) resumes the cards onto whatever
+                        // name the row ended up carrying.
                         console.error(`contacts: failed to compensate label rename ${id}:`, rollbackError);
                     }
                     throw forwardError;
@@ -1131,11 +1247,14 @@ export class Contacts {
     public async deleteLabel(id: string) {
         return this.writeLock.run(async () => {
             await this.drainDirty();
+            // Converge a half-applied rename first, so the delete below removes the name the cards actually
+            // carry. The pending record itself cascades away with the label row.
+            await this.resumeLabelRenames();
 
             const label = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
             if (label) {
                 const { nameKey } = label;
-                await this.rewriteLabelInMemberCards(id, (names) =>
+                await this.rewriteCardCategories(this.labelMemberIds([id]), (names) =>
                     names.filter((n) => normalizeLabelName(n) !== nameKey),
                 );
             }

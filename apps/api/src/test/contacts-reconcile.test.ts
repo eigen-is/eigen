@@ -1,6 +1,6 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Contact } from '@workspace/lib/types/contact';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -8,8 +8,11 @@ import { eq } from 'drizzle-orm';
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { mergeVCard } from '../lib/carddav/vcard-serialize';
 import { labelColorFor, normalizeLabelName, uriKeyOf } from '../lib/contacts/card-store';
-import type { Contacts } from '../lib/contacts/contacts';
+import { Contacts } from '../lib/contacts/contacts';
+import { CONTACTS_DB_CONFIG } from '../lib/contacts/db-config';
 import * as contactsSchema from '../lib/contacts/schema';
+import { ManagedDatabase } from '../lib/core';
+import type { Home } from '../lib/home';
 import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from './contacts-test-helpers';
 
 afterAll(() => {
@@ -815,5 +818,159 @@ describe('fail-closed drain guard', () => {
         expect(drainCalls).toBe(1);
         expect(healed).toBeGreaterThan(sizeBefore);
         expect((await contacts.getContacts()).some((c) => c.firstName === 'Sized')).toBe(true);
+    });
+});
+
+// The in-memory dirty set and the in-process rename compensation both die with the process. These pin the
+// durable half: the journals in contacts.db, and the recovery init runs off them.
+describe('crash recovery (durable journals)', () => {
+    // A fresh Contacts over the same home dir and user — a process restart, carrying none of the first
+    // instance's in-memory state.
+    const restart = async (dir: string, user: Awaited<ReturnType<typeof makeContacts>>['user']) => {
+        const managed = new ManagedDatabase(CONTACTS_DB_CONFIG, join(dir, 'eigen.contacts', 'contacts.db'));
+        await managed.open(0);
+        const home = {
+            homeDir: dir,
+            user,
+            getLocalDatabase: async () => managed,
+            broadcast: () => {},
+        } as unknown as Home;
+        const contacts = new Contacts(home);
+        await contacts.init();
+        return { contacts, db: managed.db, close: () => managed.close() };
+    };
+
+    test('a card write killed before its index commit is re-indexed on init, same stat or not', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const id = await contacts.addContact(
+            validContact({ firstName: 'Same', email: ['same-crash@example.com'], notes: 'ZZZZ' }),
+        );
+        const before = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
+
+        // The card file writes, then the process dies before the index commit — so the in-memory dirty
+        // marker dies with it and only the durable write intent is left.
+        const priv = contacts as unknown as { commitCard: (o: unknown) => void };
+        priv.commitCard = () => {
+            throw new Error('commit boom');
+        };
+        await expect(
+            contacts.updateContact(
+                id,
+                validContact({ firstName: 'Same', email: ['same-crash@example.com'], notes: 'QQQQ' }),
+            ),
+        ).rejects.toThrow('commit boom');
+
+        // Same-length bytes with the indexed mtime pinned back: the stat-only reconcile is blind to this file.
+        utimesSync(cardPathOf(dir, before.uri), new Date(), new Date(before.mtime));
+        const stat = statSync(cardPathOf(dir, before.uri));
+        expect(Math.round(stat.mtimeMs)).toBe(before.mtime);
+        expect(stat.size).toBe(before.size);
+        expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([{ uri: before.uri }]);
+
+        const restarted = await restart(dir, user);
+        try {
+            expect((await restarted.contacts.getContactById(id))?.notes).toBe('QQQQ');
+            expect(
+                restarted.db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!
+                    .etag,
+            ).not.toBe(before.etag);
+            // The intent is satisfied, so a second restart has nothing to drain.
+            expect(restarted.db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a rename killed mid-fan-out finishes on init, and a later rebuild changes nothing', async () => {
+        const { contacts, db, dir, user } = await makeContacts();
+        const labelId = await contacts.addLabel({ name: 'Bandmates', color: '#abcdef' });
+        const ids: string[] = [];
+        for (const name of ['One', 'Two', 'Three']) {
+            ids.push(
+                await contacts.addContact(
+                    validContact({ firstName: name, email: [`${name.toLowerCase()}@example.com`], labels: [labelId] }),
+                ),
+            );
+        }
+        const uris = ids.map((id) => uriOf(db, id));
+
+        // Kill the fan-out after the first member card: every later write throws, and the in-process
+        // compensation cannot run either (a killed process rolls nothing back).
+        const storage = (
+            contacts as unknown as { storage: { writeAtomic: (path: string, bytes: Uint8Array) => Promise<void> } }
+        ).storage;
+        const originalWrite = storage.writeAtomic;
+        let writes = 0;
+        storage.writeAtomic = async (path, bytes) => {
+            if (++writes > 1) throw new Error('write boom');
+            return originalWrite.call(storage, path, bytes);
+        };
+        const updateSpy = spyOn(db, 'update').mockImplementation(() => {
+            throw new Error('compensation killed');
+        });
+        const origError = console.error;
+        console.error = () => {};
+
+        try {
+            await expect(contacts.updateLabel(labelId, { name: 'Colleagues', color: '#abcdef' })).rejects.toThrow(
+                'write boom',
+            );
+        } finally {
+            storage.writeAtomic = originalWrite;
+            updateSpy.mockRestore();
+            console.error = origError;
+        }
+
+        // The stuck state: the row renamed, one card rewritten, the rest still carrying the old name — all
+        // of them stat-clean, so no reconcile can see them.
+        expect(db.select().from(contactsSchema.labels).where(eq(contactsSchema.labels.id, labelId)).get()!.name).toBe(
+            'Colleagues',
+        );
+        expect(parseVCard(readFileSync(cardPathOf(dir, uris[0]), 'utf8')).categories).toEqual(['Colleagues']);
+        expect(parseVCard(readFileSync(cardPathOf(dir, uris[2]), 'utf8')).categories).toEqual(['Bandmates']);
+        expect(db.select().from(contactsSchema.pendingLabelRenames).all()).toEqual([
+            { labelId, oldName: 'Bandmates', newName: 'Colleagues' },
+        ]);
+
+        const restarted = await restart(dir, user);
+        try {
+            for (const uri of uris) {
+                expect(parseVCard(readFileSync(cardPathOf(dir, uri), 'utf8')).categories).toEqual(['Colleagues']);
+            }
+            expect(restarted.db.select().from(contactsSchema.pendingLabelRenames).all()).toEqual([]);
+
+            // Junction and label row agree: one label, still the renamed one, still holding all three members.
+            const labels = restarted.db.select().from(contactsSchema.labels).all();
+            expect(labels.filter((l) => l.nameKey === 'colleagues').map((l) => l.id)).toEqual([labelId]);
+            expect(labels.some((l) => l.nameKey === 'bandmates')).toBe(false);
+            for (const id of ids) expect((await restarted.contacts.getContactById(id))?.labels).toEqual([labelId]);
+
+            // A rebuild re-derives labels from the files; with the files converged it re-mints nothing.
+            await restarted.contacts.rebuildIndex();
+            expect(
+                restarted.db
+                    .select()
+                    .from(contactsSchema.labels)
+                    .all()
+                    .map((l) => l.id)
+                    .sort(),
+            ).toEqual(labels.map((l) => l.id).sort());
+            for (const id of ids) expect((await restarted.contacts.getContactById(id))?.labels).toEqual([labelId]);
+        } finally {
+            await restarted.close();
+        }
+    });
+
+    test('a completed rename leaves no journal row behind', async () => {
+        const { contacts, db } = await makeContacts();
+        const labelId = await contacts.addLabel({ name: 'Clean', color: '#abcdef' });
+        await contacts.addContact(
+            validContact({ firstName: 'Member', email: ['clean@example.com'], labels: [labelId] }),
+        );
+
+        await contacts.updateLabel(labelId, { name: 'Cleaner', color: '#abcdef' });
+
+        expect(db.select().from(contactsSchema.pendingLabelRenames).all()).toEqual([]);
+        expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
     });
 });
