@@ -1174,7 +1174,7 @@ export class Contacts {
                         // Deliberately the stored projection, not the fresh parse: committing it with the
                         // rewritten file's stats hides an out-of-band edit from the stat-only reconcile. Only
                         // hand-editing a card file under a live server can produce that, so projecting from the
-                        // parse above is deferred to the phase-2 DAV PUT seam (REVIEW checkpoint 1, ruling 1).
+                        // parse above is deferred to the phase-2 DAV PUT seam.
                         data: row.data,
                         etag: computeCardEtag(bytes),
                         mtime: Math.round(mtime),
@@ -1290,7 +1290,7 @@ export class Contacts {
 
                     // The fan-out is owed from the moment the row changes, so the intent is durable from that
                     // same moment: the member files a crash never reaches stay stat-clean, and no reconcile
-                    // can find them (the proposal assumed it could — see REVIEW_CARDDAV_FINAL M-03).
+                    // can find them (the proposal's original no-journal claim — see PROPOSAL_CARDDAV.md § 1 amendment).
                     if (renamedFrom) {
                         tx.insert(schema.pendingLabelRenames)
                             .values({ labelId: id, oldName: renamedFrom.name, newName })
