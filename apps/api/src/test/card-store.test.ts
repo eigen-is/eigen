@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, fstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { type FileHandle, open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';
 import { SSEventType } from '@workspace/lib/types/sse';
@@ -55,6 +56,31 @@ describe('writeAtomic', () => {
 
         expect(await store.file('cards/b.vcf').text()).toBe('second');
         expect(readdirSync(join(base, 'cards'))).toEqual(['b.vcf']);
+    });
+
+    test('fsyncs the parent directory, not just the temp file', async () => {
+        // The bytes being on the platter is only half of it: the rename that publishes them lives in
+        // the directory, so a power loss before the directory entry is flushed resurrects the OLD
+        // file under an already-acknowledged write. Observed through FileHandle.sync — one fsync on
+        // the temp file, then one on the directory it was renamed into.
+        const { store } = nextStore();
+        const probe = await open(TEST_DIR, 'r');
+        const handleProto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
+        await probe.close();
+
+        const syncedADirectory: boolean[] = [];
+        const realSync = handleProto.sync;
+        const spy = spyOn(handleProto, 'sync').mockImplementation(async function (this: FileHandle) {
+            syncedADirectory.push(fstatSync(this.fd).isDirectory());
+            return realSync.call(this);
+        });
+        try {
+            await store.writeAtomic('cards/c.vcf', 'durable');
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(syncedADirectory).toEqual([false, true]);
     });
 });
 

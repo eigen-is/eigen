@@ -28,9 +28,11 @@ export class LocalFilesystem {
         return await Bun.write(fullPath, data);
     }
 
-    // Durable, crash-safe write: stage a sibling temp file, fsync it, then rename over the target so a
-    // reader ever only sees the whole old file or the whole new one. Used for the vCard cards where a
-    // torn write would corrupt the source of truth; the temp is `.`-prefixed so cleanup can sweep leftovers.
+    // Durable, crash-safe write: stage a sibling temp file, fsync it, rename over the target so a
+    // reader ever only sees the whole old file or the whole new one, then fsync the directory that
+    // holds the rename — without it a power loss can resurrect the old file under an acknowledged
+    // write. Used for the vCard cards where a torn write would corrupt the source of truth; the temp
+    // is `.`-prefixed so cleanup can sweep leftovers.
     async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
         const fullPath = this.getFilePath(filePath);
         const dir = path.dirname(fullPath);
@@ -46,6 +48,13 @@ export class LocalFilesystem {
             await handle.close();
         }
         await fsPromises.rename(tempPath, fullPath);
+        // fsync the directory entry the rename created (POSIX; darwin + linux are the only targets).
+        const dirHandle = await fsPromises.open(dir, 'r');
+        try {
+            await dirHandle.sync();
+        } finally {
+            await dirHandle.close();
+        }
     }
 
     async delete(filePath: string): Promise<boolean> {
