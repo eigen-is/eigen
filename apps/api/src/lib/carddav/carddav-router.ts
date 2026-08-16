@@ -1,6 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
-import { uriKeyOf } from '../contacts/card-store';
+import { sanitizeCardUri, uriKeyOf } from '../contacts/card-store';
 import { getContacts } from '../contacts/contacts';
 import { requireSelf } from '../core/access';
 import {
@@ -9,6 +9,7 @@ import {
     handleAddressbookPropfind,
     handleCardPropfind,
 } from './discovery';
+import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
 
 // The wildcard under /dav/addressbooks/:ownerId/ decoded to at most two segments — the book and, optionally, a
 // card resource name. Card names are client-chosen, so every segment is percent-decoded (the webdav/xml.ts
@@ -70,7 +71,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         return handleAddressbookPropfind(params.ownerId, book, cards, depth);
     })
 
-    // GET on a collection URL — a 200 stub so HEAD/GET probes pass (card resource GET is a later task).
+    // GET a card resource, or a 200 stub on the collection URL so HEAD/GET probes pass.
     .get('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
@@ -82,7 +83,47 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
                 headers: { 'Content-Type': 'text/plain' },
             });
         }
-        return new Response('Not Found', { status: 404 });
+        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
+
+        // The card name is client-chosen and becomes a filename, so it is sanitized before any store call (the
+        // AGENTS.md path rule); getCard then serves the stored bytes verbatim or 404s.
+        const uri = sanitizeCardUri(parsed.uri);
+        if (!uri) return new Response('Bad Request', { status: 400 });
+        return handleGetCard(await getContacts(user), uri);
+    })
+
+    // PUT a card resource — create or replace. One fixed book named 'contacts'; the name is sanitized before it
+    // reaches putCard (which turns it into a filename), and the preconditions ride the If-Match / If-None-Match
+    // headers into the store, evaluated inside its write lock (§ 3).
+    .put('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        requireSelf(params.ownerId, user.id);
+        const parsed = parseAddressbookPath(params['*']);
+        if (!parsed.ok) return new Response('Bad Request', { status: 400 });
+        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
+        if (!parsed.uri) return new Response('Bad Request', { status: 400 });
+        const uri = sanitizeCardUri(parsed.uri);
+        if (!uri) return new Response('Bad Request', { status: 400 });
+
+        const body = await request.text();
+        const ifMatch = request.headers.get('If-Match');
+        const ifNoneMatch = request.headers.get('If-None-Match');
+        return handlePutCard(await getContacts(user), params.ownerId, uri, body, ifMatch, ifNoneMatch);
+    })
+
+    // DELETE a card resource — 404 for an unknown name (DAV DELETE is not idempotent), 403 for your own card.
+    .delete('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        requireSelf(params.ownerId, user.id);
+        const parsed = parseAddressbookPath(params['*']);
+        if (!parsed.ok) return new Response('Bad Request', { status: 400 });
+        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
+        if (!parsed.uri) return new Response('Bad Request', { status: 400 });
+        const uri = sanitizeCardUri(parsed.uri);
+        if (!uri) return new Response('Bad Request', { status: 400 });
+
+        const ifMatch = request.headers.get('If-Match');
+        return handleDeleteCard(await getContacts(user), uri, ifMatch);
     })
 
     // One fixed book per user — creating another collection is forbidden (spec Non-goals).
