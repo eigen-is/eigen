@@ -14,7 +14,14 @@ import { CONTACTS_DB_CONFIG } from '../lib/contacts/db-config';
 import * as contactsSchema from '../lib/contacts/schema';
 import { ManagedDatabase } from '../lib/core';
 import type { Home } from '../lib/home';
-import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from './contacts-test-helpers';
+import {
+    avatarsDirOf,
+    CONTACTS_TEST_ROOT,
+    cardsDirOf,
+    makeContacts,
+    stageAvatar,
+    validContact,
+} from './contacts-test-helpers';
 
 afterAll(() => {
     try {
@@ -22,9 +29,7 @@ afterAll(() => {
     } catch {}
 });
 
-const cardsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'cards');
 const cardPathOf = (dir: string, uri: string) => join(cardsDirOf(dir), uri);
-const avatarsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'avatars');
 const parseCount = (contacts: Contacts) => contacts.cardParseCount;
 const uriOf = (db: Awaited<ReturnType<typeof makeContacts>>['db'], id: string) =>
     db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.uri;

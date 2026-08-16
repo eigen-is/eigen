@@ -24,7 +24,7 @@ import {
 } from '../lib/contacts/card-store';
 import * as contactsSchema from '../lib/contacts/schema';
 import { LocalFilesystem } from '../lib/core';
-import { CONTACTS_TEST_ROOT, makeContacts, validContact } from './contacts-test-helpers';
+import { CONTACTS_TEST_ROOT, cardsDirOf, makeContacts, validContact } from './contacts-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-card-store-${Date.now()}`);
 let counter = 0;
@@ -224,13 +224,11 @@ function contactOfExactly(bytes: number, uid: string): CreateContactInput {
 }
 
 describe('CARD_MAX_BYTES', () => {
-    const cardsDir = (dir: string) => join(dir, 'eigen.contacts', 'cards');
-
     test('a card exactly at the ceiling is written', async () => {
         const { contacts, db, dir } = await makeContacts();
         const id = await contacts.addContact(contactOfExactly(CARD_MAX_BYTES, randomUUID()));
 
-        expect(statSync(join(cardsDir(dir), `${id}.vcf`)).size).toBe(CARD_MAX_BYTES);
+        expect(statSync(join(cardsDirOf(dir), `${id}.vcf`)).size).toBe(CARD_MAX_BYTES);
         expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.size).toBe(
             CARD_MAX_BYTES,
         );
@@ -239,13 +237,13 @@ describe('CARD_MAX_BYTES', () => {
     test('one byte over the ceiling is refused with 413, before anything is written', async () => {
         const { contacts, db, dir } = await makeContacts();
         const exact = contactOfExactly(CARD_MAX_BYTES, randomUUID());
-        const before = readdirSync(cardsDir(dir)).length;
+        const before = readdirSync(cardsDirOf(dir)).length;
 
         // One more ORG character is one more byte on the card.
         await expect(contacts.addContact({ ...exact, company: `${exact.company}c` })).rejects.toThrow(/too large/i);
 
         // Refused before the write intent is recorded: no card file, and no pending row for a drain to chase.
-        expect(readdirSync(cardsDir(dir)).length).toBe(before);
+        expect(readdirSync(cardsDirOf(dir)).length).toBe(before);
         expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
     });
 
@@ -253,13 +251,13 @@ describe('CARD_MAX_BYTES', () => {
         const { contacts, db, dir } = await makeContacts();
         const id = await contacts.addContact(validContact({ firstName: 'Grower' }));
         const row = db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!;
-        const cardBefore = readFileSync(join(cardsDir(dir), row.uri), 'utf8');
+        const cardBefore = readFileSync(join(cardsDirOf(dir), row.uri), 'utf8');
 
         await expect(
             contacts.updateContact(id, validContact({ firstName: 'Grower', notes: 'n'.repeat(CARD_MAX_BYTES) })),
         ).rejects.toThrow(/too large/i);
 
-        expect(readFileSync(join(cardsDir(dir), row.uri), 'utf8')).toBe(cardBefore);
+        expect(readFileSync(join(cardsDirOf(dir), row.uri), 'utf8')).toBe(cardBefore);
         expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.etag).toBe(
             row.etag,
         );
@@ -281,7 +279,7 @@ describe('Contacts (file-backed store)', () => {
             }),
         );
 
-        const cardFile = join(dir, 'eigen.contacts', 'cards', `${id}.vcf`);
+        const cardFile = join(cardsDirOf(dir), `${id}.vcf`);
         expect(existsSync(cardFile)).toBe(true);
 
         const parsed = parseVCard(readFileSync(cardFile, 'utf8'));
@@ -308,7 +306,7 @@ describe('Contacts (file-backed store)', () => {
             labels: [],
         });
 
-        const card = readFileSync(join(dir, 'eigen.contacts', 'cards', `${id}.vcf`), 'utf8');
+        const card = readFileSync(join(cardsDirOf(dir), `${id}.vcf`), 'utf8');
         expect(card).not.toMatch(/^EMAIL:/m);
         expect(card).not.toMatch(/^TEL:/m);
         expect(card).not.toMatch(/^ADR/m);
@@ -399,9 +397,9 @@ describe('Contacts (file-backed store)', () => {
 
         // A card FILE with an inline PHOTO plus an index row carrying only the projection: reads serve from the
         // index and must never surface the base64 the file holds.
-        mkdirSync(join(dir, 'eigen.contacts', 'cards'), { recursive: true });
+        mkdirSync(cardsDirOf(dir), { recursive: true });
         writeFileSync(
-            join(dir, 'eigen.contacts', 'cards', uri),
+            join(cardsDirOf(dir), uri),
             `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${id}\r\nN:Pic;Has;;;\r\nFN:Has Pic\r\nPHOTO;ENCODING=b;TYPE=JPEG:${photoBase64}\r\nEND:VCARD\r\n`,
         );
         db.insert(contactsSchema.contacts)
@@ -429,7 +427,7 @@ describe('Contacts (file-backed store)', () => {
 });
 
 describe('Contacts label membership (CATEGORIES)', () => {
-    const readCard = (dir: string, uri: string) => readFileSync(join(dir, 'eigen.contacts', 'cards', uri), 'utf8');
+    const readCard = (dir: string, uri: string) => readFileSync(join(cardsDirOf(dir), uri), 'utf8');
 
     test('renaming a label rewrites its member cards, rotates their etag, and keeps membership', async () => {
         const { contacts, broadcasts, db, dir } = await makeContacts();
@@ -479,7 +477,7 @@ describe('Contacts label membership (CATEGORIES)', () => {
         const photoCard = mergeVCard(parseVCard(readCard(dir, rows[0].uri)), {
             photo: { bytes: photoBytes, mediaType: 'image/jpeg' },
         });
-        writeFileSync(join(dir, 'eigen.contacts', 'cards', rows[0].uri), photoCard);
+        writeFileSync(join(cardsDirOf(dir), rows[0].uri), photoCard);
         const photoBlock = (raw: string) => raw.match(/PHOTO[^\r\n]*(?:\r\n[ \t][^\r\n]*)*/)?.[0] ?? '';
         const photoBefore = photoBlock(photoCard);
         expect(photoBefore).not.toBe('');
@@ -597,8 +595,8 @@ describe('Contacts label membership (CATEGORIES)', () => {
         const bytes = new TextEncoder().encode(
             `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${id}\r\nN:Doe;Jane;;;\r\nFN:Jane Doe\r\nCATEGORIES:work\r\nEND:VCARD\r\n`,
         );
-        mkdirSync(join(dir, 'eigen.contacts', 'cards'), { recursive: true });
-        writeFileSync(join(dir, 'eigen.contacts', 'cards', uri), bytes);
+        mkdirSync(cardsDirOf(dir), { recursive: true });
+        writeFileSync(join(cardsDirOf(dir), uri), bytes);
         db.insert(contactsSchema.contacts)
             .values({
                 id,

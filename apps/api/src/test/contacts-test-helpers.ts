@@ -46,6 +46,11 @@ export async function makeContacts() {
     return { contacts, broadcasts, user, dir, db: managed.db };
 }
 
+// Where a harness home keeps its two card-store directories — one spelling of the layout for every
+// contacts test file that reaches past the API and inspects the files on disk.
+export const cardsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'cards');
+export const avatarsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'avatars');
+
 export const validContact = (over: Partial<CreateContactInput>): CreateContactInput => ({
     firstName: 'Ada',
     lastName: 'Lovelace',

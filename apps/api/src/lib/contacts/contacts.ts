@@ -19,6 +19,7 @@ import { generateImagePreview } from '../shared/thumbnails';
 import type { User } from '../user';
 import { getOrgOwner } from '../user/';
 import {
+    AVATAR_FILENAME,
     avatarCacheName,
     avatarUrl,
     CARD_MAX_BYTES,
@@ -26,6 +27,7 @@ import {
     cardPath,
     cleanupTempCardFiles,
     computeCardEtag,
+    isCardPhotoCacheOf,
     labelColorFor,
     listCardUris,
     normalizeLabelName,
@@ -42,8 +44,11 @@ export async function getContacts(user: User): Promise<Contacts> {
 }
 
 async function getContactsDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
-    return home.getLocalDatabase(CONTACTS_DB_CONFIG, 'eigen.contacts/contacts.db');
+    return home.getLocalDatabase(CONTACTS_DB_CONFIG, PATHS.CONTACTS.DB);
 }
+
+// The transaction handle drizzle hands a `db.transaction(cb)` callback.
+type Tx = Parameters<Parameters<BunSQLiteDatabase<typeof schema>['transaction']>[0]>[0];
 
 // The columns a card (re)index computes; the ctag + timestamps are stamped inside the write transaction.
 type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag' | 'createdAt' | 'updatedAt'>;
@@ -52,6 +57,17 @@ type CardRowInput = Omit<typeof schema.contacts.$inferInsert, 'cardCtag' | 'crea
 // eigenId that ranks a self-link claim. The reconcile/rebuild passes project these (never the `data` JSON) so
 // init never parses a stored projection.
 type IndexIncumbent = Pick<typeof schema.contacts.$inferSelect, 'id' | 'uid' | 'eigenId'>;
+
+// One card file, read and prepared but not yet committed — what phase 1 of the reconcile/rebuild passes
+// produces and phases 2/3 (self-link ranking, uid dedupe, the write transaction) consume. The incumbent
+// rides along so the caller can tell a new card from an updated one.
+type CardCandidate = {
+    row: CardRowInput;
+    categories: string[];
+    parsed: ParsedCard;
+    existing?: IndexIncumbent;
+    rank: 0 | 1 | 2 | 3;
+};
 
 // The index-stored projection: the owned properties minus what lives in dedicated columns (names/eigenId)
 // or the junction (labels). `avatar` is the cache URL only — inline photo bytes never enter the index.
@@ -76,8 +92,6 @@ function toData(contact: CreateContactInput): CardData {
 // Derived from toData so the fallback can never drift from the shape every write stores.
 const EMPTY_CARD_DATA: CardData = toData({ firstName: '', lastName: '', email: [], phone: [] });
 
-// The web form seeds a blank email, a blank phone, and an all-empty address (emptyContact). Drop those at the
-// write seam so form-created cards never carry a bare EMAIL:/TEL:/ADR: line out to DAV clients.
 function isBlankAddress(a: Address): boolean {
     return (
         !(a.street ?? '').trim() &&
@@ -86,6 +100,17 @@ function isBlankAddress(a: Address): boolean {
         !(a.zipCode ?? '').trim() &&
         !(a.country ?? '').trim()
     );
+}
+
+// What every REST body passes through at the write seam, in place. The birthday is normalized to a bare date
+// so both writers (createVCard + toData) agree and an app-set ISO datetime reaches the file as a plain BDAY;
+// the web form's placeholder blank email/phone/address (emptyContact) are dropped so no card carries a bare
+// EMAIL:/TEL:/ADR: line out to DAV clients.
+function normalizeContactInput(contact: CreateContactInput): void {
+    contact.birthday = normalizeBirthday(contact.birthday ?? '');
+    contact.email = contact.email.filter((e) => e.trim() !== '');
+    contact.phone = contact.phone.filter((p) => p.trim() !== '');
+    contact.address = (contact.address ?? []).filter((a) => !isBlankAddress(a));
 }
 
 // A freshly-staged avatar has no card referencing it yet — the user is still filling in the form. Give an
@@ -98,11 +123,6 @@ const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;
 // contact photos. App-authored cards with this shape naturally stay around 230 KiB; that is normal behavior,
 // not a resource limit or guarantee.
 const AVATAR_PREVIEW = { maxSize: 512, quality: 80, fit: 'cover' } as const;
-
-// The only two names anything ever writes into `avatars/`: a staged upload (`<uuid>.webp`) and a derived card
-// photo cache (`<uuid>-<hash8>.webp`). Serving is allowlisted to exactly those, so separators, `..` and
-// control characters are refused by construction rather than one blocklist at a time.
-const AVATAR_FILENAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(-[0-9a-f]{8})?\.webp$/;
 
 // The v2 UNIQUE index on labels(nameKey) closes duplicate/case-variant label names. bun:sqlite names the
 // column in the violation message ("UNIQUE constraint failed: labels.nameKey"); match on it so an unrelated
@@ -144,7 +164,7 @@ export class Contacts {
 
     constructor(home: Home) {
         this.home = home;
-        this.storage = new LocalFilesystem(`${home.homeDir}/eigen.contacts`);
+        this.storage = new LocalFilesystem(`${home.homeDir}/${PATHS.CONTACTS.ROOT}`);
     }
 
     private emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
@@ -242,7 +262,7 @@ export class Contacts {
     }
 
     // UPDATE book SET ctag = ctag + 1 and read the new value back — matches the calendar bookkeeping.
-    private bumpCtag(tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0]): number {
+    private bumpCtag(tx: Tx): number {
         tx.update(schema.book)
             .set({ ctag: sql`${schema.book.ctag} + 1` })
             .where(eq(schema.book.id, 1))
@@ -252,12 +272,7 @@ export class Contacts {
 
     // Upsert a removal tombstone keyed by uri (carrying the folded uriKey so a re-created case-variant card
     // clears it), stamped with the current ctag. One shape shared by drainDirty, reconcile and deleteContact.
-    private tombstone(
-        tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
-        uri: string,
-        uriKey: string,
-        ctag: number,
-    ): void {
+    private tombstone(tx: Tx, uri: string, uriKey: string, ctag: number): void {
         tx.insert(schema.contactTombstones)
             .values({ uri, uriKey, deletedAtCtag: ctag })
             .onConflictDoUpdate({ target: schema.contactTombstones.uri, set: { deletedAtCtag: ctag } })
@@ -271,12 +286,7 @@ export class Contacts {
     // Rebuild a card's label junction from its CATEGORIES inside `tx`: each name resolves to a label by
     // nameKey, minting one with its deterministic color when absent (new ids collected so the caller can
     // emit LABEL_CREATED after the transaction). Shared by commitCard and the reconcile/rebuild passes.
-    private syncCardLabels(
-        tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
-        contactId: string,
-        categories: string[],
-        createdLabelIds: string[],
-    ): void {
+    private syncCardLabels(tx: Tx, contactId: string, categories: string[], createdLabelIds: string[]): void {
         const labelIds = new Set<string>();
         for (const name of categories) {
             const nameKey = normalizeLabelName(name);
@@ -525,8 +535,8 @@ export class Contacts {
 
     // Pick the highest-ranked self-link claimant (first in the pre-sorted list on a tie); a strictly-greater rank
     // is required to displace, so the earliest max-rank card wins.
-    private pickSelfWinner<T extends { rank: number }>(candidates: T[]): T | undefined {
-        let winner: T | undefined;
+    private pickSelfWinner(candidates: CardCandidate[]): CardCandidate | undefined {
+        let winner: CardCandidate | undefined;
         for (const c of candidates) {
             if (c.rank > 0 && (!winner || c.rank > winner.rank)) winner = c;
         }
@@ -536,7 +546,7 @@ export class Contacts {
     // Stamp the chosen winner's row with the self-link and, when its file does not already assert the link,
     // restore X-EIGEN-ID into that one file and re-stat/re-etag it — the § 2 durability rewrite, covering an
     // email-only claim and an incumbent whose file a client stripped. No loser's file is ever touched.
-    private async applySelfLink(winner: { row: CardRowInput; parsed: ParsedCard }): Promise<void> {
+    private async applySelfLink(winner: CardCandidate): Promise<void> {
         winner.row.eigenId = this.home.user.id;
         if (winner.parsed.eigenId === this.home.user.id) return;
         const bytes = new TextEncoder().encode(mergeVCard(winner.parsed, { eigenId: this.home.user.id }));
@@ -553,8 +563,8 @@ export class Contacts {
     // row (reconcile) or empty (rebuild clears the table first). A candidate updating its own incumbent keeps
     // that row's slot (owner === its id); any other collision is skipped-and-warned, earliest uri winning
     // since candidates arrive uri-sorted.
-    private dedupeByUid<T extends { row: CardRowInput }>(candidates: T[], uidOwner: Map<string, string>): T[] {
-        const kept: T[] = [];
+    private dedupeByUid(candidates: CardCandidate[], uidOwner: Map<string, string>): CardCandidate[] {
+        const kept: CardCandidate[] = [];
         for (const c of candidates) {
             const owner = uidOwner.get(c.row.uid);
             if (owner !== undefined && owner !== c.row.id) {
@@ -569,24 +579,9 @@ export class Contacts {
 
     // Phase 1 of both passes: parse + prepare each entry into a candidate row without touching the self-link,
     // ranking its self-claim against the entry's incumbent eigenId. A card that can't be read (garbage vCard,
-    // or one that vanished mid-pass) is skipped-and-logged rather than failing the whole pass (spec § 1). The
-    // incumbent rides through on each candidate so the caller can tell a new card from an updated one.
-    private async buildCandidates(entries: { uri: string; existing?: IndexIncumbent }[]): Promise<
-        {
-            row: CardRowInput;
-            categories: string[];
-            parsed: ParsedCard;
-            existing?: IndexIncumbent;
-            rank: 0 | 1 | 2 | 3;
-        }[]
-    > {
-        const candidates: {
-            row: CardRowInput;
-            categories: string[];
-            parsed: ParsedCard;
-            existing?: IndexIncumbent;
-            rank: 0 | 1 | 2 | 3;
-        }[] = [];
+    // or one that vanished mid-pass) is skipped-and-logged rather than failing the whole pass (spec § 1).
+    private async buildCandidates(entries: { uri: string; existing?: IndexIncumbent }[]): Promise<CardCandidate[]> {
+        const candidates: CardCandidate[] = [];
         for (const { uri, existing } of entries) {
             try {
                 const p = await this.prepareCardRow(uri, existing?.id ?? randomUUID(), existing?.uid);
@@ -874,15 +869,7 @@ export class Contacts {
     public async addContact(contact: CreateContactInput): Promise<string> {
         return this.writeLock.run(async () => {
             await this.drainDirty();
-
-            // Normalize the birthday to a bare date at the seam so every writer (createVCard + toData) agrees
-            // and an app-set ISO datetime reaches the file as a plain BDAY (spec files-as-truth).
-            contact.birthday = normalizeBirthday(contact.birthday ?? '');
-
-            // Drop the form's placeholder blank email/phone/address so no bare property line reaches the file.
-            contact.email = contact.email.filter((e) => e.trim() !== '');
-            contact.phone = contact.phone.filter((p) => p.trim() !== '');
-            contact.address = (contact.address ?? []).filter((a) => !isBlankAddress(a));
+            normalizeContactInput(contact);
 
             const id = randomUUID();
             const uri = `${id}.vcf`;
@@ -954,16 +941,8 @@ export class Contacts {
     public async updateContact(id: string, contact: CreateContactInput, expectedEtag?: string): Promise<void> {
         return this.writeLock.run(async () => {
             await this.drainDirty();
-
-            // Normalize the birthday at the seam (see addContact) so the merge diff and toData see the same
-            // bare date — echoing a phone's BDAY is then a no-op, and an app edit reaches the file.
-            contact.birthday = normalizeBirthday(contact.birthday ?? '');
-
-            // Drop the form's placeholder blank email/phone/address (before the self-card own-email prepend
-            // below) so no bare property line reaches the file.
-            contact.email = contact.email.filter((e) => e.trim() !== '');
-            contact.phone = contact.phone.filter((p) => p.trim() !== '');
-            contact.address = (contact.address ?? []).filter((a) => !isBlankAddress(a));
+            // Runs before the self-card own-email prepend below, so that email can't be dropped as a blank.
+            normalizeContactInput(contact);
 
             const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
             if (!row) throw new ApiError(404, 'Contact not found');
@@ -1107,12 +1086,7 @@ export class Contacts {
 
             this.cardsBytes -= row.size;
             const avatarName = row.data?.avatar?.split('/').pop();
-            const ownedAvatarPrefix = `${row.id}-`;
-            // Historical rows may share staged or legacy names; only this row's hash cache is safe to unlink.
-            if (
-                avatarName?.startsWith(ownedAvatarPrefix) &&
-                /^[0-9a-f]{8}\.webp$/.test(avatarName.slice(ownedAvatarPrefix.length))
-            ) {
+            if (avatarName && isCardPhotoCacheOf(row.id, avatarName)) {
                 const avatarPath = `${PATHS.CONTACTS.AVATARS}/${avatarName}`;
                 try {
                     const avatarSize = await this.storage.size(avatarPath);
@@ -1450,10 +1424,10 @@ export class Contacts {
     }
 
     // A staged avatar (uploadAvatar's webp) transcoded to the JPEG we embed as the canonical PHOTO — Apple
-    // Contacts can't decode webp contact photos (its list is JPEG/BMP/PNG/GIF). The shared 512px q80 shape
-    // naturally keeps app-authored cards around 230 KiB; that is normal behavior, not a limit or guarantee.
-    // Null for an empty url; a non-empty url that resolves to nothing (the staged file was swept, a torn
-    // transcode) throws so the caller re-uploads rather than silently dropping a photo the user meant to set.
+    // Contacts can't decode webp contact photos (its list is JPEG/BMP/PNG/GIF), so this is the one seam that
+    // leaves AVATAR_PREVIEW's format. Null for an empty url; a non-empty url that resolves to nothing (the
+    // staged file was swept, a torn transcode) throws so the caller re-uploads rather than silently dropping
+    // a photo the user meant to set.
     private async resolveStagedAvatar(
         stagedUrl: string | undefined,
     ): Promise<{ bytes: Uint8Array; mediaType: string } | null> {
@@ -1542,11 +1516,11 @@ export class Contacts {
 
     private async addYourself(): Promise<string> {
         const user = this.home.user;
-        const nameParts = (user.name || '').split(' ');
+        const [firstName, ...rest] = (user.name || '').split(' ');
         return await this.addContact({
             eigenId: user.id,
-            firstName: nameParts[0] || '',
-            lastName: [...nameParts.slice(1)].join(' ') || '',
+            firstName: firstName || '',
+            lastName: rest.join(' '),
             email: [user.email],
             phone: [],
             company: '',

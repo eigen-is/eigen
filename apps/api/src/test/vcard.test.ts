@@ -2,7 +2,6 @@
 // round-trip. All Phase-1 CardDAV vCard tasks extend this file.
 import { describe, expect, test } from 'bun:test';
 import {
-    escapeText,
     getVersion,
     makeLine,
     parseVCardLines,
@@ -13,44 +12,47 @@ import {
 import { parseVCard } from '../lib/carddav/vcard-parse';
 import { createVCard, mergeVCard } from '../lib/carddav/vcard-serialize';
 import { transcodeTo30 } from '../lib/carddav/vcard-transcode';
+import { escapeContentText } from '../lib/core/content-line';
 
 // Wrap a single content line in a minimal valid vCard so it can go through the public parser.
 const parseCard = (line: string) => parseVCardLines(`BEGIN:VCARD\r\nVERSION:3.0\r\n${line}\r\nEND:VCARD\r\n`);
+
+// A vCard is CRLF-joined and CRLF-terminated; fixtures are written as physical lines so folding is literal.
+const vcard = (lines: string[]) => `${lines.join('\r\n')}\r\n`;
 
 // Apple-Contacts-shaped vCard 3.0: UID, N/FN, ORG, two folded properties (TITLE, NOTE), a grouped
 // item1.EMAIL + item1.X-ABLabel pair, two TEL and two ADR lines, an X-SOCIALPROFILE, BDAY, CATEGORIES,
 // X-EIGEN-ID, and a base64 PHOTO folded across 5 physical lines. Built by joining physical lines with
 // real CRLFs so nothing normalizes them.
-const APPLE_FIXTURE =
-    [
-        'BEGIN:VCARD',
-        'VERSION:3.0',
-        'PRODID:-//Apple Inc.//macOS 14.5//EN',
-        'UID:john-quinlan-doe-1234',
-        'N:Doe;John;Quinlan;;',
-        'FN:John Quinlan Doe',
-        'ORG:Example Corporation;Reliability Engineering',
-        'TITLE:Principal Engineer of Distributed Systems and Site Reliability Engi',
-        ' neering Platforms',
-        'item1.EMAIL;type=INTERNET;type=pref:john.quinlan.doe@example.com',
-        'item1.X-ABLabel:_$!<Work>!$_',
-        'TEL;type=CELL;type=pref:+31 6 12345678',
-        'TEL;type=HOME:+31 30 1234567',
-        'ADR;type=HOME:;;123 Main St;Springfield;IL;62704;USA',
-        'ADR;type=WORK:;;1 Market Sq;Utrecht;;3500;Netherlands',
-        'X-SOCIALPROFILE;type=twitter:https://twitter.com/johnqdoe',
-        'NOTE:Met at the 2026 distributed-systems summit in Utrecht; follow up abo',
-        ' ut the CardDAV sync proposal next quarter.',
-        'BDAY:1973-10-03',
-        'CATEGORIES:Engineering,Utrecht',
-        'X-EIGEN-ID:eig_abc123',
-        'PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBw',
-        ' cJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zND',
-        ' L/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjI',
-        ' yMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAEC',
-        ' AwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII',
-        'END:VCARD',
-    ].join('\r\n') + '\r\n';
+const APPLE_FIXTURE = vcard([
+    'BEGIN:VCARD',
+    'VERSION:3.0',
+    'PRODID:-//Apple Inc.//macOS 14.5//EN',
+    'UID:john-quinlan-doe-1234',
+    'N:Doe;John;Quinlan;;',
+    'FN:John Quinlan Doe',
+    'ORG:Example Corporation;Reliability Engineering',
+    'TITLE:Principal Engineer of Distributed Systems and Site Reliability Engi',
+    ' neering Platforms',
+    'item1.EMAIL;type=INTERNET;type=pref:john.quinlan.doe@example.com',
+    'item1.X-ABLabel:_$!<Work>!$_',
+    'TEL;type=CELL;type=pref:+31 6 12345678',
+    'TEL;type=HOME:+31 30 1234567',
+    'ADR;type=HOME:;;123 Main St;Springfield;IL;62704;USA',
+    'ADR;type=WORK:;;1 Market Sq;Utrecht;;3500;Netherlands',
+    'X-SOCIALPROFILE;type=twitter:https://twitter.com/johnqdoe',
+    'NOTE:Met at the 2026 distributed-systems summit in Utrecht; follow up abo',
+    ' ut the CardDAV sync proposal next quarter.',
+    'BDAY:1973-10-03',
+    'CATEGORIES:Engineering,Utrecht',
+    'X-EIGEN-ID:eig_abc123',
+    'PHOTO;ENCODING=b;TYPE=JPEG:/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBw',
+    ' cJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zND',
+    ' L/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjI',
+    ' yMjIyMjIyMjIyMjL/wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAEC',
+    ' AwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII',
+    'END:VCARD',
+]);
 
 describe('vCard content-line AST', () => {
     test('unfolds a continuation, consuming only the single leading whitespace char', () => {
@@ -77,15 +79,15 @@ describe('vCard content-line AST', () => {
         expect(tel.value).toBe('+31 6 12345678');
     });
 
-    test('escapeText escapes backslash, semicolon, comma, and newline; unescapeText inverts it', () => {
+    test('escapeContentText escapes backslash, semicolon, comma, and newline; unescapeText inverts it', () => {
         const raw = 'a;b,c\\d\ne';
-        expect(escapeText(raw)).toBe('a\\;b\\,c\\\\d\\ne');
-        expect(unescapeText(escapeText(raw))).toBe(raw);
+        expect(escapeContentText(raw)).toBe('a\\;b\\,c\\\\d\\ne');
+        expect(unescapeText(escapeContentText(raw))).toBe(raw);
     });
 
-    test('escapeText drops a bare CR so a value cannot split into a new property line', () => {
-        expect(escapeText('hi\rX-ANYTHING:v')).toBe('hiX-ANYTHING:v');
-        expect(escapeText('a\r\nb')).toBe('a\\nb');
+    test('escapeContentText drops a bare CR so a value cannot split into a new property line', () => {
+        expect(escapeContentText('hi\rX-ANYTHING:v')).toBe('hiX-ANYTHING:v');
+        expect(escapeContentText('a\r\nb')).toBe('a\\nb');
     });
 
     test('buildLine re-quotes and neuters param values so a rewritten line cannot be corrupted or injected', () => {
@@ -152,7 +154,7 @@ describe('vCard content-line AST', () => {
         const serialized = serializeVCardLines([
             makeLine('BEGIN', 'VCARD'),
             makeLine('VERSION', '3.0'),
-            makeLine('NOTE', escapeText(longText)),
+            makeLine('NOTE', escapeContentText(longText)),
             makeLine('END', 'VCARD'),
         ]);
         expect(serialized).toContain('\r\n ');
@@ -470,23 +472,22 @@ describe('vCard 4.0 -> 3.0 transcode', () => {
     // numeric PREF, an ISO-basic BDAY, plus a 4.0-only ANNIVERSARY and an Apple-style grouped EMAIL.
     const photoBytes = Uint8Array.from({ length: 96 }, (_, i) => (i * 11) % 256);
     const photoB64 = Buffer.from(photoBytes).toString('base64');
-    const THUNDERBIRD_FIXTURE =
-        [
-            'BEGIN:VCARD',
-            'VERSION:4.0',
-            'UID:urn:uuid:5c2a9e10-3d4b-4a2f-9c1e-7b6f0a1d2e3f',
-            'FN:Grace Hopper',
-            'N:Hopper;Grace;;;',
-            'ITEM1.EMAIL;PREF=1:grace.hopper@example.com',
-            'EMAIL;PREF=2:ghopper@navy.example',
-            'TEL;VALUE=uri;TYPE=cell;PREF=1:tel:+31 6 87654321',
-            'TEL;VALUE=uri;TYPE=work:tel:+31 30 1234567',
-            'ORG:US Navy',
-            'BDAY;VALUE=date:19061209',
-            'ANNIVERSARY:19301215',
-            `PHOTO:data:image/jpeg;base64,${photoB64}`,
-            'END:VCARD',
-        ].join('\r\n') + '\r\n';
+    const THUNDERBIRD_FIXTURE = vcard([
+        'BEGIN:VCARD',
+        'VERSION:4.0',
+        'UID:urn:uuid:5c2a9e10-3d4b-4a2f-9c1e-7b6f0a1d2e3f',
+        'FN:Grace Hopper',
+        'N:Hopper;Grace;;;',
+        'ITEM1.EMAIL;PREF=1:grace.hopper@example.com',
+        'EMAIL;PREF=2:ghopper@navy.example',
+        'TEL;VALUE=uri;TYPE=cell;PREF=1:tel:+31 6 87654321',
+        'TEL;VALUE=uri;TYPE=work:tel:+31 30 1234567',
+        'ORG:US Navy',
+        'BDAY;VALUE=date:19061209',
+        'ANNIVERSARY:19301215',
+        `PHOTO:data:image/jpeg;base64,${photoB64}`,
+        'END:VCARD',
+    ]);
 
     test('transcodes a Thunderbird 4.0 card to 3.0 with an inline ENCODING=b photo', () => {
         const out = transcodeTo30(THUNDERBIRD_FIXTURE);
@@ -543,14 +544,13 @@ describe('vCard 4.0 -> 3.0 transcode', () => {
     });
 
     test('rewrites a remote 4.0 PHOTO to the 3.0 VALUE=uri form', () => {
-        const input =
-            [
-                'BEGIN:VCARD',
-                'VERSION:4.0',
-                'FN:Remote Photo',
-                'PHOTO;MEDIATYPE=image/png:https://example.com/p.png',
-                'END:VCARD',
-            ].join('\r\n') + '\r\n';
+        const input = vcard([
+            'BEGIN:VCARD',
+            'VERSION:4.0',
+            'FN:Remote Photo',
+            'PHOTO;MEDIATYPE=image/png:https://example.com/p.png',
+            'END:VCARD',
+        ]);
         const out = transcodeTo30(input);
         expect(out).toContain('PHOTO;VALUE=uri:https://example.com/p.png');
         expect(out).not.toContain('MEDIATYPE');

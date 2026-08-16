@@ -8,7 +8,14 @@ import { parseVCard } from '../lib/carddav/vcard-parse';
 import { computeCardEtag } from '../lib/contacts/card-store';
 import type { Contacts } from '../lib/contacts/contacts';
 import * as contactsSchema from '../lib/contacts/schema';
-import { CONTACTS_TEST_ROOT, makeContacts, stageAvatar, validContact } from './contacts-test-helpers';
+import {
+    avatarsDirOf,
+    CONTACTS_TEST_ROOT,
+    cardsDirOf,
+    makeContacts,
+    stageAvatar,
+    validContact,
+} from './contacts-test-helpers';
 
 afterAll(() => {
     try {
@@ -16,11 +23,10 @@ afterAll(() => {
     } catch {}
 });
 
-const cardPathOf = (dir: string, id: string) => join(dir, 'eigen.contacts', 'cards', `${id}.vcf`);
-const avatarsDirOf = (dir: string) => join(dir, 'eigen.contacts', 'avatars');
+const cardPathOf = (dir: string, id: string) => join(cardsDirOf(dir), `${id}.vcf`);
 // What the book actually occupies on disk — the truth size() must keep answering from its running totals.
 const diskBytesOf = (dir: string) =>
-    [join(dir, 'eigen.contacts', 'cards'), avatarsDirOf(dir)]
+    [cardsDirOf(dir), avatarsDirOf(dir)]
         .filter((d) => existsSync(d))
         .flatMap((d) => readdirSync(d).map((name) => statSync(join(d, name)).size))
         .reduce((sum, size) => sum + size, 0);
@@ -142,7 +148,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
 
     test('a create whose staged avatar is gone fails before writing any card', async () => {
         const { contacts, user, dir } = await makeContacts();
-        const cardsDir = join(dir, 'eigen.contacts', 'cards');
+        const cardsDir = cardsDirOf(dir);
         const before = existsSync(cardsDir) ? readdirSync(cardsDir).length : 0;
 
         await expect(
@@ -224,7 +230,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(existsSync(cardPathOf(dir, deletedId))).toBe(false);
         expect(existsSync(deletedAvatarPath)).toBe(false);
         expect(existsSync(keptAvatarPath)).toBe(true);
-        expect(existsSync(join(dir, 'eigen.contacts', 'cards', selfRow.uri))).toBe(true);
+        expect(existsSync(join(cardsDirOf(dir), selfRow.uri))).toBe(true);
         expect(
             db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, deletedId)).get(),
         ).toBeUndefined();

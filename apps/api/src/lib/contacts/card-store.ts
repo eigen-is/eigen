@@ -39,6 +39,22 @@ export function avatarCacheName(contactId: string, bytes: Uint8Array): string {
     return `${contactId}-${computeCardEtag(bytes).slice(0, 8)}.webp`;
 }
 
+const CONTACT_ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'; // randomUUID()
+const PHOTO_HASH = '[0-9a-f]{8}'; // avatarCacheName's hash suffix
+
+// The only two names anything ever writes into `avatars/`: a staged upload (`<uuid>.webp`) and a derived card
+// photo cache (`<uuid>-<hash8>.webp`). Serving is allowlisted to exactly those, so separators, `..` and
+// control characters are refused by construction rather than one blocklist at a time.
+export const AVATAR_FILENAME = new RegExp(`^${CONTACT_ID}(-${PHOTO_HASH})?\\.webp$`);
+const OWN_PHOTO_CACHE = new RegExp(`^${PHOTO_HASH}\\.webp$`);
+
+// Whether `filename` is the cache avatarCacheName derives for THIS contact — built from the same two shapes
+// as the allowlist above. Historical rows may share a staged or legacy name another row still references, so
+// only a card's own hash cache is safe to unlink along with it.
+export function isCardPhotoCacheOf(contactId: string, filename: string): boolean {
+    return filename.startsWith(`${contactId}-`) && OWN_PHOTO_CACHE.test(filename.slice(contactId.length + 1));
+}
+
 // The projection URL the contact index stores for an avatar (cache or staged upload), one home for the shape
 // so the reconcile/cache/upload seams can't drift on it.
 export function avatarUrl(userId: string, name: string): string {

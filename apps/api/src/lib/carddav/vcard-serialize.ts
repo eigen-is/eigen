@@ -6,8 +6,8 @@
 // Everything else — IMPP, URL, X-SOCIALPROFILE, unknown props, VERSION/UID/PRODID/REV — rides through
 // untouched. `createVCard` emits the minimal clean 3.0 card a brand-new contact starts from.
 import type { Address } from '@workspace/lib/types/contact';
-import { stripLineBreaks } from '../core/content-line';
-import { escapeText, makeLine, serializeVCardLines, unescapeText, type VCardLine } from './vcard-ast';
+import { escapeContentText, stripLineBreaks } from '../core/content-line';
+import { makeLine, serializeVCardLines, unescapeText, type VCardLine } from './vcard-ast';
 import type { ParsedCard } from './vcard-parse';
 
 export type CardEdits = Partial<{
@@ -42,7 +42,7 @@ function addressEquals(a: Address, b: Address): boolean {
 
 // PO;ext;street;locality;region;code;country — Eigen owns only the last five components.
 function buildAddressValue(a: Address): string {
-    return `;;${escapeText(a.street ?? '')};${escapeText(a.city ?? '')};${escapeText(a.state ?? '')};${escapeText(a.zipCode ?? '')};${escapeText(a.country ?? '')}`;
+    return `;;${escapeContentText(a.street ?? '')};${escapeContentText(a.city ?? '')};${escapeContentText(a.state ?? '')};${escapeContentText(a.zipCode ?? '')};${escapeContentText(a.country ?? '')}`;
 }
 
 function photoBase64(bytes: Uint8Array): string {
@@ -102,9 +102,9 @@ function firstUnescapedSemi(value: string): number {
 // `NewCorp` -> `NewCorp;Engineering`) — the department is unowned bytes, not ours to destroy.
 function buildOrgValue(card: ParsedCard, company: string): string {
     const existing = card.lines.find((l) => l.name === 'ORG');
-    if (!existing) return escapeText(company);
+    if (!existing) return escapeContentText(company);
     const semi = firstUnescapedSemi(existing.value);
-    return escapeText(company) + (semi === -1 ? '' : existing.value.slice(semi));
+    return escapeContentText(company) + (semi === -1 ? '' : existing.value.slice(semi));
 }
 
 // Order-insensitive multiset equality — CATEGORIES is a set of labels, order carries no meaning.
@@ -131,7 +131,7 @@ function diffText(
         if (pos === -1) toRemove.add(line);
         else remaining.splice(pos, 1);
     }
-    for (const value of remaining) toAppend.push(makeLine(name, escapeText(value)));
+    for (const value of remaining) toAppend.push(makeLine(name, escapeContentText(value)));
 }
 
 // ADR diffs by the mapped Address (field-wise, '' ≡ absent). Existing ADR lines correspond positionally to
@@ -178,8 +178,8 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         const first = edits.firstName ?? card.firstName;
         const last = edits.lastName ?? card.lastName;
         if (first !== card.firstName || last !== card.lastName) {
-            result = rewriteOwned(result, 'N', `${escapeText(last)};${escapeText(first)};;;`);
-            result = rewriteOwned(result, 'FN', escapeText(`${first} ${last}`.trim()));
+            result = rewriteOwned(result, 'N', `${escapeContentText(last)};${escapeContentText(first)};;;`);
+            result = rewriteOwned(result, 'FN', escapeContentText(`${first} ${last}`.trim()));
         }
     }
     if (edits.company !== undefined) {
@@ -187,7 +187,7 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'ORG', changed, edits.company === '' ? null : buildOrgValue(card, edits.company));
     }
     if (edits.jobTitle !== undefined) {
-        const value = edits.jobTitle === '' ? null : escapeText(edits.jobTitle);
+        const value = edits.jobTitle === '' ? null : escapeContentText(edits.jobTitle);
         result = writeSingle(result, 'TITLE', edits.jobTitle !== card.jobTitle, value);
     }
     if (edits.birthday !== undefined) {
@@ -196,11 +196,11 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
         result = writeSingle(result, 'BDAY', birthday !== card.birthday, value);
     }
     if (edits.notes !== undefined) {
-        const value = edits.notes === '' ? null : escapeText(edits.notes);
+        const value = edits.notes === '' ? null : escapeContentText(edits.notes);
         result = writeSingle(result, 'NOTE', edits.notes !== card.notes, value);
     }
     if (edits.categories !== undefined) {
-        const value = edits.categories.length === 0 ? null : edits.categories.map(escapeText).join(',');
+        const value = edits.categories.length === 0 ? null : edits.categories.map(escapeContentText).join(',');
         result = writeSingle(result, 'CATEGORIES', !sameNames(edits.categories, card.categories), value);
     }
     if (edits.eigenId !== undefined) {
@@ -243,17 +243,17 @@ export function createVCard(
         makeLine('VERSION', '3.0'),
         makeLine('PRODID', '-//Eigen//CardDAV//EN'),
         makeLine('UID', uid),
-        makeLine('N', `${escapeText(input.lastName)};${escapeText(input.firstName)};;;`),
-        makeLine('FN', escapeText(`${input.firstName} ${input.lastName}`.trim())),
+        makeLine('N', `${escapeContentText(input.lastName)};${escapeContentText(input.firstName)};;;`),
+        makeLine('FN', escapeContentText(`${input.firstName} ${input.lastName}`.trim())),
     ];
-    for (const email of input.email) lines.push(makeLine('EMAIL', escapeText(email)));
-    for (const phone of input.phone) lines.push(makeLine('TEL', escapeText(phone)));
+    for (const email of input.email) lines.push(makeLine('EMAIL', escapeContentText(email)));
+    for (const phone of input.phone) lines.push(makeLine('TEL', escapeContentText(phone)));
     for (const a of input.address ?? []) lines.push(makeLine('ADR', buildAddressValue(a)));
-    if (input.company) lines.push(makeLine('ORG', escapeText(input.company)));
-    if (input.jobTitle) lines.push(makeLine('TITLE', escapeText(input.jobTitle)));
+    if (input.company) lines.push(makeLine('ORG', escapeContentText(input.company)));
+    if (input.jobTitle) lines.push(makeLine('TITLE', escapeContentText(input.jobTitle)));
     if (input.birthday && ISO_DATE.test(input.birthday)) lines.push(makeLine('BDAY', input.birthday));
-    if (input.notes) lines.push(makeLine('NOTE', escapeText(input.notes)));
-    if (input.categories?.length) lines.push(makeLine('CATEGORIES', input.categories.map(escapeText).join(',')));
+    if (input.notes) lines.push(makeLine('NOTE', escapeContentText(input.notes)));
+    if (input.categories?.length) lines.push(makeLine('CATEGORIES', input.categories.map(escapeContentText).join(',')));
     // Verbatim id, minus the CR/LF that would inject a second content line off the REST body (mirrors the BDAY guard).
     if (input.eigenId) lines.push(makeLine('X-EIGEN-ID', stripLineBreaks(input.eigenId)));
     if (input.photo) lines.push(makeLine('PHOTO', photoBase64(input.photo.bytes), photoParams(input.photo.mediaType)));

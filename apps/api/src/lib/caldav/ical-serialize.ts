@@ -1,12 +1,7 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
-import {
-    neuterParamValue as escapeICalParamValue,
-    escapeContentText as escapeICalText,
-    foldLine,
-    stripLineBreaks,
-} from '../core/content-line';
+import { escapeContentText, foldLine, neuterParamValue, stripLineBreaks } from '../core/content-line';
 import { buildVTimezone } from './vtimezone';
 
 const pad = (n: number) => n.toString().padStart(2, '0');
@@ -55,8 +50,8 @@ function buildVEvent(
     const tzid = normalizeTimezone(event.timezone);
 
     prop('BEGIN:VEVENT');
-    prop(`UID:${escapeICalText(event.uid)}`);
-    prop(`SUMMARY:${escapeICalText(event.title)}`);
+    prop(`UID:${escapeContentText(event.uid)}`);
+    prop(`SUMMARY:${escapeContentText(event.title)}`);
 
     // DTSTART / DTEND
     if (event.allDay) {
@@ -70,8 +65,8 @@ function buildVEvent(
         prop(`DTEND:${formatDateTimeUTC(event.endTime)}`);
     }
 
-    if (event.description) prop(`DESCRIPTION:${escapeICalText(event.description)}`);
-    if (event.location) prop(`LOCATION:${escapeICalText(event.location)}`);
+    if (event.description) prop(`DESCRIPTION:${escapeContentText(event.description)}`);
+    if (event.location) prop(`LOCATION:${escapeContentText(event.location)}`);
 
     prop(`STATUS:${event.status.toUpperCase()}`);
     prop(`SEQUENCE:${event.sequence}`);
@@ -130,7 +125,7 @@ function buildVEvent(
     // ORGANIZER
     const organizer = event.data?.organizer;
     if (organizer) {
-        const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
+        const cn = organizer.name ? `;CN="${neuterParamValue(organizer.name)}"` : '';
         // The email rides through unescaped after mailto:, so strip CR/LF that would otherwise inject a line.
         prop(`ORGANIZER${cn}:mailto:${stripLineBreaks(organizer.email)}`);
     }
@@ -138,13 +133,13 @@ function buildVEvent(
     // ATTENDEE lines — for iMIP, include the organizer as ACCEPTED attendee (RFC 5546)
     const attendees = event.data?.attendees ?? [];
     if (options?.rsvp && organizer && !attendees.some((a) => a.email === organizer.email)) {
-        const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
+        const cn = organizer.name ? `;CN="${neuterParamValue(organizer.name)}"` : '';
         prop(
             `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED${cn}:mailto:${stripLineBreaks(organizer.email)}`,
         );
     }
     for (const attendee of attendees) {
-        const cn = attendee.name ? `;CN="${escapeICalParamValue(attendee.name)}"` : '';
+        const cn = attendee.name ? `;CN="${neuterParamValue(attendee.name)}"` : '';
         const rsvp = options?.rsvp ? ';RSVP=TRUE' : '';
         prop(
             `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${stripLineBreaks(attendee.email)}`,

@@ -155,9 +155,6 @@ export function makeLine(
     };
 }
 
-// RFC 2426 §2.4.2 TEXT escaping — identical to iCal's, so the one implementation lives in core/content-line.
-export { escapeContentText as escapeText } from '../core/content-line';
-
 // One left-to-right pass so an escaped backslash (\\) can't recombine with the next char into a new
 // escape. `\n`/`\N` become newline; every other `\x` drops the backslash.
 export function unescapeText(v: string): string {

@@ -168,14 +168,14 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     )
     .get(
         '/contacts/:ownerId/avatar/:filename',
-        async ({ params, user, set }): Promise<Response> => {
+        async ({ params, user, set }): Promise<ArrayBuffer> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const data = await (await getContacts(user)).downloadAvatar(params.filename);
             if (!data) throw new ApiError(404, 'Avatar not found');
             setCacheHeaders(set, 900);
             set.headers['Content-Type'] = 'image/webp';
-            return new Response(data);
+            return data;
         },
         { auth: true },
     )
