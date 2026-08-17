@@ -9,6 +9,23 @@ export function multistatus(responses: string[], extra?: string): string {
     return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}${extra ?? ''}</D:multistatus>`;
 }
 
+// The 207 envelope every PROPFIND/REPORT answer ships in.
+export function multistatusResponse(responses: string[], extra?: string): Response {
+    return new Response(multistatus(responses, extra), {
+        status: 207,
+        headers: { 'Content-Type': XML_CONTENT_TYPE },
+    });
+}
+
+// DAV:error wrapping one precondition element (RFC 3253 § 1.6), e.g. <D:valid-sync-token/>; namespaces are
+// declared inline so the body stands alone.
+export function davError(status: number, element: string): Response {
+    return new Response(
+        `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CARD="urn:ietf:params:xml:ns:carddav">${element}</D:error>`,
+        { status, headers: { 'Content-Type': XML_CONTENT_TYPE } },
+    );
+}
+
 export function response(href: string, propstats: string[]): string {
     return `<D:response><D:href>${escapeXml(href)}</D:href>${propstats.join('')}</D:response>`;
 }

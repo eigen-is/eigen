@@ -7,11 +7,13 @@ import { parseVCardLines, type VCardLine } from './vcard-ast';
 import {
     addressDataProp,
     cardEtagProp,
-    multistatus,
+    davError,
+    formatSyncToken,
+    multistatusResponse,
+    parseSyncToken,
     propstatNotFound,
     propstatOk,
     response,
-    XML_CONTENT_TYPE,
 } from './xml-builder';
 import { type CardReportRequest, parseCardReport } from './xml-parser';
 
@@ -22,31 +24,9 @@ export const REPORT_BODY_MAX_BYTES = 1_048_576;
 const MULTIGET_HREF_LIMIT = 500;
 const QUERY_RESULT_CAP = 1000;
 
-function xmlResponse(responses: string[], extra?: string): Response {
-    return new Response(multistatus(responses, extra), {
-        status: 207,
-        headers: { 'Content-Type': XML_CONTENT_TYPE },
-    });
-}
-
 // RFC 6578 recovery: a token the book can't honour (stale generation, future ctag, or malformed) forces the
 // client to redo the full comparison. sabre answers 412 with D:valid-sync-token; the design follows it (§ 1).
-function invalidSyncToken(): Response {
-    return new Response(
-        `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:"><D:valid-sync-token/></D:error>`,
-        { status: 412, headers: { 'Content-Type': XML_CONTENT_TYPE } },
-    );
-}
-
-// A 403 carrying a single CardDAV precondition element (CARD:supported-collation / CARD:supported-filter). RFC
-// 6352 § 8.6 requires match-only query responses, so an unevaluable filter is refused rather than answered with
-// a superset a client would treat as all-matching.
-function davPrecondition(element: string): Response {
-    return new Response(
-        `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav"><CARD:${element}/></D:error>`,
-        { status: 403, headers: { 'Content-Type': XML_CONTENT_TYPE } },
-    );
-}
+const invalidSyncToken = () => davError(412, '<D:valid-sync-token/>');
 
 // REPORT on /dav/addressbooks/:ownerId/contacts/ — addressbook-multiget, addressbook-query, or sync-collection.
 export async function handleCardReport(contacts: Contacts, ownerId: string, body: string): Promise<Response> {
@@ -55,9 +35,11 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
         report = parseCardReport(body);
     } catch (e) {
         // The filter parser throws these two when a query names an unsupported collation or an unmappable
-        // element; everything else (malformed XML, unknown root) is a plain 400.
-        if (e instanceof UnsupportedCollationError) return davPrecondition('supported-collation');
-        if (e instanceof UnsupportedFilterError) return davPrecondition('supported-filter');
+        // element. RFC 6352 § 8.6 requires match-only query responses, so an unevaluable filter is refused
+        // with its precondition rather than answered with a superset a client would treat as all-matching;
+        // everything else (malformed XML, unknown root) is a plain 400.
+        if (e instanceof UnsupportedCollationError) return davError(403, '<CARD:supported-collation/>');
+        if (e instanceof UnsupportedFilterError) return davError(403, '<CARD:supported-filter/>');
         return new Response('Bad Request: invalid REPORT', { status: 400 });
     }
 
@@ -71,13 +53,12 @@ export async function handleCardReport(contacts: Contacts, ownerId: string, body
     }
 }
 
-// The address-data body a REPORT row serves: the full stored bytes, or — when the client asked for a property
+// The address-data body a REPORT row serves: the full stored text, or — when the client asked for a property
 // subset (partial retrieval, RFC 6352 § 10.4.2) — the projection down to that subset plus the mandatory
 // skeleton. partialProps is null for full retrieval (the parser never yields an empty list), so a non-empty
 // subset is the only projection trigger. A stored card that won't parse can't be projected, so it's served
 // whole rather than 500-ing the whole REPORT — the same skip-on-throw stance the query loop takes below.
-function resolveAddressData(bytes: Uint8Array, partialProps: string[] | null): string {
-    const text = new TextDecoder().decode(bytes);
+function resolveAddressData(text: string, partialProps: string[] | null): string {
     if (!partialProps?.length) return text;
     try {
         return projectAddressData(text, partialProps);
@@ -95,11 +76,11 @@ async function handleMultiget(
 
     const prefix = bookHref(ownerId);
     const responses: string[] = [];
-    // One response per resource: a client that lists the same href N times (or spells it N equivalent ways)
-    // must not make us retain N copies of one card's bytes during assembly — the 500-count cap bounds the
-    // request shape, this dedupe re-anchors the response size to the (quota-bounded) book. Keyed by the folded
-    // uri for a resolvable href, by the raw href (uriKeys never contain ':') for an unresolvable one, so a
-    // repeated 404 collapses too. First occurrence wins, preserving request order.
+    // One response per resource: a client listing one href N ways must not make us retain N copies of the
+    // card's bytes — the 500-count cap bounds the request, this dedupe re-anchors the response to the book.
+    // Keyed by folded uri when resolvable, by `raw:`+href otherwise so repeated 404s collapse too; stored
+    // uris can't contain ':' (sanitizeCardUri), so a raw: key never shadows a real card. First occurrence
+    // wins, preserving request order.
     const seen = new Set<string>();
     for (const href of report.hrefs) {
         // Normalise an absolute-path href down to the book prefix (caldav report.ts:72-75), then percent-decode
@@ -129,10 +110,12 @@ async function handleMultiget(
         }
         const props = [...cardEtagProp(card.etag)];
         // Full bytes verbatim, or the partial-retrieval projection when the client asked for a prop subset.
-        if (report.wantsData) props.push(addressDataProp(resolveAddressData(card.bytes, report.partialProps)));
+        if (report.wantsData) {
+            props.push(addressDataProp(resolveAddressData(new TextDecoder().decode(card.bytes), report.partialProps)));
+        }
         responses.push(response(cardHref(ownerId, uri), [propstatOk(props)]));
     }
-    return xmlResponse(responses);
+    return multistatusResponse(responses);
 }
 
 // addressbook-query: match-only server-side filtering (RFC 6352 § 8.6 — clients treat every returned card as a
@@ -147,37 +130,37 @@ async function handleQuery(
     if (!report.filter) return new Response('Bad Request: addressbook-query requires a filter', { status: 400 });
     const filter = report.filter;
 
-    // Each card's bytes are read once and kept, so a matching card is never fetched twice (the query's payload
-    // is the card, like multiget).
-    const matched: { uri: string; etag: string; bytes: Uint8Array }[] = [];
+    // The limit and cap bound the ASSEMBLY, not just the response: matching stops at the cap instead of
+    // retaining every remaining match's bytes (spec § 4 pins truncate + log). Book order is kept, so the
+    // served set equals slicing afterwards.
+    const cap = Math.min(report.limit ?? QUERY_RESULT_CAP, QUERY_RESULT_CAP);
+    const matched: { uri: string; etag: string; text: string }[] = [];
     for (const card of await contacts.listCards()) {
+        if (matched.length >= cap) {
+            if (cap === QUERY_RESULT_CAP) {
+                console.warn(`carddav: addressbook-query hit the ${QUERY_RESULT_CAP}-result cap, truncating`);
+            }
+            break;
+        }
         const got = await contacts.getCard(card.uri);
         if (!got) continue; // vanished under us — the drain tombstones it, this query just skips it
+        const text = new TextDecoder().decode(got.bytes);
         let lines: VCardLine[];
         try {
-            lines = parseVCardLines(new TextDecoder().decode(got.bytes));
+            lines = parseVCardLines(text);
         } catch {
             continue; // a stored card that won't parse can't match a filter (the same-stat replacement edge)
         }
-        if (matchCard(lines, filter)) matched.push({ uri: card.uri, etag: got.etag, bytes: got.bytes });
+        if (matchCard(lines, filter)) matched.push({ uri: card.uri, etag: got.etag, text });
     }
 
-    // Client limit first, then the server cap: over the cap we truncate and log once rather than assemble an
-    // unbounded response (spec § 4 pins truncate + log).
-    let results = matched;
-    if (report.limit !== null && results.length > report.limit) results = results.slice(0, report.limit);
-    if (results.length > QUERY_RESULT_CAP) {
-        console.warn(`carddav: addressbook-query matched ${results.length} cards, truncating to ${QUERY_RESULT_CAP}`);
-        results = results.slice(0, QUERY_RESULT_CAP);
-    }
-
-    const responses = results.map((r) => {
+    const responses = matched.map((r) => {
         const props = [...cardEtagProp(r.etag)];
-        // Full bytes verbatim, or the partial-retrieval projection when the client asked for a prop subset.
-        if (report.wantsData) props.push(addressDataProp(resolveAddressData(r.bytes, report.partialProps)));
+        // Full text verbatim, or the partial-retrieval projection when the client asked for a prop subset.
+        if (report.wantsData) props.push(addressDataProp(resolveAddressData(r.text, report.partialProps)));
         return response(cardHref(ownerId, r.uri), [propstatOk(props)]);
     });
-    return xmlResponse(responses);
+    return multistatusResponse(responses);
 }
 
 async function handleSyncCollection(
@@ -194,28 +177,26 @@ async function handleSyncCollection(
             responses.push(await cardRow(contacts, ownerId, card, report.wantsData));
         }
     } else {
-        const m = /^urn:eigen:sync:(\d+)-(\d+)$/.exec(report.syncToken);
-        if (!m) return invalidSyncToken();
-        const gen = Number(m[1]);
-        const since = Number(m[2]);
+        const token = parseSyncToken(report.syncToken);
+        if (!token) return invalidSyncToken();
         // A stale generation (index rebuilt → syncGen rotated) OR a ctag ahead of the book both force a clean
-        // full resync — the latter is the CalDAV bug the design must not inherit (report.ts:139-166 answers a
-        // post-rebuild future token with an empty delta and a LOWER token, permanently stalling that client).
-        if (gen !== book.syncGen || since > book.ctag) return invalidSyncToken();
+        // full resync — answering a post-restore future token with an empty delta and a LOWER token would
+        // stall that client permanently (the live CalDAV bug this branch also fixed, caldav/report.ts).
+        if (token.gen !== book.syncGen || token.since > book.ctag) return invalidSyncToken();
 
-        for (const card of await contacts.getChangedCardsSince(since)) {
+        for (const card of await contacts.getChangedCardsSince(token.since)) {
             responses.push(await cardRow(contacts, ownerId, card, report.wantsData));
         }
         // One tombstone row per uri (the tombstone PK + putCard's tombstone-clear on recreate guarantee no
-        // href appears as both a 200 and a 404 in one response — the other CalDAV bug the design must not inherit).
-        for (const d of await contacts.getDeletedCardsSince(since)) {
+        // href appears as both a 200 and a 404 in one response — the dup-href CalDAV bug this branch fixed at
+        // the calendar's three tombstone sites).
+        for (const d of await contacts.getDeletedCardsSince(token.since)) {
             responses.push(response(cardHref(ownerId, d.uri), ['<D:status>HTTP/1.1 404 Not Found</D:status>']));
         }
     }
 
     // RFC 6578: the current token is appended after the responses.
-    const token = `urn:eigen:sync:${book.syncGen}-${book.ctag}`;
-    return xmlResponse(responses, `<D:sync-token>${token}</D:sync-token>`);
+    return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(book)}</D:sync-token>`);
 }
 
 async function cardRow(contacts: Contacts, ownerId: string, card: CardRow, wantsData: boolean): Promise<string> {

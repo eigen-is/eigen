@@ -34,6 +34,17 @@ function parseAddressbookPath(wildcard: string): ParsedPath {
     return { ok: true, book: decoded[0] ?? null, uri: decoded[1] ?? null };
 }
 
+// The shared GET/PUT/DELETE card-resource tail: fixed-book check, then sanitize the client-chosen name before
+// it can become a filename (the AGENTS.md path rule). Returns the refusal Response to serve as-is.
+function resolveCardUri(parsed: ParsedPath): { uri: string } | Response {
+    if (!parsed.ok) return new Response('Bad Request', { status: 400 });
+    if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
+    if (!parsed.uri) return new Response('Bad Request', { status: 400 });
+    const uri = sanitizeCardUri(parsed.uri);
+    if (!uri) return new Response('Bad Request', { status: 400 });
+    return { uri };
+}
+
 export const carddavRouter = new Elysia({ name: 'carddav' })
     // PROPFIND /dav/addressbooks/:ownerId — addressbook home (the /* route catches the trailing-slash variant)
     .route('PROPFIND', '/dav/addressbooks/:ownerId', async ({ request, params }) => {
@@ -76,20 +87,16 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
         const parsed = parseAddressbookPath(params['*']);
-        if (!parsed.ok) return new Response('Bad Request', { status: 400 });
-        if (!parsed.uri) {
+        // The stub answers any well-formed collection URL before the book check — the CalDAV twin's order.
+        if (parsed.ok && !parsed.uri) {
             return new Response('This is a CardDAV endpoint. Use a CardDAV client.', {
                 status: 200,
                 headers: { 'Content-Type': 'text/plain' },
             });
         }
-        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
-
-        // The card name is client-chosen and becomes a filename, so it is sanitized before any store call (the
-        // AGENTS.md path rule); getCard then serves the stored bytes verbatim or 404s.
-        const uri = sanitizeCardUri(parsed.uri);
-        if (!uri) return new Response('Bad Request', { status: 400 });
-        return handleGetCard(await getContacts(user), uri);
+        const resolved = resolveCardUri(parsed);
+        if (resolved instanceof Response) return resolved;
+        return handleGetCard(await getContacts(user), resolved.uri);
     })
 
     // PUT a card resource — create or replace. One fixed book named 'contacts'; the name is sanitized before it
@@ -98,32 +105,24 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .put('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const parsed = parseAddressbookPath(params['*']);
-        if (!parsed.ok) return new Response('Bad Request', { status: 400 });
-        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
-        if (!parsed.uri) return new Response('Bad Request', { status: 400 });
-        const uri = sanitizeCardUri(parsed.uri);
-        if (!uri) return new Response('Bad Request', { status: 400 });
+        const resolved = resolveCardUri(parseAddressbookPath(params['*']));
+        if (resolved instanceof Response) return resolved;
 
         const body = await request.text();
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
-        return handlePutCard(await getContacts(user), params.ownerId, uri, body, ifMatch, ifNoneMatch);
+        return handlePutCard(await getContacts(user), params.ownerId, resolved.uri, body, ifMatch, ifNoneMatch);
     })
 
     // DELETE a card resource — 404 for an unknown name (DAV DELETE is not idempotent), 403 for your own card.
     .delete('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const parsed = parseAddressbookPath(params['*']);
-        if (!parsed.ok) return new Response('Bad Request', { status: 400 });
-        if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
-        if (!parsed.uri) return new Response('Bad Request', { status: 400 });
-        const uri = sanitizeCardUri(parsed.uri);
-        if (!uri) return new Response('Bad Request', { status: 400 });
+        const resolved = resolveCardUri(parseAddressbookPath(params['*']));
+        if (resolved instanceof Response) return resolved;
 
         const ifMatch = request.headers.get('If-Match');
-        return handleDeleteCard(await getContacts(user), uri, ifMatch);
+        return handleDeleteCard(await getContacts(user), resolved.uri, ifMatch);
     })
 
     // REPORT — addressbook-multiget, addressbook-query, sync-collection. Targets the book collection (a REPORT

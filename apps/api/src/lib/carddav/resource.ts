@@ -1,16 +1,6 @@
 import type { Contacts } from '../contacts/contacts';
 import { cardHref } from './discovery';
-import { XML_CONTENT_TYPE } from './xml-builder';
-
-// RFC 6352 precondition error body: a DAV:error wrapping one CardDAV precondition element — `no-uid-conflict`
-// for a UID a different resource already owns (§ 6.3.2), `max-resource-size` for a PUT over the advertised
-// ceiling (§ 6.2.3). The CARD namespace is declared inline so the body stands on its own.
-function cardDavError(status: number, element: string): Response {
-    return new Response(
-        `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:" xmlns:CARD="urn:ietf:params:xml:ns:carddav"><CARD:${element}/></D:error>`,
-        { status, headers: { 'Content-Type': XML_CONTENT_TYPE } },
-    );
-}
+import { davError } from './xml-builder';
 
 // GET /dav/addressbooks/:ownerId/contacts/:uri — the stored bytes verbatim (the file IS the resource), with the
 // content hash as a quoted ETag. A uri the index doesn't know is a 404.
@@ -54,8 +44,10 @@ export async function handlePutCard(
         return new Response(null, { status: 204, headers: { ETag: `"${result.etag}"` } });
     }
     if (result.error === 'precondition') return new Response('Precondition Failed', { status: 412 });
-    if (result.error === 'uid-conflict') return cardDavError(412, 'no-uid-conflict');
-    if (result.error === 'too-large') return cardDavError(413, 'max-resource-size');
+    // RFC 6352 precondition bodies: no-uid-conflict for a UID a different resource already owns (§ 6.3.2),
+    // max-resource-size for a PUT over the advertised ceiling (§ 6.2.3).
+    if (result.error === 'uid-conflict') return davError(412, '<CARD:no-uid-conflict/>');
+    if (result.error === 'too-large') return davError(413, '<CARD:max-resource-size/>');
     if (result.error === 'quota') return new Response('Insufficient Storage', { status: 507 });
     return new Response(result.message ?? 'Bad Request', { status: 400 });
 }
