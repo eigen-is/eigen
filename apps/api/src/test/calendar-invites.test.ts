@@ -261,6 +261,47 @@ describe('Calendar Invites', () => {
             expect(changed[0].eventCtag).not.toBeNull();
             expect(deleted).toHaveLength(0);
         });
+
+        test('a colliding (calendarId, uri) insert fails without a phantom ctag bump', async () => {
+            const bobHome = await getHome(ctx.bob.user.id);
+            const cal = bobHome.calendar;
+            const defaultCal = findOrFail(cal.getCalendars(), (c) => c.isDefault);
+            const uid = `collide-${randomUUID()}`;
+            const payload = {
+                uid,
+                title: 'Colliding Invite',
+                description: null,
+                location: null,
+                startTime: new Date('2026-11-12T09:00:00Z'),
+                endTime: new Date('2026-11-12T10:00:00Z'),
+                allDay: false,
+                rrule: null,
+                timezone: null,
+                status: 'confirmed' as const,
+                sequence: 0,
+                data: {
+                    organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
+                    organizerEventId: `org-a-${uid}`,
+                },
+                createByUserId: ctx.alice.user.id,
+                organizerEventId: `org-a-${uid}`,
+                organizerUserId: ctx.alice.user.id,
+            };
+            cal.receiveInvitation(payload);
+            const preCtag = cal.getCalendarById(defaultCal.id)!.ctag;
+
+            // The same uid (→ same uri) under a different organizer key slips past the linked-event dedupe and
+            // collides on the (calendarId, uri) unique index. The failure must not leave a phantom ctag bump —
+            // every client would poll an empty delta for it.
+            expect(() =>
+                cal.receiveInvitation({
+                    ...payload,
+                    organizerEventId: `org-b-${uid}`,
+                    organizerUserId: ctx.charlie.user.id,
+                }),
+            ).toThrow();
+            expect(cal.getCalendarById(defaultCal.id)!.ctag).toBe(preCtag);
+        });
     });
 
     describe('Linked event guard', () => {

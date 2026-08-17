@@ -1070,39 +1070,47 @@ export class Calendar {
 
         // Mirror createEvent's tombstone-clear + eventCtag stamp: without them a re-received invite whose uri
         // a local delete already tombstoned syncs as ONLY a 404 (the client drops the live event), and a NULL
-        // eventCtag hides the row from getChangedEventsSince (>eventCtag) in every delta.
-        this.incrementCtag(defaultCal.id);
-        const newCtag = this.getCalendarById(defaultCal.id)!.ctag;
-        this.db
-            .delete(schema.eventTombstones)
-            .where(and(eq(schema.eventTombstones.calendarId, defaultCal.id), eq(schema.eventTombstones.uri, uri)))
-            .run();
-
-        this.db
-            .insert(schema.events)
-            .values({
-                id,
-                calendarId: defaultCal.id,
-                uid: payload.uid,
-                uri,
-                title: payload.title,
-                description: payload.description,
-                location: payload.location,
-                startTime: payload.startTime,
-                endTime: payload.endTime,
-                allDay: payload.allDay,
-                rrule: payload.rrule,
-                timezone: payload.timezone,
-                status: payload.status,
-                sequence: payload.sequence,
-                etag,
-                data: payload.data,
-                organizerEventId: payload.organizerEventId,
-                organizerUserId: payload.organizerUserId,
-                createByUserId: payload.createByUserId,
-                eventCtag: newCtag,
-            })
-            .run();
+        // eventCtag hides the row from getChangedEventsSince (>eventCtag) in every delta. One transaction (the
+        // moveEvent pattern): the insert can still fail on a (calendarId, uri) collision the linked-event
+        // guard doesn't cover, and a phantom ctag bump must not survive that.
+        this.db.transaction((tx) => {
+            tx.update(schema.calendars)
+                .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
+                .where(eq(schema.calendars.id, defaultCal.id))
+                .run();
+            const newCtag = tx
+                .select({ ctag: schema.calendars.ctag })
+                .from(schema.calendars)
+                .where(eq(schema.calendars.id, defaultCal.id))
+                .get()!.ctag;
+            tx.delete(schema.eventTombstones)
+                .where(and(eq(schema.eventTombstones.calendarId, defaultCal.id), eq(schema.eventTombstones.uri, uri)))
+                .run();
+            tx.insert(schema.events)
+                .values({
+                    id,
+                    calendarId: defaultCal.id,
+                    uid: payload.uid,
+                    uri,
+                    title: payload.title,
+                    description: payload.description,
+                    location: payload.location,
+                    startTime: payload.startTime,
+                    endTime: payload.endTime,
+                    allDay: payload.allDay,
+                    rrule: payload.rrule,
+                    timezone: payload.timezone,
+                    status: payload.status,
+                    sequence: payload.sequence,
+                    etag,
+                    data: payload.data,
+                    organizerEventId: payload.organizerEventId,
+                    organizerUserId: payload.organizerUserId,
+                    createByUserId: payload.createByUserId,
+                    eventCtag: newCtag,
+                })
+                .run();
+        });
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
         const organizer = payload.data?.organizer;
