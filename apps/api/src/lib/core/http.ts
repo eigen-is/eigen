@@ -26,6 +26,24 @@ export function etagMatches(header: string, etag: string): boolean {
         .includes(etag);
 }
 
+// RFC 7232 If-Match matcher for DAV write seams (CalDAV/CardDAV) whose stored etag is a bare content
+// hash the handler quotes only in the response. `*` means "the resource exists", so null never matches;
+// §3.1 mandates STRONG comparison, so a member of the comma-list matches only after its quotes are
+// stripped — a weak `W/` validator never matches. Callers 412 when If-Match is present and this is false.
+export function matchesIfMatch(header: string, etag: string | null): boolean {
+    if (header === '*') return etag !== null;
+    if (etag === null) return false;
+    return header.split(',').some((raw) => raw.trim().replace(/^"|"$/g, '') === etag);
+}
+
+// The If-None-Match counterpart: §3.2 weak comparison strips each member's `W/` prefix before the quote
+// strip. `*` still means "the resource exists". Callers 412 when If-None-Match is present and this is true.
+export function matchesIfNoneMatch(header: string, etag: string | null): boolean {
+    if (header === '*') return etag !== null;
+    if (etag === null) return false;
+    return header.split(',').some((raw) => raw.trim().replace(/^W\//, '').replace(/^"|"$/g, '') === etag);
+}
+
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,
 // 'unsatisfiable' when a range was requested but can't be served (caller responds 416),
 // or null when there's no Range header (caller serves the full 200 body).

@@ -165,6 +165,189 @@ describe('CalDAV', () => {
         expect(getRes.status).toBe(404);
     });
 
+    // --- RFC 7232 If-Match / If-None-Match on the write seam (mirrors the CardDAV precondition tests) ---
+
+    test('If-Match: * succeeds against an existing event for PUT and DELETE', async () => {
+        const uid = 'caldav-ifmatch-star@eigen';
+        const uri = 'caldav-ifmatch-star.ics';
+        const ics = (summary: string) =>
+            `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260701T100000Z\r\nDTEND:20260701T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics('Star Create'),
+            }),
+        );
+        expect(create.status).toBe(201);
+
+        const update = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': '*',
+                },
+                body: ics('Star Update'),
+            }),
+        );
+        expect(update.status).toBe(204);
+
+        const del = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'DELETE',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'If-Match': '*' },
+            }),
+        );
+        expect(del.status).toBe(204);
+    });
+
+    test('If-Match with an etag on a missing event is 412 and creates nothing', async () => {
+        const uri = 'caldav-ifmatch-missing.ics';
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-ifmatch-missing@eigen\r\nSUMMARY:Should Not Exist\r\nDTSTART:20260702T100000Z\r\nDTEND:20260702T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': '"nonexistent-etag"',
+                },
+                body: ics,
+            }),
+        );
+        expect(res.status).toBe(412);
+
+        const get = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(get.status).toBe(404);
+    });
+
+    test('If-Match with a stale etag is 412 and leaves the stored event untouched', async () => {
+        const uid = 'caldav-ifmatch-stale@eigen';
+        const uri = 'caldav-ifmatch-stale.ics';
+        const ics = (summary: string) =>
+            `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260703T100000Z\r\nDTEND:20260703T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics('Original'),
+            }),
+        );
+        expect(create.status).toBe(201);
+        const etag = create.headers.get('ETag');
+
+        const stale = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': '"stale-etag"',
+                },
+                body: ics('Overwritten'),
+            }),
+        );
+        expect(stale.status).toBe(412);
+
+        const get = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(get.status).toBe(200);
+        const body = await get.text();
+        expect(body).toContain('Original');
+        expect(body).not.toContain('Overwritten');
+        expect(get.headers.get('ETag')).toBe(etag);
+    });
+
+    test('a non-star If-None-Match matching the current etag is 412', async () => {
+        const uid = 'caldav-inm-current@eigen';
+        const uri = 'caldav-inm-current.ics';
+        const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:INM Current\r\nDTSTART:20260704T100000Z\r\nDTEND:20260704T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(create.status).toBe(201);
+        const etag = create.headers.get('ETag');
+
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': etag!,
+                },
+                body: ics,
+            }),
+        );
+        expect(res.status).toBe(412);
+    });
+
+    test('a comma-list If-Match containing the current etag succeeds', async () => {
+        const uid = 'caldav-ifmatch-list@eigen';
+        const uri = 'caldav-ifmatch-list.ics';
+        const ics = (summary: string) =>
+            `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260705T100000Z\r\nDTEND:20260705T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics('List Create'),
+            }),
+        );
+        expect(create.status).toBe(201);
+        const etag = create.headers.get('ETag');
+
+        const update = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': `"deadbeef", ${etag}`,
+                },
+                body: ics('List Update'),
+            }),
+        );
+        expect(update.status).toBe(204);
+    });
+
     test('PUT all-day event stores correct UTC midnight times', async () => {
         const ics = [
             'BEGIN:VCALENDAR',

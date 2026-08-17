@@ -2,6 +2,7 @@ import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
 import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
+import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
 import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
@@ -30,18 +31,16 @@ export async function handlePut(
     userId: string,
 ): Promise<Response> {
     const existingEvent = calendar.getEventByUri(calendarId, uri);
+    const currentEtag = existingEvent?.etag ?? null;
 
-    // If-None-Match: * means "create only, fail if exists"
-    if (ifNoneMatch === '*' && existingEvent) {
+    // RFC 7232 preconditions against the state the write overwrites (mirrors CardDAV's putCard): If-None-Match
+    // fails when the header matches (e.g. `*` on an existing event), If-Match when it doesn't (a stale token,
+    // or any token against a missing resource).
+    if (ifNoneMatch !== null && matchesIfNoneMatch(ifNoneMatch, currentEtag)) {
         return new Response('Precondition Failed', { status: 412 });
     }
-
-    // If-Match: "etag" means "update only if etag matches"
-    if (ifMatch && existingEvent) {
-        const cleanEtag = ifMatch.replace(/"/g, '');
-        if (existingEvent.etag !== cleanEtag) {
-            return new Response('Precondition Failed', { status: 412 });
-        }
+    if (ifMatch !== null && !matchesIfMatch(ifMatch, currentEtag)) {
+        return new Response('Precondition Failed', { status: 412 });
     }
 
     let events: ReturnType<typeof parseIcs>['events'];
@@ -118,11 +117,8 @@ export function handleDelete(calendar: Calendar, calendarId: string, uri: string
         return new Response('Not Found', { status: 404 });
     }
 
-    if (ifMatch) {
-        const cleanEtag = ifMatch.replace(/"/g, '');
-        if (event.etag !== cleanEtag) {
-            return new Response('Precondition Failed', { status: 412 });
-        }
+    if (ifMatch !== null && !matchesIfMatch(ifMatch, event.etag)) {
+        return new Response('Precondition Failed', { status: 412 });
     }
 
     calendar.deleteByUri(calendarId, uri);

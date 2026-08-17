@@ -5,7 +5,7 @@ import type { ParsedCard } from '../carddav/vcard-parse';
 import { parseVCard } from '../carddav/vcard-parse';
 import { mergeVCard } from '../carddav/vcard-serialize';
 import { transcodeTo30 } from '../carddav/vcard-transcode';
-import { ApiError } from '../core';
+import { ApiError, matchesIfMatch, matchesIfNoneMatch } from '../core';
 import { pushUserProfile } from '../home/home-relay';
 import { deriveCardPhotoCache, downloadAvatar } from './avatars';
 import { CARD_MAX_BYTES, computeCardEtag, sanitizeCardUri, uriKeyOf, writeCardFile } from './card-store';
@@ -37,17 +37,6 @@ export type PutCardResult =
 // The typed outcome of a DAV DELETE: a 404 for an unknown uri, a 403 for your own card, or a 412 for a stale
 // If-Match. Mirrors PutCardResult so both write seams name their result once.
 export type DeleteCardResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' | 'self-delete' };
-
-// RFC 7232 precondition matching for the DAV write seam. `*` means "the resource exists" (not a literal
-// etag); a value is a comma-separated list of entity-tags, each optionally weak (`W/`) and quoted — it
-// matches when any member equals the current (unquoted) etag. Stored etags are bare content hashes, so a
-// header entry is compared after stripping its weak prefix and surrounding quotes. Used by both putCard
-// (If-Match / If-None-Match) and deleteCard (If-Match).
-function preconditionMatches(header: string, etag: string | null): boolean {
-    if (header === '*') return etag !== null;
-    if (etag === null) return false;
-    return header.split(',').some((raw) => raw.trim().replace(/^W\//, '').replace(/^"|"$/g, '') === etag);
-}
 
 // The index-only reads the protocol handlers sit on. Each drains a pending failed pair before
 // observing the index so no DAV read is served past a torn write (fail-closed, spec § 1), exactly as
@@ -189,10 +178,10 @@ export async function putCard(
             .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
             .get();
         const currentEtag = existing?.etag ?? null;
-        if (pre.ifNoneMatch !== null && preconditionMatches(pre.ifNoneMatch, currentEtag)) {
+        if (pre.ifNoneMatch !== null && matchesIfNoneMatch(pre.ifNoneMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
-        if (pre.ifMatch !== null && !preconditionMatches(pre.ifMatch, currentEtag)) {
+        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, currentEtag)) {
             return { ok: false, error: 'precondition' };
         }
 
@@ -338,7 +327,7 @@ export async function deleteCard(
             });
             return { ok: false, error: 'self-delete' };
         }
-        if (pre.ifMatch !== null && !preconditionMatches(pre.ifMatch, row.etag)) {
+        if (pre.ifMatch !== null && !matchesIfMatch(pre.ifMatch, row.etag)) {
             return { ok: false, error: 'precondition' };
         }
         await contacts.purgeCard(row);
