@@ -43,6 +43,16 @@ export function currentUserPrincipalProp(userId: string): string {
     return `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`;
 }
 
+// RFC 6578 token, the calendar ctag stamped into a sync URN. The only two sites allowed to spell the
+// grammar — emit/parse drift would 412 every client into a full-resync loop. No generation stamp: unlike the
+// carddav twin, the CalDAV index is never rebuilt, so the ctag alone pins a sync point.
+export const formatSyncToken = (ctag: number) => `urn:eigen:sync:${ctag}`;
+
+export function parseSyncToken(token: string): { since: number } | null {
+    const m = /^urn:eigen:sync:(\d+)$/.exec(token);
+    return m ? { since: Number(m[1]) } : null;
+}
+
 // Calendar collection properties (for listing calendars)
 export function calendarCollectionProps(cal: CalendarItem): string[] {
     return [
@@ -50,7 +60,7 @@ export function calendarCollectionProps(cal: CalendarItem): string[] {
         `<D:displayname>${escapeXml(cal.name)}</D:displayname>`,
         `<ICAL:calendar-color>${escapeXml(cal.color)}</ICAL:calendar-color>`,
         `<CS:getctag>${cal.ctag}</CS:getctag>`,
-        `<D:sync-token>urn:eigen:sync:${cal.ctag}</D:sync-token>`,
+        `<D:sync-token>${formatSyncToken(cal.ctag)}</D:sync-token>`,
         `<C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>`,
         // macOS Contacts/Calendar keys on supported-report-set to pick sync-collection and is documented not
         // to fall back when it's missing (spec § 4).

@@ -601,6 +601,50 @@ describe('CalDAV', () => {
         expect(syncXml).toContain('sync-test-1.ics');
     });
 
+    test('REPORT with an unknown root element is 400', async () => {
+        const body = `<?xml version="1.0" encoding="utf-8"?>
+<D:not-a-real-report xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:not-a-real-report>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('REPORT with an empty body is 400, never a full etag dump', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('sync-collection rejects a malformed or legacy-format token with 412 valid-sync-token', async () => {
+        // The legacy `urn:eigen:sync/N` slash form is no longer accepted — an unrecognised token is simply invalid.
+        for (const token of ['urn:eigen:sync/5', 'urn:eigen:sync:abc', 'nonsense']) {
+            const body = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>${token}</D:sync-token>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+            const res = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    method: 'REPORT',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                    body,
+                }),
+            );
+            expect(res.status).toBe(412);
+            expect(await res.text()).toContain('valid-sync-token');
+        }
+    });
+
     test('PUT preserves SEQUENCE from ICS', async () => {
         const ics = [
             'BEGIN:VCALENDAR',

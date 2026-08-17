@@ -2,6 +2,7 @@ import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
 import { multistatus, propstatOk, response, XML_CONTENT_TYPE } from './xml-builder';
 
+// removeNSPrefix strips the D:/C:/ICAL: prefixes, so property lookups below stay unprefixed — no fallback needed.
 const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
 
 // MKCALENDAR /dav/calendars/:ownerId/:calendarId/
@@ -12,14 +13,14 @@ export function handleMkcalendar(calendar: Calendar, body: string): Response {
     if (body?.trim()) {
         try {
             const parsed = parser.parse(body);
-            const mkcal = parsed['mkcalendar'] || parsed['C:mkcalendar'] || {};
-            const set = mkcal['set'] || mkcal['D:set'] || {};
-            const prop = set['prop'] || set['D:prop'] || {};
+            const mkcal = parsed['mkcalendar'] || {};
+            const set = mkcal['set'] || {};
+            const prop = set['prop'] || {};
 
-            const displayName = prop['displayname'] || prop['D:displayname'];
+            const displayName = prop['displayname'];
             if (displayName && typeof displayName === 'string') name = displayName;
 
-            const calColor = prop['calendar-color'] || prop['ICAL:calendar-color'];
+            const calColor = prop['calendar-color'];
             if (calColor && typeof calColor === 'string') color = calColor;
         } catch {
             // Ignore XML parse errors — use defaults
@@ -46,17 +47,17 @@ export async function handleProppatch(
     if (body?.trim()) {
         try {
             const parsed = parser.parse(body);
-            const propertyupdate = parsed['propertyupdate'] || parsed['D:propertyupdate'] || {};
-            const set = propertyupdate['set'] || propertyupdate['D:set'] || {};
-            const prop = set['prop'] || set['D:prop'] || {};
+            const propertyupdate = parsed['propertyupdate'] || {};
+            const set = propertyupdate['set'] || {};
+            const prop = set['prop'] || {};
 
-            const displayName = prop['displayname'] || prop['D:displayname'];
+            const displayName = prop['displayname'];
             if (displayName && typeof displayName === 'string') {
                 updates.name = displayName;
                 updatedProps.push('<D:displayname/>');
             }
 
-            const calColorRaw = prop['calendar-color'] || prop['ICAL:calendar-color'];
+            const calColorRaw = prop['calendar-color'];
             const calColor =
                 typeof calColorRaw === 'string'
                     ? calColorRaw

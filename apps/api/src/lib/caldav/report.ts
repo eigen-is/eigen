@@ -6,7 +6,9 @@ import {
     calendarDataProp,
     davError,
     eventEtagProp,
+    formatSyncToken,
     multistatusResponse,
+    parseSyncToken,
     propstatNotFound,
     propstatOk,
     response,
@@ -18,6 +20,10 @@ import { parseReport, type ReportRequest } from './xml-parser';
 // asks for more than this many resources in one round-trip.
 export const REPORT_BODY_MAX_BYTES = 1_048_576;
 const MULTIGET_HREF_LIMIT = 500;
+
+// RFC 6578 recovery: a token the calendar can't honour (future ctag or malformed) forces the client to redo
+// the full comparison. sabre answers 412 with D:valid-sync-token; the design follows it (§ 1).
+const invalidSyncToken = () => davError(412, '<D:valid-sync-token/>');
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export function handleReport(
@@ -31,7 +37,8 @@ export function handleReport(
     try {
         report = parseReport(body);
     } catch {
-        return new Response('Bad Request: invalid XML', { status: 400 });
+        // Empty body, unparseable XML, or an unknown REPORT root all reject here — never a silent etag dump.
+        return new Response('Bad Request: invalid REPORT', { status: 400 });
     }
 
     switch (report.type) {
@@ -41,8 +48,6 @@ export function handleReport(
             return handleCalendarMultiget(calendar, calendarId, ownerId, report);
         case 'sync-collection':
             return handleSyncCollection(calendar, calendarId, calendarItem, ownerId, report);
-        default:
-            return new Response('Unsupported report type', { status: 400 });
     }
 }
 
@@ -52,6 +57,8 @@ function handleCalendarQuery(
     ownerId: string,
     report: ReturnType<typeof parseReport>,
 ): Response {
+    // Only the time-range filter is applied; other prop-filters are intentionally ignored. A CalDAV client
+    // re-filters the returned set, so a superset response is safe (RFC 4791 calendar-query).
     let events: CalendarEventRow[];
     if (report.timeRange) {
         events = calendar.getRawEventsInRange(calendarId, report.timeRange.start, report.timeRange.end);
@@ -140,25 +147,15 @@ function handleSyncCollection(
         const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
         responses.push(...buildEventResponses(events, ownerId, calendarId, wantsData));
     } else {
-        // Incremental sync — parse ctag from token
-        // Accept both old `/sync/N` and new `:sync:N` separators so clients with stored
-        // pre-rename tokens don't need a forced full resync.
-        const tokenMatch = report.syncToken.match(/sync[/:](\d+)$/);
-        if (!tokenMatch) {
-            // Invalid sync token — client must do full resync
-            return davError(403, '<D:valid-sync-token/>');
-        }
-
-        const sinceCtag = parseInt(tokenMatch[1], 10);
+        // Incremental sync — read the since-ctag from the token.
+        const token = parseSyncToken(report.syncToken);
+        if (!token) return invalidSyncToken();
         // A token ahead of the calendar (post-restore/rebuild) can't be honoured either: an empty delta plus
-        // a LOWER token would stall the client forever, blind to every change until the ctag catches back up
-        // (the guard the carddav twin shipped with).
-        if (sinceCtag > currentCtag) {
-            return davError(403, '<D:valid-sync-token/>');
-        }
+        // a LOWER token would stall the client forever, blind to every change until the ctag catches back up.
+        if (token.since > currentCtag) return invalidSyncToken();
 
         // Changed events
-        const changed = calendar.getChangedEventsSince(calendarId, sinceCtag);
+        const changed = calendar.getChangedEventsSince(calendarId, token.since);
         for (const event of changed) {
             if (event.parentEventId) continue;
             const href = `${prefix}${event.uri}`;
@@ -166,14 +163,14 @@ function handleSyncCollection(
         }
 
         // Deleted events
-        const deleted = calendar.getDeletedEventsSince(calendarId, sinceCtag);
+        const deleted = calendar.getDeletedEventsSince(calendarId, token.since);
         for (const d of deleted) {
             responses.push(response(`${prefix}${d.uri}`, [`<D:status>HTTP/1.1 404 Not Found</D:status>`]));
         }
     }
 
     // Build response with sync-token appended after responses (required by RFC 6578)
-    return multistatusResponse(responses, `<D:sync-token>urn:eigen:sync:${currentCtag}</D:sync-token>`);
+    return multistatusResponse(responses, `<D:sync-token>${formatSyncToken(currentCtag)}</D:sync-token>`);
 }
 
 function buildEventResponses(
