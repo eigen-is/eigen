@@ -279,8 +279,8 @@ describe('vCard projection parse', () => {
 describe('vCard merge + builder', () => {
     test('a name-only edit leaves every typed TEL/EMAIL/ADR/X- line byte-identical', () => {
         const out = mergeVCard(parseVCard(APPLE_FIXTURE), { firstName: 'Bob' });
-        // The owned name lines are rewritten from the projection...
-        expect(out).toContain('N:Doe;Bob;;;');
+        // The owned name components (family, given) are rewritten; the unowned N tail (Quinlan) rides through.
+        expect(out).toContain('N:Doe;Bob;Quinlan;;');
         expect(out).toContain('FN:Bob Doe');
         expect(out).not.toContain('N:Doe;John;Quinlan;;');
         expect(out).not.toContain('FN:John Quinlan Doe');
@@ -465,14 +465,47 @@ describe('vCard merge + builder', () => {
         expect(out).not.toContain('ORG:Example Corporation');
     });
 
-    test('unchanged names keep the N middle name byte-for-byte; a real change pays the pinned form', () => {
+    test('unchanged names keep the N middle name byte-for-byte; a real change preserves the unowned N tail', () => {
         const unchanged = mergeVCard(parseVCard(APPLE_FIXTURE), { firstName: 'John', lastName: 'Doe' });
         expect(unchanged).toContain('N:Doe;John;Quinlan;;');
         expect(unchanged).toContain('FN:John Quinlan Doe');
 
+        // A real rename rewrites only family+given; the additional name (Quinlan) rides through untouched.
         const changed = mergeVCard(parseVCard(APPLE_FIXTURE), { lastName: 'Smith' });
-        expect(changed).toContain('N:Smith;John;;;');
+        expect(changed).toContain('N:Smith;John;Quinlan;;');
         expect(changed).toContain('FN:John Smith');
+    });
+
+    test('a real name change preserves the unowned N tail (additional name, honorific prefix, suffix)', () => {
+        // An Apple contact carries five N components; Eigen owns only family+given. Renaming in the web app must
+        // not silently drop the middle name, prefix, or suffix from the phone on next sync — mirrors ORG's
+        // department preservation.
+        const card = vcard([
+            'BEGIN:VCARD',
+            'VERSION:3.0',
+            'N:Doe;John;Quincy;Dr.;Jr.',
+            'FN:Dr. John Quincy Doe Jr.',
+            'END:VCARD',
+        ]);
+        const out = mergeVCard(parseVCard(card), { firstName: 'Jane', lastName: 'Smith' });
+        expect(out).toContain('N:Smith;Jane;Quincy;Dr.;Jr.');
+        expect(out).toContain('FN:Jane Smith');
+        expect(out).not.toContain('N:Doe;John;Quincy;Dr.;Jr.');
+    });
+
+    test('a short N (only family+given) is rewritten with the clean five-component shape', () => {
+        // With fewer than two component separators there is no tail to preserve, so it falls back to `;;;`.
+        const card = vcard(['BEGIN:VCARD', 'VERSION:3.0', 'N:Doe;John', 'FN:John Doe', 'END:VCARD']);
+        const out = mergeVCard(parseVCard(card), { lastName: 'Smith' });
+        expect(out).toContain('N:Smith;John;;;');
+    });
+
+    test('an escaped semicolon in an owned N component does not shift the preserved tail', () => {
+        // firstUnescapedSemi skips '\;', so the real family|given boundary is found even when the family name
+        // carries one — the tail (Quincy) is sliced from the second true separator, not the escaped one.
+        const card = vcard(['BEGIN:VCARD', 'VERSION:3.0', 'N:Do\\;e;John;Quincy;;', 'FN:John Do;e', 'END:VCARD']);
+        const out = mergeVCard(parseVCard(card), { firstName: 'Jane', lastName: 'Smith' });
+        expect(out).toContain('N:Smith;Jane;Quincy;;');
     });
 
     test('createVCard emits a minimal clean 3.0 card that parses back to its projection', () => {

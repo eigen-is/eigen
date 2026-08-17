@@ -107,6 +107,20 @@ function buildOrgValue(card: ParsedCard, company: string): string {
     return escapeContentText(company) + (semi === -1 ? '' : existing.value.slice(semi));
 }
 
+// A name change keeps the N tail from the second unescaped ';' verbatim (`Doe;John;Quincy;Dr.;Jr.` ->
+// `Smith;Jane;Quincy;Dr.;Jr.`) — components 3-5 are unowned, not ours to destroy (the buildOrgValue rule).
+// No N line, or fewer than two unescaped ';' -> the clean `family;given;;;` shape.
+function buildNameValue(card: ParsedCard, first: string, last: string): string {
+    const owned = `${escapeContentText(last)};${escapeContentText(first)}`;
+    const existing = card.lines.find((l) => l.name === 'N');
+    if (!existing) return `${owned};;;`;
+    const firstSemi = firstUnescapedSemi(existing.value);
+    if (firstSemi === -1) return `${owned};;;`;
+    const secondSemi = firstUnescapedSemi(existing.value.slice(firstSemi + 1));
+    if (secondSemi === -1) return `${owned};;;`;
+    return owned + existing.value.slice(firstSemi + 1 + secondSemi);
+}
+
 // Order-insensitive multiset equality — CATEGORIES is a set of labels, order carries no meaning.
 function sameNames(a: string[], b: string[]): boolean {
     if (a.length !== b.length) return false;
@@ -172,13 +186,14 @@ export function mergeVCard(card: ParsedCard, edits: CardEdits): string {
     let result = card.lines.filter((l) => !toRemove.has(l));
 
     // Single-value owned props are value-keyed: only a genuinely changed value rewrites its line, so an
-    // unchanged name/company/… on a full-projection save keeps its exact bytes (Apple's N middle name, an
-    // ORG department). N/FN are rewritten as a pair, or skipped entirely when neither name changed.
+    // unchanged name/company/… on a full-projection save keeps its exact bytes (an ORG department). N/FN are
+    // rewritten as a pair — buildNameValue preserving Apple's N middle name, honorific prefix and suffix across a
+    // real rename too, not just an unchanged-value skip — or skipped entirely when neither name changed.
     if (edits.firstName !== undefined || edits.lastName !== undefined) {
         const first = edits.firstName ?? card.firstName;
         const last = edits.lastName ?? card.lastName;
         if (first !== card.firstName || last !== card.lastName) {
-            result = rewriteOwned(result, 'N', `${escapeContentText(last)};${escapeContentText(first)};;;`);
+            result = rewriteOwned(result, 'N', buildNameValue(card, first, last));
             result = rewriteOwned(result, 'FN', escapeContentText(`${first} ${last}`.trim()));
         }
     }
