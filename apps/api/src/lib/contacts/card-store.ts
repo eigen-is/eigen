@@ -1,5 +1,5 @@
-// Plain helpers over the vCard card files and their derived keys — the storage seam Tasks 8–13 build the
-// file-backed Contacts refit on. `Contacts` stays the facade; these are the mount/*.ts-style free functions.
+// Plain helpers over the vCard card files and their derived keys — the storage seam the file-backed
+// Contacts refit builds on. `Contacts` stays the facade; these are the mount/*.ts-style free functions.
 // The cards live under `cards/` in the contacts home; each is one vCard whose filename is its CardDAV
 // resource name (uri).
 import { EIGEN_ACCENT_COLORS } from '@workspace/lib/constants/colors';

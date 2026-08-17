@@ -41,7 +41,7 @@ const formSchema = z
             (data.lastName ? data.lastName.trim().length > 0 : false),
         {
             message: 'Either first name or last name is required',
-            path: ['firstName'], // This will show the error on the firstName field
+            path: ['firstName'],
         },
     );
 
@@ -246,7 +246,6 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                         />
                                     </div>
 
-                                    {/* Labels */}
                                     <FormField
                                         control={form.control}
                                         name="labels"

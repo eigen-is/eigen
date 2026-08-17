@@ -9,11 +9,11 @@ import {
 } from './query-filter';
 
 // Same config as caldav/xml-parser.ts (removeNSPrefix drops the D:/CARD: prefixes so lookups stay
-// prefix-agnostic) with one difference the CardDAV reports force (review finding 5): the isArray callback is
-// jPath-aware. `href` is always a list. `prop` is a list ONLY as the partial-retrieval child of
-// `address-data` (jPath `…address-data.prop`) — a name-only isArray('prop') would also turn the top-level
-// <D:prop> request container into an array, and the `Object.keys(root.prop)` idiom that reads the requested
-// prop names (caldav/xml-parser.ts:82-83) would then come back empty, silently zeroing wantsData/partialProps.
+// prefix-agnostic) with one difference the CardDAV reports force: the isArray callback is jPath-aware.
+// `href` is always a list. `prop` is a list ONLY as the partial-retrieval child of `address-data` (jPath
+// `…address-data.prop`) — a name-only isArray('prop') would also turn the top-level <D:prop> request
+// container into an array, and the `Object.keys(root.prop)` idiom that reads the requested prop names
+// (as in caldav/xml-parser.ts) would then come back empty, silently zeroing wantsData/partialProps.
 const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
@@ -142,7 +142,7 @@ function parseFilter(raw: unknown): QueryFilter {
 }
 
 // Parse a CardDAV REPORT body into one of the three request shapes. An unrecognised root or unparseable XML
-// throws so the handler answers 400 (the caldav report.ts:25-29 contract). An addressbook-query filter that
+// throws so the handler answers 400 (the caldav report.ts contract). An addressbook-query filter that
 // names an unsupported collation or an unmappable element throws the two typed errors above, which the handler
 // maps to their 403 preconditions.
 export function parseCardReport(xml: string): CardReportRequest {
@@ -170,7 +170,7 @@ export function parseCardReport(xml: string): CardReportRequest {
     if (sync) {
         const { wantsData } = readProps(sync);
         const token = sync['sync-token'];
-        // An empty <D:sync-token/> parses to '' — the initial-full-sync signal (caldav/xml-parser.ts:79).
+        // An empty <D:sync-token/> parses to '' — the initial-full-sync signal (same as caldav/xml-parser.ts).
         return { type: 'sync-collection', syncToken: token ? String(token) : undefined, wantsData };
     }
 

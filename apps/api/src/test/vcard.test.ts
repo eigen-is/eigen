@@ -440,7 +440,7 @@ describe('vCard merge + builder', () => {
     });
 
     test('the REST seam echoing the full projection with unchanged values is a byte-for-byte no-op', () => {
-        // Task 8's updateContact sends every owned key on every save; value-keyed single-value merges must
+        // updateContact sends every owned key on every save; value-keyed single-value merges must
         // rewrite nothing when the value is unchanged, or the ORG department and N middle name are lost.
         const card = parseVCard(APPLE_FIXTURE);
         const out = mergeVCard(card, {

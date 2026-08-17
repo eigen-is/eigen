@@ -5,7 +5,7 @@
 import { parseVCardLines, serializeVCardLines, type VCardLine } from './vcard-ast';
 
 // Kept in every projection regardless of the requested subset: RFC 6352 § 10.4.2 requires VERSION+UID in any
-// returned card, BEGIN/END frame the envelope, and FN/N make the result a usable vCard — the plan pins all six.
+// returned card, BEGIN/END frame the envelope, and FN/N make the result a usable vCard.
 // Names are uppercase to match the AST's uppercased VCardLine.name.
 const SKELETON = new Set(['BEGIN', 'END', 'VERSION', 'UID', 'FN', 'N']);
 

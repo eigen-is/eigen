@@ -23,7 +23,6 @@ function handleStaleWrite(queryClient: QueryClient, ownerId: string, id: string,
     return false;
 }
 
-// Fetch all contacts
 export function useContacts() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
@@ -41,7 +40,6 @@ export function useContacts() {
     });
 }
 
-// Add a new contact
 export function useAddContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -58,7 +56,6 @@ export function useAddContact() {
     });
 }
 
-// Update an existing contact
 export function useUpdateContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -78,7 +75,6 @@ export function useUpdateContact() {
     });
 }
 
-// Delete a contact
 export function useDeleteContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();

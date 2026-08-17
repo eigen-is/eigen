@@ -122,7 +122,7 @@ describe('CalDAV client sync on web-created events', () => {
         const override = vevents.find((v) => v.includes('RECURRENCE-ID'));
         expect(override).toBeDefined();
         // The rid must name the ORIGINAL slot (Monday 12:00 Amsterdam), not the moved time —
-        // an unlinked rid makes clients render the original occurrence too (audit #C).
+        // an unlinked rid makes clients render the original occurrence too.
         const rid = override!.match(/RECURRENCE-ID[^:\r\n]*:([0-9TZ]+)/)?.[1];
         expect(rid).toBe('20260713T120000');
     });

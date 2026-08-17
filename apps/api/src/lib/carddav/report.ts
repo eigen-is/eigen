@@ -83,7 +83,7 @@ async function handleMultiget(
     // wins, preserving request order.
     const seen = new Set<string>();
     for (const href of report.hrefs) {
-        // Normalise an absolute-path href down to the book prefix (caldav report.ts:72-75), then percent-decode
+        // Normalise an absolute-path href down to the book prefix (the caldav report.ts move), then percent-decode
         // the single resource segment. A malformed escape or a href outside this book is a 404 row, not a throw.
         const normalized = href.replace(/^\/+/, '/');
         const encodedUri = normalized.startsWith(prefix) ? normalized.slice(prefix.length) : '';

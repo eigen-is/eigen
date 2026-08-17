@@ -12,7 +12,7 @@ export const contactKeys = {
     me: (ownerId: string) => [...contactKeys.owner(ownerId), 'me'] as const,
 };
 
-// Define query keys for reuse
+// Query keys for labels
 export const labelKeys = {
     all: ['labels'] as const,
     owner: (ownerId: string) => [...labelKeys.all, ownerId] as const,

@@ -1,4 +1,4 @@
-// Maps a parsed vCard (Task 2 AST) down to the projection the contact index stores and the CardDAV sync
+// Maps a parsed vCard AST down to the projection the contact index stores and the CardDAV sync
 // layer diffs against. Only the properties Eigen owns are extracted; the untouched AST rides along in
 // `lines` so a write can merge edits back without disturbing properties we don't understand.
 import type { Address } from '@workspace/lib/types/contact';

@@ -568,7 +568,7 @@ describe('Calendar Invites', () => {
         });
     });
 
-    // Audit #9: an attendee editing a local-only field (reminder) on their linked copy must NOT run the
+    // An attendee editing a local-only field (reminder) on their linked copy must NOT run the
     // organizer fan-out. Pre-fix it bumped the linked copy's SEQUENCE and sent an iMIP "Updated
     // invitation" to external co-attendees with the attendee spoofed as ORGANIZER — and because the
     // bumped SEQUENCE then outran the organizer's, the organizer's next real update was dropped by the
@@ -672,7 +672,7 @@ describe('Calendar Invites', () => {
         });
     });
 
-    // Audit #24: every write path must hash the etag over the same basis. rsvpForOccurrence used to
+    // Every write path must hash the etag over the same basis. rsvpForOccurrence used to
     // omit `timezone`, so a byte-identical repeat RSVP flipped the exception's etag and triggered a
     // spurious CalDAV re-download.
     describe('#24 occurrence-RSVP etag consistency', () => {

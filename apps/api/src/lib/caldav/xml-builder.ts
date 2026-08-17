@@ -53,7 +53,7 @@ export function calendarCollectionProps(cal: CalendarItem): string[] {
         `<D:sync-token>urn:eigen:sync:${cal.ctag}</D:sync-token>`,
         `<C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>`,
         // macOS Contacts/Calendar keys on supported-report-set to pick sync-collection and is documented not
-        // to fall back when it's missing (spec § 4, CalDAV broken window #1).
+        // to fall back when it's missing (spec § 4).
         `<D:supported-report-set><D:supported-report><D:report><C:calendar-query/></D:report></D:supported-report><D:supported-report><D:report><C:calendar-multiget/></D:report></D:supported-report><D:supported-report><D:report><D:sync-collection/></D:report></D:supported-report></D:supported-report-set>`,
     ];
 }

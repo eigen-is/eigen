@@ -14,7 +14,6 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/_auth/edit/$filterType/$filterId')({
     component: EditContactRoute,
     validateSearch: (search: Record<string, unknown>) => {
-        // Parse and validate the search params
         const result = searchSchema.safeParse(search);
 
         if (!result.success) {

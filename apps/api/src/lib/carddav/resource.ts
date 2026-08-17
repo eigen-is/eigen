@@ -20,7 +20,7 @@ export async function handleGetCard(contacts: Contacts, uri: string): Promise<Re
 
 // PUT /dav/addressbooks/:ownerId/contacts/:uri — store the client's card and map the typed PutCardResult to its
 // HTTP status. Preconditions, UID rules, quota, transcode, and the self-link decision all live in putCard,
-// evaluated inside the mutation lock (§ 3); this only translates the outcome. The etag hashes the stored bytes,
+// evaluated inside the mutation lock (spec § 3); this only translates the outcome. The etag hashes the stored bytes,
 // so a 4.0 client that PUT gets the 3.0 form's etag back and re-converges on its next fetch.
 export async function handlePutCard(
     contacts: Contacts,

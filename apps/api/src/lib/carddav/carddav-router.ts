@@ -12,9 +12,9 @@ import {
 import { handleCardReport, REPORT_BODY_MAX_BYTES } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
 
-// The wildcard under /dav/addressbooks/:ownerId/ decoded to at most two segments — the book and, optionally, a
-// card resource name. Card names are client-chosen, so every segment is percent-decoded (the webdav/xml.ts
-// convention); a malformed escape or a third segment is a client error, not a silent misroute (spec § 4).
+// The wildcard decodes to at most two segments — the book and an optional card name. Card names are
+// client-chosen, so every segment is percent-decoded (the webdav/xml.ts convention); a malformed escape or a
+// third segment is a client error, not a silent misroute (spec § 4).
 type ParsedPath = { ok: true; book: string | null; uri: string | null } | { ok: false };
 
 function parseAddressbookPath(wildcard: string): ParsedPath {
@@ -99,9 +99,8 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         return handleGetCard(await getContacts(user), resolved.uri);
     })
 
-    // PUT a card resource — create or replace. One fixed book named 'contacts'; the name is sanitized before it
-    // reaches putCard (which turns it into a filename), and the preconditions ride the If-Match / If-None-Match
-    // headers into the store, evaluated inside its write lock (§ 3).
+    // PUT a card resource — create or replace. The name is sanitized before putCard turns it into a filename,
+    // and the If-Match / If-None-Match preconditions are evaluated inside the store's write lock (spec § 3).
     .put('/dav/addressbooks/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);

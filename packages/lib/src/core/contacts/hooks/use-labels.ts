@@ -6,7 +6,6 @@ import type { Label } from '@workspace/lib/types/label';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateLabelCreated, invalidateLabelDeleted, invalidateLabelUpdated, labelKeys } from './keys';
 
-// Hook to fetch all labels
 export function useLabels() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
@@ -24,7 +23,6 @@ export function useLabels() {
     });
 }
 
-// Hook to add a label
 export function useAddLabel() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -41,7 +39,6 @@ export function useAddLabel() {
     });
 }
 
-// Hook to update a label
 export function useUpdateLabel() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -61,7 +58,6 @@ export function useUpdateLabel() {
     });
 }
 
-// Hook to delete a label
 export function useDeleteLabel() {
     const queryClient = useQueryClient();
     const { user } = useAuth();

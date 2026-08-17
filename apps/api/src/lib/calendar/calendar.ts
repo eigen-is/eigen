@@ -225,7 +225,7 @@ export class Calendar {
 
         // A create re-using a previously deleted uri clears its tombstone in the same step as the insert, so a
         // delete-then-recreate never lists one href as both a 200 (changed) and a 404 (deleted) in a single
-        // sync response (RFC 6578 forbids duplicate member URLs; spec § 1, CalDAV broken window #2).
+        // sync response (RFC 6578 forbids duplicate member URLs; spec § 1).
         this.db
             .delete(schema.eventTombstones)
             .where(and(eq(schema.eventTombstones.calendarId, calendarId), eq(schema.eventTombstones.uri, uri)))
@@ -354,7 +354,7 @@ export class Calendar {
             .map(dbEventToCalendarEventRow);
     }
 
-    // Drop exception rows a CalDAV full-resource replace no longer carries (audit #D). Deliberately
+    // Drop exception rows a CalDAV full-resource replace no longer carries. Deliberately
     // quiet: no tombstone (the client-visible resource is the master, whose etag changes via touch)
     // and no cancellation fan-out (removing an override RESTORES the base occurrence).
     public deleteExceptions(calendarId: string, parentEventId: string, ids: string[]): void {
@@ -576,7 +576,7 @@ export class Calendar {
         // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
         // reminders/color above) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
         // organizer AND outruns the organizer's SEQUENCE, so the RFC 5546 replay guard later drops the
-        // organizer's real updates (audit #9). Mirror the attendee discriminator at the top of updateEvent.
+        // organizer's real updates. Mirror the attendee discriminator at the top of updateEvent.
         if (user && !existing.data?.organizer && updated.data?.attendees?.length) {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
@@ -798,7 +798,7 @@ export class Calendar {
                     const modEvt = dbEventToCalendarEvent(modified);
                     // Keep the stored exception key, not the UTC date of the (possibly moved) startTime —
                     // the FE round-trips occurrenceDate into scope='this' RSVPs, and a drifted key would
-                    // miss getException and duplicate the exception row (audit #E).
+                    // miss getException and duplicate the exception row.
                     results.push({
                         ...modEvt,
                         occurrenceDate: occ.occurrenceDate,
@@ -1192,7 +1192,7 @@ export class Calendar {
 
     // Inbound iMIP: an external organizer moved ONE occurrence of a recurring invite (a lone VEVENT
     // with a RECURRENCE-ID). Land it as an exception on the linked series — feeding it to
-    // receiveInvitationUpdate would rewrite the master and collapse the whole series (audit #A).
+    // receiveInvitationUpdate would rewrite the master and collapse the whole series.
     public receiveInvitationException(
         orgEventId: string,
         orgUserId: string,
@@ -1278,7 +1278,7 @@ export class Calendar {
     // Re-key an inbound iMIP RECURRENCE-ID against the stored series' timezone. The payload is a single
     // VEVENT with no master, so the parser can't know the series tz; a UTC-Z RECURRENCE-ID (Exchange
     // clients, Eigen's own tz-null exceptions) would otherwise key on the UTC date and attach the
-    // exception to the wrong occurrence (audit #8). `recurrenceInstant` is set only for that Z-form case.
+    // exception to the wrong occurrence. `recurrenceInstant` is set only for that Z-form case.
     private recurrenceKeyForSeries(
         recurrenceDate: string,
         recurrenceInstant: Date | null | undefined,
@@ -1291,7 +1291,7 @@ export class Calendar {
     }
 
     // Inbound iMIP: an external organizer cancelled ONE occurrence of a recurring invite. Cancel just
-    // that instance — removeInvitation would delete the attendee's entire linked series (audit #B).
+    // that instance — removeInvitation would delete the attendee's entire linked series.
     public cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,

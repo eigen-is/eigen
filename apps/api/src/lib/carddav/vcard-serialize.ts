@@ -1,5 +1,5 @@
 // Writes Eigen-owned edits back into a stored vCard while preserving every byte we don't own. Owned
-// properties are diffed against the parsed projection (Task 3): a multi-value line (EMAIL/TEL/ADR) whose
+// properties are diffed against the parsed projection: a multi-value line (EMAIL/TEL/ADR) whose
 // value is unchanged keeps its exact source bytes, a removed value drops its line (plus any now-orphaned
 // same-group X- label), and an edited single-value property is rewritten in place — keeping the first line's
 // group and params, and taking the whole property name so no repeated line of it survives the edit.
@@ -80,8 +80,8 @@ function rewriteOwned(lines: VCardLine[], name: string, value: string, params?: 
     return next;
 }
 
-// Value-keyed write for a single-value owned prop: an unchanged value leaves the line byte-identical (the
-// Task 8 full-replacement seam echoes every owned key on every save, so presence alone must not rewrite).
+// Value-keyed write for a single-value owned prop: an unchanged value leaves the line byte-identical
+// (updateContact echoes every owned key on every save, so presence alone must not rewrite).
 // A changed or cleared value owns every line named `name`.
 function writeSingle(lines: VCardLine[], name: string, changed: boolean, value: string | null): VCardLine[] {
     if (!changed) return lines;

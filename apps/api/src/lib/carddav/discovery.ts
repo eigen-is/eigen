@@ -13,7 +13,7 @@ export const ADDRESSBOOK_ID = 'contacts';
 
 // The two href shapes every CardDAV surface emits (discovery, REPORT rows, the PUT Location header), so the
 // book segment and the escaping rule live in one place. Card names are client-chosen, so the resource segment
-// is percent-encoded — the webdav/xml.ts:53 convention the CalDAV template skips (its uris are server-made).
+// is percent-encoded — the webdav/xml.ts convention the CalDAV template skips (its uris are server-made).
 export const bookHref = (ownerId: string) => `/dav/addressbooks/${ownerId}/${ADDRESSBOOK_ID}/`;
 export const cardHref = (ownerId: string, uri: string) => `${bookHref(ownerId)}${encodeURIComponent(uri)}`;
 

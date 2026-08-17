@@ -101,11 +101,11 @@ function buildVEvent(
 
     // RECURRENCE-ID names the ORIGINAL occurrence being overridden, in the master's TZID form
     // (RFC 5545). The exception's own startTime may have been moved — echoing it back produces an
-    // override that matches no occurrence, so clients render the original slot too (audit #C).
+    // override that matches no occurrence, so clients render the original slot too.
     // The master's tz (not the exception's) decides the form: legacy exception rows hold timezone:null.
     if (event.recurrenceDate) {
-        // An unkeyable legacy value falls back to the exception's own startTime (the pre-#C shape:
-        // a possibly-orphaned override beats 500ing the whole resource).
+        // An unkeyable legacy value falls back to the exception's own startTime (a possibly-orphaned
+        // override beats 500ing the whole resource).
         const key = storedRecurrenceKey(event.recurrenceDate);
         if (event.allDay) {
             const compact = key ? key.replace(/-/g, '') : formatDateUTC(event.startTime);

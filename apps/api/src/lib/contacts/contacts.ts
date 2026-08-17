@@ -426,7 +426,7 @@ export class Contacts {
 
     // A commit that threw after its file was already persisted left the index behind that file. Re-read the
     // recorded uris and re-commit each (or tombstone a vanished one) before the caller reads the index. Runs
-    // inside the caller's writeLock; the directory-wide reconcile it becomes part of is Task 11.
+    // inside the caller's writeLock.
     private async drainDirty(): Promise<void> {
         if (this.dirtyCards.size === 0) return;
         for (const uri of [...this.dirtyCards]) {
@@ -521,7 +521,7 @@ export class Contacts {
     }
 
     // Read one card file into the index row + label names to (re)commit for it, regenerating a missing
-    // inline-photo cache (Task 10 seam). The self-link is left `''` here and assigned to the single ranked
+    // inline-photo cache. The self-link is left `''` here and assigned to the single ranked
     // winner afterwards (see `selfClaimRank`/`applySelfLink`) so no loser is ever written or indexed as self.
     // `id` is the stable contact id (an existing row's or a fresh one), `existingUid` the uid fallback.
     private async prepareCardRow(
@@ -1051,7 +1051,7 @@ export class Contacts {
             const categories = this.labelNamesFor(contact.labels ?? []);
             // REST is a full replacement, so every owned key is present; the merge is value-keyed, so
             // unchanged values keep their exact bytes. eigenId is omitted — the file's X-EIGEN-ID isn't
-            // REST-owned here (rematch is Task 11).
+            // REST-owned (the reconcile rematch manages it).
             const edits: CardEdits = {
                 firstName: contact.firstName.trim(),
                 lastName: contact.lastName.trim(),
@@ -1704,7 +1704,7 @@ export class Contacts {
     }
 
     // ---- CardDAV store seam ----
-    // The index-only reads the protocol handlers (Tasks 14–18) sit on. Each drains a pending failed pair before
+    // The index-only reads the protocol handlers sit on. Each drains a pending failed pair before
     // observing the index so no DAV read is served past a torn write (fail-closed, spec § 1), exactly as
     // getContacts does — which is why they are async even where the shape looks synchronous.
 

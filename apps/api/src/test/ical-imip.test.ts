@@ -223,7 +223,7 @@ describe('iMIP Outbound Email Composition', () => {
 
     // A scope:'this' RSVP answers ONE occurrence of a recurring series. The REPLY must carry a
     // RECURRENCE-ID for the ORIGINAL occurrence (RFC 5546), or an external organizer (Google/Outlook)
-    // applies the PARTSTAT to the whole series — the outbound mirror of the inbound #H fix.
+    // applies the PARTSTAT to the whole series — the outbound mirror of the inbound occurrence-scoping fix.
     const RECURRING_EVENT: CalendarEvent = {
         ...MOCK_EVENT,
         startTime: new Date('2026-04-01T14:00:00Z'), // 10:00 America/New_York
@@ -366,7 +366,7 @@ describe('iMIP Inbound Processing (integration)', () => {
     });
 
     // A malformed external invite (DTEND < DTSTART) must still land — clamped to zero-duration, never a
-    // negative-duration row and never silently dropped (finding #2, iMIP inbound path).
+    // negative-duration row and never silently dropped.
     test('delivering a REQUEST with a reversed interval clamps it to zero-duration', async () => {
         const ics = [
             'BEGIN:VCALENDAR',
@@ -1382,7 +1382,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         expect(cancelled!.recurrenceDate).toBe('2026-04-08');
     });
 
-    // Audit #8 (iMIP variant): an Exchange-lineage organizer sends the RECURRENCE-ID in UTC-Z form with
+    // An Exchange-lineage organizer sends the RECURRENCE-ID in UTC-Z form with
     // no VTIMEZONE. The lone exception VEVENT carries no usable tz, so the key must come from the linked
     // series' stored timezone — otherwise a cross-midnight-UTC occurrence keys on the UTC date and the
     // move attaches to the wrong instance.
@@ -1440,7 +1440,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
         expect(exception!.recurrenceDate).toBe('2026-04-08'); // pre-fix: '2026-04-09' (UTC date)
     });
 
-    // Finding 2: receiveInvitationException mirrors receiveInvitationUpdate's RFC 5546 replay guard —
+    // receiveInvitationException mirrors receiveInvitationUpdate's RFC 5546 replay guard —
     // a stale/replayed occurrence REQUEST must not overwrite a newer exception.
     test('a replayed single-occurrence REQUEST with a stale SEQUENCE does not overwrite a newer exception', async () => {
         const UID = 'audit-imip-replay@ext';

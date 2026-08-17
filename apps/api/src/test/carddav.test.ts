@@ -191,7 +191,7 @@ describe('CardDAV', () => {
         expect(res.status).toBe(403);
     });
 
-    // --- Resource GET / PUT / DELETE (Task 15) — these pin the store-result → HTTP-status mapping and the
+    // --- Resource GET / PUT / DELETE — these pin the store-result → HTTP-status mapping and the
     // byte-identity contract, not the store logic proven in carddav-store.test.ts. ---
 
     test('PUT then GET returns byte-identical bytes with a matching quoted etag', async () => {
