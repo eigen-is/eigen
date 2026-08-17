@@ -388,6 +388,25 @@ describe('deleteCard', () => {
             .get()!;
         expect(await contacts.deleteCard(self.uri, { ifMatch: null })).toEqual({ ok: false, error: 'self-delete' });
     });
+
+    test('a refused self-delete touches the self card so an ignoring client re-converges', async () => {
+        const { contacts, db, user } = await makeContacts();
+        const self = db
+            .select()
+            .from(contactsSchema.contacts)
+            .where(eq(contactsSchema.contacts.eigenId, user.id))
+            .get()!;
+        const preCtag = (await contacts.getBook()).ctag;
+
+        expect(await contacts.deleteCard(self.uri, { ifMatch: null })).toEqual({ ok: false, error: 'self-delete' });
+
+        // The refusal surfaces the self card in the next delta as a 200 change (bytes untouched — same etag),
+        // never a tombstone, so a client that locally dropped it on the ignored 403 re-downloads it.
+        const changed = await contacts.getChangedCardsSince(preCtag);
+        const changedSelf = changed.find((c) => c.uri === self.uri);
+        expect(changedSelf?.etag).toBe(self.etag);
+        expect((await contacts.getDeletedCardsSince(preCtag)).some((d) => d.uri === self.uri)).toBe(false);
+    });
 });
 
 describe('putCard — self-link', () => {

@@ -257,7 +257,8 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 - **Self-link.** The `eigenId` ↔ user link rides as `X-EIGEN-ID`. It is server-owned in the index (accepted
   only when it equals the account owner's id; at most one row per book), and a rematch on the account owner's
   own email restores it when a client strips the property. Only a client edit that strips the property *and*
-  changes the email in one go loses the link until the user re-saves their profile.
+  changes the email in one go loses the link until the user re-saves their profile. A `DELETE` of the self card
+  is refused **403** (`deleteCard` → `self-delete`); because a client like Thunderbird drops the card from its view before the request and ignores the 403, the refusal also **touches** the self card (bumps the book `ctag` and re-stamps its `cardCtag`, bytes/etag untouched) so the next `sync-collection` delta lists it as an unchanged 200 row and any client that locally dropped it re-downloads it — the refused delete self-heals on the client's own schedule, at the cost of one phantom re-fetch row for other clients.
 
 ## Where the code lives
 

@@ -1946,7 +1946,20 @@ export class Contacts {
                     .get();
                 if (!row) return { ok: false, error: 'not-found' };
                 // Self before etag, mirroring deleteContact: your own card cannot be removed regardless of token.
-                if (row.eigenId === this.home.user.id) return { ok: false, error: 'self-delete' };
+                if (row.eigenId === this.home.user.id) {
+                    // The delete is refused, but the client (Thunderbird) drops the card from its view before the
+                    // request and ignores the 403 — a delta that doesn't list the self card leaves that view wrong
+                    // forever. So touch it: bump the book ctag and re-stamp the self row's cardCtag, bytes/etag/mtime
+                    // untouched (no SSE — nothing the app shows changed). The next sync-collection delta then lists
+                    // it as an unchanged 200 row and the ignoring client re-downloads it. This deliberately bends
+                    // the "ctag bumps only on a real change" rule: a user-initiated mutation WAS refused, and the
+                    // trade is one phantom re-fetch row for every other client so the refusal self-heals on theirs.
+                    this.db.transaction((tx) => {
+                        const ctag = this.bumpCtag(tx);
+                        tx.update(schema.contacts).set({ cardCtag: ctag }).where(eq(schema.contacts.id, row.id)).run();
+                    });
+                    return { ok: false, error: 'self-delete' };
+                }
                 if (pre.ifMatch !== null && !preconditionMatches(pre.ifMatch, row.etag)) {
                     return { ok: false, error: 'precondition' };
                 }

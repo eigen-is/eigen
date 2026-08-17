@@ -550,6 +550,20 @@ describe('CardDAV', () => {
         expect(xml).toContain('404 Not Found');
     });
 
+    test('sync-collection surfaces a refused self-delete as a 200 row so an ignoring client re-converges', async () => {
+        const selfUri = await findSelfCardUri();
+        const before = (await (await getHome(userId)).contacts.getCardMeta(selfUri))!.etag;
+        const token = syncTokenOf(await (await report(syncBody())).text());
+
+        expect((await deleteCard(selfUri)).status).toBe(403);
+
+        const xml = await (await report(syncBody(token))).text();
+        // The refused delete lists the self card as an unchanged 200 (its quoted content-hash etag), never a 404.
+        expect(xml).toContain(cardHref(selfUri));
+        expect(xml).toContain(`"${before}"`);
+        expect(xml).not.toContain('404 Not Found');
+    });
+
     test('sync-collection lists a delete-then-recreate as a single 200 with no 404 row', async () => {
         const uid = randomUUID();
         const uri = `${uid}.vcf`;
