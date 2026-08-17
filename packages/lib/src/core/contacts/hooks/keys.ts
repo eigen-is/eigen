@@ -25,6 +25,9 @@ export const labelKeys = {
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
 export function invalidateContactCreated(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
+    // A DAV-created card can claim the self-link (an external client PUTs your own contact), so a mounted
+    // useMeContact must refetch — mirror invalidateContactUpdated, which invalidates `me` for the same reason.
+    queryClient.invalidateQueries({ queryKey: contactKeys.me(ownerId) });
     invalidateHomeSize(queryClient, ownerId);
 }
 
