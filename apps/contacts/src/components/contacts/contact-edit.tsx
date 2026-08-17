@@ -19,8 +19,8 @@ const formSchema = z
         lastName: z.string().optional(),
         company: z.string().optional(),
         jobTitle: z.string().optional(),
-        email: z.array(z.email('Enter a valid email address').or(z.literal(''))),
-        phone: z.array(z.string()),
+        email: z.array(z.object({ value: z.email('Enter a valid email address').or(z.literal('')) })),
+        phone: z.array(z.object({ value: z.string() })),
         address: z.array(
             z.object({
                 street: z.string().optional(),
@@ -45,7 +45,12 @@ const formSchema = z
         },
     );
 
-export type ContactFormValues = z.infer<typeof formSchema>;
+// The form models email/phone as `{ value }[]` rather than the wire `string[]`: react-hook-form's
+// useFieldArray reads the array through compact() (filter(Boolean)), so a blank primitive '' is stripped —
+// the create form would open with zero rows and "Add" would collapse an all-blank list back to one row.
+// Object entries are always truthy, so every row survives; onSave flattens back to string[], blanks filtered.
+type FormValues = z.infer<typeof formSchema>;
+export type ContactFormValues = Omit<FormValues, 'email' | 'phone'> & { email: string[]; phone: string[] };
 
 type ContactEditToolbarProps = {
     isNew: boolean;
@@ -95,15 +100,15 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     const loadedEtagRef = useRef(contact?.etag);
 
     const uploadAvatar = useContactAvatarUpload(setAvatar);
-    const form = useForm<ContactFormValues>({
+    const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             firstName: contact?.firstName || '',
             lastName: contact?.lastName || '',
             company: contact?.company || '',
             jobTitle: contact?.jobTitle || '',
-            email: contact?.email || [''],
-            phone: contact?.phone || [''],
+            email: contact?.email?.length ? contact.email.map((value) => ({ value })) : [{ value: '' }],
+            phone: contact?.phone?.length ? contact.phone.map((value) => ({ value })) : [{ value: '' }],
             address: contact?.address?.length ? contact.address : [{}],
             birthday: contact?.birthday || '',
             notes: contact?.notes || '',
@@ -111,16 +116,13 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
         },
     });
 
-    // `email`/`phone` are primitive string[] in the schema; react-hook-form v7's useFieldArray
-    // generic expects array-of-objects, so the field name needs `as never`. Runtime-safe — kept
-    // as string[] (not wrapped in {value} objects) to avoid changing the contact data shape.
     const {
         fields: emailFields,
         append: appendEmail,
         remove: removeEmail,
     } = useFieldArray({
         control: form.control,
-        name: 'email' as never,
+        name: 'email',
     });
     const {
         fields: phoneFields,
@@ -128,7 +130,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
         remove: removePhone,
     } = useFieldArray({
         control: form.control,
-        name: 'phone' as never,
+        name: 'phone',
     });
     const {
         fields: addressFields,
@@ -140,7 +142,15 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     });
 
     const handleSubmit = form.handleSubmit(async (data) => {
-        await onSave({ ...data, avatar }, loadedEtagRef.current);
+        await onSave(
+            {
+                ...data,
+                email: data.email.map((row) => row.value).filter(Boolean),
+                phone: data.phone.map((row) => row.value).filter(Boolean),
+                avatar,
+            },
+            loadedEtagRef.current,
+        );
     });
 
     const isLoading = form.formState.isSubmitting;
@@ -317,12 +327,12 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                 </div>
 
                                 <div className="grid gap-6">
-                                    <RepeatableField label="Email Addresses" onAdd={() => appendEmail('' as never)}>
+                                    <RepeatableField label="Email Addresses" onAdd={() => appendEmail({ value: '' })}>
                                         {emailFields.map((item, index) => (
                                             <FormField
                                                 key={item.id}
                                                 control={form.control}
-                                                name={`email.${index}`}
+                                                name={`email.${index}.value`}
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <div className="flex gap-2 items-center">
@@ -348,12 +358,12 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                         ))}
                                     </RepeatableField>
 
-                                    <RepeatableField label="Phone Numbers" onAdd={() => appendPhone('' as never)}>
+                                    <RepeatableField label="Phone Numbers" onAdd={() => appendPhone({ value: '' })}>
                                         {phoneFields.map((item, index) => (
                                             <FormField
                                                 key={item.id}
                                                 control={form.control}
-                                                name={`phone.${index}`}
+                                                name={`phone.${index}.value`}
                                                 render={({ field }) => (
                                                     <FormItem>
                                                         <div className="flex gap-2 items-center">
