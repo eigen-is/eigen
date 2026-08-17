@@ -528,14 +528,7 @@ export class Contacts {
 
         // The projection avatar is the derived cache URL; regenerate it only when the file has an inline photo
         // whose hashed cache file is missing (out-of-band drift / a rebuild after a cache wipe).
-        let avatar = '';
-        if (parsed.photo?.kind === 'inline') {
-            const cacheName = avatarCacheName(id, parsed.photo.bytes);
-            avatar = avatarUrl(this.home.user.id, cacheName);
-            if (!(await this.storage.exists(`${PATHS.CONTACTS.AVATARS}/${cacheName}`))) {
-                avatar = await this.cacheCardPhoto(id, parsed.photo);
-            }
-        }
+        const avatar = await this.deriveCardPhotoCache(id, parsed.photo);
 
         const stat = await this.storage.stat(cardPath(uri));
         return {
@@ -1587,6 +1580,19 @@ export class Contacts {
         return avatarUrl(this.home.user.id, name);
     }
 
+    // The projection avatar URL for a card's PHOTO: the derived-cache URL, regenerating the webp only when its
+    // hash-named file is missing. So an unchanged-photo re-PUT (any phone-side name edit re-sends the whole
+    // card) or a reconcile keeps a promoted first-generation cache rather than overwriting it with a
+    // second-generation encode. A uri-kind or absent photo caches nothing (returns '').
+    private async deriveCardPhotoCache(id: string, photo: ParsedCardPhoto | null): Promise<string> {
+        if (photo?.kind !== 'inline') return '';
+        const cacheName = avatarCacheName(id, photo.bytes);
+        if (await this.storage.exists(`${PATHS.CONTACTS.AVATARS}/${cacheName}`)) {
+            return avatarUrl(this.home.user.id, cacheName);
+        }
+        return this.cacheCardPhoto(id, photo);
+    }
+
     // Derive the webp avatar cache from an inline PHOTO and return its projection URL — the regeneration path
     // (a reindex after avatars/ loss, an external DAV PUT), one generation older than a save's promoted webp.
     // The 512px webp target decodes every format: a JPEG/PNG embed becomes an opaque/alpha webp, an animated
@@ -1859,8 +1865,10 @@ export class Contacts {
                 this.recordCardWrite(storedUri);
                 const { mtime, size } = await writeCardFile(this.storage, storedUri, bytes);
                 etag = computeCardEtag(bytes);
-                // Inline PHOTO → derived webp cache; the projection stores its URL (a uri/absent photo → '').
-                projectionAvatar = await this.cacheCardPhoto(id, parsed.photo);
+                // Inline PHOTO → derived webp cache; keep a promoted first-generation cache on an unchanged-photo
+                // re-PUT (regenerate only when the hash-named file is missing). Projection stores its URL
+                // (a uri/absent photo → '').
+                projectionAvatar = await this.deriveCardPhotoCache(id, parsed.photo);
                 this.commitCard({
                     row: {
                         id,

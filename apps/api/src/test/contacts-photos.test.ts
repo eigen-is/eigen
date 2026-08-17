@@ -219,6 +219,31 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect((contacts as unknown as { cardParseCount: number }).cardParseCount).toBe(parsesBefore);
     });
 
+    test('an unchanged-photo re-PUT keeps the promoted first-generation cache byte-for-byte', async () => {
+        const { contacts, dir } = await makeContacts();
+        const staged = await stageAvatar(contacts);
+        const id = await contacts.addContact(validContact({ firstName: 'RePut', lastName: 'Same', avatar: staged }));
+
+        const cacheName = (await contacts.getContactById(id))!.avatar!.split('/').pop()!;
+        const cachePath = join(avatarsDirOf(dir), cacheName);
+        const before = computeCardEtag(new Uint8Array(readFileSync(cachePath)));
+
+        // A phone-side name edit re-PUTs the whole card with an unchanged PHOTO. The stored bytes ARE the
+        // resource body a client sends back.
+        const stored = await contacts.getCard(`${id}.vcf`);
+        expect(stored).not.toBeNull();
+        const res = await contacts.putCard(`${id}.vcf`, new TextDecoder().decode(stored!.bytes), {
+            ifMatch: null,
+            ifNoneMatch: null,
+        });
+        expect(res.ok).toBe(true);
+
+        // The promoted generation-one webp is kept, not overwritten with a generation-two encode re-derived
+        // from the embed: same cache name, identical bytes.
+        expect((await contacts.getContactById(id))!.avatar!.split('/').pop()!).toBe(cacheName);
+        expect(computeCardEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
+    });
+
     test('updating without changing the avatar leaves the PHOTO bytes byte-identical', async () => {
         const { contacts, dir } = await makeContacts();
         const staged = await stageAvatar(contacts);
