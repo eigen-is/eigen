@@ -1,13 +1,16 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { ImageDimensions } from '@workspace/lib/types/drive';
 import sharp from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
 import { extractVideoFrame } from './video-thumbnail';
 
-type ThumbnailFormat = 'webp' | 'jpeg' | 'png' | 'gif';
+export type ThumbnailFormat = 'webp' | 'jpeg' | 'png' | 'gif';
 
-type WorkerInput = {
+// The postMessage protocol with thumbnails.ts, which imports these type-only — the worker module (and its
+// sharp import) never loads on the main thread.
+export type WorkerInput = {
     source: string | ArrayBuffer;
     mimeType: string;
     fileName: string;
@@ -16,7 +19,7 @@ type WorkerInput = {
     options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat };
 };
 
-type WorkerOutput =
+export type WorkerOutput =
     | {
           ok: true;
           data: ArrayBuffer;
@@ -28,19 +31,14 @@ type WorkerOutput =
       }
     | { ok: false };
 
-type ImageResult = {
+export type ImageResult = ImageDimensions & {
     data: Buffer;
-    width: number;
-    height: number;
     hasAlpha: boolean;
     frameCount: number;
     duration?: number;
 };
 
-async function sharpResize(
-    source: Buffer | string,
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat },
-): Promise<ImageResult | null> {
+async function sharpResize(source: Buffer | string, options: WorkerInput['options']): Promise<ImageResult | null> {
     try {
         // Only webp and gif hold animation — every other target decodes the first frame only, so reading all
         // pages of an animated source (which would stack them into one tall filmstrip) is confined to those two.
