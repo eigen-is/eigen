@@ -2,19 +2,20 @@
 // (carddav) serializers — the fold and escape algorithms are identical across both formats, so they live
 // here as the one source of truth.
 
-// Drop the C0 control bytes that are illegal in XML character data — everything below 0x20 except TAB, CR,
-// and LF. Every value that reaches a content line passes through here (via the three seams below): a raw C0
-// byte (e.g. a pasted vertical tab in a note or an event title), stored verbatim and echoed into a full-book
-// address-data / calendar-data REPORT, renders that XML invalid client-side and wedges the account's DAV
-// sync. TAB is a legal TEXT/fold char and stays; CR and LF stay here so each caller applies its own CR/LF
-// semantics (escaped, or stripped) afterwards. A code-point scan, not a \x00-\x1F regex — biome's
-// noControlCharactersInRegex rejects the latter, and a \p{Cc} regex would also strip the C1 controls, which
-// are valid XML characters.
+// A C0 control byte illegal in XML character data — below 0x20 except TAB, CR, LF. One such byte echoed into
+// a REPORT's address-data/calendar-data invalidates the XML client-side and wedges DAV sync. The serialize
+// seams below STRIP these; the vCard ingest parse REJECTS them (vcard-ast.ts). A code-point check, not a
+// regex: biome rejects \x00-\x1F, and \p{Cc} would also hit the C1 controls, which are valid XML.
+export function isIllegalC0(code: number): boolean {
+    return code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d;
+}
+
+// Drop illegal C0 bytes. TAB is a legal TEXT/fold char; CR and LF stay so each caller applies its own CR/LF
+// semantics (escaped, or stripped) afterwards.
 function stripControlChars(s: string): string {
     let out = '';
     for (const ch of s) {
-        const code = ch.charCodeAt(0);
-        if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) continue;
+        if (isIllegalC0(ch.charCodeAt(0))) continue;
         out += ch;
     }
     return out;

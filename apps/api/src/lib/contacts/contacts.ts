@@ -150,7 +150,9 @@ function rethrowDuplicateLabelName(e: unknown): never {
 
 // The index projection the CardDAV sync layer reads for a resource (multiget/sync-collection). Group cards
 // are included — DAV sees the whole book — and the etag is the unquoted content hash the handler quotes.
-export type CardRow = { uri: string; etag: string; isGroup: boolean };
+export type CardRow = { uri: string; etag: string };
+// The Drizzle projection behind CardRow, spelled once and shared by listCards/getChangedCardsSince/getCard/getCardMeta.
+const CARD_ROW = { uri: schema.contacts.uri, etag: schema.contacts.etag };
 
 // The book counters every DAV sync surface reads: ctag advances on each change, syncGen rotates on an index
 // rebuild so stale sync tokens are refused. Named once, as CalDAV's builders take a CalendarItem.
@@ -162,6 +164,10 @@ export type CardBook = { ctag: number; syncGen: number };
 export type PutCardResult =
     | { ok: true; etag: string; created: boolean }
     | { ok: false; error: 'precondition' | 'uid-conflict' | 'invalid' | 'too-large' | 'quota'; message?: string };
+
+// The typed outcome of a DAV DELETE: a 404 for an unknown uri, a 403 for your own card, or a 412 for a stale
+// If-Match. Mirrors PutCardResult so both write seams name their result once.
+export type DeleteCardResult = { ok: true } | { ok: false; error: 'not-found' | 'precondition' | 'self-delete' };
 
 // RFC 7232 precondition matching for the DAV write seam. `*` means "the resource exists" (not a literal
 // etag); a value is a comma-separated list of entity-tags, each optionally weak (`W/`) and quoted — it
@@ -1711,20 +1717,13 @@ export class Contacts {
     // Every resource in the book — group cards included, since DAV serves the whole book (the app list hides them).
     public async listCards(): Promise<CardRow[]> {
         await this.ensureDrained();
-        return this.db
-            .select({ uri: schema.contacts.uri, etag: schema.contacts.etag, isGroup: schema.contacts.isGroup })
-            .from(schema.contacts)
-            .all();
+        return this.db.select(CARD_ROW).from(schema.contacts).all();
     }
 
     // The rows changed after book token N — the sync-collection delta (cardCtag is stamped on every change).
     public async getChangedCardsSince(sinceCtag: number): Promise<CardRow[]> {
         await this.ensureDrained();
-        return this.db
-            .select({ uri: schema.contacts.uri, etag: schema.contacts.etag, isGroup: schema.contacts.isGroup })
-            .from(schema.contacts)
-            .where(gt(schema.contacts.cardCtag, sinceCtag))
-            .all();
+        return this.db.select(CARD_ROW).from(schema.contacts).where(gt(schema.contacts.cardCtag, sinceCtag)).all();
     }
 
     // The uris removed after book token N — the sync-collection 404 rows (one row per uri, no duplicate hrefs).
@@ -1743,7 +1742,7 @@ export class Contacts {
     public async getCard(uri: string): Promise<{ bytes: Uint8Array; etag: string } | null> {
         await this.ensureDrained();
         const row = this.db
-            .select()
+            .select(CARD_ROW)
             .from(schema.contacts)
             .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
             .get();
@@ -1766,7 +1765,7 @@ export class Contacts {
         await this.ensureDrained();
         return (
             this.db
-                .select({ uri: schema.contacts.uri, etag: schema.contacts.etag, isGroup: schema.contacts.isGroup })
+                .select(CARD_ROW)
                 .from(schema.contacts)
                 .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
                 .get() ?? null
@@ -1932,41 +1931,36 @@ export class Contacts {
     // A DAV DELETE: an unknown uri is a 404 (deliberately unlike REST's idempotent no-op), your own card is a
     // 403, and a stale If-Match is a 412 — then the shared purge tail removes the file, tombstone, byte total,
     // and derived avatar under the lock.
-    public async deleteCard(
-        uri: string,
-        pre: { ifMatch: string | null },
-    ): Promise<{ ok: true } | { ok: false; error: 'not-found' | 'precondition' | 'self-delete' }> {
-        return this.writeLock.run(
-            async (): Promise<{ ok: true } | { ok: false; error: 'not-found' | 'precondition' | 'self-delete' }> => {
-                await this.drainDirty();
-                const row = this.db
-                    .select()
-                    .from(schema.contacts)
-                    .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
-                    .get();
-                if (!row) return { ok: false, error: 'not-found' };
-                // Self before etag, mirroring deleteContact: your own card cannot be removed regardless of token.
-                if (row.eigenId === this.home.user.id) {
-                    // The delete is refused, but the client (Thunderbird) drops the card from its view before the
-                    // request and ignores the 403 — a delta that doesn't list the self card leaves that view wrong
-                    // forever. So touch it: bump the book ctag and re-stamp the self row's cardCtag, bytes/etag/mtime
-                    // untouched (no SSE — nothing the app shows changed). The next sync-collection delta then lists
-                    // it as an unchanged 200 row and the ignoring client re-downloads it. This deliberately bends
-                    // the "ctag bumps only on a real change" rule: a user-initiated mutation WAS refused, and the
-                    // trade is one phantom re-fetch row for every other client so the refusal self-heals on theirs.
-                    this.db.transaction((tx) => {
-                        const ctag = this.bumpCtag(tx);
-                        tx.update(schema.contacts).set({ cardCtag: ctag }).where(eq(schema.contacts.id, row.id)).run();
-                    });
-                    return { ok: false, error: 'self-delete' };
-                }
-                if (pre.ifMatch !== null && !preconditionMatches(pre.ifMatch, row.etag)) {
-                    return { ok: false, error: 'precondition' };
-                }
-                await this.purgeCard(row);
-                return { ok: true };
-            },
-        );
+    public async deleteCard(uri: string, pre: { ifMatch: string | null }): Promise<DeleteCardResult> {
+        return this.writeLock.run(async (): Promise<DeleteCardResult> => {
+            await this.drainDirty();
+            const row = this.db
+                .select()
+                .from(schema.contacts)
+                .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
+                .get();
+            if (!row) return { ok: false, error: 'not-found' };
+            // Self before etag, mirroring deleteContact: your own card cannot be removed regardless of token.
+            if (row.eigenId === this.home.user.id) {
+                // The delete is refused, but the client (Thunderbird) drops the card from its view before the
+                // request and ignores the 403 — a delta that doesn't list the self card leaves that view wrong
+                // forever. So touch it: bump the book ctag and re-stamp the self row's cardCtag, bytes/etag/mtime
+                // untouched (no SSE — nothing the app shows changed). The next sync-collection delta then lists
+                // it as an unchanged 200 row and the ignoring client re-downloads it. This deliberately bends
+                // the "ctag bumps only on a real change" rule: a user-initiated mutation WAS refused, and the
+                // trade is one phantom re-fetch row for every other client so the refusal self-heals on theirs.
+                this.db.transaction((tx) => {
+                    const ctag = this.bumpCtag(tx);
+                    tx.update(schema.contacts).set({ cardCtag: ctag }).where(eq(schema.contacts.id, row.id)).run();
+                });
+                return { ok: false, error: 'self-delete' };
+            }
+            if (pre.ifMatch !== null && !preconditionMatches(pre.ifMatch, row.etag)) {
+                return { ok: false, error: 'precondition' };
+            }
+            await this.purgeCard(row);
+            return { ok: true };
+        });
     }
 
     async destruct(): Promise<void> {

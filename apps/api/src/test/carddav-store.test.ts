@@ -320,9 +320,11 @@ describe('putCard — index projection', () => {
             card({ uid, n: 'Design Team;;;;', fn: 'Design Team', extra: ['X-ADDRESSBOOKSERVER-KIND:group'] }),
         );
 
-        expect((await contacts.listCards()).some((c) => c.uri === uri && c.isGroup)).toBe(true);
+        // Served to DAV: the group's uri is in the book listing and single-resource meta (its group-ness in the
+        // stored row is pinned by contacts-reconcile.test.ts). Hidden from the app: getContacts drops it.
+        expect((await contacts.listCards()).some((c) => c.uri === uri)).toBe(true);
+        expect((await contacts.getCardMeta(uri))?.uri).toBe(uri);
         const row = rowByUri(db, uri)!;
-        expect(row.isGroup).toBe(true);
         expect((await contacts.getContacts()).some((c) => c.id === row.id)).toBe(false);
     });
 
