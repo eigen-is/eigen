@@ -3,6 +3,7 @@ import { authenticateBasic } from '../auth/protocol-auth';
 import { sanitizeCardUri } from '../contacts/card-store';
 import { getContacts } from '../contacts/contacts';
 import { requireSelf } from '../core/access';
+import { readBoundedBody } from '../core/http';
 import {
     ADDRESSBOOK_ID,
     handleAddressbookHomePropfind,
@@ -135,8 +136,8 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (!parsed.book) return new Response('Bad Request', { status: 400 });
         if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
-        const body = await request.text();
-        if (Buffer.byteLength(body) > REPORT_BODY_MAX_BYTES) return new Response('Payload Too Large', { status: 413 });
+        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleCardReport(await getContacts(user), params.ownerId, body);
     })
 

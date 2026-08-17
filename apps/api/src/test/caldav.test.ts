@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { EVENT_MAX_BYTES } from '../lib/caldav/resource';
 import { app, getTestContext } from './setup';
 
 describe('CalDAV', () => {
@@ -839,5 +840,104 @@ describe('CalDAV', () => {
         const body = await getRes.text();
         expect(body).toContain('SubDaily PUT');
         expect(body).not.toContain('SECONDLY');
+    });
+
+    test('a REPORT body over 1 MiB is 413 before parsing', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: 'a'.repeat(1_048_577),
+            }),
+        );
+        expect(res.status).toBe(413);
+    });
+
+    test('an oversize PUT is 413 max-resource-size before parsing', async () => {
+        const prefix =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-oversize@eigen\r\nSUMMARY:Big\r\nDTSTART:20260801T090000Z\r\nDTEND:20260801T100000Z\r\nDESCRIPTION:';
+        const suffix = '\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        const pad = EVENT_MAX_BYTES + 1 - Buffer.byteLength(prefix) - Buffer.byteLength(suffix);
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-oversize.ics`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: prefix + 'a'.repeat(pad) + suffix,
+            }),
+        );
+        expect(res.status).toBe(413);
+        expect(await res.text()).toContain('max-resource-size');
+    });
+
+    test('a PUT whose resource name exceeds the length cap is 400', async () => {
+        const longUri = `${'x'.repeat(300)}.ics`;
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-longuri@eigen\r\nSUMMARY:Long\r\nDTSTART:20260901T090000Z\r\nDTEND:20260901T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${longUri}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('calendar-multiget with more than 500 hrefs is 400', async () => {
+        const hrefs = Array.from(
+            { length: 501 },
+            (_, i) => `<D:href>/dav/calendars/${userId}/${defaultCalendarId}/caldav-bulk-${i}.ics</D:href>`,
+        ).join('\n');
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/></D:prop>
+  ${hrefs}
+</C:calendar-multiget>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('calendar-multiget collapses duplicate hrefs (present and missing) to one row each', async () => {
+        const present = 'caldav-multiget-dup.ics';
+        const missing = 'caldav-multiget-missing.ics';
+        const href = (uri: string) => `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`;
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-multiget-dup@eigen\r\nSUMMARY:Dup Test\r\nDTSTART:20260701T090000Z\r\nDTEND:20260701T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        await app.handle(
+            new Request(`http://localhost${href(present)}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+
+        // The same two resources listed four ways: the present one twice, the missing one twice.
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>${href(present)}</D:href>
+  <D:href>${href(present)}</D:href>
+  <D:href>${href(missing)}</D:href>
+  <D:href>${href(missing)}</D:href>
+</C:calendar-multiget>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // Two distinct resources → exactly two rows, and the missing one 404s exactly once (the dedupe nit).
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(2);
+        expect((xml.match(/404 Not Found/g) ?? []).length).toBe(1);
+        expect(xml).toContain('Dup Test');
     });
 });

@@ -1,11 +1,12 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { requireSelf } from '../core/access';
+import { readBoundedBody } from '../core/http';
 import { getHome } from '../home';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
 import { handleCalendarPropfind } from './propfind';
 import { handleMkcalendar, handleProppatch } from './proppatch';
-import { handleReport } from './report';
+import { handleReport, REPORT_BODY_MAX_BYTES } from './report';
 import { handleDelete, handleGet, handlePut } from './resource';
 
 function parseDavPath(wildcard: string): { calendarId?: string; resourceUri?: string } {
@@ -132,7 +133,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const calendarItem = home.calendar.getCalendarById(calendarId);
         if (!calendarItem) return new Response('Not Found', { status: 404 });
 
-        const body = await request.text();
+        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleReport(home.calendar, calendarId, calendarItem, params.ownerId, body);
     })
 
@@ -141,7 +143,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
         const home = await getHome(params.ownerId);
-        const body = await request.text();
+        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleMkcalendar(home.calendar, body);
     })
 
@@ -153,6 +156,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!calendarId) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await request.text();
+        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleProppatch(home.calendar, calendarId, params.ownerId, body);
     });

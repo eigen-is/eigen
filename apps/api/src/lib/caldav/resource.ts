@@ -6,6 +6,14 @@ import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
 import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
+import { davError } from './xml-builder';
+
+// A calendar resource runs larger than a vCard (a recurring series carries an overridden VEVENT per exception),
+// so the raw-body ceiling is ~4× CardDAV's CARD_MAX_BYTES; bound the body before parsing (mirrors putCard).
+export const EVENT_MAX_BYTES = 20_971_520;
+// The client-chosen path segment becomes the stored uri (and a filename downstream); cap its length as
+// CardDAV's sanitizeCardUri does. Charset/percent-encoding parity lands separately (Task 5).
+const MAX_URI_LENGTH = 200;
 
 // GET /dav/calendars/:ownerId/:calendarId/:uri
 export function handleGet(masterEvent: CalendarEventRow, allEventsForUid: CalendarEventRow[]): Response {
@@ -30,6 +38,11 @@ export async function handlePut(
     ifNoneMatch: string | null,
     userId: string,
 ): Promise<Response> {
+    if (uri.length > MAX_URI_LENGTH) return new Response('Bad Request', { status: 400 });
+    // Bound the raw body before parsing so a hostile multi-MiB payload never reaches parseIcs (mirrors putCard);
+    // 413 max-resource-size is the same rejection CardDAV serves an oversized card.
+    if (Buffer.byteLength(body) > EVENT_MAX_BYTES) return davError(413, '<C:max-resource-size/>');
+
     const existingEvent = calendar.getEventByUri(calendarId, uri);
     const currentEtag = existingEvent?.etag ?? null;
 

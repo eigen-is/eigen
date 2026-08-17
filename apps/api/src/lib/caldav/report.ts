@@ -13,6 +13,12 @@ import {
 } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
 
+// Request bounds, the CardDAV twin's values (carddav/report.ts): the router rejects any XML request body
+// (REPORT/MKCALENDAR/PROPPATCH) over this before it reaches the parser, and multiget refuses a client that
+// asks for more than this many resources in one round-trip.
+export const REPORT_BODY_MAX_BYTES = 1_048_576;
+const MULTIGET_HREF_LIMIT = 500;
+
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export function handleReport(
     calendar: Calendar,
@@ -63,13 +69,21 @@ function handleCalendarMultiget(
     ownerId: string,
     report: ReturnType<typeof parseReport>,
 ): Response {
+    if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
+
     const prefix = `/dav/calendars/${ownerId}/${calendarId}/`;
-    const uris = report.hrefs
-        .map((href) => {
-            const h = href.replace(/^\/+/, '/');
-            return h.startsWith(prefix) ? h.slice(prefix.length) : '';
-        })
-        .filter(Boolean);
+    // Dedupe so a client listing one resource N ways yields one row, not N — the 404 loop below iterates this
+    // set, closing the duplicate-404-rows nit; first occurrence wins, preserving request order.
+    const uris = [
+        ...new Set(
+            report.hrefs
+                .map((href) => {
+                    const h = href.replace(/^\/+/, '/');
+                    return h.startsWith(prefix) ? h.slice(prefix.length) : '';
+                })
+                .filter(Boolean),
+        ),
+    ];
 
     const events = calendar.getEventsByUris(calendarId, uris);
     const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
