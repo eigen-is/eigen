@@ -1,5 +1,5 @@
 import { CARD_MAX_BYTES } from '../contacts/card-store';
-import type { CardBook } from '../contacts/contacts';
+import type { CardBook } from '../contacts/dav-store';
 import { escapeXml } from '../shared/xml';
 
 // The multistatus/response/propstat helpers and the shared NS string (which already declares the CARD

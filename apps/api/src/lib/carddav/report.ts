@@ -1,5 +1,6 @@
 import { uriKeyOf } from '../contacts/card-store';
-import type { CardRow, Contacts } from '../contacts/contacts';
+import type { Contacts } from '../contacts/contacts';
+import type { CardRow } from '../contacts/dav-store';
 import { projectAddressData } from './address-data';
 import { bookHref, cardHref } from './discovery';
 import { matchCard, UnsupportedCollationError, UnsupportedFilterError } from './query-filter';

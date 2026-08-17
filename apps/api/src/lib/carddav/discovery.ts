@@ -1,4 +1,4 @@
-import type { CardBook, CardRow } from '../contacts/contacts';
+import type { CardBook, CardRow } from '../contacts/dav-store';
 import {
     addressbookCollectionProps,
     addressbookHomeProps,

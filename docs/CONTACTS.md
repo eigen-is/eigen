@@ -273,9 +273,7 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 ## Where the code lives
 
-- **`apps/api/src/lib/contacts/`** — the domain: `contacts.ts` (the `Contacts` class), `card-store.ts` (the
-  file/key helpers — `sanitizeCardUri`, `writeCardFile`, `avatarCacheName`, `uriKeyOf`), `schema.ts`,
-  `db-config.ts`, `sse-events.ts`.
+- **`apps/api/src/lib/contacts/`** — the domain, split Mount-style: `contacts.ts` (the `Contacts` facade — the write lock, the dirty/journal machinery, REST contact CRUD and the self card; every sibling call goes through it) with sibling modules of plain functions over the facade: `dav-store.ts` (the CardDAV store seam — the index reads plus `putCard`/`deleteCard` and the seam types), `reconcile.ts` (the stat-only reconcile, the from-scratch rebuild, and the self-link ranking), `labels.ts` (label definitions + the CATEGORIES fan-out and rename journal), `avatars.ts` (avatar staging + the derived photo cache). Beside them: `card-store.ts` (the file/key helpers — `sanitizeCardUri`, `writeCardFile`, `avatarCacheName`, `uriKeyOf`), `schema.ts`, `db-config.ts`, `sse-events.ts`.
 - **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`,
   `report.ts`, `query-filter.ts`, `address-data.ts`, the vCard modules (`vcard-ast.ts`, `vcard-parse.ts`,
   `vcard-serialize.ts`, `vcard-transcode.ts`), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope,
