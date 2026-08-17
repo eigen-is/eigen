@@ -1,6 +1,6 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { useLabels } from '@workspace/lib/contacts';
-import { formatDate } from '@workspace/lib/date';
+import { formatDateOnly } from '@workspace/lib/date';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { EigenLoader } from '@workspace/ui';
@@ -142,7 +142,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
                                         <Calendar className="h-4 w-4" />
                                         Birthday
                                     </h4>
-                                    <div className="pl-6">{formatDate(contact.birthday!)}</div>
+                                    <div className="pl-6">{formatDateOnly(contact.birthday!)}</div>
                                 </div>
                             )}
                         </div>
