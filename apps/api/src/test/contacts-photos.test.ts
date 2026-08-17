@@ -1,10 +1,11 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { randomFillSync, randomUUID } from 'node:crypto';
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { ParsedCardPhoto } from '../lib/carddav/vcard-parse';
 import { parseVCard } from '../lib/carddav/vcard-parse';
+import { createVCard } from '../lib/carddav/vcard-serialize';
 import { computeCardEtag } from '../lib/contacts/card-store';
 import type { Contacts } from '../lib/contacts/contacts';
 import * as contactsSchema from '../lib/contacts/schema';
@@ -59,7 +60,38 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         expect(stored?.avatar).toBe(`contacts/${user.id}/avatar/${cacheName}`);
     });
 
-    test('an animated avatar embeds its first frame, not a stacked filmstrip', async () => {
+    test('a PNG-with-alpha upload embeds a PNG PHOTO and serves a webp cache that keeps its alpha', async () => {
+        const { contacts, dir } = await makeContacts();
+        const sharp = (await import('sharp')).default;
+        const pngAlpha = await sharp({
+            create: { width: 40, height: 40, channels: 4, background: { r: 200, g: 30, b: 30, alpha: 0.5 } },
+        })
+            .png()
+            .toBuffer();
+        const staged = await contacts.uploadAvatar(
+            new File([new Uint8Array(pngAlpha)], 'alpha.png', { type: 'image/png' }),
+        );
+
+        const id = await contacts.addContact(validContact({ firstName: 'Alpha', lastName: 'Png', avatar: staged }));
+
+        // Transparency can't survive a JPEG embed, so an alpha source embeds as PNG (\x89PNG magic, TYPE=PNG),
+        // and the decoded embed still carries an alpha channel.
+        const raw = readFileSync(cardPathOf(dir, id), 'utf8');
+        expect(raw).toContain('PHOTO;ENCODING=b;TYPE=PNG');
+        const bytes = (parseVCard(raw).photo as Extract<ParsedCardPhoto, { kind: 'inline' }>).bytes;
+        expect([bytes[0], bytes[1], bytes[2], bytes[3]]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+        expect((await sharp(bytes).metadata()).hasAlpha).toBe(true);
+
+        // The served cache is a webp that preserved the transparency (the promoted first-generation sibling),
+        // never flattened onto a matte.
+        const cacheName = (await contacts.getContactById(id))!.avatar!.split('/').pop()!;
+        expect(cacheName.endsWith('.webp')).toBe(true);
+        const cacheBytes = await contacts.downloadAvatar(cacheName);
+        expect(cacheBytes).not.toBeNull();
+        expect((await sharp(Buffer.from(cacheBytes!)).metadata()).hasAlpha).toBe(true);
+    });
+
+    test('an animated GIF upload embeds an animated GIF PHOTO', async () => {
         const { contacts, dir } = await makeContacts();
         const sharp = (await import('sharp')).default;
         const frames = await Promise.all(
@@ -82,13 +114,109 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
 
         const id = await contacts.addContact(validContact({ firstName: 'Anim', lastName: 'Gif', avatar: staged }));
 
-        // JPEG cannot hold animation: reading the staged webp's three pages at once would stack them into one
-        // 512x1536 strip, which Apple Contacts renders as a filmstrip.
-        const photo = parseVCard(readFileSync(cardPathOf(dir, id), 'utf8')).photo;
-        const bytes = (photo as Extract<ParsedCardPhoto, { kind: 'inline' }>).bytes;
+        // Animation survives into the embed now: PHOTO is a GIF (TYPE=GIF, "GIF" magic) carrying all three frames,
+        // each a full 512px square — not a first-frame still and not a stacked filmstrip.
+        const raw = readFileSync(cardPathOf(dir, id), 'utf8');
+        expect(raw).toContain('PHOTO;ENCODING=b;TYPE=GIF');
+        const bytes = (parseVCard(raw).photo as Extract<ParsedCardPhoto, { kind: 'inline' }>).bytes;
+        expect([bytes[0], bytes[1], bytes[2]]).toEqual([0x47, 0x49, 0x46]);
+        const meta = await sharp(bytes, { animated: true }).metadata();
+        expect(meta.pages).toBe(3);
+        expect(meta.width).toBe(512);
+        expect(meta.pageHeight).toBe(512);
+    });
+
+    test('an animated GIF whose embed would exceed the size cap falls back to a first-frame JPEG', async () => {
+        const { contacts, dir } = await makeContacts();
+        const sharp = (await import('sharp')).default;
+        // Seven full-resolution high-entropy frames: the 512px GIF re-encode clears the ~2 MiB embed cap, so the
+        // save must fall back to a single-frame JPEG rather than embedding a multi-MiB GIF in every sync of the card.
+        const frames: Buffer[] = [];
+        for (let f = 0; f < 7; f++) {
+            const raw = Buffer.allocUnsafe(512 * 512 * 3);
+            randomFillSync(raw);
+            frames.push(
+                await sharp(raw, { raw: { width: 512, height: 512, channels: 3 } })
+                    .png()
+                    .toBuffer(),
+            );
+        }
+        const gif = await sharp(frames, { join: { animated: true } })
+            .gif({ dither: 0, effort: 1 })
+            .toBuffer();
+        const staged = await contacts.uploadAvatar(new File([new Uint8Array(gif)], 'big.gif', { type: 'image/gif' }));
+
+        const id = await contacts.addContact(validContact({ firstName: 'Big', lastName: 'Gif', avatar: staged }));
+
+        // A JPEG holds one frame — the fallback is the first frame at full 512px, not a stacked filmstrip.
+        const raw = readFileSync(cardPathOf(dir, id), 'utf8');
+        expect(raw).toContain('PHOTO;ENCODING=b;TYPE=JPEG');
+        const bytes = (parseVCard(raw).photo as Extract<ParsedCardPhoto, { kind: 'inline' }>).bytes;
+        expect(bytes[0]).toBe(0xff);
+        expect(bytes[1]).toBe(0xd8);
         const meta = await sharp(bytes).metadata();
         expect(meta.width).toBe(512);
         expect(meta.height).toBe(512);
+    });
+
+    test('an external PUT with a different inline photo re-keys the cache and the old file is swept', async () => {
+        const { contacts, dir } = await makeContacts();
+        const staged = await stageAvatar(contacts);
+        const id = await contacts.addContact(validContact({ firstName: 'Ext', lastName: 'Put', avatar: staged }));
+
+        const firstCache = (await contacts.getContactById(id))!.avatar!.split('/').pop()!;
+        expect(existsSync(join(avatarsDirOf(dir), firstCache))).toBe(true);
+
+        // A CardDAV client re-PUTs the same resource (its UID is the contact id) with a different embedded JPEG.
+        const sharp = (await import('sharp')).default;
+        const jpeg = await sharp({
+            create: { width: 48, height: 48, channels: 3, background: { r: 250, g: 250, b: 10 } },
+        })
+            .jpeg()
+            .toBuffer();
+        const body = createVCard(
+            {
+                firstName: 'Ext',
+                lastName: 'Put',
+                email: ['ada@example.com'],
+                phone: [],
+                photo: { bytes: new Uint8Array(jpeg), mediaType: 'image/jpeg' },
+            },
+            id,
+        );
+        const res = await contacts.putCard(`${id}.vcf`, body, { ifMatch: null, ifNoneMatch: null });
+        expect(res.ok).toBe(true);
+
+        // The embed changed, so the embed-derived cache name changed: the old name is gone from the projection,
+        // the new hash-name is present on disk.
+        const secondCache = (await contacts.getContactById(id))!.avatar!.split('/').pop()!;
+        expect(secondCache).not.toBe(firstCache);
+        expect(existsSync(join(avatarsDirOf(dir), secondCache))).toBe(true);
+
+        // The superseded cache is now unreferenced; once past the stage-grace window the sweep reclaims it while
+        // leaving the live one alone.
+        const stalePath = join(avatarsDirOf(dir), firstCache);
+        const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+        utimesSync(stalePath, old, old);
+        await (contacts as unknown as { cleanupAvatarImages(): Promise<void> }).cleanupAvatarImages();
+        expect(existsSync(stalePath)).toBe(false);
+        expect(existsSync(join(avatarsDirOf(dir), secondCache))).toBe(true);
+    });
+
+    test('a reconcile keeps the promoted first-generation cache byte-for-byte and re-derives nothing', async () => {
+        const { contacts, dir } = await makeContacts();
+        const staged = await stageAvatar(contacts);
+        const id = await contacts.addContact(validContact({ firstName: 'Promo', lastName: 'Ted', avatar: staged }));
+
+        const cachePath = join(avatarsDirOf(dir), (await contacts.getContactById(id))!.avatar!.split('/').pop()!);
+        const before = computeCardEtag(new Uint8Array(readFileSync(cachePath)));
+        const parsesBefore = (contacts as unknown as { cardParseCount: number }).cardParseCount;
+
+        await contacts.reconcileIndex();
+
+        // The promoted webp is kept, not re-derived over (identical bytes), and the clean stat pass parsed nothing.
+        expect(computeCardEtag(new Uint8Array(readFileSync(cachePath)))).toBe(before);
+        expect((contacts as unknown as { cardParseCount: number }).cardParseCount).toBe(parsesBefore);
     });
 
     test('updating without changing the avatar leaves the PHOTO bytes byte-identical', async () => {

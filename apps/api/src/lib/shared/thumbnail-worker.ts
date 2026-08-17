@@ -5,27 +5,47 @@ import sharp from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
 import { extractVideoFrame } from './video-thumbnail';
 
+type ThumbnailFormat = 'webp' | 'jpeg' | 'png' | 'gif';
+
 type WorkerInput = {
     source: string | ArrayBuffer;
     mimeType: string;
     fileName: string;
     tmpDir: string;
     pathId: string;
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: 'webp' | 'jpeg' };
+    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat };
 };
 
-type WorkerOutput = { ok: true; data: ArrayBuffer; width: number; height: number; duration?: number } | { ok: false };
+type WorkerOutput =
+    | {
+          ok: true;
+          data: ArrayBuffer;
+          width: number;
+          height: number;
+          hasAlpha: boolean;
+          frameCount: number;
+          duration?: number;
+      }
+    | { ok: false };
 
-type ImageResult = { data: Buffer; width: number; height: number; duration?: number };
+type ImageResult = {
+    data: Buffer;
+    width: number;
+    height: number;
+    hasAlpha: boolean;
+    frameCount: number;
+    duration?: number;
+};
 
 async function sharpResize(
     source: Buffer | string,
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: 'webp' | 'jpeg' },
+    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat },
 ): Promise<ImageResult | null> {
     try {
-        // JPEG can't hold animation — reading every page of an animated source would stack the frames into
-        // one tall filmstrip, so a JPEG target decodes the first frame only.
-        const image = sharp(source, { animated: options.format !== 'jpeg' });
+        // Only webp and gif hold animation — every other target decodes the first frame only, so reading all
+        // pages of an animated source (which would stack them into one tall filmstrip) is confined to those two.
+        const animated = options.format === 'webp' || options.format === 'gif';
+        const image = sharp(source, { animated });
         const metadata = await image.metadata();
 
         if (!metadata.width || !metadata.height) return null;
@@ -41,12 +61,19 @@ async function sharpResize(
             position: 'center',
             withoutEnlargement: options.fit === 'inside',
         });
-        const data = await (options.format === 'jpeg'
-            ? resized.jpeg({ quality: options.quality })
-            : resized.webp({ quality: options.quality })
-        ).toBuffer();
+        const encoded =
+            options.format === 'jpeg'
+                ? resized.jpeg({ quality: options.quality })
+                : options.format === 'png'
+                  ? resized.png()
+                  : options.format === 'gif'
+                    ? resized.gif()
+                    : resized.webp({ quality: options.quality });
+        const data = await encoded.toBuffer();
 
-        return { data, width, height };
+        // hasAlpha/frameCount describe the pristine source, so the avatar-staging caller can pick the embed
+        // format (opaque still → JPEG, alpha → PNG, animated → GIF) from one decode.
+        return { data, width, height, hasAlpha: metadata.hasAlpha ?? false, frameCount: metadata.pages ?? 1 };
     } catch {
         return null;
     }
@@ -144,6 +171,8 @@ self.onmessage = async (event: MessageEvent<WorkerInput>) => {
                 data: ab,
                 width: result.width,
                 height: result.height,
+                hasAlpha: result.hasAlpha,
+                frameCount: result.frameCount,
                 ...(result.duration !== undefined && { duration: result.duration }),
             };
             postMessage(payload, [ab]);

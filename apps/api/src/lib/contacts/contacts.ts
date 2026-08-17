@@ -28,11 +28,14 @@ import {
     cardPath,
     cleanupTempCardFiles,
     computeCardEtag,
+    type EmbedFormat,
     isCardPhotoCacheOf,
     labelColorFor,
     listCardUris,
     normalizeLabelName,
     sanitizeCardUri,
+    stagedEmbedCandidates,
+    stagedEmbedName,
     uriKeyOf,
     writeCardFile,
 } from './card-store';
@@ -120,11 +123,20 @@ function normalizeContactInput(contact: CreateContactInput): void {
 // isn't deleted out from under the save.
 const AVATAR_STAGE_GRACE_MS = 60 * 60 * 1000;
 
-// Every contact-photo transcode shares one preview shape: a 512px q80 square-cropped image. The upload/cache
-// seams keep webp; resolveStagedAvatar spreads it with format:'jpeg' because Apple Contacts can't decode webp
-// contact photos. App-authored cards with this shape naturally stay around 230 KiB; that is normal behavior,
-// not a resource limit or guarantee.
+// Every contact-photo encode shares one preview shape: a 512px q80 square-cropped image. It defaults to webp
+// (the only format Eigen serves); the staged embed sibling spreads it with format:'jpeg'/'png'/'gif' for the
+// Apple-safe PHOTO bytes. App-authored cards with this shape naturally stay around 230 KiB; that is normal
+// behavior, not a resource limit or guarantee.
 const AVATAR_PREVIEW = { maxSize: 512, quality: 80, fit: 'cover' } as const;
+
+// A single animated GIF embedded in a card rides along in every device sync of that card. Past this ceiling the
+// staged embed falls back to a first-frame JPEG so one long GIF can't bloat every sync (the served webp sibling
+// stays animated regardless — the cap is only on the bytes stored in the vCard).
+const AVATAR_EMBED_GIF_MAX_BYTES = 2 * 1024 * 1024;
+
+// The two first-generation encodes a staged upload carries: the Apple-safe embed the save writes verbatim into
+// PHOTO, and the webp sibling it promotes to the cache. `resolveStagedAvatar` pairs them from a staged url.
+type StagedAvatarPair = { embed: { bytes: Uint8Array; mediaType: string }; webp: Uint8Array };
 
 // The v2 UNIQUE index on labels(nameKey) closes duplicate/case-variant label names. bun:sqlite names the
 // column in the violation message ("UNIQUE constraint failed: labels.nameKey"); match on it so an unrelated
@@ -938,7 +950,7 @@ export class Contacts {
             const categories = this.labelNamesFor(contact.labels ?? []);
             // resolveStagedAvatar throws when a non-empty avatar can't be resolved (its staged file was swept),
             // so a create with a vanished upload fails here rather than silently dropping the photo.
-            const photo = await this.resolveStagedAvatar(contact.avatar);
+            const staged = await this.resolveStagedAvatar(contact.avatar);
 
             const bytes = new TextEncoder().encode(
                 createVCard(
@@ -954,7 +966,7 @@ export class Contacts {
                         notes: contact.notes,
                         categories,
                         eigenId: contact.eigenId || undefined,
-                        photo: photo ?? undefined,
+                        photo: staged?.embed,
                     },
                     id,
                 ),
@@ -967,11 +979,9 @@ export class Contacts {
             try {
                 this.recordCardWrite(uri);
                 const { mtime, size } = await writeCardFile(this.storage, uri, bytes);
-                // The avatar cache is derived from the embed; the projection stores its hashed URL (or '' if none).
-                contact.avatar = await this.cacheCardPhoto(
-                    id,
-                    photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
-                );
+                // Promote the staged first-generation webp under the embed-derived cache name; the projection
+                // stores its hashed URL (or '' if there is no photo).
+                contact.avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
                 this.commitCard({
                     row: {
                         id,
@@ -1047,16 +1057,16 @@ export class Contacts {
                 categories,
             };
             // PHOTO is presence-triggered: only touch it when the avatar changed against the stored row. A new
-            // avatar resolves the staged webp to an embedded JPEG (or throws if its staged file was swept — a
+            // avatar embeds the staged Apple-safe bytes verbatim (or throws if its staged file was swept — a
             // silent strip would lose a photo the user meant to replace); an explicit clear (avatar === '')
-            // removes PHOTO. The derived cache + projection URL are rebuilt from the embed after the write.
+            // removes PHOTO. The cache + projection URL are set from the promoted webp sibling after the write.
             const avatarChanged = contact.avatar !== (row.data?.avatar ?? '');
-            let photo: { bytes: Uint8Array; mediaType: string } | null = null;
+            let staged: StagedAvatarPair | null = null;
             if (avatarChanged) {
                 if (contact.avatar) {
-                    photo = await this.resolveStagedAvatar(contact.avatar);
+                    staged = await this.resolveStagedAvatar(contact.avatar);
                 }
-                edits.photo = photo;
+                edits.photo = staged?.embed ?? null;
             }
 
             const bytes = new TextEncoder().encode(mergeVCard(card, edits));
@@ -1070,10 +1080,7 @@ export class Contacts {
                 this.recordCardWrite(row.uri);
                 const { mtime, size } = await writeCardFile(this.storage, row.uri, bytes);
                 if (avatarChanged) {
-                    contact.avatar = await this.cacheCardPhoto(
-                        id,
-                        photo ? { kind: 'inline', bytes: photo.bytes, mediaType: photo.mediaType } : null,
-                    );
+                    contact.avatar = staged ? await this.promoteAvatarCache(id, staged) : '';
                 }
                 this.commitCard({
                     row: {
@@ -1475,25 +1482,47 @@ export class Contacts {
         return rows.map((row) => this.dbRowToContact(row, labelsByContact.get(row.id) ?? []));
     }
 
+    // Stage two first-generation siblings from the pristine upload: the 512px webp Eigen serves (alpha and
+    // animation preserved natively) and an Apple-safe embed for the vCard PHOTO. Both are decoded from the
+    // original — never chained through one another — so a save can embed the embed verbatim and promote the
+    // webp to the cache, and the app/DAV both get generation one. Only the webp url is returned; the embed
+    // sibling rides beside it under `<uuid>.embed.<ext>` for `resolveStagedAvatar` to pair up at save time.
     public async uploadAvatar(file: File): Promise<string> {
         this.cleanupAvatarImages().catch(() => {});
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const result = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', AVATAR_PREVIEW);
+        const webp = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', AVATAR_PREVIEW);
+        if (!webp) throw new ApiError(400, 'Failed to generate avatar thumbnail');
 
-        if (!result) {
-            throw new ApiError(400, 'Failed to generate avatar thumbnail');
+        // Animation wins over alpha (a GIF always reports hasAlpha), so an animated source embeds as GIF, an
+        // opaque still as JPEG q80, and anything else carrying transparency as PNG.
+        let format: EmbedFormat = webp.frameCount > 1 ? 'gif' : webp.hasAlpha ? 'png' : 'jpeg';
+        let embed = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', {
+            ...AVATAR_PREVIEW,
+            format,
+        });
+        if (!embed) throw new ApiError(400, 'Failed to generate avatar thumbnail');
+        if (format === 'gif' && embed.data.byteLength > AVATAR_EMBED_GIF_MAX_BYTES) {
+            const jpeg = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', {
+                ...AVATAR_PREVIEW,
+                format: 'jpeg',
+            });
+            if (!jpeg) throw new ApiError(400, 'Failed to generate avatar thumbnail');
+            embed = jpeg;
+            format = 'jpeg';
         }
 
-        const fileName = `${randomUUID()}.webp`;
-        // The transcode stays outside the lock (it is the slow part and touches no accounting); the write and
-        // its byte delta take it, so the sweep's recount can never land between them and lose the increment.
+        const webpName = `${randomUUID()}.webp`;
+        const embedName = stagedEmbedName(webpName, format);
+        // The encodes stay outside the lock (the slow part, no accounting); the writes and their byte delta take
+        // it, so the sweep's recount can never land between them and lose the increment.
         await this.writeLock.run(async () => {
-            await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, result.data);
-            this.avatarsBytes += result.data.byteLength;
+            await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${webpName}`, webp.data);
+            await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${embedName}`, embed.data);
+            this.avatarsBytes += webp.data.byteLength + embed.data.byteLength;
         });
 
-        return avatarUrl(this.home.user.id, fileName);
+        return avatarUrl(this.home.user.id, webpName);
     }
 
     public async downloadAvatar(filename: string): Promise<ArrayBuffer | null> {
@@ -1507,29 +1536,55 @@ export class Contacts {
         return file.arrayBuffer();
     }
 
-    // A staged avatar (uploadAvatar's webp) transcoded to the JPEG we embed as the canonical PHOTO — Apple
-    // Contacts can't decode webp contact photos (its list is JPEG/BMP/PNG/GIF), so this is the one seam that
-    // leaves AVATAR_PREVIEW's format. Null for an empty url; a non-empty url that resolves to nothing (the
-    // staged file was swept, a torn transcode) throws so the caller re-uploads rather than silently dropping
-    // a photo the user meant to set.
-    private async resolveStagedAvatar(
-        stagedUrl: string | undefined,
-    ): Promise<{ bytes: Uint8Array; mediaType: string } | null> {
+    // Pair a staged upload back up: the Apple-safe embed bytes a save writes verbatim into PHOTO, and the
+    // first-generation webp sibling it promotes to the cache. No transcode here — both were encoded once at
+    // staging (uploadAvatar). Null for an empty url; a non-empty url whose webp or embed sibling is gone (swept,
+    // a torn upload) throws so the caller re-uploads rather than silently dropping a photo the user meant to set.
+    private async resolveStagedAvatar(stagedUrl: string | undefined): Promise<StagedAvatarPair | null> {
         if (!stagedUrl) return null;
-        const data = await this.downloadAvatar(stagedUrl.split('/').pop()!);
-        const result =
-            data &&
-            (await generateImagePreview(Buffer.from(data), 'image/webp', 'avatar', '', 'avatar', {
-                ...AVATAR_PREVIEW,
-                format: 'jpeg',
-            }));
-        if (!result) throw new ApiError(400, 'Avatar upload could not be found — please upload it again');
-        return { bytes: result.data, mediaType: 'image/jpeg' };
+        const webpName = stagedUrl.split('/').pop()!;
+        const webp = await this.downloadAvatar(webpName);
+        let embed: { bytes: Uint8Array; mediaType: string } | null = null;
+        if (webp) {
+            // The candidate names derive from a webp name the allowlist already accepted (downloadAvatar), so the
+            // embed path is safe by construction; exactly one sibling extension is ever written per upload.
+            for (const cand of stagedEmbedCandidates(webpName)) {
+                const path = `${PATHS.CONTACTS.AVATARS}/${cand.name}`;
+                if (await this.storage.exists(path)) {
+                    embed = {
+                        bytes: new Uint8Array(await this.storage.file(path).arrayBuffer()),
+                        mediaType: cand.mediaType,
+                    };
+                    break;
+                }
+            }
+        }
+        if (!webp || !embed) {
+            throw new ApiError(400, 'Avatar upload could not be found — please upload it again');
+        }
+        return { embed, webp: new Uint8Array(webp) };
     }
 
-    // Derive the webp avatar cache from an inline PHOTO and return its projection URL. Naming by the embedded
-    // bytes' hash makes a superseded photo's file fall out of reference, so cleanupAvatarImages sweeps it. A
-    // uri-kind or absent photo caches nothing — remote URIs are never fetched (SSRF, spec Non-goals).
+    // Save-seam cache write: store the staged first-generation webp sibling under the embed-derived cache name
+    // (avatarCacheName over the EMBED bytes — the same name a later reindex derives from the card's PHOTO). The
+    // app then serves generation one; a reconcile that finds this name keeps the file, and only a changed embed
+    // yields a new name and re-derivation. Mirrors cacheCardPhoto's replaced-bytes accounting.
+    private async promoteAvatarCache(contactId: string, staged: StagedAvatarPair): Promise<string> {
+        const name = avatarCacheName(contactId, staged.embed.bytes);
+        const path = `${PATHS.CONTACTS.AVATARS}/${name}`;
+        const replaced = (await this.storage.size(path)) ?? 0;
+        await this.storage.write(path, staged.webp);
+        this.avatarsBytes += staged.webp.byteLength - replaced;
+        return avatarUrl(this.home.user.id, name);
+    }
+
+    // Derive the webp avatar cache from an inline PHOTO and return its projection URL — the regeneration path
+    // (a reindex after avatars/ loss, an external DAV PUT), one generation older than a save's promoted webp.
+    // The 512px webp target decodes every format: a JPEG/PNG embed becomes an opaque/alpha webp, an animated
+    // GIF becomes an animated webp (the worker reads all pages for webp), each a full frame — never a filmstrip.
+    // Naming by the embedded bytes' hash makes a superseded photo's file fall out of reference, so
+    // cleanupAvatarImages sweeps it. A uri-kind or absent photo caches nothing — remote URIs are never fetched
+    // (SSRF, spec Non-goals).
     private async cacheCardPhoto(contactId: string, photo: ParsedCardPhoto | null): Promise<string> {
         if (photo?.kind !== 'inline') return '';
         const result = await generateImagePreview(

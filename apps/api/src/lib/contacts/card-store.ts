@@ -42,9 +42,10 @@ export function avatarCacheName(contactId: string, bytes: Uint8Array): string {
 const CONTACT_ID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'; // randomUUID()
 const PHOTO_HASH = '[0-9a-f]{8}'; // avatarCacheName's hash suffix
 
-// The only two names anything ever writes into `avatars/`: a staged upload (`<uuid>.webp`) and a derived card
+// The webp names anything ever serves from `avatars/`: a staged upload (`<uuid>.webp`) and a derived card
 // photo cache (`<uuid>-<hash8>.webp`). Serving is allowlisted to exactly those, so separators, `..` and
-// control characters are refused by construction rather than one blocklist at a time.
+// control characters are refused by construction rather than one blocklist at a time. (A third name is written
+// but never served — the staged embed sibling `<uuid>.embed.<ext>`, see STAGED_EMBED_FORMATS below.)
 export const AVATAR_FILENAME = new RegExp(`^${CONTACT_ID}(-${PHOTO_HASH})?\\.webp$`);
 const OWN_PHOTO_CACHE = new RegExp(`^${PHOTO_HASH}\\.webp$`);
 
@@ -53,6 +54,33 @@ const OWN_PHOTO_CACHE = new RegExp(`^${PHOTO_HASH}\\.webp$`);
 // only a card's own hash cache is safe to unlink along with it.
 export function isCardPhotoCacheOf(contactId: string, filename: string): boolean {
     return filename.startsWith(`${contactId}-`) && OWN_PHOTO_CACHE.test(filename.slice(contactId.length + 1));
+}
+
+// The Apple-safe embed sibling `uploadAvatar` stages next to the served `<uuid>.webp`: the exact PHOTO bytes a
+// save embeds verbatim (JPEG for opaque stills, PNG for alpha, GIF for animation). Keyed by the encoder format
+// so the extension, the vCard media type, and the allowlist shape are one source of truth. Never served —
+// `downloadAvatar`/`AVATAR_FILENAME` stay webp-only — only read back by `resolveStagedAvatar` and then swept.
+export const STAGED_EMBED_FORMATS = {
+    jpeg: { ext: 'jpg', mediaType: 'image/jpeg' },
+    png: { ext: 'png', mediaType: 'image/png' },
+    gif: { ext: 'gif', mediaType: 'image/gif' },
+} as const;
+export type EmbedFormat = keyof typeof STAGED_EMBED_FORMATS;
+
+function stagedBase(webpName: string): string {
+    return webpName.replace(/\.webp$/, '');
+}
+
+// `<uuid>.webp` -> `<uuid>.embed.<ext>`: the staged embed sits beside its served webp sibling, linked by the uuid.
+export function stagedEmbedName(webpName: string, format: EmbedFormat): string {
+    return `${stagedBase(webpName)}.embed.${STAGED_EMBED_FORMATS[format].ext}`;
+}
+
+// The embed siblings a staged webp could carry, in the order `resolveStagedAvatar` probes for the one on disk;
+// exactly one is ever written per upload.
+export function stagedEmbedCandidates(webpName: string): { name: string; mediaType: string }[] {
+    const base = stagedBase(webpName);
+    return Object.values(STAGED_EMBED_FORMATS).map((f) => ({ name: `${base}.embed.${f.ext}`, mediaType: f.mediaType }));
 }
 
 // The projection URL the contact index stores for an avatar (cache or staged upload), one home for the shape

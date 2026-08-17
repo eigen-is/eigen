@@ -18,7 +18,7 @@ type ThumbnailOptions = {
     maxSize?: number;
     quality?: number;
     fit?: 'inside' | 'cover';
-    format?: 'webp' | 'jpeg';
+    format?: 'webp' | 'jpeg' | 'png' | 'gif';
 };
 
 const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
@@ -30,6 +30,8 @@ const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
 
 type ImageResult = ImageDimensions & {
     data: Buffer;
+    hasAlpha: boolean;
+    frameCount: number;
     duration?: number;
 };
 
@@ -91,6 +93,8 @@ export async function generateImagePreview(
                         data: Buffer.from(event.data.data),
                         width: event.data.width,
                         height: event.data.height,
+                        hasAlpha: !!event.data.hasAlpha,
+                        frameCount: event.data.frameCount ?? 1,
                         ...(event.data.duration !== undefined && { duration: event.data.duration }),
                     });
                 };
