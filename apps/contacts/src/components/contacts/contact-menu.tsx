@@ -1,4 +1,4 @@
-import { useAuth } from '@workspace/lib/auth';
+import { type AuthUser, useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
 import { useOpenWriteEmailTo } from '@workspace/lib/mail';
 import type { Contact } from '@workspace/lib/types/contact';
@@ -10,12 +10,10 @@ import { printDocument } from '@workspace/ui/lib/printElement';
 import { Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 
-type MenuUser = { id: string; email: string } | null | undefined;
-
 // One "is this card me?" test for every contact surface: a card is you if it carries your
 // X-EIGEN-ID self-link (eigenId) or shares your account email — the two proxies the list and
 // the detail page used to check separately.
-export function isSelfContact(contact: Contact, user: MenuUser): boolean {
+export function isSelfContact(contact: Contact, user: AuthUser | null): boolean {
     if (user && contact.eigenId === user.id) return true;
     const myEmail = (user?.email ?? '').trim().toLowerCase();
     return myEmail.length > 0 && (contact.email ?? []).some((e) => e.trim().toLowerCase() === myEmail);

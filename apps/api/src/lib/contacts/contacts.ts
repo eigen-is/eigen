@@ -152,6 +152,10 @@ function rethrowDuplicateLabelName(e: unknown): never {
 // are included — DAV sees the whole book — and the etag is the unquoted content hash the handler quotes.
 export type CardRow = { uri: string; etag: string; isGroup: boolean };
 
+// The book counters every DAV sync surface reads: ctag advances on each change, syncGen rotates on an index
+// rebuild so stale sync tokens are refused. Named once, as CalDAV's builders take a CalendarItem.
+export type CardBook = { ctag: number; syncGen: number };
+
 // The typed outcome of a DAV PUT: a mapped precondition/conflict/limit result the handler turns into a 4xx,
 // or the stored etag plus whether the resource was newly created (201 vs 204). No raw throw crosses this seam
 // for a client-caused failure — only genuine IO errors bubble.
@@ -1687,7 +1691,7 @@ export class Contacts {
     // observing the index so no DAV read is served past a torn write (fail-closed, spec § 1), exactly as
     // getContacts does — which is why they are async even where the shape looks synchronous.
 
-    public async getBook(): Promise<{ ctag: number; syncGen: number }> {
+    public async getBook(): Promise<CardBook> {
         await this.ensureDrained();
         const book = this.db.select().from(schema.book).where(eq(schema.book.id, 1)).get()!;
         return { ctag: book.ctag, syncGen: book.syncGen };
@@ -1734,7 +1738,7 @@ export class Contacts {
             .get();
         if (!row) return null;
         try {
-            return { bytes: await this.storage.file(cardPath(row.uri)).bytes(), etag: row.etag };
+            return { bytes: await this.readCardBytes(row.uri), etag: row.etag };
         } catch (e) {
             if (e instanceof Error && 'code' in e && e.code === 'ENOENT') {
                 this.markCardDirty(row.uri);
@@ -1827,8 +1831,7 @@ export class Contacts {
             // Resolve the self-link (and restore X-EIGEN-ID into the bytes when this card holds the link but its
             // payload dropped it) before the quota gate, so the meter and the returned etag both hash the exact
             // bytes written.
-            const self = this.resolveSelfLinkOnPut(parsed, new TextEncoder().encode(stored), existing);
-            const bytes = self.bytes;
+            const { eigenId, bytes } = this.resolveSelfLinkOnPut(parsed, new TextEncoder().encode(stored), existing);
 
             // The stored bytes credit the card this one replaces (0 on create). enforceCardBudget raises 413 for
             // the whole-card ceiling and 507 for the mail+contacts quota; map both to typed results.
@@ -1841,7 +1844,7 @@ export class Contacts {
             }
 
             const id = existing?.id ?? randomUUID();
-            const isSelf = self.eigenId === this.home.user.id;
+            const isSelf = eigenId === this.home.user.id;
 
             // Fail closed on the canonical write or any later step: a throw marks the uri dirty for the next
             // drain and rethrows, and the durable intent recorded first covers a process death.
@@ -1861,7 +1864,7 @@ export class Contacts {
                         uid: parsed.uid,
                         firstName: parsed.firstName.trim(),
                         lastName: parsed.lastName.trim(),
-                        eigenId: self.eigenId,
+                        eigenId,
                         isGroup: parsed.isGroup,
                         data: {
                             email: parsed.email,

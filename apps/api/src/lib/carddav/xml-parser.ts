@@ -35,7 +35,7 @@ export type CardReportRequest =
 
 // The requested <D:prop> container: whether address-data was asked for at all, and the CARD:prop name list
 // under it (the partial-retrieval subset) when present. Full retrieval — <CARD:address-data/> with no
-// children — leaves partialProps null; Task 18 wires the projection, Task 16 always serves full bytes.
+// children — leaves partialProps null, which is the handler's "serve the stored bytes whole" signal.
 function readProps(root: Record<string, unknown>): { wantsData: boolean; partialProps: string[] | null } {
     const prop = (root['prop'] ?? {}) as Record<string, unknown>;
     const wantsData = Object.keys(prop).some((k) => k.includes('address-data'));

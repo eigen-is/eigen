@@ -1,19 +1,14 @@
 import { CARD_MAX_BYTES } from '../contacts/card-store';
+import type { CardBook } from '../contacts/contacts';
 import { escapeXml } from '../shared/xml';
 
 // The multistatus/response/propstat helpers and the shared NS string (which already declares the CARD
 // namespace) live in the CalDAV builder — one principal and one XML envelope serve both protocols, so these
 // are imported, never duplicated. This file only adds the addressbook-specific property blocks.
-export {
-    currentUserPrincipalProp,
-    multistatus,
-    propstatNotFound,
-    propstatOk,
-    response,
-    XML_CONTENT_TYPE,
-} from '../caldav/xml-builder';
+export { multistatus, propstatNotFound, propstatOk, response, XML_CONTENT_TYPE } from '../caldav/xml-builder';
 
-const BOOK_HREF = (userId: string) => `/dav/addressbooks/${userId}/`;
+// The addressbook HOME, one level above discovery.ts's bookHref (which points at the book itself).
+const homeHref = (userId: string) => `/dav/addressbooks/${userId}/`;
 
 // Addressbook home collection — the parent of the single book. Mirrors the CalDAV homeCollectionProps.
 export function addressbookHomeProps(userId: string): string[] {
@@ -21,14 +16,14 @@ export function addressbookHomeProps(userId: string): string[] {
         `<D:resourcetype><D:collection/></D:resourcetype>`,
         `<D:displayname>Addressbooks</D:displayname>`,
         `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`,
-        `<CARD:addressbook-home-set><D:href>${BOOK_HREF(userId)}</D:href></CARD:addressbook-home-set>`,
+        `<CARD:addressbook-home-set><D:href>${homeHref(userId)}</D:href></CARD:addressbook-home-set>`,
     ];
 }
 
 // The one fixed book named "Contacts". supported-report-set advertises exactly the REPORTs that exist (spec
 // § 4 — no expand-property); the sync-token carries the rebuild generation so a rebuilt book forces a full
 // resync instead of stalling clients on a stale counter.
-export function addressbookCollectionProps(book: { ctag: number; syncGen: number }): string[] {
+export function addressbookCollectionProps(book: CardBook): string[] {
     return [
         `<D:resourcetype><D:collection/><CARD:addressbook/></D:resourcetype>`,
         `<D:displayname>Contacts</D:displayname>`,
@@ -48,8 +43,8 @@ export function cardEtagProp(etag: string): string[] {
     ];
 }
 
-// The card body inside a REPORT response — the stored vCard bytes, XML-escaped, in a CARD:address-data
-// element. Task 16 always emits the full bytes; Task 18 wires the partial-retrieval projection.
+// The card body inside a REPORT response — the stored vCard bytes (or the partial-retrieval projection of
+// them), XML-escaped, in a CARD:address-data element.
 export function addressDataProp(vcf: string): string {
     return `<CARD:address-data>${escapeXml(vcf)}</CARD:address-data>`;
 }

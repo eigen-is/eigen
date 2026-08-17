@@ -69,7 +69,7 @@ export function PersonDetailToolbar({
                                 showPrint: true,
                                 labels,
                                 onEdit,
-                                onDelete: onDeleteClick ? () => onDeleteClick() : undefined,
+                                onDelete: onDeleteClick,
                                 onToggleLabel,
                             })}
                         </DropdownMenuContent>

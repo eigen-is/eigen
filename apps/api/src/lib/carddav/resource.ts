@@ -1,4 +1,5 @@
 import type { Contacts } from '../contacts/contacts';
+import { cardHref } from './discovery';
 import { XML_CONTENT_TYPE } from './xml-builder';
 
 // RFC 6352 precondition error body: a DAV:error wrapping one CardDAV precondition element — `no-uid-conflict`
@@ -46,7 +47,7 @@ export async function handlePutCard(
                 status: 201,
                 headers: {
                     ETag: `"${result.etag}"`,
-                    Location: `/dav/addressbooks/${ownerId}/contacts/${encodeURIComponent(uri)}`,
+                    Location: cardHref(ownerId, uri),
                 },
             });
         }

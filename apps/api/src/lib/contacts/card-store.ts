@@ -60,7 +60,7 @@ export function isCardPhotoCacheOf(contactId: string, filename: string): boolean
 // save embeds verbatim (JPEG for opaque stills, PNG for alpha, GIF for animation). Keyed by the encoder format
 // so the extension, the vCard media type, and the allowlist shape are one source of truth. Never served —
 // `downloadAvatar`/`AVATAR_FILENAME` stay webp-only — only read back by `resolveStagedAvatar` and then swept.
-export const STAGED_EMBED_FORMATS = {
+const STAGED_EMBED_FORMATS = {
     jpeg: { ext: 'jpg', mediaType: 'image/jpeg' },
     png: { ext: 'png', mediaType: 'image/png' },
     gif: { ext: 'gif', mediaType: 'image/gif' },

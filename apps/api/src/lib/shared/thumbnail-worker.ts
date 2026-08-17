@@ -61,14 +61,21 @@ async function sharpResize(
             position: 'center',
             withoutEnlargement: options.fit === 'inside',
         });
-        const encoded =
-            options.format === 'jpeg'
-                ? resized.jpeg({ quality: options.quality })
-                : options.format === 'png'
-                  ? resized.png()
-                  : options.format === 'gif'
-                    ? resized.gif()
-                    : resized.webp({ quality: options.quality });
+        // png/gif take no quality — they encode at sharp's defaults; webp is the default target.
+        let encoded: sharp.Sharp;
+        switch (options.format) {
+            case 'jpeg':
+                encoded = resized.jpeg({ quality: options.quality });
+                break;
+            case 'png':
+                encoded = resized.png();
+                break;
+            case 'gif':
+                encoded = resized.gif();
+                break;
+            default:
+                encoded = resized.webp({ quality: options.quality });
+        }
         const data = await encoded.toBuffer();
 
         // hasAlpha/frameCount describe the pristine source, so the avatar-staging caller can pick the embed

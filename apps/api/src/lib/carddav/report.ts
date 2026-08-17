@@ -1,7 +1,7 @@
 import { uriKeyOf } from '../contacts/card-store';
 import type { CardRow, Contacts } from '../contacts/contacts';
 import { projectAddressData } from './address-data';
-import { ADDRESSBOOK_ID } from './discovery';
+import { bookHref, cardHref } from './discovery';
 import { matchCard, UnsupportedCollationError, UnsupportedFilterError } from './query-filter';
 import { parseVCardLines, type VCardLine } from './vcard-ast';
 import {
@@ -21,11 +21,6 @@ import { type CardReportRequest, parseCardReport } from './xml-parser';
 export const REPORT_BODY_MAX_BYTES = 1_048_576;
 const MULTIGET_HREF_LIMIT = 500;
 const QUERY_RESULT_CAP = 1000;
-
-const bookPrefix = (ownerId: string) => `/dav/addressbooks/${ownerId}/${ADDRESSBOOK_ID}/`;
-// Card names are client-chosen, so every emitted href percent-encodes the resource segment — the
-// webdav/xml.ts:53 convention the CalDAV template skips (its uris are server-generated). Mirrors discovery.ts.
-const cardHref = (ownerId: string, uri: string) => `${bookPrefix(ownerId)}${encodeURIComponent(uri)}`;
 
 function xmlResponse(responses: string[], extra?: string): Response {
     return new Response(multistatus(responses, extra), {
@@ -98,7 +93,7 @@ async function handleMultiget(
 ): Promise<Response> {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    const prefix = bookPrefix(ownerId);
+    const prefix = bookHref(ownerId);
     const responses: string[] = [];
     // One response per resource: a client that lists the same href N times (or spells it N equivalent ways)
     // must not make us retain N copies of one card's bytes during assembly — the 500-count cap bounds the
