@@ -248,6 +248,27 @@ describe('CalDAV client sync on web-created events', () => {
         expect(xml).not.toContain('404 Not Found');
     });
 
+    test('a sync token ahead of the calendar ctag is refused, never answered with an empty delta', async () => {
+        // A post-restore client presents a token minted against a higher ctag; an empty delta plus a LOWER
+        // token would stall it forever, so the guard must refuse like a malformed token does.
+        const current = /urn:eigen:sync:(\d+)/.exec(await davSync());
+        expect(current).not.toBeNull();
+        const body = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>urn:eigen:sync:${Number(current![1]) + 1000}</D:sync-token>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('valid-sync-token');
+    });
+
     test('client drag of a simple event (If-Match PUT of served bytes) sticks', async () => {
         const ev = await createWebEvent({
             title: 'Dentist',

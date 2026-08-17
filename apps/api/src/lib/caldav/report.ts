@@ -4,12 +4,12 @@ import type { CalendarEventRow } from '../calendar/types';
 import { eventsToIcs } from './ical-serialize';
 import {
     calendarDataProp,
+    davError,
     eventEtagProp,
-    multistatus,
+    multistatusResponse,
     propstatNotFound,
     propstatOk,
     response,
-    XML_CONTENT_TYPE,
 } from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
 
@@ -54,11 +54,7 @@ function handleCalendarQuery(
     }
 
     const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
-    const responses = buildEventResponses(events, ownerId, calendarId, wantsData);
-    return new Response(multistatus(responses), {
-        status: 207,
-        headers: { 'Content-Type': XML_CONTENT_TYPE },
-    });
+    return multistatusResponse(buildEventResponses(events, ownerId, calendarId, wantsData));
 }
 
 function handleCalendarMultiget(
@@ -110,10 +106,7 @@ function handleCalendarMultiget(
         }
     }
 
-    return new Response(multistatus(responses), {
-        status: 207,
-        headers: { 'Content-Type': XML_CONTENT_TYPE },
-    });
+    return multistatusResponse(responses);
 }
 
 function handleSyncCollection(
@@ -139,13 +132,16 @@ function handleSyncCollection(
         const tokenMatch = report.syncToken.match(/sync[/:](\d+)$/);
         if (!tokenMatch) {
             // Invalid sync token — client must do full resync
-            return new Response(
-                `<?xml version="1.0" encoding="utf-8"?><D:error xmlns:D="DAV:"><D:valid-sync-token/></D:error>`,
-                { status: 403, headers: { 'Content-Type': XML_CONTENT_TYPE } },
-            );
+            return davError(403, '<D:valid-sync-token/>');
         }
 
         const sinceCtag = parseInt(tokenMatch[1], 10);
+        // A token ahead of the calendar (post-restore/rebuild) can't be honoured either: an empty delta plus
+        // a LOWER token would stall the client forever, blind to every change until the ctag catches back up
+        // (the guard the carddav twin shipped with).
+        if (sinceCtag > currentCtag) {
+            return davError(403, '<D:valid-sync-token/>');
+        }
 
         // Changed events
         const changed = calendar.getChangedEventsSince(calendarId, sinceCtag);
@@ -163,13 +159,7 @@ function handleSyncCollection(
     }
 
     // Build response with sync-token appended after responses (required by RFC 6578)
-    const syncToken = `urn:eigen:sync:${currentCtag}`;
-    const xml = multistatus(responses, `<D:sync-token>${syncToken}</D:sync-token>`);
-
-    return new Response(xml, {
-        status: 207,
-        headers: { 'Content-Type': XML_CONTENT_TYPE },
-    });
+    return multistatusResponse(responses, `<D:sync-token>urn:eigen:sync:${currentCtag}</D:sync-token>`);
 }
 
 function buildEventResponses(
