@@ -61,6 +61,13 @@ type DatabaseConfig<S extends SchemaType> = {
 Each migration runs in a transaction (`BEGIN`/`COMMIT`/`ROLLBACK`). If a migration fails partway through, all
 changes are rolled back and the version is not updated.
 
+**Future-version guard** (`managed-database.ts`, `runMigrations`): before applying anything, `open()` refuses a
+DB whose stored `__schema_version` is *higher* than the binary's `config.currentVersion` — it throws
+`ApiError(503)` instead of opening it. This protects the rollback case: after a deploy migrates a DB forward,
+downgrading to an older server would otherwise silently open (and keep writing to) a schema it doesn't
+understand, corrupting it. The operator sees a 503 for that domain until the binary is rolled forward to a
+version that knows the on-disk schema; nothing on disk is touched in the meantime.
+
 ### Pragmas
 
 `journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`

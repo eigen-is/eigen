@@ -23,8 +23,8 @@ You need two things: your Eigen web address, and an app password.
 Some clients also accept the discovery path `https://your-domain/.well-known/carddav`.
 
 **Generate an app password.** App passwords are separate credentials you give to external clients instead of
-your main Eigen password. If you have two-factor authentication switched on, an app password is required. Your
-main password will not work for CardDAV.
+your main Eigen password. If you have two-factor authentication switched on, an app password is required;
+your main password will not work for CardDAV.
 
 1. Open the [**Integrations** page](/space/services) in Space.
 2. Scroll down to **App passwords**.

@@ -4,7 +4,7 @@ import { getUserByEmail, type User } from '../user';
 import { auth } from './auth';
 import { checkProtocolAuthLimit, clearProtocolAuthFailures, recordProtocolAuthFailure } from './protocol-rate-limit';
 
-// HTTP Basic auth shared by CalDAV and WebDAV routers. Browsers/clients send
+// HTTP Basic auth shared by CalDAV, CardDAV, and WebDAV routers. Browsers/clients send
 // `Authorization: Basic base64(email:password)`; we hand the credentials to
 // `verifyProtocolAuth` which checks app passwords first, then primary password.
 export async function authenticateBasic(request: Request): Promise<User> {

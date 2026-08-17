@@ -7,7 +7,9 @@
 > `apps/api/src/lib/carddav/` layer serves RFC 6352 at `/dav/addressbooks/:ownerId/…`, a near-clone of the
 > CalDAV layer minus recurrence and timezones, with the same Basic-auth app-password story. One address book
 > per user named "Contacts", vCard 3.0 on disk and on the wire, `requireSelf`-only. The domain lives in
-> `apps/api/src/lib/contacts/`; the app UI and REST surface are unchanged.
+> `apps/api/src/lib/contacts/`; the REST surface gains a required conditional-write `etag` (a body field on
+> update, a `?etag=` param on delete), and the app UI grows a contact-menu, a field-array edit form, and an
+> Integrations card.
 
 ## Storage model — files as truth
 
@@ -262,6 +264,12 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
   own email restores it when a client strips the property. Only a client edit that strips the property *and*
   changes the email in one go loses the link until the user re-saves their profile. A `DELETE` of the self card
   is refused **403** (`deleteCard` → `self-delete`); because a client like Thunderbird drops the card from its view before the request and ignores the 403, the refusal also **touches** the self card (bumps the book `ctag` and re-stamps its `cardCtag`, bytes/etag untouched) so the next `sync-collection` delta lists it as an unchanged 200 row and any client that locally dropped it re-downloads it — the refused delete self-heals on the client's own schedule, at the cost of one phantom re-fetch row for other clients.
+- **Editing a value drops its params.** The app diffs a multi-value property (`EMAIL`, `TEL`) by *value*, so
+  changing one value — retyping a work email — is a delete of the old line plus an append of a bare new one:
+  the old line's params (`TYPE=WORK`, a grouped `item1.X-ABLabel`) don't carry to the new value, so an edited
+  work email reaches the phone unlabelled. Inherent to value-keyed set diffing — positional pairing of an old
+  value to its replacement is ambiguous — and a decided trade-off: untouched values keep their labels, and
+  re-picking the type on the client restores an edited one.
 
 ## Where the code lives
 
@@ -271,7 +279,8 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 - **`apps/api/src/lib/carddav/`** — the protocol layer: `carddav-router.ts`, `discovery.ts`, `resource.ts`,
   `report.ts`, `query-filter.ts`, `address-data.ts`, the vCard modules (`vcard-ast.ts`, `vcard-parse.ts`,
   `vcard-serialize.ts`, `vcard-transcode.ts`), and `xml-builder.ts`/`xml-parser.ts`. The shared XML envelope,
-  principal props, OPTIONS header and realm live in `caldav/xml-builder.ts` + `app.ts`.
+  principal props, OPTIONS header and realm live in `caldav/xml-builder.ts` + `app.ts`; the fold/escape/C0-strip
+  primitives both the vCard and iCalendar serializers ride on live in `apps/api/src/lib/core/content-line.ts`.
 - **`apps/api/src/routes/contacts.ts`** — thin REST bindings (unchanged by the refit beyond conditional-write
   etags).
 - **`packages/lib/src/core/contacts/`** — FE hooks + SSE handlers; shared types in
