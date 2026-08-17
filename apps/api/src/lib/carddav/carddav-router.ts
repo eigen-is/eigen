@@ -1,6 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
-import { sanitizeCardUri } from '../contacts/card-store';
+import { CARD_MAX_BYTES, sanitizeCardUri } from '../contacts/card-store';
 import { getContacts } from '../contacts/contacts';
 import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
@@ -12,6 +12,7 @@ import {
 } from './discovery';
 import { handleCardReport, REPORT_BODY_MAX_BYTES } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
+import { davError } from './xml-builder';
 
 // The wildcard decodes to at most two segments — the book and an optional card name. Card names are
 // client-chosen, so every segment is percent-decoded (the webdav/xml.ts convention); a malformed escape or a
@@ -108,7 +109,9 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const resolved = resolveCardUri(parseAddressbookPath(params['*']));
         if (resolved instanceof Response) return resolved;
 
-        const body = await request.text();
+        // Bound the body before buffering (1 GB server cap → heap); putCard re-checks CARD_MAX_BYTES as the store guard for its non-HTTP callers.
+        const body = await readBoundedBody(request, CARD_MAX_BYTES);
+        if (body === null) return davError(413, '<CARD:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
         return handlePutCard(await getContacts(user), params.ownerId, resolved.uri, body, ifMatch, ifNoneMatch);

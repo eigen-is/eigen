@@ -7,7 +7,8 @@ import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind
 import { handleCalendarPropfind, handleEventPropfind } from './propfind';
 import { handleMkcalendar, handleProppatch } from './proppatch';
 import { handleReport, REPORT_BODY_MAX_BYTES } from './report';
-import { handleDelete, handleGet, handlePut } from './resource';
+import { EVENT_MAX_BYTES, handleDelete, handleGet, handlePut } from './resource';
+import { davError } from './xml-builder';
 
 // The wildcard decodes to at most two segments — the calendar and an optional resource name. Resource names are
 // client-chosen, so every segment is percent-decoded (the carddav twin's parseAddressbookPath); a malformed
@@ -125,7 +126,9 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         }
 
         const home = await getHome(params.ownerId);
-        const body = await request.text();
+        // Bound the body before buffering so a hostile PUT can't park up to index.ts's 1 GB server cap on the heap.
+        const body = await readBoundedBody(request, EVENT_MAX_BYTES);
+        if (body === null) return davError(413, '<C:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
         return handlePut(
