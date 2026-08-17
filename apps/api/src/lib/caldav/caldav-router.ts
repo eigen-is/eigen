@@ -4,7 +4,7 @@ import { requireSelf } from '../core/access';
 import { readBoundedBody } from '../core/http';
 import { getHome } from '../home';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
-import { handleCalendarPropfind } from './propfind';
+import { handleCalendarPropfind, handleEventPropfind } from './propfind';
 import { handleMkcalendar, handleProppatch } from './proppatch';
 import { handleReport, REPORT_BODY_MAX_BYTES } from './report';
 import { handleDelete, handleGet, handlePut } from './resource';
@@ -57,7 +57,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const { calendarId } = parseDavPath(params['*']);
+        const { calendarId, resourceUri } = parseDavPath(params['*']);
 
         if (!calendarId) {
             const home = await getHome(params.ownerId);
@@ -69,6 +69,14 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const home = await getHome(params.ownerId);
         const calendar = home.calendar.getCalendarById(calendarId);
         if (!calendar) return new Response('Not Found', { status: 404 });
+
+        // A resource segment is a single-event PROPFIND — the event's own href + etag, 404 if the uri is unknown.
+        if (resourceUri) {
+            const event = home.calendar.getEventByUri(calendarId, resourceUri);
+            if (!event) return new Response('Not Found', { status: 404 });
+            return handleEventPropfind(params.ownerId, calendarId, event.uri, event.etag);
+        }
+
         const depth = request.headers.get('Depth') || '0';
         const events = depth === '1' ? home.calendar.getRawEvents(calendarId) : [];
         return handleCalendarPropfind(params.ownerId, calendar, events, depth);

@@ -984,4 +984,41 @@ describe('CalDAV', () => {
         expect((xml.match(/404 Not Found/g) ?? []).length).toBe(1);
         expect(xml).toContain('Dup Test');
     });
+
+    test('PROPFIND a single event returns its own href and quoted etag', async () => {
+        const uri = 'caldav-propfind-one.ics';
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-propfind-one@eigen\r\nSUMMARY:One Event\r\nDTSTART:20261001T090000Z\r\nDTEND:20261001T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        const putRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        const etag = putRes.headers.get('ETag');
+
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // The event's own href, not the collection's, and its quoted etag matching the PUT response.
+        expect(xml).toContain(`/dav/calendars/${userId}/${defaultCalendarId}/${uri}`);
+        expect(xml).toContain(`<D:getetag>${etag}</D:getetag>`);
+    });
+
+    test('PROPFIND a missing event uri is 404', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-propfind-nope.ics`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(res.status).toBe(404);
+    });
 });

@@ -32,3 +32,10 @@ export function handleCalendarPropfind(
         headers: { 'Content-Type': XML_CONTENT_TYPE },
     });
 }
+
+// PROPFIND /dav/calendars/{ownerId}/{calendarId}/{uri} — a single event resource (its own href + etag).
+export function handleEventPropfind(ownerId: string, calendarId: string, uri: string, etag: string): Response {
+    const eventHref = `/dav/calendars/${ownerId}/${calendarId}/${uri}`;
+    const xml = multistatus([response(eventHref, [propstatOk(eventEtagProp(etag))])]);
+    return new Response(xml, { status: 207, headers: { 'Content-Type': XML_CONTENT_TYPE } });
+}
