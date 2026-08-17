@@ -61,9 +61,15 @@ const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 // half stays live (Contacts.size answers from in-memory byte counters), so contact growth is always exact.
 // Only mail delivered inside the window can read stale, which the per-upload and whole-card ceilings still
 // bound; REST (avatar upload) and DAV share the one cache, which is safe because both credit the live contacts
-// half and only over-permit recently-delivered mail by at most the window.
+// half and only over-permit recently-delivered mail by at most the window. Freeing paths invalidate (below),
+// so the stale-HIGH direction — refusing a write on space the user just freed — never outlives the delete.
 const MAIL_SIZE_TTL_MS = 15_000;
 const mailSizeCache = new Map<string, { value: number; expiresAt: number }>();
+
+// Called from the maildir delete path: freed space must be visible to the next quota check immediately.
+export function invalidateMailSize(userId: string): void {
+    mailSizeCache.delete(userId);
+}
 
 async function cachedMailSize(userId: string, home: Home): Promise<number> {
     const now = Date.now();
