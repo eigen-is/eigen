@@ -124,6 +124,51 @@ describe('Contacts', () => {
         });
     });
 
+    describe('Control-character sanitization', () => {
+        // A pasted vertical tab (0x0B) is not valid XML character data. Stored verbatim in a card it renders
+        // every address-data REPORT invalid XML client-side and wedges the account's DAV sync, so the REST
+        // write seam must scrub it out of the stored bytes.
+        test('a REST update with a C0 control byte in notes stores a card with no C0 bytes', async () => {
+            const token = ctx.alice.user.sessionToken;
+            const base = `/contacts/${ctx.alice.user.id}/contacts`;
+            const createRes = await authedRequest(token, base, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ firstName: 'C0', lastName: 'Notes', email: ['c0@test.eigen.is'], phone: [] }),
+            });
+            const id = (await createRes.text()).replace(/^"|"$/g, '');
+            const beforeRes = await authedRequest(token, `${base}/${id}`);
+            const etag = (await assertJson<Contact>(beforeRes)).etag;
+
+            const putRes = await authedRequest(token, `${base}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: 'C0',
+                    lastName: 'Notes',
+                    email: ['c0@test.eigen.is'],
+                    phone: [],
+                    notes: `before${String.fromCharCode(0x0b)}after`,
+                    etag,
+                }),
+            });
+            expect(putRes.status).toBe(200);
+
+            // Read the stored resource bytes back through the card store — no C0 control byte other than
+            // TAB/CR/LF survives, so a full-book address-data REPORT stays well-formed XML.
+            const home = await getHome(ctx.alice.user.id);
+            const stored = await home.contacts.getCard(`${id}.vcf`);
+            expect(stored).not.toBeNull();
+            const text = new TextDecoder().decode(stored!.bytes);
+            const hasC0 = [...text].some((ch) => {
+                const c = ch.charCodeAt(0);
+                return c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d;
+            });
+            expect(hasC0).toBe(false);
+            expect(text).toContain('NOTE:beforeafter');
+        });
+    });
+
     describe('Conditional writes (etag preconditions)', () => {
         // A stale etag means the card was rewritten (a device sync, another tab) since the form loaded; the
         // second write must be refused with 412 rather than clobbering the newer state (spec § 3).

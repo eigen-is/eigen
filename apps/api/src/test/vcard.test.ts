@@ -28,6 +28,14 @@ const parseCard = (line: string) => parseVCardLines(`BEGIN:VCARD\r\nVERSION:3.0\
 // A vCard is CRLF-joined and CRLF-terminated; fixtures are written as physical lines so folding is literal.
 const vcard = (lines: string[]) => `${lines.join('\r\n')}\r\n`;
 
+// True if any C0 control byte other than the three XML-legal ones (TAB/CR/LF) survives in the text — the
+// bytes that make an address-data REPORT invalid XML client-side.
+const hasDisallowedC0 = (s: string) =>
+    [...s].some((ch) => {
+        const c = ch.charCodeAt(0);
+        return c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d;
+    });
+
 // Apple-Contacts-shaped vCard 3.0: UID, N/FN, ORG, two folded properties (TITLE, NOTE), a grouped
 // item1.EMAIL + item1.X-ABLabel pair, two TEL and two ADR lines, an X-SOCIALPROFILE, BDAY, CATEGORIES,
 // X-EIGEN-ID, and a base64 PHOTO folded across 5 physical lines. Built by joining physical lines with
@@ -318,6 +326,28 @@ describe('vCard merge + builder', () => {
         const reparsed = parseVCard(out);
         expect(reparsed.notes).toBe('hiX-EVIL:1');
         expect(reparsed.lines.filter((l) => l.name === 'X-EVIL')).toHaveLength(0);
+    });
+
+    test('a C0 control byte in a notes edit is stripped, keeping a legitimate TAB', () => {
+        // A pasted vertical tab (0x0B) is not valid XML character data; echoed into an address-data REPORT it
+        // renders that XML invalid client-side and wedges the account's sync. It is scrubbed at the escape seam
+        // (TAB stays — it is legal in a TEXT value), so the merged card round-trips and the parse-seam C0 guard
+        // accepts it.
+        const vt = String.fromCharCode(0x0b);
+        const out = mergeVCard(parseVCard(APPLE_FIXTURE), { notes: `a${vt}b${String.fromCharCode(9)}c` });
+        expect(hasDisallowedC0(out)).toBe(false);
+        expect(() => parseVCardLines(out)).not.toThrow();
+        expect(parseVCard(out).notes).toBe(`ab${String.fromCharCode(9)}c`); // VT dropped, TAB preserved
+    });
+
+    test('createVCard strips a C0 control byte from notes', () => {
+        const created = createVCard(
+            { firstName: 'A', lastName: 'B', email: [], phone: [], notes: `x${String.fromCharCode(0x0b)}y` },
+            'uid-c0',
+        );
+        expect(hasDisallowedC0(created)).toBe(false);
+        expect(() => parseVCardLines(created)).not.toThrow();
+        expect(parseVCard(created).notes).toBe('xy');
     });
 
     test('a birthday that is not a strict YYYY-MM-DD is treated as a clear, never written or injected', () => {

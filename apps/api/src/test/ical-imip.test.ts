@@ -76,6 +76,20 @@ describe('iMIP Serialization', () => {
         expect(ics).not.toContain('METHOD:');
         expect(ics).toContain('BEGIN:VCALENDAR');
     });
+
+    test('a C0 control byte in SUMMARY/DESCRIPTION is stripped from the serialized ICS', () => {
+        // A vertical tab (0x0B) pasted into an event title is not valid XML character data; echoed into a
+        // calendar-data REPORT it invalidates the XML. The shared content-line escape seam strips it (TAB stays).
+        const vt = String.fromCharCode(0x0b);
+        const ics = eventsToIcs([{ ...MOCK_EVENT, title: `Stand${vt}up`, description: `daily${vt}sync` }]);
+        expect(ics).toContain('SUMMARY:Standup');
+        expect(ics).toContain('DESCRIPTION:dailysync');
+        const hasC0 = [...ics].some((ch) => {
+            const c = ch.charCodeAt(0);
+            return c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d;
+        });
+        expect(hasC0).toBe(false);
+    });
 });
 
 describe('iMIP Parsing', () => {
