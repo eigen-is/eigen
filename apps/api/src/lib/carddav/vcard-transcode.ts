@@ -1,5 +1,5 @@
-// vCard 4.0 -> 3.0 transcode for the CardDAV PUT seam (Task 13's putCard — not wired up yet, this module has
-// no production caller). The book is 3.0 on disk and on the wire, but Thunderbird 102+ PUTs VERSION:4.0
+// vCard 4.0 -> 3.0 transcode for the CardDAV PUT seam (Contacts.putCard runs every PUT body through it before
+// storage). The book is 3.0 on disk and on the wire, but Thunderbird 102+ PUTs VERSION:4.0
 // regardless of what the server advertises, and 4.0 bytes served verbatim lose the photo on iOS (which reads
 // only the 3.0 PHOTO;ENCODING=b form). So a 4.0 card is rewritten before storage: VERSION, PHOTO, tel: URI
 // TEL values, ISO-basic BDAY dates and numeric PREF get their real 3.0 form; every construct with no 3.0

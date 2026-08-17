@@ -172,9 +172,10 @@ or a card that won't parse, serves the whole bytes.
 **Request bounds.** REPORT bodies are capped at 1 MiB (enforced in the router *before* the body reaches the
 XML parser), multiget hrefs at 500, query results at 1000.
 
-Reads never touch `.vcf` files except where the payload *is* the card: `PROPFIND` Depth 1 and `sync-collection`
-are pure SQLite (uris, etags, tombstones); only GET / multiget / query stream file bytes. Query filtering runs
-over a small book on a rare request, never on an app hot path.
+Reads touch `.vcf` files only where the payload *is* the card: `PROPFIND` Depth 1 is pure SQLite (uris, etags,
+tombstones), and so is `sync-collection` — unless the client also requests `address-data`, in which case each
+changed row streams its file bytes (as multiget does). GET / multiget / query always stream file bytes. Query
+filtering runs over a small book on a rare request, never on an app hot path.
 
 ## Labels ↔ CATEGORIES
 
@@ -236,8 +237,8 @@ Same credential story as CalDAV/IMAP: HTTP Basic auth, app password (primary-pas
 2FA). Point clients at `https://<domain>/` (or `/.well-known/carddav` discovery) with the Eigen email as
 username. The device-setup how-to is the help-center article
 [connect/contacts-client](../apps/index/src/data/support/connect/contacts-client.md) (Apple Contacts on
-macOS/iOS, DAVx⁵ on Android). The **Integrations** page (`apps/space/src/routes/_auth.services.tsx`) does not
-yet surface a CardDAV address card next to CalDAV/IMAP/WebDAV — a straightforward follow-up.
+macOS/iOS, DAVx⁵ on Android). The **Integrations** page (`apps/space/src/routes/_auth.services.tsx`) surfaces a
+CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 ## Caveats & decisions
 
