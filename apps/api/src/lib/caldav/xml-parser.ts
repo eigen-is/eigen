@@ -23,6 +23,9 @@ const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
     removeNSPrefix: true,
+    // Keep element text as text — fxp's default numeric coercion mangles digit-only values (the carddav
+    // twin's <text-match> phone bug); nothing here is meant to be numeric.
+    parseTagValue: false,
     isArray: (name) => ['href', 'comp'].includes(name),
 });
 

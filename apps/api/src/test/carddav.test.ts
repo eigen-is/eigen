@@ -668,6 +668,18 @@ describe('CardDAV', () => {
         expect((xml.match(/<D:response>/g) ?? []).length).toBe(2);
     });
 
+    test('a digit-only text-match value keeps its leading zero (no numeric coercion)', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        const card = `BEGIN:VCARD\r\nVERSION:3.0\r\nUID:${uid}\r\nFN:Zero Test\r\nN:Zero;;;;\r\nTEL;TYPE=CELL:0612345678\r\nEND:VCARD\r\n`;
+        expect((await putCard(uri, card, { 'If-None-Match': '*' })).status).toBe(201);
+
+        // fxp's default parseTagValue would deliver this as the number 612 and the phone would never match.
+        const telFilter = `<CARD:prop-filter name="TEL"><CARD:text-match match-type="starts-with">0612</CARD:text-match></CARD:prop-filter>`;
+        const xml = await (await report(queryBody(telFilter))).text();
+        expect(xml).toContain(cardHref(uri));
+    });
+
     test('an addressbook-query with no filter element is 400', async () => {
         const body =
             `<?xml version="1.0" encoding="utf-8"?>\n` +

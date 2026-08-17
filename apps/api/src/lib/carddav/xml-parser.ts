@@ -18,6 +18,9 @@ const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
     removeNSPrefix: true,
+    // Keep element text as text: fxp's default numeric coercion would turn <text-match>0612</text-match>
+    // into 612 and match no phone. nresults, the one genuinely numeric value, is converted explicitly below.
+    parseTagValue: false,
     isArray: (name, jpath) =>
         name === 'href' || (name === 'prop' && typeof jpath === 'string' && jpath.endsWith('address-data.prop')),
 });
@@ -157,8 +160,9 @@ export function parseCardReport(xml: string): CardReportRequest {
     }
     if (query) {
         const { wantsData, partialProps } = readProps(query);
-        const nresults = query.limit?.nresults;
-        const limit = nresults != null && Number.isFinite(Number(nresults)) ? Number(nresults) : null;
+        // xs:unsignedLong — ignore a non-numeric/negative limit; floor a fractional one.
+        const nresults = Number(query.limit?.nresults);
+        const limit = Number.isFinite(nresults) && nresults >= 0 ? Math.floor(nresults) : null;
         // RFC 6352 § 8.6 requires a CARDDAV:filter; a body without one parses to null and the handler 400s.
         const filter = query.filter == null ? null : parseFilter(query.filter);
         return { type: 'addressbook-query', filter, limit, wantsData, partialProps };
