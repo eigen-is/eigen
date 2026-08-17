@@ -145,9 +145,10 @@ function parseFilter(raw: unknown): QueryFilter {
 export function parseCardReport(xml: string): CardReportRequest {
     const parsed = parser.parse(xml);
 
-    const multiget = parsed['addressbook-multiget'] ?? parsed['CARD:addressbook-multiget'];
-    const query = parsed['addressbook-query'] ?? parsed['CARD:addressbook-query'];
-    const sync = parsed['sync-collection'] ?? parsed['D:sync-collection'];
+    // removeNSPrefix strips the D:/CARD: prefixes, so the roots are always unprefixed — no fallback needed.
+    const multiget = parsed['addressbook-multiget'];
+    const query = parsed['addressbook-query'];
+    const sync = parsed['sync-collection'];
 
     if (multiget) {
         const { wantsData, partialProps } = readProps(multiget);

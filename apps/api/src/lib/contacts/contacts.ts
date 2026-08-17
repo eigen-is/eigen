@@ -1689,6 +1689,20 @@ export class Contacts {
         }
     }
 
+    // The resource metadata (canonical uri + etag) for one card by its folded key — the single-resource
+    // PROPFIND read. An indexed single-row lookup, unlike a `listCards().find()` over the whole book; getCard
+    // is the wrong tool here because it reads the file bytes a PROPFIND never returns.
+    public async getCardMeta(uri: string): Promise<CardRow | null> {
+        await this.ensureDrained();
+        return (
+            this.db
+                .select({ uri: schema.contacts.uri, etag: schema.contacts.etag, isGroup: schema.contacts.isGroup })
+                .from(schema.contacts)
+                .where(eq(schema.contacts.uriKey, uriKeyOf(uri)))
+                .get() ?? null
+        );
+    }
+
     // A DAV PUT: store the client's card verbatim (after the 4.0→3.0 transcode) as the resource, with every
     // precondition, UID rule, quota gate, and self-link decision evaluated INSIDE the writeLock against the
     // state the write overwrites (§ 3). The uri is the client-chosen filename; the router sanitizes it (§ 4)

@@ -175,6 +175,22 @@ describe('CardDAV', () => {
         expect(res.status).toBe(403);
     });
 
+    test('a cross-user PUT (bob writing into alice’s book) is denied 403', async () => {
+        const uid = randomUUID();
+        const res = await app.handle(
+            new Request(cardUrl(`${uid}.vcf`), {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.bob.user.email),
+                    'Content-Type': 'text/vcard; charset=utf-8',
+                    'If-None-Match': '*',
+                },
+                body: vcard(uid),
+            }),
+        );
+        expect(res.status).toBe(403);
+    });
+
     // --- Resource GET / PUT / DELETE (Task 15) — these pin the store-result → HTTP-status mapping and the
     // byte-identity contract, not the store logic proven in carddav-store.test.ts. ---
 
@@ -264,6 +280,16 @@ describe('CardDAV', () => {
         const body = 'BEGIN:VCARD\r\nVERSION:3.0\r\nN:No;Uid;;;\r\nFN:No Uid\r\nEND:VCARD\r\n';
         const res = await putCard(`${randomUUID()}.vcf`, body, { 'If-None-Match': '*' });
         expect(res.status).toBe(400);
+    });
+
+    test('a PUT carrying a raw C0 control character maps to 400 and stores nothing', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        // A BEL (0x07) inside a NOTE value: stored verbatim it would make every full-book REPORT invalid XML
+        // client-side, so the parse seam rejects it as a bad card rather than accepting it.
+        const body = vcard(uid, [`NOTE:before${String.fromCharCode(7)}after`]);
+        expect((await putCard(uri, body, { 'If-None-Match': '*' })).status).toBe(400);
+        expect((await getCard(uri)).status).toBe(404);
     });
 
     test('an oversize PUT maps to 413 max-resource-size', async () => {
@@ -452,6 +478,36 @@ describe('CardDAV', () => {
     test('a REPORT body over 1 MiB is 413 before parsing', async () => {
         const res = await report('a'.repeat(1_048_577));
         expect(res.status).toBe(413);
+    });
+
+    test('addressbook-multiget collapses a repeated href to a single response element', async () => {
+        const uid = randomUUID();
+        const uri = `${uid}.vcf`;
+        expect((await putCard(uri, vcard(uid), { 'If-None-Match': '*' })).status).toBe(201);
+
+        // The same resource listed three times (spelled two different but equivalent ways) must yield exactly
+        // one <D:response> — a client expects per-resource rows, and assembling one address-data body per
+        // duplicate is the aggregate-bytes amplification this dedupe closes.
+        const res = await report(multigetBody([cardHref(uri), cardHref(uri), cardHref(uri.toUpperCase())]));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);
+    });
+
+    test('addressbook-multiget collapses a repeated missing href to a single 404 row', async () => {
+        const missing = `${randomUUID()}.vcf`;
+        const res = await report(multigetBody([cardHref(missing), cardHref(missing)]));
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(1);
+        expect(xml).toContain('404 Not Found');
+    });
+
+    test('a REPORT with an unknown root element is 400', async () => {
+        const body =
+            `<?xml version="1.0" encoding="utf-8"?>\n` +
+            `<D:not-a-real-report xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:not-a-real-report>`;
+        expect((await report(body)).status).toBe(400);
     });
 
     test('sync-collection without a token lists all cards and a generation-stamped token', async () => {

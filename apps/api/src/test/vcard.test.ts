@@ -166,6 +166,17 @@ describe('vCard content-line AST', () => {
         expect(() => parseVCardLines(`${APPLE_FIXTURE}END:VCARD\r\n`)).toThrow('multiple END');
     });
 
+    test('rejects a raw C0 control character but keeps a legitimate TAB', () => {
+        // A C0 control byte (here BEL, 0x07) stored in a value makes every full-book REPORT invalid XML
+        // client-side, wedging the whole account's sync — so it's refused at the parse seam.
+        const withBel = vcard(['BEGIN:VCARD', 'VERSION:3.0', `NOTE:a${String.fromCharCode(7)}b`, 'END:VCARD']);
+        expect(() => parseVCardLines(withBel)).toThrow(VCardError);
+        // TAB (0x09) is legal in a TEXT value and in line folding, so a card carrying one still parses.
+        const withTab = vcard(['BEGIN:VCARD', 'VERSION:3.0', `NOTE:a${String.fromCharCode(9)}b`, 'END:VCARD']);
+        expect(() => parseVCardLines(withTab)).not.toThrow();
+        expect(parseVCardLines(withTab).find((l) => l.name === 'NOTE')!.value).toBe(`a${String.fromCharCode(9)}b`);
+    });
+
     test('a built line over 75 octets folds and re-parses to the same value (UTF-8 safe)', () => {
         // é (2 bytes) sits right on the 75-octet boundary of `NOTE:` + value, so a naive byte split
         // would cut it in half.

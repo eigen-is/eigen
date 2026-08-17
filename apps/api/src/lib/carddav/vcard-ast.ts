@@ -105,6 +105,19 @@ function parseLine(raw: string, logical: string): VCardLine {
 // each, nothing outside. A payload with a second card, a trailing END, or bytes around the envelope is
 // rejected rather than stored and re-served to every DAV client.
 export function parseVCardLines(text: string): VCardLine[] {
+    // Reject raw C0 control bytes other than TAB/CR/LF (the only C0 chars valid in XML character data): one
+    // such byte, stored verbatim and echoed into a full-book REPORT's address-data, renders that XML invalid
+    // client-side and wedges the whole account's sync. This guards putCard (parse → 'invalid' → 400) and every
+    // future ingest path. TAB is legal in TEXT values and in folding, so it stays allowed. (A code-point scan,
+    // not a \x00-\x1F regex: biome's noControlCharactersInRegex rejects the latter; a \p{Cc} regex would also
+    // reject the C1 controls, which are valid XML characters.)
+    for (let i = 0; i < text.length; i++) {
+        const code = text.charCodeAt(i);
+        if (code < 0x20 && code !== 0x09 && code !== 0x0a && code !== 0x0d) {
+            throw new VCardError('control character in vCard');
+        }
+    }
+
     const lines = unfold(text).map(({ raw, logical }) => parseLine(raw, logical));
 
     const frames = (name: string) => lines.filter((l) => l.name === name && l.value.toUpperCase() === 'VCARD');

@@ -1,6 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
-import { sanitizeCardUri, uriKeyOf } from '../contacts/card-store';
+import { sanitizeCardUri } from '../contacts/card-store';
 import { getContacts } from '../contacts/contacts';
 import { requireSelf } from '../core/access';
 import {
@@ -62,8 +62,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
 
         // A second segment is a single-resource PROPFIND — index-only lookup by folded uri key, 404 if unknown.
         if (parsed.uri) {
-            const key = uriKeyOf(parsed.uri);
-            const card = (await contacts.listCards()).find((c) => uriKeyOf(c.uri) === key);
+            const card = await contacts.getCardMeta(parsed.uri);
             if (!card) return new Response('Not Found', { status: 404 });
             return handleCardPropfind(params.ownerId, card.uri, card.etag);
         }
@@ -139,7 +138,7 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
         const body = await request.text();
-        if (body.length > REPORT_BODY_MAX_BYTES) return new Response('Payload Too Large', { status: 413 });
+        if (Buffer.byteLength(body) > REPORT_BODY_MAX_BYTES) return new Response('Payload Too Large', { status: 413 });
         return handleCardReport(await getContacts(user), params.ownerId, body);
     })
 

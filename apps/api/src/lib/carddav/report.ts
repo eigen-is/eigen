@@ -1,3 +1,4 @@
+import { uriKeyOf } from '../contacts/card-store';
 import type { CardRow, Contacts } from '../contacts/contacts';
 import { projectAddressData } from './address-data';
 import { ADDRESSBOOK_ID } from './discovery';
@@ -99,6 +100,12 @@ async function handleMultiget(
 
     const prefix = bookPrefix(ownerId);
     const responses: string[] = [];
+    // One response per resource: a client that lists the same href N times (or spells it N equivalent ways)
+    // must not make us retain N copies of one card's bytes during assembly — the 500-count cap bounds the
+    // request shape, this dedupe re-anchors the response size to the (quota-bounded) book. Keyed by the folded
+    // uri for a resolvable href, by the raw href (uriKeys never contain ':') for an unresolvable one, so a
+    // repeated 404 collapses too. First occurrence wins, preserving request order.
+    const seen = new Set<string>();
     for (const href of report.hrefs) {
         // Normalise an absolute-path href down to the book prefix (caldav report.ts:72-75), then percent-decode
         // the single resource segment. A malformed escape or a href outside this book is a 404 row, not a throw.
@@ -112,6 +119,9 @@ async function handleMultiget(
                 uri = '';
             }
         }
+        const dedupeKey = uri ? uriKeyOf(uri) : `raw:${href}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
         if (!uri) {
             responses.push(response(href, [propstatNotFound(['<D:getetag/>'])]));
             continue;
