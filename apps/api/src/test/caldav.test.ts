@@ -1021,4 +1021,124 @@ describe('CalDAV', () => {
         );
         expect(res.status).toBe(404);
     });
+
+    test('a percent-encoded resource name round-trips through PUT, GET, and single-event PROPFIND', async () => {
+        // a%40b.ics decodes to a@b.ics — the server stores the decoded uri and re-encodes it on every emitted
+        // href (parity with CardDAV; CalDAV's uris are client-chosen too, so a raw split leaked the wrong href).
+        const href = `/dav/calendars/${userId}/${defaultCalendarId}/a%40b.ics`;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-encoded@eigen',
+            'SUMMARY:Encoded URI Event',
+            'DTSTART:20261101T090000Z',
+            'DTEND:20261101T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const putRes = await app.handle(
+            new Request(`http://localhost${href}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(href);
+        const etag = putRes.headers.get('ETag');
+        expect(etag).toBeTruthy();
+
+        const getRes = await app.handle(
+            new Request(`http://localhost${href}`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(getRes.status).toBe(200);
+        expect(await getRes.text()).toContain('Encoded URI Event');
+        expect(getRes.headers.get('ETag')).toBe(etag);
+
+        const propRes = await app.handle(
+            new Request(`http://localhost${href}`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(207);
+        const propXml = await propRes.text();
+        // The emitted href is the encoded form, never the decoded a@b.ics, and its etag matches the PUT.
+        expect(propXml).toContain(href);
+        expect(propXml).not.toContain('a@b.ics');
+        expect(propXml).toContain(`<D:getetag>${etag}</D:getetag>`);
+    });
+
+    test('REPORT multiget and sync-collection resolve and emit a percent-encoded href', async () => {
+        // c%40d.ics decodes to c@d.ics: multiget must decode the inbound href before matching, and both surfaces
+        // must re-encode the href they emit — never leak the decoded c@d.ics.
+        const href = `/dav/calendars/${userId}/${defaultCalendarId}/c%40d.ics`;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-encoded-report@eigen',
+            'SUMMARY:Encoded Report Event',
+            'DTSTART:20261102T090000Z',
+            'DTEND:20261102T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const putRes = await app.handle(
+            new Request(`http://localhost${href}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+
+        const multigetBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>${href}</D:href>
+</C:calendar-multiget>`;
+        const multigetRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: multigetBody,
+            }),
+        );
+        expect(multigetRes.status).toBe(207);
+        const multigetXml = await multigetRes.text();
+        expect(multigetXml).toContain('Encoded Report Event');
+        expect(multigetXml).toContain(href);
+        expect(multigetXml).not.toContain('c@d.ics');
+
+        const syncBody = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token/>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+        const syncRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: syncBody,
+            }),
+        );
+        expect(syncRes.status).toBe(207);
+        const syncXml = await syncRes.text();
+        expect(syncXml).toContain(href);
+        expect(syncXml).not.toContain('c@d.ics');
+    });
 });

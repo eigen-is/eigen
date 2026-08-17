@@ -3,6 +3,7 @@ import type { Calendar } from '../calendar/calendar';
 import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
 import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
+import { eventHref } from './discovery';
 import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
@@ -11,8 +12,8 @@ import { davError } from './xml-builder';
 // A calendar resource runs larger than a vCard (a recurring series carries an overridden VEVENT per exception),
 // so the raw-body ceiling is ~4× CardDAV's CARD_MAX_BYTES; bound the body before parsing (mirrors putCard).
 export const EVENT_MAX_BYTES = 20_971_520;
-// The client-chosen path segment becomes the stored uri (and a filename downstream); cap its length as
-// CardDAV's sanitizeCardUri does. Charset/percent-encoding parity lands separately (Task 5).
+// The client-chosen path segment, percent-decoded at the router, becomes the stored uri; cap its decoded length
+// as CardDAV's sanitizeCardUri does (an event uri is a DB column here, never a filename).
 const MAX_URI_LENGTH = 200;
 
 // GET /dav/calendars/:ownerId/:calendarId/:uri
@@ -118,7 +119,7 @@ export async function handlePut(
         status: 201,
         headers: {
             ETag: `"${calendar.getEventByUri(calendarId, uri)!.etag}"`,
-            Location: `/dav/calendars/${ownerId}/${calendarId}/${uri}`,
+            Location: eventHref(ownerId, calendarId, uri),
         },
     });
 }

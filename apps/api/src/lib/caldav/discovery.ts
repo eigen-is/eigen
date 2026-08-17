@@ -10,6 +10,14 @@ import {
     XML_CONTENT_TYPE,
 } from './xml-builder';
 
+// The two href shapes every CalDAV surface emits (discovery, PROPFIND rows, REPORT rows, the PUT Location
+// header), so the path shape and the escaping rule live in one place. The resource name is client-chosen, so its
+// segment is percent-encoded (the CardDAV twin's cardHref); ownerId and the server-made (randomUUID) calendarId
+// are not.
+export const calendarHref = (ownerId: string, calendarId: string) => `/dav/calendars/${ownerId}/${calendarId}/`;
+export const eventHref = (ownerId: string, calendarId: string, uri: string) =>
+    `${calendarHref(ownerId, calendarId)}${encodeURIComponent(uri)}`;
+
 // PROPFIND /dav/ — returns current-user-principal
 export function handleRootPropfind(userId: string): Response {
     const xml = multistatus([response('/dav/', [propstatOk([currentUserPrincipalProp(userId)])])]);
@@ -32,9 +40,7 @@ export function handleCalendarHomePropfind(ownerId: string, calendars: CalendarI
     if (depth === '1') {
         // Each calendar as a child collection
         for (const cal of calendars) {
-            responses.push(
-                response(`/dav/calendars/${ownerId}/${cal.id}/`, [propstatOk(calendarCollectionProps(cal))]),
-            );
+            responses.push(response(calendarHref(ownerId, cal.id), [propstatOk(calendarCollectionProps(cal))]));
         }
     }
 

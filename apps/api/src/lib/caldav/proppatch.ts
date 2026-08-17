@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
+import { calendarHref } from './discovery';
 import { multistatus, propstatOk, response, XML_CONTENT_TYPE } from './xml-builder';
 
 // removeNSPrefix strips the D:/C:/ICAL: prefixes, so property lookups below stay unprefixed — no fallback needed.
@@ -77,6 +78,6 @@ export async function handleProppatch(
         await calendar.updateCalendar(calendarId, updates);
     }
 
-    const xml = multistatus([response(`/dav/calendars/${ownerId}/${calendarId}/`, [propstatOk(updatedProps)])]);
+    const xml = multistatus([response(calendarHref(ownerId, calendarId), [propstatOk(updatedProps)])]);
     return new Response(xml, { status: 207, headers: { 'Content-Type': XML_CONTENT_TYPE } });
 }

@@ -1,6 +1,7 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
 import type { CalendarEventRow } from '../calendar/types';
+import { calendarHref, eventHref } from './discovery';
 import { eventsToIcs } from './ical-serialize';
 import {
     calendarDataProp,
@@ -78,15 +79,23 @@ function handleCalendarMultiget(
 ): Response {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
-    const prefix = `/dav/calendars/${ownerId}/${calendarId}/`;
+    const prefix = calendarHref(ownerId, calendarId);
     // Dedupe so a client listing one resource N ways yields one row, not N — the 404 loop below iterates this
-    // set, closing the duplicate-404-rows nit; first occurrence wins, preserving request order.
+    // set, closing the duplicate-404-rows nit; first occurrence wins, preserving request order. Each resource
+    // segment is percent-decoded (the CardDAV twin's move) so an encoded href resolves to the stored uri; a
+    // malformed escape or an out-of-collection href drops to '' and is skipped.
     const uris = [
         ...new Set(
             report.hrefs
                 .map((href) => {
                     const h = href.replace(/^\/+/, '/');
-                    return h.startsWith(prefix) ? h.slice(prefix.length) : '';
+                    const encoded = h.startsWith(prefix) ? h.slice(prefix.length) : '';
+                    if (!encoded) return '';
+                    try {
+                        return decodeURIComponent(encoded);
+                    } catch {
+                        return '';
+                    }
                 })
                 .filter(Boolean),
         ),
@@ -110,20 +119,19 @@ function handleCalendarMultiget(
 
     for (const event of events) {
         if (event.parentEventId) continue; // Skip exceptions (part of master .ics)
-        const href = `${prefix}${event.uri}`;
         const props = [...eventEtagProp(event.etag)];
         if (wantsData) {
             const group = eventsByUid.get(event.uid) ?? [event];
             props.push(calendarDataProp(eventsToIcs(group)));
         }
-        responses.push(response(href, [propstatOk(props)]));
+        responses.push(response(eventHref(ownerId, calendarId, event.uri), [propstatOk(props)]));
     }
 
     // Include 404 for missing URIs
     const foundUris = new Set(events.map((e) => e.uri));
     for (const uri of uris) {
         if (!foundUris.has(uri)) {
-            responses.push(response(`${prefix}${uri}`, [propstatNotFound([`<D:getetag/>`])]));
+            responses.push(response(eventHref(ownerId, calendarId, uri), [propstatNotFound([`<D:getetag/>`])]));
         }
     }
 
@@ -137,7 +145,6 @@ function handleSyncCollection(
     ownerId: string,
     report: ReturnType<typeof parseReport>,
 ): Response {
-    const prefix = `/dav/calendars/${ownerId}/${calendarId}/`;
     const currentCtag = calendarItem.ctag;
     const responses: string[] = [];
 
@@ -158,14 +165,17 @@ function handleSyncCollection(
         const changed = calendar.getChangedEventsSince(calendarId, token.since);
         for (const event of changed) {
             if (event.parentEventId) continue;
-            const href = `${prefix}${event.uri}`;
-            responses.push(response(href, [propstatOk(eventEtagProp(event.etag))]));
+            responses.push(
+                response(eventHref(ownerId, calendarId, event.uri), [propstatOk(eventEtagProp(event.etag))]),
+            );
         }
 
         // Deleted events
         const deleted = calendar.getDeletedEventsSince(calendarId, token.since);
         for (const d of deleted) {
-            responses.push(response(`${prefix}${d.uri}`, [`<D:status>HTTP/1.1 404 Not Found</D:status>`]));
+            responses.push(
+                response(eventHref(ownerId, calendarId, d.uri), [`<D:status>HTTP/1.1 404 Not Found</D:status>`]),
+            );
         }
     }
 
@@ -179,8 +189,6 @@ function buildEventResponses(
     calendarId: string,
     includeData: boolean,
 ): string[] {
-    const prefix = `/dav/calendars/${ownerId}/${calendarId}/`;
-
     // Build uid→events map so master events can include their exceptions in the ICS
     const eventsByUid = new Map<string, CalendarEventRow[]>();
     for (const e of events) {
@@ -193,13 +201,12 @@ function buildEventResponses(
 
     for (const event of events) {
         if (event.parentEventId) continue; // Skip exceptions
-        const href = `${prefix}${event.uri}`;
         const props = [...eventEtagProp(event.etag)];
         if (includeData) {
             const group = eventsByUid.get(event.uid) ?? [event];
             props.push(calendarDataProp(eventsToIcs(group)));
         }
-        responses.push(response(href, [propstatOk(props)]));
+        responses.push(response(eventHref(ownerId, calendarId, event.uri), [propstatOk(props)]));
     }
 
     return responses;
