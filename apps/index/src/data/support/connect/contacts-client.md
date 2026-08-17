@@ -104,5 +104,9 @@ that Contacts sync is switched on for the account in DAVx5 and that you granted 
 as DAVx5 or Thunderbird can show that entry as a blank contact. It is harmless and does not affect your real
 contacts.
 
+**An animated contact photo does not show in Thunderbird.** Thunderbird does not display animated GIF contact
+photos. The photo still syncs correctly and shows in Eigen and on other devices. Still photos, including
+transparent PNG, show fine in Thunderbird.
+
 **401 Unauthorized.** Your username or password is wrong. Confirm the username is your Eigen email address and
 the password is the app password, not your main account password.

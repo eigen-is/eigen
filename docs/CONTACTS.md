@@ -247,6 +247,9 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
   cosmetic consequence: an Apple-created group card renders as a **blank contact** in DAVx⁵'s default
   per-contact `CATEGORIES` mode and in Thunderbird (Mozilla bug 1807394). Mapping group cards to labels is
   deferred.
+- **Thunderbird does not render animated GIF contact photos** (verified live 2026-08-17: the GIF embed syncs
+  byte-correct and round-trips TB edits untouched, TB just doesn't display it; transparent PNG and JPEG show
+  fine). Client rendering limitation, not a sync defect — noted in the help-center article's troubleshooting.
 - **The deploy resets every contact book** to the seeded state (yourself + org owner) — decided, not
   accidental. The v2 migration drops v1 data; eigen.is books are seed-scale, and anyone with manual entries
   re-adds them or syncs them back from a phone once CardDAV is live. Say so in the release note.
