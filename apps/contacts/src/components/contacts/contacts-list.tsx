@@ -1,4 +1,3 @@
-import { useAuth } from '@workspace/lib/auth';
 import { useContacts } from '@workspace/lib/contacts';
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
@@ -8,13 +7,12 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { LabelAssignSubMenu } from '@workspace/ui/components/labels';
 import { PersonList, UserItem } from '@workspace/ui/components/user';
-import { ArrowUpDown, Pencil, Trash2 } from 'lucide-react';
+import { ArrowUpDown } from 'lucide-react';
 import { useMemo } from 'react';
+import { useContactMenu } from './contact-menu';
 
 type ContactsListToolbarProps = {
     searchQuery: string;
@@ -75,8 +73,8 @@ export function ContactsList({
     onToggleLabel,
     onRowClick,
 }: ContactsListProps) {
-    const { user } = useAuth();
     const { data: contacts = [], isLoading, error } = useContacts();
+    const contactMenu = useContactMenu();
 
     const filteredContacts = useMemo(() => {
         if (filterType === 'label' && filterId !== 'all') {
@@ -90,79 +88,36 @@ export function ContactsList({
     }
 
     return (
-        <PersonList
-            items={filteredContacts}
-            searchQuery={searchQuery}
-            activeId={activeContactId}
-            getId={(c) => c.id}
-            getName={(c) => (sortBy === 'firstName' ? c.firstName : c.lastName)}
-            getSearchFields={(c) => [c.firstName, c.lastName, ...(c.email ?? [])]}
-            onRowClick={(id) => onRowClick?.(id)}
-            selectable
-            dragType="contact"
-            emptyState={isLoading ? <LoadingState /> : <EmptyState message="No contacts found" />}
-            renderPerson={(contact) => (
-                <UserItem
-                    name={
-                        sortBy === 'firstName'
-                            ? `${contact.firstName} ${contact.lastName}`
-                            : `${contact.lastName}, ${contact.firstName}`
-                    }
-                    email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
-                    imageUrl={contact.avatar}
-                    className="flex-1"
-                />
-            )}
-            renderMenuItems={(contextItems, close) => {
-                const isSingleSelect = contextItems.length === 1;
-                const hasMe = contextItems.some((c) => c.eigenId === user?.id);
-                const allLabelIds = labels.map((l) => l.id);
-                const assignedToAll = allLabelIds.filter((lid) =>
-                    contextItems.every((c) => (c.labels || []).includes(lid)),
-                );
-                const assignedToSome = allLabelIds.filter(
-                    (lid) => !assignedToAll.includes(lid) && contextItems.some((c) => (c.labels || []).includes(lid)),
-                );
-                return (
-                    <>
-                        {isSingleSelect && onEdit && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onEdit(contextItems[0]);
-                                    close();
-                                }}
-                            >
-                                <Pencil className="h-4 w-4 mr-2" /> Edit
-                            </DropdownMenuItem>
-                        )}
-                        {onDelete && !hasMe && contextItems.length > 0 && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onDelete(contextItems);
-                                    close();
-                                }}
-                            >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
-                            </DropdownMenuItem>
-                        )}
-                        {onToggleLabel && contextItems.length > 0 && labels.length > 0 && (
-                            <>
-                                <DropdownMenuSeparator />
-                                <LabelAssignSubMenu
-                                    labels={labels}
-                                    assignedLabelIds={assignedToAll}
-                                    partialLabelIds={assignedToSome}
-                                    onToggleLabel={(labelId) => {
-                                        onToggleLabel(contextItems, labelId);
-                                        close();
-                                    }}
-                                />
-                            </>
-                        )}
-                    </>
-                );
-            }}
-        />
+        <>
+            <PersonList
+                items={filteredContacts}
+                searchQuery={searchQuery}
+                activeId={activeContactId}
+                getId={(c) => c.id}
+                getName={(c) => (sortBy === 'firstName' ? c.firstName : c.lastName)}
+                getSearchFields={(c) => [c.firstName, c.lastName, ...(c.email ?? [])]}
+                onRowClick={(id) => onRowClick?.(id)}
+                selectable
+                dragType="contact"
+                emptyState={isLoading ? <LoadingState /> : <EmptyState message="No contacts found" />}
+                renderPerson={(contact) => (
+                    <UserItem
+                        name={
+                            sortBy === 'firstName'
+                                ? `${contact.firstName} ${contact.lastName}`
+                                : `${contact.lastName}, ${contact.firstName}`
+                        }
+                        email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
+                        imageUrl={contact.avatar}
+                        className="flex-1"
+                    />
+                )}
+                renderMenuItems={(contextItems, close) =>
+                    // Print is detail-only (it clones the on-screen detail pane), so showPrint stays off here.
+                    contactMenu.renderItems(contextItems, close, { labels, onEdit, onDelete, onToggleLabel })
+                }
+            />
+            {contactMenu.chatWizard}
+        </>
     );
 }

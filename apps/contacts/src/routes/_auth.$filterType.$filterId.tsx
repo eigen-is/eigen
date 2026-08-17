@@ -66,6 +66,25 @@ function ContactsRoute() {
         });
     };
 
+    // Shared by the list context menu and the detail kebab — toggle one label across the batch.
+    const handleToggleLabel = async (selectedContacts: Contact[], labelId: string) => {
+        const allHaveLabel = selectedContacts.every((c) => (c.labels || []).includes(labelId));
+        await Promise.allSettled(
+            selectedContacts.map((c) => {
+                const currentLabels = c.labels || [];
+                if (allHaveLabel) {
+                    return updateContactMutation.mutateAsync({
+                        ...c,
+                        labels: currentLabels.filter((id) => id !== labelId),
+                    });
+                } else if (!currentLabels.includes(labelId)) {
+                    return updateContactMutation.mutateAsync({ ...c, labels: [...currentLabels, labelId] });
+                }
+                return Promise.resolve();
+            }),
+        );
+    };
+
     const contact = contactsLoading ? undefined : contacts.find((c) => c.id === contactId);
 
     useEffect(() => {
@@ -93,6 +112,8 @@ function ContactsRoute() {
             contact={contact}
             filterType={filterType}
             filterId={filterId}
+            labels={labels}
+            onToggleLabel={handleToggleLabel}
             onDeleteClick={() => setDeleteTargets([contact])}
         />
     ) : null;
@@ -157,26 +178,7 @@ function ContactsRoute() {
                             onDelete={(selectedContacts) => {
                                 setDeleteTargets(selectedContacts);
                             }}
-                            onToggleLabel={async (selectedContacts, labelId) => {
-                                const allHaveLabel = selectedContacts.every((c) => (c.labels || []).includes(labelId));
-                                await Promise.allSettled(
-                                    selectedContacts.map((c) => {
-                                        const currentLabels = c.labels || [];
-                                        if (allHaveLabel) {
-                                            return updateContactMutation.mutateAsync({
-                                                ...c,
-                                                labels: currentLabels.filter((id) => id !== labelId),
-                                            });
-                                        } else if (!currentLabels.includes(labelId)) {
-                                            return updateContactMutation.mutateAsync({
-                                                ...c,
-                                                labels: [...currentLabels, labelId],
-                                            });
-                                        }
-                                        return Promise.resolve();
-                                    }),
-                                );
-                            }}
+                            onToggleLabel={handleToggleLabel}
                         />
                     </div>
                 </Column>

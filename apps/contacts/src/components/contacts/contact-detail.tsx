@@ -13,15 +13,25 @@ type ContactDetailToolbarProps = {
     contact: Contact;
     filterType?: string;
     filterId?: string;
+    labels?: Label[];
+    onToggleLabel?: (contacts: Contact[], labelId: string) => void;
     onDeleteClick: () => void;
 };
 
-export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteClick }: ContactDetailToolbarProps) {
+export function ContactDetailToolbar({
+    contact,
+    filterType,
+    filterId,
+    labels,
+    onToggleLabel,
+    onDeleteClick,
+}: ContactDetailToolbarProps) {
     return (
         <PersonDetailToolbar
-            name={`${contact.firstName} ${contact.lastName}`.trim()}
-            emails={contact.email ?? []}
+            contact={contact}
             editSearch={{ filterType: filterType || 'filter', filterId: filterId || 'all', contactId: contact.id }}
+            labels={labels}
+            onToggleLabel={onToggleLabel}
             onDeleteClick={onDeleteClick}
         />
     );
