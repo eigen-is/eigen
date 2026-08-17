@@ -204,17 +204,19 @@ carries only that URL string — **base64 `PHOTO` bytes never enter the index, t
 event** (the one place the design could silently multiply the list payload by ~1000×, so it's an invariant).
 
 The app side keeps `uploadAvatar` as a pure staging endpoint (a file in, a webp URL out, before the contact
-even exists); `addContact`/`updateContact` read the staged webp and embed it as the vCard `PHOTO`. The embed
-is **JPEG** (`resolveStagedAvatar` transcodes the staged webp) because Apple Contacts decodes only
-JPEG/BMP/PNG/GIF, never webp. A DAV PUT carrying an inline photo is decoded and thumbnailed into the same
-hash-named webp cache (`cacheCardPhoto`); `prepareCardRow` regenerates a missing cache from the file's inline
-photo on reconcile/rebuild. Remote `PHOTO;VALUE=uri` images are kept verbatim in the file and **never fetched
-server-side** (SSRF, spec Non-goals). Staged orphans are swept by `cleanupAvatarImages`.
-
-> A richer embed pipeline — decode the pristine upload once into sibling first-generation encodes (webp for
-> the app; JPEG/PNG/GIF for the vCard by opacity/animation), promoted under the same embed-hash cache name so a
-> reconcile keeps it and any embed change invalidates it — is designed (spec § Phased rollout) but not yet
-> shipped; today the embed is JPEG-only and the app-served webp is a later generation.
+even exists) — but it now stages a **first-generation sibling pair** from the pristine upload: the 512px webp
+Eigen serves (`<uuid>.webp`, alpha and animation preserved) and an Apple-safe embed (`<uuid>.embed.<ext>` —
+JPEG q80 for opaque stills, PNG for alpha, animated GIF for animated sources with a 2 MiB fallback to
+first-frame JPEG, since Apple Contacts decodes only JPEG/BMP/PNG/GIF, never webp). Save embeds the staged
+embed bytes **verbatim** into `PHOTO` and promotes the sibling webp into the cache under
+`avatarCacheName(contactId, embedBytes)` — the exact name a reindex derives from the card, so a reconcile
+that finds it present keeps the promoted copy (never re-derives over it), while any change to the embedded
+bytes yields a new name and the missing-cache paths regenerate from the embed (one generation older —
+accepted; it's what an external DAV PUT gets anyway). A DAV PUT carrying an inline photo is decoded and
+thumbnailed into the same hash-named webp cache (`cacheCardPhoto`, animation and alpha carried through);
+`prepareCardRow` regenerates a missing cache from the file's inline photo on reconcile/rebuild. Remote
+`PHOTO;VALUE=uri` images are kept verbatim in the file and **never fetched server-side** (SSRF, spec
+Non-goals). Staged orphans — both siblings — are swept by `cleanupAvatarImages`.
 
 ## Quotas
 
