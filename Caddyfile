@@ -55,10 +55,10 @@ www.{$DOMAIN} {
         }
     }
     handle /.well-known/caldav {
-        redir /dav/ 301
+        redir * /dav/ 301
     }
     handle /.well-known/carddav {
-        redir /dav/ 301
+        redir * /dav/ 301
     }
 
     # Email autodiscovery — Apple Mail + Thunderbird autoconfig

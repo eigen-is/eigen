@@ -52,10 +52,10 @@
         }
     }
     handle /.well-known/caldav {
-        redir /dav/ 301
+        redir * /dav/ 301
     }
     handle /.well-known/carddav {
-        redir /dav/ 301
+        redir * /dav/ 301
     }
 
     # Email autodiscovery — same template as the bundled Caddyfile, served at the apex
