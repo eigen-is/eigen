@@ -2339,6 +2339,33 @@ describe('Event move across calendars (finding #1)', () => {
         expect(moved.data?.organizer?.email).toBe('org@example.com'); // link preserved across the move
     });
 
+    test('move A→B→A clears the source tombstone: a pre-move sync lists the uri once as 200, never as 404', async () => {
+        const createRes = await authedRequest(ctx.alice.user.sessionToken, eventsUrl(sourceCalId), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: 'Round Trip',
+                startTime: '2027-01-05T09:00:00Z',
+                endTime: '2027-01-05T10:00:00Z',
+                allDay: false,
+            }),
+        });
+        const created = await assertJson<CalendarEvent>(createRes);
+        const uri = `${created.uid}.ics`;
+
+        const home = await getHome(ctx.alice.user.id);
+        // The client's sync token on the source, captured before it ever leaves.
+        const preCtag = home.calendar.getCalendarById(sourceCalId)!.ctag;
+
+        home.calendar.moveEvent(sourceCalId, created.id, targetCalId); // A → B (tombstones the uri in A)
+        home.calendar.moveEvent(targetCalId, created.id, sourceCalId); // B → A (must clear that tombstone)
+
+        const changed = home.calendar.getChangedEventsSince(sourceCalId, preCtag).filter((e) => e.uri === uri);
+        const deleted = home.calendar.getDeletedEventsSince(sourceCalId, preCtag).filter((d) => d.uri === uri);
+        expect(changed).toHaveLength(1); // the re-homed event, once, as a 200
+        expect(deleted).toHaveLength(0); // and never as a stale 404
+    });
+
     test('rejects an event that does not live in the given source calendar (404 IDOR)', async () => {
         const createRes = await authedRequest(ctx.alice.user.sessionToken, eventsUrl(targetCalId), {
             method: 'POST',

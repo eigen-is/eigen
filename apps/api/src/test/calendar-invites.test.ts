@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
 import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import { getHome } from '../lib/home';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 describe('Calendar Invites', () => {
@@ -210,6 +212,54 @@ describe('Calendar Invites', () => {
             const aliceEvents = await assertJson<CalendarEventOccurrence[]>(aliceRes);
             const orgEvent = findOrFail(aliceEvents, (e) => e.title === 'Optional Meeting');
             expect(orgEvent.data!.attendees![0].status).toBe('declined');
+        });
+    });
+
+    // A re-received invite whose uri a local delete already tombstoned must sync as a fresh 200, not a lone
+    // 404 (which deletes the live event on the client), and its row must carry a non-null eventCtag or the
+    // sync delta (>eventCtag) never surfaces it at all. Driven at the domain level, like the linked-event
+    // seeding in calendar.test.ts — the REST layer has no re-invite-after-delete flow to exercise it.
+    describe('Re-received invitation after local delete', () => {
+        test('syncs once as a 200 with a non-null eventCtag and no 404 tombstone', async () => {
+            const bobHome = await getHome(ctx.bob.user.id);
+            const cal = bobHome.calendar;
+            const defaultCal = findOrFail(cal.getCalendars(), (c) => c.isDefault);
+            const uid = `reinvite-${randomUUID()}`;
+            const uri = `${uid}.ics`;
+            const payload = {
+                uid,
+                title: 'Re-received Invite',
+                description: null,
+                location: null,
+                startTime: new Date('2026-11-10T09:00:00Z'),
+                endTime: new Date('2026-11-10T10:00:00Z'),
+                allDay: false,
+                rrule: null,
+                timezone: null,
+                status: 'confirmed' as const,
+                sequence: 0,
+                data: {
+                    organizer: { userId: ctx.alice.user.id, email: ctx.alice.user.email, name: 'Alice' },
+                    organizerEventId: `org-${uid}`,
+                },
+                createByUserId: ctx.alice.user.id,
+                organizerEventId: `org-${uid}`,
+                organizerUserId: ctx.alice.user.id,
+            };
+
+            const firstId = cal.receiveInvitation(payload);
+            // The client's sync token, captured after the first receive and before the delete + re-receive.
+            const preCtag = cal.getCalendarById(defaultCal.id)!.ctag;
+
+            cal.deleteEvent(defaultCal.id, firstId); // Bob deletes his linked copy → tombstones the uri
+            const secondId = cal.receiveInvitation(payload); // Alice re-sends the same invite
+            expect(secondId).not.toBe(firstId);
+
+            const changed = cal.getChangedEventsSince(defaultCal.id, preCtag).filter((e) => e.uri === uri);
+            const deleted = cal.getDeletedEventsSince(defaultCal.id, preCtag).filter((d) => d.uri === uri);
+            expect(changed).toHaveLength(1);
+            expect(changed[0].eventCtag).not.toBeNull();
+            expect(deleted).toHaveLength(0);
         });
     });
 

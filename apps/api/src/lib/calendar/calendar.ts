@@ -679,6 +679,16 @@ export class Calendar {
                 .from(schema.calendars)
                 .where(eq(schema.calendars.id, targetCalendarId))
                 .get()!.ctag;
+            // Clear any tombstone this uri still carries in the target from an earlier move out of it — moving
+            // A→B then B→A must not leave A listing the uri as both a 200 (re-homed) and a 404 (stale tombstone).
+            tx.delete(schema.eventTombstones)
+                .where(
+                    and(
+                        eq(schema.eventTombstones.calendarId, targetCalendarId),
+                        eq(schema.eventTombstones.uri, existing.uri),
+                    ),
+                )
+                .run();
             tx.update(schema.events)
                 .set({ calendarId: targetCalendarId, eventCtag: targetCtag, updatedAt: sql`unixepoch()` })
                 .where(or(eq(schema.events.id, id), eq(schema.events.parentEventId, id)))
@@ -1044,6 +1054,7 @@ export class Calendar {
         if (!defaultCal) throw new ApiError(500, 'No default calendar');
 
         const id = randomUUID();
+        const uri = `${payload.uid}.ics`;
         const etag = computeEtag({
             title: payload.title,
             description: payload.description,
@@ -1057,13 +1068,23 @@ export class Calendar {
             data: payload.data,
         });
 
+        // Mirror createEvent's tombstone-clear + eventCtag stamp: without them a re-received invite whose uri
+        // a local delete already tombstoned syncs as ONLY a 404 (the client drops the live event), and a NULL
+        // eventCtag hides the row from getChangedEventsSince (>eventCtag) in every delta.
+        this.incrementCtag(defaultCal.id);
+        const newCtag = this.getCalendarById(defaultCal.id)!.ctag;
+        this.db
+            .delete(schema.eventTombstones)
+            .where(and(eq(schema.eventTombstones.calendarId, defaultCal.id), eq(schema.eventTombstones.uri, uri)))
+            .run();
+
         this.db
             .insert(schema.events)
             .values({
                 id,
                 calendarId: defaultCal.id,
                 uid: payload.uid,
-                uri: `${payload.uid}.ics`,
+                uri,
                 title: payload.title,
                 description: payload.description,
                 location: payload.location,
@@ -1079,10 +1100,10 @@ export class Calendar {
                 organizerEventId: payload.organizerEventId,
                 organizerUserId: payload.organizerUserId,
                 createByUserId: payload.createByUserId,
+                eventCtag: newCtag,
             })
             .run();
 
-        this.incrementCtag(defaultCal.id);
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
         const organizer = payload.data?.organizer;
         this.home.notifications?.persist({
