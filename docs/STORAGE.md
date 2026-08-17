@@ -116,7 +116,7 @@ data/home/{userId}/
     └── notifications.db
 ```
 
-Contacts follow the mail model: the `.vcf` files under `cards/` are canonical (each filename is its CardDAV resource name), and `contacts.db` indexes them. What the index projects — names, the `data` JSON, etags, label membership from each card's `CATEGORIES` — re-derives from the files; what it owns is authoritative and lives nowhere else: label ids + colors, the book `ctag`/`syncGen`/`ownerSeeded`, tombstones, and the crash-recovery journals. `avatars/` is a derived cache — one hashed webp per card photo, regenerated from the card's inline `PHOTO` when missing — alongside staged uploads a contact form hasn't saved yet. See [PROPOSAL_CARDDAV.md](PROPOSAL_CARDDAV.md).
+Contacts follow the mail model: the `.vcf` files under `cards/` are canonical (each filename is its CardDAV resource name), and `contacts.db` indexes them. What the index projects — names, the `data` JSON, etags, label membership from each card's `CATEGORIES` — re-derives from the files; what it owns is authoritative and lives nowhere else: label ids + colors, the book `ctag`/`syncGen`/`ownerSeeded`, tombstones, and the crash-recovery journals. `avatars/` is a derived cache — one hashed webp per card photo, regenerated from the card's inline `PHOTO` when missing — alongside staged uploads a contact form hasn't saved yet. See [CONTACTS.md](CONTACTS.md).
 
 Team data: `data/team/{teamId}/` — Drive + Calendar only, plus `settings.json` for mount/calendar config.
 Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).

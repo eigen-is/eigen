@@ -93,6 +93,7 @@ or reviewing one; an implementer working on a single file doesn't need it.
 | **Auth**              | `apps/api/src/lib/auth/auth.ts`              | better-auth with org/team/2FA/API key plugins                                                              |
 | **Protocol auth**     | `apps/api/src/lib/auth/protocol-auth.ts`     | `verifyProtocolAuth()` — shared IMAP/CalDAV/WebDAV auth (app password → primary password fallback)         |
 | **WebDAV**            | `apps/api/src/lib/webdav/`                   | RFC 4918 Class 1+2 server at `/webdav/:ownerId/:mountId/*`; mirrors CalDAV layer                           |
+| **CardDAV**           | `apps/api/src/lib/carddav/`                  | RFC 6352 server at `/dav/addressbooks/:ownerId/…`; contacts as vCard files under `eigen.contacts/cards/` with `contacts.db` a rebuildable index; mirrors CalDAV layer. See [CONTACTS.md](docs/CONTACTS.md) |
 | **Server config**     | `apps/api/src/lib/config/server-config.ts`   | Identity + secrets written once at setup (`domain`, `orgName`, `orgId`, `secret`, `setupCompleted`)        |
 | **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas, storage default (`defaults.mount.{storageType,s3Config}`), onboarding, guests   |
 | **Quota resolution**  | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
