@@ -3,8 +3,8 @@ import type { CardBook } from '../contacts/dav-store';
 import { escapeXml } from '../shared/xml';
 
 // The multistatus/response/propstat helpers and the shared NS string (which already declares the CARD
-// namespace) live in the CalDAV builder — one principal and one XML envelope serve both protocols, so these
-// are imported, never duplicated. This file only adds the addressbook-specific property blocks.
+// namespace) live in the shared DAV envelope (lib/dav/xml.ts) — one principal and one XML envelope serve both
+// protocols, so these are imported, never duplicated. This file only adds the addressbook-specific property blocks.
 export {
     davError,
     multistatus,
@@ -13,7 +13,7 @@ export {
     propstatOk,
     response,
     XML_CONTENT_TYPE,
-} from '../caldav/xml-builder';
+} from '../dav/xml';
 
 // The addressbook HOME, one level above discovery.ts's bookHref (which points at the book itself).
 const homeHref = (userId: string) => `/dav/addressbooks/${userId}/`;

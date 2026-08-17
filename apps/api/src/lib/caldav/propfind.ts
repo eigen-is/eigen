@@ -1,13 +1,6 @@
 import type { CalendarEvent, CalendarItem } from '@workspace/lib/types/calendar';
 import { calendarHref, eventHref } from './discovery';
-import {
-    calendarCollectionProps,
-    eventEtagProp,
-    multistatus,
-    propstatOk,
-    response,
-    XML_CONTENT_TYPE,
-} from './xml-builder';
+import { calendarCollectionProps, eventEtagProp, multistatusResponse, propstatOk, response } from './xml-builder';
 
 export function handleCalendarPropfind(
     ownerId: string,
@@ -30,14 +23,10 @@ export function handleCalendarPropfind(
         }
     }
 
-    return new Response(multistatus(responses), {
-        status: 207,
-        headers: { 'Content-Type': XML_CONTENT_TYPE },
-    });
+    return multistatusResponse(responses);
 }
 
 // PROPFIND /dav/calendars/{ownerId}/{calendarId}/{uri} — a single event resource (its own href + etag).
 export function handleEventPropfind(ownerId: string, calendarId: string, uri: string, etag: string): Response {
-    const xml = multistatus([response(eventHref(ownerId, calendarId, uri), [propstatOk(eventEtagProp(etag))])]);
-    return new Response(xml, { status: 207, headers: { 'Content-Type': XML_CONTENT_TYPE } });
+    return multistatusResponse([response(eventHref(ownerId, calendarId, uri), [propstatOk(eventEtagProp(etag))])]);
 }
