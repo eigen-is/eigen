@@ -31,31 +31,40 @@ export type ContactMenuActions = {
 
 // The single menu-item definition the contact list's context menu and the detail page's kebab both
 // render — same actions, same order on both surfaces (Send email, Start chat, Print, Edit, Delete,
-// Assign label). Single-select-only actions (email, chat, print, edit) hide when more than one
-// contact is targeted; delete and labels act on the whole batch. Owns the start-chat handoff and
-// the wizard both surfaces open, so mount `chatWizard` at a stable spot outside the menu content.
+// Assign label). Send email and Start chat act on the whole selection, silently dropping your own
+// card (a mail/chat with yourself is pointless); print and edit are single-select-only; delete and
+// labels act on the whole batch. Owns the start-chat handoff and the wizard both surfaces open, so
+// mount `chatWizard` at a stable spot outside the menu content.
 export function useContactMenu() {
     const openWriteEmailTo = useOpenWriteEmailTo();
     const startChatWith = useStartChatWith();
     const { user } = useAuth();
-    const [chatWith, setChatWith] = useState<{ email: string; name: string } | null>(null);
+    const [chatWith, setChatWith] = useState<{ email: string; name: string }[] | null>(null);
 
     const startChat = async (emails: string[], name: string) => {
         // startChatWith prefers the registered account address; an existing writable 1:1 opens
         // directly, otherwise the wizard opens pre-filled.
         const result = await startChatWith(emails);
-        if (result !== 'opened') setChatWith({ email: result.email, name });
+        if (result !== 'opened') setChatWith([{ email: result.email, name }]);
     };
 
     const renderItems = (contacts: Contact[], close: () => void, actions: ContactMenuActions): ReactNode => {
         const { labels = [], onEdit, onDelete, onToggleLabel, showPrint } = actions;
         const single = contacts.length === 1 ? contacts[0] : undefined;
-        const emails = (single?.email ?? []).filter((e) => e.trim().length > 0);
-        const email = emails[0];
         const hasSelf = contacts.some((c) => isSelfContact(c, user));
 
-        const canChat = single ? emails.length > 0 && !isSelfContact(single, user) : false;
-        const topGroup = !!single && (!!email || canChat || !!showPrint);
+        // Send email / Start chat act on everyone selected who isn't me and has an address — self is
+        // silently dropped. Each contact contributes its first email (the single-select convention).
+        const eligible = contacts.filter(
+            (c) => !isSelfContact(c, user) && (c.email ?? []).some((e) => e.trim().length > 0),
+        );
+        const eligiblePeople = eligible.map((c) => ({
+            email: (c.email ?? []).find((e) => e.trim().length > 0)?.trim() ?? '',
+            name: `${c.firstName} ${c.lastName}`.trim(),
+        }));
+        const canReach = eligible.length > 0;
+
+        const topGroup = canReach || (!!single && !!showPrint);
         const editGroup = (!!single && !!onEdit) || (!!onDelete && contacts.length > 0 && !hasSelf);
 
         const labelIds = labels.map((l) => l.id);
@@ -66,39 +75,47 @@ export function useContactMenu() {
 
         return (
             <>
-                {single && (
+                {canReach && (
                     <>
-                        {email && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    openWriteEmailTo(email);
-                                    close();
-                                }}
-                            >
-                                <Mail className="h-4 w-4 mr-2" /> Send email
-                            </DropdownMenuItem>
-                        )}
-                        {canChat && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    void startChat(emails, `${single.firstName} ${single.lastName}`.trim());
-                                    close();
-                                }}
-                            >
-                                <MessageSquare className="h-4 w-4 mr-2" /> Start chat
-                            </DropdownMenuItem>
-                        )}
-                        {showPrint && (
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    printDocument();
-                                    close();
-                                }}
-                            >
-                                <Printer className="h-4 w-4 mr-2" /> Print
-                            </DropdownMenuItem>
-                        )}
+                        <DropdownMenuItem
+                            onClick={() => {
+                                openWriteEmailTo(eligiblePeople.map((p) => p.email));
+                                close();
+                            }}
+                        >
+                            <Mail className="h-4 w-4 mr-2" />
+                            {eligible.length === 1 ? 'Send email' : `Send email to ${eligible.length} contacts`}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                            onClick={() => {
+                                // One eligible contact keeps the direct-open probe (its full address
+                                // list lets startChatWith prefer the registered account); several open
+                                // the wizard directly, pre-filled with every eligible person.
+                                if (eligible.length === 1) {
+                                    void startChat(
+                                        (eligible[0].email ?? []).filter((e) => e.trim().length > 0),
+                                        eligiblePeople[0].name,
+                                    );
+                                } else {
+                                    setChatWith(eligiblePeople);
+                                }
+                                close();
+                            }}
+                        >
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            {eligible.length === 1 ? 'Start chat' : `Start chat with ${eligible.length} contacts`}
+                        </DropdownMenuItem>
                     </>
+                )}
+                {single && showPrint && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            printDocument();
+                            close();
+                        }}
+                    >
+                        <Printer className="h-4 w-4 mr-2" /> Print
+                    </DropdownMenuItem>
                 )}
 
                 {topGroup && editGroup && <DropdownMenuSeparator />}
@@ -149,7 +166,7 @@ export function useContactMenu() {
             onOpenChange={(open) => {
                 if (!open) setChatWith(null);
             }}
-            initialPeople={chatWith ? [chatWith] : undefined}
+            initialPeople={chatWith ?? undefined}
         />
     );
 
