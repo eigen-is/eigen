@@ -296,8 +296,13 @@ export class Contacts {
         this.cleanupAvatarImages().catch(() => {});
     }
 
+    // Answered purely from the in-memory byte counters, and it must NEVER take the write lock. enforceCardBudget
+    // reaches size() through the mail+contacts quota gate from INSIDE the write lock on every metered mutation,
+    // and a lock-free read (getCard's ENOENT branch) can mark a card dirty without holding the lock — draining
+    // here would re-acquire the non-reentrant Semaphore(1) this call is already inside and deadlock the home.
+    // The counters stay live on every mutation (a pending drain perturbs them by at most one card's delta) and
+    // the quota is soft, so it answers directly. Stays async to leave the read-seam signature its callers await.
     public async size(): Promise<number> {
-        await this.ensureDrained();
         return this.cardsBytes + this.avatarsBytes;
     }
 

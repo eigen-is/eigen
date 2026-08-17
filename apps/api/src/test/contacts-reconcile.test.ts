@@ -993,7 +993,7 @@ describe('fail-closed drain guard', () => {
         ).toBeTruthy();
     });
 
-    test('size() drains a pending failure so the total reflects the healed card', async () => {
+    test('size() never drains a pending failure — a draining read heals it, then size() reflects it', async () => {
         const { contacts } = await makeContacts();
         const sizeBefore = await contacts.size(); // clean baseline, before any orphan exists
 
@@ -1012,7 +1012,7 @@ describe('fail-closed drain guard', () => {
         ).rejects.toThrow('commit boom');
         priv.commitCard = origCommit;
 
-        // Spy AFTER the failure so the very next read is the one that must drain (size() has not run since).
+        // Spy AFTER the failure so we can prove which read drains.
         let drainCalls = 0;
         const proto = Object.getPrototypeOf(contacts) as { drainDirty: () => Promise<void> };
         const origDrain = proto.drainDirty;
@@ -1021,11 +1021,17 @@ describe('fail-closed drain guard', () => {
             return origDrain.apply(this);
         };
 
-        // The failed create left the file staged but unindexed; size() drains it in and grows the total.
-        const healed = await contacts.size();
-        expect(drainCalls).toBe(1);
-        expect(healed).toBeGreaterThan(sizeBefore);
+        // size() must NEVER drain: it is reachable from the in-lock quota gate, so draining here would re-enter
+        // the non-reentrant write lock and deadlock the home. The pending failure is therefore not healed by
+        // size(), and the total is unchanged (the failed create never credited its bytes).
+        expect(await contacts.size()).toBe(sizeBefore);
+        expect(drainCalls).toBe(0);
+
+        // The next draining read (getContacts) heals the orphan through the shared prepare path; only then does
+        // size() grow to include it.
         expect((await contacts.getContacts()).some((c) => c.firstName === 'Sized')).toBe(true);
+        expect(drainCalls).toBe(1);
+        expect(await contacts.size()).toBeGreaterThan(sizeBefore);
     });
 });
 
@@ -1332,5 +1338,45 @@ describe('owner-contact seeding (one-shot latch)', () => {
             lookup.mockRestore();
             await updateServerSettings({ onboarding: { autoAddOwnerContact: setting } });
         }
+    });
+});
+
+describe('size() must never re-enter the non-reentrant write lock', () => {
+    // Resolve `p` or reject once `ms` elapses — turns a self-deadlock (a promise that never settles) into a
+    // failing assertion instead of a hung test run, and clears the timer on the resolve path so no stray
+    // rejection leaks.
+    const completesWithin = async <T>(p: Promise<T>, ms: number, msg: string): Promise<T> => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error(msg)), ms);
+        });
+        try {
+            return await Promise.race([p, timeout]);
+        } finally {
+            clearTimeout(timer);
+        }
+    };
+
+    test('size() called from inside the write lock still completes when a lock-free read marked a card dirty', async () => {
+        const { contacts } = await makeContacts();
+        const priv = contacts as unknown as {
+            writeLock: { run<T>(fn: () => Promise<T>): Promise<T> };
+            markCardDirty(uri: string): void;
+        };
+
+        // getCard's ENOENT branch marks a uri dirty WITHOUT holding the lock — reproduce that state. If it
+        // lands between a mutation's drainDirty() and its quota gate, size() sees a non-empty dirty set.
+        priv.markCardDirty('ghost.vcf');
+
+        // enforceCardBudget reaches Contacts.size() from INSIDE the write lock on every metered mutation.
+        // Reproduce that position: hold the lock, then call size(). If size() drains — taking the same
+        // non-reentrant Semaphore(1) it is already inside — it self-deadlocks the whole home forever.
+        const sizeFromInsideLock = priv.writeLock.run(() => contacts.size());
+        const bytes = await completesWithin(
+            sizeFromInsideLock,
+            2000,
+            'size() self-deadlocked: it re-entered the write lock it was already inside',
+        );
+        expect(bytes).toBeGreaterThanOrEqual(0);
     });
 });
