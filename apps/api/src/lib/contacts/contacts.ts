@@ -800,7 +800,7 @@ export class Contacts {
         return labels.deleteLabel(this, id);
     }
 
-    private dbRowToContact(row: typeof schema.contacts.$inferSelect, labels: string[]): Contact {
+    private dbRowToContact(row: typeof schema.contacts.$inferSelect, labelIds: string[]): Contact {
         const data = row.data ?? EMPTY_CARD_DATA;
 
         return {
@@ -810,7 +810,7 @@ export class Contacts {
             eigenId: row.eigenId,
             etag: row.etag,
             ...data,
-            labels,
+            labels: labelIds,
         };
     }
 
@@ -818,13 +818,13 @@ export class Contacts {
         await this.ensureDrained();
         const row = this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
         if (!row || row.isGroup) return null;
-        const labels = this.db
+        const labelIds = this.db
             .select({ labelId: schema.contactsToLabels.labelId })
             .from(schema.contactsToLabels)
             .where(eq(schema.contactsToLabels.contactId, row.id))
             .all()
             .map((rel) => rel.labelId);
-        return this.dbRowToContact(row, labels);
+        return this.dbRowToContact(row, labelIds);
     }
 
     public async getContacts(): Promise<Contact[]> {
