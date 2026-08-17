@@ -84,6 +84,27 @@ describe('writeAtomic', () => {
 
         expect(syncedADirectory).toEqual([false, true]);
     });
+
+    test('a failed write sweeps its temp file and rethrows the original error', async () => {
+        // Force the temp-file fsync to throw mid-write: the staged temp must not leak (only the cards/ init
+        // sweep self-heals its own leftovers), and the original error must surface. Reuses the shared
+        // FileHandle.sync spy from the probe above.
+        const { store, base } = nextStore();
+        const probe = await open(TEST_DIR, 'r');
+        const handleProto = Object.getPrototypeOf(probe) as { sync: () => Promise<void> };
+        await probe.close();
+
+        const spy = spyOn(handleProto, 'sync').mockImplementation(async () => {
+            throw new Error('fsync failed');
+        });
+        try {
+            await expect(store.writeAtomic('cards/d.vcf', 'doomed')).rejects.toThrow('fsync failed');
+        } finally {
+            spy.mockRestore();
+        }
+
+        expect(readdirSync(join(base, 'cards'))).toEqual([]);
+    });
 });
 
 describe('sanitizeCardUri', () => {

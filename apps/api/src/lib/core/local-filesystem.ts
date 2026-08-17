@@ -40,14 +40,22 @@ export class LocalFilesystem {
             fs.mkdirSync(dir, { recursive: true });
         }
         const tempPath = path.join(dir, `.${path.basename(fullPath)}.tmp-${randomUUID()}`);
-        const handle = await fsPromises.open(tempPath, 'w');
         try {
-            await handle.writeFile(data);
-            await handle.sync();
-        } finally {
-            await handle.close();
+            const handle = await fsPromises.open(tempPath, 'w');
+            try {
+                await handle.writeFile(data);
+                await handle.sync();
+            } finally {
+                await handle.close();
+            }
+            await fsPromises.rename(tempPath, fullPath);
+        } catch (error) {
+            // A failure before the rename lands leaves the staged temp behind. The cards/ init sweep self-heals
+            // its own leftovers, but any other caller would leak — best-effort unlink and rethrow the original
+            // (swallow the unlink's own error: the temp may never have been created).
+            await fsPromises.unlink(tempPath).catch(() => {});
+            throw error;
         }
-        await fsPromises.rename(tempPath, fullPath);
         // fsync the directory entry the rename created (POSIX; darwin + linux are the only targets).
         const dirHandle = await fsPromises.open(dir, 'r');
         try {
