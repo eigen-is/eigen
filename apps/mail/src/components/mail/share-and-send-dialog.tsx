@@ -1,3 +1,4 @@
+import type { DrivePathType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
@@ -7,12 +8,18 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
+import { getFileIcon } from '@workspace/ui/components/drive';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
-import type { ReactNode } from 'react';
 import { useRef } from 'react';
 
 // One grantable reference: the document and the To/Cc recipients that will receive view access.
-export type ShareGrant = { id: string; name: string; recipients: string[] };
+export type ShareGrant = {
+    id: string;
+    name: string;
+    mimeType: string;
+    driveType: DrivePathType;
+    recipients: string[];
+};
 
 type ShareAndSendDialogProps = {
     open: boolean;
@@ -56,28 +63,33 @@ export function ShareAndSendDialog({
     const primaryRef = useRef<HTMLButtonElement>(null);
 
     const hasGrants = grants.length > 0;
-    // All grantable documents share one recipient set → one sentence; otherwise a row per document.
+    // The lead line names the union of needing recipients. When the per-document sets differ it
+    // overstates some grants, so a closing line qualifies it — lead, list, and closer read as one
+    // sentence. Only missing access is ever granted, so the qualifier is simply the truth.
     const sharedSet = hasGrants && grants.every((g) => sameRecipients(g.recipients, grants[0].recipients));
+    const allRecipients = [...new Set(grants.flatMap((g) => g.recipients))];
 
-    let description: ReactNode;
-    let rows: ReactNode = null;
-    if (!hasGrants) {
-        description = "Some recipients won't get access to the linked documents.";
-    } else if (sharedSet) {
-        description = `Let ${formatRecipients(grants[0].recipients)} view ${joinList(grants.map((g) => g.name))}?`;
-    } else {
-        description = 'Let these recipients view the linked documents?';
-        rows = (
+    const description = hasGrants
+        ? `Not everyone on this email can open the linked ${grants.length === 1 ? 'document' : 'documents'}.`
+        : "Some recipients won't get access to the linked documents.";
+
+    // Lead line and file list are separate DialogContent children so the grid's default
+    // gap-4 section spacing applies around the list.
+    const rows = hasGrants && (
+        <>
+            <p className="text-sm">Give {formatRecipients(allRecipients)} access to:</p>
             <div className="space-y-2 text-sm">
                 {grants.map((g) => (
-                    <div key={g.id}>
-                        <span className="font-medium">{g.name}</span>
-                        <div className="text-muted-foreground">{formatRecipients(g.recipients)}</div>
+                    <div key={g.id} className="flex items-center gap-2">
+                        {getFileIcon(g.mimeType, g.driveType, { className: 'h-4 w-4 shrink-0 text-muted-foreground' })}
+                        <span className="truncate font-medium">{g.name}</span>
+                        <span className="ml-auto shrink-0 text-xs text-muted-foreground">Viewer</span>
                     </div>
                 ))}
             </div>
-        );
-    }
+            {!sharedSet && <p className="text-sm">unless they already have access.</p>}
+        </>
+    );
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>

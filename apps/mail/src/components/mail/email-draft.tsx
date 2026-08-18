@@ -307,6 +307,8 @@ export function EmailDraft({
                 grants.push({
                     id: ref.id,
                     name: stripEigenExtension(ref.name),
+                    mimeType: ref.mimeType,
+                    driveType: ref.driveType,
                     recipients: needingToCc.map((r) => r.email),
                 });
             }
