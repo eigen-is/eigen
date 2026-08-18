@@ -22,7 +22,7 @@ export const cardHref = (ownerId: string, uri: string) => `${bookHref(ownerId)}$
 export function handleAddressbookHomePropfind(ownerId: string, book: CardBook, depth: string): Response {
     const responses = [response(`/dav/addressbooks/${ownerId}/`, [propstatOk(addressbookHomeProps(ownerId))])];
     if (depth === '1') {
-        responses.push(response(bookHref(ownerId), [propstatOk(addressbookCollectionProps(book))]));
+        responses.push(response(bookHref(ownerId), [propstatOk(addressbookCollectionProps(book, ownerId))]));
     }
     return multistatusResponse(responses);
 }
@@ -30,7 +30,7 @@ export function handleAddressbookHomePropfind(ownerId: string, book: CardBook, d
 // PROPFIND /dav/addressbooks/{ownerId}/contacts/ — the book collection, plus one card per resource at Depth:1
 // (etag + content-type). The card listing comes from the index; DAV serves every card, group cards included.
 export function handleAddressbookPropfind(ownerId: string, book: CardBook, cards: CardRow[], depth: string): Response {
-    const responses = [response(bookHref(ownerId), [propstatOk(addressbookCollectionProps(book))])];
+    const responses = [response(bookHref(ownerId), [propstatOk(addressbookCollectionProps(book, ownerId))])];
     if (depth === '1') {
         for (const card of cards) {
             responses.push(response(cardHref(ownerId, card.uri), [propstatOk(cardEtagProp(card.etag))]));

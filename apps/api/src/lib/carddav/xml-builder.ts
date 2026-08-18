@@ -1,10 +1,11 @@
 import { CARD_MAX_BYTES } from '../contacts/card-store';
 import type { CardBook } from '../contacts/dav-store';
-import { escapeXml } from '../shared/xml';
-
 // The multistatus/response/propstat helpers and the shared NS string (which already declares the CARD
 // namespace) live in the shared DAV envelope (lib/dav/xml.ts) — one principal and one XML envelope serve both
 // protocols, so these are imported, never duplicated. This file only adds the addressbook-specific property blocks.
+import { ownershipProps } from '../dav/xml';
+import { escapeXml } from '../shared/xml';
+
 export {
     davError,
     multistatus,
@@ -34,16 +35,18 @@ export function addressbookHomeProps(userId: string): string[] {
         `<D:displayname>Addressbooks</D:displayname>`,
         `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`,
         `<CARD:addressbook-home-set><D:href>${homeHref(userId)}</D:href></CARD:addressbook-home-set>`,
+        ...ownershipProps(userId),
     ];
 }
 
 // The one fixed book named "Contacts". supported-report-set advertises exactly the REPORTs that exist (spec
 // § 4 — no expand-property); the sync-token carries the rebuild generation so a rebuilt book forces a full
 // resync instead of stalling clients on a stale counter.
-export function addressbookCollectionProps(book: CardBook): string[] {
+export function addressbookCollectionProps(book: CardBook, ownerId: string): string[] {
     return [
         `<D:resourcetype><D:collection/><CARD:addressbook/></D:resourcetype>`,
         `<D:displayname>Contacts</D:displayname>`,
+        ...ownershipProps(ownerId),
         `<CS:getctag>${book.ctag}</CS:getctag>`,
         `<D:sync-token>${formatSyncToken(book)}</D:sync-token>`,
         `<CARD:supported-address-data><CARD:address-data-type content-type="text/vcard" version="3.0"/></CARD:supported-address-data>`,

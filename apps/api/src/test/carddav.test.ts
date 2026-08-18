@@ -114,6 +114,21 @@ describe('CardDAV', () => {
         expect(xml).toMatch(/urn:eigen:sync:\d+-\d+/);
     });
 
+    // Apple's AddressBook derives per-source editability from DAV permission props; without them it
+    // treats existing cards as read-only and saves every edit as a NEW card (fresh UID) — the
+    // duplicate-on-edit class debugged on the wire 2026-08-18.
+    test('home and book advertise write privileges and ownership', async () => {
+        for (const [path, depth] of [
+            [`/dav/addressbooks/${userId}/`, '1'],
+            [`/dav/addressbooks/${userId}/contacts/`, '0'],
+        ] as const) {
+            const res = await propfind(path, depth);
+            const xml = await res.text();
+            expect(xml).toContain('<D:current-user-privilege-set><D:privilege><D:all/></D:privilege>');
+            expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
+        }
+    });
+
     test('PROPFIND book Depth:1 lists the seeded self-card with a quoted etag', async () => {
         const res = await propfind(`/dav/addressbooks/${userId}/contacts/`, '1');
         expect(res.status).toBe(207);
