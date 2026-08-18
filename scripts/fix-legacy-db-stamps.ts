@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 // One-off repair for deployments whose data predates the 2026-04-07 migration squash.
-// Pre-squash databases carry migration stamps (e.g. calendar.db at user_version 3) that are
-// higher than the squashed configs declare, and the 2026-08-14 forward-version guard in
-// ManagedDatabase now refuses to open them — which fails the whole Home init (503s everywhere).
-// The schema content of those DBs is identical to the squashed v1; only the stamp is stale.
+// Pre-squash databases carry migration stamps (e.g. calendar.db at v3 in the __schema_version
+// table ManagedDatabase uses — NOT PRAGMA user_version) that are higher than the squashed
+// configs declare, and the 2026-08-14 forward-version guard now refuses to open them — which
+// fails the whole Home init (503s everywhere). The schema content of those DBs is identical
+// to the squashed v1; only the stamp is stale.
 //
 // Usage (from the repo root on the server, api container stopped):
 //   bun scripts/fix-legacy-db-stamps.ts data           # audit only, no writes
@@ -48,6 +49,16 @@ function* walk(dir: string): Generator<string> {
     }
 }
 
+// ManagedDatabase tracks its migration stamp in __schema_version (id=1), never PRAGMA user_version.
+function readStamp(db: Database): number | null {
+    const table = db.query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = '__schema_version'`).all();
+    if (table.length === 0) return null;
+    const row = db.query('SELECT version FROM __schema_version WHERE id = 1').get() as {
+        version: number;
+    } | null;
+    return row?.version ?? null;
+}
+
 function hasSquashedV1Markers(db: Database): boolean {
     const cols = db.query(`PRAGMA table_info(events)`).all() as { name: string }[];
     const names = new Set(cols.map((c) => c.name));
@@ -59,6 +70,7 @@ function hasSquashedV1Markers(db: Database): boolean {
 
 let scanned = 0;
 let skipped = 0;
+let unstamped = 0;
 let stale = 0;
 let fixed = 0;
 let refused = 0;
@@ -69,38 +81,38 @@ for (const path of walk(root)) {
     scanned++;
     let db: Database;
     try {
-        // Always readwrite: readonly connections can't create a missing WAL -shm file
+        // readwrite (never create): readonly connections can't create a missing WAL -shm file
         // (SQLITE_CANTOPEN). Audit mode still never issues a write statement.
-        db = new Database(path, { readwrite: true });
+        db = new Database(path, { readwrite: true, create: false });
     } catch (err) {
         skipped++;
         console.error(`SKIP  ${path} — cannot open: ${err}`);
         continue;
     }
     try {
-        const { user_version } = db.query('PRAGMA user_version').get() as { user_version: number };
-        if (user_version <= expected) continue;
+        const stamp = readStamp(db);
+        if (stamp === null) {
+            unstamped++;
+            continue;
+        }
+        if (stamp <= expected) continue;
 
         stale++;
         if (name !== 'calendar.db') {
-            console.log(
-                `STALE ${path} — user_version ${user_version} > expected ${expected} (audit only, not touched)`,
-            );
+            console.log(`STALE ${path} — stamped v${stamp} > expected v${expected} (audit only, not touched)`);
             continue;
         }
         if (!hasSquashedV1Markers(db)) {
             refused++;
-            console.log(
-                `REFUSED ${path} — stamped ${user_version} but missing squashed-v1 markers; needs manual review`,
-            );
+            console.log(`REFUSED ${path} — stamped v${stamp} but missing squashed-v1 markers; needs manual review`);
             continue;
         }
         if (fix) {
-            db.exec(`PRAGMA user_version = ${expected}`);
+            db.run('UPDATE __schema_version SET version = ? WHERE id = 1', [expected]);
             fixed++;
-            console.log(`FIXED ${path} — user_version ${user_version} -> ${expected}`);
+            console.log(`FIXED ${path} — v${stamp} -> v${expected}`);
         } else {
-            console.log(`WOULD FIX ${path} — user_version ${user_version} -> ${expected} (markers verified)`);
+            console.log(`WOULD FIX ${path} — v${stamp} -> v${expected} (markers verified)`);
         }
     } catch (err) {
         skipped++;
@@ -111,7 +123,7 @@ for (const path of walk(root)) {
 }
 
 console.log(
-    `\n${fix ? 'Fix' : 'Audit'} complete: ${scanned} database(s) scanned, ${skipped} skipped, ${stale} stale stamp(s) found, ${fixed} fixed, ${refused} refused.`,
+    `\n${fix ? 'Fix' : 'Audit'} complete: ${scanned} database(s) scanned (${unstamped} without a version table), ${skipped} skipped, ${stale} stale stamp(s) found, ${fixed} fixed, ${refused} refused.`,
 );
 if (scanned === 0) console.log('WARNING: no managed databases found under this directory — wrong data dir?');
 if (skipped > 0)
