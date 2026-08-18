@@ -911,8 +911,9 @@ describe('Calendar timezone read-side degrade (audit P1-7b)', () => {
         );
         expect(res.status).toBe(207);
         const xml = await res.text();
-        // The href percent-encodes the client-chosen uri, so the @ in the uid arrives as %40 on the wire.
-        expect(xml).toContain(`${encodeURIComponent(uid)}.ics`);
+        // @ is pchar-legal (RFC 3986), so the client-chosen uri's @ is emitted raw in the href, never as %40.
+        expect(xml).toContain(`${uid}.ics`);
+        expect(xml).not.toContain(`${encodeURIComponent(uid)}.ics`);
         // The bad zone serializes like a no-timezone event (absolute UTC), not as a bogus TZID param.
         expect(xml).not.toContain('W. Europe Standard Time');
         expect(xml).toContain('DTSTART:20260910T090000Z');

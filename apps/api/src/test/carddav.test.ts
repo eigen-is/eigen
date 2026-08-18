@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { CARD_MAX_BYTES, computeCardEtag } from '../lib/contacts/card-store';
+import { encodePathSegment } from '../lib/dav/href';
 import { getHome } from '../lib/home';
 import { app, getTestContext } from './setup';
 
@@ -321,15 +322,27 @@ describe('CardDAV', () => {
         expect(uris).not.toContain('a/b.vcf');
     });
 
-    test('a percent-encoded resource name round-trips through PUT and GET', async () => {
+    test('a %40-encoded @ in a card name round-trips through PUT and GET and its Location is emitted raw', async () => {
+        // Inbound decodes A%40B.vcf to the stored uri A@B.vcf; @ is pchar-legal (RFC 3986), so the Location the
+        // PUT hands back carries the @ raw, never re-encoded to %40.
         const uid = randomUUID();
         const putRes = await putCard('A%40B.vcf', vcard(uid), { 'If-None-Match': '*' });
         expect(putRes.status).toBe(201);
-        expect(putRes.headers.get('Location')).toBe(`/dav/addressbooks/${userId}/contacts/A%40B.vcf`);
+        expect(putRes.headers.get('Location')).toBe(`/dav/addressbooks/${userId}/contacts/A@B.vcf`);
 
         const getRes = await getCard('A%40B.vcf');
         expect(getRes.status).toBe(200);
         expect(await getRes.text()).toBe(vcard(uid));
+    });
+
+    // sanitizeCardUri forbids every non-pchar char (a valid card name is `[A-Za-z0-9._@-]*.vcf`), so no storable
+    // card ever needs encoding — the emitted-href encoder is proven directly: pchar-legal chars stay raw, the
+    // rest still percent-encode. This pins that the @ flip narrowed the escaped set, it did not disable it.
+    test('the shared href encoder leaves pchar-legal chars raw but still encodes the rest', () => {
+        expect(encodePathSegment('A@B.vcf')).toBe('A@B.vcf');
+        expect(encodePathSegment("a:b+c,d;e=f&g$h!i'j(k)l*m")).toBe("a:b+c,d;e=f&g$h!i'j(k)l*m");
+        expect(encodePathSegment('a b.vcf')).toBe('a%20b.vcf');
+        expect(encodePathSegment('a/b.vcf')).toBe('a%2Fb.vcf');
     });
 
     test('a 4.0 Thunderbird-shaped PUT is stored and served as 3.0', async () => {
@@ -443,18 +456,19 @@ describe('CardDAV', () => {
         expect(xml).toContain('404 Not Found');
     });
 
-    test('addressbook-multiget resolves a percent-encoded href', async () => {
+    test('addressbook-multiget resolves a %40-encoded href and emits the @ raw', async () => {
         const uid = randomUUID();
         const body = vcard(uid);
-        // P%40Q.vcf decodes to P@Q.vcf — a name the server must percent-decode before matching and re-encode
-        // on emission (unlike CalDAV, where server-generated uris never need it).
+        // P%40Q.vcf decodes to P@Q.vcf — the server percent-decodes before matching and emits the @ raw, since @
+        // is pchar-legal (RFC 3986); the %40 form must not leak back into the emitted href.
         expect((await putCard('P%40Q.vcf', body, { 'If-None-Match': '*' })).status).toBe(201);
 
         const res = await report(multigetBody([cardHref('P%40Q.vcf')]));
         expect(res.status).toBe(207);
         const xml = await res.text();
         expect(xml).toContain(body);
-        expect(xml).toContain(cardHref('P%40Q.vcf'));
+        expect(xml).toContain(cardHref('P@Q.vcf'));
+        expect(xml).not.toContain('P%40Q.vcf');
     });
 
     test('addressbook-multiget without address-data returns etags only', async () => {
@@ -580,25 +594,25 @@ describe('CardDAV', () => {
         expect(xml).not.toContain('404 Not Found');
     });
 
-    test('sync-collection with a stale generation token is 412 valid-sync-token', async () => {
+    test('sync-collection with a stale generation token is 403 valid-sync-token', async () => {
         const res = await report(syncBody('urn:eigen:sync:0-1'));
-        expect(res.status).toBe(412);
+        expect(res.status).toBe(403);
         expect(await res.text()).toContain('valid-sync-token');
     });
 
-    test('sync-collection with a future ctag token is 412 valid-sync-token', async () => {
+    test('sync-collection with a future ctag token is 403 valid-sync-token', async () => {
         const token = syncTokenOf(await (await report(syncBody())).text());
         const [, gen, ctag] = token.match(/^urn:eigen:sync:(\d+)-(\d+)$/)!;
         const future = `urn:eigen:sync:${gen}-${Number(ctag) + 999}`;
         const res = await report(syncBody(future));
-        expect(res.status).toBe(412);
+        expect(res.status).toBe(403);
         expect(await res.text()).toContain('valid-sync-token');
     });
 
-    test('sync-collection with a malformed token is 412 valid-sync-token', async () => {
+    test('sync-collection with a malformed token is 403 valid-sync-token', async () => {
         for (const token of ['urn:eigen:sync:abc', 'nonsense']) {
             const res = await report(syncBody(token));
-            expect(res.status).toBe(412);
+            expect(res.status).toBe(403);
             expect(await res.text()).toContain('valid-sync-token');
         }
     });

@@ -1,4 +1,5 @@
 import type { CardBook, CardRow } from '../contacts/dav-store';
+import { encodePathSegment } from '../dav/href';
 import {
     addressbookCollectionProps,
     addressbookHomeProps,
@@ -13,9 +14,9 @@ export const ADDRESSBOOK_ID = 'contacts';
 
 // The two href shapes every CardDAV surface emits (discovery, REPORT rows, the PUT Location header), so the
 // book segment and the escaping rule live in one place. Card names are client-chosen, so the resource segment
-// is percent-encoded — the webdav/xml.ts convention the CalDAV template skips (its uris are server-made).
+// is minimally path-encoded via the shared dav/href encoder — the same one the CalDAV twin's eventHref uses.
 export const bookHref = (ownerId: string) => `/dav/addressbooks/${ownerId}/${ADDRESSBOOK_ID}/`;
-export const cardHref = (ownerId: string, uri: string) => `${bookHref(ownerId)}${encodeURIComponent(uri)}`;
+export const cardHref = (ownerId: string, uri: string) => `${bookHref(ownerId)}${encodePathSegment(uri)}`;
 
 // PROPFIND /dav/addressbooks/{ownerId}/ — the home collection, plus the single book child at Depth:1.
 export function handleAddressbookHomePropfind(ownerId: string, book: CardBook, depth: string): Response {

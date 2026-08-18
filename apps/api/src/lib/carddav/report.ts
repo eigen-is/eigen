@@ -26,8 +26,9 @@ const MULTIGET_HREF_LIMIT = 500;
 const QUERY_RESULT_CAP = 1000;
 
 // RFC 6578 recovery: a token the book can't honour (stale generation, future ctag, or malformed) forces the
-// client to redo the full comparison. sabre answers 412 with D:valid-sync-token; the design follows it (§ 1).
-const invalidSyncToken = () => davError(412, '<D:valid-sync-token/>');
+// client to redo the full comparison. sabre answers 403 (InvalidSyncToken extends Forbidden) with
+// D:valid-sync-token; RFC 3253 § 1.6 marshals precondition failures as 403, and clients key full resync on it.
+const invalidSyncToken = () => davError(403, '<D:valid-sync-token/>');
 
 // REPORT on /dav/addressbooks/:ownerId/contacts/ — addressbook-multiget, addressbook-query, or sync-collection.
 export async function handleCardReport(contacts: Contacts, ownerId: string, body: string): Promise<Response> {

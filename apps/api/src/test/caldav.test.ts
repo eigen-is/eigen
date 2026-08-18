@@ -625,7 +625,7 @@ describe('CalDAV', () => {
         expect(res.status).toBe(400);
     });
 
-    test('sync-collection rejects a malformed or legacy-format token with 412 valid-sync-token', async () => {
+    test('sync-collection rejects a malformed or legacy-format token with 403 valid-sync-token', async () => {
         // The legacy `urn:eigen:sync/N` slash form is no longer accepted — an unrecognised token is simply invalid.
         for (const token of ['urn:eigen:sync/5', 'urn:eigen:sync:abc', 'nonsense']) {
             const body = `<?xml version="1.0" encoding="utf-8"?>
@@ -640,7 +640,7 @@ describe('CalDAV', () => {
                     body,
                 }),
             );
-            expect(res.status).toBe(412);
+            expect(res.status).toBe(403);
             expect(await res.text()).toContain('valid-sync-token');
         }
     });
@@ -1022,10 +1022,11 @@ describe('CalDAV', () => {
         expect(res.status).toBe(404);
     });
 
-    test('a percent-encoded resource name round-trips through PUT, GET, and single-event PROPFIND', async () => {
-        // a%40b.ics decodes to a@b.ics — the server stores the decoded uri and re-encodes it on every emitted
-        // href (parity with CardDAV; CalDAV's uris are client-chosen too, so a raw split leaked the wrong href).
-        const href = `/dav/calendars/${userId}/${defaultCalendarId}/a%40b.ics`;
+    test('a %40-encoded @ in a resource name round-trips through PUT, GET, PROPFIND and is emitted raw', async () => {
+        // The client may PUT the @ percent-encoded; inbound decodes a%40b.ics to the stored uri a@b.ics. @ is
+        // pchar-legal (RFC 3986), so every emitted href/Location carries it raw — never re-encoded back to %40.
+        const requestHref = `/dav/calendars/${userId}/${defaultCalendarId}/a%40b.ics`;
+        const emittedHref = `/dav/calendars/${userId}/${defaultCalendarId}/a@b.ics`;
         const ics = [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -1039,7 +1040,7 @@ describe('CalDAV', () => {
         ].join('\r\n');
 
         const putRes = await app.handle(
-            new Request(`http://localhost${href}`, {
+            new Request(`http://localhost${requestHref}`, {
                 method: 'PUT',
                 headers: {
                     Authorization: basicAuth(ctx.alice.user.email),
@@ -1050,12 +1051,12 @@ describe('CalDAV', () => {
             }),
         );
         expect(putRes.status).toBe(201);
-        expect(putRes.headers.get('Location')).toBe(href);
+        expect(putRes.headers.get('Location')).toBe(emittedHref);
         const etag = putRes.headers.get('ETag');
         expect(etag).toBeTruthy();
 
         const getRes = await app.handle(
-            new Request(`http://localhost${href}`, {
+            new Request(`http://localhost${requestHref}`, {
                 method: 'GET',
                 headers: { Authorization: basicAuth(ctx.alice.user.email) },
             }),
@@ -1065,23 +1066,24 @@ describe('CalDAV', () => {
         expect(getRes.headers.get('ETag')).toBe(etag);
 
         const propRes = await app.handle(
-            new Request(`http://localhost${href}`, {
+            new Request(`http://localhost${requestHref}`, {
                 method: 'PROPFIND',
                 headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
             }),
         );
         expect(propRes.status).toBe(207);
         const propXml = await propRes.text();
-        // The emitted href is the encoded form, never the decoded a@b.ics, and its etag matches the PUT.
-        expect(propXml).toContain(href);
-        expect(propXml).not.toContain('a@b.ics');
+        // The emitted href carries the raw @, never the %40-encoded form, and its etag matches the PUT.
+        expect(propXml).toContain(emittedHref);
+        expect(propXml).not.toContain('a%40b.ics');
         expect(propXml).toContain(`<D:getetag>${etag}</D:getetag>`);
     });
 
-    test('REPORT multiget and sync-collection resolve and emit a percent-encoded href', async () => {
+    test('REPORT multiget and sync-collection resolve a %40-encoded href and emit the @ raw', async () => {
         // c%40d.ics decodes to c@d.ics: multiget must decode the inbound href before matching, and both surfaces
-        // must re-encode the href they emit — never leak the decoded c@d.ics.
-        const href = `/dav/calendars/${userId}/${defaultCalendarId}/c%40d.ics`;
+        // emit the @ raw (pchar-legal, RFC 3986) — never re-encoded back to the %40 form.
+        const requestHref = `/dav/calendars/${userId}/${defaultCalendarId}/c%40d.ics`;
+        const emittedHref = `/dav/calendars/${userId}/${defaultCalendarId}/c@d.ics`;
         const ics = [
             'BEGIN:VCALENDAR',
             'VERSION:2.0',
@@ -1094,7 +1096,7 @@ describe('CalDAV', () => {
             'END:VCALENDAR',
         ].join('\r\n');
         const putRes = await app.handle(
-            new Request(`http://localhost${href}`, {
+            new Request(`http://localhost${requestHref}`, {
                 method: 'PUT',
                 headers: {
                     Authorization: basicAuth(ctx.alice.user.email),
@@ -1109,7 +1111,7 @@ describe('CalDAV', () => {
         const multigetBody = `<?xml version="1.0" encoding="utf-8"?>
 <C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
   <D:prop><D:getetag/><C:calendar-data/></D:prop>
-  <D:href>${href}</D:href>
+  <D:href>${requestHref}</D:href>
 </C:calendar-multiget>`;
         const multigetRes = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
@@ -1121,8 +1123,8 @@ describe('CalDAV', () => {
         expect(multigetRes.status).toBe(207);
         const multigetXml = await multigetRes.text();
         expect(multigetXml).toContain('Encoded Report Event');
-        expect(multigetXml).toContain(href);
-        expect(multigetXml).not.toContain('c@d.ics');
+        expect(multigetXml).toContain(emittedHref);
+        expect(multigetXml).not.toContain('c%40d.ics');
 
         const syncBody = `<?xml version="1.0" encoding="utf-8"?>
 <D:sync-collection xmlns:D="DAV:">
@@ -1138,7 +1140,49 @@ describe('CalDAV', () => {
         );
         expect(syncRes.status).toBe(207);
         const syncXml = await syncRes.text();
-        expect(syncXml).toContain(href);
-        expect(syncXml).not.toContain('c@d.ics');
+        expect(syncXml).toContain(emittedHref);
+        expect(syncXml).not.toContain('c%40d.ics');
+    });
+
+    test('a resource name that genuinely needs encoding (a space) round-trips as %20', async () => {
+        // A space is not pchar-legal, so it MUST stay percent-encoded on the wire: the client PUTs a%20b.ics, the
+        // server stores "a b.ics" and re-emits the href as a%20b.ics — the raw space never appears in a listing.
+        const requestHref = `/dav/calendars/${userId}/${defaultCalendarId}/a%20b.ics`;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-space@eigen',
+            'SUMMARY:Spaced URI Event',
+            'DTSTART:20261103T090000Z',
+            'DTEND:20261103T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const putRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(requestHref);
+
+        const propRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(207);
+        const propXml = await propRes.text();
+        expect(propXml).toContain(requestHref);
+        expect(propXml).not.toContain('a b.ics');
     });
 });

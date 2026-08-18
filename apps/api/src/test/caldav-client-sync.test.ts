@@ -265,7 +265,7 @@ describe('CalDAV client sync on web-created events', () => {
                 body,
             }),
         );
-        expect(res.status).toBe(412);
+        expect(res.status).toBe(403);
         expect(await res.text()).toContain('valid-sync-token');
     });
 
