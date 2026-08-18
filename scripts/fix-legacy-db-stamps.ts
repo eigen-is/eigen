@@ -57,6 +57,8 @@ function hasSquashedV1Markers(db: Database): boolean {
     return names.has('icsBlob') && names.has('eventCtag') && tombstones.length === 1;
 }
 
+let scanned = 0;
+let skipped = 0;
 let stale = 0;
 let fixed = 0;
 let refused = 0;
@@ -64,12 +66,14 @@ let refused = 0;
 for (const path of walk(root)) {
     const name = basename(path);
     const expected = EXPECTED[name];
+    scanned++;
     let db: Database;
     try {
         // Always readwrite: readonly connections can't create a missing WAL -shm file
         // (SQLITE_CANTOPEN). Audit mode still never issues a write statement.
         db = new Database(path, { readwrite: true });
     } catch (err) {
+        skipped++;
         console.error(`SKIP  ${path} — cannot open: ${err}`);
         continue;
     }
@@ -99,12 +103,20 @@ for (const path of walk(root)) {
             console.log(`WOULD FIX ${path} — user_version ${user_version} -> ${expected} (markers verified)`);
         }
     } catch (err) {
+        skipped++;
         console.error(`SKIP  ${path} — ${err}`);
     } finally {
         db.close();
     }
 }
 
-console.log(`\n${fix ? 'Fix' : 'Audit'} complete: ${stale} stale stamp(s) found, ${fixed} fixed, ${refused} refused.`);
+console.log(
+    `\n${fix ? 'Fix' : 'Audit'} complete: ${scanned} database(s) scanned, ${skipped} skipped, ${stale} stale stamp(s) found, ${fixed} fixed, ${refused} refused.`,
+);
+if (scanned === 0) console.log('WARNING: no managed databases found under this directory — wrong data dir?');
+if (skipped > 0)
+    console.log(
+        'WARNING: skipped databases were NOT checked — fix the underlying error (permissions? sudo) and re-run.',
+    );
 if (!fix && stale > 0) console.log('Re-run with --fix (api container stopped, backup taken) to repair.');
-if (refused > 0) process.exitCode = 1;
+if (refused > 0 || scanned === 0 || skipped > 0) process.exitCode = 1;
