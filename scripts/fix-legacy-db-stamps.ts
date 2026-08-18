@@ -33,6 +33,10 @@ if (!root) {
     console.error('Usage: bun scripts/fix-legacy-db-stamps.ts <data-dir> [--fix]');
     process.exit(1);
 }
+if (!statSync(root, { throwIfNoEntry: false })?.isDirectory()) {
+    console.error(`Not a directory: ${root}`);
+    process.exit(1);
+}
 
 function* walk(dir: string): Generator<string> {
     for (const entry of readdirSync(dir)) {
