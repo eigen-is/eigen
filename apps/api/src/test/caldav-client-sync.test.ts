@@ -33,6 +33,24 @@ describe('CalDAV client sync on web-created events', () => {
         );
     }
 
+    async function davSync(token?: string): Promise<string> {
+        const tokenEl = token ? `<D:sync-token>${token}</D:sync-token>` : '<D:sync-token/>';
+        const body = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  ${tokenEl}
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(207);
+        return res.text();
+    }
+
     async function davGet(uri: string): Promise<{ ics: string; etag: string | null }> {
         const res = await app.handle(
             new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
@@ -104,7 +122,7 @@ describe('CalDAV client sync on web-created events', () => {
         const override = vevents.find((v) => v.includes('RECURRENCE-ID'));
         expect(override).toBeDefined();
         // The rid must name the ORIGINAL slot (Monday 12:00 Amsterdam), not the moved time —
-        // an unlinked rid makes clients render the original occurrence too (audit #C).
+        // an unlinked rid makes clients render the original occurrence too.
         const rid = override!.match(/RECURRENCE-ID[^:\r\n]*:([0-9TZ]+)/)?.[1];
         expect(rid).toBe('20260713T120000');
     });
@@ -191,6 +209,64 @@ describe('CalDAV client sync on web-created events', () => {
         expect(await occurrenceDays(ev.uid, '2026-09-01T00:00:00Z', '2026-09-30T00:00:00Z')).not.toContain(
             '2026-09-14',
         );
+    });
+
+    test('delete-then-recreate emits a single href in one sync response (no 200 + 404 duplicate)', async () => {
+        const uri = 'recreate-single-href.ics';
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:recreate-single-href@eigen',
+            'SUMMARY:Recreate Me',
+            'DTSTART:20261101T090000Z',
+            'DTEND:20261101T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const create = await davPut(uri, ics);
+        expect([201, 204]).toContain(create.status);
+
+        // The token captured BEFORE the delete: the tombstone and the re-created event both fall after it, so
+        // pre-fix this href would come back as both a 200 (changed) and a 404 (deleted).
+        const preToken = (await davSync()).match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+
+        const del = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/${uri}`, {
+                method: 'DELETE',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(del.status).toBe(204);
+        const recreate = await davPut(uri, ics);
+        expect(recreate.status).toBe(201);
+
+        const xml = await davSync(preToken);
+        // The href appears exactly once, and never as a 404 tombstone row.
+        expect(xml.split(uri).length - 1).toBe(1);
+        expect(xml).not.toContain('404 Not Found');
+    });
+
+    test('a sync token ahead of the calendar ctag is refused, never answered with an empty delta', async () => {
+        // A post-restore client presents a token minted against a higher ctag; an empty delta plus a LOWER
+        // token would stall it forever, so the guard must refuse like a malformed token does.
+        const current = /urn:eigen:sync:(\d+)/.exec(await davSync());
+        expect(current).not.toBeNull();
+        const body = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>urn:eigen:sync:${Number(current![1]) + 1000}</D:sync-token>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(403);
+        expect(await res.text()).toContain('valid-sync-token');
     });
 
     test('client drag of a simple event (If-Match PUT of served bytes) sticks', async () => {

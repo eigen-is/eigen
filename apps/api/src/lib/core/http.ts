@@ -26,6 +26,57 @@ export function etagMatches(header: string, etag: string): boolean {
         .includes(etag);
 }
 
+// RFC 7232 If-Match matcher for DAV write seams (CalDAV/CardDAV) whose stored etag is a bare content
+// hash the handler quotes only in the response. `*` means "the resource exists", so null never matches;
+// §3.1 mandates STRONG comparison, so a member of the comma-list matches only after its quotes are
+// stripped — a weak `W/` validator never matches. Callers 412 when If-Match is present and this is false.
+export function matchesIfMatch(header: string, etag: string | null): boolean {
+    if (header === '*') return etag !== null;
+    if (etag === null) return false;
+    return header.split(',').some((raw) => raw.trim().replace(/^"|"$/g, '') === etag);
+}
+
+// The If-None-Match counterpart: §3.2 weak comparison strips each member's `W/` prefix before the quote
+// strip. `*` still means "the resource exists". Callers 412 when If-None-Match is present and this is true.
+export function matchesIfNoneMatch(header: string, etag: string | null): boolean {
+    if (header === '*') return etag !== null;
+    if (etag === null) return false;
+    return header.split(',').some((raw) => raw.trim().replace(/^W\//, '').replace(/^"|"$/g, '') === etag);
+}
+
+// The bounded request-body reader every DAV router's XML/body seam sits on. Reads the body as UTF-8 text but
+// refuses to buffer more than `maxBytes`: the Content-Length pre-check rejects an honest client early, and the
+// read loop cancels the stream the instant the running total crosses the cap — the load-bearing check, since a
+// chunked or Bun-string body carries no length header to trust. Returns the decoded text ('' for an empty
+// body), or null when the cap is exceeded, leaving each caller to map null to its own rejection (WebDAV throws
+// 413, CalDAV/CardDAV return an explicit 413) so a hostile payload never reaches the synchronous XML parser.
+export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
+    const len = request.headers.get('Content-Length');
+    if (len !== null && Number(len) > maxBytes) return null;
+    if (!request.body) return '';
+    const reader = request.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+            await reader.cancel();
+            return null;
+        }
+        chunks.push(value);
+    }
+    if (chunks.length === 0) return '';
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const c of chunks) {
+        merged.set(c, offset);
+        offset += c.byteLength;
+    }
+    return new TextDecoder().decode(merged);
+}
+
 // RFC 7233 single byte-range. Returns the inclusive [start, end] when satisfiable,
 // 'unsatisfiable' when a range was requested but can't be served (caller responds 416),
 // or null when there's no Range header (caller serves the full 200 body).

@@ -13,7 +13,7 @@
 | Notifications   | `{home}/eigen.notifications/notifications.db`   | Per-user notification history                            |
 | Mount metadata  | `{home}/mounts/{id}/metadata.db`                | Drive file/folder structure. Also `pending_uploads` (write-behind S3 queue), `file_events` + `path_watchers` (history/watching) and the `paths_fts` name index (`apps/api/src/lib/mount/schema.ts`) |
 | Shared paths    | `{home}/mounts/shared.db`                       | Files shared with this user                              |
-| Contacts        | `{home}/eigen.contacts/contacts.db`             | Contact data                                             |
+| Contacts        | `{home}/eigen.contacts/contacts.db`             | Index over the canonical vCard files in `eigen.contacts/cards/` — **plus** the metadata that lives only here: label ids + colors, the one-row `book` (`ctag`, `syncGen`, `ownerSeeded`), `contact_tombstones`, and the `pending_card_writes` + `pending_label_renames` recovery journals (`apps/api/src/lib/contacts/schema.ts`). Card projections, etags and label membership re-derive from the files; the rest does not. `CONTACTS_DB_CONFIG` is at `currentVersion: 4`. See [CONTACTS.md](CONTACTS.md) |
 | Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata + FTS5 full-text index (`emails_fts`). `MAIL_DB_CONFIG` is at `currentVersion: 4`. See [SEARCH.md](SEARCH.md) |
 | Calendar        | `{home}/eigen.calendar/calendar.db`             | Calendars, events, shared calendars                      |
 | Collab docs     | Via storage backend (`{dataDbPathId}`)           | Yjs snapshots + updates                                  |
@@ -60,6 +60,13 @@ type DatabaseConfig<S extends SchemaType> = {
 
 Each migration runs in a transaction (`BEGIN`/`COMMIT`/`ROLLBACK`). If a migration fails partway through, all
 changes are rolled back and the version is not updated.
+
+**Future-version guard** (`managed-database.ts`, `runMigrations`): before applying anything, `open()` refuses a
+DB whose stored `__schema_version` is *higher* than the binary's `config.currentVersion` — it throws
+`ApiError(503)` instead of opening it. This protects the rollback case: after a deploy migrates a DB forward,
+downgrading to an older server would otherwise silently open (and keep writing to) a schema it doesn't
+understand, corrupting it. The operator sees a 503 for that domain until the binary is rolled forward to a
+version that knows the on-disk schema; nothing on disk is touched in the meantime.
 
 ### Pragmas
 

@@ -101,6 +101,34 @@ describe('ManagedDatabase migration rollback', () => {
     });
 });
 
+describe('ManagedDatabase future-version guard', () => {
+    test('refuses to open a database newer than the binary supports', async () => {
+        // A rollback to an older binary after a schema bump would otherwise silently open the
+        // newer on-disk schema and mangle it. The guard reads __schema_version before migrating
+        // and refuses anything past currentVersion.
+        const dbPath = nextDbPath();
+        const raw = new BunDatabase(dbPath, { create: true });
+        raw.exec(`CREATE TABLE __schema_version (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL DEFAULT 0);
+                  INSERT INTO __schema_version (id, version) VALUES (1, 99);`);
+        raw.close();
+
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
+        await expect(db.open(0)).rejects.toThrow(/newer/);
+    });
+
+    test('opens a database sitting at exactly currentVersion', async () => {
+        // The guard is `>`, not `>=`: an already-migrated db reopens cleanly at currentVersion.
+        const dbPath = nextDbPath();
+        const db = new ManagedDatabase(makeConfig(1000), dbPath, {});
+        await db.open(0);
+        await db.close({ skipFinalSnapshot: true });
+
+        const reopened = new ManagedDatabase(makeConfig(1000), dbPath, {}, true);
+        await reopened.open(0);
+        await reopened.close({ skipFinalSnapshot: true });
+    });
+});
+
 describe('ManagedDatabase snapshot lifecycle', () => {
     test('flush() pushes writes to storage but does NOT take a version snapshot', async () => {
         // Regression: flush() used to run the snapshot trigger, so a snapshot
@@ -163,6 +191,75 @@ describe('ManagedDatabase snapshot lifecycle', () => {
 
         expect(snapshots).toBeGreaterThanOrEqual(1);
         await db.close({ skipFinalSnapshot: true });
+    });
+});
+
+describe('ManagedDatabase lifecycle serialization', () => {
+    test('a parked tick makes flush and close queue instead of running a second onSync', async () => {
+        // Regression: ticks were fire-and-forget, flush() called sync() directly and close() only
+        // cleared the timer — so two onSync callbacks could stage the same db at once, and close
+        // could tear the db down with one still in flight.
+        let syncs = 0;
+        let active = 0;
+        let overlapped = false;
+        let release!: () => void;
+        const held = new Promise<void>((r) => {
+            release = r;
+        });
+        let first = true;
+        const db = new ManagedDatabase(makeConfig(1000), nextDbPath(), {
+            onSync: async () => {
+                syncs++;
+                active++;
+                if (active > 1) overlapped = true;
+                if (first) {
+                    first = false;
+                    await held; // hold the first tick's sync open across everything below
+                }
+                active--;
+            },
+        });
+        await db.open(5);
+        db.db.insert(items).values({ v: 'x' }).run();
+        await new Promise((r) => setTimeout(r, 20)); // let the timer fire and park inside onSync
+
+        const flushed = db.flush();
+        const closing = db.close({ skipFinalSnapshot: true });
+        setTimeout(release, 20);
+        await flushed;
+        await closing;
+
+        expect(overlapped).toBe(false);
+        expect(active).toBe(0); // close awaited the in-flight sync instead of tearing down under it
+
+        // A flush landing after close must not call back into a torn-down db — with rawDb null,
+        // total_changes() reads 0 while lastSyncedChanges doesn't, so isDirty said "sync me".
+        const syncsAtClose = syncs;
+        await db.flush();
+        expect(syncs).toBe(syncsAtClose);
+    });
+
+    test('a snapshot callback that flushes the same db deadlocks neither the tick nor the close', async () => {
+        // versioning/snapshot.ts flushes the cached db it is about to copy, and for a container's
+        // data.db that is the very instance running onSnapshot — so onSnapshot → flush() re-enters.
+        // flush() must never queue behind the lifecycle op the tick or close is holding.
+        let snapshots = 0;
+        const db: ManagedDatabase<Schema> = new ManagedDatabase(makeConfig(1), nextDbPath(), {
+            onSync: async () => {},
+            onSnapshot: async () => {
+                await db.flush();
+                snapshots++;
+                return 'taken';
+            },
+        });
+        await db.open(5);
+        db.db.insert(items).values({ v: 'x' }).run();
+        await new Promise((r) => setTimeout(r, 30));
+        expect(snapshots).toBeGreaterThanOrEqual(1); // tick path
+
+        db.db.insert(items).values({ v: 'y' }).run();
+        await db.close();
+        expect(snapshots).toBeGreaterThanOrEqual(2); // close path
     });
 });
 

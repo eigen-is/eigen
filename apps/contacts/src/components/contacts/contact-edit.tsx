@@ -1,6 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useLabels } from '@workspace/lib/contacts';
-import { formatInputDate } from '@workspace/lib/date';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AvatarEditor, Toolbar, ToolbarTitle, useContactAvatarUpload } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
@@ -10,19 +9,18 @@ import { Input } from '@workspace/ui/components/input';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { Plus, Trash2 } from 'lucide-react';
 import type React from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-// Define the form schema
 const formSchema = z
     .object({
         firstName: z.string().optional(),
         lastName: z.string().optional(),
         company: z.string().optional(),
         jobTitle: z.string().optional(),
-        email: z.array(z.email().or(z.string().length(0))),
-        phone: z.array(z.string()),
+        email: z.array(z.object({ value: z.email('Enter a valid email address').or(z.literal('')) })),
+        phone: z.array(z.object({ value: z.string() })),
         address: z.array(
             z.object({
                 street: z.string().optional(),
@@ -32,7 +30,7 @@ const formSchema = z
                 country: z.string().optional(),
             }),
         ),
-        birthday: z.date().nullable(),
+        birthday: z.string().optional(),
         notes: z.string().optional(),
         labels: z.array(z.string()).optional(),
         avatar: z.string().nullable().optional(),
@@ -43,11 +41,16 @@ const formSchema = z
             (data.lastName ? data.lastName.trim().length > 0 : false),
         {
             message: 'Either first name or last name is required',
-            path: ['firstName'], // This will show the error on the firstName field
+            path: ['firstName'],
         },
     );
 
-export type ContactFormValues = z.infer<typeof formSchema>;
+// The form models email/phone as `{ value }[]` rather than the wire `string[]`: react-hook-form's
+// useFieldArray reads the array through compact() (filter(Boolean)), so a blank primitive '' is stripped —
+// the create form would open with zero rows and "Add" would collapse an all-blank list back to one row.
+// Object entries are always truthy, so every row survives; onSave flattens back to string[], blanks filtered.
+type FormValues = z.infer<typeof formSchema>;
+export type ContactFormValues = Omit<FormValues, 'email' | 'phone'> & { email: string[]; phone: string[] };
 
 type ContactEditToolbarProps = {
     isNew: boolean;
@@ -62,7 +65,7 @@ export function ContactEditToolbar({ isNew }: ContactEditToolbarProps) {
 }
 
 type RepeatableFieldProps = {
-    label: React.ReactNode;
+    label: string;
     onAdd: () => void;
     children: React.ReactNode;
 };
@@ -84,41 +87,42 @@ function RepeatableField({ label, onAdd, children }: RepeatableFieldProps) {
 
 type ContactEditProps = {
     contact: Contact;
-    onSave: (data: ContactFormValues) => void;
+    onSave: (data: ContactFormValues, etag: string) => void;
     onCancel: () => void;
 };
 
 export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     const { data: labels = [], error: labelsError } = useLabels();
     const [avatar, setAvatar] = useState<string | null>(contact?.avatar ?? null);
+    // Snapshot the etag from the same first-render contact that seeds the form fields below. The route's live
+    // useContacts() copy is refetched by SSE, so reading its etag at submit would pair fresh-server etag with
+    // stale field values and silently clobber a concurrent edit; this ref stays paired with the loaded fields.
+    const loadedEtagRef = useRef(contact?.etag);
 
     const uploadAvatar = useContactAvatarUpload(setAvatar);
-    const form = useForm<ContactFormValues>({
+    const form = useForm<FormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
             firstName: contact?.firstName || '',
             lastName: contact?.lastName || '',
             company: contact?.company || '',
             jobTitle: contact?.jobTitle || '',
-            email: contact?.email || [''],
-            phone: contact?.phone || [''],
+            email: contact?.email?.length ? contact.email.map((value) => ({ value })) : [{ value: '' }],
+            phone: contact?.phone?.length ? contact.phone.map((value) => ({ value })) : [{ value: '' }],
             address: contact?.address?.length ? contact.address : [{}],
-            birthday: contact?.birthday ? new Date(contact.birthday) : null,
+            birthday: contact?.birthday || '',
             notes: contact?.notes || '',
             labels: contact?.labels || [],
         },
     });
 
-    // `email`/`phone` are primitive string[] in the schema; react-hook-form v7's useFieldArray
-    // generic expects array-of-objects, so the field name needs `as never`. Runtime-safe — kept
-    // as string[] (not wrapped in {value} objects) to avoid changing the contact data shape.
     const {
         fields: emailFields,
         append: appendEmail,
         remove: removeEmail,
     } = useFieldArray({
         control: form.control,
-        name: 'email' as never,
+        name: 'email',
     });
     const {
         fields: phoneFields,
@@ -126,7 +130,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
         remove: removePhone,
     } = useFieldArray({
         control: form.control,
-        name: 'phone' as never,
+        name: 'phone',
     });
     const {
         fields: addressFields,
@@ -138,7 +142,15 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
     });
 
     const handleSubmit = form.handleSubmit(async (data) => {
-        await onSave({ ...data, avatar });
+        await onSave(
+            {
+                ...data,
+                email: data.email.map((row) => row.value).filter(Boolean),
+                phone: data.phone.map((row) => row.value).filter(Boolean),
+                avatar,
+            },
+            loadedEtagRef.current,
+        );
     });
 
     const isLoading = form.formState.isSubmitting;
@@ -180,9 +192,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                             name="firstName"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>
-                                                        First name<span className="text-muted-foreground">*</span>
-                                                    </FormLabel>
+                                                    <FormLabel>First name</FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
@@ -196,9 +206,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                             name="lastName"
                                             render={({ field }) => (
                                                 <FormItem>
-                                                    <FormLabel>
-                                                        Last name<span className="text-muted-foreground">*</span>
-                                                    </FormLabel>
+                                                    <FormLabel>Last name</FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
@@ -238,7 +246,6 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                         />
                                     </div>
 
-                                    {/* Labels */}
                                     <FormField
                                         control={form.control}
                                         name="labels"
@@ -319,69 +326,65 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                 </div>
 
                                 <div className="grid gap-6">
-                                    <RepeatableField
-                                        label={
-                                            <>
-                                                Email Addresses
-                                                <span className="text-muted-foreground">*</span>
-                                            </>
-                                        }
-                                        onAdd={() => appendEmail('' as never)}
-                                    >
+                                    <RepeatableField label="Email Addresses" onAdd={() => appendEmail({ value: '' })}>
                                         {emailFields.map((item, index) => (
-                                            <div key={item.id} className="flex gap-2 items-center">
-                                                <FormField
-                                                    control={form.control}
-                                                    name={`email.${index}`}
-                                                    render={({ field }) => (
-                                                        <FormItem className="flex-1 space-y-0">
+                                            <FormField
+                                                key={item.id}
+                                                control={form.control}
+                                                name={`email.${index}.value`}
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <div className="flex gap-2 items-center">
                                                             <FormControl>
                                                                 <Input {...field} placeholder="Email address" />
                                                             </FormControl>
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                {emailFields.length > 1 && (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 w-7 p-0"
-                                                        onClick={() => removeEmail(index)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                            {emailFields.length > 1 && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-7 w-7 p-0"
+                                                                    onClick={() => removeEmail(index)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
                                                 )}
-                                            </div>
+                                            />
                                         ))}
                                     </RepeatableField>
 
-                                    <RepeatableField label="Phone Numbers" onAdd={() => appendPhone('' as never)}>
+                                    <RepeatableField label="Phone Numbers" onAdd={() => appendPhone({ value: '' })}>
                                         {phoneFields.map((item, index) => (
-                                            <div key={item.id} className="flex gap-2 items-center">
-                                                <FormField
-                                                    control={form.control}
-                                                    name={`phone.${index}`}
-                                                    render={({ field }) => (
-                                                        <FormItem className="flex-1 space-y-0">
+                                            <FormField
+                                                key={item.id}
+                                                control={form.control}
+                                                name={`phone.${index}.value`}
+                                                render={({ field }) => (
+                                                    <FormItem>
+                                                        <div className="flex gap-2 items-center">
                                                             <FormControl>
                                                                 <Input {...field} placeholder="Phone number" />
                                                             </FormControl>
-                                                        </FormItem>
-                                                    )}
-                                                />
-                                                {phoneFields.length > 1 && (
-                                                    <Button
-                                                        type="button"
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-7 w-7 p-0"
-                                                        onClick={() => removePhone(index)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                            {phoneFields.length > 1 && (
+                                                                <Button
+                                                                    type="button"
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-7 w-7 p-0"
+                                                                    onClick={() => removePhone(index)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
+                                                        </div>
+                                                        <FormMessage />
+                                                    </FormItem>
                                                 )}
-                                            </div>
+                                            />
                                         ))}
                                     </RepeatableField>
 
@@ -521,14 +524,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                 <FormLabel>Birthday</FormLabel>
 
                                                 <FormControl>
-                                                    <Input
-                                                        type="date"
-                                                        defaultValue={field.value ? formatInputDate(field.value) : ''}
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            field.onChange(val ? new Date(`${val}T00:00:00`) : null);
-                                                        }}
-                                                    />
+                                                    <Input type="date" {...field} value={field.value || ''} />
                                                 </FormControl>
                                                 <FormMessage />
                                             </FormItem>

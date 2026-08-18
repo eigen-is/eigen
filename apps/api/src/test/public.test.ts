@@ -97,6 +97,14 @@ describe('Public Routes', () => {
             expect(response.headers.get('Content-Type')).toBe('image/svg+xml');
         });
 
+        // A contact without an email renders src="/p/avatar/" — the empty id must serve the fallback, not 404.
+        test('returns fallback SVG for empty emailOrId', async () => {
+            const response = await ctx.app.handle(new Request('http://localhost/p/avatar/'));
+            expect(response.status).toBe(200);
+            expect(response.headers.get('Content-Type')).toBe('image/svg+xml');
+            expect(await response.text()).toContain('<svg');
+        });
+
         test('returns uploaded avatar as WebP after profile update', async () => {
             // Create a small test image (4x4 PNG — same bytes used in preview.test.ts)
             const file = new File([TEST_PNG_BYTES], 'test-avatar.png', { type: 'image/png' });

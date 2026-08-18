@@ -77,7 +77,9 @@ Eigen ships as a monorepo with a single API server and a set of tightly integrat
 - **Calendar** — Full calendar with recurring events (RFC 5545 RRULE), invitations with RSVP, shared calendars, and
   team calendars. Includes a **CalDAV server** — sync with Thunderbird, Apple Calendar, or DAVx5 using standard
   protocols.
-- **Contacts** — Contact management with avatars.
+- **Contacts** — Contact management with labels and avatars. Contacts are stored as standard vCard files on disk,
+  indexed in SQLite. Includes a **CardDAV server** — sync your address book with iOS/macOS Contacts, Thunderbird,
+  or DAVx5.
 - **Chat** — Real-time chat inspired by classic MUDs. Over 80 built-in slash commands including emotes, whispers,
   and @mentions. Chat rooms live inside Drive (inheriting its ACL), and can be embedded inside documents and
   kanban cards as comment threads.
@@ -91,6 +93,8 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 - **IMAP** — Via Dovecot. Eigen writes Maildir++, Dovecot serves it over IMAP. They coexist on the same filesystem.
 - **CalDAV** — Built-in CalDAV server with discovery, sync-collection, and recurring event support. Tested with
   Thunderbird.
+- **CardDAV** — Built-in CardDAV server (RFC 6352) with discovery, sync-collection, and addressbook-query support.
+  Accepts vCard 3.0 and 4.0; labels and contact photos sync along with the cards.
 - **WebDAV** — Built-in WebDAV server (RFC 4918 Class 1+2). Mount your Drive as a network drive in Finder, Windows
   Explorer, Mountain Duck, rclone, or any standard WebDAV client.
 - **SMTP** — Postfix handles inbound and outbound email, with DKIM signing and relay support.
@@ -149,7 +153,7 @@ data/home/{userId}/
 ├── settings.json         # Per-user settings
 ├── mounts/default/       # Drive files + metadata.db
 ├── eigen.mail/           # Maildir + mail.db
-├── eigen.contacts/       # contacts.db + avatars
+├── eigen.contacts/       # vCard files + contacts.db + avatars
 ├── eigen.calendar/       # calendar.db
 └── eigen.notifications/  # notifications.db
 ```
@@ -190,7 +194,7 @@ Architecture docs live in `docs/`:
 | Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md), [Search](docs/SEARCH.md), [Scalability](docs/SCALABILITY.md) |
 | Deployment | [Docker Setup](docker/SETUP-GUIDE.md), [Local Testing](docker/LOCAL-TESTING.md), [S3 Sync](docs/SYNC.md), [Demo Mode](docs/DEMO_MODE.md), [Testing](docs/TESTING.md) |
 | Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
-| Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md), [WebDAV](docs/WEBDAV.md) |
+| Features | [Mail](docs/MAIL.md), [Calendar](docs/CALENDAR.md), [Contacts](docs/CONTACTS.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATION-CENTER.md), [IMAP](docs/IMAP.md), [WebDAV](docs/WEBDAV.md) |
 | Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS.md) |
 | Operations | [Quota](docs/QUOTA.md), [Server Settings](docs/SERVER-SETTINGS.md), [Export](docs/EXPORT.md), [Organizations](docs/ORGANISATIONS-AND-TEAMS.md) |
 

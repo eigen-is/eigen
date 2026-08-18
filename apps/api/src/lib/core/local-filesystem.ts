@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import * as path from 'node:path';
@@ -25,6 +26,43 @@ export class LocalFilesystem {
             fs.mkdirSync(dir, { recursive: true });
         }
         return await Bun.write(fullPath, data);
+    }
+
+    // Durable, crash-safe write: stage a sibling temp file, fsync it, rename over the target so a
+    // reader ever only sees the whole old file or the whole new one, then fsync the directory that
+    // holds the rename — without it a power loss can resurrect the old file under an acknowledged
+    // write. Used for the vCard cards where a torn write would corrupt the source of truth; the temp
+    // is `.`-prefixed so cleanup can sweep leftovers.
+    async writeAtomic(filePath: string, data: Buffer | Uint8Array | string): Promise<void> {
+        const fullPath = this.getFilePath(filePath);
+        const dir = path.dirname(fullPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        const tempPath = path.join(dir, `.${path.basename(fullPath)}.tmp-${randomUUID()}`);
+        try {
+            const handle = await fsPromises.open(tempPath, 'w');
+            try {
+                await handle.writeFile(data);
+                await handle.sync();
+            } finally {
+                await handle.close();
+            }
+            await fsPromises.rename(tempPath, fullPath);
+        } catch (error) {
+            // A failure before the rename lands leaves the staged temp behind. The cards/ init sweep self-heals
+            // its own leftovers, but any other caller would leak — best-effort unlink and rethrow the original
+            // (swallow the unlink's own error: the temp may never have been created).
+            await fsPromises.unlink(tempPath).catch(() => {});
+            throw error;
+        }
+        // fsync the directory entry the rename created (POSIX; darwin + linux are the only targets).
+        const dirHandle = await fsPromises.open(dir, 'r');
+        try {
+            await dirHandle.sync();
+        } finally {
+            await dirHandle.close();
+        }
     }
 
     async delete(filePath: string): Promise<boolean> {

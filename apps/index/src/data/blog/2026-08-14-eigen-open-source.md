@@ -14,7 +14,7 @@ The code has been on [GitHub](https://github.com/eigen-is/eigen) under the MIT l
 
 Open sourcing Eigen sets the direction for development: self-hosters first. Eigen is for individuals, enthusiasts and small organizations who want to run it themselves. Larger organizations can follow later.
 
-Deployment is one Docker Compose stack. A setup script asks a few questions and writes the configuration. HTTPS is automatic. Postfix and Dovecot are included, and standard clients can connect over IMAP, CalDAV and WebDAV. There are scripts for backups and updates. The [README](https://github.com/eigen-is/eigen) has the details.
+Deployment is one Docker Compose stack. A setup script asks a few questions and writes the configuration. HTTPS is automatic. Postfix and Dovecot are included, and standard clients can connect over IMAP, CalDAV, CardDAV and WebDAV. There are scripts for backups and updates. The [README](https://github.com/eigen-is/eigen) has the details.
 
 Reality check: Eigen is pre-1.0.0. Expect rough edges, and expect breaking changes between versions until 1.0. If losing data would be a disaster for you, please wait a little longer.
 
@@ -37,6 +37,7 @@ Other additions since the last post:
 - **Version history**: docs, sheets, slides, stickies and chat keep automatic snapshots. Browse or restore any earlier version.
 - **File activity**: every file has a timeline of what happened and who did it. Watch a file or folder to get notified when it changes.
 - **Import**: `.xlsx` and `.docx` files convert into Eigen sheets and docs.
+- **Contacts sync**: Eigen now has a CardDAV server. Sync your address book with the contacts app on your phone or laptop, or with Thunderbird and DAVx5. Contacts are stored as plain vCard files on the server, so your address book is yours even without Eigen. Labels and contact photos sync too.
 
 The full list is in the [changelog](https://eigen.is/changelog).
 

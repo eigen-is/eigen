@@ -9,7 +9,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { COLLAB_DB_CONFIG } from '../lib/collab/db-config';
 import { loadYjsState } from '../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../lib/core';
-import { BRANDING, BUDGET, KANBAN, PHOTOS, personaByRole, SPONSOR_DECK } from '../scripts/demo/content';
+import { BRANDING, BUDGET, KANBAN, PHOTOS, personaByRole, SPONSOR_DECK, TEAM_NAME } from '../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
@@ -110,12 +110,12 @@ describe('seed-demo', () => {
             const avatarFiles = readdirSync(join(root, 'server', 'avatars')).filter((f) => f.endsWith('.webp'));
             expect(avatarFiles.length).toBeGreaterThanOrEqual(20);
 
-            // The organization plugin auto-creates a default team; target the one the seeder
-            // actually gave a mount (its data dir exists on disk).
-            const teams = query<{ id: string }>(usersDb, 'SELECT id FROM team');
-            expect(teams.length).toBeGreaterThanOrEqual(1);
-            const teamId = teams.map((t) => t.id).find((id) => existsSync(join(root, 'team', id, 'mounts')));
-            expect(teamId).toBeDefined();
+            // The organization plugin auto-creates a default team, whose home can also materialize a
+            // mounts/ dir during seeding — select the seeder's crew team by its name, not by disk layout.
+            const teams = query<{ id: string }>(usersDb, `SELECT id FROM team WHERE name = '${TEAM_NAME}'`);
+            expect(teams.length).toBe(1);
+            const teamId = teams[0].id;
+            expect(existsSync(join(root, 'team', teamId, 'mounts'))).toBe(true);
 
             // Team avatar: the festival logo fixture went through the same 512px-cover pipeline
             // as the avatar route — file existence under server/avatars is the source of truth.

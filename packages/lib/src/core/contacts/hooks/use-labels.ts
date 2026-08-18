@@ -1,14 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { Label } from '@workspace/lib/types/label';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateLabelCreated, invalidateLabelDeleted, invalidateLabelUpdated, labelKeys } from './keys';
 
-// Hook to fetch all labels
 export function useLabels() {
     const { user } = useAuth();
+    const isGuest = useIsGuest();
     const ownerId = user?.id || '';
 
     return useQuery({
@@ -19,11 +19,10 @@ export function useLabels() {
             return response.data;
         },
         staleTime: STALE_TIME.FIVE_MINUTES,
-        enabled: !!ownerId,
+        enabled: !!ownerId && !isGuest,
     });
 }
 
-// Hook to add a label
 export function useAddLabel() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -40,7 +39,6 @@ export function useAddLabel() {
     });
 }
 
-// Hook to update a label
 export function useUpdateLabel() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -60,7 +58,6 @@ export function useUpdateLabel() {
     });
 }
 
-// Hook to delete a label
 export function useDeleteLabel() {
     const queryClient = useQueryClient();
     const { user } = useAuth();

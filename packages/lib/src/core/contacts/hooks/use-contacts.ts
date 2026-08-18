@@ -1,12 +1,28 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { Contact } from '@workspace/lib/types/contact';
+import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
+import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated } from './keys';
 
-// Fetch all contacts
+// A write echoes the etag its form loaded; a 412 means the card changed elsewhere first. Reload list + detail so
+// the form shows current state, tell the user, and swallow it. All handling stays in the hook (NOTIFICATIONS.md).
+const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
+
+// Both the update and delete onError paths recover a 412 the same way — reload the contact as an update (a
+// refused delete leaves it present), toast, and swallow. Shared so the two callbacks can't drift; returns true
+// when it handled the 412 so the caller skips onMutationError.
+function handleStaleWrite(queryClient: QueryClient, ownerId: string, id: string, error: unknown): boolean {
+    if (error instanceof AppError && error.status === 412) {
+        invalidateContactUpdated(queryClient, ownerId, id);
+        toast.error(STALE_WRITE_TOAST);
+        return true;
+    }
+    return false;
+}
+
 export function useContacts() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
@@ -24,14 +40,13 @@ export function useContacts() {
     });
 }
 
-// Add a new contact
 export function useAddContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (newContact: Omit<Contact, 'id'>) => {
+        mutationFn: async (newContact: CreateContactInput) => {
             const response = await contactsApi({ ownerId }).contacts.post(newContact);
             if (response.error) throw new AppError(response);
             return response.data;
@@ -41,42 +56,47 @@ export function useAddContact() {
     });
 }
 
-// Update an existing contact
 export function useUpdateContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({ id, ...data }: Contact) => {
+        mutationFn: async ({ id, ...data }: UpdateContactInput & { id: string }) => {
             const response = await contactsApi({ ownerId }).contacts({ id }).put(data);
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, ownerId, variables.id),
-        onError: onMutationError,
+        onError: (error, variables) => {
+            if (handleStaleWrite(queryClient, ownerId, variables.id, error)) return;
+            onMutationError(error);
+        },
     });
 }
 
-// Delete a contact
 export function useDeleteContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (id: string) => {
-            const response = await contactsApi({ ownerId }).contacts({ id }).delete();
+        mutationFn: async ({ id, etag }: { id: string; etag: string }) => {
+            const response = await contactsApi({ ownerId }).contacts({ id }).delete({}, { query: { etag } });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, id) => invalidateContactDeleted(queryClient, ownerId, id),
-        onError: onMutationError,
+        onSuccess: (_data, { id }) => invalidateContactDeleted(queryClient, ownerId, id),
+        onError: (error, { id }) => {
+            if (handleStaleWrite(queryClient, ownerId, id, error)) return;
+            onMutationError(error);
+        },
     });
 }
 
 export function useMeContact() {
     const { user } = useAuth();
+    const isGuest = useIsGuest();
     const ownerId = user?.id || '';
 
     return useQuery({
@@ -86,7 +106,7 @@ export function useMeContact() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        enabled: !!ownerId,
+        enabled: !!ownerId && !isGuest,
         staleTime: STALE_TIME.FIVE_MINUTES,
     });
 }

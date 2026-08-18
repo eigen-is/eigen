@@ -1,22 +1,35 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { requireSelf } from '../core/access';
+import { readBoundedBody } from '../core/http';
 import { getHome } from '../home';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
-import { handleCalendarPropfind } from './propfind';
+import { handleCalendarPropfind, handleEventPropfind } from './propfind';
 import { handleMkcalendar, handleProppatch } from './proppatch';
-import { handleReport } from './report';
-import { handleDelete, handleGet, handlePut } from './resource';
+import { handleReport, REPORT_BODY_MAX_BYTES } from './report';
+import { EVENT_MAX_BYTES, handleDelete, handleGet, handlePut } from './resource';
+import { davError } from './xml-builder';
 
-function parseDavPath(wildcard: string): { calendarId?: string; resourceUri?: string } {
+// The wildcard decodes to at most two segments — the calendar and an optional resource name. Resource names are
+// client-chosen, so every segment is percent-decoded (the carddav twin's parseAddressbookPath); a malformed
+// escape or a third segment is a client error, not a silent misroute.
+type ParsedPath = { ok: true; calendarId: string | null; resourceUri: string | null } | { ok: false };
+
+function parseDavPath(wildcard: string): ParsedPath {
     const parts = wildcard
         .replace(/^\/+|\/+$/g, '')
         .split('/')
         .filter(Boolean);
-    return {
-        calendarId: parts[0] || undefined,
-        resourceUri: parts[1] || undefined,
-    };
+    if (parts.length > 2) return { ok: false };
+    const decoded: string[] = [];
+    for (const part of parts) {
+        try {
+            decoded.push(decodeURIComponent(part));
+        } catch {
+            return { ok: false };
+        }
+    }
+    return { ok: true, calendarId: decoded[0] ?? null, resourceUri: decoded[1] ?? null };
 }
 
 export const caldavRouter = new Elysia({ name: 'caldav' })
@@ -56,20 +69,27 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const { calendarId } = parseDavPath(params['*']);
-
-        if (!calendarId) {
-            const home = await getHome(params.ownerId);
-            const calendars = home.calendar.getCalendars();
-            const depth = request.headers.get('Depth') || '0';
-            return handleCalendarHomePropfind(params.ownerId, calendars, depth);
-        }
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const calendar = home.calendar.getCalendarById(calendarId);
-        if (!calendar) return new Response('Not Found', { status: 404 });
         const depth = request.headers.get('Depth') || '0';
-        const events = depth === '1' ? home.calendar.getRawEvents(calendarId) : [];
+
+        if (!parsed.calendarId) {
+            return handleCalendarHomePropfind(params.ownerId, home.calendar.getCalendars(), depth);
+        }
+
+        const calendar = home.calendar.getCalendarById(parsed.calendarId);
+        if (!calendar) return new Response('Not Found', { status: 404 });
+
+        // A resource segment is a single-event PROPFIND — the event's own href + etag, 404 if the uri is unknown.
+        if (parsed.resourceUri) {
+            const event = home.calendar.getEventByUri(parsed.calendarId, parsed.resourceUri);
+            if (!event) return new Response('Not Found', { status: 404 });
+            return handleEventPropfind(params.ownerId, parsed.calendarId, event.uri, event.etag);
+        }
+
+        const events = depth === '1' ? home.calendar.getRawEvents(parsed.calendarId) : [];
         return handleCalendarPropfind(params.ownerId, calendar, events, depth);
     })
 
@@ -77,10 +97,11 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .get('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const { calendarId, resourceUri } = parseDavPath(params['*']);
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
         // GET on collection URL (no resource) — return 200 so HEAD/GET checks pass
-        if (!calendarId || !resourceUri) {
+        if (!parsed.calendarId || !parsed.resourceUri) {
             return new Response('This is a CalDAV endpoint. Use a CalDAV client.', {
                 status: 200,
                 headers: { 'Content-Type': 'text/plain' },
@@ -88,10 +109,10 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         }
 
         const home = await getHome(params.ownerId);
-        const event = home.calendar.getEventByUri(calendarId, resourceUri);
+        const event = home.calendar.getEventByUri(parsed.calendarId, parsed.resourceUri);
         if (!event) return new Response('Not Found', { status: 404 });
 
-        const allEvents = home.calendar.getRawEventsByUid(calendarId, event.uid);
+        const allEvents = home.calendar.getRawEventsByUid(parsed.calendarId, event.uid);
         return handleGet(event, allEvents);
     })
 
@@ -99,41 +120,57 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .put('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const { calendarId, resourceUri } = parseDavPath(params['*']);
-        if (!calendarId || !resourceUri) return new Response('Bad Request', { status: 400 });
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok || !parsed.calendarId || !parsed.resourceUri) {
+            return new Response('Bad Request', { status: 400 });
+        }
 
         const home = await getHome(params.ownerId);
-        const body = await request.text();
+        // Bound the body before buffering so a hostile PUT can't park up to index.ts's 1 GB server cap on the heap.
+        const body = await readBoundedBody(request, EVENT_MAX_BYTES);
+        if (body === null) return davError(413, '<C:max-resource-size/>');
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
-        return handlePut(home.calendar, params.ownerId, calendarId, resourceUri, body, ifMatch, ifNoneMatch, user.id);
+        return handlePut(
+            home.calendar,
+            params.ownerId,
+            parsed.calendarId,
+            parsed.resourceUri,
+            body,
+            ifMatch,
+            ifNoneMatch,
+            user.id,
+        );
     })
 
     // DELETE .ics resource
     .delete('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const { calendarId, resourceUri } = parseDavPath(params['*']);
-        if (!calendarId || !resourceUri) return new Response('Bad Request', { status: 400 });
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok || !parsed.calendarId || !parsed.resourceUri) {
+            return new Response('Bad Request', { status: 400 });
+        }
 
         const home = await getHome(params.ownerId);
         const ifMatch = request.headers.get('If-Match');
-        return handleDelete(home.calendar, calendarId, resourceUri, ifMatch);
+        return handleDelete(home.calendar, parsed.calendarId, parsed.resourceUri, ifMatch);
     })
 
     // REPORT — calendar-query, multiget, sync-collection
     .route('REPORT', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const { calendarId } = parseDavPath(params['*']);
-        if (!calendarId) return new Response('Bad Request', { status: 400 });
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok || !parsed.calendarId) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const calendarItem = home.calendar.getCalendarById(calendarId);
+        const calendarItem = home.calendar.getCalendarById(parsed.calendarId);
         if (!calendarItem) return new Response('Not Found', { status: 404 });
 
-        const body = await request.text();
-        return handleReport(home.calendar, calendarId, calendarItem, params.ownerId, body);
+        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        return handleReport(home.calendar, parsed.calendarId, calendarItem, params.ownerId, body);
     })
 
     // MKCALENDAR
@@ -141,7 +178,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
         const home = await getHome(params.ownerId);
-        const body = await request.text();
+        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
         return handleMkcalendar(home.calendar, body);
     })
 
@@ -149,10 +187,11 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPPATCH', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
-        const { calendarId } = parseDavPath(params['*']);
-        if (!calendarId) return new Response('Bad Request', { status: 400 });
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok || !parsed.calendarId) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
-        const body = await request.text();
-        return handleProppatch(home.calendar, calendarId, params.ownerId, body);
+        const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        return handleProppatch(home.calendar, parsed.calendarId, params.ownerId, body);
     });

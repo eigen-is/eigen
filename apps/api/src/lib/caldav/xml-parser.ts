@@ -23,6 +23,9 @@ const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
     removeNSPrefix: true,
+    // Keep element text as text — fxp's default numeric coercion mangles digit-only values (the carddav
+    // twin's <text-match> phone bug); nothing here is meant to be numeric.
+    parseTagValue: false,
     isArray: (name) => ['href', 'comp'].includes(name),
 });
 
@@ -37,32 +40,28 @@ export type ReportRequest = {
 };
 
 export function parseReport(xml: string): ReportRequest {
-    if (!xml?.trim()) return { type: 'calendar-query', hrefs: [], propNames: [] };
     const parsed = parser.parse(xml);
 
-    // Detect report type from root element
-    const root =
-        parsed['calendar-query'] ||
-        parsed['C:calendar-query'] ||
-        parsed['calendar-multiget'] ||
-        parsed['C:calendar-multiget'] ||
-        parsed['sync-collection'] ||
-        parsed['D:sync-collection'] ||
-        {};
+    // removeNSPrefix strips the D:/C: prefixes, so a report's root is always unprefixed — no fallback needed.
+    // An empty body or an unknown root matches nothing and throws: a bodyless or unknown REPORT must 400,
+    // never default to a calendar-query that dumps every event's etag (the report.ts contract, carddav twin).
+    let type: ReportType;
+    if (parsed['calendar-query']) type = 'calendar-query';
+    else if (parsed['calendar-multiget']) type = 'calendar-multiget';
+    else if (parsed['sync-collection']) type = 'sync-collection';
+    else throw new Error('Unsupported REPORT type');
 
-    let type: ReportType = 'calendar-query';
-    if (parsed['calendar-multiget'] || parsed['C:calendar-multiget']) type = 'calendar-multiget';
-    if (parsed['sync-collection'] || parsed['D:sync-collection']) type = 'sync-collection';
+    const root = parsed[type];
 
     // Extract hrefs (for multiget)
-    const hrefData = root['href'] || root['D:href'] || [];
+    const hrefData = root['href'] || [];
     const hrefs = Array.isArray(hrefData) ? hrefData.map(String) : [String(hrefData)].filter(Boolean);
 
     // Extract time-range (for calendar-query)
-    const filter = root['filter'] || root['C:filter'] || {};
-    const compFilter = filter['comp-filter'] || filter['C:comp-filter'] || {};
-    const veventFilter = compFilter['comp-filter'] || compFilter['C:comp-filter'] || {};
-    const timeRange = veventFilter['time-range'] || veventFilter['C:time-range'];
+    const filter = root['filter'] || {};
+    const compFilter = filter['comp-filter'] || {};
+    const veventFilter = compFilter['comp-filter'] || {};
+    const timeRange = veventFilter['time-range'];
 
     let parsedTimeRange: { start: Date; end: Date } | undefined;
     if (timeRange) {
@@ -76,10 +75,10 @@ export function parseReport(xml: string): ReportRequest {
     }
 
     // Extract sync-token
-    const syncToken = root['sync-token'] || root['D:sync-token'] || undefined;
+    const syncToken = root['sync-token'] || undefined;
 
     // Extract requested props
-    const prop = root['prop'] || root['D:prop'] || {};
+    const prop = root['prop'] || {};
     const propNames = Object.keys(prop);
 
     return {

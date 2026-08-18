@@ -12,7 +12,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
-import { Calendar, FolderTree, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
+import { Calendar, FolderTree, KeyRound, Mail, Plus, Trash2, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
 export const Route = createFileRoute('/_auth/services')({
@@ -133,8 +133,8 @@ function ServicesComponent() {
                 <div className="h-full overflow-y-auto">
                     <div className="w-full max-w-3xl app-gutter">
                         <p className="text-sm text-muted-foreground mb-6">
-                            Connect your calendars, mail, and drive to external clients like Thunderbird, Apple Mail,
-                            Finder, rclone, or any app that supports CalDAV, IMAP, or WebDAV.
+                            Connect your calendars, contacts, mail, and drive to external clients like Thunderbird,
+                            Apple Mail, Finder, rclone, or any app that supports CalDAV, CardDAV, IMAP, or WebDAV.
                         </p>
 
                         <div className="space-y-6">
@@ -153,6 +153,26 @@ function ServicesComponent() {
                                     <CopyInput
                                         label="Server URL (Thunderbird)"
                                         value={`${davBase}/calendars/${user?.id}/`}
+                                    />
+                                    <CopyInput label="Username" value={user?.email ?? ''} />
+                                </CardContent>
+                            </Card>
+
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-2">
+                                        <UsersRound className="h-5 w-5" />
+                                        CardDAV (Contacts sync)
+                                    </CardTitle>
+                                    <CardDescription>
+                                        Use these settings to sync your Eigen contacts with an external contacts app.
+                                    </CardDescription>
+                                </CardHeader>
+                                <CardContent className="space-y-3">
+                                    <CopyInput label="Server URL" value={`${davBase}/`} />
+                                    <CopyInput
+                                        label="Server URL (address book)"
+                                        value={`${davBase}/addressbooks/${user?.id}/`}
                                     />
                                     <CopyInput label="Username" value={user?.email ?? ''} />
                                 </CardContent>

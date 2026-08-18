@@ -1,4 +1,5 @@
 import { publicApi } from '@workspace/lib/api';
+import { MAX_PUBLIC_USERS_PER_BATCH } from '@workspace/lib/constants/public';
 import type { PublicUser } from '../../types/public';
 
 type PendingResolve = (user: PublicUser | null) => void;
@@ -27,11 +28,18 @@ async function flushBatch() {
         return;
     }
 
-    // Multiple IDs — batch POST. Resolve null for not-found users so
-    // TanStack Query caches the miss instead of retrying.
+    // Multiple IDs — batch POST, chunked to the server's cap. Resolve null for
+    // not-found users so TanStack Query caches the miss instead of retrying.
     try {
-        const res = await publicApi.users.post({ ids });
-        const users = res.data ?? {};
+        const chunks: string[][] = [];
+        for (let i = 0; i < ids.length; i += MAX_PUBLIC_USERS_PER_BATCH) {
+            chunks.push(ids.slice(i, i + MAX_PUBLIC_USERS_PER_BATCH));
+        }
+        const results = await Promise.all(chunks.map((chunk) => publicApi.users.post({ ids: chunk })));
+        const users: Record<string, PublicUser> = {};
+        for (const res of results) {
+            Object.assign(users, res.data ?? {});
+        }
         for (const [id, resolve] of batch) {
             resolve(users[id] ?? null);
         }

@@ -12,7 +12,7 @@ export const contactKeys = {
     me: (ownerId: string) => [...contactKeys.owner(ownerId), 'me'] as const,
 };
 
-// Define query keys for reuse
+// Query keys for labels
 export const labelKeys = {
     all: ['labels'] as const,
     owner: (ownerId: string) => [...labelKeys.all, ownerId] as const,
@@ -25,12 +25,18 @@ export const labelKeys = {
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
 export function invalidateContactCreated(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
+    // A DAV-created card can claim the self-link (an external client PUTs your own contact), so a mounted
+    // useMeContact must refetch — mirror invalidateContactUpdated, which invalidates `me` for the same reason.
+    queryClient.invalidateQueries({ queryKey: contactKeys.me(ownerId) });
     invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateContactUpdated(queryClient: QueryClient, ownerId: string, contactId: string): void {
     queryClient.invalidateQueries({ queryKey: contactKeys.detail(ownerId, contactId) });
     queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
+    // The self/profile card reads through contactKeys.me, not the detail/list keys — invalidate it too so a
+    // 412 recovery (or any edit to your own card) refetches the profile editor's frozen etag snapshot.
+    queryClient.invalidateQueries({ queryKey: contactKeys.me(ownerId) });
     invalidateHomeSize(queryClient, ownerId);
 }
 

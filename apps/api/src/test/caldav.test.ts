@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import { EVENT_MAX_BYTES } from '../lib/caldav/resource';
 import { app, getTestContext } from './setup';
 
 describe('CalDAV', () => {
@@ -79,6 +80,22 @@ describe('CalDAV', () => {
         const xml = await res.text();
         expect(xml).toContain('calendar');
         expect(xml).toContain('displayname');
+        // macOS Contacts/Calendar keys on this to pick sync-collection.
+        expect(xml).toContain('supported-report-set');
+    });
+
+    // Apple clients derive per-source editability from these props; without them every edit of an
+    // existing resource is saved as a NEW one (the CardDAV duplicate-on-edit class, fixed 2026-08-18).
+    test('calendar home and collections advertise write privileges and ownership', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        const xml = await res.text();
+        expect(xml).toContain('<D:current-user-privilege-set><D:privilege><D:all/></D:privilege>');
+        expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
     });
 
     test('PUT creates event, GET retrieves it', async () => {
@@ -161,6 +178,189 @@ describe('CalDAV', () => {
             }),
         );
         expect(getRes.status).toBe(404);
+    });
+
+    // --- RFC 7232 If-Match / If-None-Match on the write seam (mirrors the CardDAV precondition tests) ---
+
+    test('If-Match: * succeeds against an existing event for PUT and DELETE', async () => {
+        const uid = 'caldav-ifmatch-star@eigen';
+        const uri = 'caldav-ifmatch-star.ics';
+        const ics = (summary: string) =>
+            `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260701T100000Z\r\nDTEND:20260701T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics('Star Create'),
+            }),
+        );
+        expect(create.status).toBe(201);
+
+        const update = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': '*',
+                },
+                body: ics('Star Update'),
+            }),
+        );
+        expect(update.status).toBe(204);
+
+        const del = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'DELETE',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'If-Match': '*' },
+            }),
+        );
+        expect(del.status).toBe(204);
+    });
+
+    test('If-Match with an etag on a missing event is 412 and creates nothing', async () => {
+        const uri = 'caldav-ifmatch-missing.ics';
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-ifmatch-missing@eigen\r\nSUMMARY:Should Not Exist\r\nDTSTART:20260702T100000Z\r\nDTEND:20260702T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': '"nonexistent-etag"',
+                },
+                body: ics,
+            }),
+        );
+        expect(res.status).toBe(412);
+
+        const get = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(get.status).toBe(404);
+    });
+
+    test('If-Match with a stale etag is 412 and leaves the stored event untouched', async () => {
+        const uid = 'caldav-ifmatch-stale@eigen';
+        const uri = 'caldav-ifmatch-stale.ics';
+        const ics = (summary: string) =>
+            `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260703T100000Z\r\nDTEND:20260703T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics('Original'),
+            }),
+        );
+        expect(create.status).toBe(201);
+        const etag = create.headers.get('ETag');
+
+        const stale = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': '"stale-etag"',
+                },
+                body: ics('Overwritten'),
+            }),
+        );
+        expect(stale.status).toBe(412);
+
+        const get = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(get.status).toBe(200);
+        const body = await get.text();
+        expect(body).toContain('Original');
+        expect(body).not.toContain('Overwritten');
+        expect(get.headers.get('ETag')).toBe(etag);
+    });
+
+    test('a non-star If-None-Match matching the current etag is 412', async () => {
+        const uid = 'caldav-inm-current@eigen';
+        const uri = 'caldav-inm-current.ics';
+        const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:INM Current\r\nDTSTART:20260704T100000Z\r\nDTEND:20260704T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(create.status).toBe(201);
+        const etag = create.headers.get('ETag');
+
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': etag!,
+                },
+                body: ics,
+            }),
+        );
+        expect(res.status).toBe(412);
+    });
+
+    test('a comma-list If-Match containing the current etag succeeds', async () => {
+        const uid = 'caldav-ifmatch-list@eigen';
+        const uri = 'caldav-ifmatch-list.ics';
+        const ics = (summary: string) =>
+            `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${uid}\r\nSUMMARY:${summary}\r\nDTSTART:20260705T100000Z\r\nDTEND:20260705T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR`;
+
+        const create = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics('List Create'),
+            }),
+        );
+        expect(create.status).toBe(201);
+        const etag = create.headers.get('ETag');
+
+        const update = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': `"deadbeef", ${etag}`,
+                },
+                body: ics('List Update'),
+            }),
+        );
+        expect(update.status).toBe(204);
     });
 
     test('PUT all-day event stores correct UTC midnight times', async () => {
@@ -415,6 +615,50 @@ describe('CalDAV', () => {
         expect(syncXml).toContain('sync-test-1.ics');
     });
 
+    test('REPORT with an unknown root element is 400', async () => {
+        const body = `<?xml version="1.0" encoding="utf-8"?>
+<D:not-a-real-report xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:not-a-real-report>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('REPORT with an empty body is 400, never a full etag dump', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('sync-collection rejects a malformed or legacy-format token with 403 valid-sync-token', async () => {
+        // The legacy `urn:eigen:sync/N` slash form is no longer accepted — an unrecognised token is simply invalid.
+        for (const token of ['urn:eigen:sync/5', 'urn:eigen:sync:abc', 'nonsense']) {
+            const body = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>${token}</D:sync-token>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+            const res = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    method: 'REPORT',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                    body,
+                }),
+            );
+            expect(res.status).toBe(403);
+            expect(await res.text()).toContain('valid-sync-token');
+        }
+    });
+
     test('PUT preserves SEQUENCE from ICS', async () => {
         const ics = [
             'BEGIN:VCALENDAR',
@@ -654,5 +898,305 @@ describe('CalDAV', () => {
         const body = await getRes.text();
         expect(body).toContain('SubDaily PUT');
         expect(body).not.toContain('SECONDLY');
+    });
+
+    test('a REPORT body over 1 MiB is 413 before parsing', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: 'a'.repeat(1_048_577),
+            }),
+        );
+        expect(res.status).toBe(413);
+    });
+
+    test('an oversize PUT is 413 max-resource-size before parsing', async () => {
+        const prefix =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-oversize@eigen\r\nSUMMARY:Big\r\nDTSTART:20260801T090000Z\r\nDTEND:20260801T100000Z\r\nDESCRIPTION:';
+        const suffix = '\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        const pad = EVENT_MAX_BYTES + 1 - Buffer.byteLength(prefix) - Buffer.byteLength(suffix);
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-oversize.ics`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: prefix + 'a'.repeat(pad) + suffix,
+            }),
+        );
+        expect(res.status).toBe(413);
+        expect(await res.text()).toContain('max-resource-size');
+    });
+
+    test('a PUT whose resource name exceeds the length cap is 400', async () => {
+        const longUri = `${'x'.repeat(300)}.ics`;
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-longuri@eigen\r\nSUMMARY:Long\r\nDTSTART:20260901T090000Z\r\nDTEND:20260901T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${longUri}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('calendar-multiget with more than 500 hrefs is 400', async () => {
+        const hrefs = Array.from(
+            { length: 501 },
+            (_, i) => `<D:href>/dav/calendars/${userId}/${defaultCalendarId}/caldav-bulk-${i}.ics</D:href>`,
+        ).join('\n');
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/></D:prop>
+  ${hrefs}
+</C:calendar-multiget>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('calendar-multiget collapses duplicate hrefs (present and missing) to one row each', async () => {
+        const present = 'caldav-multiget-dup.ics';
+        const missing = 'caldav-multiget-missing.ics';
+        const href = (uri: string) => `/dav/calendars/${userId}/${defaultCalendarId}/${uri}`;
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-multiget-dup@eigen\r\nSUMMARY:Dup Test\r\nDTSTART:20260701T090000Z\r\nDTEND:20260701T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        await app.handle(
+            new Request(`http://localhost${href(present)}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+
+        // The same two resources listed four ways: the present one twice, the missing one twice.
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>${href(present)}</D:href>
+  <D:href>${href(present)}</D:href>
+  <D:href>${href(missing)}</D:href>
+  <D:href>${href(missing)}</D:href>
+</C:calendar-multiget>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // Two distinct resources → exactly two rows, and the missing one 404s exactly once (the dedupe nit).
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(2);
+        expect((xml.match(/404 Not Found/g) ?? []).length).toBe(1);
+        expect(xml).toContain('Dup Test');
+    });
+
+    test('PROPFIND a single event returns its own href and quoted etag', async () => {
+        const uri = 'caldav-propfind-one.ics';
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-propfind-one@eigen\r\nSUMMARY:One Event\r\nDTSTART:20261001T090000Z\r\nDTEND:20261001T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        const putRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        const etag = putRes.headers.get('ETag');
+
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${uri}`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // The event's own href, not the collection's, and its quoted etag matching the PUT response.
+        expect(xml).toContain(`/dav/calendars/${userId}/${defaultCalendarId}/${uri}`);
+        expect(xml).toContain(`<D:getetag>${etag}</D:getetag>`);
+    });
+
+    test('PROPFIND a missing event uri is 404', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-propfind-nope.ics`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(res.status).toBe(404);
+    });
+
+    test('a %40-encoded @ in a resource name round-trips through PUT, GET, PROPFIND and is emitted raw', async () => {
+        // The client may PUT the @ percent-encoded; inbound decodes a%40b.ics to the stored uri a@b.ics. @ is
+        // pchar-legal (RFC 3986), so every emitted href/Location carries it raw — never re-encoded back to %40.
+        const requestHref = `/dav/calendars/${userId}/${defaultCalendarId}/a%40b.ics`;
+        const emittedHref = `/dav/calendars/${userId}/${defaultCalendarId}/a@b.ics`;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-encoded@eigen',
+            'SUMMARY:Encoded URI Event',
+            'DTSTART:20261101T090000Z',
+            'DTEND:20261101T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const putRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(emittedHref);
+        const etag = putRes.headers.get('ETag');
+        expect(etag).toBeTruthy();
+
+        const getRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        expect(getRes.status).toBe(200);
+        expect(await getRes.text()).toContain('Encoded URI Event');
+        expect(getRes.headers.get('ETag')).toBe(etag);
+
+        const propRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(207);
+        const propXml = await propRes.text();
+        // The emitted href carries the raw @, never the %40-encoded form, and its etag matches the PUT.
+        expect(propXml).toContain(emittedHref);
+        expect(propXml).not.toContain('a%40b.ics');
+        expect(propXml).toContain(`<D:getetag>${etag}</D:getetag>`);
+    });
+
+    test('REPORT multiget and sync-collection resolve a %40-encoded href and emit the @ raw', async () => {
+        // c%40d.ics decodes to c@d.ics: multiget must decode the inbound href before matching, and both surfaces
+        // emit the @ raw (pchar-legal, RFC 3986) — never re-encoded back to the %40 form.
+        const requestHref = `/dav/calendars/${userId}/${defaultCalendarId}/c%40d.ics`;
+        const emittedHref = `/dav/calendars/${userId}/${defaultCalendarId}/c@d.ics`;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-encoded-report@eigen',
+            'SUMMARY:Encoded Report Event',
+            'DTSTART:20261102T090000Z',
+            'DTEND:20261102T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+        const putRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+
+        const multigetBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>${requestHref}</D:href>
+</C:calendar-multiget>`;
+        const multigetRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: multigetBody,
+            }),
+        );
+        expect(multigetRes.status).toBe(207);
+        const multigetXml = await multigetRes.text();
+        expect(multigetXml).toContain('Encoded Report Event');
+        expect(multigetXml).toContain(emittedHref);
+        expect(multigetXml).not.toContain('c%40d.ics');
+
+        const syncBody = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token/>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+        const syncRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: syncBody,
+            }),
+        );
+        expect(syncRes.status).toBe(207);
+        const syncXml = await syncRes.text();
+        expect(syncXml).toContain(emittedHref);
+        expect(syncXml).not.toContain('c%40d.ics');
+    });
+
+    test('a resource name that genuinely needs encoding (a space) round-trips as %20', async () => {
+        // A space is not pchar-legal, so it MUST stay percent-encoded on the wire: the client PUTs a%20b.ics, the
+        // server stores "a b.ics" and re-emits the href as a%20b.ics — the raw space never appears in a listing.
+        const requestHref = `/dav/calendars/${userId}/${defaultCalendarId}/a%20b.ics`;
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-space@eigen',
+            'SUMMARY:Spaced URI Event',
+            'DTSTART:20261103T090000Z',
+            'DTEND:20261103T100000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const putRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        expect(putRes.headers.get('Location')).toBe(requestHref);
+
+        const propRes = await app.handle(
+            new Request(`http://localhost${requestHref}`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(207);
+        const propXml = await propRes.text();
+        expect(propXml).toContain(requestHref);
+        expect(propXml).not.toContain('a b.ics');
     });
 });

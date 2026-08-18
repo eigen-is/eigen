@@ -1,52 +1,49 @@
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { useStartChatWith } from '@workspace/lib/chat';
-import { useOpenWriteEmailTo } from '@workspace/lib/mail';
+import type { Contact } from '@workspace/lib/types/contact';
+import type { Label } from '@workspace/lib/types/label';
 import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
-import { ChatCreateWizard } from '@workspace/ui/components/chat';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-} from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { Separator } from '@workspace/ui/components/separator';
-import { printDocument } from '@workspace/ui/lib/printElement';
-import { Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { Pencil, Trash2 } from 'lucide-react';
+import { isSelfContact, useContactMenu } from './contact-menu';
 
 type PersonDetailToolbarProps = {
-    name: string;
-    emails: string[];
+    // The person as a card (synthetic for team members). Feeds the shared kebab menu.
+    contact: Contact;
     // Contact rows are editable; team members aren't — absent editSearch/onDeleteClick hides
     // Edit/Delete. Delete also hides on your own card (same guard as the list's context menu).
     editSearch?: { filterType: string; filterId: string; contactId: string };
     onDeleteClick?: () => void;
+    // Contacts-only label wiring; absent for team members.
+    labels?: Label[];
+    onToggleLabel?: (contacts: Contact[], labelId: string) => void;
 };
 
-// One toolbar for every person-detail surface (contact + team member): direct Edit/Delete
-// buttons and the actions menu (Send email / Start chat / Print / Edit / Delete).
-export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDeleteClick }: PersonDetailToolbarProps) {
-    const openWriteEmailTo = useOpenWriteEmailTo();
-    const startChatWith = useStartChatWith();
+// One toolbar for every person-detail surface (contact + team member): direct Edit/Delete buttons
+// plus the kebab menu, whose items are the same definition the contact list renders.
+export function PersonDetailToolbar({
+    contact,
+    editSearch,
+    onDeleteClick,
+    labels,
+    onToggleLabel,
+}: PersonDetailToolbarProps) {
+    const navigate = useNavigate();
     const { user } = useAuth();
-    const [chatWith, setChatWith] = useState<{ email: string; name: string } | null>(null);
+    const contactMenu = useContactMenu();
 
-    const emails = allEmails.filter((e) => e.trim().length > 0);
-    const email = emails[0];
-    // Any address can start a chat — one without an account becomes an ACL invite. Only the
-    // caller's own card is excluded: a chat is always with someone else.
-    const isSelf = emails.some((e) => e.toLowerCase() === (user?.email ?? '').toLowerCase());
-    const canStartChat = emails.length > 0 && !isSelf;
     const showEdit = !!editSearch;
-    const showDelete = !!onDeleteClick && !isSelf;
+    const showDelete = !!onDeleteClick && !isSelfContact(contact, user);
 
-    const handleStartChat = async () => {
-        // startChatWith prefers the registered account address among the person's emails; an
-        // existing writable 1:1 opens directly, otherwise the wizard opens pre-filled.
-        const result = await startChatWith(emails);
-        if (result !== 'opened') setChatWith({ email: result.email, name });
-    };
+    const onEdit = editSearch
+        ? () =>
+              navigate({
+                  to: '/edit/$filterType/$filterId',
+                  params: { filterType: editSearch.filterType, filterId: editSearch.filterId },
+                  search: { contactId: editSearch.contactId },
+              })
+        : undefined;
 
     return (
         <>
@@ -68,52 +65,18 @@ export function PersonDetailToolbar({ name, emails: allEmails, editSearch, onDel
                     <DropdownMenu>
                         <KebabTrigger />
                         <DropdownMenuContent align="end">
-                            {email && (
-                                <DropdownMenuItem onClick={() => openWriteEmailTo(email)}>
-                                    <Mail className="mr-2" />
-                                    Send email
-                                </DropdownMenuItem>
-                            )}
-                            {canStartChat && (
-                                <DropdownMenuItem onClick={() => void handleStartChat()}>
-                                    <MessageSquare className="mr-2" />
-                                    Start chat
-                                </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={printDocument}>
-                                <Printer className="mr-2" />
-                                Print
-                            </DropdownMenuItem>
-                            {(showEdit || showDelete) && <DropdownMenuSeparator />}
-                            {editSearch && (
-                                <DropdownMenuItem asChild className="cursor-pointer">
-                                    <Link
-                                        to="/edit/$filterType/$filterId"
-                                        params={{ filterType: editSearch.filterType, filterId: editSearch.filterId }}
-                                        search={{ contactId: editSearch.contactId }}
-                                    >
-                                        <Pencil className="mr-2" />
-                                        Edit
-                                    </Link>
-                                </DropdownMenuItem>
-                            )}
-                            {showDelete && (
-                                <DropdownMenuItem onClick={onDeleteClick}>
-                                    <Trash2 className="mr-2" />
-                                    Delete
-                                </DropdownMenuItem>
-                            )}
+                            {contactMenu.renderItems([contact], () => {}, {
+                                showPrint: true,
+                                labels,
+                                onEdit,
+                                onDelete: onDeleteClick,
+                                onToggleLabel,
+                            })}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
             </Toolbar>
-            <ChatCreateWizard
-                open={!!chatWith}
-                onOpenChange={(open) => {
-                    if (!open) setChatWith(null);
-                }}
-                initialPeople={chatWith ? [chatWith] : undefined}
-            />
+            {contactMenu.chatWizard}
         </>
     );
 }

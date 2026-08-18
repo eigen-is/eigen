@@ -43,7 +43,7 @@
         }
     }
 
-    # CalDAV — set X-Real-IP to the real client and drop inbound X-Forwarded-For so a DAV client
+    # CalDAV + CardDAV — set X-Real-IP to the real client and drop inbound X-Forwarded-For so a DAV client
     # can't spoof its rate-limit bucket (matches /eigen/*).
     handle /dav/* {
         reverse_proxy eigen-api:8000 {
@@ -52,7 +52,10 @@
         }
     }
     handle /.well-known/caldav {
-        redir /dav/ 301
+        redir * /dav/ 301
+    }
+    handle /.well-known/carddav {
+        redir * /dav/ 301
     }
 
     # Email autodiscovery — same template as the bundled Caddyfile, served at the apex

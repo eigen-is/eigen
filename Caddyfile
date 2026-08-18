@@ -46,8 +46,8 @@ www.{$DOMAIN} {
         }
     }
 
-    # CalDAV — keep /dav/ prefix (API routes include it). Set X-Real-IP to the real client and drop
-    # inbound X-Forwarded-For so a DAV client can't spoof its rate-limit bucket (matches /eigen/*).
+    # CalDAV + CardDAV — keep /dav/ prefix (API routes include it). Set X-Real-IP to the real client and
+    # drop inbound X-Forwarded-For so a DAV client can't spoof its rate-limit bucket (matches /eigen/*).
     handle /dav/* {
         reverse_proxy eigen-api:8000 {
             header_up X-Real-IP {remote_host}
@@ -55,7 +55,10 @@ www.{$DOMAIN} {
         }
     }
     handle /.well-known/caldav {
-        redir /dav/ 301
+        redir * /dav/ 301
+    }
+    handle /.well-known/carddav {
+        redir * /dav/ 301
     }
 
     # Email autodiscovery — Apple Mail + Thunderbird autoconfig

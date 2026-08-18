@@ -1,8 +1,9 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { emptyContact } from '@workspace/lib/constants/contact';
-import { useAddContact, useContacts, useUpdateContact } from '@workspace/lib/contacts';
-import type { Contact } from '@workspace/lib/types/contact';
+import { useContacts, useUpdateContact } from '@workspace/lib/contacts';
+import type { Contact, CreateContactInput } from '@workspace/lib/types/contact';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
+import { useEffect } from 'react';
 import { z } from 'zod';
 import { ContactEdit, ContactEditToolbar, type ContactFormValues } from '../components/contacts/contact-edit';
 
@@ -13,7 +14,6 @@ const searchSchema = z.object({
 export const Route = createFileRoute('/_auth/edit/$filterType/$filterId')({
     component: EditContactRoute,
     validateSearch: (search: Record<string, unknown>) => {
-        // Parse and validate the search params
         const result = searchSchema.safeParse(search);
 
         if (!result.success) {
@@ -38,14 +38,20 @@ function EditContactRoute() {
     const { data: contacts = [], isLoading: contactsLoading } = useContacts();
     const contact = contactId ? contacts.find((c): c is Contact => c.id === contactId) : undefined;
     const updateContactMutation = useUpdateContact();
-    const addContactMutation = useAddContact();
 
-    const handleSave = async (data: ContactFormValues) => {
-        const contactData: Omit<Contact, 'id'> = {
+    // Redirect away from a contactId that no longer exists (e.g. deleted elsewhere) from an effect, not the
+    // render body — matching the sibling list route's idiom rather than calling navigate() while rendering.
+    useEffect(() => {
+        if (!contactsLoading && contactId && !contact) {
+            navigate({ to: '/$filterType/$filterId', params: { filterType, filterId }, search: {} });
+        }
+    }, [contactsLoading, contactId, contact, navigate, filterType, filterId]);
+
+    const handleSave = async (data: ContactFormValues, etag: string) => {
+        const contactData: CreateContactInput = {
             ...data,
             firstName: data.firstName || '',
             lastName: data.lastName || '',
-            birthday: data.birthday?.toISOString(),
             labels: data.labels || [],
             avatar: data.avatar ?? '',
         };
@@ -54,18 +60,10 @@ function EditContactRoute() {
             await updateContactMutation.mutateAsync({
                 id: contactId,
                 ...contactData,
+                // The etag ContactEdit snapshotted when it loaded these fields — not the live query's, which SSE
+                // can advance mid-edit. A drifted card then 412s instead of silently clobbering the newer write.
+                etag,
             });
-        } else {
-            const newId = await addContactMutation.mutateAsync(contactData);
-
-            if (newId && typeof newId === 'string') {
-                navigate({
-                    to: '/$filterType/$filterId',
-                    params: { filterType, filterId },
-                    search: { contactId: newId },
-                });
-                return;
-            }
         }
 
         navigate({
@@ -87,12 +85,8 @@ function EditContactRoute() {
         return <LoadingState />;
     }
 
+    // The effect above is redirecting; render nothing rather than flash the editor over emptyContact.
     if (contactId && !contact) {
-        navigate({
-            to: '/$filterType/$filterId',
-            params: { filterType, filterId },
-            search: {},
-        });
         return null;
     }
 
@@ -101,7 +95,14 @@ function EditContactRoute() {
     return (
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew} />}>
-                <ContactEdit contact={contact || emptyContact} onSave={handleSave} onCancel={handleCancel} />
+                <ContactEdit
+                    // Remount when the loaded card's etag changes (e.g. after a 412 refetch) so the form fields
+                    // and the snapshotted etag re-seed together and the next save carries the fresh etag.
+                    key={(contact || emptyContact).etag}
+                    contact={contact || emptyContact}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                />
             </Column>
         </ColumnLayout>
     );

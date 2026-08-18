@@ -4,4 +4,5 @@ export * from './fonts';
 export * from './mail';
 export * from './mime';
 export * from './preview';
+export * from './public';
 export * from './stale-time';

@@ -3,6 +3,7 @@ import { Database as BunDatabase } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
+import { Semaphore } from '../../utils/semaphore';
 import { time } from '../../utils/timing';
 import { isTest } from '../config/env';
 import type { RetentionPolicy } from '../versioning/retention';
@@ -47,6 +48,16 @@ export class ManagedDatabase<S extends SchemaType> {
     private lastSyncedChanges = 0;
     private lastSnapshotChanges = 0;
     private forceDirty = false;
+    // One lifecycle op at a time: a tick and a close never run their sync + snapshot concurrently,
+    // so close can't tear the db down under an in-flight tick. flush() deliberately takes only
+    // syncLock — onSnapshot flushes the very db it is snapshotting (versioning/snapshot.ts
+    // takeSnapshot), so a flush waiting on this lock would deadlock on its own tick.
+    private lifecycleLock = new Semaphore(1);
+    // Every onSync runs under this: two of them stage the same bytes and race their watermark.
+    private syncLock = new Semaphore(1);
+    // Set the moment close() starts, so queued ticks and flushes can't call back into a db that is
+    // being (or has been) torn down. Cleared by a reopen.
+    private closed = false;
     // When true, openCold opens with { create: false } so a MISSING working copy throws instead of
     // silently materialising an empty db. Set by Mount for "open existing" document dbs — the file is
     // known to exist (metadata.db has its row), so a fresh empty db here means lost data, not a new doc.
@@ -112,6 +123,7 @@ export class ManagedDatabase<S extends SchemaType> {
 
         this.drizzleDb = drizzle(this.rawDb, { schema: this.config.schema }) as BunSQLiteDatabase<S>;
         this.lastSyncedChanges = 0;
+        this.closed = false;
 
         if (this.callbacks.onSync && autoSyncMs > 0) {
             this.syncTimer = setInterval(() => {
@@ -127,6 +139,15 @@ export class ManagedDatabase<S extends SchemaType> {
 
         const row = this.rawDb.query('SELECT version FROM __schema_version WHERE id = 1').get() as { version: number };
         let currentVersion = row?.version ?? 0;
+
+        // A db written by a newer binary carries a schema past what we know how to migrate. Rolling
+        // back to an older server and silently opening it would corrupt it — refuse loudly instead.
+        if (currentVersion > this.config.currentVersion) {
+            throw new ApiError(
+                503,
+                `${this.config.name}: database is at schema v${currentVersion}, newer than this server supports (v${this.config.currentVersion})`,
+            );
+        }
 
         const pending = this.config.migrations
             .filter((m) => m.version > currentVersion)
@@ -207,17 +228,26 @@ export class ManagedDatabase<S extends SchemaType> {
         }
     }
 
-    // Periodic auto-sync: push writes, then snapshot if the threshold is crossed.
+    // Periodic auto-sync: push writes, then snapshot if the threshold is crossed. A tick that was
+    // already queued when close() started is dropped rather than run against a closing db.
     private async tick(): Promise<void> {
-        await this.sync();
-        await this.snapshotIfDue();
+        await this.lifecycleLock.run(async () => {
+            if (this.closed) return;
+            await this.syncLock.run(() => this.sync());
+            await this.snapshotIfDue();
+        });
     }
 
     // Public sync entry point — callers (e.g. Mount.createDatabase) use this
     // to guarantee the current state has been pushed through the configured
     // sync callback before returning, instead of waiting for the 30s timer.
+    // Serialized against every other sync but NOT against the lifecycle op, so the re-entrant
+    // flush from onSnapshot can't wedge (see lifecycleLock). Once close() has started this is a
+    // no-op: close ran its own final sync, and nothing may touch the db it is tearing down.
     async flush(): Promise<void> {
-        await this.sync();
+        await this.syncLock.run(async () => {
+            if (!this.closed) await this.sync();
+        });
     }
 
     // Write a frozen, WAL-complete copy of the current DB to destPath via VACUUM INTO.
@@ -235,57 +265,64 @@ export class ManagedDatabase<S extends SchemaType> {
     async close(opts: { skipFinalSnapshot?: boolean } = {}): Promise<void> {
         if (!this.rawDb) return;
 
+        // Stop scheduling and disarm queued flushes BEFORE waiting for the in-flight lifecycle op:
+        // from here on nothing may sync a db that is about to lose its handle.
+        this.closed = true;
         if (this.syncTimer) {
             clearInterval(this.syncTimer);
             this.syncTimer = null;
         }
 
-        // The teardown runs even when onSync throws (the error still propagates to the caller) —
-        // aborting before it leaked the raw db handle + working copy. Checkpoint and snapshot stay
-        // correct after a failed sync: they copy the locally-committed on-disk bytes. onClose is
-        // told about the failure so it can leave the working copy as the crash-recovery marker.
-        let syncFailed = true;
-        try {
-            await this.sync();
-            syncFailed = false;
-        } finally {
-            // Fold the WAL into the main file before snapshotting: local backends copy
-            // this on-disk file (TRUNCATE makes it complete), remote backends copy the
-            // object sync() uploaded. A snapshot failure is caught so it can't block close.
-            this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
-            if (!opts.skipFinalSnapshot) {
-                await this.snapshotIfDue(true).catch((err) =>
-                    console.error(`[${this.config.name}] close snapshot failed:`, err),
-                );
-            }
-            // Strict close, GC-assisted: drizzle leaves its prepared statements to GC, and
-            // sqlite refuses to close over them (SQLITE_BUSY) — a plain close() degrades to a
-            // LAZY close that keeps the file + -shm mapped until GC finalizes them. Collect the
-            // dropped statements and retry so the close is real. If it is STILL lazy (a
-            // genuinely live statement), keep the journals: unlinking -shm under the zombie
-            // poisons sqlite's per-inode shm node and the next open of the SAME file (every
-            // local-key reopen) fails with SQLITE_IOERR_VNODE.
-            let cleanClose = true;
-            if (this.rawDb) {
-                try {
-                    this.rawDb.close(true);
-                } catch {
-                    Bun.gc(true);
+        await this.lifecycleLock.run(async () => {
+            if (!this.rawDb) return; // a concurrent close reached the teardown first
+
+            // The teardown runs even when onSync throws (the error still propagates to the caller) —
+            // aborting before it leaked the raw db handle + working copy. Checkpoint and snapshot stay
+            // correct after a failed sync: they copy the locally-committed on-disk bytes. onClose is
+            // told about the failure so it can leave the working copy as the crash-recovery marker.
+            let syncFailed = true;
+            try {
+                await this.syncLock.run(() => this.sync());
+                syncFailed = false;
+            } finally {
+                // Fold the WAL into the main file before snapshotting: local backends copy
+                // this on-disk file (TRUNCATE makes it complete), remote backends copy the
+                // object sync() uploaded. A snapshot failure is caught so it can't block close.
+                this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
+                if (!opts.skipFinalSnapshot) {
+                    await this.snapshotIfDue(true).catch((err) =>
+                        console.error(`[${this.config.name}] close snapshot failed:`, err),
+                    );
+                }
+                // Strict close, GC-assisted: drizzle leaves its prepared statements to GC, and
+                // sqlite refuses to close over them (SQLITE_BUSY) — a plain close() degrades to a
+                // LAZY close that keeps the file + -shm mapped until GC finalizes them. Collect the
+                // dropped statements and retry so the close is real. If it is STILL lazy (a
+                // genuinely live statement), keep the journals: unlinking -shm under the zombie
+                // poisons sqlite's per-inode shm node and the next open of the SAME file (every
+                // local-key reopen) fails with SQLITE_IOERR_VNODE.
+                let cleanClose = true;
+                if (this.rawDb) {
                     try {
                         this.rawDb.close(true);
                     } catch {
-                        cleanClose = false;
-                        this.rawDb.close();
+                        Bun.gc(true);
+                        try {
+                            this.rawDb.close(true);
+                        } catch {
+                            cleanClose = false;
+                            this.rawDb.close();
+                        }
                     }
                 }
+                this.rawDb = null;
+                this.drizzleDb = null;
+
+                if (cleanClose) this.deleteJournalFiles();
+
+                await this.callbacks.onClose?.(syncFailed);
             }
-            this.rawDb = null;
-            this.drizzleDb = null;
-
-            if (cleanClose) this.deleteJournalFiles();
-
-            await this.callbacks.onClose?.(syncFailed);
-        }
+        });
     }
 
     private deleteJournalFiles(): void {

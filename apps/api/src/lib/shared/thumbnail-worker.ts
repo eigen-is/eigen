@@ -1,27 +1,49 @@
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
+import type { ImageDimensions } from '@workspace/lib/types/drive';
 import sharp from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
 import { extractVideoFrame } from './video-thumbnail';
 
-type WorkerInput = {
+export type ThumbnailFormat = 'webp' | 'jpeg' | 'png' | 'gif';
+
+// The postMessage protocol with thumbnails.ts, which imports these type-only — the worker module (and its
+// sharp import) never loads on the main thread.
+export type WorkerInput = {
     source: string | ArrayBuffer;
     mimeType: string;
     fileName: string;
     tmpDir: string;
     pathId: string;
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover' };
+    options: { maxSize: number; quality: number; fit: 'inside' | 'cover'; format: ThumbnailFormat };
 };
 
-type WorkerOutput = { ok: true; data: ArrayBuffer; width: number; height: number; duration?: number } | { ok: false };
+export type WorkerOutput =
+    | {
+          ok: true;
+          data: ArrayBuffer;
+          width: number;
+          height: number;
+          hasAlpha: boolean;
+          frameCount: number;
+          duration?: number;
+      }
+    | { ok: false };
 
-type ImageResult = { data: Buffer; width: number; height: number; duration?: number };
+export type ImageResult = ImageDimensions & {
+    data: Buffer;
+    hasAlpha: boolean;
+    frameCount: number;
+    duration?: number;
+};
 
-async function sharpResize(
-    source: Buffer | string,
-    options: { maxSize: number; quality: number; fit: 'inside' | 'cover' },
-): Promise<ImageResult | null> {
+async function sharpResize(source: Buffer | string, options: WorkerInput['options']): Promise<ImageResult | null> {
     try {
-        const image = sharp(source, { animated: true });
+        // Only webp and gif hold animation — every other target decodes the first frame only, so reading all
+        // pages of an animated source (which would stack them into one tall filmstrip) is confined to those two.
+        const animated = options.format === 'webp' || options.format === 'gif';
+        const image = sharp(source, { animated });
         const metadata = await image.metadata();
 
         if (!metadata.width || !metadata.height) return null;
@@ -32,17 +54,31 @@ async function sharpResize(
 
         if (width > 32000 || height > 32000) return null;
 
-        const data = await image
-            .rotate()
-            .resize(options.maxSize, options.maxSize, {
-                fit: options.fit,
-                position: 'center',
-                withoutEnlargement: options.fit === 'inside',
-            })
-            .webp({ quality: options.quality })
-            .toBuffer();
+        const resized = image.rotate().resize(options.maxSize, options.maxSize, {
+            fit: options.fit,
+            position: 'center',
+            withoutEnlargement: options.fit === 'inside',
+        });
+        // png/gif take no quality — they encode at sharp's defaults; webp is the default target.
+        let encoded: sharp.Sharp;
+        switch (options.format) {
+            case 'jpeg':
+                encoded = resized.jpeg({ quality: options.quality });
+                break;
+            case 'png':
+                encoded = resized.png();
+                break;
+            case 'gif':
+                encoded = resized.gif();
+                break;
+            default:
+                encoded = resized.webp({ quality: options.quality });
+        }
+        const data = await encoded.toBuffer();
 
-        return { data, width, height };
+        // hasAlpha/frameCount describe the pristine source, so the avatar-staging caller can pick the embed
+        // format (opaque still → JPEG, alpha → PNG, animated → GIF) from one decode.
+        return { data, width, height, hasAlpha: metadata.hasAlpha ?? false, frameCount: metadata.pages ?? 1 };
     } catch {
         return null;
     }
@@ -78,20 +114,23 @@ async function processImage(input: WorkerInput): Promise<ImageResult | null> {
         }
     }
 
-    // Exiftool fallback — needs a file on disk
-    let filePath: string;
+    // Exiftool fallback — needs a file on disk. Avatar conversions pass no tmpDir, and their scratch names
+    // are derived from a fixed pathId: without a private dir they collide in the process CWD, so concurrent
+    // conversions would read each other's bytes.
+    const scratchDir = input.tmpDir || fs.mkdtempSync(path.join(os.tmpdir(), 'eigen-thumb-'));
     let tempFile: string | null = null;
 
-    if (typeof source === 'string') {
-        filePath = source;
-    } else {
-        tempFile = path.join(input.tmpDir, `${input.pathId}-src.tmp`);
-        await Bun.write(tempFile, source);
-        filePath = tempFile;
-    }
-
     try {
-        const extractPath = await extractEmbeddedPreview(filePath, input.tmpDir, input.pathId);
+        let filePath: string;
+        if (typeof source === 'string') {
+            filePath = source;
+        } else {
+            tempFile = path.join(scratchDir, `${input.pathId}-src.tmp`);
+            await Bun.write(tempFile, source);
+            filePath = tempFile;
+        }
+
+        const extractPath = await extractEmbeddedPreview(filePath, scratchDir, input.pathId);
         if (!extractPath) return null;
 
         try {
@@ -101,6 +140,7 @@ async function processImage(input: WorkerInput): Promise<ImageResult | null> {
         }
     } finally {
         if (tempFile) await cleanupExtract(tempFile);
+        if (scratchDir !== input.tmpDir) fs.rmSync(scratchDir, { recursive: true, force: true });
     }
 }
 
@@ -136,6 +176,8 @@ self.onmessage = async (event: MessageEvent<WorkerInput>) => {
                 data: ab,
                 width: result.width,
                 height: result.height,
+                hasAlpha: result.hasAlpha,
+                frameCount: result.frameCount,
                 ...(result.duration !== undefined && { duration: result.duration }),
             };
             postMessage(payload, [ab]);

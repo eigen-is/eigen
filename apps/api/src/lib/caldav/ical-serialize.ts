@@ -1,47 +1,10 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { computeOccurrenceTimes, storedRecurrenceKey, utcToLocal } from '../calendar/recurrence';
 import { normalizeTimezone } from '../calendar/timezone';
+import { escapeContentText, foldLine, neuterParamValue, stripLineBreaks } from '../core/content-line';
 import { buildVTimezone } from './vtimezone';
 
 const pad = (n: number) => n.toString().padStart(2, '0');
-
-// RFC 5545 §3.3.11 — escape TEXT values
-function escapeICalText(s: string): string {
-    return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n').replace(/\r/g, '');
-}
-
-// Escape a value for use inside a double-quoted PARAM-VALUE (e.g. CN="...").
-// Double quotes would break out of the parameter; CRLF could inject properties.
-function escapeICalParamValue(s: string): string {
-    return s.replace(/"/g, "'").replace(/[\r\n]/g, '');
-}
-
-// RFC 5545 §3.1 — fold lines longer than 75 octets with CRLF + single space
-function foldLine(line: string): string {
-    const bytes = new TextEncoder().encode(line);
-    if (bytes.length <= 75) return line;
-
-    const parts: string[] = [];
-    let offset = 0;
-    let first = true;
-
-    while (offset < bytes.length) {
-        const limit = first ? 75 : 74; // continuation lines lose 1 octet to the leading space
-        first = false;
-
-        // Walk back from limit so we never split a multi-byte character
-        let end = Math.min(offset + limit, bytes.length);
-        // If the byte at `end` is a UTF-8 continuation byte (10xxxxxx), back up
-        while (end < bytes.length && (bytes[end] & 0xc0) === 0x80) {
-            end--;
-        }
-
-        parts.push(new TextDecoder().decode(bytes.slice(offset, end)));
-        offset = end;
-    }
-
-    return parts.join('\r\n ');
-}
 
 function formatDateTimeUTC(d: Date): string {
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
@@ -87,8 +50,8 @@ function buildVEvent(
     const tzid = normalizeTimezone(event.timezone);
 
     prop('BEGIN:VEVENT');
-    prop(`UID:${escapeICalText(event.uid)}`);
-    prop(`SUMMARY:${escapeICalText(event.title)}`);
+    prop(`UID:${escapeContentText(event.uid)}`);
+    prop(`SUMMARY:${escapeContentText(event.title)}`);
 
     // DTSTART / DTEND
     if (event.allDay) {
@@ -102,8 +65,8 @@ function buildVEvent(
         prop(`DTEND:${formatDateTimeUTC(event.endTime)}`);
     }
 
-    if (event.description) prop(`DESCRIPTION:${escapeICalText(event.description)}`);
-    if (event.location) prop(`LOCATION:${escapeICalText(event.location)}`);
+    if (event.description) prop(`DESCRIPTION:${escapeContentText(event.description)}`);
+    if (event.location) prop(`LOCATION:${escapeContentText(event.location)}`);
 
     prop(`STATUS:${event.status.toUpperCase()}`);
     prop(`SEQUENCE:${event.sequence}`);
@@ -138,11 +101,11 @@ function buildVEvent(
 
     // RECURRENCE-ID names the ORIGINAL occurrence being overridden, in the master's TZID form
     // (RFC 5545). The exception's own startTime may have been moved — echoing it back produces an
-    // override that matches no occurrence, so clients render the original slot too (audit #C).
+    // override that matches no occurrence, so clients render the original slot too.
     // The master's tz (not the exception's) decides the form: legacy exception rows hold timezone:null.
     if (event.recurrenceDate) {
-        // An unkeyable legacy value falls back to the exception's own startTime (the pre-#C shape:
-        // a possibly-orphaned override beats 500ing the whole resource).
+        // An unkeyable legacy value falls back to the exception's own startTime (a possibly-orphaned
+        // override beats 500ing the whole resource).
         const key = storedRecurrenceKey(event.recurrenceDate);
         if (event.allDay) {
             const compact = key ? key.replace(/-/g, '') : formatDateUTC(event.startTime);
@@ -162,21 +125,24 @@ function buildVEvent(
     // ORGANIZER
     const organizer = event.data?.organizer;
     if (organizer) {
-        const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
-        prop(`ORGANIZER${cn}:mailto:${organizer.email}`);
+        const cn = organizer.name ? `;CN="${neuterParamValue(organizer.name)}"` : '';
+        // The email rides through unescaped after mailto:, so strip CR/LF that would otherwise inject a line.
+        prop(`ORGANIZER${cn}:mailto:${stripLineBreaks(organizer.email)}`);
     }
 
     // ATTENDEE lines — for iMIP, include the organizer as ACCEPTED attendee (RFC 5546)
     const attendees = event.data?.attendees ?? [];
     if (options?.rsvp && organizer && !attendees.some((a) => a.email === organizer.email)) {
-        const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
-        prop(`ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED${cn}:mailto:${organizer.email}`);
+        const cn = organizer.name ? `;CN="${neuterParamValue(organizer.name)}"` : '';
+        prop(
+            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED${cn}:mailto:${stripLineBreaks(organizer.email)}`,
+        );
     }
     for (const attendee of attendees) {
-        const cn = attendee.name ? `;CN="${escapeICalParamValue(attendee.name)}"` : '';
+        const cn = attendee.name ? `;CN="${neuterParamValue(attendee.name)}"` : '';
         const rsvp = options?.rsvp ? ';RSVP=TRUE' : '';
         prop(
-            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${attendee.email}`,
+            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${stripLineBreaks(attendee.email)}`,
         );
     }
 

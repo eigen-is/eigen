@@ -219,17 +219,25 @@ export class Calendar {
         this.incrementCtag(calendarId);
         const newCtag = this.getCalendarById(calendarId)!.ctag;
 
+        const uri =
+            input.uri ||
+            (input.parentEventId && input.recurrenceDate ? `${uid}-exc-${input.recurrenceDate}.ics` : `${uid}.ics`);
+
+        // A create re-using a previously deleted uri clears its tombstone in the same step as the insert, so a
+        // delete-then-recreate never lists one href as both a 200 (changed) and a 404 (deleted) in a single
+        // sync response (RFC 6578 forbids duplicate member URLs; spec § 1).
+        this.db
+            .delete(schema.eventTombstones)
+            .where(and(eq(schema.eventTombstones.calendarId, calendarId), eq(schema.eventTombstones.uri, uri)))
+            .run();
+
         this.db
             .insert(schema.events)
             .values({
                 id,
                 calendarId,
                 uid,
-                uri:
-                    input.uri ||
-                    (input.parentEventId && input.recurrenceDate
-                        ? `${uid}-exc-${input.recurrenceDate}.ics`
-                        : `${uid}.ics`),
+                uri,
                 title: input.title.trim(),
                 description: input.description ?? null,
                 location: input.location ?? null,
@@ -346,7 +354,7 @@ export class Calendar {
             .map(dbEventToCalendarEventRow);
     }
 
-    // Drop exception rows a CalDAV full-resource replace no longer carries (audit #D). Deliberately
+    // Drop exception rows a CalDAV full-resource replace no longer carries. Deliberately
     // quiet: no tombstone (the client-visible resource is the master, whose etag changes via touch)
     // and no cancellation fan-out (removing an override RESTORES the base occurrence).
     public deleteExceptions(calendarId: string, parentEventId: string, ids: string[]): void {
@@ -568,7 +576,7 @@ export class Calendar {
         // Only the organizer fans out invitations. An attendee editing their linked copy (guarded to
         // reminders/color above) must NOT bump SEQUENCE or send iMIP — doing so spoofs the attendee as
         // organizer AND outruns the organizer's SEQUENCE, so the RFC 5546 replay guard later drops the
-        // organizer's real updates (audit #9). Mirror the attendee discriminator at the top of updateEvent.
+        // organizer's real updates. Mirror the attendee discriminator at the top of updateEvent.
         if (user && !existing.data?.organizer && updated.data?.attendees?.length) {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
@@ -671,6 +679,16 @@ export class Calendar {
                 .from(schema.calendars)
                 .where(eq(schema.calendars.id, targetCalendarId))
                 .get()!.ctag;
+            // Clear any tombstone this uri still carries in the target from an earlier move out of it — moving
+            // A→B then B→A must not leave A listing the uri as both a 200 (re-homed) and a 404 (stale tombstone).
+            tx.delete(schema.eventTombstones)
+                .where(
+                    and(
+                        eq(schema.eventTombstones.calendarId, targetCalendarId),
+                        eq(schema.eventTombstones.uri, existing.uri),
+                    ),
+                )
+                .run();
             tx.update(schema.events)
                 .set({ calendarId: targetCalendarId, eventCtag: targetCtag, updatedAt: sql`unixepoch()` })
                 .where(or(eq(schema.events.id, id), eq(schema.events.parentEventId, id)))
@@ -780,7 +798,7 @@ export class Calendar {
                     const modEvt = dbEventToCalendarEvent(modified);
                     // Keep the stored exception key, not the UTC date of the (possibly moved) startTime —
                     // the FE round-trips occurrenceDate into scope='this' RSVPs, and a drifted key would
-                    // miss getException and duplicate the exception row (audit #E).
+                    // miss getException and duplicate the exception row.
                     results.push({
                         ...modEvt,
                         occurrenceDate: occ.occurrenceDate,
@@ -1036,6 +1054,7 @@ export class Calendar {
         if (!defaultCal) throw new ApiError(500, 'No default calendar');
 
         const id = randomUUID();
+        const uri = `${payload.uid}.ics`;
         const etag = computeEtag({
             title: payload.title,
             description: payload.description,
@@ -1049,32 +1068,50 @@ export class Calendar {
             data: payload.data,
         });
 
-        this.db
-            .insert(schema.events)
-            .values({
-                id,
-                calendarId: defaultCal.id,
-                uid: payload.uid,
-                uri: `${payload.uid}.ics`,
-                title: payload.title,
-                description: payload.description,
-                location: payload.location,
-                startTime: payload.startTime,
-                endTime: payload.endTime,
-                allDay: payload.allDay,
-                rrule: payload.rrule,
-                timezone: payload.timezone,
-                status: payload.status,
-                sequence: payload.sequence,
-                etag,
-                data: payload.data,
-                organizerEventId: payload.organizerEventId,
-                organizerUserId: payload.organizerUserId,
-                createByUserId: payload.createByUserId,
-            })
-            .run();
+        // Mirror createEvent's tombstone-clear + eventCtag stamp: without them a re-received invite whose uri
+        // a local delete already tombstoned syncs as ONLY a 404 (the client drops the live event), and a NULL
+        // eventCtag hides the row from getChangedEventsSince (>eventCtag) in every delta. One transaction (the
+        // moveEvent pattern): the insert can still fail on a (calendarId, uri) collision the linked-event
+        // guard doesn't cover, and a phantom ctag bump must not survive that.
+        this.db.transaction((tx) => {
+            tx.update(schema.calendars)
+                .set({ ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()` })
+                .where(eq(schema.calendars.id, defaultCal.id))
+                .run();
+            const newCtag = tx
+                .select({ ctag: schema.calendars.ctag })
+                .from(schema.calendars)
+                .where(eq(schema.calendars.id, defaultCal.id))
+                .get()!.ctag;
+            tx.delete(schema.eventTombstones)
+                .where(and(eq(schema.eventTombstones.calendarId, defaultCal.id), eq(schema.eventTombstones.uri, uri)))
+                .run();
+            tx.insert(schema.events)
+                .values({
+                    id,
+                    calendarId: defaultCal.id,
+                    uid: payload.uid,
+                    uri,
+                    title: payload.title,
+                    description: payload.description,
+                    location: payload.location,
+                    startTime: payload.startTime,
+                    endTime: payload.endTime,
+                    allDay: payload.allDay,
+                    rrule: payload.rrule,
+                    timezone: payload.timezone,
+                    status: payload.status,
+                    sequence: payload.sequence,
+                    etag,
+                    data: payload.data,
+                    organizerEventId: payload.organizerEventId,
+                    organizerUserId: payload.organizerUserId,
+                    createByUserId: payload.createByUserId,
+                    eventCtag: newCtag,
+                })
+                .run();
+        });
 
-        this.incrementCtag(defaultCal.id);
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
         const organizer = payload.data?.organizer;
         this.home.notifications?.persist({
@@ -1155,7 +1192,7 @@ export class Calendar {
 
     // Inbound iMIP: an external organizer moved ONE occurrence of a recurring invite (a lone VEVENT
     // with a RECURRENCE-ID). Land it as an exception on the linked series — feeding it to
-    // receiveInvitationUpdate would rewrite the master and collapse the whole series (audit #A).
+    // receiveInvitationUpdate would rewrite the master and collapse the whole series.
     public receiveInvitationException(
         orgEventId: string,
         orgUserId: string,
@@ -1241,7 +1278,7 @@ export class Calendar {
     // Re-key an inbound iMIP RECURRENCE-ID against the stored series' timezone. The payload is a single
     // VEVENT with no master, so the parser can't know the series tz; a UTC-Z RECURRENCE-ID (Exchange
     // clients, Eigen's own tz-null exceptions) would otherwise key on the UTC date and attach the
-    // exception to the wrong occurrence (audit #8). `recurrenceInstant` is set only for that Z-form case.
+    // exception to the wrong occurrence. `recurrenceInstant` is set only for that Z-form case.
     private recurrenceKeyForSeries(
         recurrenceDate: string,
         recurrenceInstant: Date | null | undefined,
@@ -1254,7 +1291,7 @@ export class Calendar {
     }
 
     // Inbound iMIP: an external organizer cancelled ONE occurrence of a recurring invite. Cancel just
-    // that instance — removeInvitation would delete the attendee's entire linked series (audit #B).
+    // that instance — removeInvitation would delete the attendee's entire linked series.
     public cancelInvitationOccurrence(
         orgEventId: string,
         orgUserId: string,

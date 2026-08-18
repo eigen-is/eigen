@@ -1,11 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import { isVideoCandidate } from '../preview/video-preview';
 import type { StorageFile } from '../storage';
+import type { ImageResult, WorkerInput, WorkerOutput } from './thumbnail-worker';
 
 // Each generateImagePreview spawns a Worker that loads sharp; export/media.ts fans out
 // Promise.all over every media file. Cap concurrent workers so a large export can't spawn N
@@ -14,21 +14,14 @@ const imageWorkerSemaphore = new Semaphore(4);
 
 type ImageSource = StorageFile | Buffer | string;
 
-type ThumbnailOptions = {
-    maxSize?: number;
-    quality?: number;
-    fit?: 'inside' | 'cover';
-};
+// The worker owns the options shape; callers pass any subset over the defaults.
+type ThumbnailOptions = Partial<WorkerInput['options']>;
 
-const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
+const DEFAULT_OPTIONS: WorkerInput['options'] = {
     maxSize: 512,
     quality: 80,
     fit: 'inside',
-};
-
-type ImageResult = ImageDimensions & {
-    data: Buffer;
-    duration?: number;
+    format: 'webp',
 };
 
 export async function generateImagePreview(
@@ -79,7 +72,7 @@ export async function generateImagePreview(
                     resolve(null);
                 }, 30_000);
 
-                worker.onmessage = (event: MessageEvent) => {
+                worker.onmessage = (event: MessageEvent<WorkerOutput>) => {
                     cleanup();
                     if (!event.data.ok) {
                         resolve(null);
@@ -89,6 +82,8 @@ export async function generateImagePreview(
                         data: Buffer.from(event.data.data),
                         width: event.data.width,
                         height: event.data.height,
+                        hasAlpha: event.data.hasAlpha,
+                        frameCount: event.data.frameCount,
                         ...(event.data.duration !== undefined && { duration: event.data.duration }),
                     });
                 };
@@ -99,7 +94,14 @@ export async function generateImagePreview(
                     resolve(null);
                 };
 
-                const message = { source: resolvedSource, mimeType, fileName, tmpDir, pathId, options: opts };
+                const message: WorkerInput = {
+                    source: resolvedSource,
+                    mimeType,
+                    fileName,
+                    tmpDir,
+                    pathId,
+                    options: opts,
+                };
 
                 if (resolvedSource instanceof ArrayBuffer) {
                     worker.postMessage(message, [resolvedSource]);

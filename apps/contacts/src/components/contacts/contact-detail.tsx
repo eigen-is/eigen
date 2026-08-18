@@ -1,6 +1,6 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { useLabels } from '@workspace/lib/contacts';
-import { formatDate } from '@workspace/lib/date';
+import { formatDateOnly } from '@workspace/lib/date';
 import type { Address, Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { EigenLoader } from '@workspace/ui';
@@ -13,15 +13,25 @@ type ContactDetailToolbarProps = {
     contact: Contact;
     filterType?: string;
     filterId?: string;
+    labels?: Label[];
+    onToggleLabel?: (contacts: Contact[], labelId: string) => void;
     onDeleteClick: () => void;
 };
 
-export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteClick }: ContactDetailToolbarProps) {
+export function ContactDetailToolbar({
+    contact,
+    filterType,
+    filterId,
+    labels,
+    onToggleLabel,
+    onDeleteClick,
+}: ContactDetailToolbarProps) {
     return (
         <PersonDetailToolbar
-            name={`${contact.firstName} ${contact.lastName}`.trim()}
-            emails={contact.email ?? []}
+            contact={contact}
             editSearch={{ filterType: filterType || 'filter', filterId: filterId || 'all', contactId: contact.id }}
+            labels={labels}
+            onToggleLabel={onToggleLabel}
             onDeleteClick={onDeleteClick}
         />
     );
@@ -132,7 +142,7 @@ export function ContactDetail({ contact }: ContactDetailProps) {
                                         <Calendar className="h-4 w-4" />
                                         Birthday
                                     </h4>
-                                    <div className="pl-6">{formatDate(contact.birthday!)}</div>
+                                    <div className="pl-6">{formatDateOnly(contact.birthday!)}</div>
                                 </div>
                             )}
                         </div>

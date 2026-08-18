@@ -2,6 +2,7 @@ import type { FSWatcher } from 'node:fs';
 import type { Attachment, DraftAttachmentUpload, Email, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { BunFile, FileSink } from 'bun';
 import { Semaphore } from '../../utils/semaphore';
+import { invalidateMailSize } from '../config/enforcement';
 import { ApiError, LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
 import type { Home } from '../home';
 import { parseEml, parseEmlBytes } from './mail-parse';
@@ -197,6 +198,8 @@ export class MaildirStore implements MailStore {
 
             await this.deleteMessage(email.mailbox, email.filename);
             this.db.deleteEmail(messageId);
+            // Freed bytes must reach the next mail+contacts quota check, not a cached pre-delete figure.
+            invalidateMailSize(this.home.user.id);
         });
     }
 

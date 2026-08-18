@@ -2,9 +2,18 @@ import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
 import { storedRecurrenceKey } from '../calendar/recurrence';
 import type { CalendarEventRow } from '../calendar/types';
+import { matchesIfMatch, matchesIfNoneMatch } from '../core/http';
+import { eventHref } from './discovery';
 import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
+
+// A calendar resource runs larger than a vCard (a recurring series carries an overridden VEVENT per exception),
+// so the raw-body ceiling is ~4× CardDAV's CARD_MAX_BYTES; the router bounds the PUT body against it before buffering.
+export const EVENT_MAX_BYTES = 20_971_520;
+// The client-chosen path segment, percent-decoded at the router, becomes the stored uri; cap its decoded length
+// as CardDAV's sanitizeCardUri does (an event uri is a DB column here, never a filename).
+const MAX_URI_LENGTH = 200;
 
 // GET /dav/calendars/:ownerId/:calendarId/:uri
 export function handleGet(masterEvent: CalendarEventRow, allEventsForUid: CalendarEventRow[]): Response {
@@ -29,19 +38,19 @@ export async function handlePut(
     ifNoneMatch: string | null,
     userId: string,
 ): Promise<Response> {
-    const existingEvent = calendar.getEventByUri(calendarId, uri);
+    if (uri.length > MAX_URI_LENGTH) return new Response('Bad Request', { status: 400 });
 
-    // If-None-Match: * means "create only, fail if exists"
-    if (ifNoneMatch === '*' && existingEvent) {
+    const existingEvent = calendar.getEventByUri(calendarId, uri);
+    const currentEtag = existingEvent?.etag ?? null;
+
+    // RFC 7232 preconditions against the state the write overwrites (mirrors CardDAV's putCard): If-None-Match
+    // fails when the header matches (e.g. `*` on an existing event), If-Match when it doesn't (a stale token,
+    // or any token against a missing resource).
+    if (ifNoneMatch !== null && matchesIfNoneMatch(ifNoneMatch, currentEtag)) {
         return new Response('Precondition Failed', { status: 412 });
     }
-
-    // If-Match: "etag" means "update only if etag matches"
-    if (ifMatch && existingEvent) {
-        const cleanEtag = ifMatch.replace(/"/g, '');
-        if (existingEvent.etag !== cleanEtag) {
-            return new Response('Precondition Failed', { status: 412 });
-        }
+    if (ifMatch !== null && !matchesIfMatch(ifMatch, currentEtag)) {
+        return new Response('Precondition Failed', { status: 412 });
     }
 
     let events: ReturnType<typeof parseIcs>['events'];
@@ -106,7 +115,7 @@ export async function handlePut(
         status: 201,
         headers: {
             ETag: `"${calendar.getEventByUri(calendarId, uri)!.etag}"`,
-            Location: `/dav/calendars/${ownerId}/${calendarId}/${uri}`,
+            Location: eventHref(ownerId, calendarId, uri),
         },
     });
 }
@@ -118,11 +127,8 @@ export function handleDelete(calendar: Calendar, calendarId: string, uri: string
         return new Response('Not Found', { status: 404 });
     }
 
-    if (ifMatch) {
-        const cleanEtag = ifMatch.replace(/"/g, '');
-        if (event.etag !== cleanEtag) {
-            return new Response('Precondition Failed', { status: 412 });
-        }
+    if (ifMatch !== null && !matchesIfMatch(ifMatch, event.etag)) {
+        return new Response('Precondition Failed', { status: 412 });
     }
 
     calendar.deleteByUri(calendarId, uri);
