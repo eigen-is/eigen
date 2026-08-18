@@ -41,7 +41,9 @@ export function handleCalendarHomePropfind(ownerId: string, calendars: CalendarI
     if (depth === '1') {
         // Each calendar as a child collection
         for (const cal of calendars) {
-            responses.push(response(calendarHref(ownerId, cal.id), [propstatOk(calendarCollectionProps(cal))]));
+            responses.push(
+                response(calendarHref(ownerId, cal.id), [propstatOk(calendarCollectionProps(cal, ownerId))]),
+            );
         }
     }
 

@@ -9,7 +9,7 @@ export function handleCalendarPropfind(
     depth: string,
 ): Response {
     const responses: string[] = [
-        response(calendarHref(ownerId, calendar.id), [propstatOk(calendarCollectionProps(calendar))]),
+        response(calendarHref(ownerId, calendar.id), [propstatOk(calendarCollectionProps(calendar, ownerId))]),
     ];
 
     if (depth === '1') {

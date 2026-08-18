@@ -84,6 +84,20 @@ describe('CalDAV', () => {
         expect(xml).toContain('supported-report-set');
     });
 
+    // Apple clients derive per-source editability from these props; without them every edit of an
+    // existing resource is saved as a NEW one (the CardDAV duplicate-on-edit class, fixed 2026-08-18).
+    test('calendar home and collections advertise write privileges and ownership', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        const xml = await res.text();
+        expect(xml).toContain('<D:current-user-privilege-set><D:privilege><D:all/></D:privilege>');
+        expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
+    });
+
     test('PUT creates event, GET retrieves it', async () => {
         const ics = [
             'BEGIN:VCALENDAR',

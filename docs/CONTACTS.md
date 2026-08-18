@@ -244,6 +244,7 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
 
 ## Caveats & decisions
 
+- **Apple clients require `current-user-privilege-set` + `owner` on the home and collection, or they treat every existing resource as read-only** — and macOS Contacts silently saves each edit of a "read-only" card as a NEW card with a fresh UID (`If-None-Match: *` create), producing server-side duplicates while linking the pair locally so the Mac shows one contact. Wire-diagnosed on eigen.is 2026-08-18 (tcpdump: perfect sync-collection + multiget ingest, then create-only PUTs; fixed by `ownershipProps` in `lib/dav/xml.ts`, served by both CardDAV and CalDAV prop builders and pinned by tests in both suites). The privileges are truthful: the DAV surface is single-owner behind `requireSelf`.
 - **Apple group cards.** Apple Contacts creates groups as separate `X-ADDRESSBOOKSERVER-KIND:group` cards.
   v1 stores them **verbatim** (fidelity) but hides them from the app's contact list (`isGroup`). Known
   cosmetic consequence: an Apple-created group card renders as a **blank contact** in DAVx⁵'s default

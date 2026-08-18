@@ -1,4 +1,5 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
+import { ownershipProps } from '../dav/xml';
 import { escapeXml } from '../shared/xml';
 
 export {
@@ -28,10 +29,11 @@ export function parseSyncToken(token: string): { since: number } | null {
 }
 
 // Calendar collection properties (for listing calendars)
-export function calendarCollectionProps(cal: CalendarItem): string[] {
+export function calendarCollectionProps(cal: CalendarItem, ownerId: string): string[] {
     return [
         `<D:resourcetype><D:collection/><C:calendar/></D:resourcetype>`,
         `<D:displayname>${escapeXml(cal.name)}</D:displayname>`,
+        ...ownershipProps(ownerId),
         `<ICAL:calendar-color>${escapeXml(cal.color)}</ICAL:calendar-color>`,
         `<CS:getctag>${cal.ctag}</CS:getctag>`,
         `<D:sync-token>${formatSyncToken(cal.ctag)}</D:sync-token>`,
@@ -62,5 +64,6 @@ export function homeCollectionProps(userId: string): string[] {
         `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`,
         `<C:calendar-home-set><D:href>/dav/calendars/${userId}/</D:href></C:calendar-home-set>`,
         `<D:displayname>Calendars</D:displayname>`,
+        ...ownershipProps(userId),
     ];
 }
