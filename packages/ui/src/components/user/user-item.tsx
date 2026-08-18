@@ -38,16 +38,16 @@ export function UserItem({
     if (isLoading) return <EigenLoader />;
 
     const row = (
-        <div className={cn('flex items-center', className)} {...props}>
+        <div className={cn('flex min-w-0 items-center', className)} {...props}>
             <Avatar className={'h-8 w-8 print-exact select-none'}>
                 <AvatarImage src={avatarSrc} alt={displayName} />
             </Avatar>
 
-            <div className="ml-3 flex-1">
-                <p className="text-sm font-medium text-foreground">{displayName}</p>
+            <div className="ml-3 flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
                 <div className="flex justify-between items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
                     {resolvedEmail && (resolvedEmail !== displayName || mailLink) && (
-                        <span>
+                        <span className="truncate">
                             <MailComposeLink email={resolvedEmail} mailLink={mailLink} />
                         </span>
                     )}
