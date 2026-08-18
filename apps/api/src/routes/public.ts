@@ -1,3 +1,4 @@
+import { MAX_PUBLIC_USERS_PER_BATCH } from '@workspace/lib/constants/public';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { Elysia, t } from 'elysia';
 import { isDemo } from '../lib/config/env';
@@ -12,6 +13,13 @@ import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/
 // (avatar, user info, config, invite, waitlist). Do NOT add `auth: true` / `.use(betterAuth)`: these
 // are consumed by pre-auth pages and external callers, and gating them breaks the public contract.
 export const publicRouter = new Elysia({ name: 'public' })
+    // Avatar URLs built from an empty email/id (e.g. a new contact without email) hit `/p/avatar/` —
+    // serve the generic fallback instead of a 404.
+    .get('/p/avatar', async ({ set }) => {
+        setCacheHeaders(set, 3600, 'public');
+        set.headers['Content-Type'] = 'image/svg+xml';
+        return await generateFallbackSvg('');
+    })
     .get('/p/avatar/:emailOrId', async ({ params, set }) => {
         const avatar = await getAvatarByEmailOrId(params.emailOrId);
 
@@ -27,7 +35,7 @@ export const publicRouter = new Elysia({ name: 'public' })
     })
     .get('/p/user/:emailOrId', async ({ params }) => await getPublicInfo(params.emailOrId))
     .post('/p/users', async ({ body }): Promise<Record<string, PublicUser>> => await getBatchPublicInfo(body.ids), {
-        body: t.Object({ ids: t.Array(t.String(), { maxItems: 100 }) }),
+        body: t.Object({ ids: t.Array(t.String(), { maxItems: MAX_PUBLIC_USERS_PER_BATCH }) }),
     })
     .post(
         '/p/waitlist',
