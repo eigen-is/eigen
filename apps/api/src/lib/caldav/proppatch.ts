@@ -17,10 +17,11 @@ function textOf(value: unknown): string | null {
 // displayname + calendar-color as the client set them, read identically by MKCALENDAR and PROPPATCH.
 function extractCalendarProps(prop: Record<string, unknown>): { name?: string; color?: string } {
     const out: { name?: string; color?: string } = {};
+    // Truthiness, not null-checks: an empty <displayname/> means "not set", never an empty name.
     const name = textOf(prop['displayname']);
-    if (name !== null) out.name = name;
+    if (name) out.name = name;
     const color = textOf(prop['calendar-color']);
-    if (color !== null) out.color = color;
+    if (color) out.color = color;
     return out;
 }
 

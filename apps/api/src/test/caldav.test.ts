@@ -1301,18 +1301,28 @@ describe('CalDAV', () => {
         expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${calId}/`);
     });
 
-    test('a duplicate MKCALENDAR to the same URL is 405', async () => {
+    test('a duplicate MKCALENDAR to the same URL is 405 and leaves the existing calendar untouched', async () => {
         const calId = 'dup-cal';
-        const mk = () =>
+        const mk = (body: string) =>
             app.handle(
                 new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
                     method: 'MKCALENDAR',
                     headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
-                    body: '',
+                    body,
                 }),
             );
-        expect((await mk()).status).toBe(201);
-        expect((await mk()).status).toBe(405);
+        expect((await mk('')).status).toBe(201);
+        const usurper = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>Usurper</D:displayname></D:prop></D:set></C:mkcalendar>`;
+        expect((await mk(usurper)).status).toBe(405);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        const xml = await propRes.text();
+        expect(xml).toContain(`<D:displayname>${calId}</D:displayname>`);
+        expect(xml).not.toContain('Usurper');
     });
 
     test('MKCALENDAR without a displayname names the calendar after the URL segment', async () => {
@@ -1376,6 +1386,56 @@ describe('CalDAV', () => {
             }),
         );
         expect(await propRes.text()).toContain('<D:displayname>2026</D:displayname>');
+    });
+
+    test('MKCALENDAR with an empty <displayname/> falls back to the URL segment', async () => {
+        const calId = 'empty-name-cal';
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname/></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
+    });
+
+    // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
+    test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain('<D:current-user-privilege-set>');
+        expect(xml).toContain('<D:all/>');
+        expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
+    });
+
+    test('a malformed PROPFIND body degrades to allprop', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                body: `<D:propfind xmlns:D="DAV:><D:prop><D:getetag/></D:prop></D:propfind>`,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain('getctag');
+        expect(xml).toContain('supported-report-set');
     });
 
     test('MKCALENDAR with an invalid id segment (leading dot) is 400', async () => {

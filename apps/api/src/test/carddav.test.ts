@@ -240,6 +240,34 @@ describe('CardDAV', () => {
             expect(xml).not.toContain('getctag');
             expect(xml).not.toContain('supported-report-set');
         });
+
+        // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
+        test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
+            const res = await app.handle(
+                new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
+                }),
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain('<D:current-user-privilege-set>');
+            expect(xml).toContain('<D:all/>');
+            expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
+        });
+
+        // fxp accepts tag names XML forbids; the echo guard must drop them, not emit broken multistatus XML.
+        test('a requested prop with a non-well-formed name is dropped from the 404 propstat', async () => {
+            const res = await propfindCard(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/><a<b xmlns="urn:x"/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('a<b');
+            expect(xml).not.toContain('404 Not Found');
+        });
     });
 
     test('MKCOL under the addressbook tree is forbidden', async () => {

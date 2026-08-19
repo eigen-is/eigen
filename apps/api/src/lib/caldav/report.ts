@@ -98,7 +98,9 @@ function handleCalendarMultiget(
                 uri = null;
             }
         }
-        const key = uri ?? `raw:${href}`;
+        // Both key forms are prefixed: event uris (unlike card uris) have no charset restriction, so a stored
+        // uri literally starting with `raw:` must not collide with a bad-href key.
+        const key = uri === null ? `raw:${href}` : `uri:${uri}`;
         if (seen.has(key)) continue;
         seen.add(key);
         resolved.push({ uri, href });
