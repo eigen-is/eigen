@@ -114,6 +114,8 @@ MKCOL / MKADDRESSBOOK                             → 403 (one fixed book, spec 
 404, and there is no `MKADDRESSBOOK`. The wildcard decodes to at most two segments (book + optional card
 name); a third segment or a malformed percent-escape is a 400.
 
+**PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (the CalDAV twin uses the same): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and card member rows carry an empty `resourcetype`.
+
 **Discovery** is edge + principal chain. `/.well-known/carddav` redirects to `/dav/` at the Caddy edge (the
 CalDAV twin — no API route). From there: `PROPFIND /dav/` → `current-user-principal` →
 `/dav/principals/:userId/` whose `principalProps` carry **both** `calendar-home-set` *and*
