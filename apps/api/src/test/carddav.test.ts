@@ -153,6 +153,123 @@ describe('CardDAV', () => {
         expect(res.status).toBe(400);
     });
 
+    describe('PROPFIND honors the requested prop list', () => {
+        // A seeded card whose href/etag every prop-list case below reads.
+        const propUri = 'carddav-proplist.vcf';
+        let propEtag: string;
+
+        const propfindCard = (body: string, headers: Record<string, string> = {}) =>
+            app.handle(
+                new Request(cardUrl(propUri), {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0', ...headers },
+                    body,
+                }),
+            );
+
+        beforeAll(async () => {
+            const putRes = await putCard(propUri, vcard('carddav-proplist@eigen'));
+            expect(putRes.status).toBe(201);
+            propEtag = putRes.headers.get('ETag') ?? '';
+        });
+
+        test('a body requesting only getetag drops getcontenttype from the member row', async () => {
+            const res = await propfindCard(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('getcontenttype');
+            expect(xml).not.toContain('resourcetype');
+        });
+
+        test('getetag + resourcetype + an unknown prop split into 200 and 404 propstats', async () => {
+            const res = await propfindCard(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><D:resourcetype/><X:frobnicate/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).toContain('<D:resourcetype/>');
+            expect(xml).toContain('404 Not Found');
+            expect(xml).toContain('frobnicate');
+            expect(xml).toContain('urn:example:x');
+        });
+
+        test('Brief:t suppresses the 404 propstat', async () => {
+            const res = await propfindCard(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><X:frobnicate/></D:prop></D:propfind>`,
+                { Brief: 't' },
+            );
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('404');
+        });
+
+        test('Prefer:return=minimal suppresses the 404 propstat', async () => {
+            const res = await propfindCard(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><X:frobnicate/></D:prop></D:propfind>`,
+                { Prefer: 'return=minimal' },
+            );
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('404');
+        });
+
+        test('a bodyless PROPFIND still serves allprop, now with the member resourcetype', async () => {
+            const res = await propfindCard('');
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).toContain('getcontenttype');
+            expect(xml).toContain('<D:resourcetype/>');
+        });
+
+        test('a collection row honors a subset request', async () => {
+            const res = await app.handle(
+                new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
+                }),
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain('<D:displayname>Contacts</D:displayname>');
+            expect(xml).not.toContain('getctag');
+            expect(xml).not.toContain('supported-report-set');
+        });
+
+        // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
+        test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
+            const res = await app.handle(
+                new Request(`http://localhost/dav/addressbooks/${userId}/contacts/`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
+                }),
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain('<D:current-user-privilege-set>');
+            expect(xml).toContain('<D:all/>');
+            expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
+        });
+
+        // fxp accepts tag names XML forbids; the echo guard must drop them, not emit broken multistatus XML.
+        test('a requested prop with a non-well-formed name is dropped from the 404 propstat', async () => {
+            const res = await propfindCard(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/><a<b xmlns="urn:x"/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('a<b');
+            expect(xml).not.toContain('404 Not Found');
+        });
+    });
+
     test('MKCOL under the addressbook tree is forbidden', async () => {
         const res = await app.handle(
             new Request(`http://localhost/dav/addressbooks/${userId}/newbook/`, {

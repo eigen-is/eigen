@@ -1036,6 +1036,107 @@ describe('CalDAV', () => {
         expect(res.status).toBe(404);
     });
 
+    describe('PROPFIND honors the requested prop list', () => {
+        // A seeded event whose href/etag every prop-list case below reads.
+        let propUri: string;
+        let propEtag: string;
+
+        const propfindEvent = (body: string, headers: Record<string, string> = {}) =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0', ...headers },
+                    body,
+                }),
+            );
+
+        beforeAll(async () => {
+            propUri = 'caldav-proplist.ics';
+            const ics =
+                'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-proplist@eigen\r\nSUMMARY:Prop List\r\nDTSTART:20261201T090000Z\r\nDTEND:20261201T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+            const putRes = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
+                    method: 'PUT',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                    body: ics,
+                }),
+            );
+            expect(putRes.status).toBe(201);
+            propEtag = putRes.headers.get('ETag') ?? '';
+        });
+
+        test('a body requesting only getetag drops getcontenttype from the member row', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('getcontenttype');
+            expect(xml).not.toContain('resourcetype');
+        });
+
+        test('getetag + resourcetype + an unknown prop split into 200 and 404 propstats', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><D:resourcetype/><X:frobnicate/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            // Member rows carry the empty resourcetype discriminator, not the collection form.
+            expect(xml).toContain('<D:resourcetype/>');
+            // The unknown prop is echoed in its own namespace inside a 404 propstat.
+            expect(xml).toContain('404 Not Found');
+            expect(xml).toContain('frobnicate');
+            expect(xml).toContain('urn:example:x');
+        });
+
+        test('Brief:t suppresses the 404 propstat', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><X:frobnicate/></D:prop></D:propfind>`,
+                { Brief: 't' },
+            );
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('404');
+        });
+
+        test('Prefer:return=minimal suppresses the 404 propstat', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><X:frobnicate/></D:prop></D:propfind>`,
+                { Prefer: 'return=minimal' },
+            );
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('404');
+        });
+
+        test('a bodyless PROPFIND still serves allprop, now with the member resourcetype', async () => {
+            const res = await propfindEvent('');
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).toContain('getcontenttype');
+            expect(xml).toContain('<D:resourcetype/>');
+        });
+
+        test('a collection row honors a subset request', async () => {
+            const res = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
+                }),
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain('<D:displayname>');
+            // The unrequested collection props stay out.
+            expect(xml).not.toContain('getctag');
+            expect(xml).not.toContain('supported-report-set');
+        });
+    });
+
     test('a %40-encoded @ in a resource name round-trips through PUT, GET, PROPFIND and is emitted raw', async () => {
         // The client may PUT the @ percent-encoded; inbound decodes a%40b.ics to the stored uri a@b.ics. @ is
         // pchar-legal (RFC 3986), so every emitted href/Location carries it raw — never re-encoded back to %40.
@@ -1156,6 +1257,266 @@ describe('CalDAV', () => {
         const syncXml = await syncRes.text();
         expect(syncXml).toContain(emittedHref);
         expect(syncXml).not.toContain('c%40d.ics');
+    });
+
+    test('MKCALENDAR at a client-chosen URL creates that exact calendar, PROPFIND finds it, home lists it', async () => {
+        const calId = 'client-chosen-cal';
+        const mkBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/">
+  <D:set><D:prop>
+    <D:displayname>My New Calendar</D:displayname>
+    <ICAL:calendar-color>#ff0000</ICAL:calendar-color>
+    <C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>
+  </D:prop></D:set>
+</C:mkcalendar>`;
+        const mkRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: mkBody,
+            }),
+        );
+        expect(mkRes.status).toBe(201);
+        expect(mkRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${calId}/`);
+
+        // PROPFIND the exact client-chosen URL resolves and carries the displayname + colour the client set.
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(207);
+        const propXml = await propRes.text();
+        expect(propXml).toContain('My New Calendar');
+        expect(propXml).toContain('#ff0000');
+
+        // And it appears in the calendar-home listing under the very same href.
+        const homeRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${calId}/`);
+    });
+
+    test('a duplicate MKCALENDAR to the same URL is 405 and leaves the existing calendar untouched', async () => {
+        const calId = 'dup-cal';
+        const mk = (body: string) =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                    method: 'MKCALENDAR',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                    body,
+                }),
+            );
+        expect((await mk('')).status).toBe(201);
+        const usurper = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>Usurper</D:displayname></D:prop></D:set></C:mkcalendar>`;
+        expect((await mk(usurper)).status).toBe(405);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        const xml = await propRes.text();
+        expect(xml).toContain(`<D:displayname>${calId}</D:displayname>`);
+        expect(xml).not.toContain('Usurper');
+    });
+
+    test('MKCALENDAR without a displayname names the calendar after the URL segment', async () => {
+        const calId = 'unnamed-cal';
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
+    });
+
+    test('MKCALENDAR parses displayname and calendar-color given with element attributes (#text shape)', async () => {
+        const calId = 'attr-shape-cal';
+        // An xml:lang attribute makes fast-xml-parser wrap the value as { '@_...': ..., '#text': ... }.
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname xml:lang="en">Localized Name</D:displayname><ICAL:calendar-color symbolic-color="custom">#00ff00</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        const xml = await propRes.text();
+        expect(xml).toContain('Localized Name');
+        expect(xml).toContain('#00ff00');
+    });
+
+    test('MKCALENDAR keeps a purely numeric displayname (fxp coerces it to a number)', async () => {
+        const calId = 'numeric-name-cal';
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>2026</D:displayname></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(await propRes.text()).toContain('<D:displayname>2026</D:displayname>');
+    });
+
+    test('MKCALENDAR with an empty <displayname/> falls back to the URL segment', async () => {
+        const calId = 'empty-name-cal';
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname/></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
+    });
+
+    // The props that fixed the macOS duplicate-on-edit class (2026-08-18) — a named request must serve them.
+    test('a named PROPFIND requesting current-user-privilege-set and owner returns both', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:current-user-privilege-set/><D:owner/></D:prop></D:propfind>`,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain('<D:current-user-privilege-set>');
+        expect(xml).toContain('<D:all/>');
+        expect(xml).toContain(`<D:owner><D:href>/dav/principals/${userId}/</D:href></D:owner>`);
+    });
+
+    test('a malformed PROPFIND body degrades to allprop', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                body: `<D:propfind xmlns:D="DAV:><D:prop><D:getetag/></D:prop></D:propfind>`,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        expect(xml).toContain('getctag');
+        expect(xml).toContain('supported-report-set');
+    });
+
+    test('MKCALENDAR with an invalid id segment (leading dot) is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/.hidden/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('MKCALENDAR with a malformed percent-escape in the URL is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/%zz/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('MKCALENDAR targeting a resource path (two segments) is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/some-cal/nested.ics`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('PROPFIND with a malformed percent-escape in the URL is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/%zz.ics`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('calendar-multiget emits a 404 row for malformed and out-of-collection hrefs', async () => {
+        const present = 'caldav-multiget-mixed.ics';
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-multiget-mixed@eigen\r\nSUMMARY:Mixed Row Test\r\nDTSTART:20260801T090000Z\r\nDTEND:20260801T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${present}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+        const presentHref = `/dav/calendars/${userId}/${defaultCalendarId}/${present}`;
+        const malformedHref = `/dav/calendars/${userId}/${defaultCalendarId}/%zz.ics`;
+        const outOfCollectionHref = `/dav/calendars/${userId}/some-other-calendar/x.ics`;
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>${presentHref}</D:href>
+  <D:href>${malformedHref}</D:href>
+  <D:href>${outOfCollectionHref}</D:href>
+</C:calendar-multiget>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // One row per href: the present one 200, the two bad ones 404 echoing the original href.
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(3);
+        expect((xml.match(/404 Not Found/g) ?? []).length).toBe(2);
+        expect(xml).toContain('Mixed Row Test');
+        expect(xml).toContain(malformedHref);
+        expect(xml).toContain(outOfCollectionHref);
     });
 
     test('a resource name that genuinely needs encoding (a space) round-trips as %20', async () => {

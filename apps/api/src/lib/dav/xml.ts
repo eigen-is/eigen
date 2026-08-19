@@ -52,9 +52,13 @@ export function principalProps(userId: string): string[] {
 // server that omits them is treated as read-only and every edit lands as a NEW resource with a fresh
 // UID instead of a PUT to the existing href (the duplicate-on-edit class, wire-diagnosed 2026-08-18).
 // The DAV surface is single-owner (requireSelf), so full privileges and ownership are statements of fact.
-export function ownershipProps(ownerId: string): string[] {
+// Returned as [localName, fragment] entries so the collection prop maps can spread them in place.
+export function ownershipEntries(ownerId: string): [string, string][] {
     return [
-        `<D:current-user-privilege-set><D:privilege><D:all/></D:privilege><D:privilege><D:read/></D:privilege><D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege><D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege></D:current-user-privilege-set>`,
-        `<D:owner><D:href>/dav/principals/${ownerId}/</D:href></D:owner>`,
+        [
+            'current-user-privilege-set',
+            `<D:current-user-privilege-set><D:privilege><D:all/></D:privilege><D:privilege><D:read/></D:privilege><D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege><D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege></D:current-user-privilege-set>`,
+        ],
+        ['owner', `<D:owner><D:href>/dav/principals/${ownerId}/</D:href></D:owner>`],
     ];
 }

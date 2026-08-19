@@ -290,9 +290,11 @@ External organizers have no Eigen user ID. `organizerUserId` is set to `external
 ## CalDAV
 
 `apps/api/src/lib/caldav/` serves RFC 4791 CalDAV at `/dav/calendars/:ownerId/:calendarId/` (PROPFIND,
-REPORT calendar-query/multiget/sync-collection, per-resource GET/PUT/DELETE). Auth via
+REPORT calendar-query/multiget/sync-collection, MKCALENDAR, per-resource GET/PUT/DELETE). Auth via
 `verifyProtocolAuth()`. One `.ics` resource per UID: the master VEVENT plus one override VEVENT per
 stored exception — exception rows are internal and never appear as their own resources.
+
+**MKCALENDAR creates the calendar at the client-chosen URL segment** (sanitized by `sanitizeCalendarId`, 405 when the id already exists, 201 with a `Location` header), so a client's follow-up PROPFIND of the URL it chose resolves — previously the segment was discarded for a random UUID and the 404 made retries create duplicates. **PROPFIND honors the requested prop list** via the shared core in `lib/dav/propfind.ts` (both DAV surfaces use it): requested props we have come back in the 200 propstat, unknown ones in a 404 propstat echoing their namespace (omitted under `Brief: t` / `Prefer: return=minimal`), a bodyless PROPFIND stays allprop, and member rows carry an empty `resourcetype`. Every multiget href gets a response row — malformed or out-of-collection hrefs come back as 404 rows echoing the original href.
 
 **Serialization** (`ical-serialize.ts`):
 

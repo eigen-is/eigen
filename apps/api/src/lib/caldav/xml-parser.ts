@@ -31,13 +31,12 @@ const parser = new XMLParser({
 
 export type ReportType = 'calendar-query' | 'calendar-multiget' | 'sync-collection';
 
-export type ReportRequest = {
-    type: ReportType;
-    hrefs: string[];
-    timeRange?: { start: Date; end: Date };
-    syncToken?: string;
-    propNames: string[];
-};
+// Discriminated union, the CardDAV twin's shape (carddav xml-parser.ts): each report type carries only the
+// fields it uses, so a handler taking Extract<ReportRequest, {type}> can't read a field meant for another.
+export type ReportRequest =
+    | { type: 'calendar-query'; timeRange?: { start: Date; end: Date }; propNames: string[] }
+    | { type: 'calendar-multiget'; hrefs: string[]; propNames: string[] }
+    | { type: 'sync-collection'; syncToken?: string; propNames: string[] };
 
 export function parseReport(xml: string): ReportRequest {
     const parsed = parser.parse(xml);
@@ -52,40 +51,29 @@ export function parseReport(xml: string): ReportRequest {
     else throw new Error('Unsupported REPORT type');
 
     const root = parsed[type];
+    const propNames = Object.keys(root['prop'] || {});
 
-    // Extract hrefs (for multiget)
-    const hrefData = root['href'] || [];
-    const hrefs = Array.isArray(hrefData) ? hrefData.map(String) : [String(hrefData)].filter(Boolean);
+    if (type === 'calendar-multiget') {
+        const hrefData = root['href'] || [];
+        const hrefs = Array.isArray(hrefData) ? hrefData.map(String) : [String(hrefData)].filter(Boolean);
+        return { type, hrefs, propNames };
+    }
 
-    // Extract time-range (for calendar-query)
-    const filter = root['filter'] || {};
-    const compFilter = filter['comp-filter'] || {};
-    const veventFilter = compFilter['comp-filter'] || {};
+    if (type === 'sync-collection') {
+        const syncToken = root['sync-token'] || undefined;
+        return { type, syncToken: syncToken ? String(syncToken) : undefined, propNames };
+    }
+
+    // calendar-query: only the VEVENT time-range filter is read.
+    const veventFilter = root['filter']?.['comp-filter']?.['comp-filter'] || {};
     const timeRange = veventFilter['time-range'];
-
     let parsedTimeRange: { start: Date; end: Date } | undefined;
     if (timeRange) {
         const start = timeRange['@_start'] ? parseCalDavDate(timeRange['@_start']) : undefined;
         const end = timeRange['@_end'] ? parseCalDavDate(timeRange['@_end']) : undefined;
         // Only honour a fully-valid range; a malformed bound drops the range (→ full listing) rather
         // than feeding Invalid Date into rrule.between.
-        if (start && end) {
-            parsedTimeRange = { start, end };
-        }
+        if (start && end) parsedTimeRange = { start, end };
     }
-
-    // Extract sync-token
-    const syncToken = root['sync-token'] || undefined;
-
-    // Extract requested props
-    const prop = root['prop'] || {};
-    const propNames = Object.keys(prop);
-
-    return {
-        type,
-        hrefs,
-        timeRange: parsedTimeRange,
-        syncToken: syncToken ? String(syncToken) : undefined,
-        propNames,
-    };
+    return { type, timeRange: parsedTimeRange, propNames };
 }

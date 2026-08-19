@@ -8,7 +8,7 @@ import { handleCalendarPropfind, handleEventPropfind } from './propfind';
 import { handleMkcalendar, handleProppatch } from './proppatch';
 import { handleReport, REPORT_BODY_MAX_BYTES } from './report';
 import { EVENT_MAX_BYTES, handleDelete, handleGet, handlePut } from './resource';
-import { davError } from './xml-builder';
+import { davError, PROPFIND_BODY_MAX_BYTES, parsePropfind, wantsBrief } from './xml-builder';
 
 // The wildcard decodes to at most two segments — the calendar and an optional resource name. Resource names are
 // client-chosen, so every segment is percent-decoded (the carddav twin's parseAddressbookPath); a malformed
@@ -59,10 +59,12 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     .route('PROPFIND', '/dav/calendars/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
+        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
         const home = await getHome(params.ownerId);
         const calendars = home.calendar.getCalendars();
         const depth = request.headers.get('Depth') || '0';
-        return handleCalendarHomePropfind(params.ownerId, calendars, depth);
+        return handleCalendarHomePropfind(params.ownerId, calendars, depth, parsePropfind(body), wantsBrief(request));
     })
 
     // PROPFIND /dav/calendars/:ownerId/* — calendar collection or event listing
@@ -72,11 +74,15 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const parsed = parseDavPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
+        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const req = parsePropfind(body);
+        const brief = wantsBrief(request);
         const home = await getHome(params.ownerId);
         const depth = request.headers.get('Depth') || '0';
 
         if (!parsed.calendarId) {
-            return handleCalendarHomePropfind(params.ownerId, home.calendar.getCalendars(), depth);
+            return handleCalendarHomePropfind(params.ownerId, home.calendar.getCalendars(), depth, req, brief);
         }
 
         const calendar = home.calendar.getCalendarById(parsed.calendarId);
@@ -86,11 +92,11 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (parsed.resourceUri) {
             const event = home.calendar.getEventByUri(parsed.calendarId, parsed.resourceUri);
             if (!event) return new Response('Not Found', { status: 404 });
-            return handleEventPropfind(params.ownerId, parsed.calendarId, event.uri, event.etag);
+            return handleEventPropfind(params.ownerId, parsed.calendarId, event.uri, event.etag, req, brief);
         }
 
         const events = depth === '1' ? home.calendar.getRawEvents(parsed.calendarId) : [];
-        return handleCalendarPropfind(params.ownerId, calendar, events, depth);
+        return handleCalendarPropfind(params.ownerId, calendar, events, depth, req, brief);
     })
 
     // GET .ics resource
@@ -173,14 +179,17 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handleReport(home.calendar, parsed.calendarId, calendarItem, params.ownerId, body);
     })
 
-    // MKCALENDAR
+    // MKCALENDAR — creates a calendar at the client-chosen URL (one path segment, no resource part).
     .route('MKCALENDAR', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok || !parsed.calendarId || parsed.resourceUri) return new Response('Bad Request', { status: 400 });
+
         const home = await getHome(params.ownerId);
         const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
-        return handleMkcalendar(home.calendar, body);
+        return handleMkcalendar(home.calendar, params.ownerId, parsed.calendarId, body);
     })
 
     // PROPPATCH
