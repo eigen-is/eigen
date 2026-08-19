@@ -173,14 +173,17 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handleReport(home.calendar, parsed.calendarId, calendarItem, params.ownerId, body);
     })
 
-    // MKCALENDAR
+    // MKCALENDAR — creates a calendar at the client-chosen URL (one path segment, no resource part).
     .route('MKCALENDAR', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
+        const parsed = parseDavPath(params['*']);
+        if (!parsed.ok || !parsed.calendarId || parsed.resourceUri) return new Response('Bad Request', { status: 400 });
+
         const home = await getHome(params.ownerId);
         const body = await readBoundedBody(request, REPORT_BODY_MAX_BYTES);
         if (body === null) return new Response('Payload Too Large', { status: 413 });
-        return handleMkcalendar(home.calendar, body);
+        return handleMkcalendar(home.calendar, params.ownerId, parsed.calendarId, body);
     })
 
     // PROPPATCH

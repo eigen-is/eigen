@@ -99,8 +99,8 @@ export class Calendar {
         return row ? dbCalendarToCalendarItem(row) : null;
     }
 
-    public createCalendar(input: { name: string; color: string }): CalendarItem {
-        const id = randomUUID();
+    public createCalendar(input: { name: string; color: string; id?: string }): CalendarItem {
+        const id = input.id ?? randomUUID();
         this.db
             .insert(schema.calendars)
             .values({

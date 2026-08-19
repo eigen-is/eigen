@@ -57,7 +57,7 @@ function handleCalendarQuery(
     calendar: Calendar,
     calendarId: string,
     ownerId: string,
-    report: ReturnType<typeof parseReport>,
+    report: Extract<ReportRequest, { type: 'calendar-query' }>,
 ): Response {
     // Only the time-range filter is applied; other prop-filters are intentionally ignored. A CalDAV client
     // re-filters the returned set, so a superset response is safe (RFC 4791 calendar-query).
@@ -76,37 +76,39 @@ function handleCalendarMultiget(
     calendar: Calendar,
     calendarId: string,
     ownerId: string,
-    report: ReturnType<typeof parseReport>,
+    report: Extract<ReportRequest, { type: 'calendar-multiget' }>,
 ): Response {
     if (report.hrefs.length > MULTIGET_HREF_LIMIT) return new Response('Too many hrefs', { status: 400 });
 
     const prefix = calendarHref(ownerId, calendarId);
-    // Dedupe so a client listing one resource N ways yields one row, not N — the 404 loop below iterates this
-    // set, closing the duplicate-404-rows nit; first occurrence wins, preserving request order. Each resource
-    // segment is percent-decoded (the CardDAV twin's move) so an encoded href resolves to the stored uri; a
-    // malformed escape or an out-of-collection href drops to '' and is skipped.
-    const uris = [
-        ...new Set(
-            report.hrefs
-                .map((href) => {
-                    const h = href.replace(/^\/+/, '/');
-                    const encoded = h.startsWith(prefix) ? h.slice(prefix.length) : '';
-                    if (!encoded) return '';
-                    try {
-                        return decodeURIComponent(encoded);
-                    } catch {
-                        return '';
-                    }
-                })
-                .filter(Boolean),
-        ),
-    ];
+    // Resolve each href to its stored uri (percent-decoded, in-collection). A malformed escape or an
+    // out-of-collection href stays null → a 404 row echoing the original href (the CardDAV twin's move). Dedupe
+    // so a client listing one resource N ways yields one row: by uri when resolvable, by `raw:`+href otherwise
+    // so repeated bad hrefs collapse too. First occurrence wins, preserving request order.
+    const seen = new Set<string>();
+    const resolved: { uri: string | null; href: string }[] = [];
+    for (const href of report.hrefs) {
+        const normalized = href.replace(/^\/+/, '/');
+        const encoded = normalized.startsWith(prefix) ? normalized.slice(prefix.length) : '';
+        let uri: string | null = null;
+        if (encoded) {
+            try {
+                uri = decodeURIComponent(encoded);
+            } catch {
+                uri = null;
+            }
+        }
+        const key = uri ?? `raw:${href}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        resolved.push({ uri, href });
+    }
 
+    const uris = resolved.map((r) => r.uri).filter((u): u is string => u !== null);
     const events = calendar.getEventsByUris(calendarId, uris);
     const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
 
-    // Build a uid→all-events map for grouping exceptions with their master — only for the UIDs the
-    // client actually asked for, not the whole collection.
+    // uid→all-events map for grouping exceptions with their master — only the UIDs the client asked for.
     const requestedUids = [...new Set(events.map((e) => e.uid))];
     const relatedEvents = calendar.getRawEventsByUids(calendarId, requestedUids);
     const eventsByUid = new Map<string, CalendarEventRow[]>();
@@ -115,24 +117,25 @@ function handleCalendarMultiget(
         eventsByUid.set(e.uid, group);
         group.push(e);
     }
+    // A master and its exceptions share one uri; a uri present only as an exception yields no standalone row.
+    const foundUris = new Set(events.map((e) => e.uri));
+    const masterByUri = new Map(events.filter((e) => !e.parentEventId).map((e) => [e.uri, e]));
 
     const responses: string[] = [];
-
-    for (const event of events) {
-        if (event.parentEventId) continue; // Skip exceptions (part of master .ics)
-        const props = [...eventEtagProp(event.etag)];
-        if (wantsData) {
-            const group = eventsByUid.get(event.uid) ?? [event];
-            props.push(calendarDataProp(eventsToIcs(group)));
-        }
-        responses.push(response(eventHref(ownerId, calendarId, event.uri), [propstatOk(props)]));
-    }
-
-    // Include 404 for missing URIs
-    const foundUris = new Set(events.map((e) => e.uri));
-    for (const uri of uris) {
-        if (!foundUris.has(uri)) {
-            responses.push(response(eventHref(ownerId, calendarId, uri), [propstatNotFound([`<D:getetag/>`])]));
+    for (const { uri, href } of resolved) {
+        if (uri && foundUris.has(uri)) {
+            const master = masterByUri.get(uri);
+            if (!master) continue; // uri exists only as an exception (part of a master .ics) — no own row
+            const props = [...eventEtagProp(master.etag)];
+            if (wantsData) {
+                const group = eventsByUid.get(master.uid) ?? [master];
+                props.push(calendarDataProp(eventsToIcs(group)));
+            }
+            responses.push(response(eventHref(ownerId, calendarId, master.uri), [propstatOk(props)]));
+        } else {
+            // Missing but in-collection → 404 on the event href; unresolvable → 404 echoing the original href.
+            const row = uri ? eventHref(ownerId, calendarId, uri) : href;
+            responses.push(response(row, [propstatNotFound(['<D:getetag/>'])]));
         }
     }
 
@@ -144,7 +147,7 @@ function handleSyncCollection(
     calendarId: string,
     calendarItem: CalendarItem,
     ownerId: string,
-    report: ReturnType<typeof parseReport>,
+    report: Extract<ReportRequest, { type: 'sync-collection' }>,
 ): Response {
     const currentCtag = calendarItem.ctag;
     const responses: string[] = [];

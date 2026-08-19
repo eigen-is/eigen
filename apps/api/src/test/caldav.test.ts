@@ -1158,6 +1158,206 @@ describe('CalDAV', () => {
         expect(syncXml).not.toContain('c%40d.ics');
     });
 
+    test('MKCALENDAR at a client-chosen URL creates that exact calendar, PROPFIND finds it, home lists it', async () => {
+        const calId = 'client-chosen-cal';
+        const mkBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/">
+  <D:set><D:prop>
+    <D:displayname>My New Calendar</D:displayname>
+    <ICAL:calendar-color>#ff0000</ICAL:calendar-color>
+    <C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>
+  </D:prop></D:set>
+</C:mkcalendar>`;
+        const mkRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: mkBody,
+            }),
+        );
+        expect(mkRes.status).toBe(201);
+        expect(mkRes.headers.get('Location')).toBe(`/dav/calendars/${userId}/${calId}/`);
+
+        // PROPFIND the exact client-chosen URL resolves and carries the displayname + colour the client set.
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(propRes.status).toBe(207);
+        const propXml = await propRes.text();
+        expect(propXml).toContain('My New Calendar');
+        expect(propXml).toContain('#ff0000');
+
+        // And it appears in the calendar-home listing under the very same href.
+        const homeRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '1' },
+            }),
+        );
+        expect(await homeRes.text()).toContain(`/dav/calendars/${userId}/${calId}/`);
+    });
+
+    test('a duplicate MKCALENDAR to the same URL is 405', async () => {
+        const calId = 'dup-cal';
+        const mk = () =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                    method: 'MKCALENDAR',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                    body: '',
+                }),
+            );
+        expect((await mk()).status).toBe(201);
+        expect((await mk()).status).toBe(405);
+    });
+
+    test('MKCALENDAR without a displayname names the calendar after the URL segment', async () => {
+        const calId = 'unnamed-cal';
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(await propRes.text()).toContain(`<D:displayname>${calId}</D:displayname>`);
+    });
+
+    test('MKCALENDAR parses displayname and calendar-color given with element attributes (#text shape)', async () => {
+        const calId = 'attr-shape-cal';
+        // An xml:lang attribute makes fast-xml-parser wrap the value as { '@_...': ..., '#text': ... }.
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:ICAL="http://apple.com/ns/ical/"><D:set><D:prop><D:displayname xml:lang="en">Localized Name</D:displayname><ICAL:calendar-color symbolic-color="custom">#00ff00</ICAL:calendar-color></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        const xml = await propRes.text();
+        expect(xml).toContain('Localized Name');
+        expect(xml).toContain('#00ff00');
+    });
+
+    test('MKCALENDAR keeps a purely numeric displayname (fxp coerces it to a number)', async () => {
+        const calId = 'numeric-name-cal';
+        const body = `<?xml version="1.0"?><C:mkcalendar xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><D:set><D:prop><D:displayname>2026</D:displayname></D:prop></D:set></C:mkcalendar>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body,
+            }),
+        );
+        expect(res.status).toBe(201);
+        const propRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${calId}/`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(await propRes.text()).toContain('<D:displayname>2026</D:displayname>');
+    });
+
+    test('MKCALENDAR with an invalid id segment (leading dot) is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/.hidden/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('MKCALENDAR with a malformed percent-escape in the URL is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/%zz/`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('MKCALENDAR targeting a resource path (two segments) is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/some-cal/nested.ics`, {
+                method: 'MKCALENDAR',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: '',
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('PROPFIND with a malformed percent-escape in the URL is 400', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/%zz.ics`, {
+                method: 'PROPFIND',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+            }),
+        );
+        expect(res.status).toBe(400);
+    });
+
+    test('calendar-multiget emits a 404 row for malformed and out-of-collection hrefs', async () => {
+        const present = 'caldav-multiget-mixed.ics';
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-multiget-mixed@eigen\r\nSUMMARY:Mixed Row Test\r\nDTSTART:20260801T090000Z\r\nDTEND:20260801T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${present}`, {
+                method: 'PUT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                body: ics,
+            }),
+        );
+        const presentHref = `/dav/calendars/${userId}/${defaultCalendarId}/${present}`;
+        const malformedHref = `/dav/calendars/${userId}/${defaultCalendarId}/%zz.ics`;
+        const outOfCollectionHref = `/dav/calendars/${userId}/some-other-calendar/x.ics`;
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<C:calendar-multiget xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav">
+  <D:prop><D:getetag/><C:calendar-data/></D:prop>
+  <D:href>${presentHref}</D:href>
+  <D:href>${malformedHref}</D:href>
+  <D:href>${outOfCollectionHref}</D:href>
+</C:calendar-multiget>`;
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'application/xml' },
+                body: reportBody,
+            }),
+        );
+        expect(res.status).toBe(207);
+        const xml = await res.text();
+        // One row per href: the present one 200, the two bad ones 404 echoing the original href.
+        expect((xml.match(/<D:response>/g) ?? []).length).toBe(3);
+        expect((xml.match(/404 Not Found/g) ?? []).length).toBe(2);
+        expect(xml).toContain('Mixed Row Test');
+        expect(xml).toContain(malformedHref);
+        expect(xml).toContain(outOfCollectionHref);
+    });
+
     test('a resource name that genuinely needs encoding (a space) round-trips as %20', async () => {
         // A space is not pchar-legal, so it MUST stay percent-encoded on the wire: the client PUTs a%20b.ics, the
         // server stores "a b.ics" and re-emits the href as a%20b.ics — the raw space never appears in a listing.
