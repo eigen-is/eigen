@@ -1,5 +1,6 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import { encodePathSegment } from '../dav/href';
+import type { PropfindRequest } from '../dav/propfind';
 import {
     calendarCollectionProps,
     currentUserPrincipalProp,
@@ -8,6 +9,7 @@ import {
     principalProps,
     propstatOk,
     response,
+    selectProps,
 } from './xml-builder';
 
 // The two href shapes every CalDAV surface emits (discovery, PROPFIND rows, REPORT rows, the PUT/MKCALENDAR
@@ -39,17 +41,26 @@ export function handlePrincipalPropfind(userId: string): Response {
 }
 
 // PROPFIND /dav/calendars/{ownerId}/ — list calendars (Depth: 0 or 1)
-export function handleCalendarHomePropfind(ownerId: string, calendars: CalendarItem[], depth: string): Response {
+export function handleCalendarHomePropfind(
+    ownerId: string,
+    calendars: CalendarItem[],
+    depth: string,
+    request: PropfindRequest,
+    brief: boolean,
+): Response {
     const responses: string[] = [
         // The home collection itself
-        response(`/dav/calendars/${ownerId}/`, [propstatOk(homeCollectionProps(ownerId))]),
+        response(`/dav/calendars/${ownerId}/`, selectProps(homeCollectionProps(ownerId), request, brief)),
     ];
 
     if (depth === '1') {
         // Each calendar as a child collection
         for (const cal of calendars) {
             responses.push(
-                response(calendarHref(ownerId, cal.id), [propstatOk(calendarCollectionProps(cal, ownerId))]),
+                response(
+                    calendarHref(ownerId, cal.id),
+                    selectProps(calendarCollectionProps(cal, ownerId), request, brief),
+                ),
             );
         }
     }

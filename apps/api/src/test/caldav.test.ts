@@ -1036,6 +1036,107 @@ describe('CalDAV', () => {
         expect(res.status).toBe(404);
     });
 
+    describe('PROPFIND honors the requested prop list', () => {
+        // A seeded event whose href/etag every prop-list case below reads.
+        let propUri: string;
+        let propEtag: string;
+
+        const propfindEvent = (body: string, headers: Record<string, string> = {}) =>
+            app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0', ...headers },
+                    body,
+                }),
+            );
+
+        beforeAll(async () => {
+            propUri = 'caldav-proplist.ics';
+            const ics =
+                'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:caldav-proplist@eigen\r\nSUMMARY:Prop List\r\nDTSTART:20261201T090000Z\r\nDTEND:20261201T100000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+            const putRes = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/${propUri}`, {
+                    method: 'PUT',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), 'Content-Type': 'text/calendar' },
+                    body: ics,
+                }),
+            );
+            expect(putRes.status).toBe(201);
+            propEtag = putRes.headers.get('ETag') ?? '';
+        });
+
+        test('a body requesting only getetag drops getcontenttype from the member row', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:getetag/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('getcontenttype');
+            expect(xml).not.toContain('resourcetype');
+        });
+
+        test('getetag + resourcetype + an unknown prop split into 200 and 404 propstats', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><D:resourcetype/><X:frobnicate/></D:prop></D:propfind>`,
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            // Member rows carry the empty resourcetype discriminator, not the collection form.
+            expect(xml).toContain('<D:resourcetype/>');
+            // The unknown prop is echoed in its own namespace inside a 404 propstat.
+            expect(xml).toContain('404 Not Found');
+            expect(xml).toContain('frobnicate');
+            expect(xml).toContain('urn:example:x');
+        });
+
+        test('Brief:t suppresses the 404 propstat', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><X:frobnicate/></D:prop></D:propfind>`,
+                { Brief: 't' },
+            );
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('404');
+        });
+
+        test('Prefer:return=minimal suppresses the 404 propstat', async () => {
+            const res = await propfindEvent(
+                `<?xml version="1.0"?><D:propfind xmlns:D="DAV:" xmlns:X="urn:example:x"><D:prop><D:getetag/><X:frobnicate/></D:prop></D:propfind>`,
+                { Prefer: 'return=minimal' },
+            );
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).not.toContain('404');
+        });
+
+        test('a bodyless PROPFIND still serves allprop, now with the member resourcetype', async () => {
+            const res = await propfindEvent('');
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain(`<D:getetag>${propEtag}</D:getetag>`);
+            expect(xml).toContain('getcontenttype');
+            expect(xml).toContain('<D:resourcetype/>');
+        });
+
+        test('a collection row honors a subset request', async () => {
+            const res = await app.handle(
+                new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                    method: 'PROPFIND',
+                    headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
+                    body: `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop><D:displayname/></D:prop></D:propfind>`,
+                }),
+            );
+            expect(res.status).toBe(207);
+            const xml = await res.text();
+            expect(xml).toContain('<D:displayname>');
+            // The unrequested collection props stay out.
+            expect(xml).not.toContain('getctag');
+            expect(xml).not.toContain('supported-report-set');
+        });
+    });
+
     test('a %40-encoded @ in a resource name round-trips through PUT, GET, PROPFIND and is emitted raw', async () => {
         // The client may PUT the @ percent-encoded; inbound decodes a%40b.ics to the stored uri a@b.ics. @ is
         // pchar-legal (RFC 3986), so every emitted href/Location carries it raw — never re-encoded back to %40.

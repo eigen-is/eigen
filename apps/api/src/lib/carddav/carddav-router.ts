@@ -12,7 +12,7 @@ import {
 } from './discovery';
 import { handleCardReport, REPORT_BODY_MAX_BYTES } from './report';
 import { handleDeleteCard, handleGetCard, handlePutCard } from './resource';
-import { davError } from './xml-builder';
+import { davError, PROPFIND_BODY_MAX_BYTES, parsePropfind, wantsBrief } from './xml-builder';
 
 // The wildcard decodes to at most two segments — the book and an optional card name. Card names are
 // client-chosen, so every segment is percent-decoded (the webdav/xml.ts convention); a malformed escape or a
@@ -52,9 +52,17 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
     .route('PROPFIND', '/dav/addressbooks/:ownerId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         requireSelf(params.ownerId, user.id);
+        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
         const contacts = await getContacts(user);
         const depth = request.headers.get('Depth') || '0';
-        return handleAddressbookHomePropfind(params.ownerId, await contacts.getBook(), depth);
+        return handleAddressbookHomePropfind(
+            params.ownerId,
+            await contacts.getBook(),
+            depth,
+            parsePropfind(body),
+            wantsBrief(request),
+        );
     })
 
     // PROPFIND /dav/addressbooks/:ownerId/* — home, the book collection, or a single card resource
@@ -64,12 +72,16 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         const parsed = parseAddressbookPath(params['*']);
         if (!parsed.ok) return new Response('Bad Request', { status: 400 });
 
+        const body = await readBoundedBody(request, PROPFIND_BODY_MAX_BYTES);
+        if (body === null) return new Response('Payload Too Large', { status: 413 });
+        const req = parsePropfind(body);
+        const brief = wantsBrief(request);
         const contacts = await getContacts(user);
         const book = await contacts.getBook();
         const depth = request.headers.get('Depth') || '0';
 
         // Empty wildcard — the home collection itself.
-        if (!parsed.book) return handleAddressbookHomePropfind(params.ownerId, book, depth);
+        if (!parsed.book) return handleAddressbookHomePropfind(params.ownerId, book, depth, req, brief);
         // One fixed book named 'contacts'; any other name is a 404 (no MKADDRESSBOOK, spec § 4).
         if (parsed.book !== ADDRESSBOOK_ID) return new Response('Not Found', { status: 404 });
 
@@ -77,11 +89,11 @@ export const carddavRouter = new Elysia({ name: 'carddav' })
         if (parsed.uri) {
             const card = await contacts.getCardMeta(parsed.uri);
             if (!card) return new Response('Not Found', { status: 404 });
-            return handleCardPropfind(params.ownerId, card.uri, card.etag);
+            return handleCardPropfind(params.ownerId, card.uri, card.etag, req, brief);
         }
 
         const cards = depth === '1' ? await contacts.listCards() : [];
-        return handleAddressbookPropfind(params.ownerId, book, cards, depth);
+        return handleAddressbookPropfind(params.ownerId, book, cards, depth, req, brief);
     })
 
     // GET a card resource, or a 200 stub on the collection URL so HEAD/GET probes pass.
