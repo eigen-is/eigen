@@ -172,11 +172,16 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                       .where(eq(member.organizationId, orgId))
                       .all()
                 : [];
-            const teamRows = db
-                .select({ userId: teamMember.userId, name: team.name })
-                .from(teamMember)
-                .innerJoin(team, eq(teamMember.teamId, team.id))
-                .all();
+            // Scope to the configured org like the member query above — teams belong to an org, so
+            // an unscoped join would leak other orgs' team memberships into this org's admin view.
+            const teamRows = orgId
+                ? db
+                      .select({ userId: teamMember.userId, name: team.name })
+                      .from(teamMember)
+                      .innerJoin(team, eq(teamMember.teamId, team.id))
+                      .where(eq(team.organizationId, orgId))
+                      .all()
+                : [];
             // MAX() over a timestamp-mode column comes back as raw epoch seconds
             const lastSessions = db
                 .select({ userId: session.userId, last: sql<number>`max(${session.updatedAt})` })

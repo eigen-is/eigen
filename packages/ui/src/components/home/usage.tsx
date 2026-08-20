@@ -24,6 +24,35 @@ export const getStorageUsageColor = (storageUsed: number): string => {
     return '';
 };
 
+// Presentational storage breakdown: total line + fill bar + Drive/Mail rows. Shared by the admin
+// user detail pane and any other surface that already has a StorageData in hand.
+export function StorageUsageBars({ data, className }: { data: StorageData; className?: string }) {
+    // Clamp: over-quota users exist in prod, and Progress must not exceed 100%.
+    const ratio = data.total.max > 0 ? Math.min(data.total.used / data.total.max, 1) : 0;
+
+    return (
+        <div className={cn('space-y-3', className)}>
+            <div>
+                <div className="flex justify-between text-sm mb-1">
+                    <span className="text-muted-foreground">Total</span>
+                    <span>
+                        {formatFileSize(data.total.used)} / {formatFileSize(data.total.max)}
+                    </span>
+                </div>
+                <Progress value={ratio * 100} indicatorClassName={getStorageUsageColor(ratio)} className="h-1.5" />
+            </div>
+            <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Drive</span>
+                <span>{formatFileSize(data.drive.default.used)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Mail & contacts</span>
+                <span>{formatFileSize(data.mailAndContacts.used)}</span>
+            </div>
+        </div>
+    );
+}
+
 export function StorageUsage({ className = '', condensed = false }: StorageUsageProps) {
     const { data: storageData, isLoading: storageLoading } = useHomeSize();
     const [showDetails, setShowDetails] = useState(false);

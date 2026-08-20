@@ -1,5 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { useDriveViewPreferences } from '@workspace/lib/drive';
+import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -27,6 +28,10 @@ export function DriveFilePicker({
     multiSelect = false,
 }: DriveFilePickerProps) {
     const { user } = useAuth();
+    // Local sort, seeded once from the global view preference — header clicks inside the dialog sort
+    // the listing but never PUT the global settings.
+    const { sortKey, sortDir } = useDriveViewPreferences();
+    const [sort, setSort] = useState<{ key: DriveSortKey; dir: DriveSortDir }>({ key: sortKey, dir: sortDir });
     const [selected, setSelected] = useState<DrivePath | null>(null);
     // In multi-select mode the DriveTable owns modifier-aware selection (shift/ctrl range +
     // toggle). We mirror its current selection here so the submit button reads what the user
@@ -95,6 +100,8 @@ export function DriveFilePicker({
                         onConfirm={multiSelect ? undefined : handleConfirm}
                         showNewFolder={false}
                         onSelectionChange={multiSelect ? setMultiSelected : undefined}
+                        sort={sort}
+                        onSortChange={setSort}
                         className="h-full"
                     />
                 </div>

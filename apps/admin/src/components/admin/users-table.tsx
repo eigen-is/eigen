@@ -2,7 +2,8 @@ import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { EmptyState, SearchBar, SortHeader } from '@workspace/ui';
+import type { SortDir } from '@workspace/ui';
+import { EmptyState, nextSortDir, SearchBar, SortHeader } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { UserAvatar } from '@workspace/ui/components/user';
@@ -57,19 +58,19 @@ export function AdminUsersToolbar({
 }
 
 type SortCol = 'name' | 'email' | 'role' | 'teams' | 'disk' | 'lastActive' | 'joined';
-type SortState = { col: SortCol; dir: 1 | -1 };
+type SortState = { col: SortCol; dir: SortDir };
 
-// Sort semantics mirror Drive's (see nextDriveSort/DEFAULT_DIR in drive-table): re-selecting the
-// active column flips direction; switching to a new column uses that column's default — text
-// ascending, size and date columns descending.
-const DEFAULT_DIR: Record<SortCol, 1 | -1> = {
-    name: 1,
-    email: 1,
-    role: 1,
-    teams: 1,
-    disk: -1,
-    lastActive: -1,
-    joined: -1,
+// Sort semantics mirror Drive's (via the shared nextSortDir helper): re-selecting the active column
+// flips direction; switching to a new column uses that column's default — text ascending, size and
+// date columns descending.
+const DEFAULT_DIR: Record<SortCol, SortDir> = {
+    name: 'asc',
+    email: 'asc',
+    role: 'asc',
+    teams: 'asc',
+    disk: 'desc',
+    lastActive: 'desc',
+    joined: 'desc',
 };
 
 // Static cumulative grid templates so Tailwind's JIT sees every class. Columns append on the
@@ -106,10 +107,10 @@ type AdminUsersTableProps = {
 };
 
 export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRowClick }: AdminUsersTableProps) {
-    const [sort, setSort] = useState<SortState>({ col: 'name', dir: 1 });
+    const [sort, setSort] = useState<SortState>({ col: 'name', dir: 'asc' });
 
     const handleSort = (col: SortCol) => {
-        setSort((prev) => (prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: DEFAULT_DIR[col] }));
+        setSort((prev) => ({ col, dir: nextSortDir(col, prev.col, prev.dir, DEFAULT_DIR).dir }));
     };
 
     const visible = useMemo(() => {
@@ -137,7 +138,8 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                     return a.createdAt.getTime() - b.createdAt.getTime();
             }
         };
-        return [...filtered].sort((a, b) => compare(a, b) * sort.dir);
+        const factor = sort.dir === 'asc' ? 1 : -1;
+        return [...filtered].sort((a, b) => compare(a, b) * factor);
     }, [users, usage, searchQuery, sort]);
 
     // Only org members can be dropped onto a team (addTeamMember needs org membership); orphans
@@ -150,7 +152,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
         return <EmptyState message={searchQuery ? 'No users match your search.' : 'No users found'} />;
     }
 
-    const dir = sort.dir === 1 ? 'asc' : 'desc';
+    const dir = sort.dir;
 
     return (
         <div className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none">
@@ -254,7 +256,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                         </div>
 
                         <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.disk)}>
-                            {usage ? formatFileSize(usage[u.id]?.total.used ?? 0) : '—'}
+                            {usage?.[u.id] ? formatFileSize(usage[u.id].total.used) : '—'}
                         </div>
 
                         <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.teams)}>

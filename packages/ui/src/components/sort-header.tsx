@@ -1,10 +1,23 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 
+export type SortDir = 'asc' | 'desc';
+
+// Shared header/menu sort-toggle rule for the grid tables (drive, admin users): re-selecting the
+// active column flips direction; switching to a new column uses that column's default direction.
+export function nextSortDir<K extends string>(
+    key: K,
+    activeKey: K,
+    dir: SortDir,
+    defaults: Record<K, SortDir>,
+): { key: K; dir: SortDir } {
+    return key === activeKey ? { key, dir: dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaults[key] };
+}
+
 export type SortHeaderProps = {
     label: string;
     active: boolean;
-    dir: 'asc' | 'desc';
+    dir: SortDir;
     onClick: () => void;
     // Right-aligned headers (numeric/date columns) flush their label to the end.
     align?: 'left' | 'right';

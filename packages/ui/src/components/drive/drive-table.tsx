@@ -3,7 +3,7 @@ import { useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types';
 import type { DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
-import { SortHeader } from '@workspace/ui/components/sort-header';
+import { nextSortDir, SortHeader } from '@workspace/ui/components/sort-header';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { useRef } from 'react';
@@ -18,7 +18,7 @@ import { useDriveItemController } from './use-drive-item-controller';
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
 export function nextDriveSort(key: DriveSortKey, sortKey: DriveSortKey, sortDir: DriveSortDir): DriveSortDir {
-    return key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : DEFAULT_DIR[key];
+    return nextSortDir(key, sortKey, sortDir, DEFAULT_DIR).dir;
 }
 
 // Shared base for the drive views (table + grid): data, callbacks and selection inputs,
@@ -68,6 +68,10 @@ export type DriveTableProps = DriveViewProps & {
     getItemDate?: (item: DrivePath) => Date | null;
     ancestorBreadcrumb?: DrivePath[];
     externalSelectedIds?: Set<string>;
+    // Controlled sort: when provided, header clicks call onSortChange instead of writing the global
+    // view preference — used by the pickers so their sort stays local to the dialog.
+    sort?: { key: DriveSortKey; dir: DriveSortDir };
+    onSortChange?: (sort: { key: DriveSortKey; dir: DriveSortDir }) => void;
 };
 
 // Static permutations so Tailwind's JIT sees every class; keyed by the visible optional columns.
@@ -130,14 +134,24 @@ export function DriveTable({
     externalSelectedIds,
     onSelectionChange,
     contextMenuItems,
+    sort,
+    onSortChange,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
 
-    // Sort state is the global view preference — header clicks mutate it exactly like the
-    // grid-mode dropdown, so every listing stays in sync without prop-drilling sort.
-    const { sortKey, sortDir, setSort } = useDriveViewPreferences();
-    const onSortHeader = (key: DriveSortKey) => setSort(key, nextDriveSort(key, sortKey, sortDir));
+    // Uncontrolled (default): sort is the global view preference — header clicks mutate it exactly
+    // like the grid-mode dropdown, so every listing stays in sync without prop-drilling sort.
+    // Controlled (pickers): `sort`/`onSortChange` replace the hook path so clicks stay local and
+    // never write the global preference.
+    const prefs = useDriveViewPreferences();
+    const sortKey = sort?.key ?? prefs.sortKey;
+    const sortDir = sort?.dir ?? prefs.sortDir;
+    const onSortHeader = (key: DriveSortKey) => {
+        const dir = nextDriveSort(key, sortKey, sortDir);
+        if (sort) onSortChange?.({ key, dir });
+        else prefs.setSort(key, dir);
+    };
 
     // Estimate only — every row is measured, since row height varies with the container-driven layout.
     const ROW_HEIGHT = 41;

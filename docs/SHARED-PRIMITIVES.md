@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-909 primitives across 6 kinds. `packages/sheet` internals are excluded.
+912 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (126)
+## Components (127)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -110,6 +110,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ExportProgressDialog` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
 | `LightEditor` | `@workspace/ui/components/editor` | packages/ui/src/components/editor/light-editor.tsx |
 | `StorageUsage` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
+| `StorageUsageBars` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `LabelAssignSubMenu` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-assign-sub-menu.tsx |
 | `LabelDialog` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-dialog.tsx |
 | `LabelFilterHeader` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
@@ -402,7 +403,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (252)
+## Types (253)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -623,6 +624,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SidebarBodyProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-body.tsx |
 | `SidebarItemProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-item.tsx |
 | `SidebarSectionProps` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
+| `SortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `SortHeaderProps` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
 | `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
@@ -659,7 +661,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (286)
+## Utilities & constants (287)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -925,6 +927,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
+| `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |

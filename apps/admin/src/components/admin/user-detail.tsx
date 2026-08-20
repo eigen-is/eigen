@@ -1,15 +1,13 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useDeleteUser, useUpdateMemberRole } from '@workspace/lib/admin';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
-import { formatFileSize } from '@workspace/lib/format';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import { TooltipButton, useLayout } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/delete/danger-zone';
-import { getStorageUsageColor } from '@workspace/ui/components/home';
-import { Progress } from '@workspace/ui/components/progress';
+import { StorageUsageBars } from '@workspace/ui/components/home';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { UserDetailHero } from '@workspace/ui/components/user';
 import { KeyRound, X } from 'lucide-react';
@@ -83,9 +81,6 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
         navigate({ to: '/users', search: {} });
     };
 
-    // Clamp: over-quota users exist in prod, and Progress must not exceed 100%.
-    const ratio = usage && usage.total.max > 0 ? Math.min(usage.total.used / usage.total.max, 1) : 0;
-
     return (
         <div className="app-gutter space-y-6">
             <UserDetailHero name={user.name} email={user.email} userId={user.id} subtitle={user.email} />
@@ -133,33 +128,7 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
 
                 <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-2">Storage</h3>
-                    {usage ? (
-                        <div className="space-y-3">
-                            <div>
-                                <div className="flex justify-between text-sm mb-1">
-                                    <span className="text-muted-foreground">Total</span>
-                                    <span>
-                                        {formatFileSize(usage.total.used)} / {formatFileSize(usage.total.max)}
-                                    </span>
-                                </div>
-                                <Progress
-                                    value={ratio * 100}
-                                    indicatorClassName={getStorageUsageColor(ratio)}
-                                    className="h-1.5"
-                                />
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Drive</span>
-                                <span>{formatFileSize(usage.drive.default.used)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Mail & contacts</span>
-                                <span>{formatFileSize(usage.mailAndContacts.used)}</span>
-                            </div>
-                        </div>
-                    ) : (
-                        <p className="text-sm text-muted-foreground">—</p>
-                    )}
+                    {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
                 </div>
             </div>
 

@@ -109,6 +109,9 @@ export function DriveLocationField({
                         showNewFolder
                         hideToolbar
                         hideHeader
+                        // Folder picker: pin name-ascending (folders-first is built into the
+                        // comparator); the header is hidden so there's nothing to toggle.
+                        sort={{ key: 'name', dir: 'asc' }}
                         ownMountsOnly={ownMountsOnly}
                         createFolderOpen={createFolderOpen}
                         onCreateFolderOpenChange={setCreateFolderOpen}
