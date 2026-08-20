@@ -129,15 +129,19 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
     test('an animated GIF whose embed would exceed the size cap falls back to a first-frame JPEG', async () => {
         const { contacts, dir } = await makeContacts();
         const sharp = (await import('sharp')).default;
-        // Seven full-resolution high-entropy frames: the 512px GIF re-encode clears the ~2 MiB embed cap, so the
-        // save must fall back to a single-frame JPEG rather than embedding a multi-MiB GIF in every sync of the card.
+        // Seven full-resolution high-entropy frames: the 512px GIF re-encode clears the ~2 MiB embed cap, so
+        // the save must fall back to a single-frame JPEG rather than embedding a multi-MiB GIF in every sync
+        // of the card. This shape is the measured optimum — the source must be a GIF (the pipeline's GIF
+        // re-encode reuses its palette; a truecolor or lossy source makes quantization ~10× slower) and the
+        // noise must stay hard 512px noise. Still inherently heavy (~2.5s locally: >2 MiB of GIF encoded
+        // twice plus an animated webp, across three one-shot sharp workers), hence the raised timeout.
         const frames: Buffer[] = [];
         for (let f = 0; f < 7; f++) {
             const raw = Buffer.allocUnsafe(512 * 512 * 3);
             randomFillSync(raw);
             frames.push(
                 await sharp(raw, { raw: { width: 512, height: 512, channels: 3 } })
-                    .png()
+                    .png({ compressionLevel: 0 })
                     .toBuffer(),
             );
         }
@@ -157,7 +161,7 @@ describe('Contacts inline PHOTO / derived avatar cache', () => {
         const meta = await sharp(bytes).metadata();
         expect(meta.width).toBe(512);
         expect(meta.height).toBe(512);
-    });
+    }, 15_000);
 
     test('an external PUT with a different inline photo re-keys the cache and the old file is swept', async () => {
         const { contacts, dir } = await makeContacts();
