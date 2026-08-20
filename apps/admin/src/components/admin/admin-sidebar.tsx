@@ -8,17 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@workspace/ui/components/input';
 import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import { UserAvatar } from '@workspace/ui/components/user';
-import {
-    ClipboardList,
-    KeyRound,
-    Plus,
-    Settings,
-    UserMinus,
-    UserPlus,
-    UserRoundCheck,
-    Users,
-    UsersRound,
-} from 'lucide-react';
+import { ClipboardList, KeyRound, Plus, Settings, UserPlus, UserRoundCheck, Users, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
 type AdminSidebarProps = {
@@ -83,12 +73,7 @@ export function AdminSidebar({
                             condensed={condensed}
                         />
                     )}
-                    <SidebarItem
-                        icon={<Users className="h-4 w-4" />}
-                        label="Members"
-                        to="/members"
-                        condensed={condensed}
-                    />
+                    <SidebarItem icon={<Users className="h-4 w-4" />} label="Users" to="/users" condensed={condensed} />
                     <SidebarItem
                         icon={<UsersRound className="h-4 w-4" />}
                         label="Teams"
@@ -99,12 +84,6 @@ export function AdminSidebar({
                         icon={<UserRoundCheck className="h-4 w-4" />}
                         label="Guests"
                         to="/guests"
-                        condensed={condensed}
-                    />
-                    <SidebarItem
-                        icon={<UserMinus className="h-4 w-4" />}
-                        label="Orphans"
-                        to="/orphans"
                         condensed={condensed}
                     />
                 </SidebarSection>

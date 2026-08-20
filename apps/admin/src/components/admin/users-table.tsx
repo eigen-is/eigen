@@ -101,7 +101,10 @@ function SortHeader({
         <button
             type="button"
             onClick={() => onSort(col)}
-            className={cn('eigen-section-label h-10 items-center gap-1 hover:text-foreground text-left', visibility)}
+            className={cn(
+                'eigen-section-label h-10 items-center gap-1 pr-2 hover:text-foreground text-left',
+                visibility,
+            )}
         >
             <span className="truncate">{label}</span>
             {active &&
@@ -216,7 +219,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                         </div>
                     </div>
 
-                    <div className={cn('items-center', COL_VISIBILITY.role)}>
+                    <div className={cn('items-center pr-2', COL_VISIBILITY.role)}>
                         {u.role ? (
                             <Badge variant={roleBadgeVariant[u.role] ?? 'outline'} className="text-xs">
                                 {u.role}
@@ -228,23 +231,23 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                         )}
                     </div>
 
-                    <div className={cn('min-w-0 items-center text-muted-foreground', COL_VISIBILITY.email)}>
+                    <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.email)}>
                         <span className="truncate">{u.email}</span>
                     </div>
 
-                    <div className={cn('items-center text-muted-foreground', COL_VISIBILITY.disk)}>
+                    <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.disk)}>
                         {usage ? formatFileSize(usage[u.id]?.total.used ?? 0) : '—'}
                     </div>
 
-                    <div className={cn('min-w-0 items-center text-muted-foreground', COL_VISIBILITY.teams)}>
+                    <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.teams)}>
                         <span className="truncate">{u.teams.length > 0 ? u.teams.join(', ') : '—'}</span>
                     </div>
 
-                    <div className={cn('items-center text-muted-foreground', COL_VISIBILITY.lastActive)}>
+                    <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.lastActive)}>
                         {u.lastActiveAt ? formatTimeAgo(u.lastActiveAt) : '—'}
                     </div>
 
-                    <div className={cn('items-center text-muted-foreground', COL_VISIBILITY.joined)}>
+                    <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.joined)}>
                         {formatDate(u.createdAt)}
                     </div>
                 </button>

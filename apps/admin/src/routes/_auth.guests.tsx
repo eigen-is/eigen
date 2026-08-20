@@ -10,14 +10,5 @@ export const Route = createFileRoute('/_auth/guests')({
 
 function GuestsRoute() {
     const { userId } = Route.useSearch();
-    return (
-        <AdminFilteredUserRoute
-            filter="guest"
-            routeTo="/guests"
-            userId={userId}
-            searchPlaceholder="Search guests..."
-            listEmptyMessage="No guest users"
-            detailEmptyMessage="Select a guest to view details"
-        />
-    );
+    return <AdminFilteredUserRoute userId={userId} />;
 }
