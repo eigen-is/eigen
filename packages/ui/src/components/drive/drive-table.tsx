@@ -1,6 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types';
+import type { DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import { SortHeader } from '@workspace/ui/components/sort-header';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { useRef } from 'react';
@@ -9,6 +12,14 @@ import { useLongPress } from '../../hooks/use-long-press';
 import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
+
+// Header/menu sort semantics, shared with drive-list's SortMenuItems (which imports these):
+// re-selecting the active field flips direction; switching field uses that field's default.
+const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
+
+export function nextDriveSort(key: DriveSortKey, sortKey: DriveSortKey, sortDir: DriveSortDir): DriveSortDir {
+    return key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : DEFAULT_DIR[key];
+}
 
 // Shared base for the drive views (table + grid): data, callbacks and selection inputs,
 // minus the table-only column flags. DriveGrid consumes this directly.
@@ -60,27 +71,29 @@ export type DriveTableProps = DriveViewProps & {
 };
 
 // Static permutations so Tailwind's JIT sees every class; keyed by the visible optional columns.
+// The Size column joins the @[800px] tier (always present, right before Modified in DOM order),
+// so every combo carries an extra 10% track for it.
 const GRID_COLS_800: Record<string, string> = {
-    'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%_40px]',
-    'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_40px]',
-    'owner-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_15%_40px]',
-    'shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_10%_15%_40px]',
-    owner: '@[800px]:grid-cols-[minmax(0,1fr)_8%_40px]',
-    shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%_40px]',
-    modified: '@[800px]:grid-cols-[minmax(0,1fr)_15%_40px]',
-    '': '@[800px]:grid-cols-[minmax(0,1fr)_40px]',
+    'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_15%_40px]',
+    'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_40px]',
+    'owner-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%_40px]',
+    'shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_10%_10%_15%_40px]',
+    owner: '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_40px]',
+    shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%_10%_40px]',
+    modified: '@[800px]:grid-cols-[minmax(0,1fr)_10%_15%_40px]',
+    '': '@[800px]:grid-cols-[minmax(0,1fr)_10%_40px]',
 };
 
 // Same permutations without the trailing 40px kebab track, for `hideActions` (pickers).
 const GRID_COLS_800_NO_ACTIONS: Record<string, string> = {
-    'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%]',
-    'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%]',
-    'owner-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_15%]',
-    'shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_10%_15%]',
-    owner: '@[800px]:grid-cols-[minmax(0,1fr)_8%]',
-    shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%]',
-    modified: '@[800px]:grid-cols-[minmax(0,1fr)_15%]',
-    '': '@[800px]:grid-cols-[minmax(0,1fr)]',
+    'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_15%]',
+    'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%]',
+    'owner-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%]',
+    'shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_10%_10%_15%]',
+    owner: '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%]',
+    shared: '@[800px]:grid-cols-[minmax(0,1fr)_10%_10%]',
+    modified: '@[800px]:grid-cols-[minmax(0,1fr)_10%_15%]',
+    '': '@[800px]:grid-cols-[minmax(0,1fr)_10%]',
 };
 
 export function DriveTable({
@@ -120,6 +133,11 @@ export function DriveTable({
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
+
+    // Sort state is the global view preference — header clicks mutate it exactly like the
+    // grid-mode dropdown, so every listing stays in sync without prop-drilling sort.
+    const { sortKey, sortDir, setSort } = useDriveViewPreferences();
+    const onSortHeader = (key: DriveSortKey) => setSort(key, nextDriveSort(key, sortKey, sortDir));
 
     // Estimate only — every row is measured, since row height varies with the container-driven layout.
     const ROW_HEIGHT = 41;
@@ -179,7 +197,13 @@ export function DriveTable({
         >
             {!hideHeader && (
                 <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', gridCols)}>
-                    <div className="eigen-section-label h-10 pr-2 flex items-center">Name</div>
+                    <SortHeader
+                        label="Name"
+                        active={sortKey === 'name'}
+                        dir={sortDir}
+                        onClick={() => onSortHeader('name')}
+                        className="flex pr-2"
+                    />
                     {!hideOwner && (
                         <div className="eigen-section-label h-10 px-2 hidden @[800px]:flex items-center justify-center">
                             Owner
@@ -190,10 +214,23 @@ export function DriveTable({
                             Shared with
                         </div>
                     )}
+                    <SortHeader
+                        label="Size"
+                        active={sortKey === 'size'}
+                        dir={sortDir}
+                        onClick={() => onSortHeader('size')}
+                        align="right"
+                        className="hidden @[800px]:flex pl-2 pr-4"
+                    />
                     {!hideModified && (
-                        <div className="eigen-section-label h-10 pl-2 pr-4 hidden @[600px]:flex items-center justify-end">
-                            {dateLabel}
-                        </div>
+                        <SortHeader
+                            label={dateLabel}
+                            active={sortKey === 'modified'}
+                            dir={sortDir}
+                            onClick={() => onSortHeader('modified')}
+                            align="right"
+                            className="hidden @[600px]:flex pl-2 pr-4"
+                        />
                     )}
                     {!hideActions && <div className={coarse ? 'block' : 'hidden @[800px]:block'} />}
                 </div>

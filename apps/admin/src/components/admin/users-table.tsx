@@ -2,12 +2,12 @@ import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { HomeSizeResponse } from '@workspace/lib/types/settings';
-import { EmptyState, SearchBar } from '@workspace/ui';
+import { EmptyState, SearchBar, SortHeader } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { UserAvatar } from '@workspace/ui/components/user';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CreateUserDialog } from './create-user-dialog';
 
@@ -83,40 +83,6 @@ const COL_VISIBILITY: Record<Exclude<SortCol, 'name'>, string> = {
     joined: 'hidden @[950px]:flex',
 };
 
-function SortHeader({
-    label,
-    col,
-    sort,
-    onSort,
-    visibility,
-}: {
-    label: string;
-    col: SortCol;
-    sort: SortState;
-    onSort: (col: SortCol) => void;
-    visibility: string;
-}) {
-    const active = sort.col === col;
-    return (
-        <button
-            type="button"
-            onClick={() => onSort(col)}
-            className={cn(
-                'eigen-section-label h-10 items-center gap-1 pr-2 hover:text-foreground text-left',
-                visibility,
-            )}
-        >
-            <span className="truncate">{label}</span>
-            {active &&
-                (sort.dir === 1 ? (
-                    <ChevronUp className="h-3 w-3 shrink-0" />
-                ) : (
-                    <ChevronDown className="h-3 w-3 shrink-0" />
-                ))}
-        </button>
-    );
-}
-
 type AdminUsersTableProps = {
     users: AdminUserRow[];
     usage: Record<string, HomeSizeResponse> | undefined;
@@ -164,39 +130,59 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
         return <EmptyState message={searchQuery ? 'No users match your search.' : 'No users found'} />;
     }
 
+    const dir = sort.dir === 1 ? 'asc' : 'desc';
+
     return (
         <div className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none">
             <div className={cn('grid border-b app-gutter-x sticky top-0 z-10 bg-background', gridCols)}>
-                <SortHeader label="Name" col="name" sort={sort} onSort={handleSort} visibility="flex" />
-                <SortHeader label="Role" col="role" sort={sort} onSort={handleSort} visibility={COL_VISIBILITY.role} />
+                <SortHeader
+                    label="Name"
+                    active={sort.col === 'name'}
+                    dir={dir}
+                    onClick={() => handleSort('name')}
+                    className="flex pr-2"
+                />
+                <SortHeader
+                    label="Role"
+                    active={sort.col === 'role'}
+                    dir={dir}
+                    onClick={() => handleSort('role')}
+                    className={cn('pr-2', COL_VISIBILITY.role)}
+                />
                 <SortHeader
                     label="Email"
-                    col="email"
-                    sort={sort}
-                    onSort={handleSort}
-                    visibility={COL_VISIBILITY.email}
+                    active={sort.col === 'email'}
+                    dir={dir}
+                    onClick={() => handleSort('email')}
+                    className={cn('pr-2', COL_VISIBILITY.email)}
                 />
-                <SortHeader label="Disk" col="disk" sort={sort} onSort={handleSort} visibility={COL_VISIBILITY.disk} />
+                <SortHeader
+                    label="Disk"
+                    active={sort.col === 'disk'}
+                    dir={dir}
+                    onClick={() => handleSort('disk')}
+                    className={cn('pr-2', COL_VISIBILITY.disk)}
+                />
                 <SortHeader
                     label="Teams"
-                    col="teams"
-                    sort={sort}
-                    onSort={handleSort}
-                    visibility={COL_VISIBILITY.teams}
+                    active={sort.col === 'teams'}
+                    dir={dir}
+                    onClick={() => handleSort('teams')}
+                    className={cn('pr-2', COL_VISIBILITY.teams)}
                 />
                 <SortHeader
                     label="Last active"
-                    col="lastActive"
-                    sort={sort}
-                    onSort={handleSort}
-                    visibility={COL_VISIBILITY.lastActive}
+                    active={sort.col === 'lastActive'}
+                    dir={dir}
+                    onClick={() => handleSort('lastActive')}
+                    className={cn('pr-2', COL_VISIBILITY.lastActive)}
                 />
                 <SortHeader
                     label="Joined"
-                    col="joined"
-                    sort={sort}
-                    onSort={handleSort}
-                    visibility={COL_VISIBILITY.joined}
+                    active={sort.col === 'joined'}
+                    dir={dir}
+                    onClick={() => handleSort('joined')}
+                    className={cn('pr-2', COL_VISIBILITY.joined)}
                 />
             </div>
 
