@@ -55,6 +55,7 @@ export function useUpdateMemberRole(organizationId?: string) {
         },
         onSuccess: () => {
             invalidateAdminMembers(queryClient, organizationId ?? '');
+            invalidateAdminUsers(queryClient);
         },
         onError: onMutationError,
     });
@@ -119,6 +120,7 @@ export function useCreateUser(organizationId?: string) {
         },
         onSuccess: () => {
             invalidateAdminMembers(queryClient, organizationId ?? '');
+            invalidateAdminUsers(queryClient);
         },
         onError: onMutationError,
     });

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-903 primitives across 6 kinds. `packages/sheet` internals are excluded.
+906 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -165,13 +165,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (229)
+## Hooks (231)
 
 | Name | Import from | File |
 |------|-------------|------|
 | `useAcceptWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
 | `useAddTeamMember` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
-| `useAdminUsers` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-users.ts |
+| `useAdminGuests` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-users.ts |
+| `useAdminUserList` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
+| `useAdminUsersUsage` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-admin-user-list.ts |
 | `useCheckSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCompleteSetup` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useCreateTeam` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-teams.ts |
@@ -399,7 +401,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (250)
+## Types (251)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -456,6 +458,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Address` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |
 | `AddressObject` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `AdminUser` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
+| `AdminUserRow` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `Attachment` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `AttachmentMeta` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Attendee` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
