@@ -1,7 +1,8 @@
 import {
-    defaultDriveSort,
+    getDriveComparator,
     useBreadcrumb,
     useCreateFolder,
+    useDriveViewPreferences,
     useFolderContent,
     useRootFolder,
 } from '@workspace/lib/drive';
@@ -117,7 +118,12 @@ export function DriveBrowser({
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
     const folderId = currentFolderId ?? rootFolder?.id ?? '';
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
-    const sortedContents = useMemo(() => [...folderContents].sort(defaultDriveSort), [folderContents]);
+    // Sort by the live view preference so the header arrows match the row order and header clicks work.
+    const { sortKey, sortDir } = useDriveViewPreferences();
+    const sortedContents = useMemo(
+        () => [...folderContents].sort(getDriveComparator(sortKey, sortDir)),
+        [folderContents, sortKey, sortDir],
+    );
     const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId, activeMountId, folderId);
     const createFolder = useCreateFolder();
 
