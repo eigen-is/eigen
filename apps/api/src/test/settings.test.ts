@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -8,6 +9,9 @@ import type {
     TeamSettings,
     UserSettings,
 } from '@workspace/lib/types/settings';
+import { eq } from 'drizzle-orm';
+import { user } from '../../auth-schema';
+import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerConfig } from '../lib/config/server-config';
 import { assertJson, authedRequest, getTestContext } from './setup';
 
@@ -662,6 +666,27 @@ describe('User Settings', () => {
         const data = await assertJson<UserSettings>(getRes);
         expect(data.email?.autoAdvance).toBe('list');
         expect(data.email?.signatures).toEqual([sig]);
+    });
+});
+
+describe('lastLoginAt', () => {
+    test('is stamped on sign-in', async () => {
+        const ctx = await getTestContext();
+        const row = await getAuthDrizzleDb()
+            .select({ lastLoginAt: user.lastLoginAt })
+            .from(user)
+            .where(eq(user.id, ctx.alice.user.id))
+            .get();
+        expect(row?.lastLoginAt).toBeInstanceOf(Date);
+    });
+
+    test('ensureAuthSchemaColumns adds the column to a pre-migration db', () => {
+        const db = new Database(':memory:');
+        db.run(`CREATE TABLE "user" ("id" text PRIMARY KEY NOT NULL, "name" text NOT NULL)`);
+        ensureAuthSchemaColumns(db);
+        ensureAuthSchemaColumns(db); // idempotent
+        const cols = db.query<{ name: string }, []>(`PRAGMA table_info(user)`).all();
+        expect(cols.some((c) => c.name === 'last_login_at')).toBe(true);
     });
 });
 
