@@ -1,6 +1,6 @@
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
@@ -10,6 +10,7 @@ import { getS3Config, getServerSettings, updateServerSettings } from '../lib/con
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
 import { checkS3Connection } from '../lib/storage/s3-storage';
+import { getAllUsersUsage } from '../lib/user/admin-usage';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { betterAuth } from './auth';
 import { s3ConfigBody, toS3Config } from './shared-schemas';
@@ -227,6 +228,21 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                 .from(user)
                 .where(eq(user.role, 'guest'))
                 .all();
+        },
+        { auth: true },
+    )
+
+    .get(
+        '/settings/users/usage',
+        async ({ user: authUser }): Promise<Record<string, HomeSizeResponse>> => {
+            await requireAdmin(authUser.id);
+            const db = getAuthDrizzleDb();
+            const ids = db
+                .select({ id: user.id })
+                .from(user)
+                .where(or(isNull(user.role), ne(user.role, 'guest')))
+                .all();
+            return getAllUsersUsage(ids.map((r) => r.id));
         },
         { auth: true },
     )

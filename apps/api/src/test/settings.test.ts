@@ -840,3 +840,22 @@ describe('GET /settings/users', () => {
         await db.delete(user).where(inArray(user.id, ['orphan-test-id', 'guest-test-id']));
     });
 });
+
+describe('GET /settings/users/usage', () => {
+    test('403 for non-admin', async () => {
+        const ctx = await getTestContext();
+        const res = await authedRequest(ctx.bob.user.sessionToken, '/settings/users/usage');
+        expect(res.status).toBe(403);
+    });
+
+    test('returns HomeSizeResponse per user', async () => {
+        const ctx = await getTestContext();
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users/usage');
+        expect(res.status).toBe(200);
+        const usage: Record<string, HomeSizeResponse> = await res.json();
+        const mine = usage[ctx.alice.user.id];
+        expect(mine?.total.max).toBeGreaterThan(0);
+        expect(mine?.drive.default).toBeDefined();
+        expect(mine?.mailAndContacts).toBeDefined();
+    });
+});
