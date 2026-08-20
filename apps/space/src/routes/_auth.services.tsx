@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { API_HOST } from '@workspace/lib/api';
+import { API_HOST, DAV_HOST, SERVER_HOSTNAME } from '@workspace/lib/api';
 import { useAppPasswords, useAuth, useCreateAppPassword, useDeleteAppPassword } from '@workspace/lib/auth';
 import { formatDate } from '@workspace/lib/date';
 import { useMounts } from '@workspace/lib/drive';
@@ -121,8 +121,8 @@ function AppPasswords() {
 
 function ServicesComponent() {
     const { user } = useAuth();
-    const host = new URL(API_HOST).hostname;
-    const davBase = `${API_HOST}/dav`;
+    const host = SERVER_HOSTNAME;
+    const davBase = DAV_HOST;
     const webdavBase = `${API_HOST}/webdav`;
     const { data: personalMounts } = useMounts(user?.id ?? '');
     const { data: teams } = useMyTeams();

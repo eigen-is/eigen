@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-901 primitives across 6 kinds. `packages/sheet` internals are excluded.
+903 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -654,7 +654,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (283)
+## Utilities & constants (285)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -668,6 +668,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `collabApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `CONTACTS_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `contactsApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `DAV_HOST` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `DOCS_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `DRIVE_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `driveApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -720,6 +721,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `openMailComposeWith` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `publicApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `searchApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `SERVER_HOSTNAME` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `settingsApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `setupApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `SHEETS_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |

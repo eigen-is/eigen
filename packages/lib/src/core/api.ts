@@ -31,6 +31,12 @@ function resolveApiHost(): string {
 
 export const API_HOST = resolveApiHost();
 
+// Protocol surfaces live on the API's public origin, not under the API path prefix: the bundled
+// Caddyfiles serve /dav/* at the origin root (where /.well-known/caldav redirects) and IMAP/SMTP
+// listen on the hostname, while a bare dev API serves /dav on its own origin directly.
+export const SERVER_HOSTNAME = new URL(API_HOST).hostname;
+export const DAV_HOST = `${new URL(API_HOST).origin}/dav`;
+
 export const api = treaty<app>(API_HOST, {
     fetch: {
         credentials: 'include',
