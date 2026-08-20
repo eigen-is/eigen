@@ -82,8 +82,8 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
         navigate({ to: '/users', search: {} });
     };
 
-    const totalMax = usage && usage.total.max > 0 ? usage.total.max : 0;
-    const ratio = totalMax > 0 ? usage!.total.used / totalMax : 0;
+    // Clamp: over-quota users exist in prod, and Progress must not exceed 100%.
+    const ratio = usage && usage.total.max > 0 ? Math.min(usage.total.used / usage.total.max, 1) : 0;
 
     return (
         <div className="app-gutter space-y-6">

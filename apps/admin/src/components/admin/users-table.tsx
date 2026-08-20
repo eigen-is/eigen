@@ -6,14 +6,15 @@ import { EmptyState, SearchBar, SortHeader } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { UserAvatar } from '@workspace/ui/components/user';
+import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
+import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { CreateUserDialog } from './create-user-dialog';
 
-// Org role → badge variant. Single source of truth: the guests page (admin-user-list.tsx)
-// imports this instead of keeping its own copy.
-export const roleBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
+// Org role → badge variant for the role column (orphans render a plain outline badge inline).
+const roleBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
     owner: 'default',
     admin: 'secondary',
     member: 'outline',
@@ -58,6 +59,19 @@ export function AdminUsersToolbar({
 type SortCol = 'name' | 'email' | 'role' | 'teams' | 'disk' | 'lastActive' | 'joined';
 type SortState = { col: SortCol; dir: 1 | -1 };
 
+// Sort semantics mirror Drive's (see nextDriveSort/DEFAULT_DIR in drive-table): re-selecting the
+// active column flips direction; switching to a new column uses that column's default — text
+// ascending, size and date columns descending.
+const DEFAULT_DIR: Record<SortCol, 1 | -1> = {
+    name: 1,
+    email: 1,
+    role: 1,
+    teams: 1,
+    disk: -1,
+    lastActive: -1,
+    joined: -1,
+};
+
 // Static cumulative grid templates so Tailwind's JIT sees every class. Columns append on the
 // right as the container widens; each track lines up, in DOM order, with the visible cells at
 // that width (a display:none cell takes no grid track). DOM/column order matches the appearance
@@ -95,7 +109,7 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
     const [sort, setSort] = useState<SortState>({ col: 'name', dir: 1 });
 
     const handleSort = (col: SortCol) => {
-        setSort((prev) => (prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: 1 }));
+        setSort((prev) => (prev.col === col ? { col, dir: prev.dir === 1 ? -1 : 1 } : { col, dir: DEFAULT_DIR[col] }));
     };
 
     const visible = useMemo(() => {
@@ -125,6 +139,12 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
         };
         return [...filtered].sort((a, b) => compare(a, b) * sort.dir);
     }, [users, usage, searchQuery, sort]);
+
+    // Only org members can be dropped onto a team (addTeamMember needs org membership); orphans
+    // (no member row) still render but are excluded from selection and drag.
+    const selectableUsers = useMemo(() => visible.filter((u) => u.memberId !== null), [visible]);
+    const selection = useListSelection({ items: selectableUsers, getId: (u) => u.id });
+    const drag = useListDrag({ selection, getId: (u) => u.id, dragType: 'member' });
 
     if (visible.length === 0) {
         return <EmptyState message={searchQuery ? 'No users match your search.' : 'No users found'} />;
@@ -186,58 +206,71 @@ export function AdminUsersTable({ users, usage, searchQuery, activeUserId, onRow
                 />
             </div>
 
-            {visible.map((u) => (
-                <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => onRowClick(u.id)}
-                    className={cn(
-                        'grid w-full app-gutter-x items-center text-left eigen-list-item',
-                        gridCols,
-                        activeUserId === u.id && 'eigen-list-item-active',
-                    )}
-                >
-                    <div className="flex min-w-0 items-center gap-3 py-2 pr-2">
-                        <UserAvatar name={u.name} email={u.email} userId={u.id} size="sm" />
-                        <div className="min-w-0">
-                            <div className="truncate font-medium text-foreground">{u.name}</div>
-                            <div className="truncate text-xs text-muted-foreground @[550px]:hidden">{u.email}</div>
-                        </div>
-                    </div>
-
-                    <div className={cn('items-center pr-2', COL_VISIBILITY.role)}>
-                        {u.role ? (
-                            <Badge variant={roleBadgeVariant[u.role] ?? 'outline'} className="text-xs">
-                                {u.role}
-                            </Badge>
-                        ) : (
-                            <Badge variant="outline" className="text-xs text-muted-foreground">
-                                no organisation
-                            </Badge>
+            {visible.map((u) => {
+                const selectable = u.memberId !== null;
+                return (
+                    <button
+                        key={u.id}
+                        type="button"
+                        onClick={(e) => {
+                            // Modifier-click builds a multi-selection (mirrors PersonList); a plain
+                            // click opens the detail pane.
+                            if (selectable) {
+                                selection.handleItemClick(u.id, e);
+                                if (e.shiftKey || e.metaKey || e.ctrlKey) return;
+                            }
+                            onRowClick(u.id);
+                        }}
+                        {...(selectable ? drag.getDragProps(u) : undefined)}
+                        className={cn(
+                            'grid w-full app-gutter-x items-center text-left eigen-list-item',
+                            gridCols,
+                            activeUserId === u.id && 'eigen-list-item-active',
+                            selectable && selection.isSelected(u.id) && 'eigen-list-item-selected',
                         )}
-                    </div>
+                    >
+                        <div className="flex min-w-0 items-center gap-3 py-2 pr-2">
+                            <UserAvatar name={u.name} email={u.email} userId={u.id} size="sm" />
+                            <div className="min-w-0">
+                                <div className="truncate font-medium text-foreground">{u.name}</div>
+                                <div className="truncate text-xs text-muted-foreground @[550px]:hidden">{u.email}</div>
+                            </div>
+                        </div>
 
-                    <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.email)}>
-                        <span className="truncate">{u.email}</span>
-                    </div>
+                        <div className={cn('items-center pr-2', COL_VISIBILITY.role)}>
+                            {u.role ? (
+                                <Badge variant={roleBadgeVariant[u.role] ?? 'outline'} className="text-xs">
+                                    {u.role}
+                                </Badge>
+                            ) : (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                    no organisation
+                                </Badge>
+                            )}
+                        </div>
 
-                    <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.disk)}>
-                        {usage ? formatFileSize(usage[u.id]?.total.used ?? 0) : '—'}
-                    </div>
+                        <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.email)}>
+                            <span className="truncate">{u.email}</span>
+                        </div>
 
-                    <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.teams)}>
-                        <span className="truncate">{u.teams.length > 0 ? u.teams.join(', ') : '—'}</span>
-                    </div>
+                        <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.disk)}>
+                            {usage ? formatFileSize(usage[u.id]?.total.used ?? 0) : '—'}
+                        </div>
 
-                    <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.lastActive)}>
-                        {u.lastActiveAt ? formatTimeAgo(u.lastActiveAt) : '—'}
-                    </div>
+                        <div className={cn('min-w-0 items-center text-muted-foreground pr-2', COL_VISIBILITY.teams)}>
+                            <span className="truncate">{u.teams.length > 0 ? u.teams.join(', ') : '—'}</span>
+                        </div>
 
-                    <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.joined)}>
-                        {formatDate(u.createdAt)}
-                    </div>
-                </button>
-            ))}
+                        <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.lastActive)}>
+                            {u.lastActiveAt ? formatTimeAgo(u.lastActiveAt) : '—'}
+                        </div>
+
+                        <div className={cn('items-center text-muted-foreground pr-2', COL_VISIBILITY.joined)}>
+                            {formatDate(u.createdAt)}
+                        </div>
+                    </button>
+                );
+            })}
         </div>
     );
 }
