@@ -8,6 +8,7 @@ import { TooltipButton, useLayout } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { DangerZone } from '@workspace/ui/components/delete/danger-zone';
+import { getStorageUsageColor } from '@workspace/ui/components/home';
 import { Progress } from '@workspace/ui/components/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { UserDetailHero } from '@workspace/ui/components/user';
@@ -141,7 +142,11 @@ export function UserDetail({ user, usage, organizationId }: UserDetailProps) {
                                         {formatFileSize(usage.total.used)} / {formatFileSize(usage.total.max)}
                                     </span>
                                 </div>
-                                <Progress value={ratio * 100} className="h-1.5" />
+                                <Progress
+                                    value={ratio * 100}
+                                    indicatorClassName={getStorageUsageColor(ratio)}
+                                    className="h-1.5"
+                                />
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Drive</span>

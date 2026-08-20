@@ -833,7 +833,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PAGE_MARGIN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
-| `defaultDriveSort` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
@@ -939,6 +938,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STICKIES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `getCreateMenuItems` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `DRIVE_CAPABILITIES` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
+| `getStorageUsageColor` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |
 | `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `DEFAULT_COLORS` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |

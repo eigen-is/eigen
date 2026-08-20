@@ -25,5 +25,3 @@ export function getDriveComparator(
         return byName(a, b);
     };
 }
-
-export const defaultDriveSort = getDriveComparator('name', 'asc');

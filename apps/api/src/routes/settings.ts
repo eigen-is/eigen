@@ -15,6 +15,10 @@ import { deleteUserCompletely } from '../lib/user/delete-user';
 import { betterAuth } from './auth';
 import { s3ConfigBody, toS3Config } from './shared-schemas';
 
+// Who appears on the admin Users page: everyone except guests, orphans included.
+// `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
+const nonGuestUsers = () => or(isNull(user.role), ne(user.role, 'guest'));
+
 export const settingsRouter = new Elysia({ name: 'settings' })
     .use(betterAuth)
 
@@ -150,7 +154,6 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             const orgId = getServerConfig()?.orgId;
             // Project explicitly so the wire payload matches AdminUserRow exactly — `select()`
             // would ship banReason / twoFactorEnabled / banned etc. to the admin UI.
-            // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
             const users = db
                 .select({
                     id: user.id,
@@ -160,7 +163,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                     lastLoginAt: user.lastLoginAt,
                 })
                 .from(user)
-                .where(or(isNull(user.role), ne(user.role, 'guest')))
+                .where(nonGuestUsers())
                 .all();
             const members = orgId
                 ? db
@@ -184,17 +187,14 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             const sessionByUser = new Map(lastSessions.map((s) => [s.userId, new Date(s.last * 1000)]));
             const teamsByUser = new Map<string, string[]>();
             for (const t of teamRows) {
-                teamsByUser.set(t.userId, [...(teamsByUser.get(t.userId) ?? []), t.name]);
+                const names = teamsByUser.get(t.userId);
+                if (names) names.push(t.name);
+                else teamsByUser.set(t.userId, [t.name]);
             }
             return users.map((u) => {
                 const m = memberByUser.get(u.id);
-                const sessionLast = sessionByUser.get(u.id);
-                const lastActiveAt =
-                    u.lastLoginAt && sessionLast
-                        ? u.lastLoginAt > sessionLast
-                            ? u.lastLoginAt
-                            : sessionLast
-                        : (u.lastLoginAt ?? sessionLast ?? null);
+                const seen = [u.lastLoginAt, sessionByUser.get(u.id)].filter((d): d is Date => d != null);
+                const lastActiveAt = seen.length ? new Date(Math.max(...seen.map(Number))) : null;
                 return {
                     id: u.id,
                     name: u.name,
@@ -237,11 +237,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         async ({ user: authUser }): Promise<Record<string, HomeSizeResponse>> => {
             await requireAdmin(authUser.id);
             const db = getAuthDrizzleDb();
-            const ids = db
-                .select({ id: user.id })
-                .from(user)
-                .where(or(isNull(user.role), ne(user.role, 'guest')))
-                .all();
+            const ids = db.select({ id: user.id }).from(user).where(nonGuestUsers()).all();
             return getAllUsersUsage(ids.map((r) => r.id));
         },
         { auth: true },
