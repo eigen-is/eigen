@@ -136,8 +136,14 @@ Add these DNS records:
 | TXT | `_dmarc.eigen.example.com` | `"v=DMARC1; p=quarantine; rua=mailto:postmaster@eigen.example.com"` |
 | SRV | `_imaps._tcp.eigen.example.com` | `0 1 993 eigen.example.com` |
 | SRV | `_submission._tcp.eigen.example.com` | `0 1 587 eigen.example.com` |
+| SRV | `_caldavs._tcp.eigen.example.com` | `0 1 443 eigen.example.com` |
+| SRV | `_carddavs._tcp.eigen.example.com` | `0 1 443 eigen.example.com` |
+| TXT | `_caldavs._tcp.eigen.example.com` | `"path=/dav/"` |
+| TXT | `_carddavs._tcp.eigen.example.com` | `"path=/dav/"` |
 
 Set the **rDNS (PTR) record** in your VPS provider's panel — it should resolve to your domain.
+
+> Registrar UIs often auto-append your domain to the Name field — enter `_imaps._tcp`, not `_imaps._tcp.eigen.example.com`, or the record lands one zone too deep. SRV forms that split the name into fields want service `_imaps`, protocol `tcp`, name `@`.
 
 What these do:
 
@@ -146,7 +152,7 @@ What these do:
 - **DKIM** — signs outgoing email to prove it's from you
 - **DMARC** — tells receivers what to do with unsigned mail
 - **rDNS** — maps your IP back to your domain (many servers check this)
-- **SRV records** — let mail clients auto-discover IMAP/SMTP from just an email address
+- **SRV records** — let mail clients auto-discover IMAP/SMTP, and calendar/contacts clients CalDAV/CardDAV, from just an email address; the two TXT records tell CalDAV/CardDAV clients the path (RFC 6764)
 
 ### 7. Connect a mail or calendar client (optional)
 
@@ -160,7 +166,7 @@ What these do:
 | Username | `you@eigen.example.com` |
 | Password | your Eigen password |
 
-**CalDAV** (Apple Calendar, DAVx5, Thunderbird):
+**CalDAV / CardDAV** (Apple Calendar & Contacts, DAVx5, Thunderbird):
 
 | Setting | Value |
 |---------|-------|
@@ -168,7 +174,9 @@ What these do:
 | Username | `you@eigen.example.com` |
 | Password | your Eigen password |
 
-Apple Calendar and DAVx5 auto-discover calendars from the server URL. Thunderbird needs the full URL: `https://eigen.example.com/dav/calendars/{userId}/`.
+Some clients can also find the server from just the email address via the SRV records from step 6 (for example DAVx5's login-with-email flow); support varies per client, so the server URL above is the reliable path.
+
+Thunderbird's calendar picker prefers the full URL: `https://eigen.example.com/dav/calendars/{userId}/` (shown on the Space → Integrations page, along with the address-book equivalent).
 
 The web interface and IMAP/CalDAV clients share the same data — changes sync both ways.
 
@@ -440,6 +448,17 @@ example.com.                     MX   10 eigen.example.com.
 example.com.                     TXT  "v=spf1 mx -all"
 _dmarc.example.com.              TXT  "v=DMARC1; p=quarantine; rua=mailto:postmaster@example.com"
 eigen._domainkey.example.com.    TXT  "<key from postfix logs after first boot>"
+```
+
+The autodiscovery SRV/TXT records also live on `MAIL_DOMAIN` — clients derive the lookup domain from the email address — while their targets point at the web host:
+
+```
+_imaps._tcp.example.com.         SRV  0 1 993 eigen.example.com.
+_submission._tcp.example.com.    SRV  0 1 587 eigen.example.com.
+_caldavs._tcp.example.com.       SRV  0 1 443 eigen.example.com.
+_carddavs._tcp.example.com.      SRV  0 1 443 eigen.example.com.
+_caldavs._tcp.example.com.       TXT  "path=/dav/"
+_carddavs._tcp.example.com.      TXT  "path=/dav/"
 ```
 
 **Autoconfig caveat:** mail clients look for auto-discovery at `https://autoconfig.example.com/...` — the apex, not Eigen's subdomain. Two options:
