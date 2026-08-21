@@ -12,8 +12,11 @@ export function getDriveComparator(
 ): (a: DrivePath, b: DrivePath) => number {
     const sign = sortDir === 'desc' ? -1 : 1;
     return (a, b) => {
-        if (a.type === 'folder' && b.type !== 'folder') return -1;
-        if (a.type !== 'folder' && b.type === 'folder') return 1;
+        // Only name sort groups folders first; date/size intermix so the column reads strictly ordered.
+        if (sortKey === 'name') {
+            if (a.type === 'folder' && b.type !== 'folder') return -1;
+            if (a.type !== 'folder' && b.type === 'folder') return 1;
+        }
         let field = 0;
         if (sortKey === 'name') field = byName(a, b);
         else if (sortKey === 'modified') field = getModified(a).getTime() - getModified(b).getTime();
@@ -22,5 +25,3 @@ export function getDriveComparator(
         return byName(a, b);
     };
 }
-
-export const defaultDriveSort = getDriveComparator('name', 'asc');

@@ -137,7 +137,8 @@ path owned by the same team).
 - **Sidebar**: Team drives appear under "Shared Drives" in Drive app
 - **Share dialog**: `drive-access-list-edit.tsx` supports team picker + team display
 - **Admin hooks** (`packages/lib/src/core/admin/hooks/`, exported from `@workspace/lib/admin`):
-  `useMembers(orgId?)`, `useTeams(orgId?)`, `useAdminUsers(filter)`
+  `useMembers(orgId?)`, `useTeams(orgId?)`, `useAdminUserList()` (org members + orphans for the Users page),
+  `useAdminUsersUsage()` (per-user disk usage), `useAdminGuests()`
 - **Team hooks** (`packages/lib/src/core/team/hooks/`, exported from `@workspace/lib/team`):
   `useTeamMembers(teamId)` — takes the raw team id and wraps it with `teamOwnerId()` itself — plus the team
   settings/mounts hooks that share `teamKeys`
@@ -149,8 +150,12 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 
 ### Pages
 
-- **Members**: List, create, search, change role, reset password, remove org members, fully delete user accounts.
-  Supports drag-and-drop of members onto team sidebar items
+- **Users** (`/users`, old `/members` redirects here): one enriched table of org members **and** orphans — columns
+  name, role (orphans carry a "no organisation" badge), email, disk usage, teams, last active, joined. Create,
+  search, change role, reset password, remove org members, fully delete user accounts, and drag members onto team
+  sidebar items. Collapses to a 350px list + detail pane on narrow viewports (container query, no remount); the
+  detail pane holds the role select, teams, last active/joined, per-user storage bars, a danger zone, and
+  reset-password + close in the toolbar. Orphan cleanup is a delete from this detail pane
 - **Teams**: Team list in sidebar with create dialog. Team detail as main content
 - **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
   (free-busy/read/write), manage mounts (add/edit/enable/disable), set quota overrides (mail & contacts, default
@@ -159,7 +164,6 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
   page links. See [SERVER-SETTINGS.md](SERVER-SETTINGS.md)
 - **Guests**: guest accounts, with detail + delete — see [GUEST-ACCESS.md](GUEST-ACCESS.md) (the `/guest-settings`
   page next to it holds the guest toggles)
-- **Orphans**: users with no org membership, from the same `GET /settings/users/:filter` route
 - **Waitlist**: waitlist entries — accept, reject, resend invite, delete
 - **Onboarding**: the waitlist toggle and the invite / welcome mail templates
 
@@ -186,7 +190,9 @@ build the segment with `teamOwnerId(teamId)`.
 | `/team/:ownerId/mount/:mountId`  | PUT        | Update mount settings                     |
 | `/team/:ownerId/avatar`          | POST / DELETE | Set / remove the team avatar           |
 | `/settings/user/:userId`         | DELETE     | Delete user completely                    |
-| `/settings/users/:filter`        | GET        | Guest / orphan user lists                 |
+| `/settings/users`                | GET        | Org members + orphans (`AdminUserRow[]`)  |
+| `/settings/users/usage`          | GET        | Per-user disk usage                       |
+| `/settings/users/guests`         | GET        | Guest accounts only                       |
 | `/settings/server`               | GET / PUT  | Server-wide settings                      |
 | `/settings/s3config`             | GET / PUT  | S3 storage configuration                  |
 | `/settings/s3check`              | POST       | Test S3 connection                        |

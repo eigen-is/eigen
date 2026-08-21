@@ -1,5 +1,7 @@
+import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { type S3Config, teamOwnerId } from '@workspace/lib/types';
+import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type {
     HomeSizeResponse,
@@ -8,6 +10,9 @@ import type {
     TeamSettings,
     UserSettings,
 } from '@workspace/lib/types/settings';
+import { eq, inArray } from 'drizzle-orm';
+import { user } from '../../auth-schema';
+import { ensureAuthSchemaColumns, getAuthDrizzleDb } from '../lib/auth/auth';
 import { getServerConfig } from '../lib/config/server-config';
 import { assertJson, authedRequest, getTestContext } from './setup';
 
@@ -665,6 +670,27 @@ describe('User Settings', () => {
     });
 });
 
+describe('lastLoginAt', () => {
+    test('is stamped on sign-in', async () => {
+        const ctx = await getTestContext();
+        const row = await getAuthDrizzleDb()
+            .select({ lastLoginAt: user.lastLoginAt })
+            .from(user)
+            .where(eq(user.id, ctx.alice.user.id))
+            .get();
+        expect(row?.lastLoginAt).toBeInstanceOf(Date);
+    });
+
+    test('ensureAuthSchemaColumns adds the column to a pre-migration db', () => {
+        const db = new Database(':memory:');
+        db.run(`CREATE TABLE "user" ("id" text PRIMARY KEY NOT NULL, "name" text NOT NULL)`);
+        ensureAuthSchemaColumns(db);
+        ensureAuthSchemaColumns(db); // idempotent
+        const cols = db.query<{ name: string }, []>(`PRAGMA table_info(user)`).all();
+        expect(cols.some((c) => c.name === 'last_login_at')).toBe(true);
+    });
+});
+
 describe('S3 Config Persistence', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
@@ -768,5 +794,68 @@ describe('S3 Config Persistence', () => {
             }),
         });
         expect(putRes.status).toBe(403);
+    });
+});
+
+describe('GET /settings/users', () => {
+    test('403 for non-admin', async () => {
+        const ctx = await getTestContext();
+        const res = await authedRequest(ctx.bob.user.sessionToken, '/settings/users');
+        expect(res.status).toBe(403);
+    });
+
+    test('lists members and orphans, excludes guests', async () => {
+        const ctx = await getTestContext();
+        const db = getAuthDrizzleDb();
+        const now = new Date();
+        await db.insert(user).values({
+            id: 'orphan-test-id',
+            name: 'Orphan',
+            email: 'orphan@test.eigen.is',
+            emailVerified: true,
+            createdAt: now,
+            updatedAt: now,
+        });
+        await db.insert(user).values({
+            id: 'guest-test-id',
+            name: 'Guest',
+            email: 'guest-row@test.eigen.is',
+            emailVerified: true,
+            createdAt: now,
+            updatedAt: now,
+            role: 'guest',
+        });
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users');
+        expect(res.status).toBe(200);
+        const rows: AdminUserRow[] = await res.json();
+        const orphan = rows.find((r) => r.id === 'orphan-test-id');
+        expect(orphan?.role).toBeNull();
+        expect(orphan?.memberId).toBeNull();
+        expect(rows.find((r) => r.id === 'guest-test-id')).toBeUndefined();
+        const aliceRow = rows.find((r) => r.email === 'alice@test.eigen.is');
+        expect(aliceRow?.role).toBe('owner');
+        expect(aliceRow?.lastActiveAt).not.toBeNull();
+        expect(Array.isArray(aliceRow?.teams)).toBe(true);
+        // cleanup so other tests' user counts stay stable
+        await db.delete(user).where(inArray(user.id, ['orphan-test-id', 'guest-test-id']));
+    });
+});
+
+describe('GET /settings/users/usage', () => {
+    test('403 for non-admin', async () => {
+        const ctx = await getTestContext();
+        const res = await authedRequest(ctx.bob.user.sessionToken, '/settings/users/usage');
+        expect(res.status).toBe(403);
+    });
+
+    test('returns HomeSizeResponse per user', async () => {
+        const ctx = await getTestContext();
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users/usage');
+        expect(res.status).toBe(200);
+        const usage: Record<string, HomeSizeResponse> = await res.json();
+        const mine = usage[ctx.alice.user.id];
+        expect(mine?.total.max).toBeGreaterThan(0);
+        expect(mine?.drive.default).toBeDefined();
+        expect(mine?.mailAndContacts).toBeDefined();
     });
 });

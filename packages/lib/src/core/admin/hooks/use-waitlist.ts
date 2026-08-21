@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { waitlistApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
-import { invalidateWaitlistEntries, waitlistKeys } from './keys';
+import { invalidateAdminUsers, invalidateWaitlistEntries, waitlistKeys } from './keys';
 
 export function useWaitlistEntries(status?: string) {
     const isGuest = useIsGuest();
@@ -30,6 +30,7 @@ export function useAcceptWaitlistEntry() {
         },
         onSuccess: (data) => {
             invalidateWaitlistEntries(queryClient);
+            invalidateAdminUsers(queryClient);
             toast.success(`Invite sent to ${data?.email ?? 'user'}`);
         },
         onError: onMutationError,

@@ -6,7 +6,7 @@ import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { invalidateMyTeams } from '../../home';
 import { invalidateTeamMembers } from '../../team';
-import { adminKeys, invalidateAdminTeams } from './keys';
+import { adminKeys, invalidateAdminTeams, invalidateAdminUsers } from './keys';
 
 // Admin hooks for team management (org settings UI). Mutations here require
 // admin auth at the better-auth plugin level. For viewing teams the current
@@ -68,6 +68,7 @@ export function useRemoveTeam(organizationId?: string) {
         onSuccess: () => {
             invalidateAdminTeams(queryClient, organizationId ?? '');
             invalidateMyTeams(queryClient);
+            invalidateAdminUsers(queryClient);
         },
         onError: onMutationError,
     });
@@ -87,6 +88,7 @@ export function useAddTeamMember() {
         onSuccess: (_data, variables) => {
             invalidateTeamMembers(queryClient, variables.teamId);
             invalidateMyTeams(queryClient);
+            invalidateAdminUsers(queryClient);
         },
         onError: onMutationError,
     });
@@ -106,6 +108,7 @@ export function useRemoveTeamMember() {
         onSuccess: (_data, variables) => {
             invalidateTeamMembers(queryClient, variables.teamId);
             invalidateMyTeams(queryClient);
+            invalidateAdminUsers(queryClient);
         },
         onError: onMutationError,
     });
@@ -125,6 +128,7 @@ export function useUpdateTeam(organizationId?: string) {
         onSuccess: () => {
             invalidateAdminTeams(queryClient, organizationId ?? '');
             invalidateMyTeams(queryClient);
+            invalidateAdminUsers(queryClient);
         },
         onError: onMutationError,
     });

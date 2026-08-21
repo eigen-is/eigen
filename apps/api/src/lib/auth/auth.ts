@@ -1,3 +1,4 @@
+import { Database } from 'bun:sqlite';
 import { apiKey } from '@better-auth/api-key';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -47,6 +48,23 @@ export const trustedOrigins = [
     ...(deploymentDomain !== 'localhost' ? [`https://${deploymentDomain}`] : []),
 ];
 
+// users3.db has no versioned-migration system (setup.ts only creates tables once), so
+// additive columns are ensured here at boot. Skip when the table doesn't exist yet —
+// setup's CREATE TABLE includes every column.
+export function ensureAuthSchemaColumns(db: Database): void {
+    const cols = db.query<{ name: string }, []>(`PRAGMA table_info(user)`).all();
+    if (cols.length === 0) return;
+    if (!cols.some((c) => c.name === 'last_login_at')) {
+        db.run(`ALTER TABLE "user" ADD COLUMN "last_login_at" integer`);
+    }
+}
+
+{
+    const db = new Database(getServerDataPath('users3.db'));
+    ensureAuthSchemaColumns(db);
+    db.close();
+}
+
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath('users3.db')), {
         provider: 'sqlite',
@@ -65,6 +83,18 @@ export const auth = betterAuth({
         },
     }),
     databaseHooks: {
+        session: {
+            create: {
+                after: async (session) => {
+                    // Fires on sign-in only; session refresh is an update, not a create — so this is
+                    // genuinely "last login" rather than "last activity".
+                    await getAuthDrizzleDb()
+                        .update(userScheme)
+                        .set({ lastLoginAt: new Date() })
+                        .where(eq(userScheme.id, session.userId));
+                },
+            },
+        },
         user: {
             create: {
                 after: async (hookUser) => {

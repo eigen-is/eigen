@@ -39,7 +39,8 @@ async function resetAuthDatabase(): Promise<void> {
         "role" text,
         "banned" integer,
         "ban_reason" text,
-        "ban_expires" integer
+        "ban_expires" integer,
+        "last_login_at" integer
     )`);
 
     await db.run(`CREATE TABLE IF NOT EXISTS "session" (

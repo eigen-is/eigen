@@ -1,4 +1,5 @@
 import { formatDateTime } from '@workspace/lib/date';
+import { formatFileSize } from '@workspace/lib/format';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
@@ -131,6 +132,9 @@ export function DriveRow({
                     />
                 </div>
             )}
+            <div className="hidden @[800px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap text-xs text-muted-foreground">
+                {formatFileSize(item.size)}
+            </div>
             {!hideModified && (
                 <div className="hidden @[600px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap text-xs text-muted-foreground">
                     {itemDate ? formatDateTime(itemDate) : 'Unknown'}

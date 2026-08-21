@@ -1,11 +1,12 @@
 import {
-    defaultDriveSort,
+    getDriveComparator,
     useBreadcrumb,
     useCreateFolder,
+    useDriveViewPreferences,
     useFolderContent,
     useRootFolder,
 } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
@@ -43,6 +44,10 @@ type DriveBrowserProps = {
     externalSelectedIds?: Set<string>;
     onSelectionChange?: (items: DrivePath[]) => void;
     ownMountsOnly?: boolean;
+    // Sort override: when set, the browser sorts by it and the table's headers drive onSortChange
+    // instead of the global view preference (keeps picker sort local to the dialog).
+    sort?: { key: DriveSortKey; dir: DriveSortDir };
+    onSortChange?: (sort: { key: DriveSortKey; dir: DriveSortDir }) => void;
     className?: string;
 };
 
@@ -64,6 +69,8 @@ export function DriveBrowser({
     externalSelectedIds,
     onSelectionChange,
     ownMountsOnly,
+    sort,
+    onSortChange,
     className,
 }: DriveBrowserProps) {
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
@@ -117,7 +124,15 @@ export function DriveBrowser({
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
     const folderId = currentFolderId ?? rootFolder?.id ?? '';
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
-    const sortedContents = useMemo(() => [...folderContents].sort(defaultDriveSort), [folderContents]);
+    // Sort by the override when controlled, else the live view preference — so the header arrows
+    // match the row order and header clicks work in both modes.
+    const prefs = useDriveViewPreferences();
+    const sortKey = sort?.key ?? prefs.sortKey;
+    const sortDir = sort?.dir ?? prefs.sortDir;
+    const sortedContents = useMemo(
+        () => [...folderContents].sort(getDriveComparator(sortKey, sortDir)),
+        [folderContents, sortKey, sortDir],
+    );
     const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId, activeMountId, folderId);
     const createFolder = useCreateFolder();
 
@@ -245,6 +260,8 @@ export function DriveBrowser({
                 hideHeader={hideHeader}
                 externalSelectedIds={externalSelectedIds}
                 onSelectionChange={onSelectionChange}
+                sort={sort}
+                onSortChange={onSortChange}
             />
         </div>
     );

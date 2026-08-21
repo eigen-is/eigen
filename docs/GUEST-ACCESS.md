@@ -180,8 +180,8 @@ directly. Home directory removed; share registry entries preserved (see above).
 Two pages in `apps/admin/src/routes/`:
 
 - **Guest access** (`/guest-settings`) — the `guests.openSignup` toggle and the `guests.inactivityDays` threshold
-- **Guests** (`/guests`) — every `role: 'guest'` account, from `GET /settings/users/guest` via
-  `useAdminUsers('guest')`, with a detail view and delete
+- **Guests** (`/guests`) — every `role: 'guest'` account, from `GET /settings/users/guests` via
+  `useAdminGuests()`, with a detail view and delete
 
 ## Known Limitations
 

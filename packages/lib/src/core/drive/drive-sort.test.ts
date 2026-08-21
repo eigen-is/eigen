@@ -25,7 +25,7 @@ function item(p: Partial<DrivePath> & { name: string }): DrivePath {
 }
 
 describe('getDriveComparator', () => {
-    test('folders always sort before files regardless of key/dir', () => {
+    test('name sort groups folders before files regardless of dir', () => {
         const folder = item({ name: 'zzz', type: 'folder' });
         const file = item({ name: 'aaa', type: 'file' });
         for (const dir of ['asc', 'desc'] as const) {
@@ -48,6 +48,32 @@ describe('getDriveComparator', () => {
                 .sort(getDriveComparator('name', 'desc'))
                 .map((x) => x.name),
         ).toEqual(['cherry', 'banana', 'Apple']);
+    });
+
+    test('modified intermixes folders and files by date (Finder-style)', () => {
+        const oldFolder = item({ name: 'oldFolder', type: 'folder', updatedAt: new Date(1000) });
+        const newFile = item({ name: 'newFile', type: 'file', updatedAt: new Date(9000) });
+        expect([oldFolder, newFile].sort(getDriveComparator('modified', 'desc')).map((x) => x.name)).toEqual([
+            'newFile',
+            'oldFolder',
+        ]);
+        expect([oldFolder, newFile].sort(getDriveComparator('modified', 'asc')).map((x) => x.name)).toEqual([
+            'oldFolder',
+            'newFile',
+        ]);
+    });
+
+    test('size intermixes folders and files by byte value', () => {
+        const bigFolder = item({ name: 'bigFolder', type: 'folder', size: 9000 });
+        const smallFile = item({ name: 'smallFile', type: 'file', size: 10 });
+        expect([bigFolder, smallFile].sort(getDriveComparator('size', 'desc')).map((x) => x.name)).toEqual([
+            'bigFolder',
+            'smallFile',
+        ]);
+        expect([bigFolder, smallFile].sort(getDriveComparator('size', 'asc')).map((x) => x.name)).toEqual([
+            'smallFile',
+            'bigFolder',
+        ]);
     });
 
     test('modified sorts by updatedAt', () => {

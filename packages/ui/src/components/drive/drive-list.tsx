@@ -1,7 +1,7 @@
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
-import type { DrivePath, DriveSortDir, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
+import type { DrivePath, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -28,17 +28,16 @@ import { type CreateCallbacks, getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveGrid } from './drive-grid';
 import { useMountLabel } from './drive-mount-list';
-import { DriveTable } from './drive-table';
+import { DriveTable, nextDriveSort } from './drive-table';
 
 const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
-const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
-// The three sort options, shared by the desktop sort dropdown and the mobile kebab.
-// Re-selecting the active field flips direction; switching field uses that field's default.
+// The three sort options, shared by the grid-mode sort dropdown and the mobile kebab. List mode
+// sorts via the table's column headers instead. Re-selecting the active field flips direction;
+// switching field uses that field's default (see nextDriveSort in drive-table).
 function SortMenuItems() {
     const { sortKey, sortDir, setSort } = useDriveViewPreferences();
-    const chooseSort = (key: DriveSortKey) =>
-        setSort(key, key === sortKey ? (sortDir === 'asc' ? 'desc' : 'asc') : DEFAULT_DIR[key]);
+    const chooseSort = (key: DriveSortKey) => setSort(key, nextDriveSort(key, sortKey, sortDir));
 
     return (
         <>
@@ -89,17 +88,20 @@ export function DriveViewControls() {
 
     return (
         <>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm">
-                        {SORT_LABELS[sortKey]}
-                        <ChevronDown className="h-4 w-4 ml-1" />
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    <SortMenuItems />
-                </DropdownMenuContent>
-            </DropdownMenu>
+            {/* List mode sorts via column headers; only grid mode (no headers) keeps a sort dropdown. */}
+            {mode === 'grid' && (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm">
+                            {SORT_LABELS[sortKey]}
+                            <ChevronDown className="h-4 w-4 ml-1" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        <SortMenuItems />
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
             <ToggleGroup
                 type="single"
                 variant="outline"

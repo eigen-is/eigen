@@ -20,6 +20,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
+import type { HomeSizeResponse } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type {
     CreateEventArgs,
@@ -29,7 +30,7 @@ import type {
 } from '../calendar/types';
 import { getAvatarsDir } from '../config/paths';
 import type { User } from '../user';
-import { getUserByEmail, updateUser } from '../user/';
+import { getMemberships, getUserByEmail, updateUser } from '../user/';
 import { atHome, getHome, getTeamHome } from './get-home';
 
 export type HomeMessage =
@@ -146,6 +147,13 @@ export async function pullSharedPaths(ownerUserId: string, user: User): Promise<
 export async function pullDrivePath(ownerUserId: string, mountId: string, pathId: string): Promise<DrivePath | null> {
     const home = await getHome(ownerUserId);
     return home.drive.getPath(mountId, pathId);
+}
+
+// Sizing a foreign user's Home (admin usage view). Mirrors the self-scoped /home/:ownerId/size route.
+export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeResponse> {
+    const home = await getHome(ownerUserId);
+    const { teamIds } = await getMemberships(ownerUserId);
+    return home.size(teamIds);
 }
 
 export async function pullCalendarShares(

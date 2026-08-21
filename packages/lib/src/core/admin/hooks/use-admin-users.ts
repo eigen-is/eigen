@@ -6,12 +6,12 @@ import { AppError } from '../../api-error';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { adminKeys } from './keys';
 
-export function useAdminUsers(filter: 'guest' | 'orphan') {
+export function useAdminGuests() {
     const isGuest = useIsGuest();
     return useQuery({
-        queryKey: adminKeys.usersFiltered(filter),
+        queryKey: adminKeys.guests(),
         queryFn: async (): Promise<AdminUser[]> => {
-            const response = await settingsApi.users({ filter }).get();
+            const response = await settingsApi.users.guests.get();
             if (response.error) throw new AppError(response);
             return response.data;
         },

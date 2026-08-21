@@ -1,3 +1,4 @@
+export * from './use-admin-user-list';
 export * from './use-admin-users';
 export * from './use-is-admin';
 export * from './use-members';

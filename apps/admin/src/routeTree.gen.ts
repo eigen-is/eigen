@@ -13,9 +13,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthWaitlistRouteImport } from './routes/_auth.waitlist'
+import { Route as AuthUsersRouteImport } from './routes/_auth.users'
 import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
 import { Route as AuthSettingsRouteImport } from './routes/_auth.settings'
-import { Route as AuthOrphansRouteImport } from './routes/_auth.orphans'
 import { Route as AuthOnboardingRouteImport } from './routes/_auth.onboarding'
 import { Route as AuthMembersRouteImport } from './routes/_auth.members'
 import { Route as AuthGuestsRouteImport } from './routes/_auth.guests'
@@ -40,6 +40,11 @@ const AuthWaitlistRoute = AuthWaitlistRouteImport.update({
   path: '/waitlist',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthUsersRoute = AuthUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthTeamsRoute = AuthTeamsRouteImport.update({
   id: '/teams',
   path: '/teams',
@@ -48,11 +53,6 @@ const AuthTeamsRoute = AuthTeamsRouteImport.update({
 const AuthSettingsRoute = AuthSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => AuthRoute,
-} as any)
-const AuthOrphansRoute = AuthOrphansRouteImport.update({
-  id: '/orphans',
-  path: '/orphans',
   getParentRoute: () => AuthRoute,
 } as any)
 const AuthOnboardingRoute = AuthOnboardingRouteImport.update({
@@ -83,9 +83,9 @@ export interface FileRoutesByFullPath {
   '/guests': typeof AuthGuestsRoute
   '/members': typeof AuthMembersRoute
   '/onboarding': typeof AuthOnboardingRoute
-  '/orphans': typeof AuthOrphansRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
+  '/users': typeof AuthUsersRoute
   '/waitlist': typeof AuthWaitlistRoute
 }
 export interface FileRoutesByTo {
@@ -95,9 +95,9 @@ export interface FileRoutesByTo {
   '/guests': typeof AuthGuestsRoute
   '/members': typeof AuthMembersRoute
   '/onboarding': typeof AuthOnboardingRoute
-  '/orphans': typeof AuthOrphansRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
+  '/users': typeof AuthUsersRoute
   '/waitlist': typeof AuthWaitlistRoute
 }
 export interface FileRoutesById {
@@ -109,9 +109,9 @@ export interface FileRoutesById {
   '/_auth/guests': typeof AuthGuestsRoute
   '/_auth/members': typeof AuthMembersRoute
   '/_auth/onboarding': typeof AuthOnboardingRoute
-  '/_auth/orphans': typeof AuthOrphansRoute
   '/_auth/settings': typeof AuthSettingsRoute
   '/_auth/teams': typeof AuthTeamsRoute
+  '/_auth/users': typeof AuthUsersRoute
   '/_auth/waitlist': typeof AuthWaitlistRoute
 }
 export interface FileRouteTypes {
@@ -123,9 +123,9 @@ export interface FileRouteTypes {
     | '/guests'
     | '/members'
     | '/onboarding'
-    | '/orphans'
     | '/settings'
     | '/teams'
+    | '/users'
     | '/waitlist'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -135,9 +135,9 @@ export interface FileRouteTypes {
     | '/guests'
     | '/members'
     | '/onboarding'
-    | '/orphans'
     | '/settings'
     | '/teams'
+    | '/users'
     | '/waitlist'
   id:
     | '__root__'
@@ -148,9 +148,9 @@ export interface FileRouteTypes {
     | '/_auth/guests'
     | '/_auth/members'
     | '/_auth/onboarding'
-    | '/_auth/orphans'
     | '/_auth/settings'
     | '/_auth/teams'
+    | '/_auth/users'
     | '/_auth/waitlist'
   fileRoutesById: FileRoutesById
 }
@@ -190,6 +190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthWaitlistRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/users': {
+      id: '/_auth/users'
+      path: '/users'
+      fullPath: '/users'
+      preLoaderRoute: typeof AuthUsersRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/teams': {
       id: '/_auth/teams'
       path: '/teams'
@@ -202,13 +209,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthSettingsRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/orphans': {
-      id: '/_auth/orphans'
-      path: '/orphans'
-      fullPath: '/orphans'
-      preLoaderRoute: typeof AuthOrphansRouteImport
       parentRoute: typeof AuthRoute
     }
     '/_auth/onboarding': {
@@ -247,9 +247,9 @@ interface AuthRouteChildren {
   AuthGuestsRoute: typeof AuthGuestsRoute
   AuthMembersRoute: typeof AuthMembersRoute
   AuthOnboardingRoute: typeof AuthOnboardingRoute
-  AuthOrphansRoute: typeof AuthOrphansRoute
   AuthSettingsRoute: typeof AuthSettingsRoute
   AuthTeamsRoute: typeof AuthTeamsRoute
+  AuthUsersRoute: typeof AuthUsersRoute
   AuthWaitlistRoute: typeof AuthWaitlistRoute
 }
 
@@ -258,9 +258,9 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthGuestsRoute: AuthGuestsRoute,
   AuthMembersRoute: AuthMembersRoute,
   AuthOnboardingRoute: AuthOnboardingRoute,
-  AuthOrphansRoute: AuthOrphansRoute,
   AuthSettingsRoute: AuthSettingsRoute,
   AuthTeamsRoute: AuthTeamsRoute,
+  AuthUsersRoute: AuthUsersRoute,
   AuthWaitlistRoute: AuthWaitlistRoute,
 }
 
