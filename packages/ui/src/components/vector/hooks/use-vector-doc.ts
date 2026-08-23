@@ -194,8 +194,9 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                 clone.set('id', id);
                 clone.set('seed', Math.floor(Math.random() * 2 ** 31));
                 clone.set('index', keys[i]);
-                const x = clone.get('x');
-                const y = clone.get('y');
+                // Read x/y from the source map — the clone is not integrated into the doc yet
+                const x = src.get('x');
+                const y = src.get('y');
                 if (typeof x === 'number') clone.set('x', x + dx);
                 if (typeof y === 'number') clone.set('y', y + dy);
                 elementsMap.set(id, clone);
