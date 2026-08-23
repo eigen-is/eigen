@@ -248,7 +248,10 @@ export function VectorCanvas({
                     setTool('select');
                 } else if (g.kind === 'marquee') {
                     setMarquee(null);
-                    setSelectedIds(g.base); // cancel restores the pre-marquee selection
+                    // Cancel restores the gesture's base: the prior set for additive marquees,
+                    // empty for plain ones (pressing empty canvas deselects immediately, so
+                    // Escape staying deselected is the Excalidraw-consistent model).
+                    setSelectedIds(g.base);
                 } else if (g.kind === 'move') {
                     setPreviews({});
                 } else {
