@@ -6,9 +6,10 @@ import {
     DEFAULT_TEXT_PROPS,
     ELEMENT_FIELDS,
     generateKeyBetween,
+    isValidFractionalIndex,
     readVectorFromDoc,
-    type VectorElement,
     type VectorElementType,
+    type VectorImageElement,
     type VectorScene,
     type VectorShapeElement,
     type VectorTextElement,
@@ -23,7 +24,7 @@ import * as Y from 'yjs';
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
     Partial<Omit<VectorTextElement, 'id' | 'type'>> &
-    Partial<Omit<VectorElement, 'id' | 'type'>>;
+    Partial<Omit<VectorImageElement, 'id' | 'type'>>;
 
 // addElement input: the caller names a `type` and overrides whatever it likes; the hook fills
 // the rest from lib defaults and generates id/seed/index.
@@ -101,10 +102,14 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
             const elementsMap = doc.getMap('elements');
             // Place on top: read the live topmost index (each transact commits before the next
             // add, so successive seeds get a0, a1, a2… — reading React state would collide them).
+            // Skip non-map entries and malformed index strings — a corrupt peer write must not
+            // make generateKeyBetween throw and brick adding elements (read-vector heals them).
             let topmost: string | null = null;
             for (const value of elementsMap.values()) {
-                const idx = (value as Y.Map<unknown>).get('index');
-                if (typeof idx === 'string' && idx && (topmost === null || idx > topmost)) topmost = idx;
+                if (!(value instanceof Y.Map)) continue;
+                const idx = value.get('index');
+                if (typeof idx !== 'string' || !isValidFractionalIndex(idx, undefined, undefined)) continue;
+                if (topmost === null || idx > topmost) topmost = idx;
             }
             record.index = generateKeyBetween(topmost, null);
 
@@ -122,10 +127,10 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
-            const elMap = doc.getMap('elements').get(id) as Y.Map<unknown> | undefined;
-            if (!elMap) return;
+            const elMap = doc.getMap('elements').get(id);
+            if (!(elMap instanceof Y.Map)) return;
             for (const [k, v] of Object.entries(fields)) {
-                if (k === 'id') continue;
+                if (k === 'id' || k === 'type' || v === undefined) continue;
                 if ((ELEMENT_FIELDS as readonly string[]).includes(k)) elMap.set(k, v);
             }
         });
@@ -148,6 +153,5 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         deleteElements,
         undoManager: undoManager.current,
         synced: isSynced,
-        loading: !isSynced,
     };
 };

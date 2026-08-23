@@ -246,8 +246,8 @@ export function generateNKeysBetween(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Eigen repair layer — the reusable core of Excalidraw's fractionalIndex.ts wrapper,
-// trimmed of the bound-text / mutateElement / versioning machinery (SCOUT §4). Elements
-// here are plain materialized objects, so repair mutates `index` in place.
+// trimmed of the bound-text / mutateElement / versioning machinery. Elements here are
+// plain materialized objects, so repair mutates `index` in place.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type IndexedElement = { id: string; index: string };

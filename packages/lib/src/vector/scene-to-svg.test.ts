@@ -27,7 +27,8 @@ const scene = (elements: VectorElement[], background = 'transparent'): VectorSce
 
 // The golden scene: each shape type, both roundness variants, and a two-line text. Pins
 // roughjs determinism (fixed seeds → byte-identical output run-to-run and across the pinned
-// roughjs version). Regenerate with scripts/regen (see report) after any deliberate change.
+// roughjs version). After a deliberate renderer change, regenerate GOLDEN_SVG by pasting
+// the output of `sceneToSvg(buildGoldenScene())`.
 export function buildGoldenScene(): VectorScene {
     return scene([
         shape({ id: 'r1', type: 'rectangle', roundness: 'sharp', x: 0, y: 0, seed: 1, index: 'a0' }),

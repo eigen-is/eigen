@@ -1,4 +1,5 @@
 import {
+    ELEMENT_FIELDS,
     elementToSvg,
     getElementsBounds,
     isTransparent,
@@ -7,7 +8,7 @@ import {
     type VectorElement,
     type VectorMeta,
 } from '@workspace/lib/vector';
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const PADDING = 40;
@@ -19,10 +20,29 @@ type VectorCanvasProps = {
     resolveMedia?: MediaResolver;
 };
 
-// The live SVG scene surface. Each element is its own node (keyed + `data-element-id` so M2's
-// interaction layer can hit-test back to the model) rendered through the SAME lib render path as
-// previews/embeds/export — elementToSvg emits our own escaped `<g>` fragment. M2 replaces the
-// interaction internals but this render seam stays.
+// readVectorFromDoc materializes fresh element objects on every Yjs tick, so identity-based
+// memo never hits; every ELEMENT_FIELDS value is a scalar or string, so a field compare is
+// exact. Only changed elements re-run elementToSvg — rough path generation is the expensive part.
+function sameElement(a: VectorElement, b: VectorElement): boolean {
+    const ra = a as Record<string, unknown>;
+    const rb = b as Record<string, unknown>;
+    for (const field of ELEMENT_FIELDS) {
+        if (ra[field] !== rb[field]) return false;
+    }
+    return true;
+}
+
+const ElementNode = memo(
+    // Each element is its own node (keyed + `data-element-id` so M2's interaction layer can
+    // hit-test back to the model) rendered through the SAME lib render path as previews/
+    // embeds/export — elementToSvg emits our own escaped `<g>` fragment.
+    function ElementNode({ el, resolveMedia }: { el: VectorElement; resolveMedia?: MediaResolver }) {
+        return <g data-element-id={el.id} dangerouslySetInnerHTML={{ __html: elementToSvg(el, { resolveMedia }) }} />;
+    },
+    (prev, next) => prev.resolveMedia === next.resolveMedia && sameElement(prev.el, next.el),
+);
+
+// The live SVG scene surface. M2 replaces the interaction internals but this render seam stays.
 export function VectorCanvas({ elements, meta, resolveMedia }: VectorCanvasProps) {
     const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
 
@@ -43,13 +63,8 @@ export function VectorCanvas({ elements, meta, resolveMedia }: VectorCanvasProps
             {!isTransparent(meta.background) && (
                 <rect x={view.x} y={view.y} width={view.width} height={view.height} fill={meta.background} />
             )}
-            {/* elementToSvg is our own XML-escaped output — the same fragment previews/export emit. */}
             {ordered.map((el) => (
-                <g
-                    key={el.id}
-                    data-element-id={el.id}
-                    dangerouslySetInnerHTML={{ __html: elementToSvg(el, { resolveMedia }) }}
-                />
+                <ElementNode key={el.id} el={el} resolveMedia={resolveMedia} />
             ))}
         </svg>
     );

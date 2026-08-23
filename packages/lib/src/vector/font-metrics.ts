@@ -1,7 +1,7 @@
 // Per-font vertical metrics for placing SVG <text> baselines in the pure renderer — the
-// first font-metrics table in Eigen (FONT-METRICS.md). Keyed by EIGEN_FONTS name; values
-// extracted from the shipped faces (fonttools). Never stored per element — derived at
-// render. `getVerticalOffset` replicates Excalidraw's alphabetic-baseline formula (SCOUT §5).
+// first font-metrics table in Eigen. Keyed by EIGEN_FONTS name; values extracted from the
+// shipped faces (fonttools). Never stored per element — derived at render.
+// `getVerticalOffset` replicates Excalidraw's alphabetic-baseline formula.
 
 import { DEFAULT_FONT_FAMILY } from './types';
 
@@ -28,7 +28,7 @@ export function getLineHeightPx(fontFamily: string, fontSize: number): number {
 }
 
 // Distance from a line's top to its alphabetic baseline, so `y = i*lineHeightPx +
-// verticalOffset` places each <text> line's baseline correctly (SCOUT §5).
+// verticalOffset` places each <text> line's baseline correctly.
 export function getVerticalOffset(fontFamily: string, fontSize: number, lineHeightPx: number): number {
     const { unitsPerEm, ascender, descender } = getFontMetrics(fontFamily);
     const fontSizeEm = fontSize / unitsPerEm;

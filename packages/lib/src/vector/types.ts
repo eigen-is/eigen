@@ -1,7 +1,7 @@
 // The eigen|vector> element model. React-free shared core (the packages/lib/src/sheets
 // precedent). Element shape adopted from Excalidraw's `_ExcalidrawElementBase`, trimmed to
 // what Eigen's Yjs CRDT needs: no tombstones, no version/versionNonce, no groupIds, no
-// points (freehand/line/arrow are additive later units). See CONTRACT.md §A.
+// points (freehand/line/arrow are additive later units).
 
 export type VectorElementType = 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image';
 
@@ -24,7 +24,7 @@ export type VectorElementBase = {
     y: number;
     width: number;
     height: number;
-    angle: number; // DEGREES, clockwise, y-down (CONTRACT RULING 1)
+    angle: number; // DEGREES, clockwise, y-down — matches SVG rotate() and slides `rotation`
     strokeColor: string;
     backgroundColor: string; // fill color; '' or 'transparent' = no fill (see isTransparent)
     fillStyle: FillStyle;
@@ -98,7 +98,7 @@ export const DEFAULT_SHAPE_ROUNDNESS: Roundness = 'round';
 // Canvas-level defaults (the `meta` root).
 export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', gridSize: 20 };
 
-// Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS (SCOUT §6).
+// Shared element defaults, adopted from Excalidraw's DEFAULT_ELEMENT_PROPS.
 export const DEFAULT_ELEMENT_PROPS = {
     strokeColor: '#1e1e1e',
     backgroundColor: 'transparent',

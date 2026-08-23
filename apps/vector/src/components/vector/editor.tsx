@@ -15,7 +15,7 @@ type VectorEditorProps = {
 // interaction land in M2 — this shell wires the doc hook to the canvas plus a temporary
 // seed affordance.
 export function VectorEditor({ ownerId, path }: VectorEditorProps) {
-    const { elements, meta, addElement, loading } = useVectorDoc(ownerId, path.mountId, path.id);
+    const { elements, meta, addElement, synced } = useVectorDoc(ownerId, path.mountId, path.id);
 
     // TEMPORARY seed affordance — replaced by M2's shape tools. Deterministic layout, randomized
     // seeds (addElement generates each element's roughjs seed), covering every M1 render path:
@@ -85,7 +85,7 @@ export function VectorEditor({ ownerId, path }: VectorEditorProps) {
                     </div>
                 }
             >
-                {loading ? (
+                {!synced ? (
                     <LoadingState />
                 ) : (
                     <div className="h-full bg-muted/30">

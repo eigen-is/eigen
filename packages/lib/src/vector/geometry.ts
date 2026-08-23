@@ -1,14 +1,14 @@
-// Pure scene-space geometry for eigen|vector>. Angle is DEGREES at every boundary
-// (CONTRACT RULING 1); radian math never escapes a function body. `Box` is the canonical
-// transform core shared by hit-testing, bounds, the properties bar, and (later) the shared
-// ObjectTransform primitive (CONTRACT RULING 8).
+// Pure scene-space geometry for eigen|vector>. Angle is DEGREES at every boundary;
+// radian math never escapes a function body. `Box` is the canonical transform core shared
+// by hit-testing, bounds, the properties bar, and (later) the shared ObjectTransform
+// primitive.
 
 import type { VectorElement } from './types';
 
 export type Point = { x: number; y: number };
 
 // Canonical transform core: top-left origin + size + rotation. Structurally identical to
-// the cross-app stored canon (CONTRACT §E), so hosts pass stored fields straight through.
+// the stored element fields, so hosts pass stored fields straight through.
 export type Box = { x: number; y: number; width: number; height: number; angle: number };
 
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };

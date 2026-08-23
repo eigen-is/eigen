@@ -1,16 +1,15 @@
 // Materialize a vector container's Y.Doc into a plain VectorScene. Worker-safe (yjs only),
 // mirrors document/slides.ts readDeckFromDoc but per-element-Map. Every v1 field is a scalar
-// or string (CONTRACT §A), so — unlike slides' commentCardIds — there is no Y.Array branch;
+// or string, so — unlike slides' commentCardIds — there is no Y.Array branch;
 // primitive reads suffice even when the server hydrates values via Y.applyUpdate.
 
 import type * as Y from 'yjs';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
 import {
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_FONT_FAMILY,
-    DEFAULT_FONT_SIZE,
     DEFAULT_SCENE_META,
     DEFAULT_SHAPE_ROUNDNESS,
+    DEFAULT_TEXT_PROPS,
     FILL_STYLES,
     isVectorElementType,
     ROUNDNESS,
@@ -20,6 +19,11 @@ import {
     type VectorElementBase,
     type VectorScene,
 } from './types';
+
+// Sanity bound on spatial fields. The doc is a boundary (any peer writes it); without a cap
+// one client's corrupt write (say 1e15 from a math bug) freezes every other peer — rough
+// fill cost scales with element area.
+const MAX_COORD = 1_000_000;
 
 export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const elementsMap = doc.getMap('elements');
@@ -49,10 +53,10 @@ function readElement(value: unknown): VectorElement | null {
     const base: VectorElementBase = {
         id,
         type,
-        x: num(value.get('x'), 0),
-        y: num(value.get('y'), 0),
-        width: num(value.get('width'), 0),
-        height: num(value.get('height'), 0),
+        x: coord(value.get('x')),
+        y: coord(value.get('y')),
+        width: coord(value.get('width')),
+        height: coord(value.get('height')),
         angle: num(value.get('angle'), 0),
         strokeColor: str(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
         backgroundColor: str(value.get('backgroundColor'), DEFAULT_ELEMENT_PROPS.backgroundColor),
@@ -61,7 +65,7 @@ function readElement(value: unknown): VectorElement | null {
         strokeStyle: oneOf(value.get('strokeStyle'), STROKE_STYLES, DEFAULT_ELEMENT_PROPS.strokeStyle),
         roughness: num(value.get('roughness'), DEFAULT_ELEMENT_PROPS.roughness),
         seed: num(value.get('seed'), 0),
-        opacity: num(value.get('opacity'), DEFAULT_ELEMENT_PROPS.opacity),
+        opacity: Math.min(100, Math.max(0, num(value.get('opacity'), DEFAULT_ELEMENT_PROPS.opacity))),
         locked: bool(value.get('locked'), DEFAULT_ELEMENT_PROPS.locked),
         index: str(value.get('index'), ''),
     };
@@ -79,10 +83,10 @@ function readElement(value: unknown): VectorElement | null {
             return {
                 ...base,
                 type: 'text',
-                text: str(value.get('text'), ''),
-                fontSize: num(value.get('fontSize'), DEFAULT_FONT_SIZE),
-                fontFamily: str(value.get('fontFamily'), DEFAULT_FONT_FAMILY),
-                textAlign: oneOf(value.get('textAlign'), TEXT_ALIGNS, 'left'),
+                text: str(value.get('text'), DEFAULT_TEXT_PROPS.text),
+                fontSize: num(value.get('fontSize'), DEFAULT_TEXT_PROPS.fontSize),
+                fontFamily: str(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
+                textAlign: oneOf(value.get('textAlign'), TEXT_ALIGNS, DEFAULT_TEXT_PROPS.textAlign),
             };
         case 'image':
             return { ...base, type: 'image', mediaName: str(value.get('mediaName'), '') };
@@ -97,6 +101,10 @@ function isYMapLike(value: unknown): value is YMapLike {
 
 function num(v: unknown, fallback: number): number {
     return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
+function coord(v: unknown): number {
+    return Math.min(MAX_COORD, Math.max(-MAX_COORD, num(v, 0)));
 }
 
 function str(v: unknown, fallback: string): string {

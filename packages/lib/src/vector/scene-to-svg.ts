@@ -1,5 +1,5 @@
 // Pure scene → SVG string. No DOM, no measurement: roughjs's RoughGenerator yields path
-// ops as plain data (DOM-free), we serialize them ourselves (SCOUT §3, replacing RoughSVG),
+// ops as plain data (DOM-free), we serialize them ourselves instead of using RoughSVG,
 // and text trusts client-measured width/height so the server never measures. Shared verbatim
 // by the frontend (previews/embeds/thumbnails/export) and the API transform Worker.
 
@@ -22,8 +22,8 @@ import {
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_PADDING = 10;
 
-// Radius policy — a renderer constant, never stored (CONTRACT RULING 6). Rectangles use
-// Excalidraw's ADAPTIVE radius (cap 32), diamonds the PROPORTIONAL radius (0.25).
+// Radius policy — a renderer constant, never stored. Rectangles use Excalidraw's
+// ADAPTIVE radius (cap 32), diamonds the PROPORTIONAL radius (0.25).
 const PROPORTIONAL_RADIUS = 0.25;
 const ADAPTIVE_RADIUS = 32;
 
@@ -105,8 +105,8 @@ function renderImage(el: VectorImageElement, opts: SceneToSvgOptions): string {
     return `${groupOpen(el)}<image x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" href="${escapeXml(href)}" preserveAspectRatio="none"/></g>`;
 }
 
-// translate to the element's position, then rotate about its center (angle in degrees →
-// SVG rotate() takes degrees directly, no conversion — CONTRACT RULING 1).
+// translate to the element's position, then rotate about its center (angle in degrees —
+// SVG rotate() takes degrees directly, no conversion).
 function elementTransform(box: Box): string {
     const translate = `translate(${round(box.x)} ${round(box.y)})`;
     if (box.angle === 0) return translate;
@@ -154,7 +154,7 @@ function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
     return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, options);
 }
 
-// Options assembly, replicated from Excalidraw's generateRoughOptions (SCOUT §1), minus the
+// Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
 // dark-mode filter. Determinism comes from the persisted per-element `seed`.
 function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
     const options: Options = {
@@ -176,7 +176,7 @@ function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options 
     return options;
 }
 
-// Reduce roughness for small elements so they don't look destroyed (SCOUT §1).
+// Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule).
 function adjustRoughness(el: VectorShapeElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);

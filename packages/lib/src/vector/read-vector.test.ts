@@ -109,6 +109,22 @@ describe('readVectorFromDoc', () => {
         expect(scene.elements[0]).toMatchObject({ id: 'a', x: 5, y: 6 });
     });
 
+    test('clamps hostile spatial values and opacity', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'big', {
+                type: 'rectangle',
+                index: 'a0',
+                x: -1e15,
+                y: 2e9,
+                width: 1e12,
+                height: Number.NaN,
+                opacity: 250,
+            });
+        });
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el).toMatchObject({ x: -1_000_000, y: 1_000_000, width: 1_000_000, height: 0, opacity: 100 });
+    });
+
     test('empty doc yields an empty scene with default meta', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
