@@ -60,10 +60,12 @@ export type ObjectTransformProps = {
     onTransform: (next: Box) => void;
     // Fires exactly once per gesture at pointerup / window-blur / pointercancel, with angle
     // normalized to [0, 360). A no-op gesture (no movement) does not fire it. This is the host's
-    // single write. The host MUST freeze its viewport (pan/zoom) while a drag is active: the
-    // rotate pivot and the `screenDeltaToScene` closure are captured at pointerdown, and a
-    // viewport change mid-drag would silently invalidate both.
-    onCommit: (next: Box) => void;
+    // single write; `start` is the pointerdown snapshot so the host can write only the fields the
+    // gesture changed (field-level merge with concurrent peer edits). The host MUST freeze its
+    // viewport (pan/zoom) while a drag is active: the rotate pivot and the `screenDeltaToScene`
+    // closure are captured at pointerdown, and a viewport change mid-drag would silently
+    // invalidate both.
+    onCommit: (next: Box, start: Box) => void;
 };
 
 export function ObjectTransform({
@@ -89,11 +91,15 @@ export function ObjectTransform({
     const startResize = (e: React.PointerEvent, mode: string) => {
         e.preventDefault();
         e.stopPropagation();
+        // One gesture at a time: a second pointer landing on another grip mid-drag must not
+        // start a parallel gesture (both would commit on the first pointerup).
+        if (dragAbort.current && !dragAbort.current.signal.aborted) return;
         e.currentTarget.setPointerCapture(e.pointerId);
         const controller = new AbortController();
         dragAbort.current = controller;
         const { signal } = controller;
         setDragging(true);
+        const pointerId = e.pointerId;
         const snapshot = box;
         const startX = e.clientX;
         const startY = e.clientY;
@@ -115,6 +121,7 @@ export function ObjectTransform({
         };
 
         const onMove = (me: PointerEvent) => {
+            if (me.pointerId !== pointerId) return;
             cursor.clientX = me.clientX;
             cursor.clientY = me.clientY;
             cursor.altKey = me.altKey;
@@ -141,25 +148,37 @@ export function ObjectTransform({
         };
         const commit = () => {
             teardown();
-            if (latest && !sameBox(latest, snapshot)) onCommit({ ...latest, angle: normalizeAngle(latest.angle) });
+            if (latest && !sameBox(latest, snapshot)) {
+                onCommit({ ...latest, angle: normalizeAngle(latest.angle) }, snapshot);
+            }
         };
         const cancel = () => {
             teardown();
             onTransform(snapshot);
         };
+        const onEnd = (pe: PointerEvent) => {
+            if (pe.pointerId === pointerId) commit();
+        };
 
         document.addEventListener('pointermove', onMove, { signal });
-        document.addEventListener('pointerup', commit, { signal });
-        document.addEventListener('pointercancel', commit, { signal });
+        document.addEventListener('pointerup', onEnd, { signal });
+        document.addEventListener('pointercancel', onEnd, { signal });
         document.addEventListener('keydown', onKey, { signal, capture: true });
         document.addEventListener('keyup', onKey, { signal });
         // Browsers can drop pointerup on alt-tab / devtools — commit and tear down on focus loss.
         window.addEventListener('blur', commit, { signal });
+        // Signal gesture start now (the seam has no onStart): the host's first-onTransform latch
+        // must freeze the viewport at POINTERDOWN, not first move — a wheel zoom in that gap would
+        // silently invalidate the screenDeltaToScene closure. `latest` stays null, so a no-move
+        // click still commits nothing.
+        onTransform(snapshot);
     };
 
     const startRotate = (e: React.PointerEvent) => {
         e.preventDefault();
         e.stopPropagation();
+        // Same one-gesture-at-a-time guard as startResize.
+        if (dragAbort.current && !dragAbort.current.signal.aborted) return;
         const ring = ringRef.current;
         if (!ring) return;
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -173,6 +192,7 @@ export function ObjectTransform({
         const rect = ring.getBoundingClientRect();
         const pivotX = rect.left + rect.width / 2;
         const pivotY = rect.top + rect.height / 2;
+        const pointerId = e.pointerId;
         const snapshot = box;
         const startAngle = Math.atan2(e.clientY - pivotY, e.clientX - pivotX);
         const cursor = { clientX: e.clientX, clientY: e.clientY, shiftKey: e.shiftKey };
@@ -191,6 +211,7 @@ export function ObjectTransform({
         };
 
         const onMove = (me: PointerEvent) => {
+            if (me.pointerId !== pointerId) return;
             cursor.clientX = me.clientX;
             cursor.clientY = me.clientY;
             cursor.shiftKey = me.shiftKey;
@@ -214,19 +235,27 @@ export function ObjectTransform({
         };
         const commit = () => {
             teardown();
-            if (latest && !sameBox(latest, snapshot)) onCommit({ ...latest, angle: normalizeAngle(latest.angle) });
+            if (latest && !sameBox(latest, snapshot)) {
+                onCommit({ ...latest, angle: normalizeAngle(latest.angle) }, snapshot);
+            }
         };
         const cancel = () => {
             teardown();
             onTransform(snapshot);
         };
+        const onEnd = (pe: PointerEvent) => {
+            if (pe.pointerId === pointerId) commit();
+        };
 
         document.addEventListener('pointermove', onMove, { signal });
-        document.addEventListener('pointerup', commit, { signal });
-        document.addEventListener('pointercancel', commit, { signal });
+        document.addEventListener('pointerup', onEnd, { signal });
+        document.addEventListener('pointercancel', onEnd, { signal });
         document.addEventListener('keydown', onKey, { signal, capture: true });
         document.addEventListener('keyup', onKey, { signal });
         window.addEventListener('blur', commit, { signal });
+        // Freeze-at-pointerdown signal — same reasoning as startResize (the rotate pivot above is
+        // only exact while the viewport holds still).
+        onTransform(snapshot);
     };
 
     // Side grips gate on the on-screen box size. screenDeltaToScene is a uniform scale, so a

@@ -39,6 +39,20 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
     return { ...base, roundness: DEFAULT_SHAPE_ROUNDNESS };
 }
 
+// Live topmost fractional index in the map. Skips non-map entries and malformed index strings —
+// a corrupt peer write must not make generateKeyBetween throw and brick adding elements
+// (read-vector heals them on read).
+function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
+    let topmost: string | null = null;
+    for (const value of elementsMap.values()) {
+        if (!(value instanceof Y.Map)) continue;
+        const idx = value.get('index');
+        if (typeof idx !== 'string' || !isValidFractionalIndex(idx, undefined, undefined)) continue;
+        if (topmost === null || idx > topmost) topmost = idx;
+    }
+    return topmost;
+}
+
 export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) => {
     const [scene, setScene] = useState<VectorScene>({ elements: [], meta: DEFAULT_SCENE_META });
     const [isSynced, setIsSynced] = useState(false);
@@ -104,17 +118,8 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         doc.transact(() => {
             const elementsMap = doc.getMap('elements');
             // Place on top: read the live topmost index (each transact commits before the next
-            // add, so successive seeds get a0, a1, a2… — reading React state would collide them).
-            // Skip non-map entries and malformed index strings — a corrupt peer write must not
-            // make generateKeyBetween throw and brick adding elements (read-vector heals them).
-            let topmost: string | null = null;
-            for (const value of elementsMap.values()) {
-                if (!(value instanceof Y.Map)) continue;
-                const idx = value.get('index');
-                if (typeof idx !== 'string' || !isValidFractionalIndex(idx, undefined, undefined)) continue;
-                if (topmost === null || idx > topmost) topmost = idx;
-            }
-            record.index = generateKeyBetween(topmost, null);
+            // add, so successive adds get a0, a1, a2… — reading React state would collide them).
+            record.index = generateKeyBetween(topmostIndex(elementsMap), null);
 
             const elMap = new Y.Map();
             for (const field of ELEMENT_FIELDS) {
@@ -176,14 +181,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                     return ia < ib ? -1 : ia > ib ? 1 : 0;
                 });
             if (sources.length === 0) return;
-            let topmost: string | null = null;
-            for (const value of elementsMap.values()) {
-                if (!(value instanceof Y.Map)) continue;
-                const idx = value.get('index');
-                if (typeof idx !== 'string' || !isValidFractionalIndex(idx, undefined, undefined)) continue;
-                if (topmost === null || idx > topmost) topmost = idx;
-            }
-            const keys = generateNKeysBetween(topmost, null, sources.length);
+            const keys = generateNKeysBetween(topmostIndex(elementsMap), null, sources.length);
             sources.forEach((src, i) => {
                 const id = `el-${nanoid(10)}`;
                 const clone = new Y.Map();

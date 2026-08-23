@@ -17,6 +17,15 @@ const NUDGE = 1;
 const NUDGE_LARGE = 5;
 const DUPLICATE_OFFSET = 10;
 
+// The manual listeners' equivalent of the hotkey lib's input gate; the canvas reuses it for its
+// own Space/Escape listeners.
+export function isTypingTarget(): boolean {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName.toLowerCase();
+    return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable;
+}
+
 type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
@@ -85,9 +94,13 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     useHotkey('O', () => setTool('ellipse'), { enabled });
     useHotkey('4', () => setTool('ellipse'), { enabled });
 
+    // Discrete ops seal the undo group on BOTH sides: stopCapturing before opens a fresh step,
+    // stopCapturing after keeps a nudge inside the 500ms capture window from merging into it.
+    // Nudges themselves carry neither, so rapid taps still coalesce.
     const del = () => {
         undoManager?.stopCapturing();
         deleteElements(selectedIds);
+        undoManager?.stopCapturing();
         setSelection([]);
     };
     useHotkey('Delete', del, { enabled: enabled && hasSelection });
@@ -108,6 +121,7 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
             e.preventDefault();
             undoManager?.stopCapturing();
             const ids = duplicateElements(selectedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET);
+            undoManager?.stopCapturing();
             if (ids.length) setSelection(ids);
         },
         { enabled: enabled && hasSelection, ignoreInputs: true },
@@ -144,7 +158,7 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
             if (!(e.metaKey || e.ctrlKey)) return;
             if (e.code !== 'BracketLeft' && e.code !== 'BracketRight') return;
             const { enabled: on, elements: els, selectedIds: ids } = stateRef.current;
-            if (!on || ids.length === 0) return;
+            if (!on || ids.length === 0 || isTypingTarget()) return;
             e.preventDefault();
             const op: ZOp =
                 e.code === 'BracketLeft' ? (e.shiftKey ? 'toBack' : 'backward') : e.shiftKey ? 'toFront' : 'forward';
@@ -152,6 +166,7 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
             if (patches.length) {
                 undoManager?.stopCapturing();
                 updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } })));
+                undoManager?.stopCapturing();
             }
         };
         document.addEventListener('keydown', onKeyDown);

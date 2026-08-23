@@ -18,7 +18,7 @@ import type * as Y from 'yjs';
 import { hitTestTopmost, marqueeContain, useSelection } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
-import { useVectorKeyboard } from './hooks/use-vector-keyboard';
+import { isTypingTarget, useVectorKeyboard } from './hooks/use-vector-keyboard';
 import { useViewport } from './hooks/use-viewport';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -96,14 +96,9 @@ function creatingElement(c: CreatingState): VectorElement {
     };
 }
 
-function isTypingTarget(): boolean {
-    const el = document.activeElement;
-    if (!el) return false;
-    const tag = el.tagName.toLowerCase();
-    return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable;
-}
-
-type Gesture =
+// pointerId gates move/up to the pointer that started the gesture — on touch, a second finger's
+// events would otherwise drive (and prematurely commit) the first finger's gesture.
+type Gesture = { pointerId: number } & (
     | { kind: 'pan'; lastX: number; lastY: number }
     | {
           kind: 'move';
@@ -114,7 +109,8 @@ type Gesture =
           moved: boolean;
       }
     | { kind: 'create'; startX: number; startY: number }
-    | { kind: 'marquee'; startX: number; startY: number; additive: boolean; base: string[] };
+    | { kind: 'marquee'; startX: number; startY: number; additive: boolean; base: string[] }
+);
 
 type VectorCanvasProps = {
     elements: VectorElement[];
@@ -161,9 +157,11 @@ export function VectorCanvas({
     const [panning, setPanning] = useState(false);
 
     const gestureRef = useRef<Gesture | null>(null);
-    // First onTransform of a resize/rotate is the de-facto gesture start (ObjectTransform's seam has
-    // no onStart); flip it there for the one-stopCapturing-per-gesture rule.
+    // First onTransform of a resize/rotate is the de-facto gesture start (ObjectTransform fires it
+    // synchronously at grip pointerdown); flip it there for the one-stopCapturing-per-gesture rule.
     const transformStartedRef = useRef(false);
+    // Latest finishGesture closure, for the window-blur listener bound once below.
+    const finishRef = useRef<() => void>(() => {});
 
     const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
 
@@ -203,19 +201,31 @@ export function VectorCanvas({
         };
     }, []);
 
-    // Safety net: any pointerup ends the freeze and clears the transform-start latch. This is what
-    // unfreezes the viewport after an ObjectTransform resize/rotate (its pointer lifecycle is
-    // internal), including its Escape-cancel path which fires no onCommit.
+    // Safety net: any pointerup ends the freeze, clears the transform-start latch, and drops
+    // leftover previews — ObjectTransform's Escape-cancel and no-move paths fire no onCommit, so
+    // their snapshot preview would otherwise stick and mask later remote edits of that element.
+    // (Registered at mount, so on a normal commit this runs before ObjectTransform's own pointerup
+    // listener; the batched onCommit write supersedes the clear in the same render.) window blur
+    // can swallow the pointerup entirely (alt-tab mid-drag) — finalize any active canvas gesture
+    // first, mirroring ObjectTransform's commit-on-blur, so no gesture is left live tracking a
+    // released pointer when focus returns.
     useEffect(() => {
         const clear = () => {
             frozenRef.current = false;
             transformStartedRef.current = false;
+            setPreviews((p) => (Object.keys(p).length ? {} : p));
+        };
+        const onBlur = () => {
+            finishRef.current();
+            clear();
         };
         document.addEventListener('pointerup', clear);
         document.addEventListener('pointercancel', clear);
+        window.addEventListener('blur', onBlur);
         return () => {
             document.removeEventListener('pointerup', clear);
             document.removeEventListener('pointercancel', clear);
+            window.removeEventListener('blur', onBlur);
         };
     }, [frozenRef]);
 
@@ -226,7 +236,9 @@ export function VectorCanvas({
     escRef.current = { hasSelection: selectedIds.length > 0, tool };
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return;
+            // A dialog/palette input owns its own Escape (close, clear); no gesture can be active
+            // while one has focus, so skipping the whole handler is safe.
+            if (e.key !== 'Escape' || isTypingTarget()) return;
             const g = gestureRef.current;
             if (g) {
                 gestureRef.current = null;
@@ -236,6 +248,7 @@ export function VectorCanvas({
                     setTool('select');
                 } else if (g.kind === 'marquee') {
                     setMarquee(null);
+                    setSelectedIds(g.base); // cancel restores the pre-marquee selection
                 } else if (g.kind === 'move') {
                     setPreviews({});
                 } else {
@@ -259,7 +272,7 @@ export function VectorCanvas({
             containerRef.current?.setPointerCapture(e.pointerId);
             frozenRef.current = true;
             setPanning(true);
-            gestureRef.current = { kind: 'pan', lastX: e.clientX, lastY: e.clientY };
+            gestureRef.current = { kind: 'pan', pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY };
             return;
         }
         if (e.button !== 0) return;
@@ -273,7 +286,7 @@ export function VectorCanvas({
             frozenRef.current = true;
             undoManager?.stopCapturing();
             setSelectedIds([]);
-            gestureRef.current = { kind: 'create', startX: p.x, startY: p.y };
+            gestureRef.current = { kind: 'create', pointerId: e.pointerId, startX: p.x, startY: p.y };
             setCreating({
                 type: tool,
                 seed: Math.floor(Math.random() * 2 ** 31),
@@ -298,7 +311,15 @@ export function VectorCanvas({
             }
             frozenRef.current = true;
             undoManager?.stopCapturing();
-            gestureRef.current = { kind: 'move', startX: p.x, startY: p.y, originals, ids, moved: false };
+            gestureRef.current = {
+                kind: 'move',
+                pointerId: e.pointerId,
+                startX: p.x,
+                startY: p.y,
+                originals,
+                ids,
+                moved: false,
+            };
             return;
         }
 
@@ -306,13 +327,20 @@ export function VectorCanvas({
         frozenRef.current = true;
         const additive = e.shiftKey;
         if (!additive) setSelectedIds([]);
-        gestureRef.current = { kind: 'marquee', startX: p.x, startY: p.y, additive, base: additive ? selectedIds : [] };
+        gestureRef.current = {
+            kind: 'marquee',
+            pointerId: e.pointerId,
+            startX: p.x,
+            startY: p.y,
+            additive,
+            base: additive ? selectedIds : [],
+        };
         setMarquee({ x: p.x, y: p.y, width: 0, height: 0, angle: 0 });
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
         const g = gestureRef.current;
-        if (!g) return;
+        if (!g || e.pointerId !== g.pointerId) return;
         if (g.kind === 'pan') {
             panBy(e.clientX - g.lastX, e.clientY - g.lastY);
             g.lastX = e.clientX;
@@ -358,7 +386,7 @@ export function VectorCanvas({
         setSelectedIds(g.additive ? [...new Set([...g.base, ...contained])] : contained);
     };
 
-    const onPointerUp = () => {
+    const finishGesture = () => {
         const g = gestureRef.current;
         gestureRef.current = null;
         frozenRef.current = false;
@@ -382,6 +410,9 @@ export function VectorCanvas({
                     seed: c.seed,
                 });
                 if (id) setSelectedIds([id]);
+                // Trailing seal: a nudge inside the 500ms capture window must not merge into
+                // this gesture's undo step (nudges deliberately carry no leading stopCapturing).
+                undoManager?.stopCapturing();
             }
             return;
         }
@@ -391,12 +422,20 @@ export function VectorCanvas({
                     .filter((id) => previews[id])
                     .map((id) => ({ id, fields: { x: previews[id].x, y: previews[id].y } }));
                 if (patches.length) updateElements(patches);
+                undoManager?.stopCapturing(); // trailing seal, same as create
             }
             setPreviews({});
             return;
         }
         // marquee: selection was set live during the move; a plain click already cleared it.
         setMarquee(null);
+    };
+    finishRef.current = finishGesture;
+
+    const onPointerUp = (e: React.PointerEvent) => {
+        const g = gestureRef.current;
+        if (g && e.pointerId !== g.pointerId) return;
+        finishGesture();
     };
 
     const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
@@ -445,16 +484,21 @@ export function VectorCanvas({
                             }
                             setPreviews({ [single.id]: next });
                         }}
-                        onCommit={(next) => {
+                        onCommit={(next, start) => {
                             transformStartedRef.current = false;
                             frozenRef.current = false;
-                            updateElement(single.id, {
-                                x: next.x,
-                                y: next.y,
-                                width: next.width,
-                                height: next.height,
-                                angle: next.angle,
-                            });
+                            // Write only the fields the gesture changed — a rotate must not clobber
+                            // a peer's concurrent move/resize with its stale snapshot values.
+                            const fields: VectorElementPatch = {};
+                            if (next.x !== start.x) fields.x = next.x;
+                            if (next.y !== start.y) fields.y = next.y;
+                            if (next.width !== start.width) fields.width = next.width;
+                            if (next.height !== start.height) fields.height = next.height;
+                            if (next.angle !== start.angle) fields.angle = next.angle;
+                            if (Object.keys(fields).length) {
+                                updateElement(single.id, fields);
+                                undoManager?.stopCapturing(); // trailing seal, same as create/move
+                            }
                             setPreviews({});
                         }}
                     />

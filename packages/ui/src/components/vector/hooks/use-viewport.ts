@@ -5,8 +5,8 @@
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-export const MIN_ZOOM = 0.1;
-export const MAX_ZOOM = 30;
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 30;
 const WHEEL_DELTA_CLAMP = 10;
 
 type ViewportState = { zoom: number; scrollX: number; scrollY: number };
@@ -91,5 +91,5 @@ export function useViewport() {
         return () => el.removeEventListener('wheel', onWheel);
     }, []);
 
-    return { containerRef, zoom, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef };
+    return { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef };
 }

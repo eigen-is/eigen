@@ -29,12 +29,10 @@ export function marqueeContain(ordered: VectorElement[], marquee: Bounds): strin
 export function useSelection() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-    const selectOnly = useCallback((id: string) => setSelectedIds([id]), []);
-    const clear = useCallback(() => setSelectedIds([]), []);
     const toggle = useCallback(
         (id: string) => setSelectedIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id])),
         [],
     );
 
-    return { selectedIds, setSelectedIds, selectOnly, clear, toggle };
+    return { selectedIds, setSelectedIds, toggle };
 }
