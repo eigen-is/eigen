@@ -51,7 +51,7 @@ export function eigenDocValidateSearch(search: Record<string, unknown>): DriveSe
     return { pid, uid, mid };
 }
 
-// The four EigenDoc editor routes (doc/slide/board/sheet) share one validator for the optional
+// The EigenDoc editor routes (doc/slide/board/sheet/vector) share one validator for the optional
 // `?chat=` / `?card=` deep-link params and the `?q=` in-document search term, so they can't
 // drift (only stickies reads `card` for now).
 export function eigenDocEditorValidateSearch(search: Record<string, unknown>): {

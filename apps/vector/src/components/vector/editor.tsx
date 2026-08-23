@@ -14,12 +14,11 @@ export function VectorEditor({ path }: VectorEditorProps) {
         <ColumnLayout>
             <Column
                 id="editor"
-                width="w-full"
-                className="flex-1 h-full"
+                width="flex"
                 toolbarBorder="always"
                 toolbar={<ToolbarTitle>{stripEigenExtension(path.name)}</ToolbarTitle>}
             >
-                <div className="flex-1 h-full bg-muted/30" />
+                <div className="h-full bg-muted/30" />
             </Column>
         </ColumnLayout>
     );

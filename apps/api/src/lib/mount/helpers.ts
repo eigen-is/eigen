@@ -33,7 +33,7 @@ export function validateName(name: string): string {
     return normalized;
 }
 
-// Subquery: ids of every eigendoc container (doc/stickies/slides/sheets/chat) and
+// Subquery: ids of every eigendoc container (every EIGEN_DOCUMENT_TYPES row) and
 // every path descended from one. Embedded as `parentId NOT IN (…)` to filter out
 // container internals (data.db, media, embedded chats) — file rows the user
 // never sees in the drive UI and shouldn't see in search.
