@@ -18,6 +18,7 @@
     "serve:admin": "bun --filter '@apps/api' --filter './apps/admin' dev",
     "serve:slides": "bun --filter '@apps/api' --filter './apps/slides' dev",
     "serve:sheets": "bun --filter '@apps/api' --filter './apps/sheets' dev",
+    "serve:vector": "bun --filter '@apps/api' --filter './apps/vector' dev",
     "setup": "bun scripts/setup.ts",
     "build": "bun --workspaces build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",

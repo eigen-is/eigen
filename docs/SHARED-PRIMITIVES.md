@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-912 primitives across 6 kinds. `packages/sheet` internals are excluded.
+918 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -403,7 +403,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (253)
+## Types (254)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -506,6 +506,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveTypeSheets` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeSlides` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveTypeStickies` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveTypeVector` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveViewMode` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveViewPreferences` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveVisibility` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -661,7 +662,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (287)
+## Utilities & constants (292)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -719,6 +720,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getSSEEventsUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getStickiesAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getSupportUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `getVectorAppUrl` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `homeApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `INDEX_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `MAIL_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
@@ -737,6 +739,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `spaceApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `STICKIES_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `teamApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
+| `VECTOR_APP_URL` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `onMutationError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
@@ -878,6 +881,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_MIME_SHEETS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_SLIDES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_MIME_STICKIES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DRIVE_MIME_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_CHAT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_DOC` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_FILE` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -885,6 +889,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DRIVE_TYPE_SHEETS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_SLIDES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DRIVE_TYPE_STICKIES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DRIVE_TYPE_VECTOR` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPE_INFO` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOC_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EIGEN_DOCUMENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -939,6 +944,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SHEETS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `SLIDES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `STICKIES_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
+| `VECTOR_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `getCreateMenuItems` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
 | `DRIVE_CAPABILITIES` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `getStorageUsageColor` | `@workspace/ui/components/home` | packages/ui/src/components/home/usage.tsx |

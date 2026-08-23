@@ -1,4 +1,11 @@
-import { getDocsAppUrl, getDriveAppUrl, getSheetsAppUrl, getSlidesAppUrl, getStickiesAppUrl } from '@workspace/lib/api';
+import {
+    getDocsAppUrl,
+    getDriveAppUrl,
+    getSheetsAppUrl,
+    getSlidesAppUrl,
+    getStickiesAppUrl,
+    getVectorAppUrl,
+} from '@workspace/lib/api';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, useRootFolder } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
@@ -11,6 +18,7 @@ import {
     Home,
     Image,
     MessageSquare,
+    PenTool,
     Presentation,
     Sheet,
     SquareKanban,
@@ -30,7 +38,7 @@ type AppSidebarProps = {
     newButton?: ReactNode;
 };
 
-type FilterApp = 'drive' | 'docs' | 'slides' | 'stickies' | 'sheets';
+type FilterApp = 'drive' | 'docs' | 'slides' | 'stickies' | 'sheets' | 'vector';
 
 type FilterEntry = {
     targetApp: FilterApp;
@@ -86,6 +94,13 @@ const FILTER_ENTRIES: ReadonlyArray<FilterEntry> = [
         driveMime: 'application-eigensheets',
         appHref: () => getSheetsAppUrl(),
     },
+    {
+        targetApp: 'vector',
+        label: 'All vectors',
+        icon: <PenTool className="h-4 w-4" />,
+        driveMime: 'application-eigenvector',
+        appHref: () => getVectorAppUrl(),
+    },
 ];
 
 // Drive mime slug (`image`, `application-eigenstickies`) → sidebar filter label,
@@ -95,7 +110,14 @@ export const FILTER_LABELS: Record<string, string> = Object.fromEntries(
 );
 
 function isFilterApp(name: string): name is FilterApp {
-    return name === 'drive' || name === 'docs' || name === 'slides' || name === 'stickies' || name === 'sheets';
+    return (
+        name === 'drive' ||
+        name === 'docs' ||
+        name === 'slides' ||
+        name === 'stickies' ||
+        name === 'sheets' ||
+        name === 'vector'
+    );
 }
 
 const SHARING_NOUN: Record<Exclude<FilterApp, 'drive'>, string> = {
@@ -103,6 +125,7 @@ const SHARING_NOUN: Record<Exclude<FilterApp, 'drive'>, string> = {
     slides: 'Slides',
     stickies: 'Stickies',
     sheets: 'Sheets',
+    vector: 'Vectors',
 };
 
 function FilterRow({

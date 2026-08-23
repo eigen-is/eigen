@@ -8,6 +8,7 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
+    DRIVE_MIME_VECTOR,
 } from '@workspace/lib/types/drive';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { Button } from '@workspace/ui/components/button';
@@ -36,6 +37,7 @@ const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     slides: { mime: DRIVE_MIME_SLIDES, title: 'Open slide' },
     sheets: { mime: DRIVE_MIME_SHEETS, title: 'Open sheet' },
     chat: { mime: DRIVE_MIME_CHAT, title: 'Open chat' },
+    vector: { mime: DRIVE_MIME_VECTOR, title: 'Open vector' },
 };
 
 const DOWNLOAD_LABELS: Record<string, string> = {

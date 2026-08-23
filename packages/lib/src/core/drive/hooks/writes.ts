@@ -6,6 +6,7 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
+    DRIVE_MIME_VECTOR,
     type DrivePath,
     type EigenDocType,
 } from '@workspace/lib/types/drive';
@@ -325,6 +326,7 @@ const EIGENDOC_MIME: Record<EigenDocType, string> = {
     slides: DRIVE_MIME_SLIDES,
     sheets: DRIVE_MIME_SHEETS,
     chat: DRIVE_MIME_CHAT,
+    vector: DRIVE_MIME_VECTOR,
 };
 
 export function useCreateDriveItem(type: EigenDocType) {

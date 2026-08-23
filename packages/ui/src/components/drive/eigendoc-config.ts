@@ -42,6 +42,7 @@ export const DOCS_CONFIG: EigenDocAppConfig = buildConfig('doc');
 export const STICKIES_CONFIG: EigenDocAppConfig = buildConfig('stickies');
 export const SLIDES_CONFIG: EigenDocAppConfig = buildConfig('slides');
 export const SHEETS_CONFIG: EigenDocAppConfig = buildConfig('sheets');
+export const VECTOR_CONFIG: EigenDocAppConfig = buildConfig('vector');
 
 export function eigenDocValidateSearch(search: Record<string, unknown>): DriveSearchParams {
     const pid = typeof search.pid === 'string' ? search.pid : undefined;

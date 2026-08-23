@@ -313,6 +313,7 @@
         --app-docs-color: var(--color-violet-600);
         --app-chat-color: var(--color-fuchsia-700);
         --app-slides-color: var(--color-pink-600);
+        --app-vector-color: var(--color-orange-600);
         --app-admin-color: var(--color-slate-600);
 
         /* `-soft` is the saturated app color washed 14% over the current
@@ -329,6 +330,7 @@
         --app-docs-color-soft: color-mix(in oklab, var(--app-docs-color) 14%, var(--background));
         --app-chat-color-soft: color-mix(in oklab, var(--app-chat-color) 14%, var(--background));
         --app-slides-color-soft: color-mix(in oklab, var(--app-slides-color) 14%, var(--background));
+        --app-vector-color-soft: color-mix(in oklab, var(--app-vector-color) 14%, var(--background));
         --app-admin-color-soft: color-mix(in oklab, var(--app-admin-color) 14%, var(--background));
 
         --app-drive-light-color: var(--color-yellow-200);
