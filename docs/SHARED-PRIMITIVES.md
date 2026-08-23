@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-918 primitives across 6 kinds. `packages/sheet` internals are excluded.
+975 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (127)
+## Components (128)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -142,6 +142,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItem` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserName` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UserNameCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
+| `VectorCanvas` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-canvas.tsx |
 
 ## Providers (6)
 
@@ -167,7 +168,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (231)
+## Hooks (232)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -388,6 +389,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useOptionalDocSearchBar` | `@workspace/ui/components/search` | packages/ui/src/components/search/doc-search-provider.tsx |
 | `useProseMirrorSearchController` | `@workspace/ui/components/search/prosemirror-search-controller` | packages/ui/src/components/search/prosemirror-search-controller.ts |
 | `useUpload` | `@workspace/ui/components/upload-provider` | packages/ui/src/components/upload-provider/upload-provider.tsx |
+| `useVectorDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
@@ -403,7 +405,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (254)
+## Types (274)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -615,6 +617,24 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
+| `Bounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `Box` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
+| `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `SceneToSvgOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorImageElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorMeta` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ActivityRowProps` | `@workspace/ui` | packages/ui/src/components/activity-row.tsx |
 | `AvatarEditorProps` | `@workspace/ui` | packages/ui/src/components/avatar-editor.tsx |
 | `ColumnProps` | `@workspace/ui` | packages/ui/src/components/layout/app/column-layout.tsx |
@@ -660,9 +680,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItemProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserNameCardProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
 | `UserNameProps` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
+| `NewVectorElement` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
+| `VectorElementPatch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (292)
+## Utilities & constants (327)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -929,6 +951,41 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateEmailTarget` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
+| `BASE_62_DIGITS` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `DEFAULT_ELEMENT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_FONT_FAMILY` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_FONT_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_SHAPE_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `generateNKeysBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `getElementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `getElementsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `getFontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
+| `getLineHeightPx` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
+| `getVerticalOffset` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
+| `hitTestBox` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `hitTestEllipse` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `isTransparent` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `isValidFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `orderByFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
+| `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |

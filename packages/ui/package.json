@@ -34,8 +34,11 @@
     "@workspace/lib": "workspace:*",
     "cmdk": "^1.1.1",
     "input-otp": "^1.4.2",
+    "nanoid": "^5.1.5",
     "prosemirror-search": "^1.1.1",
-    "radix-ui": "^1.4.3"
+    "radix-ui": "^1.4.3",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.27"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.21.0",
@@ -90,6 +93,7 @@
     "./components/sse-provider": "./src/components/sse-provider/index.ts",
     "./components/upload-provider": "./src/components/upload-provider/index.ts",
     "./components/user": "./src/components/user/index.ts",
+    "./components/vector": "./src/components/vector/index.ts",
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
