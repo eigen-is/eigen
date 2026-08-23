@@ -18,5 +18,5 @@ function VectorView() {
     if (isLoading) return <LoadingState />;
     if (!docInfo?.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
-    return <VectorEditor ownerId={ownerId} path={path} />;
+    return <VectorEditor ownerId={ownerId} path={path} canWrite={docInfo.canWrite} />;
 }

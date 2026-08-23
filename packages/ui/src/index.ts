@@ -24,5 +24,6 @@ export * from './components/layout/toolbar';
 export * from './components/search-bar/search-bar';
 export * from './components/shadow-content';
 export * from './components/sort-header';
+export * from './components/transform/object-transform';
 export * from './components/unread-dot';
 export * from './components/use-contact-avatar-upload';

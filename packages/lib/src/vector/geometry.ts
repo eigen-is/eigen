@@ -101,3 +101,115 @@ export function hitTestElement(element: VectorElement, point: Point): boolean {
             return hitTestBox(element, point);
     }
 }
+
+// --- Resize / rotate transform math ---------------------------------------------------
+// Ported verbatim from slides' app-local transform-geometry.ts (Rect{x,y,w,h} → canonical
+// Box), with slides' module-level MIN_SIZE threaded as a `minSize` parameter so the same
+// math serves a fixed-unit deck (slides passes 30) and a zoomable canvas (vector passes ~1).
+// Angle is DEGREES throughout — no radian value escapes a function body (rotatePoint owns it).
+
+const ORIGIN: Point = { x: 0, y: 0 };
+
+// Resize an axis-aligned box by dragging one handle. The opposite corner/edge stays pinned
+// (unless fromCenter). `mode` is a 'resize-<dir>' string. Angle is passed through unchanged
+// — callers use resizeRotatedRect for rotated boxes.
+export function applyResize(
+    mode: string,
+    dx: number,
+    dy: number,
+    { x: ox, y: oy, width: ow, height: oh, angle }: Box,
+    { fromCenter, keepAspect }: { fromCenter: boolean; keepAspect: boolean },
+    minSize: number,
+): Box {
+    // Strip the 'resize-' prefix first — 'resize' itself contains 'e' and 's', poisoning the substring check.
+    const dir = mode?.split('-')[1] ?? '';
+    const xDir = dir.includes('e') ? 1 : dir.includes('w') ? -1 : 0;
+    const yDir = dir.includes('s') ? 1 : dir.includes('n') ? -1 : 0;
+    // Aspect lock only applies to corners — on edges only one axis is intentional.
+    const aspectLocked = keepAspect && xDir !== 0 && yDir !== 0 && ow > 0 && oh > 0;
+
+    let dw = xDir * dx;
+    let dh = yDir * dy;
+
+    if (aspectLocked) {
+        const aspect = ow / oh;
+        if (Math.abs(dw / ow) >= Math.abs(dh / oh)) {
+            dh = dw / aspect;
+        } else {
+            dw = dh * aspect;
+        }
+    }
+
+    const sizeFactor = fromCenter ? 2 : 1;
+    let w = ow + sizeFactor * dw;
+    let h = oh + sizeFactor * dh;
+
+    if (aspectLocked) {
+        // Clamp both dimensions through a single scale so the ratio survives the minSize floor.
+        const scale = Math.max(w / ow, minSize / ow, minSize / oh);
+        w = ow * scale;
+        h = oh * scale;
+    } else {
+        w = Math.max(minSize, w);
+        h = Math.max(minSize, h);
+    }
+
+    let x: number;
+    let y: number;
+    if (fromCenter) {
+        x = ox + (ow - w) / 2;
+        y = oy + (oh - h) / 2;
+    } else {
+        x = xDir === -1 ? ox + ow - w : ox;
+        y = yDir === -1 ? oy + oh - h : oy;
+    }
+
+    return { x, y, width: w, height: h, angle };
+}
+
+// Resize a rotated box: the dragged handle's opposite corner/edge stays fixed in world
+// space and the box grows along its own (rotated) axes. Reuses applyResize in a
+// center-origin local frame, then repositions the center so the pinned point holds. At
+// angle 0 this returns exactly applyResize(...). Rotation is read from the box itself.
+export function resizeRotatedRect(
+    mode: string,
+    dx: number,
+    dy: number,
+    start: Box,
+    opts: { fromCenter: boolean; keepAspect: boolean },
+    minSize: number,
+): Box {
+    const rotation = start.angle;
+    if (!rotation) return applyResize(mode, dx, dy, start, opts, minSize);
+    const cx = start.x + start.width / 2;
+    const cy = start.y + start.height / 2;
+    // Rotate the pointer delta into the box's unrotated frame (rotatePoint around ORIGIN is a
+    // pure vector rotation — reused rather than a second helper).
+    const local = rotatePoint({ x: dx, y: dy }, ORIGIN, -rotation);
+    const r = applyResize(
+        mode,
+        local.x,
+        local.y,
+        { x: -start.width / 2, y: -start.height / 2, width: start.width, height: start.height, angle: 0 },
+        opts,
+        minSize,
+    );
+    const dCenter = rotatePoint({ x: r.x + r.width / 2, y: r.y + r.height / 2 }, ORIGIN, rotation);
+    return {
+        x: cx + dCenter.x - r.width / 2,
+        y: cy + dCenter.y - r.height / 2,
+        width: r.width,
+        height: r.height,
+        angle: rotation,
+    };
+}
+
+// Snap an angle (degrees) to the nearest `step` — used for Shift → 15° rotation.
+export function snapAngle(deg: number, step = 15): number {
+    return Math.round(deg / step) * step;
+}
+
+// Normalize degrees into [0, 360) for storage.
+export function normalizeAngle(deg: number): number {
+    return ((deg % 360) + 360) % 360;
+}

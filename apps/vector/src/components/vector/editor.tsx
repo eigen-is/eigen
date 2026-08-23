@@ -1,76 +1,23 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
-import { ToolbarTitle, TooltipButton } from '@workspace/ui/components/layout/toolbar';
-import { useVectorDoc, VectorCanvas } from '@workspace/ui/components/vector';
-import { Sparkles } from 'lucide-react';
-import { useCallback } from 'react';
+import { Button } from '@workspace/ui/components/button';
+import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
+import { useTool, useVectorDoc, VECTOR_TOOLS, VectorCanvas } from '@workspace/ui/components/vector';
 
 type VectorEditorProps = {
     ownerId: string;
     path: DrivePath;
+    canWrite: boolean;
 };
 
-// M1: a live scene rendered from Yjs. The tool palette, properties panel and pointer
-// interaction land in M2 — this shell wires the doc hook to the canvas plus a temporary
-// seed affordance.
-export function VectorEditor({ ownerId, path }: VectorEditorProps) {
-    const { elements, meta, addElement, synced } = useVectorDoc(ownerId, path.mountId, path.id);
-
-    // TEMPORARY seed affordance — replaced by M2's shape tools. Deterministic layout, randomized
-    // seeds (addElement generates each element's roughjs seed), covering every M1 render path:
-    // rounded + sharp rectangles, a hachure-filled diamond, a solid-filled ellipse, dashed stroke,
-    // and a two-line Excalifont text.
-    const seedDemoScene = useCallback(() => {
-        addElement({
-            type: 'rectangle',
-            roundness: 'round',
-            x: 40,
-            y: 40,
-            width: 180,
-            height: 120,
-            backgroundColor: '#a5d8ff',
-            fillStyle: 'hachure',
-        });
-        addElement({
-            type: 'rectangle',
-            roundness: 'sharp',
-            x: 260,
-            y: 40,
-            width: 180,
-            height: 120,
-            strokeStyle: 'dashed',
-        });
-        addElement({
-            type: 'diamond',
-            x: 40,
-            y: 200,
-            width: 180,
-            height: 120,
-            backgroundColor: '#b2f2bb',
-            fillStyle: 'cross-hatch',
-        });
-        addElement({
-            type: 'ellipse',
-            x: 260,
-            y: 200,
-            width: 180,
-            height: 120,
-            backgroundColor: '#ffec99',
-            fillStyle: 'solid',
-        });
-        addElement({
-            type: 'text',
-            x: 40,
-            y: 360,
-            width: 320,
-            height: 90,
-            text: 'eigen|vector>\nhello canvas',
-            fontSize: 36,
-            fontFamily: 'Excalifont',
-            textAlign: 'left',
-        });
-    }, [addElement]);
+// M2: the live scene plus pointer/keyboard interaction. Tool state is lifted here so the toolbar
+// and the canvas share one source; everything else (viewport, selection, gestures) lives in the
+// canvas. The properties panel and text/image tools land in M3.
+export function VectorEditor({ ownerId, path, canWrite }: VectorEditorProps) {
+    const doc = useVectorDoc(ownerId, path.mountId, path.id);
+    const { tool, setTool } = useTool();
 
     return (
         <ColumnLayout>
@@ -79,18 +26,49 @@ export function VectorEditor({ ownerId, path }: VectorEditorProps) {
                 width="flex"
                 toolbarBorder="always"
                 toolbar={
-                    <div className="flex w-full items-center justify-between">
+                    <div className="flex w-full items-center gap-2">
                         <ToolbarTitle>{stripEigenExtension(path.name)}</ToolbarTitle>
-                        <TooltipButton icon={Sparkles} tooltipText="Seed demo scene" onClick={seedDemoScene} />
+                        {canWrite && (
+                            <div className="ml-auto flex items-center gap-1">
+                                {VECTOR_TOOLS.map((t) => (
+                                    <Tooltip key={t.tool}>
+                                        <TooltipTrigger asChild>
+                                            {/* aria-pressed styling, not data-state: TooltipTrigger asChild clobbers data-state */}
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                aria-pressed={tool === t.tool}
+                                                aria-label={t.label}
+                                                className="h-8 w-8 aria-pressed:bg-primary/15 aria-pressed:text-primary aria-pressed:hover:bg-primary/20 aria-pressed:hover:text-primary"
+                                                onClick={() => setTool(t.tool)}
+                                            >
+                                                <t.icon className="h-4 w-4" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>{`${t.label} (${t.shortcut})`}</TooltipContent>
+                                    </Tooltip>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 }
             >
-                {!synced ? (
+                {!doc.synced ? (
                     <LoadingState />
                 ) : (
-                    <div className="h-full bg-muted/30">
-                        <VectorCanvas elements={elements} meta={meta} />
-                    </div>
+                    <VectorCanvas
+                        elements={doc.elements}
+                        meta={doc.meta}
+                        tool={tool}
+                        setTool={setTool}
+                        canWrite={canWrite}
+                        addElement={doc.addElement}
+                        updateElement={doc.updateElement}
+                        updateElements={doc.updateElements}
+                        deleteElements={doc.deleteElements}
+                        duplicateElements={doc.duplicateElements}
+                        undoManager={doc.undoManager}
+                    />
                 )}
             </Column>
         </ColumnLayout>

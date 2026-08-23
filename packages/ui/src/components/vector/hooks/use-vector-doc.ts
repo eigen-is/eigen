@@ -6,6 +6,7 @@ import {
     DEFAULT_TEXT_PROPS,
     ELEMENT_FIELDS,
     generateKeyBetween,
+    generateNKeysBetween,
     isValidFractionalIndex,
     readVectorFromDoc,
     type VectorElementType,
@@ -90,7 +91,9 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         const doc = docRef.current;
         if (!doc) return;
         const id = `el-${nanoid(10)}`;
-        const seed = Math.floor(Math.random() * 2 ** 31);
+        // Honor a caller-supplied seed so a drag-create preview and its committed element share
+        // the same roughjs jitter (no visual pop on release); otherwise generate one.
+        const seed = partial.seed ?? Math.floor(Math.random() * 2 ** 31);
         const record: Record<string, unknown> = {
             ...elementDefaults(partial.type),
             ...partial,
@@ -123,18 +126,29 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         return id;
     }, []);
 
-    const updateElement = useCallback((id: string, fields: VectorElementPatch) => {
+    // Batch update — the whole set in ONE transact, so a group move / nudge / z-order rewrite is a
+    // single undo step and a single broadcast (CONTRACT §A: one gesture = one transact). Missing ids
+    // no-op (a peer may have deleted one mid-gesture).
+    const updateElements = useCallback((patches: { id: string; fields: VectorElementPatch }[]) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
-            const elMap = doc.getMap('elements').get(id);
-            if (!(elMap instanceof Y.Map)) return;
-            for (const [k, v] of Object.entries(fields)) {
-                if (k === 'id' || k === 'type' || v === undefined) continue;
-                if ((ELEMENT_FIELDS as readonly string[]).includes(k)) elMap.set(k, v);
+            const elementsMap = doc.getMap('elements');
+            for (const { id, fields } of patches) {
+                const elMap = elementsMap.get(id);
+                if (!(elMap instanceof Y.Map)) continue;
+                for (const [k, v] of Object.entries(fields)) {
+                    if (k === 'id' || k === 'type' || v === undefined) continue;
+                    if ((ELEMENT_FIELDS as readonly string[]).includes(k)) elMap.set(k, v);
+                }
             }
         });
     }, []);
+
+    const updateElement = useCallback(
+        (id: string, fields: VectorElementPatch) => updateElements([{ id, fields }]),
+        [updateElements],
+    );
 
     const deleteElements = useCallback((ids: string[]) => {
         const doc = docRef.current;
@@ -145,12 +159,60 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         });
     }, []);
 
+    // Clone elements offset by (dx, dy) in ONE transact, stacked on top preserving their relative
+    // z-order, each with a fresh id + seed. Returns the new ids so the caller reselects the clones.
+    const duplicateElements = useCallback((ids: string[], dx: number, dy: number): string[] => {
+        const doc = docRef.current;
+        if (!doc) return [];
+        const newIds: string[] = [];
+        doc.transact(() => {
+            const elementsMap = doc.getMap('elements');
+            const sources = ids
+                .map((id) => elementsMap.get(id))
+                .filter((m): m is Y.Map<unknown> => m instanceof Y.Map)
+                .sort((a, b) => {
+                    const ia = typeof a.get('index') === 'string' ? (a.get('index') as string) : '';
+                    const ib = typeof b.get('index') === 'string' ? (b.get('index') as string) : '';
+                    return ia < ib ? -1 : ia > ib ? 1 : 0;
+                });
+            if (sources.length === 0) return;
+            let topmost: string | null = null;
+            for (const value of elementsMap.values()) {
+                if (!(value instanceof Y.Map)) continue;
+                const idx = value.get('index');
+                if (typeof idx !== 'string' || !isValidFractionalIndex(idx, undefined, undefined)) continue;
+                if (topmost === null || idx > topmost) topmost = idx;
+            }
+            const keys = generateNKeysBetween(topmost, null, sources.length);
+            sources.forEach((src, i) => {
+                const id = `el-${nanoid(10)}`;
+                const clone = new Y.Map();
+                for (const field of ELEMENT_FIELDS) {
+                    const v = src.get(field);
+                    if (v !== undefined) clone.set(field, v);
+                }
+                clone.set('id', id);
+                clone.set('seed', Math.floor(Math.random() * 2 ** 31));
+                clone.set('index', keys[i]);
+                const x = clone.get('x');
+                const y = clone.get('y');
+                if (typeof x === 'number') clone.set('x', x + dx);
+                if (typeof y === 'number') clone.set('y', y + dy);
+                elementsMap.set(id, clone);
+                newIds.push(id);
+            });
+        });
+        return newIds;
+    }, []);
+
     return {
         elements: scene.elements,
         meta: scene.meta,
         addElement,
         updateElement,
+        updateElements,
         deleteElements,
+        duplicateElements,
         undoManager: undoManager.current,
         synced: isSynced,
     };
