@@ -21,7 +21,7 @@ import {
     useUploadFile,
 } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
-import { htmlToPlainText, sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
+import { htmlToPlainText, readDominantTextAlign, sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import { OBJECT_FIELDS } from '@workspace/lib/slides';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
@@ -651,10 +651,16 @@ function SlideEditorInner({
             const hasBlock = /<(?:p|ul|ol|blockquote)[\s>]/i.test(richHtml);
             if (richHtml && hasBlock) {
                 e.preventDefault();
+                // Prose alignment rides in the RAW html as a block text-align (stripped by the
+                // sanitizer); carry it onto the object field. slides accepts all four values, so no map.
+                // null means implicit left (Tiptap only emits styles for non-default alignments) — the
+                // centered DEFAULT_TEXT_OBJECT is a title affordance, wrong for pasted prose.
+                const align = readDominantTextAlign(html ?? '');
                 addObject(activeSlideId, {
                     ...DEFAULT_TEXT_OBJECT,
                     text: richHtml,
                     fontSize: 16,
+                    textAlign: align ?? 'left',
                 } as Omit<SlideObject, 'id' | 'slideId'>);
                 return;
             }
@@ -666,6 +672,7 @@ function SlideEditorInner({
                     ...DEFAULT_TEXT_OBJECT,
                     text: `<p>${escapeHtml(text.trim()).replace(/\n/g, '<br>')}</p>`,
                     fontSize: 16,
+                    textAlign: 'left',
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         };

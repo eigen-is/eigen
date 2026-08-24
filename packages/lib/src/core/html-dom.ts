@@ -88,6 +88,22 @@ function appendSanitized(node: Node, parent: HTMLElement): void {
     for (const child of Array.from(el.childNodes)) appendSanitized(child, parent);
 }
 
+// Alignment of pasted prose (docs → slides/vector). Docs' Tiptap TextAlign extension stores it as a
+// block-level `style="text-align: X"` (parseHTML also reads the legacy `align` attr), which the
+// LightEditor sanitizer strips along with every other attribute — so read it here, off the RAW html,
+// before sanitizing. Returns the first top-level block's alignment when it's one of the four canonical
+// values, else null (a default-left paragraph carries no style, so callers keep their own default).
+const TEXT_ALIGN_VALUES = ['left', 'center', 'right', 'justify'] as const;
+export function readDominantTextAlign(html: string): (typeof TEXT_ALIGN_VALUES)[number] | null {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    for (const el of Array.from(doc.body.children)) {
+        const raw = ((el as HTMLElement).style.textAlign || el.getAttribute('align') || '').trim().toLowerCase();
+        const match = TEXT_ALIGN_VALUES.find((a) => a === raw);
+        if (match) return match;
+    }
+    return null;
+}
+
 // Map arbitrary pasted HTML onto the LightEditor tag set (see the sets above): structural formatting
 // and inline marks are kept, headings become paragraphs, everything else is unwrapped or dropped, and
 // ALL attributes except a safe `<a href>` are stripped. DOM-based so escaping is automatic and there

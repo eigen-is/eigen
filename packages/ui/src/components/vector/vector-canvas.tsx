@@ -10,7 +10,7 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useMediaResolver, useUploadFile } from '@workspace/lib/drive';
-import { htmlToPlainText } from '@workspace/lib/html-dom';
+import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -881,7 +881,7 @@ export function VectorCanvas({
     // default typography and locally-measured dims (the pasteEigenItems text idiom). Multi-line text is
     // preserved — measureVectorText and the renderer both split on \n. One sealed undo step.
     const pasteTextElement = useCallback(
-        (text: string) => {
+        (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
             const { width: w, height: h } = measureVectorText(text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
             undoManager?.stopCapturing();
@@ -895,7 +895,7 @@ export function VectorCanvas({
                 text,
                 fontSize: DEFAULT_FONT_SIZE,
                 fontFamily: DEFAULT_FONT_FAMILY,
-                textAlign: 'left',
+                textAlign,
             });
             undoManager?.stopCapturing();
             if (!id) return;
@@ -939,12 +939,15 @@ export function VectorCanvas({
             }
             // No eigen payload. OS files fall through to useFilePasteTarget (image drop path).
             if (!cd || cd.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new text element.
-            const text = cd.getData('text/plain') || htmlToPlainText(cd.getData('text/html'));
+            // Plain text (or the text of pasted HTML) → a new text element. Prose alignment rides in
+            // text/html as a block text-align; carry it through toVectorTextAlign (justify→left).
+            const rawHtml = cd.getData('text/html');
+            const text = cd.getData('text/plain') || htmlToPlainText(rawHtml);
             if (!text.trim()) return;
             e.preventDefault();
             e.stopPropagation();
-            pasteTextElement(text);
+            const align = rawHtml ? toVectorTextAlign(readDominantTextAlign(rawHtml) ?? undefined) : 'left';
+            pasteTextElement(text, align);
         };
         document.addEventListener('copy', onCopyEvent);
         document.addEventListener('cut', onCutEvent);
