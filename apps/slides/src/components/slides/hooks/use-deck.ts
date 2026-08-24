@@ -9,6 +9,14 @@ import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
 import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
 
+// commentCardIds may still be a legacy Y.Array (yMapToObject tolerates it on read) — normalize
+// before rewriting so an anchor write can't silently drop the existing ids.
+function readCommentCardIds(objMap: Y.Map<unknown>): string[] {
+    const raw = objMap.get('commentCardIds');
+    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') return (raw as Y.Array<string>).toArray();
+    return Array.isArray(raw) ? [...raw] : [];
+}
+
 export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const [deck, setDeck] = useState<DeckData>({ slides: {}, objects: {}, slideOrder: [] });
     const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
@@ -467,8 +475,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const objectsMap = doc.getMap('objects');
             const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
             if (!objMap) return;
-            const current = (objMap.get('commentCardIds') as string[] | undefined) || [];
-            const arr = Array.isArray(current) ? [...current] : [];
+            const arr = readCommentCardIds(objMap);
             if (!arr.includes(cardId)) {
                 arr.push(cardId);
                 objMap.set('commentCardIds', arr);
@@ -483,9 +490,10 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const objectsMap = doc.getMap('objects');
             const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
             if (!objMap) return;
-            const current = (objMap.get('commentCardIds') as string[] | undefined) || [];
-            const arr = Array.isArray(current) ? current.filter((c) => c !== cardId) : [];
-            objMap.set('commentCardIds', arr);
+            objMap.set(
+                'commentCardIds',
+                readCommentCardIds(objMap).filter((c) => c !== cardId),
+            );
         }, 'comment');
     }, []);
 

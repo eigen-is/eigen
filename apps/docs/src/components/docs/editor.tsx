@@ -1,6 +1,6 @@
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
-import type { Mark, Node } from '@tiptap/pm/model';
+import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
@@ -111,7 +111,7 @@ function normalizeFontFamilyMarks(editor: Editor) {
     const targets: { from: number; to: number; attrs: Record<string, unknown> }[] = [];
     editor.state.doc.descendants((node, pos) => {
         if (!node.isText) return;
-        const mark = node.marks.find((m: Mark) => m.type === markType);
+        const mark = node.marks.find((m) => m.type === markType);
         if (!mark) return;
         const family = mark.attrs.fontFamily;
         if (typeof family !== 'string' || !family) return;

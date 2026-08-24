@@ -27,4 +27,3 @@ export * from './components/sort-header';
 export * from './components/transform/object-transform';
 export * from './components/unread-dot';
 export * from './components/use-contact-avatar-upload';
-export * from './hooks/is-typing-target';

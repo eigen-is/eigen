@@ -1007,7 +1007,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
-| `isTypingTarget` | `@workspace/ui` | packages/ui/src/hooks/is-typing-target.ts |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
@@ -1039,6 +1038,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `measureVectorText` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `VECTOR_TOOLS` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `vectorFontString` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
+| `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |

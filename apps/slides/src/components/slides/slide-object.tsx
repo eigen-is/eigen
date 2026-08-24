@@ -126,7 +126,6 @@ type SlideObjectViewProps = {
     onDragStart: (
         e: React.MouseEvent,
         objId: string,
-        mode: 'move',
         x: number,
         y: number,
         width: number,
@@ -172,7 +171,7 @@ export const SlideObjectView = memo(function SlideObjectView({
             onSelect(obj.id, true);
         }
         if (editable && !additive) {
-            onDragStart(e, obj.id, 'move', obj.x, obj.y, obj.width, obj.height, obj.angle);
+            onDragStart(e, obj.id, obj.x, obj.y, obj.width, obj.height, obj.angle);
         }
     };
 

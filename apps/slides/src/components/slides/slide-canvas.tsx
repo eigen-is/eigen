@@ -56,7 +56,6 @@ type SlideCanvasProps = {
     members?: EffectiveMember[];
     currentUserEmail?: string;
     onCommentAssign?: (chatName: string, email: string | null, title?: string) => void;
-
     onCommentResolve?: (chatName: string, title?: string) => void;
     onCommentReopen?: (chatName: string, title?: string) => void;
     onCommentChangeColor?: (cardId: string, color: string) => void;
@@ -93,7 +92,6 @@ export function SlideCanvas({
     members,
     currentUserEmail,
     onCommentAssign,
-
     onCommentResolve,
     onCommentReopen,
     onCommentChangeColor,
@@ -151,17 +149,8 @@ export function SlideCanvas({
     });
 
     const handleDragStart = useCallback(
-        (
-            e: React.MouseEvent,
-            objId: string,
-            mode: 'move',
-            x: number,
-            y: number,
-            width: number,
-            height: number,
-            angle: number,
-        ) => {
-            if (mode === 'move' && multiSelectBounds && selectedObjectIds.includes(objId)) {
+        (e: React.MouseEvent, objId: string, x: number, y: number, width: number, height: number, angle: number) => {
+            if (multiSelectBounds && selectedObjectIds.includes(objId)) {
                 startGroupDrag(e, selectedObjects, multiSelectBounds);
             } else {
                 startDrag(e, objId, x, y, width, height, angle);
@@ -315,7 +304,6 @@ export function SlideCanvas({
     }, [onTransformActiveChange]);
 
     const showTransform = canWrite && single !== null && single.id !== editingObjectId;
-    const transformBox = single ? objToBox(displayObject(single)) : null;
 
     return (
         <div
@@ -368,9 +356,9 @@ export function SlideCanvas({
                         />
                     );
                 })}
-                {showTransform && single && transformBox && (
+                {showTransform && single && (
                     <ObjectTransform
-                        box={transformBox}
+                        box={objToBox(displayObject(single))}
                         boxToStyle={boxToStyle}
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate

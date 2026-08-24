@@ -511,7 +511,7 @@ export function VectorCanvas({
 
             undoManager?.stopCapturing();
             const pending: { id: string; promise: Promise<DrivePath | null> }[] = [];
-            measured.forEach(({ file, size }, i) => {
+            for (const [i, { file, size }] of measured.entries()) {
                 // Fit within 80% of the visible viewport, uniform scale, never upscale.
                 const scale = Math.min(1, (IMAGE_VIEWPORT_FIT * viewW) / size.w, (IMAGE_VIEWPORT_FIT * viewH) / size.h);
                 const w = size.w * scale;
@@ -528,7 +528,7 @@ export function VectorCanvas({
                     mediaName: pendingName,
                 });
                 if (id) pending.push({ id, promise });
-            });
+            }
             undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
             setSelectedIds(pending.map((p) => p.id));
 

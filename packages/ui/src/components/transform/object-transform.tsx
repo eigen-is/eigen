@@ -118,6 +118,7 @@ export function ObjectTransform({
         const startX = e.clientX;
         const startY = e.clientY;
         const cursor = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey };
+        const dir = mode.slice('resize-'.length);
         let latest: Box | null = null;
 
         const update = () => {
@@ -130,11 +131,13 @@ export function ObjectTransform({
             // from-center) so it can't break the ratio or the centered mirror; minSize re-clamped after.
             if (snapBox && !cursor.altKey && !keepAspect) {
                 const snapped = snapBox(next);
-                next = {
-                    ...snapped,
-                    width: Math.max(minSize, snapped.width),
-                    height: Math.max(minSize, snapped.height),
-                };
+                const width = Math.max(minSize, snapped.width);
+                const height = Math.max(minSize, snapped.height);
+                // Re-pin the gesture's anchored edge: a west/north snap clamped up to minSize must
+                // grow back leftward/upward, not shove the fixed right/bottom edge outward.
+                const x = dir.includes('w') ? snapped.x + snapped.width - width : snapped.x;
+                const y = dir.includes('n') ? snapped.y + snapped.height - height : snapped.y;
+                next = { x, y, width, height, angle: snapped.angle };
             }
             latest = next;
             onTransform(next);
