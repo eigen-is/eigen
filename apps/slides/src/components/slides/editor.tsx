@@ -19,6 +19,7 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
+    useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign, sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
@@ -199,6 +200,7 @@ export function SlideEditor({
             chatFolderId={chatFolderId}
         >
             <SlideEditorInner
+                key={path.id}
                 ownerId={ownerId}
                 path={path}
                 canWrite={canWrite}
@@ -716,28 +718,27 @@ function SlideEditorInner({
         uploadFile.mutateAsync,
     ]);
 
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot object ids
+    // and re-check pending at removal — a since-completed upload has swapped its mediaName, so it is
+    // skipped (ids, not names, because slides deletes by object id).
     const deckRef = useRef(deck);
     deckRef.current = deck;
-    useEffect(() => {
-        if (!isSynced) return;
-        const snapshot: string[] = [];
-        for (const obj of Object.values(deckRef.current.objects)) {
-            if (obj.type === 'image' && isPendingMediaName(obj.mediaName)) {
-                snapshot.push(obj.id);
+    useZombieMediaSweep({
+        ready: isSynced,
+        scan: () => {
+            const ids: string[] = [];
+            for (const obj of Object.values(deckRef.current.objects)) {
+                if (obj.type === 'image' && isPendingMediaName(obj.mediaName)) ids.push(obj.id);
             }
-        }
-        if (snapshot.length === 0) return;
-        const timer = setTimeout(() => {
-            for (const objId of snapshot) {
+            return ids;
+        },
+        remove: (ids) => {
+            for (const objId of ids) {
                 const obj = deckRef.current.objects[objId];
-                if (obj?.type === 'image' && isPendingMediaName(obj.mediaName)) {
-                    deleteObject(objId);
-                }
+                if (obj?.type === 'image' && isPendingMediaName(obj.mediaName)) deleteObject(objId);
             }
-        }, 60_000);
-        return () => clearTimeout(timer);
-    }, [isSynced, deleteObject]);
+        },
+    });
 
     const handleAddText = useCallback(() => {
         if (!activeSlideId) return;

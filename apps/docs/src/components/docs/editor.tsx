@@ -31,6 +31,7 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
+    useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import { htmlToPlainText } from '@workspace/lib/html-dom';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
@@ -755,28 +756,29 @@ const TiptapEditor = ({
         };
     }, [editor]);
 
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
-    useEffect(() => {
-        if (!editor) return;
-        const snapshot: string[] = [];
-        editor.state.doc.descendants((node) => {
-            if (
-                node.type.name === 'figure' &&
-                typeof node.attrs.mediaName === 'string' &&
-                isPendingMediaName(node.attrs.mediaName)
-            ) {
-                snapshot.push(node.attrs.mediaName);
-            }
-            return true;
-        });
-        if (snapshot.length === 0) return;
-        const timer = setTimeout(() => {
-            for (const pendingName of snapshot) {
-                swapFigureMediaName(editor, pendingName, null);
-            }
-        }, 60_000);
-        return () => clearTimeout(timer);
-    }, [editor]);
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
+    // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
+    useZombieMediaSweep({
+        ready: !!editor,
+        scan: () => {
+            const names: string[] = [];
+            editor?.state.doc.descendants((node) => {
+                if (
+                    node.type.name === 'figure' &&
+                    typeof node.attrs.mediaName === 'string' &&
+                    isPendingMediaName(node.attrs.mediaName)
+                ) {
+                    names.push(node.attrs.mediaName);
+                }
+                return true;
+            });
+            return names;
+        },
+        remove: (names) => {
+            if (!editor) return;
+            for (const name of names) swapFigureMediaName(editor, name, null);
+        },
+    });
 
     // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
     // synced doc is open for editing. The parent gates this subtree on first sync, so the content is

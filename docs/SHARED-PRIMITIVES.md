@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1044 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1045 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -181,7 +181,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (241)
+## Hooks (242)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -332,6 +332,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useWatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
+| `useZombieMediaSweep` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-zombie-media-sweep.ts |
 | `useFileContent` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-content.ts |
 | `useFileSave` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-save.ts |
 | `useHomeSize` | `@workspace/lib/home` | packages/lib/src/core/home/hooks/use-home.ts |

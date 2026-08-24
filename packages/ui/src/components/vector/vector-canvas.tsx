@@ -10,7 +10,7 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
-import { useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { isPendingMediaName, useMediaResolver, useUploadFile, useZombieMediaSweep } from '@workspace/lib/drive';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -546,6 +546,27 @@ export function VectorCanvas({
     // slow load can never write stale dims over it — and the single .then can't loop.
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
+
+    // Sweep zombie image placeholders left behind by a tab close or reload mid-upload (vector adopts
+    // the shared sweep). This canvas mounts only after the doc syncs, so mount IS the ready signal, and
+    // this tab's own uploads start on later user action — never in the mount snapshot. Snapshot pending
+    // element ids, re-check pending at removal (another tab may have completed the upload in the window),
+    // and delete the survivors in ONE untracked transact — a sweep must never be undoable.
+    useZombieMediaSweep({
+        ready: true,
+        scan: () =>
+            elementsRef.current
+                .filter((el) => el.type === 'image' && isPendingMediaName(el.mediaName))
+                .map((el) => el.id),
+        remove: (ids) => {
+            const stale = ids.filter((id) => {
+                const el = elementsRef.current.find((e) => e.id === id);
+                return el?.type === 'image' && isPendingMediaName(el.mediaName);
+            });
+            if (stale.length) deleteElementsUntracked(stale);
+        },
+    });
+
     const healTextDims = useCallback(
         (id: string, text: string, fontSize: number, fontFamily: string) => {
             if (isVectorFontLoaded(fontSize, fontFamily)) return;

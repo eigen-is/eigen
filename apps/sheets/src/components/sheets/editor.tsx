@@ -8,6 +8,7 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
+    useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
@@ -26,7 +27,7 @@ import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-pr
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
@@ -53,7 +54,7 @@ export function SheetEditor(props: SheetEditorProps) {
             mediaFolderId={props.mediaFolderId}
             chatFolderId={props.chatFolderId}
         >
-            <SheetEditorInner {...props} />
+            <SheetEditorInner key={props.path.id} {...props} />
         </MediaResolverProvider>
     );
 }
@@ -239,25 +240,26 @@ function SheetEditorInner({
         [mediaFolderId, uploadFile.mutateAsync, fitToPane, resolveMediaUrl],
     );
 
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
-    useEffect(() => {
-        if (!synced) return;
-        const workbook = workbookRef.current;
-        if (!workbook) return;
-        const snapshot: string[] = [];
-        for (const sheet of workbook.getAllSheets()) {
-            for (const img of sheet.images ?? []) {
-                if (isPendingMediaName(img.mediaName)) snapshot.push(img.mediaName);
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot pending
+    // mediaNames over the imperative workbook API; removeImageByMediaName is noUndo (correct for a
+    // sweep) and no-ops on a name a completed upload already swapped away.
+    useZombieMediaSweep({
+        ready: synced,
+        scan: () => {
+            const workbook = workbookRef.current;
+            if (!workbook) return [];
+            const names: string[] = [];
+            for (const sheet of workbook.getAllSheets()) {
+                for (const img of sheet.images ?? []) {
+                    if (isPendingMediaName(img.mediaName)) names.push(img.mediaName);
+                }
             }
-        }
-        if (snapshot.length === 0) return;
-        const timer = setTimeout(() => {
-            for (const mediaName of snapshot) {
-                workbookRef.current?.removeImageByMediaName(mediaName);
-            }
-        }, 60_000);
-        return () => clearTimeout(timer);
-    }, [synced]);
+            return names;
+        },
+        remove: (names) => {
+            for (const name of names) workbookRef.current?.removeImageByMediaName(name);
+        },
+    });
 
     const handleImageFromDevice = useCallback(
         (files: File[]) => {
