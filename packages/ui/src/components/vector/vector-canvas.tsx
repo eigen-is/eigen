@@ -27,15 +27,18 @@ import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
+import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
+import type { ZOp } from '../properties-panel/z-order';
 import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
-import { useVectorKeyboard } from './hooks/use-vector-keyboard';
+import { applyZOrder, deleteSelection, duplicateSelection, useVectorKeyboard } from './hooks/use-vector-keyboard';
 import type { PublishCursor } from './hooks/use-vector-presence';
 import { useViewport } from './hooks/use-viewport';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
+import { VectorObjectMenu } from './vector-object-menu';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const CREATING_ID = '__creating__';
@@ -222,6 +225,9 @@ export function VectorCanvas({
     const [spaceHeld, setSpaceHeld] = useState(false);
     const [panning, setPanning] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
+    // The object context menu (right-click) — the singleton surface; item is the right-clicked
+    // element id, its ops act on the selection below.
+    const objectContextMenu = useContextMenu<string>();
 
     const gestureRef = useRef<Gesture | null>(null);
     // First onTransform of a resize/rotate is the de-facto gesture start (ObjectTransform fires it
@@ -587,6 +593,26 @@ export function VectorCanvas({
         if (hitEl?.type === 'text') openEditExisting(hitEl);
     };
 
+    // Right-click on an element opens the object menu (empty canvas keeps the browser default). Like
+    // slides, a right-click on an element outside the current selection selects it first, so the menu
+    // ops act on the target; a right-click inside the selection keeps the whole selection. The canvas
+    // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
+    const onContextMenu = (e: React.MouseEvent) => {
+        // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
+        if (!canWrite || editing || frozenRef.current) return;
+        const p = clientToScene(e.clientX, e.clientY);
+        const hitId = hitTestTopmost(ordered, p);
+        if (!hitId) return;
+        if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
+        objectContextMenu.handleContextMenu(e, hitId);
+    };
+
+    // Menu ops act on the full selection, wired to the same writes as ⌘[/] , ⌘D, and Delete so the
+    // menu and the keyboard stay one behavior (one sealed undo step each).
+    const onMenuArrange = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
+    const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
+    const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+
     const onPointerDown = (e: React.PointerEvent) => {
         if (frozenRef.current) return; // a gesture is already active (defensive)
         // Focus the tabIndex=-1 container so a following paste lands on our onPaste — a bare canvas
@@ -828,6 +854,7 @@ export function VectorCanvas({
                 if (!gestureRef.current) publishCursor(null);
             }}
             onDoubleClick={onDoubleClick}
+            onContextMenu={onContextMenu}
             onPaste={onPaste}
             {...fileDropProps}
         >
@@ -934,6 +961,12 @@ export function VectorCanvas({
             {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
                 hook stays enabled even when it wouldn't — see above). */}
             <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
+            <VectorObjectMenu
+                contextMenu={objectContextMenu}
+                onArrange={onMenuArrange}
+                onDuplicate={onMenuDuplicate}
+                onDelete={onMenuDelete}
+            />
         </div>
     );
 }

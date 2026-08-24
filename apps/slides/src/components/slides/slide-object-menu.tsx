@@ -2,7 +2,12 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { type CommentContextMenuItem, CommentMenuItems } from '@workspace/ui/components/comments';
-import { ContextMenuAnchor, type useContextMenu } from '@workspace/ui/components/context-menu';
+import {
+    ArrangeMenuItems,
+    ContextMenuAnchor,
+    ObjectActionMenuItems,
+    type useContextMenu,
+} from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -10,7 +15,8 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
+import type { ZOp } from '@workspace/ui/components/properties-panel';
+import { Copy } from 'lucide-react';
 import type { SlideObject } from './types';
 
 export function getCommentItems(
@@ -86,6 +92,16 @@ export function SlideObjectMenu({
         contextMenu.close();
     };
 
+    // The four z-order callbacks map onto the shared Arrange group's single ZOp verb — keeping
+    // SlideObjectMenu's prop surface unchanged so slide-canvas' wiring stays byte-for-byte the same.
+    const onArrange = (op: ZOp) => {
+        if (!obj) return;
+        if (op === 'toFront') onMoveToFront?.(obj.id);
+        else if (op === 'forward') onMoveUp?.(obj.id);
+        else if (op === 'backward') onMoveDown?.(obj.id);
+        else onMoveToBack?.(obj.id);
+    };
+
     return (
         <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
             {obj && (
@@ -94,23 +110,9 @@ export function SlideObjectMenu({
                         <Copy className="h-4 w-4 mr-2" /> Copy
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    {/* Z-order — shares the ZOrderButtons vocabulary/order (front at top). */}
-                    <DropdownMenuItem onClick={() => onMoveToFront?.(obj.id)}>
-                        <ArrowUpToLine className="h-4 w-4 mr-2" /> Bring to front
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onMoveUp?.(obj.id)}>
-                        <ChevronUp className="h-4 w-4 mr-2" /> Bring forward
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onMoveDown?.(obj.id)}>
-                        <ChevronDown className="h-4 w-4 mr-2" /> Send backward
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onMoveToBack?.(obj.id)}>
-                        <ArrowDownToLine className="h-4 w-4 mr-2" /> Send to back
-                    </DropdownMenuItem>
+                    <ArrangeMenuItems onApply={onArrange} />
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" onClick={() => onDelete?.(obj.id)}>
-                        <Trash2 className="h-4 w-4 mr-2" /> Delete
-                    </DropdownMenuItem>
+                    <ObjectActionMenuItems onDelete={() => onDelete?.(obj.id)} />
                     {(single || showAdd) && (
                         <>
                             <DropdownMenuSeparator />

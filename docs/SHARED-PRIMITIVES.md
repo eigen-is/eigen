@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1019 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1021 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (138)
+## Components (140)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -95,7 +95,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PanelColumn` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/panel-column.tsx |
 | `ContactAddRow` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-add-row.tsx |
 | `ContactAutosuggest` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-autosuggest.tsx |
+| `ArrangeMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `ContextMenuAnchor` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/context-menu-anchor.tsx |
+| `ObjectActionMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `DriveAccessList` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
 | `DriveBrowser` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-browser.tsx |
 | `DriveCreateEigenDoc` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-create-eigendoc.tsx |

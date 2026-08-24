@@ -52,6 +52,34 @@ function computeZOrder(ordered: VectorElement[], selectedIds: string[], op: ZOp)
     return sel.map((e, i) => ({ id: e.id, index: keys[i] }));
 }
 
+// Duplicate the selection (⌘D and the object context menu share this) — offsets each copy by +10,+10,
+// seals the undo group on both sides so it's one step, and reselects the new copies.
+export function duplicateSelection(
+    selectedIds: string[],
+    duplicateElements: (ids: string[], dx: number, dy: number) => string[],
+    setSelection: (ids: string[]) => void,
+    undoManager: Y.UndoManager | null,
+): void {
+    undoManager?.stopCapturing();
+    const ids = duplicateElements(selectedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET);
+    undoManager?.stopCapturing();
+    if (ids.length) setSelection(ids);
+}
+
+// Delete the selection (Delete/Backspace and the object context menu share this) — one sealed undo
+// step, then clears the selection.
+export function deleteSelection(
+    selectedIds: string[],
+    deleteElements: (ids: string[]) => void,
+    setSelection: (ids: string[]) => void,
+    undoManager: Y.UndoManager | null,
+): void {
+    undoManager?.stopCapturing();
+    deleteElements(selectedIds);
+    undoManager?.stopCapturing();
+    setSelection([]);
+}
+
 // The z-order write, shared by the keyboard brackets and the properties panel's Arrange buttons so
 // the fractional-index math lives in one place. Seals the undo group on both sides (one step) and
 // no-ops when the block is already at the edge.
@@ -102,15 +130,10 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     useHotkey('T', () => setTool('text'), { enabled });
     useHotkey('8', () => setTool('text'), { enabled });
 
-    // Discrete ops seal the undo group on BOTH sides: stopCapturing before opens a fresh step,
-    // stopCapturing after keeps a nudge inside the 500ms capture window from merging into it.
-    // Nudges themselves carry neither, so rapid taps still coalesce.
-    const del = () => {
-        undoManager?.stopCapturing();
-        deleteElements(selectedIds);
-        undoManager?.stopCapturing();
-        setSelection([]);
-    };
+    // Discrete ops seal the undo group on BOTH sides (see deleteSelection/duplicateSelection): a
+    // nudge inside the 500ms capture window then can't merge into them. Nudges themselves carry no
+    // seal, so rapid taps still coalesce.
+    const del = () => deleteSelection(selectedIds, deleteElements, setSelection, undoManager);
     useHotkey('Delete', del, { enabled: enabled && hasSelection });
     useHotkey('Backspace', del, { enabled: enabled && hasSelection });
 
@@ -127,10 +150,7 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
         'Mod+D',
         (e) => {
             e.preventDefault();
-            undoManager?.stopCapturing();
-            const ids = duplicateElements(selectedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET);
-            undoManager?.stopCapturing();
-            if (ids.length) setSelection(ids);
+            duplicateSelection(selectedIds, duplicateElements, setSelection, undoManager);
         },
         { enabled: enabled && hasSelection, ignoreInputs: true },
     );
