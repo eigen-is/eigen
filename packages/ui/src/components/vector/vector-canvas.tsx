@@ -1,3 +1,5 @@
+import { useMediaResolver } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type Bounds,
     type Box,
@@ -17,12 +19,19 @@ import {
     type VectorTextElement,
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
+import { cn } from '@workspace/ui/lib/utils';
+import { Image as ImageIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
+import { useFileDropTarget } from '../../hooks/use-file-drop-target';
+import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
+import { CursorLayer } from './cursor-layer';
 import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
 import { isTypingTarget, useVectorKeyboard } from './hooks/use-vector-keyboard';
+import type { PublishCursor } from './hooks/use-vector-presence';
 import { useViewport } from './hooks/use-viewport';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
@@ -35,6 +44,14 @@ const MIN_ELEMENT_SIZE = 1;
 // fontSize clamp for resize-scaling of text (a resize maps width ratio → fontSize).
 const MIN_FONT_SIZE = 4;
 const MAX_FONT_SIZE = 400;
+// A dropped/pasted image fits within this fraction of the visible viewport (never upscaled).
+const IMAGE_VIEWPORT_FIT = 0.8;
+// Fallback box for an image whose intrinsic size can't be read (e.g. an SVG with no intrinsic
+// dimensions) — placed at this size, still run through the 80% viewport cap below.
+const DEFAULT_IMAGE_SIZE = { w: 400, h: 300 };
+// Each subsequent image in a multi-file drop staggers by this many scene units so a stack of
+// natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
+const IMAGE_CASCADE_OFFSET = 20;
 
 // An open text-editing session. A new element stays LOCAL (id never written) until its first
 // commit — an empty discard writes nothing; re-editing an existing element commits one update, or
@@ -160,8 +177,10 @@ type VectorCanvasProps = {
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
     toggle: (id: string) => void;
-    // Images resolve to an <image> href; omitted → images render nothing (elementToSvg null path).
-    resolveMedia?: MediaResolver;
+    // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
+    // local pointer's scene position (throttled in the editor's use-vector-presence).
+    provider: WebsocketProvider | null;
+    publishCursor: PublishCursor;
 };
 
 // The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
@@ -183,10 +202,14 @@ export function VectorCanvas({
     selectedIds,
     setSelectedIds,
     toggle,
-    resolveMedia,
+    provider,
+    publishCursor,
 }: VectorCanvasProps) {
     const { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef, zoom } =
         useViewport();
+    // Images resolve/upload through the container's media/ folder (the provider the editor wraps
+    // us in). resolveMediaUrl feeds every <image> href; startUpload drives the optimistic insert.
+    const { resolveMediaUrl, startUpload, mediaFolderId } = useMediaResolver();
 
     const [previews, setPreviews] = useState<Record<string, Box>>({});
     const [creating, setCreating] = useState<CreatingState | null>(null);
@@ -450,6 +473,99 @@ export function VectorCanvas({
         [addElement, updateElement, deleteElements, undoManager, setSelectedIds, setTool, healTextDims],
     );
 
+    // A paste carries no coordinates (unlike a drop), so it anchors on the visible viewport center.
+    const viewportCenterScene = useCallback(() => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return { x: 0, y: 0 };
+        return clientToScene(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    }, [clientToScene, containerRef]);
+
+    // Drop/paste image(s) → upload into media/ and place each at natural size, centered on `anchor`
+    // (a multi-file drop cascades +20,+20). Sizes are measured up-front so the adds run as one tight
+    // synchronous batch = one undo step (an await between adds could split it past the UndoManager's
+    // capture window). Each optimistic element renders instantly from the pending blob URL; the
+    // pending → real mediaName swap is its own late transact (mirrors slides), and useUploadFile
+    // owns the failure toast.
+    const insertImageFiles = useCallback(
+        async (files: File[], anchor: { x: number; y: number }) => {
+            if (!mediaFolderId) return; // no upload target — nothing to do
+            const images = files.filter((f) => f.type.startsWith('image/'));
+            if (!images.length) return;
+            const measured = await Promise.all(
+                images.map(async (file) => {
+                    // createImageBitmap rejects on some valid files (e.g. an SVG with no intrinsic
+                    // size) — fall back to a default box rather than silently dropping the file; the
+                    // 80% viewport cap below still applies.
+                    const bmp = await createImageBitmap(file).catch(() => null);
+                    if (!bmp) return { file, size: DEFAULT_IMAGE_SIZE };
+                    const size = { w: bmp.width, h: bmp.height };
+                    bmp.close();
+                    return { file, size };
+                }),
+            );
+
+            const rect = containerRef.current?.getBoundingClientRect();
+            const viewW = (rect?.width ?? 0) / zoom;
+            const viewH = (rect?.height ?? 0) / zoom;
+
+            undoManager?.stopCapturing();
+            const pending: { id: string; promise: Promise<DrivePath | null> }[] = [];
+            measured.forEach(({ file, size }, i) => {
+                // Fit within 80% of the visible viewport, uniform scale, never upscale.
+                const scale = Math.min(1, (IMAGE_VIEWPORT_FIT * viewW) / size.w, (IMAGE_VIEWPORT_FIT * viewH) / size.h);
+                const w = size.w * scale;
+                const h = size.h * scale;
+                const cx = anchor.x + i * IMAGE_CASCADE_OFFSET;
+                const cy = anchor.y + i * IMAGE_CASCADE_OFFSET;
+                const { pendingName, promise } = startUpload(file);
+                const id = addElement({
+                    type: 'image',
+                    x: cx - w / 2,
+                    y: cy - h / 2,
+                    width: w,
+                    height: h,
+                    mediaName: pendingName,
+                });
+                if (id) pending.push({ id, promise });
+            });
+            undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
+            setSelectedIds(pending.map((p) => p.id));
+
+            for (const { id, promise } of pending) {
+                promise
+                    .then((result) => (result ? updateElement(id, { mediaName: result.name }) : deleteElements([id])))
+                    .catch(() => {});
+            }
+        },
+        [
+            mediaFolderId,
+            zoom,
+            startUpload,
+            addElement,
+            updateElement,
+            deleteElements,
+            setSelectedIds,
+            undoManager,
+            containerRef,
+        ],
+    );
+
+    // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
+    // this is normally present) and is closed while a text overlay owns paste + the pointer.
+    const imagesEnabled = canWrite && !!mediaFolderId && !editing;
+    // The drop hook stays ALWAYS enabled so dragover/drop are always preventDefault'd — a disabled
+    // hook skips that, letting the BROWSER navigate to a file dropped while read-only or mid-text-edit
+    // (destroying the editor + uncommitted text). The insertion gate lives in the callback instead;
+    // the drag-over affordance shows only when insertion is actually possible.
+    const { targetProps: fileDropProps, isDragging } = useFileDropTarget((files, e) => {
+        if (!imagesEnabled) return;
+        void insertImageFiles(files, e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene());
+    });
+    // Paste stays gated: its disabled default (no preventDefault) is harmless — text pastes flow on.
+    const { onPaste } = useFilePasteTarget((files) => {
+        void insertImageFiles(files, viewportCenterScene());
+    }, imagesEnabled);
+
     const onDoubleClick = (e: React.MouseEvent) => {
         if (!canWrite || tool !== 'select' || editing) return;
         const p = clientToScene(e.clientX, e.clientY);
@@ -460,6 +576,9 @@ export function VectorCanvas({
 
     const onPointerDown = (e: React.PointerEvent) => {
         if (frozenRef.current) return; // a gesture is already active (defensive)
+        // Focus the tabIndex=-1 container so a following paste lands on our onPaste — a bare canvas
+        // div never holds focus, so image paste would otherwise bubble past us to the body.
+        containerRef.current?.focus();
         // Pan: space-drag or middle mouse.
         if (spaceHeld || e.button === 1) {
             e.preventDefault();
@@ -551,6 +670,9 @@ export function VectorCanvas({
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
+        // Publish the local cursor on every move (throttled downstream; no React state → no
+        // re-render), then handle the active gesture if any.
+        publishCursor(clientToScene(e.clientX, e.clientY));
         const g = gestureRef.current;
         if (!g || e.pointerId !== g.pointerId) return;
         if (g.kind === 'pan') {
@@ -600,9 +722,14 @@ export function VectorCanvas({
 
     const finishGesture = () => {
         const g = gestureRef.current;
+        // No active gesture → nothing to finish, and crucially DON'T touch frozenRef: a text session
+        // freezes the viewport with no gesture, and this handler runs on the session's opening
+        // pointerup (and on every caret click inside the textarea, which bubbles up here). Clearing
+        // the freeze here was letting wheel zoom/pan the scene out from under the overlay — the
+        // root cause of the editing-freeze leak. Only a real gesture unfreezes.
+        if (!g) return;
         gestureRef.current = null;
         frozenRef.current = false;
-        if (!g) return;
 
         if (g.kind === 'pan') {
             setPanning(false);
@@ -674,23 +801,31 @@ export function VectorCanvas({
     return (
         <div
             ref={containerRef}
-            className="relative h-full w-full select-none overflow-hidden bg-muted/30 touch-none"
+            tabIndex={-1}
+            className="relative h-full w-full select-none overflow-hidden bg-muted/30 touch-none outline-none"
             style={{ cursor, backgroundColor: background }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            // Hide our cursor from peers when the pointer leaves — unless a gesture holds capture (the
+            // pointer legitimately roams outside the container mid-drag).
+            onPointerLeave={() => {
+                if (!gestureRef.current) publishCursor(null);
+            }}
             onDoubleClick={onDoubleClick}
+            onPaste={onPaste}
+            {...fileDropProps}
         >
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
                 <g transform={groupTransform}>
                     {ordered.map((el) =>
                         // The element under edit is drawn only by the overlay textarea (WYSIWYG).
                         editing?.id === el.id ? null : (
-                            <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMedia} />
+                            <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} />
                         ),
                     )}
-                    {creating && <ElementNode el={creatingElement(creating)} resolveMedia={resolveMedia} />}
+                    {creating && <ElementNode el={creatingElement(creating)} resolveMedia={resolveMediaUrl} />}
                 </g>
             </svg>
             <div className="pointer-events-none absolute inset-0">
@@ -702,7 +837,10 @@ export function VectorCanvas({
                         showRotate
                         // Text has derived dims + no wrap, so only corners, aspect always locked; a
                         // resize maps the width ratio → fontSize, then re-measures (see onCommit).
-                        resizeMode={single.type === 'text' ? 'aspect' : 'free'}
+                        // Images resize aspect-locked by default (Shift frees), all 8 grips.
+                        resizeMode={
+                            single.type === 'text' ? 'aspect' : single.type === 'image' ? 'aspect-default' : 'free'
+                        }
                         minSize={MIN_ELEMENT_SIZE}
                         onTransform={(next) => {
                             if (!transformStartedRef.current) {
@@ -773,6 +911,22 @@ export function VectorCanvas({
                         onCommit={commitEditing}
                     />
                 )}
+            </div>
+            {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
+                the scene + local chrome; renders nothing when alone. */}
+            <CursorLayer provider={provider} elements={ordered} boxToStyle={boxToStyle} />
+            {/* OS-file drag-over affordance, the mail-compose idiom. Shown only when a drop would
+                actually insert (the drop hook stays enabled even when it wouldn't — see above). */}
+            <div
+                className={cn(
+                    'pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-primary bg-primary/5 transition-opacity',
+                    isDragging && imagesEnabled ? 'opacity-100' : 'opacity-0',
+                )}
+            >
+                <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <ImageIcon className="h-4 w-4" />
+                    Drop images to add
+                </div>
             </div>
         </div>
     );

@@ -213,6 +213,8 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         deleteElements,
         duplicateElements,
         undoManager: undoManager.current,
+        // Exposed for awareness (cursors + remote selections) — same ref-current shape as undoManager.
+        provider: providerRef.current,
         synced: isSynced,
     };
 };

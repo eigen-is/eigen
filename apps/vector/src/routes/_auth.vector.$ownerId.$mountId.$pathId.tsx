@@ -13,10 +13,18 @@ export const Route = createFileRoute('/_auth/vector/$ownerId/$mountId/$pathId')(
 // real editor has a share button to open it (the placeholder shell has none).
 function VectorView() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { docInfo, isLoading, path } = useEigenDocEditorRoute(ownerId, mountId, pathId);
+    const { docInfo, isLoading, path, mediaFolderId, chatFolderId } = useEigenDocEditorRoute(ownerId, mountId, pathId);
 
     if (isLoading) return <LoadingState />;
     if (!docInfo?.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
-    return <VectorEditor ownerId={ownerId} path={path} canWrite={docInfo.canWrite} />;
+    return (
+        <VectorEditor
+            ownerId={ownerId}
+            path={path}
+            canWrite={docInfo.canWrite}
+            mediaFolderId={mediaFolderId}
+            chatFolderId={chatFolderId}
+        />
+    );
 }

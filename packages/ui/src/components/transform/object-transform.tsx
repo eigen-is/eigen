@@ -56,8 +56,10 @@ export type ObjectTransformProps = {
     showRotate: boolean;
     // 'aspect' mounts corner grips only (side grips never, independent of the 40px threshold) and
     // forces aspect-lock regardless of Shift — for derived-dims hosts like text elements (no wrap,
-    // so one-axis resize is meaningless). Default 'free' leaves every existing host unchanged.
-    resizeMode?: 'free' | 'aspect';
+    // so one-axis resize is meaningless). 'aspect-default' keeps all 8 grips but INVERTS the corner
+    // Shift meaning (aspect-locked by default, Shift frees it) — Excalidraw's image feel; sides stay
+    // single-axis. Default 'free' leaves every existing host unchanged.
+    resizeMode?: 'free' | 'aspect' | 'aspect-default';
     // Scene-unit resize floor (slides 30, vector ~1). Defaults to 1.
     minSize?: number;
     // Per-move LOCAL preview — never a Yjs write. The host feeds the result back in as `box`.
@@ -118,7 +120,13 @@ export function ObjectTransform({
                 dx,
                 dy,
                 snapshot,
-                { fromCenter: cursor.altKey, keepAspect: cursor.shiftKey || resizeMode === 'aspect' },
+                {
+                    fromCenter: cursor.altKey,
+                    // 'aspect' always locks; 'aspect-default' locks unless Shift; 'free' locks on Shift.
+                    keepAspect:
+                        resizeMode === 'aspect' ||
+                        (resizeMode === 'aspect-default' ? !cursor.shiftKey : cursor.shiftKey),
+                },
                 minSize,
             );
             latest = next;
