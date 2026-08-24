@@ -10,6 +10,7 @@ import {
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { htmlToPlainText } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -876,6 +877,34 @@ export function VectorCanvas({
         ],
     );
 
+    // Plain-text paste (no eigen payload, no OS files) → ONE text element at the viewport centre, with
+    // default typography and locally-measured dims (the pasteEigenItems text idiom). Multi-line text is
+    // preserved — measureVectorText and the renderer both split on \n. One sealed undo step.
+    const pasteTextElement = useCallback(
+        (text: string) => {
+            const anchor = viewportCenterScene();
+            const { width: w, height: h } = measureVectorText(text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
+            undoManager?.stopCapturing();
+            const id = addElement({
+                type: 'text',
+                x: anchor.x - w / 2,
+                y: anchor.y - h / 2,
+                width: w,
+                height: h,
+                angle: 0,
+                text,
+                fontSize: DEFAULT_FONT_SIZE,
+                fontFamily: DEFAULT_FONT_FAMILY,
+                textAlign: 'left',
+            });
+            undoManager?.stopCapturing();
+            if (!id) return;
+            setSelectedIds([id]);
+            healTextDims(id, text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
+        },
+        [viewportCenterScene, addElement, setSelectedIds, undoManager, healTextDims],
+    );
+
     // ⌘C / ⌘X / ⌘V via document-level ClipboardEvent listeners (the slides idiom — native events are
     // required to write the MIME flavors and to read the DataTransfer synchronously). Gated
     // canWrite && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
@@ -900,11 +929,22 @@ export function VectorCanvas({
         };
         const onPasteEvent = (e: ClipboardEvent) => {
             if (isTypingTarget() || !canWrite || editingRef.current) return;
-            const data = e.clipboardData ? readEigenClipboard(e.clipboardData) : null;
-            if (!data) return; // no eigen payload → let OS files reach useFilePasteTarget
+            const cd = e.clipboardData;
+            const data = cd ? readEigenClipboard(cd) : null;
+            if (data) {
+                e.preventDefault();
+                e.stopPropagation();
+                pasteEigenItems(data.items);
+                return;
+            }
+            // No eigen payload. OS files fall through to useFilePasteTarget (image drop path).
+            if (!cd || cd.files.length > 0) return;
+            // Plain text (or the text of pasted HTML) → a new text element.
+            const text = cd.getData('text/plain') || htmlToPlainText(cd.getData('text/html'));
+            if (!text.trim()) return;
             e.preventDefault();
             e.stopPropagation();
-            pasteEigenItems(data.items);
+            pasteTextElement(text);
         };
         document.addEventListener('copy', onCopyEvent);
         document.addEventListener('cut', onCutEvent);
@@ -920,6 +960,7 @@ export function VectorCanvas({
         buildSelectionItems,
         selectionPlainText,
         pasteEigenItems,
+        pasteTextElement,
         deleteElements,
         setSelectedIds,
         undoManager,

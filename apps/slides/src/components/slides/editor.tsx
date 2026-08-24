@@ -21,7 +21,7 @@ import {
     useUploadFile,
 } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
-import { htmlToPlainText } from '@workspace/lib/html-dom';
+import { htmlToPlainText, sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import { OBJECT_FIELDS } from '@workspace/lib/slides';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
@@ -638,12 +638,34 @@ function SlideEditorInner({
                 return;
             }
 
+            // Rich HTML (docs → slides): keep bold/italic/lists by mapping onto LightEditor's schema.
+            // This branch is already post-eigen, so any HTML here is external. One text object holds all
+            // paragraphs (LightEditor is multi-block). fontSize 16 = docs body px mapped 1:1 into slide
+            // units (1 unit = 1px @1080p), NOT DEFAULT_TEXT_OBJECT's 48 — same prose, same size whether
+            // or not it carried formatting.
+            const html = e.clipboardData?.getData('text/html');
+            const richHtml = html ? sanitizeToLightEditorHtml(html).trim() : '';
+            // Only take the rich branch when a block element survived. Div-structured clipboards (VS
+            // Code, terminals) unwrap to merged inline text with no <p>, losing line breaks — those fall
+            // through to the text/plain path, which preserves lines as <br>.
+            const hasBlock = /<(?:p|ul|ol|blockquote)[\s>]/i.test(richHtml);
+            if (richHtml && hasBlock) {
+                e.preventDefault();
+                addObject(activeSlideId, {
+                    ...DEFAULT_TEXT_OBJECT,
+                    text: richHtml,
+                    fontSize: 16,
+                } as Omit<SlideObject, 'id' | 'slideId'>);
+                return;
+            }
+
             const text = e.clipboardData?.getData('text/plain') ?? '';
             if (text.trim()) {
                 e.preventDefault();
                 addObject(activeSlideId, {
                     ...DEFAULT_TEXT_OBJECT,
                     text: `<p>${escapeHtml(text.trim()).replace(/\n/g, '<br>')}</p>`,
+                    fontSize: 16,
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         };
