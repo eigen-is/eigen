@@ -66,6 +66,14 @@ export function TextOverlay({
         onCommit(valueRef.current);
     }, [onCommit]);
 
+    // Unmount commits (the latch makes it a no-op after any normal commit): a route change or a
+    // connection drop swapping the editor to its loading state must not silently drop the session's
+    // text. Via ref so a mid-session onCommit identity change can't fire it. (No StrictMode anywhere
+    // in Eigen — a simulated unmount would trip this latch and dead-lock the session if that changes.)
+    const commitRef = useRef(commit);
+    commitRef.current = commit;
+    useEffect(() => () => commitRef.current(), []);
+
     // Grow snugly to content (wrap="off" → widest line drives width). scrollWidth/scrollHeight are
     // fine for the live editing box; the STORED dims come from the canvas measurement util, never here.
     const grow = () => {
@@ -155,7 +163,8 @@ export function TextOverlay({
                 grow();
             }}
             onKeyDown={(e) => {
-                if (e.key === 'Escape') {
+                // Skip while composing: IME Escape cancels the composition, not the session.
+                if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     e.stopPropagation();
                     commit();

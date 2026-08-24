@@ -411,8 +411,10 @@ function ImageProperties({
                 </div>
             )}
             <PropertyRow label="Fit">
+                {/* Always-controlled: '' (never undefined) for mixed — Radix shows the placeholder
+                    for '', while undefined would flip controlled→uncontrolled (React warning). */}
                 <Select
-                    value={isMixed(objectFit) ? undefined : objectFit}
+                    value={isMixed(objectFit) || objectFit === undefined ? '' : objectFit}
                     onValueChange={(v) => onUpdate({ objectFit: v as 'contain' | 'cover' | 'fill' })}
                 >
                     <SelectTrigger className="h-7 text-xs">

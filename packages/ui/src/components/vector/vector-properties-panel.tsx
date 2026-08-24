@@ -315,10 +315,13 @@ function MergedSelect<T extends string>({
     options: { value: T; label: string }[];
 }) {
     const mixed = isMixed(value);
+    // Always-controlled: '' (never undefined) for mixed — Radix renders the placeholder for '',
+    // while flipping to undefined would switch the Select controlled→uncontrolled (React warning).
+    const controlled = mixed || value === undefined ? '' : value;
     return (
         // onValueChange is the library seam: Radix types it (value: string) => void, so the cast back
         // to the option union lives here and nowhere else.
-        <Select value={mixed ? undefined : value} onValueChange={(v) => onChange(v as T)}>
+        <Select value={controlled} onValueChange={(v) => onChange(v as T)}>
             <SelectTrigger className="h-7 text-xs">
                 <SelectValue placeholder={mixed ? '—' : undefined} />
             </SelectTrigger>

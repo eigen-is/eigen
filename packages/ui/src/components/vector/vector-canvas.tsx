@@ -24,7 +24,7 @@ import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
 import { isTypingTarget, useVectorKeyboard } from './hooks/use-vector-keyboard';
 import { useViewport } from './hooks/use-viewport';
-import { isVectorFontLoaded, loadVectorFont, measureVectorText, type TextDimensions } from './text-measure';
+import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -372,14 +372,21 @@ export function VectorCanvas({
     // The overlay awaits loadVectorFont on open, so commit-time measureVectorText is normally exact.
     // The safety net for the rare commit-before-load-resolves race: if the face isn't loaded, load it
     // and re-measure into the element once it swaps in (self-healing — stored dims are the server
-    // renderer's source of truth, and the measurement util stays the sole dim writer).
+    // renderer's source of truth, and the measurement util stays the sole dim writer). Re-validated
+    // against the LIVE element at resolve time: a newer edit (text/font/size) owns the dims, so a
+    // slow load can never write stale dims over it — and the single .then can't loop.
+    const elementsRef = useRef(elements);
+    elementsRef.current = elements;
     const healTextDims = useCallback(
-        (id: string, text: string, fontSize: number, fontFamily: string, measured: TextDimensions) => {
+        (id: string, text: string, fontSize: number, fontFamily: string) => {
             if (isVectorFontLoaded(fontSize, fontFamily)) return;
             loadVectorFont(fontSize, fontFamily)
                 .then(() => {
+                    const el = elementsRef.current.find((x) => x.id === id);
+                    if (el?.type !== 'text') return; // deleted meanwhile — nothing to heal
+                    if (el.text !== text || el.fontSize !== fontSize || el.fontFamily !== fontFamily) return;
                     const healed = measureVectorText(text, fontSize, fontFamily);
-                    if (healed.width === measured.width && healed.height === measured.height) return;
+                    if (healed.width === el.width && healed.height === el.height) return;
                     undoManager?.stopCapturing();
                     updateElement(id, { width: healed.width, height: healed.height });
                     undoManager?.stopCapturing();
@@ -420,7 +427,7 @@ export function VectorCanvas({
                     undoManager?.stopCapturing();
                     if (id) {
                         setSelectedIds([id]);
-                        healTextDims(id, text, ed.fontSize, ed.fontFamily, { width, height });
+                        healTextDims(id, text, ed.fontSize, ed.fontFamily);
                     }
                 }
                 // empty → zero Yjs writes, no element, no undo step
@@ -435,7 +442,7 @@ export function VectorCanvas({
                 updateElement(ed.id, { text, width, height }); // per-field LWW, accepted v1
                 undoManager?.stopCapturing();
                 setSelectedIds([ed.id]);
-                healTextDims(ed.id, text, ed.fontSize, ed.fontFamily, { width, height });
+                healTextDims(ed.id, text, ed.fontSize, ed.fontFamily);
             }
             // A text-tool session reverts to select; a double-click session was already select.
             setTool('select');
@@ -470,6 +477,13 @@ export function VectorCanvas({
         // Text tool: click places a caret (no drag-create, no capture). A click that hits an existing
         // text element edits THAT element instead of stacking a fresh empty on top.
         if (tool === 'text') {
+            // Cancel the pointerdown: the compatibility mousedown fires AFTER this dispatch (and
+            // after the overlay mounts + focuses its textarea), and its focus default re-hit-tests
+            // at the cursor — which sits exactly on the new textarea's top-left boundary pixel. A
+            // miss lands on this non-focusable div, blurs the textarea, and the blur-commit
+            // discards the empty session instantly (intermittent dead clicks). Canceling also
+            // keeps mousedown's caret-placement from destroying the select-all on existing text.
+            e.preventDefault();
             const hit = hitTestTopmost(ordered, p);
             const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
             if (hitEl?.type === 'text') openEditExisting(hitEl);
@@ -717,7 +731,7 @@ export function VectorCanvas({
                                     fields.fontSize = size;
                                     fields.width = width;
                                     fields.height = height;
-                                    healTextDims(single.id, single.text, size, single.fontFamily, { width, height });
+                                    healTextDims(single.id, single.text, size, single.fontFamily);
                                 }
                             } else {
                                 if (next.width !== start.width) fields.width = next.width;
