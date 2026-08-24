@@ -4,7 +4,7 @@ import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
-import type { Box } from '@workspace/lib/vector';
+import { arrangeBoundingBox, type Box } from '@workspace/lib/vector';
 import { FileDropOverlay } from '@workspace/ui';
 import { CursorLayer } from '@workspace/ui/components/collab';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
@@ -15,7 +15,6 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
-import { boundingBox } from './arrange';
 import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { useObjectDrag } from './hooks/use-object-drag';
 import type { PublishCursor, SlidesPeerState } from './hooks/use-slides-presence';
@@ -153,7 +152,7 @@ export function SlideCanvas({
 
     const multiSelectBounds = useMemo(() => {
         if (selectedObjects.length < 2) return null;
-        const { minX, minY, maxX, maxY } = boundingBox(selectedObjects);
+        const { minX, minY, maxX, maxY } = arrangeBoundingBox(selectedObjects);
         return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
     }, [selectedObjects]);
 

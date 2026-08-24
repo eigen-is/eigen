@@ -1,175 +1,39 @@
+import { computeSnapTargets, type SnapLine, snapBoxToTargets } from '@workspace/lib/vector';
 import { useMemo } from 'react';
 import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 
+// Slides' thin adapter over the shared snap core (U7a). The math lives in @workspace/lib/vector; here
+// we keep slides' slide-unit threshold and canvas guide targets (edges + centre) so behavior is
+// unchanged. Slides has no zoom, so the threshold is a plain constant.
 const SNAP_THRESHOLD = 15;
 
-export type SnapLine = {
-    orientation: 'horizontal' | 'vertical';
-    position: number;
-};
+export type { SnapLine };
 
-type SnapResult = {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    lines: SnapLine[];
-};
-
+type SnapResult = { x: number; y: number; w: number; h: number; lines: SnapLine[] };
 type Rect = { x: number; y: number; w: number; h: number };
-
-function getEdges(r: Rect) {
-    return {
-        left: r.x,
-        right: r.x + r.w,
-        top: r.y,
-        bottom: r.y + r.h,
-        cx: r.x + r.w / 2,
-        cy: r.y + r.h / 2,
-    };
-}
 
 export function computeSnapLines(
     objects: SlideObject[],
     excludeIds: Set<string>,
 ): { vSnaps: number[]; hSnaps: number[] } {
-    const vSnaps: number[] = [0, SLIDE_BASE_WIDTH / 2, SLIDE_BASE_WIDTH];
-    const hSnaps: number[] = [0, SLIDE_BASE_HEIGHT / 2, SLIDE_BASE_HEIGHT];
-
-    for (const obj of objects) {
-        if (excludeIds.has(obj.id)) continue;
-        // getEdges works on the app-private w/h Rect scratch type; map the canonical object in.
-        const e = getEdges({ x: obj.x, y: obj.y, w: obj.width, h: obj.height });
-        // A rotated object's axis-aligned left/right/top/bottom don't match its visual box, so they'd
-        // be false snap targets — only its centre (cx/cy) is rotation-invariant. Contribute centre only.
-        if (obj.angle) {
-            vSnaps.push(e.cx);
-            hSnaps.push(e.cy);
-        } else {
-            vSnaps.push(e.left, e.right, e.cx);
-            hSnaps.push(e.top, e.bottom, e.cy);
-        }
-    }
-
-    return { vSnaps, hSnaps };
+    return computeSnapTargets(
+        objects.map((o) => ({ id: o.id, box: { x: o.x, y: o.y, width: o.width, height: o.height, angle: o.angle } })),
+        excludeIds,
+        [0, SLIDE_BASE_WIDTH / 2, SLIDE_BASE_WIDTH],
+        [0, SLIDE_BASE_HEIGHT / 2, SLIDE_BASE_HEIGHT],
+    );
 }
 
-// `centerOnly` (move-mode) snaps the box by its centre alone — the rule for a rotated object, whose
-// axis-aligned edges lie about its visual box but whose centre stays rotation-invariant.
+// `centerOnly` snaps the box by its centre alone (a rotated mover) — the host passes `angle !== 0`.
 export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: string, centerOnly = false): SnapResult {
-    const edges = getEdges(rect);
-    const lines: SnapLine[] = [];
-    let { x, y, w, h } = rect;
-
-    if (mode === 'move') {
-        const vEdges = centerOnly ? [edges.cx] : [edges.left, edges.right, edges.cx];
-        const hEdges = centerOnly ? [edges.cy] : [edges.top, edges.bottom, edges.cy];
-        let bestDx = Infinity;
-        let bestDy = Infinity;
-        let snapX = x;
-        let snapY = y;
-
-        for (const vs of vSnaps) {
-            for (const edge of vEdges) {
-                const d = Math.abs(edge - vs);
-                if (d < SNAP_THRESHOLD && d < Math.abs(bestDx)) {
-                    bestDx = edge - vs;
-                    snapX = x - bestDx;
-                }
-            }
-        }
-
-        for (const hs of hSnaps) {
-            for (const edge of hEdges) {
-                const d = Math.abs(edge - hs);
-                if (d < SNAP_THRESHOLD && d < Math.abs(bestDy)) {
-                    bestDy = edge - hs;
-                    snapY = y - bestDy;
-                }
-            }
-        }
-
-        if (bestDx !== Infinity) {
-            x = snapX;
-            const snappedEdges = getEdges({ x, y, w, h });
-            const vSnapped = centerOnly ? [snappedEdges.cx] : [snappedEdges.left, snappedEdges.right, snappedEdges.cx];
-            for (const vs of vSnaps) {
-                for (const edge of vSnapped) {
-                    if (Math.abs(edge - vs) < 0.1) {
-                        lines.push({ orientation: 'vertical', position: vs });
-                    }
-                }
-            }
-        }
-
-        if (bestDy !== Infinity) {
-            y = snapY;
-            const snappedEdges = getEdges({ x, y, w, h });
-            const hSnapped = centerOnly ? [snappedEdges.cy] : [snappedEdges.top, snappedEdges.bottom, snappedEdges.cy];
-            for (const hs of hSnaps) {
-                for (const edge of hSnapped) {
-                    if (Math.abs(edge - hs) < 0.1) {
-                        lines.push({ orientation: 'horizontal', position: hs });
-                    }
-                }
-            }
-        }
-    } else {
-        // Strip the 'resize-' prefix first — 'resize' itself contains 'e' and 's', poisoning the
-        // substring checks (matches applyResize's guard).
-        const dir = mode.startsWith('resize-') ? mode.slice('resize-'.length) : mode;
-        const isRight = dir.includes('e');
-        const isLeft = dir.includes('w');
-        const isBottom = dir.includes('s');
-        const isTop = dir.includes('n');
-
-        if (isRight) {
-            const right = x + w;
-            for (const vs of vSnaps) {
-                const d = Math.abs(right - vs);
-                if (d < SNAP_THRESHOLD) {
-                    w = vs - x;
-                    lines.push({ orientation: 'vertical', position: vs });
-                    break;
-                }
-            }
-        }
-        if (isLeft) {
-            for (const vs of vSnaps) {
-                const d = Math.abs(x - vs);
-                if (d < SNAP_THRESHOLD) {
-                    w = w + (x - vs);
-                    x = vs;
-                    lines.push({ orientation: 'vertical', position: vs });
-                    break;
-                }
-            }
-        }
-        if (isBottom) {
-            const bottom = y + h;
-            for (const hs of hSnaps) {
-                const d = Math.abs(bottom - hs);
-                if (d < SNAP_THRESHOLD) {
-                    h = hs - y;
-                    lines.push({ orientation: 'horizontal', position: hs });
-                    break;
-                }
-            }
-        }
-        if (isTop) {
-            for (const hs of hSnaps) {
-                const d = Math.abs(y - hs);
-                if (d < SNAP_THRESHOLD) {
-                    h = h + (y - hs);
-                    y = hs;
-                    lines.push({ orientation: 'horizontal', position: hs });
-                    break;
-                }
-            }
-        }
-    }
-
-    return { x, y, w, h, lines };
+    const { box, lines } = snapBoxToTargets(
+        { x: rect.x, y: rect.y, width: rect.w, height: rect.h, angle: 0 },
+        { vSnaps, hSnaps },
+        mode,
+        SNAP_THRESHOLD,
+        centerOnly,
+    );
+    return { x: box.x, y: box.y, w: box.width, h: box.height, lines };
 }
 
 export function useSnapTargets(objects: SlideObject[], excludeIds: string[]) {

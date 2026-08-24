@@ -17,6 +17,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type Bounds,
     type Box,
+    computeSnapTargets,
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
@@ -26,6 +27,7 @@ import {
     elementToSvg,
     type FillStyle,
     fitImageSize,
+    getElementBounds,
     getElementsBounds,
     isTransparent,
     type MarqueeMode,
@@ -33,7 +35,10 @@ import {
     marqueeMode,
     orderByFractionalIndex,
     type Roundness,
+    SNAP_SCREEN_THRESHOLD,
+    type SnapLine,
     type StrokeStyle,
+    snapBoxToTargets,
     type TextAlign,
     type VectorElement,
     type VectorMeta,
@@ -81,6 +86,8 @@ const IMAGE_CASCADE_OFFSET = 20;
 // item; vector/slides always carry both dims). Vector→vector paste never uses these.
 const DEFAULT_PASTE_IMAGE_SIZE = 200;
 const DEFAULT_PASTE_SHAPE_SIZE = 100;
+// Half-length of a snap guide line in scene units — large enough to span the viewport at any pan/zoom.
+const SNAP_LINE_EXTENT = 1_000_000;
 
 // Vector-private clipboard meta, carried under `item.meta.vector` so cross-app consumers (slides/docs)
 // ignore it and only vector restores exact scene coords + per-element fields. Absolute scene x/y ride
@@ -354,6 +361,9 @@ export function VectorCanvas({
     // The marquee carries its direction mode so the render can signal it (solid = contain, dashed =
     // intersect) — slides' visual convention, shared here (U6c).
     const [marquee, setMarquee] = useState<{ box: Box; mode: MarqueeMode } | null>(null);
+    // Active snap guide lines (scene coords) while a move/resize gesture is snapping (U7a). Rendered as
+    // SVG lines in the scene group; cleared on gesture end.
+    const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
     const [spaceHeld, setSpaceHeld] = useState(false);
     const [panning, setPanning] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
@@ -449,6 +459,8 @@ export function VectorCanvas({
             frozenRef.current = false;
             transformStartedRef.current = false;
             setPreviews((p) => (Object.keys(p).length ? {} : p));
+            // Escape-cancelled resizes fire no onCommit, so stale guide lines land here.
+            setSnapLines((l) => (l.length ? [] : l));
         };
         const onBlur = () => {
             if (editingRef.current) return; // the textarea's own onBlur commits the session
@@ -490,6 +502,7 @@ export function VectorCanvas({
                     setSelectedIds(g.base);
                 } else if (g.kind === 'move') {
                     setPreviews({});
+                    setSnapLines([]);
                 } else {
                     setPanning(false);
                 }
@@ -551,6 +564,53 @@ export function VectorCanvas({
     // slow load can never write stale dims over it — and the single .then can't loop.
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
+
+    // Snap targets = every OTHER element's edges/centre (rotated → centre only). Infinite canvas, so no
+    // canvas-edge guides (slides seeds those). Threshold is screen-space: SNAP_SCREEN_THRESHOLD / zoom
+    // keeps the snap radius a constant pixel distance at any zoom.
+    const buildSnapTargets = useCallback(
+        (excludeIds: Set<string>) =>
+            computeSnapTargets(
+                elementsRef.current.map((el) => ({ id: el.id, box: elementBox(el) })),
+                excludeIds,
+            ),
+        [],
+    );
+
+    // Resize-time snapping, fed to ObjectTransform's snapBox seam (the resize half of U7a; move snaps in
+    // the gesture loop above). Infers the moved edge by diffing the in-progress box against the element's
+    // committed start box (stable during a local resize). Rotated boxes skip (axis-aligned edges lie),
+    // mirroring slides. Records the matched guide lines for the SVG overlay.
+    const resizeSnapBox = useCallback(
+        (b: Box): Box => {
+            if (b.angle !== 0) return b;
+            const id = selectedIds.length === 1 ? selectedIds[0] : null;
+            if (!id) return b;
+            const startEl = elementsRef.current.find((el) => el.id === id);
+            if (!startEl) return b;
+            const start = elementBox(startEl);
+            const EPS = 0.001;
+            const movedLeft = Math.abs(b.x - start.x) > EPS;
+            const movedRight = Math.abs(b.x + b.width - (start.x + start.width)) > EPS;
+            const movedTop = Math.abs(b.y - start.y) > EPS;
+            const movedBottom = Math.abs(b.y + b.height - (start.y + start.height)) > EPS;
+            let mode = 'resize-';
+            if (movedTop) mode += 'n';
+            else if (movedBottom) mode += 's';
+            if (movedLeft) mode += 'w';
+            else if (movedRight) mode += 'e';
+            if (mode === 'resize-') return b; // nothing moved yet
+            const { box, lines } = snapBoxToTargets(
+                b,
+                buildSnapTargets(new Set([id])),
+                mode,
+                SNAP_SCREEN_THRESHOLD / zoom,
+            );
+            setSnapLines(lines);
+            return box;
+        },
+        [selectedIds, zoom, buildSnapTargets],
+    );
 
     // Sweep zombie image placeholders left behind by a tab close or reload mid-upload (vector adopts
     // the shared sweep). This canvas mounts only after the doc syncs, so mount IS the ready signal, and
@@ -1253,12 +1313,52 @@ export function VectorCanvas({
                 else dy = 0;
             }
             if (dx !== 0 || dy !== 0) g.moved = true;
+
+            const selEls = g.ids
+                .map((id) => elementsRef.current.find((el) => el.id === id))
+                .filter((el): el is VectorElement => !!el);
+            // Snap the selection's AABB to the other elements (centre-only if any member is rotated —
+            // Override-24), then apply the snap correction to every moved element. Empty lines = no snap.
+            let snapDx = 0;
+            let snapDy = 0;
+            if (selEls.length > 0) {
+                let minX = Number.POSITIVE_INFINITY;
+                let minY = Number.POSITIVE_INFINITY;
+                let maxX = Number.NEGATIVE_INFINITY;
+                let maxY = Number.NEGATIVE_INFINITY;
+                for (const el of selEls) {
+                    const bb = getElementBounds({ ...elementBox(el), x: el.x + dx, y: el.y + dy });
+                    minX = Math.min(minX, bb.minX);
+                    minY = Math.min(minY, bb.minY);
+                    maxX = Math.max(maxX, bb.maxX);
+                    maxY = Math.max(maxY, bb.maxY);
+                }
+                const movedAabb: Box = { x: minX, y: minY, width: maxX - minX, height: maxY - minY, angle: 0 };
+                const anyRotated = selEls.some((el) => el.angle !== 0);
+                const { box: snapped, lines } = snapBoxToTargets(
+                    movedAabb,
+                    buildSnapTargets(new Set(g.ids)),
+                    'move',
+                    SNAP_SCREEN_THRESHOLD / zoom,
+                    anyRotated,
+                );
+                snapDx = snapped.x - minX;
+                snapDy = snapped.y - minY;
+                setSnapLines(lines);
+            }
+
             const next: Record<string, Box> = {};
             for (const id of g.ids) {
                 const o = g.originals[id];
                 const el = ordered.find((x) => x.id === id);
                 if (!o || !el) continue;
-                next[id] = { x: o.x + dx, y: o.y + dy, width: el.width, height: el.height, angle: el.angle };
+                next[id] = {
+                    x: o.x + dx + snapDx,
+                    y: o.y + dy + snapDy,
+                    width: el.width,
+                    height: el.height,
+                    angle: el.angle,
+                };
             }
             setPreviews(next);
             return;
@@ -1328,6 +1428,7 @@ export function VectorCanvas({
                 }
             }
             setPreviews({});
+            setSnapLines([]);
             return;
         }
         // marquee: selection was set live during the move; a plain click already cleared it.
@@ -1393,6 +1494,31 @@ export function VectorCanvas({
                         ),
                     )}
                     {creating && <ElementNode el={creatingElement(creating)} resolveMedia={resolveMediaUrl} />}
+                    {snapLines.map((line, i) =>
+                        line.orientation === 'vertical' ? (
+                            <line
+                                key={i}
+                                className="stroke-selection-handle"
+                                x1={line.position}
+                                y1={-SNAP_LINE_EXTENT}
+                                x2={line.position}
+                                y2={SNAP_LINE_EXTENT}
+                                strokeWidth={1}
+                                vectorEffect="non-scaling-stroke"
+                            />
+                        ) : (
+                            <line
+                                key={i}
+                                className="stroke-selection-handle"
+                                x1={-SNAP_LINE_EXTENT}
+                                y1={line.position}
+                                x2={SNAP_LINE_EXTENT}
+                                y2={line.position}
+                                strokeWidth={1}
+                                vectorEffect="non-scaling-stroke"
+                            />
+                        ),
+                    )}
                 </g>
             </svg>
             <div className="pointer-events-none absolute inset-0">
@@ -1408,6 +1534,7 @@ export function VectorCanvas({
                         // 'aspect-default' (Shift frees) when checked, else 'free'.
                         resizeMode={single.type === 'text' ? 'aspect' : aspectLocked ? 'aspect-default' : 'free'}
                         minSize={MIN_ELEMENT_SIZE}
+                        snapBox={resizeSnapBox}
                         onTransform={(next) => {
                             if (!transformStartedRef.current) {
                                 transformStartedRef.current = true;
@@ -1446,6 +1573,7 @@ export function VectorCanvas({
                                 undoManager?.stopCapturing(); // trailing seal, same as create/move
                             }
                             setPreviews({});
+                            setSnapLines([]);
                         }}
                     />
                 )}

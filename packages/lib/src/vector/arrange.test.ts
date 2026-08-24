@@ -1,24 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { boundingBox, computeArrange } from './arrange';
-import type { SlideObject } from './types';
+import { type ArrangeItem, arrangeBoundingBox, computeArrange } from './arrange';
 
-function obj(id: string, x: number, y: number, width: number, height: number): SlideObject {
-    return {
-        id,
-        slideId: 's1',
-        x,
-        y,
-        width,
-        height,
-        angle: 0,
-        borderColor: '',
-        borderWidth: 0,
-        borderRadius: 0,
-        commentCardIds: [],
-        type: 'image',
-        mediaName: 'm.png',
-        objectFit: 'cover',
-    };
+function obj(id: string, x: number, y: number, width: number, height: number): ArrangeItem {
+    return { id, x, y, width, height };
 }
 
 // A(10,10,100,40) B(200,80,60,100) C(50,300,200,20)
@@ -27,9 +11,9 @@ const A = obj('a', 10, 10, 100, 40);
 const B = obj('b', 200, 80, 60, 100);
 const C = obj('c', 50, 300, 200, 20);
 
-describe('boundingBox', () => {
+describe('arrangeBoundingBox', () => {
     test('min/max corners over the selection', () => {
-        expect(boundingBox([A, B, C])).toEqual({ minX: 10, minY: 10, maxX: 260, maxY: 320 });
+        expect(arrangeBoundingBox([A, B, C])).toEqual({ minX: 10, minY: 10, maxX: 260, maxY: 320 });
     });
 });
 
@@ -83,7 +67,6 @@ describe('computeArrange - align', () => {
     });
 
     test('rounds to nearest integer', () => {
-        // bbox maxX = 5, cx = 2.5; B width 2 → 2.5 - 1 = 1.5 → 2
         const p = obj('p', 0, 0, 5, 10);
         const q = obj('q', 0, 0, 2, 10);
         expect(computeArrange([p, q], 'align-h-center')).toEqual([
@@ -115,13 +98,11 @@ describe('computeArrange - match size', () => {
 describe('computeArrange - distribute (equal gaps, endpoints fixed)', () => {
     test('distribute-h with 3 equal-size objects', () => {
         const objs = [obj('a', 0, 0, 100, 50), obj('b', 120, 0, 100, 50), obj('c', 400, 0, 100, 50)];
-        // span = 400 - 100 = 300; gap = (300 - 100)/2 = 100; b → 0+100+100 = 200
         expect(computeArrange(objs, 'distribute-h')).toEqual([{ id: 'b', x: 200 }]);
     });
 
     test('distribute-h with mixed sizes', () => {
         const objs = [obj('a', 0, 0, 100, 50), obj('b', 150, 0, 50, 50), obj('c', 500, 0, 100, 50)];
-        // span = 500 - 100 = 400; gap = (400 - 50)/2 = 175; b → 100+175 = 275
         expect(computeArrange(objs, 'distribute-h')).toEqual([{ id: 'b', x: 275 }]);
     });
 
@@ -132,7 +113,6 @@ describe('computeArrange - distribute (equal gaps, endpoints fixed)', () => {
             obj('c', 300, 0, 100, 50),
             obj('d', 900, 0, 100, 50),
         ];
-        // span = 900 - 100 = 800; gap = (800 - 200)/3 = 200; b → 300, c → 600
         expect(computeArrange(objs, 'distribute-h')).toEqual([
             { id: 'b', x: 300 },
             { id: 'c', x: 600 },
@@ -141,7 +121,6 @@ describe('computeArrange - distribute (equal gaps, endpoints fixed)', () => {
 
     test('distribute-h with overlap → even negative gap, deterministic', () => {
         const objs = [obj('a', 0, 0, 100, 50), obj('b', 10, 0, 100, 50), obj('c', 20, 0, 100, 50)];
-        // span = 20 - 100 = -80; gap = (-80 - 100)/2 = -90; b → 100 + (-90) = 10
         expect(computeArrange(objs, 'distribute-h')).toEqual([{ id: 'b', x: 10 }]);
     });
 

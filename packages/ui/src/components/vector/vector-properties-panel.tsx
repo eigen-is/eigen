@@ -7,6 +7,8 @@
 // strokeColor doubles as the text color.
 
 import {
+    type ArrangeOp,
+    computeArrange,
     DEFAULT_FONT_FAMILY,
     type FillStyle,
     isTransparent,
@@ -20,6 +22,7 @@ import {
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignmentPicker,
+    AlignSection,
     ColorRow,
     getMergedValue,
     isMixed,
@@ -125,6 +128,28 @@ export function VectorPropertiesPanel({
     };
 
     const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
+
+    // Align / distribute / match-size over the shared arrange math (U7a). One transact, one undo step
+    // (U6e seal). computeArrange no-ops below 2 (distribute below 3), so nothing to gate here.
+    const handleAlign = (op: ArrangeOp) => {
+        const patches = computeArrange(
+            selectedElements.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
+            op,
+        );
+        if (!patches.length) return;
+        // Text dims are DERIVED from fontSize (the measurement util is the sole dim writer), so
+        // match-size patches must never write width/height onto a text element; align/distribute
+        // (x/y-only) still applies.
+        const textIds = new Set(selectedElements.filter((el) => el.type === 'text').map((el) => el.id));
+        undoManager?.stopCapturing();
+        updateElements(
+            patches.map((p) => ({
+                id: p.id,
+                fields: textIds.has(p.id) ? { x: p.x, y: p.y } : { x: p.x, y: p.y, width: p.width, height: p.height },
+            })),
+        );
+        undoManager?.stopCapturing();
+    };
 
     // Numeric transform (U4b) — x/y/angle write straight through applyToAll; width/height are
     // disabled for text (its dims are DERIVED from fontSize via the measurement util, the sole dim
@@ -275,6 +300,8 @@ export function VectorPropertiesPanel({
             <PropertySection title="Arrange">
                 <ZOrderButtons onApply={handleZOrderApply} />
             </PropertySection>
+
+            {selectedElements.length >= 2 && <AlignSection count={selectedElements.length} onApply={handleAlign} />}
         </PropertiesPanel>
     );
 }

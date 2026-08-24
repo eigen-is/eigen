@@ -1,3 +1,4 @@
+export { AlignSection } from './align-section';
 export { AlignmentPicker } from './alignment-picker';
 export { BackgroundFillBlock } from './background-fill-block';
 export { ColorRow } from './color-row';

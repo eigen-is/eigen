@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1054 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1066 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (141)
+## Components (142)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -133,6 +133,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |
 | `NoteCardDialog` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card-dialog.tsx |
 | `AlignmentPicker` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/alignment-picker.tsx |
+| `AlignSection` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/align-section.tsx |
 | `BackgroundFillBlock` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/background-fill-block.tsx |
 | `ColorRow` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/color-row.tsx |
 | `MergedNumberInput` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-number-input.tsx |
@@ -428,7 +429,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (290)
+## Types (296)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -646,6 +647,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Snapshot` | `@workspace/lib/types/versioning` | packages/lib/src/types/versioning.ts |
 | `CommandValidationResult` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `ParsedContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
+| `ArrangeItem` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
+| `ArrangeOp` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
+| `ArrangePatch` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `Bounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Box` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -656,6 +660,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `SceneToSvgOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `SnapLine` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
+| `SnapResult` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
+| `SnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -723,7 +730,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (367)
+## Utilities & constants (372)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1005,8 +1012,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
 | `applyResize` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `arrangeBoundingBox` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `BASE_62_DIGITS` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
+| `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `DEFAULT_ELEMENT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_FONT_FAMILY` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_FONT_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1045,7 +1055,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `snapBoxToTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `STROKE_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |

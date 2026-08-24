@@ -3,13 +3,13 @@ import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { STROKE_WIDTH_OPTIONS } from '@workspace/lib/vector';
-import { TooltipButton } from '@workspace/ui';
+import { type ArrangeOp, STROKE_WIDTH_OPTIONS } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignmentPicker,
+    AlignSection,
     BackgroundFillBlock,
     ColorRow,
     getMergedValue,
@@ -27,24 +27,16 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Toggle } from '@workspace/ui/components/toggle';
 import {
-    AlignHorizontalDistributeCenter,
-    AlignHorizontalJustifyCenter,
-    AlignHorizontalJustifyEnd,
-    AlignHorizontalJustifyStart,
-    AlignVerticalDistributeCenter,
     AlignVerticalJustifyCenter,
     AlignVerticalJustifyEnd,
     AlignVerticalJustifyStart,
     Bold,
     Italic,
-    MoveHorizontal,
-    MoveVertical,
     Strikethrough,
     Trash2,
     Underline,
 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import type { ArrangeOp } from './arrange';
 import type { ApplyTo, ImageObject, SlideObject, TextObject } from './types';
 import { BORDER_RADIUS_ROUND } from './types';
 
@@ -110,7 +102,7 @@ export function SlidePropertiesPanel({
                 </PropertySection>
             )}
 
-            {onAlign && objects.length >= 2 && <AlignProperties count={objects.length} onAlign={onAlign} />}
+            {onAlign && objects.length >= 2 && <AlignSection count={objects.length} onApply={onAlign} />}
 
             {allText && (
                 <TextProperties objects={objects as (SlideObject & { type: 'text' })[]} onUpdate={handleUpdate} />
@@ -131,80 +123,6 @@ export function SlidePropertiesPanel({
                 </div>
             )}
         </PropertiesPanel>
-    );
-}
-
-function AlignProperties({ count, onAlign }: { count: number; onAlign: (op: ArrangeOp) => void }) {
-    const canDistribute = count >= 3;
-    return (
-        <PropertySection title="Align">
-            <div className="flex items-center gap-1">
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalJustifyStart}
-                    tooltipText="Align left"
-                    onClick={() => onAlign('align-left')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalJustifyCenter}
-                    tooltipText="Align horizontal center"
-                    onClick={() => onAlign('align-h-center')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalJustifyEnd}
-                    tooltipText="Align right"
-                    onClick={() => onAlign('align-right')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalJustifyStart}
-                    tooltipText="Align top"
-                    onClick={() => onAlign('align-top')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalJustifyCenter}
-                    tooltipText="Align vertical center"
-                    onClick={() => onAlign('align-v-center')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalJustifyEnd}
-                    tooltipText="Align bottom"
-                    onClick={() => onAlign('align-bottom')}
-                />
-            </div>
-            <div className="flex items-center gap-1">
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalDistributeCenter}
-                    tooltipText={canDistribute ? 'Distribute horizontally' : 'Select 3+ objects to distribute'}
-                    disabled={!canDistribute}
-                    onClick={() => onAlign('distribute-h')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalDistributeCenter}
-                    tooltipText={canDistribute ? 'Distribute vertically' : 'Select 3+ objects to distribute'}
-                    disabled={!canDistribute}
-                    onClick={() => onAlign('distribute-v')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={MoveHorizontal}
-                    tooltipText="Match width"
-                    onClick={() => onAlign('match-width')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={MoveVertical}
-                    tooltipText="Match height"
-                    onClick={() => onAlign('match-height')}
-                />
-            </div>
-        </PropertySection>
     );
 }
 

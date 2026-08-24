@@ -28,7 +28,15 @@ import { OBJECT_FIELDS } from '@workspace/lib/slides';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DUPLICATE_OFFSET, fitImageSize, type ImageSize, NUDGE_STEP, NUDGE_STEP_LARGE } from '@workspace/lib/vector';
+import {
+    type ArrangeOp,
+    computeArrange,
+    DUPLICATE_OFFSET,
+    fitImageSize,
+    type ImageSize,
+    NUDGE_STEP,
+    NUDGE_STEP_LARGE,
+} from '@workspace/lib/vector';
 import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -41,7 +49,6 @@ import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type ArrangeOp, computeArrange } from './arrange';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
