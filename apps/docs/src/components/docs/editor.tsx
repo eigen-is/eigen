@@ -30,7 +30,7 @@ import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib
 import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, LoadingState, useLayout } from '@workspace/ui';
+import { Column, FileDropOverlay, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
@@ -50,8 +50,10 @@ import { PROPERTIES_PANEL_WIDTH_PX } from '@workspace/ui/components/properties-p
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useProseMirrorSearchController } from '@workspace/ui/components/search/prosemirror-search-controller';
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
+import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
+import { Image as ImageIcon } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -490,6 +492,10 @@ const TiptapEditor = ({
         },
     });
 
+    // Drag-over affordance only. The actual image insert stays with ProseMirror's editorProps.handleDrop
+    // (it needs the drop point to place the figure); this hook just tracks state to fade the overlay in.
+    const { targetProps: fileDropProps, isDragging } = useFileDropTarget(() => {}, canWrite && !!mediaFolderId);
+
     const handleImageUpload = async (file: File) => {
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
         const { pendingName, promise } = startUpload(file);
@@ -839,7 +845,8 @@ const TiptapEditor = ({
                                 />
                             }
                         >
-                            <div className="h-full relative overflow-hidden">
+                            <div className="h-full relative overflow-hidden" {...fileDropProps}>
+                                <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
                                 <div
                                     ref={setScrollContainer}
                                     className={cn(

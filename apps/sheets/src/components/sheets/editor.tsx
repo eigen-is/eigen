@@ -10,14 +10,16 @@ import {
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { DocumentShareCluster, LoadingState, useLayout } from '@workspace/ui';
+import { DocumentShareCluster, FileDropOverlay, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
+import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
+import { Image as ImageIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
@@ -180,6 +182,12 @@ function SheetEditorInner({
         [handleImageFile],
     );
 
+    // OS-file drop → the same insert path as the Insert-image menu (handleImageFile guards non-images).
+    const { targetProps: imageDropProps, isDragging } = useFileDropTarget(
+        handleImageFromDevice,
+        canWrite && !!mediaFolderId,
+    );
+
     const handleImagePickFromDrive = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0) return;
@@ -279,89 +287,94 @@ function SheetEditorInner({
                         onUndo={() => workbookRef.current?.undo()}
                         onRedo={() => workbookRef.current?.redo()}
                     >
-                        <Workbook
-                            key={snapshotVersion}
-                            ref={workbookRef}
-                            data={initialData}
-                            onChange={(data) => {
-                                onDataChange(data);
-                                setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
-                            }}
-                            onOp={handleOp}
-                            showToolbar={true}
-                            showFormulaBar={true}
-                            showSheetTabs={true}
-                            allowEdit={canWrite}
-                            toolbarLeftItems={leftItems}
-                            toolbarRightItems={rightItems}
-                            defaultRowHeight={20}
-                            defaultFontSize={10}
-                            defaultColWidth={100}
-                            hooks={{
-                                afterSelectionChange: (sheetId, selection) => {
-                                    const r = selection.row_focus ?? selection.row?.[0];
-                                    const c = selection.column_focus ?? selection.column?.[0];
-                                    if (r != null && c != null) publishSelection(sheetId, r, c);
-                                },
-                                ...(canWrite && mediaFolderId ? { onInsertImage: () => setImagePickerOpen(true) } : {}),
-                                resolveImageUrl: resolveMediaUrl,
-                                ...(canWrite && chatFolderId
-                                    ? {
-                                          onAddComment: (r: number, c: number) => {
-                                              addCommentRef.current?.(r, c);
-                                          },
-                                      }
-                                    : {}),
-                                onViewComment: (r: number, c: number) => {
-                                    const fd = workbookRef.current?.getFlowdata();
-                                    const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                    if (cardId) setOpenCardId(cardId);
-                                },
-                                ...(canWrite
-                                    ? {
-                                          onDeleteComment: (r: number, c: number) => {
-                                              const fd = workbookRef.current?.getFlowdata();
-                                              const cell = fd?.[r]?.[c];
-                                              const cardId = cell?.commentCardIds?.[0];
-                                              if (cardId && workbookRef.current) {
-                                                  workbookRef.current.setCellFormat(
-                                                      r,
-                                                      c,
-                                                      'commentCardIds',
-                                                      (cell.commentCardIds ?? []).filter((id) => id !== cardId),
-                                                  );
-                                              }
-                                          },
-                                          onCommentColor: (r: number, c: number, color: string) => {
-                                              const fd = workbookRef.current?.getFlowdata();
-                                              const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                              if (cardId) updateCard(cardId, { color });
-                                          },
-                                          onCommentResolve: (chatName: string, title?: string) =>
-                                              resolveComment.mutate({ chatName, status: 'resolved', title }),
-                                          onCommentReopen: (chatName: string, title?: string) =>
-                                              resolveComment.mutate({ chatName, status: 'open', title }),
-                                          onCommentAssign: (chatName, email, title) =>
-                                              assignComment.mutate({ chatName, assignee: email, title }),
-                                          commentMembers: members,
-                                          currentUserEmail: auth.user?.email,
-                                      }
-                                    : {}),
-                                getCommentInfo: (r: number, c: number) => {
-                                    const fd = workbookRef.current?.getFlowdata();
-                                    const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                    const card = cardId ? cards[cardId] : undefined;
-                                    if (!card) return null;
-                                    const entry = card.chatName
-                                        ? allComments.find((c) => c.chatName === card.chatName)
-                                        : undefined;
-                                    const indicatorColor = card.color
-                                        ? (EIGEN_STICKIES_INDICATOR_MAP.get(card.color) ?? card.color)
-                                        : null;
-                                    return { card, entry, indicatorColor };
-                                },
-                            }}
-                        />
+                        <div className="relative h-full w-full" {...imageDropProps}>
+                            <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
+                            <Workbook
+                                key={snapshotVersion}
+                                ref={workbookRef}
+                                data={initialData}
+                                onChange={(data) => {
+                                    onDataChange(data);
+                                    setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
+                                }}
+                                onOp={handleOp}
+                                showToolbar={true}
+                                showFormulaBar={true}
+                                showSheetTabs={true}
+                                allowEdit={canWrite}
+                                toolbarLeftItems={leftItems}
+                                toolbarRightItems={rightItems}
+                                defaultRowHeight={20}
+                                defaultFontSize={10}
+                                defaultColWidth={100}
+                                hooks={{
+                                    afterSelectionChange: (sheetId, selection) => {
+                                        const r = selection.row_focus ?? selection.row?.[0];
+                                        const c = selection.column_focus ?? selection.column?.[0];
+                                        if (r != null && c != null) publishSelection(sheetId, r, c);
+                                    },
+                                    ...(canWrite && mediaFolderId
+                                        ? { onInsertImage: () => setImagePickerOpen(true) }
+                                        : {}),
+                                    resolveImageUrl: resolveMediaUrl,
+                                    ...(canWrite && chatFolderId
+                                        ? {
+                                              onAddComment: (r: number, c: number) => {
+                                                  addCommentRef.current?.(r, c);
+                                              },
+                                          }
+                                        : {}),
+                                    onViewComment: (r: number, c: number) => {
+                                        const fd = workbookRef.current?.getFlowdata();
+                                        const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                        if (cardId) setOpenCardId(cardId);
+                                    },
+                                    ...(canWrite
+                                        ? {
+                                              onDeleteComment: (r: number, c: number) => {
+                                                  const fd = workbookRef.current?.getFlowdata();
+                                                  const cell = fd?.[r]?.[c];
+                                                  const cardId = cell?.commentCardIds?.[0];
+                                                  if (cardId && workbookRef.current) {
+                                                      workbookRef.current.setCellFormat(
+                                                          r,
+                                                          c,
+                                                          'commentCardIds',
+                                                          (cell.commentCardIds ?? []).filter((id) => id !== cardId),
+                                                      );
+                                                  }
+                                              },
+                                              onCommentColor: (r: number, c: number, color: string) => {
+                                                  const fd = workbookRef.current?.getFlowdata();
+                                                  const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                                  if (cardId) updateCard(cardId, { color });
+                                              },
+                                              onCommentResolve: (chatName: string, title?: string) =>
+                                                  resolveComment.mutate({ chatName, status: 'resolved', title }),
+                                              onCommentReopen: (chatName: string, title?: string) =>
+                                                  resolveComment.mutate({ chatName, status: 'open', title }),
+                                              onCommentAssign: (chatName, email, title) =>
+                                                  assignComment.mutate({ chatName, assignee: email, title }),
+                                              commentMembers: members,
+                                              currentUserEmail: auth.user?.email,
+                                          }
+                                        : {}),
+                                    getCommentInfo: (r: number, c: number) => {
+                                        const fd = workbookRef.current?.getFlowdata();
+                                        const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                        const card = cardId ? cards[cardId] : undefined;
+                                        if (!card) return null;
+                                        const entry = card.chatName
+                                            ? allComments.find((c) => c.chatName === card.chatName)
+                                            : undefined;
+                                        const indicatorColor = card.color
+                                            ? (EIGEN_STICKIES_INDICATOR_MAP.get(card.color) ?? card.color)
+                                            : null;
+                                        return { card, entry, indicatorColor };
+                                    },
+                                }}
+                            />
+                        </div>
                     </DocSearchProvider>
                 </div>
                 {panel && (

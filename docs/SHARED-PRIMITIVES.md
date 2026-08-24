@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1002 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1003 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (130)
+## Components (131)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -41,6 +41,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EmptyState` | `@workspace/ui` | packages/ui/src/components/layout/app/empty-state.tsx |
 | `ErrorBoundary` | `@workspace/ui` | packages/ui/src/components/layout/app/error-boundary.tsx |
 | `ErrorState` | `@workspace/ui` | packages/ui/src/components/layout/app/error-state.tsx |
+| `FileDropOverlay` | `@workspace/ui` | packages/ui/src/components/file-drop-overlay.tsx |
 | `FileMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
 | `InfoBlock` | `@workspace/ui` | packages/ui/src/components/info-block.tsx |
 | `KebabTrigger` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/kebab-trigger.tsx |

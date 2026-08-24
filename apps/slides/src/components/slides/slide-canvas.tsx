@@ -5,10 +5,13 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { Box } from '@workspace/lib/vector';
+import { FileDropOverlay } from '@workspace/ui';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
+import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
+import { Image as ImageIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { boundingBox } from './arrange';
 import { useMarqueeSelect } from './hooks/use-marquee-select';
@@ -181,22 +184,12 @@ export function SlideCanvas({
         [canWrite, startGroupDrag, selectedObjects, multiSelectBounds],
     );
 
-    const handleDrop = useCallback(
-        (e: React.DragEvent) => {
-            e.preventDefault();
-            const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
-            if (files.length === 0 || !onDropImage) return;
-            for (const file of files) {
-                onDropImage(file);
-            }
-        },
-        [onDropImage],
-    );
-
-    const handleDragOver = useCallback((e: React.DragEvent) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-    }, []);
+    const { targetProps: fileDropProps, isDragging } = useFileDropTarget((files) => {
+        if (!onDropImage) return;
+        for (const file of files.filter((f) => f.type.startsWith('image/'))) {
+            onDropImage(file);
+        }
+    }, !!onDropImage);
 
     const handleOuterMouseDown = useCallback(
         (e: React.MouseEvent) => {
@@ -324,8 +317,7 @@ export function SlideCanvas({
                     ...getBackgroundStyle(slide.background, resolveMediaUrl),
                 }}
                 onMouseDown={handleCanvasMouseDown}
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
+                {...fileDropProps}
             >
                 {objects.map((obj) => {
                     const displayObj = displayObject(obj);
@@ -424,6 +416,7 @@ export function SlideCanvas({
                         }}
                     />
                 )}
+                <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
             </div>
             <SlideObjectMenu
                 contextMenu={objectContextMenu}

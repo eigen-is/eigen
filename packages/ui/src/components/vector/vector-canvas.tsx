@@ -19,7 +19,6 @@ import {
     type VectorTextElement,
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
-import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
@@ -27,6 +26,7 @@ import type * as Y from 'yjs';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
+import { FileDropOverlay } from '../file-drop-overlay';
 import { CursorLayer } from './cursor-layer';
 import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
@@ -920,19 +920,9 @@ export function VectorCanvas({
             {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
                 the scene + local chrome; renders nothing when alone. */}
             <CursorLayer provider={provider} elements={ordered} boxToStyle={boxToStyle} />
-            {/* OS-file drag-over affordance, the mail-compose idiom. Shown only when a drop would
-                actually insert (the drop hook stays enabled even when it wouldn't — see above). */}
-            <div
-                className={cn(
-                    'pointer-events-none absolute inset-0 flex items-center justify-center border-2 border-dashed border-primary bg-primary/5 transition-opacity',
-                    isDragging && imagesEnabled ? 'opacity-100' : 'opacity-0',
-                )}
-            >
-                <div className="flex items-center gap-2 text-sm font-medium text-primary">
-                    <ImageIcon className="h-4 w-4" />
-                    Drop images to add
-                </div>
-            </div>
+            {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
+                hook stays enabled even when it wouldn't — see above). */}
+            <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
         </div>
     );
 }

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type React from 'react';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { printDocument } from '../../../lib/printElement';
 import { PreviewProvider } from '../../preview-provider/preview-provider';
 import { Toaster } from '../../sonner';
@@ -32,6 +32,18 @@ function GlobalHotkeys() {
 }
 
 export function EigenApp({ children }: EigenAppProps) {
+    // A file dropped outside any wired drop target must never navigate the tab away (destroying the
+    // session). Handled targets run first during bubble; this document-level preventDefault only
+    // suppresses the browser's default file-open.
+    useEffect(() => {
+        const prevent = (e: DragEvent) => e.preventDefault();
+        document.addEventListener('dragover', prevent);
+        document.addEventListener('drop', prevent);
+        return () => {
+            document.removeEventListener('dragover', prevent);
+            document.removeEventListener('drop', prevent);
+        };
+    }, []);
     const [queryClient] = useState(
         () =>
             new QueryClient({

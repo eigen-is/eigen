@@ -13,13 +13,13 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { KebabTrigger, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
-import { cn } from '@workspace/ui/lib/utils';
 import { ArrowDown, ArrowUp, Check, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useListSelection } from '../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { FileDropOverlay } from '../file-drop-overlay';
 import { EmptyState } from '../layout/app/empty-state';
 import { ErrorState } from '../layout/app/error-state';
 import { useLayout } from '../layout/app/layout-context';
@@ -356,19 +356,7 @@ export function DriveList({
             {...targetProps}
             onContextMenu={createItems.length > 0 ? (e) => createMenu.handleContextMenu(e, true) : undefined}
         >
-            {allowUpload && (
-                <div
-                    className={cn(
-                        'pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity z-10',
-                        isDragging ? 'opacity-100' : 'opacity-0',
-                    )}
-                >
-                    <div className="flex items-center gap-2 text-primary text-sm font-medium">
-                        <UploadIcon className="h-4 w-4" />
-                        Drop files to upload
-                    </div>
-                </div>
-            )}
+            {allowUpload && <FileDropOverlay visible={isDragging} label="Drop files to upload" icon={UploadIcon} />}
 
             {mode === 'grid' ? (
                 <DriveGrid {...sharedProps} />
