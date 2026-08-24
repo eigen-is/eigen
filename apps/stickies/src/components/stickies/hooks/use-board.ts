@@ -1,11 +1,10 @@
-import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useCreateChat } from '@workspace/lib/chat';
+import { useCollabDoc } from '@workspace/lib/collab';
 import { writeCardToDoc } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { nanoid } from 'nanoid';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { WebsocketProvider } from 'y-websocket';
+import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
 import type { BoardData, ColumnItem } from '../types';
@@ -31,14 +30,17 @@ function sameColumn(a: ColumnItem, b: ColumnItem): boolean {
 
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
     const [board, setBoard] = useState<BoardData>({ columns: {}, columnOrder: [] });
-    const [isSynced, setIsSynced] = useState(false);
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
-    const docRef = useRef<Y.Doc | null>(null);
-    const providerRef = useRef<WebsocketProvider | null>(null);
-    const undoManager = useRef<Y.UndoManager | null>(null);
+    // Latched so normalize + seed run once per doc (reset in onInit on every pathId switch), not on
+    // every 'sync' reconnect.
+    const initializedRef = useRef(false);
 
     const { user } = useAuth();
+    // Read the live email inside onSync (held in a ref by the shared hook) so an auth change never
+    // tears down the live board — the doc is keyed strictly on ownerId/mountId/pathId.
+    const userEmailRef = useRef(user?.email);
+    userEmailRef.current = user?.email;
     const createChat = useCreateChat(ownerId, mountId);
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
@@ -102,74 +104,63 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         [createCardChat],
     );
 
-    useEffect(() => {
-        const doc = new Y.Doc();
-        docRef.current = doc;
+    const {
+        docRef,
+        provider,
+        undoManager,
+        doc: yjsDoc,
+        synced: isSynced,
+    } = useCollabDoc({
+        ownerId,
+        mountId,
+        pathId,
+        undoScope: (doc) => [doc.getMap('columns'), doc.getMap('tasks'), doc.getArray('columnOrder')],
+        onInit: ({ doc }) => {
+            initializedRef.current = false;
+            const columnsMap = doc.getMap('columns');
+            const columnOrderArray = doc.getArray('columnOrder');
 
-        const columnsMap = doc.getMap('columns');
-        const tasksMap = doc.getMap('tasks');
-        const columnOrderArray = doc.getArray('columnOrder');
+            const updateReactState = () => {
+                setBoard((prev) => {
+                    const columns: Record<string, ColumnItem> = {};
+                    for (const [columnId, columnMapValue] of columnsMap) {
+                        const columnMap = columnMapValue as Y.Map<unknown>;
+                        const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
+                        const next: ColumnItem = {
+                            id: columnId,
+                            title: (columnMap.get('title') as string) || '',
+                            taskIds: taskIdsArray ? (taskIdsArray.toArray() as string[]) : [],
+                            creator: (columnMap.get('creator') as string) || '',
+                            // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
+                            // legacy columns that predate the createdAt field. Nothing renders it.
+                            createdAt: (columnMap.get('createdAt') as number) || 0,
+                        };
+                        const prevColumn = prev.columns[columnId];
+                        columns[columnId] = prevColumn && sameColumn(prevColumn, next) ? prevColumn : next;
+                    }
+                    return { columns, columnOrder: columnOrderArray.toArray() as string[] };
+                });
+            };
 
-        undoManager.current = new Y.UndoManager([columnsMap, tasksMap, columnOrderArray]);
+            columnsMap.observeDeep(updateReactState);
+            columnOrderArray.observe(updateReactState);
+            updateReactState();
 
-        const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
-        const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
-            resyncInterval: 5000,
-            connect: true,
-        });
-        providerRef.current = wsProvider;
-
-        const updateReactState = () => {
-            setBoard((prev) => {
-                const columns: Record<string, ColumnItem> = {};
-                for (const [columnId, columnMapValue] of columnsMap) {
-                    const columnMap = columnMapValue as Y.Map<unknown>;
-                    const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
-                    const next: ColumnItem = {
-                        id: columnId,
-                        title: (columnMap.get('title') as string) || '',
-                        taskIds: taskIdsArray ? (taskIdsArray.toArray() as string[]) : [],
-                        creator: (columnMap.get('creator') as string) || '',
-                        // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
-                        // legacy columns that predate the createdAt field. Nothing renders it.
-                        createdAt: (columnMap.get('createdAt') as number) || 0,
-                    };
-                    const prevColumn = prev.columns[columnId];
-                    columns[columnId] = prevColumn && sameColumn(prevColumn, next) ? prevColumn : next;
-                }
-                return { columns, columnOrder: columnOrderArray.toArray() as string[] };
-            });
-        };
-
-        columnsMap.observeDeep(updateReactState);
-        columnOrderArray.observe(updateReactState);
-        updateReactState();
-
-        let initialized = false;
-        wsProvider.on('sync', (synced: boolean) => {
-            setIsSynced(synced);
-            if (synced && !initialized) {
-                initialized = true;
-                normalizeBoard(doc);
-                if (columnsMap.size === 0) {
-                    initializeDefaultBoard(doc, user?.email || 'user@localhost').catch(console.error);
-                }
+            return () => {
+                columnsMap.unobserveDeep(updateReactState);
+                columnOrderArray.unobserve(updateReactState);
+            };
+        },
+        onSync: ({ doc }, synced) => {
+            if (!synced || initializedRef.current) return;
+            initializedRef.current = true;
+            // normalizeBoard runs BEFORE the empty-check + seeding, once per pathId.
+            normalizeBoard(doc);
+            if (doc.getMap('columns').size === 0) {
+                initializeDefaultBoard(doc, userEmailRef.current || 'user@localhost').catch(console.error);
             }
-        });
-
-        return () => {
-            setIsSynced(false);
-            // Unregister observers and tear down the UndoManager + provider; the effect re-runs on
-            // pathId change without an unmount, so without this the old ones leak (and fire on
-            // torn-down state). provider.destroy() before doc.destroy() — it detaches its own doc listener.
-            columnsMap.unobserveDeep(updateReactState);
-            columnOrderArray.unobserve(updateReactState);
-            undoManager.current?.destroy();
-            undoManager.current = null;
-            wsProvider.destroy();
-            doc.destroy();
-        };
-    }, [ownerId, mountId, pathId, user?.email, initializeDefaultBoard]);
+        },
+    });
 
     const handleAddColumn = (title: string) => {
         if (!docRef.current) return;
@@ -218,8 +209,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         setIsAddColumnDialogOpen,
         handleAddColumn,
         deleteCardFromBoard,
-        yjsDoc: docRef.current,
-        undoManager: undoManager.current,
-        provider: providerRef.current,
+        yjsDoc,
+        undoManager,
+        provider,
     };
 };

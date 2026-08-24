@@ -1,4 +1,4 @@
-import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { useCollabDoc } from '@workspace/lib/collab';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SCENE_META,
@@ -16,8 +16,7 @@ import {
     type VectorTextElement,
 } from '@workspace/lib/vector';
 import { nanoid } from 'nanoid';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { WebsocketProvider } from 'y-websocket';
+import { useCallback, useState } from 'react';
 import * as Y from 'yjs';
 
 // Origin sentinel for writes the UndoManager must IGNORE. Its trackedOrigins defaults to {null}
@@ -62,51 +61,35 @@ function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
 
 export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) => {
     const [scene, setScene] = useState<VectorScene>({ elements: [], meta: DEFAULT_SCENE_META });
-    const [isSynced, setIsSynced] = useState(false);
 
-    const docRef = useRef<Y.Doc | null>(null);
-    const providerRef = useRef<WebsocketProvider | null>(null);
-    const undoManager = useRef<Y.UndoManager | null>(null);
-
-    useEffect(() => {
-        const doc = new Y.Doc();
-        docRef.current = doc;
-
-        const elementsMap = doc.getMap('elements');
-        const metaMap = doc.getMap('meta');
-
-        undoManager.current = new Y.UndoManager([elementsMap, metaMap]);
-
-        const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
-        const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
-            resyncInterval: 5000,
-            connect: true,
-        });
-        providerRef.current = wsProvider;
-
-        // readVectorFromDoc materializes each per-element Y.Map through the ELEMENT_FIELDS
-        // whitelist, orders by fractional index, and heals invalid runs — the whole read path.
-        const updateReactState = () => setScene(readVectorFromDoc(doc));
-
-        elementsMap.observeDeep(updateReactState);
-        metaMap.observeDeep(updateReactState);
-        updateReactState();
-
-        wsProvider.on('sync', (synced: boolean) => setIsSynced(synced));
-
-        return () => {
-            setIsSynced(false);
-            // Unregister observers and tear down the UndoManager + provider; the effect re-runs on
-            // pathId change without an unmount, so without this the old ones leak (and fire on
-            // torn-down state). provider.destroy() before doc.destroy() — it detaches its own doc listener.
-            elementsMap.unobserveDeep(updateReactState);
-            metaMap.unobserveDeep(updateReactState);
-            undoManager.current?.destroy();
-            undoManager.current = null;
-            wsProvider.destroy();
-            doc.destroy();
-        };
-    }, [ownerId, mountId, pathId]);
+    // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the two
+    // element roots with default trackedOrigins, so UNTRACKED_ORIGIN writes escape capture (below).
+    const {
+        docRef,
+        doc: yjsDoc,
+        provider,
+        undoManager,
+        synced,
+    } = useCollabDoc({
+        ownerId,
+        mountId,
+        pathId,
+        undoScope: (doc) => [doc.getMap('elements'), doc.getMap('meta')],
+        onInit: ({ doc }) => {
+            const elementsMap = doc.getMap('elements');
+            const metaMap = doc.getMap('meta');
+            // readVectorFromDoc materializes each per-element Y.Map through the ELEMENT_FIELDS
+            // whitelist, orders by fractional index, and heals invalid runs — the whole read path.
+            const updateReactState = () => setScene(readVectorFromDoc(doc));
+            elementsMap.observeDeep(updateReactState);
+            metaMap.observeDeep(updateReactState);
+            updateReactState();
+            return () => {
+                elementsMap.unobserveDeep(updateReactState);
+                metaMap.unobserveDeep(updateReactState);
+            };
+        },
+    });
 
     const addElement = useCallback((partial: NewVectorElement) => {
         const doc = docRef.current;
@@ -275,12 +258,12 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
-        undoManager: undoManager.current,
-        // Exposed for awareness (cursors + remote selections) — same ref-current shape as undoManager.
-        provider: providerRef.current,
+        undoManager,
+        // Exposed for awareness (cursors + remote selections).
+        provider,
         // The live Y.Doc, for the document-level comment lifecycle (its `comments` Y.Map). Null until
         // the effect runs; the editor gates comment reads on `synced` like the rest of the panel.
-        yjsDoc: docRef.current,
-        synced: isSynced,
+        yjsDoc,
+        synced,
     };
 };

@@ -19,6 +19,7 @@
     "nanoid": "^5.1.5",
     "roughjs": "4.6.4",
     "rrule": "^2.8.1",
+    "y-websocket": "^3.0.0",
     "yjs": "^13.6.27"
   },
   "exports": {

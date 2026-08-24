@@ -5,7 +5,6 @@ import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
-import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import {
     buildImageClipboardItem,
@@ -16,6 +15,7 @@ import {
     reUploadImage,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
+import { useCollabDoc } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
     useCommentFilter,
@@ -66,9 +66,9 @@ import { useProseMirrorSearchController } from '@workspace/ui/components/search/
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { WebsocketProvider } from 'y-websocket';
-import * as Y from 'yjs';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { WebsocketProvider } from 'y-websocket';
+import type * as Y from 'yjs';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
@@ -173,28 +173,20 @@ export const CollaborativeEditor = ({
     initialChatName?: string;
     initialSearchTerm?: string;
 }) => {
-    const [connected, setConnected] = useState(false);
-    const [provider, setProvider] = useState<WebsocketProvider>();
+    // Shared collab lifecycle. This also fixes the long-standing leak where docs created its Y.Doc
+    // via useMemo and never destroyed it (only the provider was torn down); the hook destroys the
+    // doc on unmount / pathId switch. No UndoManager — y-prosemirror's history plugin owns undo.
+    const {
+        doc: yDoc,
+        provider,
+        synced,
+    } = useCollabDoc({
+        ownerId: path.ownerId,
+        mountId: path.mountId,
+        pathId: path.id,
+    });
 
-    const yDoc = useMemo(() => new Y.Doc(), []);
-
-    useEffect(() => {
-        const wsUrl = getCollabWebSocketUrl(path.ownerId, path.mountId, path.id);
-
-        const yProvider = new WebsocketProvider(wsUrl, '', yDoc, {
-            resyncInterval: 5000,
-            connect: true,
-        });
-        yProvider.on('sync', setConnected);
-        setProvider(yProvider);
-
-        return () => {
-            yProvider?.off('sync', setConnected);
-            yProvider?.destroy();
-        };
-    }, [yDoc, path.ownerId, path.mountId, path.id]);
-
-    if (!connected || !provider) {
+    if (!synced || !provider || !yDoc) {
         return <LoadingState />;
     }
 
@@ -206,6 +198,7 @@ export const CollaborativeEditor = ({
             chatFolderId={chatFolderId}
         >
             <TiptapEditor
+                key={path.id}
                 path={path}
                 yDoc={yDoc}
                 provider={provider}

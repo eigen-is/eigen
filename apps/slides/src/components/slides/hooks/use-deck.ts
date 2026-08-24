@@ -1,11 +1,10 @@
-import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
+import { useCollabDoc } from '@workspace/lib/collab';
 import { yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { ZOp } from '@workspace/ui/components/properties-panel';
 import { nanoid } from 'nanoid';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { WebsocketProvider } from 'y-websocket';
+import { useCallback, useEffect, useState } from 'react';
 import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
 import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
@@ -21,11 +20,6 @@ function readCommentCardIds(objMap: Y.Map<unknown>): string[] {
 export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const [deck, setDeck] = useState<DeckData>({ slides: {}, objects: {}, slideOrder: [] });
     const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
-    const [isSynced, setIsSynced] = useState(false);
-
-    const docRef = useRef<Y.Doc | null>(null);
-    const providerRef = useRef<WebsocketProvider | null>(null);
-    const undoManager = useRef<Y.UndoManager | null>(null);
 
     const initializeDefaultDeck = useCallback((doc: Y.Doc) => {
         const slidesMap = doc.getMap('slides');
@@ -63,74 +57,64 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, []);
 
-    useEffect(() => {
-        const doc = new Y.Doc();
-        docRef.current = doc;
+    const {
+        docRef,
+        provider,
+        undoManager,
+        doc: yjsDoc,
+        synced: isSynced,
+    } = useCollabDoc({
+        ownerId,
+        mountId,
+        pathId,
+        undoScope: (doc) => [doc.getMap('slides'), doc.getMap('objects'), doc.getArray('slideOrder')],
+        onInit: ({ doc }) => {
+            const slidesMap = doc.getMap('slides');
+            const objectsMap = doc.getMap('objects');
+            const slideOrderArray = doc.getArray('slideOrder');
 
-        const slidesMap = doc.getMap('slides');
-        const objectsMap = doc.getMap('objects');
-        const slideOrderArray = doc.getArray('slideOrder');
-
-        undoManager.current = new Y.UndoManager([slidesMap, objectsMap, slideOrderArray]);
-
-        const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
-        const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
-            resyncInterval: 5000,
-            connect: true,
-        });
-        providerRef.current = wsProvider;
-
-        const updateReactState = () => {
-            normalizeDeck(doc);
-            const newState: DeckData = {
-                slides: {},
-                objects: {},
-                slideOrder: slideOrderArray.toArray() as string[],
-            };
-            for (const [slideId, slideMapValue] of slidesMap) {
-                const slideMap = slideMapValue as Y.Map<unknown>;
-                const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
-                const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
-                const bgRaw = slideMap.get('background');
-                newState.slides[slideId] = {
-                    id: slideId,
-                    objectIds: objIds,
-                    background: bgRaw && typeof bgRaw === 'object' ? (bgRaw as BackgroundFill) : null,
+            const updateReactState = () => {
+                normalizeDeck(doc);
+                const newState: DeckData = {
+                    slides: {},
+                    objects: {},
+                    slideOrder: slideOrderArray.toArray() as string[],
                 };
-            }
-            for (const [objId, objMapValue] of objectsMap) {
-                const objMap = objMapValue as Y.Map<unknown>;
-                newState.objects[objId] = yMapToObject(objMap);
-            }
-            setDeck(newState);
-        };
+                for (const [slideId, slideMapValue] of slidesMap) {
+                    const slideMap = slideMapValue as Y.Map<unknown>;
+                    const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
+                    const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
+                    const bgRaw = slideMap.get('background');
+                    newState.slides[slideId] = {
+                        id: slideId,
+                        objectIds: objIds,
+                        background: bgRaw && typeof bgRaw === 'object' ? (bgRaw as BackgroundFill) : null,
+                    };
+                }
+                for (const [objId, objMapValue] of objectsMap) {
+                    const objMap = objMapValue as Y.Map<unknown>;
+                    newState.objects[objId] = yMapToObject(objMap);
+                }
+                setDeck(newState);
+            };
 
-        slidesMap.observeDeep(updateReactState);
-        objectsMap.observeDeep(updateReactState);
-        slideOrderArray.observe(updateReactState);
-        updateReactState();
+            slidesMap.observeDeep(updateReactState);
+            objectsMap.observeDeep(updateReactState);
+            slideOrderArray.observe(updateReactState);
+            updateReactState();
 
-        wsProvider.on('sync', (synced: boolean) => {
-            setIsSynced(synced);
-            if (synced && slidesMap.size === 0) {
+            return () => {
+                slidesMap.unobserveDeep(updateReactState);
+                objectsMap.unobserveDeep(updateReactState);
+                slideOrderArray.unobserve(updateReactState);
+            };
+        },
+        onSync: ({ doc }, synced) => {
+            if (synced && doc.getMap('slides').size === 0) {
                 initializeDefaultDeck(doc);
             }
-        });
-
-        return () => {
-            setIsSynced(false);
-            // Unregister observers and tear down the UndoManager + provider; the effect re-runs on
-            // pathId change without an unmount, so without this the old ones leak (and fire on
-            // torn-down state). provider.destroy() before doc.destroy() — it detaches its own doc listener.
-            slidesMap.unobserveDeep(updateReactState);
-            objectsMap.unobserveDeep(updateReactState);
-            slideOrderArray.unobserve(updateReactState);
-            undoManager.current?.destroy();
-            undoManager.current = null;
-            wsProvider.destroy();
-            doc.destroy();
-        };
-    }, [ownerId, mountId, pathId, initializeDefaultDeck]);
+        },
+    });
 
     useEffect(() => {
         if (deck.slideOrder.length > 0) {
@@ -495,8 +479,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         moveObjectToFront,
         moveObjectToBack,
         moveObjectsZOrder,
-        yjsDoc: docRef.current,
-        undoManager: undoManager.current,
-        provider: providerRef.current,
+        yjsDoc,
+        undoManager,
+        provider,
     };
 };
