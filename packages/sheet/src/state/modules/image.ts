@@ -42,7 +42,7 @@ export function removeImageByMediaName(ctx: Context, name: string) {
     if (ctx.insertedImgs.length !== before) saveImage(ctx);
 }
 
-export function insertImage(ctx: Context, mediaName: string, width: number, height: number) {
+export function insertImage(ctx: Context, mediaName: string, width: number, height: number, angle: number = 0) {
     const last = ctx.selections?.[ctx.selections.length - 1];
     let rowIndex = last?.row_focus;
     let colIndex = last?.column_focus;
@@ -69,6 +69,7 @@ export function insertImage(ctx: Context, mediaName: string, width: number, heig
     }
     // Stored as given — the caller has already sized the image (OS-file/upload inserts run the
     // shared fitImageSize; typed clipboard sizes are authoritative). No sizing quirk lives here.
+    // `angle` is 0 for fresh inserts; an eigen image paste carries the source rotation through (U5c).
     const img = {
         id: generateImageId(),
         mediaName,
@@ -76,7 +77,7 @@ export function insertImage(ctx: Context, mediaName: string, width: number, heig
         y: top,
         width,
         height,
-        angle: 0,
+        angle,
     };
     ctx.insertedImgs = (ctx.insertedImgs || []).concat(img);
     saveImage(ctx);

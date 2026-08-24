@@ -145,8 +145,8 @@ export function generateAPIs(
             });
         },
 
-        insertImage: (mediaName: string, width: number, height: number) =>
-            setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height)),
+        insertImage: (mediaName: string, width: number, height: number, angle?: number) =>
+            setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height, angle)),
 
         replaceImageMediaName: (oldName: string, newName: string) =>
             setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName)),

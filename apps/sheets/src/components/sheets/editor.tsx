@@ -1,4 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
+import { needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
 import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
@@ -6,10 +7,12 @@ import {
     MediaResolverProvider,
     useCopyToMediaFolder,
     useMediaResolver,
+    useUploadFile,
 } from '@workspace/lib/drive';
+import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
+import { DEFAULT_IMAGE_BOX, fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
 import { DocumentShareCluster, FileDropOverlay, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
@@ -86,7 +89,8 @@ function SheetEditorInner({
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
     const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
-    const { resolveMediaUrl, startUpload } = useMediaResolver();
+    const uploadFile = useUploadFile(ownerId, path.mountId);
+    const { resolveMediaUrl, resolveMediaPath, startUpload } = useMediaResolver();
     // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
     // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
     const { isMobile } = useLayout();
@@ -169,6 +173,74 @@ function SheetEditorInner({
             else workbookRef.current?.removeImageByMediaName(pendingName);
         },
         [mediaFolderId, startUpload, fitToPane],
+    );
+
+    // Consume a pasted eigen image item (from sheets/slides/vector/docs) as a floating image. Typed
+    // width/height/angle are AUTHORITATIVE — no fit-to-pane (U5c). A width-only item (a docs figure,
+    // whose height derives from the intrinsic ratio) can't just square off — sheets stretches to exact
+    // w×h, so a square would distort. Same media folder → probe the intrinsic ratio and insert once at
+    // the corrected height; cross-mount → optimistic pending insert at the default-box ratio, re-upload,
+    // swap, then probe the uploaded URL and correct the height (one extra op). Probe failure falls back
+    // to the DEFAULT_IMAGE_BOX ratio, never square. Items carrying both dims stay exact and probe-free;
+    // items carrying neither get the shared default box.
+    const handlePasteEigenImage = useCallback(
+        async (item: EigenClipboardImageItem) => {
+            if (!mediaFolderId) return;
+            const { angle } = item;
+            const defaultRatio = DEFAULT_IMAGE_BOX.width / DEFAULT_IMAGE_BOX.height;
+            const widthOnly = item.width != null && item.height == null;
+            // Height from a probed intrinsic ratio, DEFAULT_IMAGE_BOX ratio on failure (never square).
+            const deriveHeight = async (url: string | null, width: number): Promise<number> => {
+                const intrinsic = url ? await readImageSizeFromUrl(url) : null;
+                const ratio = intrinsic && intrinsic.height > 0 ? intrinsic.width / intrinsic.height : defaultRatio;
+                return width / ratio;
+            };
+            const findImageId = (mediaName: string): string | undefined => {
+                for (const sheet of workbookRef.current?.getAllSheets() ?? []) {
+                    const img = sheet.images?.find((i) => i.mediaName === mediaName);
+                    if (img) return img.id;
+                }
+                return undefined;
+            };
+
+            if (needsReUpload(item.sourceParentId, mediaFolderId)) {
+                // Cross-mount: can't probe our media/ before the upload, so insert a provisional box.
+                const width = item.width ?? fitToPane(null).width;
+                const provisionalHeight = item.height ?? width / defaultRatio;
+                const pendingName = `pending:${crypto.randomUUID()}`;
+                workbookRef.current?.insertImage(pendingName, width, provisionalHeight, angle);
+                const result = await reUploadImage(
+                    item.sourcePathId,
+                    item.sourceOwnerId,
+                    item.sourceMountId,
+                    mediaFolderId,
+                    uploadFile.mutateAsync,
+                    ownerId,
+                    path.mountId,
+                    item.mediaName,
+                );
+                if (!result) {
+                    workbookRef.current?.removeImageByMediaName(pendingName);
+                    return;
+                }
+                workbookRef.current?.replaceImageMediaName(pendingName, result.mediaName);
+                // Width-only figure: probe the now-uploaded image and correct the stretched height.
+                if (widthOnly) {
+                    const height = await deriveHeight(resolveMediaUrl(result.mediaName), width);
+                    const id = findImageId(result.mediaName);
+                    if (id) workbookRef.current?.updateImage(id, { height });
+                }
+            } else {
+                // Same media folder: the file is already here — probe before inserting so the box is
+                // right on the first paint (no correction op).
+                const width = item.width ?? fitToPane(null).width;
+                const height = widthOnly
+                    ? await deriveHeight(resolveMediaUrl(item.mediaName), width)
+                    : (item.height ?? fitToPane(null).height);
+                workbookRef.current?.insertImage(item.mediaName, width, height, angle);
+            }
+        },
+        [mediaFolderId, ownerId, path.mountId, uploadFile.mutateAsync, fitToPane, resolveMediaUrl],
     );
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
@@ -336,9 +408,14 @@ function SheetEditorInner({
                                     },
                                     onActiveImageChange: setActiveImage,
                                     ...(canWrite && mediaFolderId
-                                        ? { onInsertImage: () => setImagePickerOpen(true) }
+                                        ? {
+                                              onInsertImage: () => setImagePickerOpen(true),
+                                              onPasteEigenImage: handlePasteEigenImage,
+                                              onPasteImageFile: handleImageFile,
+                                          }
                                         : {}),
                                     resolveImageUrl: resolveMediaUrl,
+                                    resolveImagePath: resolveMediaPath,
                                     ...(canWrite && chatFolderId
                                         ? {
                                               onAddComment: (r: number, c: number) => {
