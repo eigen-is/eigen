@@ -7,7 +7,14 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
+import {
+    buildImageClipboardItem,
+    needsReUpload,
+    readClipboardBox,
+    readEigenClipboard,
+    reUploadImage,
+    writeEigenClipboard,
+} from '@workspace/lib/clipboard';
 import {
     findCardIdByChatName,
     useCommentFilter,
@@ -455,7 +462,7 @@ const TiptapEditor = ({
                         const imageItem = eigenData.items.find((i): i is EigenClipboardImageItem => i.type === 'image');
                         if (imageItem) {
                             event.preventDefault();
-                            const width = imageItem.meta?.width as number | undefined;
+                            const { width } = readClipboardBox(imageItem);
                             handleEigenImagePaste(imageItem, width).catch(() => {});
                             return true;
                         }
@@ -580,16 +587,15 @@ const TiptapEditor = ({
                 if (node.type.name === 'figure' && node.attrs.mediaName) {
                     const mediaPath = resolveMediaPath(node.attrs.mediaName);
                     if (mediaPath) {
-                        items.push({
-                            type: 'image',
-                            mediaName: node.attrs.mediaName,
-                            sourcePathId: mediaPath.id,
-                            sourceParentId: mediaPath.parentId,
-                            sourceOwnerId: mediaPath.ownerId,
-                            sourceMountId: mediaPath.mountId,
-                            caption: node.attrs.caption || undefined,
-                            meta: { width: node.attrs.width ?? undefined },
-                        });
+                        // Figures store width only; height derives from the image's aspect ratio on load.
+                        items.push(
+                            buildImageClipboardItem({
+                                mediaName: node.attrs.mediaName,
+                                source: mediaPath,
+                                box: { width: node.attrs.width ?? undefined },
+                                caption: node.attrs.caption || undefined,
+                            }),
+                        );
                     }
                 }
             });

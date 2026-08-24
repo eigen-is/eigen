@@ -2,7 +2,10 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
 import { getBackgroundStyle } from '@workspace/lib/background';
 import {
+    buildImageClipboardItem,
+    buildTextClipboardItem,
     needsReUpload,
+    readClipboardBox,
     readEigenClipboard,
     reUploadImage,
     writeEigenClipboard,
@@ -65,40 +68,88 @@ function centeredImageProps(intrinsic: ImageSize | null): Pick<ImageObject, 'x' 
     return { x: (SLIDE_BASE_WIDTH - width) / 2, y: (SLIDE_BASE_HEIGHT - height) / 2, width, height };
 }
 
-// Object fields a pasted clipboard item may restore from its (untyped) meta. Derived from the
-// canonical registry minus identity/position/content — x/y anchor separately, text/mediaName come
-// off the item itself — so the consumer can never drift from buildClipboardItem's producer. One
-// list serves both item types: a field absent from an item's meta is simply skipped.
+// App-private object fields a pasted item restores from its (untyped) meta via this loop. Geometry
+// (width/height/angle) and typography ride typed clipboard fields; text/mediaName come off the item
+// itself; x/y/slideId are slides-private meta restored separately below (paste-in-place) — so this
+// list holds only borders, objectFit, and the text-box background. Derived from the canonical
+// registry minus everything carried elsewhere, so the consumer can never drift from the producer.
 const PASTE_META_FIELDS = OBJECT_FIELDS.filter(
     (f) =>
-        !(['id', 'slideId', 'type', 'x', 'y', 'text', 'mediaName', 'commentCardIds'] as readonly string[]).includes(f),
+        !(
+            [
+                'id',
+                'slideId',
+                'type',
+                'x',
+                'y',
+                'width',
+                'height',
+                'angle',
+                'text',
+                'mediaName',
+                'commentCardIds',
+                'fontFamily',
+                'fontSize',
+                'fontWeight',
+                'fontStyle',
+                'textDecoration',
+                'textAlign',
+                'verticalAlign',
+                'color',
+                'letterSpacing',
+                'lineHeight',
+                'highlightColor',
+            ] as readonly string[]
+        ).includes(f),
 );
+
+// Same-slide pastes shift by this so the copy is visibly distinct (cross-slide lands in place).
+const PASTE_OFFSET = 24;
+
+// Overrides a pasted item restores onto a DEFAULT_*_OBJECT: typed geometry + app-private meta
+// extras (borders/objectFit/background) + slides-private position. x/y are deliberately NOT in the
+// shared typed contract (no cross-app meaning) — slides carries them in its own meta so the
+// shipped paste-in-place UX survives: cross-slide paste lands at the source coordinates
+// (footer/logo workflows), same-slide paste offsets. Cross-app items have no meta.x/y and anchor
+// at the defaults. Typography is layered on top for text items by the caller.
+function clipboardItemOverrides(item: EigenClipboardItem, activeSlideId: string | null): Record<string, unknown> {
+    const overrides: Record<string, unknown> = {};
+    const box = readClipboardBox(item);
+    if (box.width != null) overrides.width = box.width;
+    if (box.height != null) overrides.height = box.height;
+    if (box.angle != null) overrides.angle = box.angle;
+    const m = item.meta ?? {};
+    for (const k of PASTE_META_FIELDS) {
+        if (m[k] != null) overrides[k] = m[k];
+    }
+    if (typeof m.x === 'number' && typeof m.y === 'number') {
+        const offset = m.slideId === activeSlideId ? PASTE_OFFSET : 0;
+        overrides.x = m.x + offset;
+        overrides.y = m.y + offset;
+    }
+    return overrides;
+}
 
 function buildClipboardItem(
     obj: SlideObject,
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): EigenClipboardItem | null {
-    const rect = { x: obj.x, y: obj.y, width: obj.width, height: obj.height, angle: obj.angle };
+    const box = { width: obj.width, height: obj.height, angle: obj.angle };
     const border = { borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius };
     if (obj.type === 'image') {
         const mediaPath = resolveMediaPath(obj.mediaName);
         if (!mediaPath) return null;
-        return {
-            type: 'image',
+        return buildImageClipboardItem({
             mediaName: obj.mediaName,
-            sourcePathId: mediaPath.id,
-            sourceParentId: mediaPath.parentId,
-            sourceOwnerId: mediaPath.ownerId,
-            sourceMountId: mediaPath.mountId,
-            meta: { ...rect, ...border, objectFit: obj.objectFit },
-        };
+            source: mediaPath,
+            box,
+            meta: { ...border, objectFit: obj.objectFit, x: obj.x, y: obj.y, slideId: obj.slideId },
+        });
     }
-    return {
-        type: 'text',
+    return buildTextClipboardItem({
         text: obj.text,
-        meta: {
-            ...rect,
-            ...border,
+        box,
+        typography: {
             fontFamily: obj.fontFamily,
             fontSize: obj.fontSize,
             fontWeight: obj.fontWeight,
@@ -110,9 +161,9 @@ function buildClipboardItem(
             letterSpacing: obj.letterSpacing,
             lineHeight: obj.lineHeight,
             highlightColor: obj.highlightColor,
-            background: obj.background,
         },
-    };
+        meta: { ...border, background: obj.background, x: obj.x, y: obj.y, slideId: obj.slideId },
+    });
 }
 
 type SlideEditorProps = {
@@ -544,13 +595,12 @@ function SlideEditorInner({
             if (eigenData) {
                 e.preventDefault();
                 for (const item of eigenData.items) {
-                    const m = item.meta ?? {};
                     if (item.type === 'text') {
-                        const overrides: Record<string, unknown> = {};
-                        if (m.x != null) overrides.x = m.x;
-                        if (m.y != null) overrides.y = m.y;
-                        for (const k of PASTE_META_FIELDS) {
-                            if (m[k] != null) overrides[k] = m[k];
+                        const overrides = clipboardItemOverrides(item, activeSlideId);
+                        if (item.typography) {
+                            for (const [k, v] of Object.entries(item.typography)) {
+                                if (v != null) overrides[k] = v;
+                            }
                         }
                         addObject(activeSlideId, {
                             ...DEFAULT_TEXT_OBJECT,
@@ -558,13 +608,7 @@ function SlideEditorInner({
                             ...overrides,
                         } as Omit<SlideObject, 'id' | 'slideId'>);
                     } else if (item.type === 'image') {
-                        const overrides: Record<string, unknown> = {};
-                        if (m.x != null) overrides.x = m.x;
-                        if (m.y != null) overrides.y = m.y;
-                        for (const k of PASTE_META_FIELDS) {
-                            if (m[k] != null) overrides[k] = m[k];
-                        }
-                        const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...overrides };
+                        const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...clipboardItemOverrides(item, activeSlideId) };
                         if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
                             reUploadImage(
                                 item.sourcePathId,
