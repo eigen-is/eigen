@@ -6,17 +6,16 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { ColorPicker } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import {
     AlignmentPicker,
     BackgroundFillBlock,
+    ColorRow,
     getMergedValue,
     isMixed,
-    type MergedValue,
+    MergedNumberInput,
+    MergedSelect,
     PropertiesPanel,
-    PropertyNumberInput,
     PropertyRow,
     PropertySection,
 } from '@workspace/ui/components/properties-panel';
@@ -215,9 +214,6 @@ function TextProperties({
     objects: TextObject[];
     onUpdate: (updates: Partial<SlideObject>) => void;
 }) {
-    const [colorOpen, setColorOpen] = useState(false);
-    const [highlightOpen, setHighlightOpen] = useState(false);
-
     const fontFamily = getMergedValue(objects, (o) => o.fontFamily);
     const fontSize = getMergedValue(objects, (o) => o.fontSize);
     const fontWeight = getMergedValue(objects, (o) => o.fontWeight);
@@ -353,25 +349,11 @@ function TextProperties({
             </PropertySection>
 
             <PropertySection title="Color">
-                <ColorRow
-                    label="Text"
-                    value={color}
-                    onOpen={setColorOpen}
-                    open={colorOpen}
-                    onChange={(c) => {
-                        onUpdate({ color: c || '#000000' });
-                        setColorOpen(false);
-                    }}
-                />
+                <ColorRow label="Text" value={color} onChange={(c) => onUpdate({ color: c || '#000000' })} />
                 <ColorRow
                     label="Highlight"
                     value={highlightColor}
-                    onOpen={setHighlightOpen}
-                    open={highlightOpen}
-                    onChange={(c) => {
-                        onUpdate({ highlightColor: c });
-                        setHighlightOpen(false);
-                    }}
+                    onChange={(c) => onUpdate({ highlightColor: c })}
                     showReset
                 />
             </PropertySection>
@@ -421,21 +403,15 @@ function ImageProperties({
                 </div>
             )}
             <PropertyRow label="Fit">
-                {/* Always-controlled: '' (never undefined) for mixed — Radix shows the placeholder
-                    for '', while undefined would flip controlled→uncontrolled (React warning). */}
-                <Select
-                    value={isMixed(objectFit) || objectFit === undefined ? '' : objectFit}
-                    onValueChange={(v) => onUpdate({ objectFit: v as 'contain' | 'cover' | 'fill' })}
-                >
-                    <SelectTrigger className="h-7 text-xs">
-                        <SelectValue placeholder={isMixed(objectFit) ? '—' : undefined} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="contain">Contain</SelectItem>
-                        <SelectItem value="cover">Cover</SelectItem>
-                        <SelectItem value="fill">Fill</SelectItem>
-                    </SelectContent>
-                </Select>
+                <MergedSelect
+                    value={objectFit}
+                    onChange={(v) => onUpdate({ objectFit: v })}
+                    options={[
+                        { value: 'contain', label: 'Contain' },
+                        { value: 'cover', label: 'Cover' },
+                        { value: 'fill', label: 'Fill' },
+                    ]}
+                />
             </PropertyRow>
         </PropertySection>
     );
@@ -448,7 +424,6 @@ function BorderProperties({
     objects: SlideObject[];
     onUpdate: (updates: Partial<SlideObject>) => void;
 }) {
-    const [colorOpen, setColorOpen] = useState(false);
     const borderColor = getMergedValue(objects, (o) => o.borderColor);
     const borderWidth = getMergedValue(objects, (o) => o.borderWidth);
     const borderRadius = getMergedValue(objects, (o) => o.borderRadius);
@@ -456,17 +431,7 @@ function BorderProperties({
 
     return (
         <PropertySection title="Border">
-            <ColorRow
-                label="Color"
-                value={borderColor}
-                onOpen={setColorOpen}
-                open={colorOpen}
-                onChange={(c) => {
-                    onUpdate({ borderColor: c });
-                    setColorOpen(false);
-                }}
-                showReset
-            />
+            <ColorRow label="Color" value={borderColor} onChange={(c) => onUpdate({ borderColor: c })} showReset />
             <PropertyRow label="Width">
                 <MergedNumberInput
                     value={borderWidth}
@@ -498,80 +463,6 @@ function BorderProperties({
                 </PropertyRow>
             </div>
         </PropertySection>
-    );
-}
-
-function ColorRow({
-    label,
-    value,
-    open,
-    onOpen,
-    onChange,
-    showReset,
-}: {
-    label: string;
-    value: MergedValue<string>;
-    open: boolean;
-    onOpen: (open: boolean) => void;
-    onChange: (color: string) => void;
-    showReset?: boolean;
-}) {
-    const mixed = isMixed(value);
-    const displayColor = mixed ? undefined : value || undefined;
-
-    return (
-        <Popover open={open} onOpenChange={onOpen}>
-            <PopoverTrigger asChild>
-                <button className="flex items-center gap-2 h-8 px-2 rounded hover:bg-accent text-sm w-full">
-                    <div
-                        className="h-5 w-5 rounded border border-border shrink-0"
-                        style={{ backgroundColor: displayColor }}
-                    >
-                        {mixed && (
-                            <span className="text-xs text-muted-foreground flex items-center justify-center h-full">
-                                —
-                            </span>
-                        )}
-                        {!mixed && !value && (
-                            <span className="text-xs text-muted-foreground flex items-center justify-center h-full">
-                                ∅
-                            </span>
-                        )}
-                    </div>
-                    <span className="text-xs flex-1 text-left">{label}</span>
-                    {!mixed && value && <span className="text-xs text-muted-foreground">{value}</span>}
-                </button>
-            </PopoverTrigger>
-            <PopoverContent side="left" align="start" className="w-auto">
-                <ColorPicker value={mixed ? '#000000' : value || '#000000'} onChange={onChange} showReset={showReset} />
-            </PopoverContent>
-        </Popover>
-    );
-}
-
-function MergedNumberInput({
-    value,
-    onChange,
-    min,
-    max,
-    step,
-}: {
-    value: MergedValue<number>;
-    onChange: (v: number) => void;
-    min?: number;
-    max?: number;
-    step?: number;
-}) {
-    const mixed = isMixed(value);
-    return (
-        <PropertyNumberInput
-            value={mixed ? undefined : value}
-            onChange={onChange}
-            min={min}
-            max={max}
-            step={step}
-            placeholder={mixed ? '—' : undefined}
-        />
     );
 }
 

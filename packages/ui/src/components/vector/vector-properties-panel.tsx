@@ -17,22 +17,20 @@ import {
     type VectorTextElement,
 } from '@workspace/lib/vector';
 import { TooltipButton } from '@workspace/ui';
-import { ColorPicker } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import {
     AlignmentPicker,
+    ColorRow,
     getMergedValue,
     isMixed,
+    MergedNumberInput,
+    MergedSelect,
     type MergedValue,
     PropertiesPanel,
-    PropertyNumberInput,
     PropertyRow,
     PropertySection,
 } from '@workspace/ui/components/properties-panel';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { BringToFront, ChevronDown, ChevronUp, SendToBack } from 'lucide-react';
-import { useState } from 'react';
 import type * as Y from 'yjs';
 import type { VectorElementPatch } from './hooks/use-vector-doc';
 import { applyZOrder, type ZOp } from './hooks/use-vector-keyboard';
@@ -276,117 +274,5 @@ export function VectorPropertiesPanel({
                 </div>
             </PropertySection>
         </PropertiesPanel>
-    );
-}
-
-function MergedNumberInput({
-    value,
-    onChange,
-    min,
-    max,
-    step,
-}: {
-    value: MergedValue<number>;
-    onChange: (v: number) => void;
-    min?: number;
-    max?: number;
-    step?: number;
-}) {
-    const mixed = isMixed(value);
-    return (
-        <PropertyNumberInput
-            value={mixed ? undefined : value}
-            onChange={onChange}
-            min={min}
-            max={max}
-            step={step}
-            placeholder={mixed ? '—' : undefined}
-        />
-    );
-}
-
-function MergedSelect<T extends string>({
-    value,
-    onChange,
-    options,
-}: {
-    value: MergedValue<T>;
-    onChange: (v: T) => void;
-    options: { value: T; label: string }[];
-}) {
-    const mixed = isMixed(value);
-    // Always-controlled: '' (never undefined) for mixed — Radix renders the placeholder for '',
-    // while flipping to undefined would switch the Select controlled→uncontrolled (React warning).
-    const controlled = mixed || value === undefined ? '' : value;
-    return (
-        // onValueChange is the library seam: Radix types it (value: string) => void, so the cast back
-        // to the option union lives here and nowhere else.
-        <Select value={controlled} onValueChange={(v) => onChange(v as T)}>
-            <SelectTrigger className="h-7 text-xs">
-                <SelectValue placeholder={mixed ? '—' : undefined} />
-            </SelectTrigger>
-            <SelectContent>
-                {options.map((o) => (
-                    <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                    </SelectItem>
-                ))}
-            </SelectContent>
-        </Select>
-    );
-}
-
-function ColorRow({
-    label,
-    value,
-    onChange,
-    showReset,
-}: {
-    label: string;
-    value: MergedValue<string>;
-    onChange: (color: string) => void;
-    showReset?: boolean;
-}) {
-    const [open, setOpen] = useState(false);
-    const mixed = isMixed(value);
-    const displayColor = mixed ? undefined : value || undefined;
-
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-                <button
-                    type="button"
-                    className="flex items-center gap-2 h-8 px-2 rounded hover:bg-accent text-sm w-full"
-                >
-                    <div
-                        className="h-5 w-5 rounded border border-border shrink-0"
-                        style={{ backgroundColor: displayColor }}
-                    >
-                        {mixed && (
-                            <span className="text-xs text-muted-foreground flex items-center justify-center h-full">
-                                —
-                            </span>
-                        )}
-                        {!mixed && !value && (
-                            <span className="text-xs text-muted-foreground flex items-center justify-center h-full">
-                                ∅
-                            </span>
-                        )}
-                    </div>
-                    <span className="text-xs flex-1 text-left">{label}</span>
-                    {!mixed && value && <span className="text-xs text-muted-foreground">{value}</span>}
-                </button>
-            </PopoverTrigger>
-            <PopoverContent side="left" align="start" className="w-auto">
-                <ColorPicker
-                    value={mixed ? '#000000' : value || '#000000'}
-                    onChange={(c) => {
-                        onChange(c);
-                        setOpen(false);
-                    }}
-                    showReset={showReset}
-                />
-            </PopoverContent>
-        </Popover>
     );
 }
