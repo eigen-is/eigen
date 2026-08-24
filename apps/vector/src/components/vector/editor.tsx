@@ -1,21 +1,17 @@
 import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
-import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import {
     useSelection,
     useTool,
     useVectorDoc,
     useVectorPresence,
-    VECTOR_TOOLS,
     VectorCanvas,
     VectorPropertiesPanel,
 } from '@workspace/ui/components/vector';
 import { useMemo } from 'react';
+import { Toolbar } from './toolbar';
 
 type VectorEditorProps = {
     ownerId: string;
@@ -23,13 +19,21 @@ type VectorEditorProps = {
     canWrite: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
+    onAccessDialogOpen: () => void;
 };
 
 // The live scene plus pointer/keyboard interaction. Tool and selection state are lifted here so the
 // toolbar, canvas, and properties panel share one source (the slides editor/canvas idiom); viewport
 // and gestures stay in the canvas. Wrapped in MediaResolverProvider (the slides idiom) so the canvas
 // resolves + uploads images through the container's media/ folder.
-export function VectorEditor({ ownerId, path, canWrite, mediaFolderId, chatFolderId }: VectorEditorProps) {
+export function VectorEditor({
+    ownerId,
+    path,
+    canWrite,
+    mediaFolderId,
+    chatFolderId,
+    onAccessDialogOpen,
+}: VectorEditorProps) {
     const doc = useVectorDoc(ownerId, path.mountId, path.id);
     const { tool, setTool } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
@@ -57,31 +61,14 @@ export function VectorEditor({ ownerId, path, canWrite, mediaFolderId, chatFolde
                     width="flex"
                     toolbarBorder="always"
                     toolbar={
-                        <div className="flex w-full items-center gap-2">
-                            <ToolbarTitle>{stripEigenExtension(path.name)}</ToolbarTitle>
-                            {canWrite && (
-                                <div className="ml-auto flex items-center gap-1">
-                                    {VECTOR_TOOLS.map((t) => (
-                                        <Tooltip key={t.tool}>
-                                            <TooltipTrigger asChild>
-                                                {/* aria-pressed styling, not data-state: TooltipTrigger asChild clobbers data-state */}
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    aria-pressed={tool === t.tool}
-                                                    aria-label={t.label}
-                                                    className="h-8 w-8 aria-pressed:bg-primary/15 aria-pressed:text-primary aria-pressed:hover:bg-primary/20 aria-pressed:hover:text-primary"
-                                                    onClick={() => setTool(t.tool)}
-                                                >
-                                                    <t.icon className="h-4 w-4" />
-                                                </Button>
-                                            </TooltipTrigger>
-                                            <TooltipContent>{`${t.label} (${t.shortcut})`}</TooltipContent>
-                                        </Tooltip>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
+                        <Toolbar
+                            path={path}
+                            canWrite={canWrite}
+                            undoManager={doc.undoManager}
+                            tool={tool}
+                            setTool={setTool}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                        />
                     }
                 >
                     {!doc.synced ? (
