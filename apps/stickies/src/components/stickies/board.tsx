@@ -87,6 +87,7 @@ export function StickiesBoard({
         handleAddColumn,
         deleteCardFromBoard,
         isSynced,
+        loaded,
         yjsDoc,
         undoManager,
         provider,
@@ -303,7 +304,8 @@ export function StickiesBoard({
         return null;
     };
 
-    if (!isSynced) return <LoadingState />;
+    // Latched: a WS blip keeps the board mounted; `isSynced` still gates presence + seeding. See useCollabDoc.
+    if (!loaded) return <LoadingState />;
 
     return (
         <MediaResolverProvider

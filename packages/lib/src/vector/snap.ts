@@ -51,7 +51,9 @@ export function computeSnapTargets(
 
 // Snap `box` to the targets. `mode` is 'move' or 'resize-<dir>'. `threshold` is in box units.
 // `centerOnly` (move) snaps the box by its centre alone — the rule for a rotated mover, whose edges
-// lie but whose centre is rotation-invariant. Returns the snapped box + the guide lines that matched.
+// lie but whose centre is rotation-invariant. `lockAxis` (move) is the Shift dominant-axis constraint:
+// 'x' keeps x fixed (skip vertical snapping + guides), 'y' keeps y fixed — so a locked axis never
+// gets a correction to undo at the call site. Returns the snapped box + the guide lines that matched.
 // The post-snap 0.1 line-detection epsilon is a coordinate-exactness check (the snap made the edge
 // equal to the target), not a hit radius, so it needs no zoom scaling.
 export function snapBoxToTargets(
@@ -60,6 +62,7 @@ export function snapBoxToTargets(
     mode: string,
     threshold: number,
     centerOnly = false,
+    lockAxis?: 'x' | 'y',
 ): SnapResult {
     const edges = edgesOf(box);
     const lines: SnapLine[] = [];
@@ -74,21 +77,25 @@ export function snapBoxToTargets(
         let snapX = x;
         let snapY = y;
 
-        for (const vs of vSnaps) {
-            for (const edge of vEdges) {
-                const d = Math.abs(edge - vs);
-                if (d < threshold && d < Math.abs(bestDx)) {
-                    bestDx = edge - vs;
-                    snapX = x - bestDx;
+        if (lockAxis !== 'x') {
+            for (const vs of vSnaps) {
+                for (const edge of vEdges) {
+                    const d = Math.abs(edge - vs);
+                    if (d < threshold && d < Math.abs(bestDx)) {
+                        bestDx = edge - vs;
+                        snapX = x - bestDx;
+                    }
                 }
             }
         }
-        for (const hs of hSnaps) {
-            for (const edge of hEdges) {
-                const d = Math.abs(edge - hs);
-                if (d < threshold && d < Math.abs(bestDy)) {
-                    bestDy = edge - hs;
-                    snapY = y - bestDy;
+        if (lockAxis !== 'y') {
+            for (const hs of hSnaps) {
+                for (const edge of hEdges) {
+                    const d = Math.abs(edge - hs);
+                    if (d < threshold && d < Math.abs(bestDy)) {
+                        bestDy = edge - hs;
+                        snapY = y - bestDy;
+                    }
                 }
             }
         }

@@ -27,7 +27,6 @@ import {
     elementToSvg,
     type FillStyle,
     fitImageSize,
-    getElementBounds,
     getElementsBounds,
     isTransparent,
     type MarqueeMode,
@@ -37,6 +36,7 @@ import {
     type Roundness,
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
+    type SnapTargets,
     type StrokeStyle,
     snapBoxToTargets,
     type TextAlign,
@@ -277,6 +277,9 @@ type Gesture = { pointerId: number } & (
           originals: Record<string, { x: number; y: number }>;
           ids: string[];
           moved: boolean;
+          // Snap targets = every OTHER element's edges/centre, invariant for the gesture (only
+          // previews move; committed elements don't), so compute once here instead of per tick.
+          snapTargets: SnapTargets;
       }
     | { kind: 'create'; startX: number; startY: number }
     | { kind: 'marquee'; startX: number; startY: number; additive: boolean; base: string[] }
@@ -1260,6 +1263,7 @@ export function VectorCanvas({
                 originals,
                 ids,
                 moved: false,
+                snapTargets: buildSnapTargets(new Set(ids)),
             };
             return;
         }
@@ -1317,40 +1321,34 @@ export function VectorCanvas({
             const selEls = g.ids
                 .map((id) => elementsRef.current.find((el) => el.id === id))
                 .filter((el): el is VectorElement => !!el);
+            const selById = new Map(selEls.map((el) => [el.id, el]));
             // Snap the selection's AABB to the other elements (centre-only if any member is rotated —
             // Override-24), then apply the snap correction to every moved element. Empty lines = no snap.
+            // A Shift-locked axis (the zeroed one) is passed to snap as lockAxis so it never produces a
+            // correction or guide line to undo here.
             let snapDx = 0;
             let snapDy = 0;
             if (selEls.length > 0) {
-                let minX = Number.POSITIVE_INFINITY;
-                let minY = Number.POSITIVE_INFINITY;
-                let maxX = Number.NEGATIVE_INFINITY;
-                let maxY = Number.NEGATIVE_INFINITY;
-                for (const el of selEls) {
-                    const bb = getElementBounds({ ...elementBox(el), x: el.x + dx, y: el.y + dy });
-                    minX = Math.min(minX, bb.minX);
-                    minY = Math.min(minY, bb.minY);
-                    maxX = Math.max(maxX, bb.maxX);
-                    maxY = Math.max(maxY, bb.maxY);
-                }
-                const movedAabb: Box = { x: minX, y: minY, width: maxX - minX, height: maxY - minY, angle: 0 };
+                const b = getElementsBounds(selEls.map((el) => ({ ...elementBox(el), x: el.x + dx, y: el.y + dy })));
                 const anyRotated = selEls.some((el) => el.angle !== 0);
+                const lockAxis = e.shiftKey ? (dx === 0 ? 'x' : 'y') : undefined;
                 const { box: snapped, lines } = snapBoxToTargets(
-                    movedAabb,
-                    buildSnapTargets(new Set(g.ids)),
+                    boundsToBox(b),
+                    g.snapTargets,
                     'move',
                     SNAP_SCREEN_THRESHOLD / zoom,
                     anyRotated,
+                    lockAxis,
                 );
-                snapDx = snapped.x - minX;
-                snapDy = snapped.y - minY;
+                snapDx = snapped.x - b.minX;
+                snapDy = snapped.y - b.minY;
                 setSnapLines(lines);
             }
 
             const next: Record<string, Box> = {};
             for (const id of g.ids) {
                 const o = g.originals[id];
-                const el = ordered.find((x) => x.id === id);
+                const el = selById.get(id);
                 if (!o || !el) continue;
                 next[id] = {
                     x: o.x + dx + snapDx,

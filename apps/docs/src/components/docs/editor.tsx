@@ -181,14 +181,17 @@ export const CollaborativeEditor = ({
     const {
         doc: yDoc,
         provider,
-        synced,
+        loaded,
     } = useCollabDoc({
         ownerId: path.ownerId,
         mountId: path.mountId,
         pathId: path.id,
     });
 
-    if (!synced || !provider || !yDoc) {
+    // Gate on the LATCHED loaded flag, not live `synced`: a mid-session WS blip must not unmount
+    // TiptapEditor (y-prosemirror's undo history is destroyed on unmount); the mounted editor
+    // converges on reconnect.
+    if (!loaded || !provider || !yDoc) {
         return <LoadingState />;
     }
 

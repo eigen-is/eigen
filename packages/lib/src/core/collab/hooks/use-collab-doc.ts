@@ -46,7 +46,15 @@ export interface CollabDoc {
     docRef: RefObject<Y.Doc | null>;
     provider: WebsocketProvider | null;
     undoManager: Y.UndoManager | null;
+    // Live sync state — flips true on every provider 'sync' and false on disconnect. Use for
+    // presence, seed-if-empty, and other work that must track the actual connection.
     synced: boolean;
+    // LATCHED first-load flag: false at doc creation, true after the FIRST synced=true for this doc
+    // instance, and reset only on teardown / pathId swap. Gate the initial loading screen on THIS,
+    // not `synced` — a mid-session WS blip (synced → false → true) must not unmount the editor
+    // (destroying y-prosemirror undo history / transient selection); the mounted doc converges on
+    // reconnect. The pathId-swap loading gate still works: the cleanup resets it before the new doc.
+    loaded: boolean;
 }
 
 export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
@@ -56,6 +64,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [provider, setProvider] = useState<WebsocketProvider | null>(null);
     const [undoManager, setUndoManager] = useState<Y.UndoManager | null>(null);
     const [synced, setSynced] = useState(false);
+    const [loaded, setLoaded] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
 
@@ -84,6 +93,9 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
         const handleSync = (isSynced: boolean) => {
             setSynced(isSynced);
+            // Latch on the first successful sync; never cleared here (only in teardown below), so a
+            // later disconnect leaves `loaded` true and the editor stays mounted.
+            if (isSynced) setLoaded(true);
             onSyncRef.current?.(ctx, isSynced);
         };
         provider.on('sync', handleSync);
@@ -94,6 +106,8 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
         return () => {
             setSynced(false);
+            // Reset the latch so a pathId swap re-shows the loading screen for the new doc.
+            setLoaded(false);
             provider.off('sync', handleSync);
             // Host teardown first (unobserve, flush-on-unmount), then destroy the framework objects
             // provider→doc (provider.destroy detaches its own doc listener). The effect re-runs on a
@@ -109,5 +123,5 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
     }, [ownerId, mountId, pathId]);
 
-    return { doc, docRef, provider, undoManager, synced };
+    return { doc, docRef, provider, undoManager, synced, loaded };
 }

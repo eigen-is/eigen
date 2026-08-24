@@ -184,7 +184,8 @@ export function VectorEditor({
                             />
                         }
                     >
-                        {!doc.synced ? (
+                        {/* Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence. */}
+                        {!doc.loaded ? (
                             <LoadingState />
                         ) : (
                             <div className="flex h-full w-full overflow-hidden">

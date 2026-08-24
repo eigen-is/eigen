@@ -349,7 +349,11 @@ function SheetEditorInner({
         ],
     );
 
-    if (!synced || !initialData) {
+    // initialData is the load latch, deliberately NOT `synced`: the shared useCollabDoc flips
+    // `synced` false on a WS blip and true on reconnect, and unmounting the Workbook there would
+    // drop the engine undo stack and any in-progress cell edit. The mounted workbook catches up via
+    // the op-log observer (and a remote snapshot flush remounts through snapshotVersion).
+    if (!initialData) {
         return <LoadingState />;
     }
 

@@ -235,6 +235,7 @@ function SlideEditorInner({
     const {
         deck,
         isSynced,
+        loaded,
         activeSlideId,
         setActiveSlideId,
         addSlide,
@@ -499,48 +500,20 @@ function SlideEditorInner({
         [moveObjectsZOrder, selectedObjectIds],
     );
     useZOrderHotkeys(canEdit && hasSelection && !isEditing, zOrderSelected);
-    useHotkey(
-        'ArrowLeft',
-        (e) => {
-            e.preventDefault();
-            moveSelected(-NUDGE_STEP, 0);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    useHotkey(
-        'ArrowRight',
-        (e) => {
-            e.preventDefault();
-            moveSelected(NUDGE_STEP, 0);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    useHotkey(
-        'ArrowUp',
-        (e) => {
-            e.preventDefault();
-            moveSelected(0, -NUDGE_STEP);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    useHotkey(
-        'ArrowDown',
-        (e) => {
-            e.preventDefault();
-            moveSelected(0, NUDGE_STEP);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    // Shift-nudge — large step, shared with vector. Same typing-target guard as the 1px arrows.
+    // Arrow nudge (1px) + Shift-nudge (large step, shared with vector), one factory + guard for both.
     const nudgeEnabled = { enabled: canEdit && hasSelection && !isEditing };
-    const shiftNudge = (dx: number, dy: number) => (e: KeyboardEvent) => {
+    const nudge = (dx: number, dy: number) => (e: KeyboardEvent) => {
         e.preventDefault();
         moveSelected(dx, dy);
     };
-    useHotkey('Shift+ArrowLeft', shiftNudge(-NUDGE_STEP_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowRight', shiftNudge(NUDGE_STEP_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowUp', shiftNudge(0, -NUDGE_STEP_LARGE), nudgeEnabled);
-    useHotkey('Shift+ArrowDown', shiftNudge(0, NUDGE_STEP_LARGE), nudgeEnabled);
+    useHotkey('ArrowLeft', nudge(-NUDGE_STEP, 0), nudgeEnabled);
+    useHotkey('ArrowRight', nudge(NUDGE_STEP, 0), nudgeEnabled);
+    useHotkey('ArrowUp', nudge(0, -NUDGE_STEP), nudgeEnabled);
+    useHotkey('ArrowDown', nudge(0, NUDGE_STEP), nudgeEnabled);
+    useHotkey('Shift+ArrowLeft', nudge(-NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowRight', nudge(NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowUp', nudge(0, -NUDGE_STEP_LARGE), nudgeEnabled);
+    useHotkey('Shift+ArrowDown', nudge(0, NUDGE_STEP_LARGE), nudgeEnabled);
     // ⌘A select-all (active slide's objects) and ⌘D duplicate (shared DUPLICATE_OFFSET, same as vector).
     // Mod combos default ignoreInputs off, so opt in — ⌘A must not hijack select-all in a text input.
     useHotkey(
@@ -973,7 +946,9 @@ function SlideEditorInner({
     // active slide and the user can write (or comments are open) — inset the find bar clear of it.
     const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || activityPanelOpen || canWrite);
 
-    if (!isSynced) return <LoadingState />;
+    // Latched: a WS blip keeps the editor mounted (transient selection/preview state survives) — see
+    // useCollabDoc. `isSynced` still drives presence + seed-on-sync, unchanged.
+    if (!loaded) return <LoadingState />;
 
     if (isPresenting && activeSlide) {
         return (

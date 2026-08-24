@@ -54,7 +54,8 @@ export function normalizeParentChildRefs(doc: Y.Doc, parentMap: string, childMap
             const firstParentValue = parents.get(parentIds[0]);
             if (firstParentValue) {
                 const firstParent = firstParentValue as Y.Map<unknown>;
-                const firstRefs = firstParent.get(childRefField) as Y.Array<string>;
+                const firstRefs = firstParent.get(childRefField) as Y.Array<string> | undefined;
+                if (!firstRefs) return; // tolerate here too — a throw would escape into the observer
                 for (const childId of childIds) {
                     if (!childToParents[childId] || childToParents[childId].length === 0) {
                         firstRefs.push([childId]);

@@ -68,6 +68,17 @@ describe('normalizeParentChildRefs', () => {
         expect(refsOf(doc, 'p2')).toEqual(['c1']);
     });
 
+    test('tolerates an orphan when the first parent has no ref array', () => {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            const bare = new Y.Map();
+            bare.set('id', 'p1'); // no 'refs' array
+            doc.getMap('parents').set('p1', bare);
+            doc.getMap('children').set('orphan', new Y.Map());
+        });
+        expect(() => normalizeParentChildRefs(doc, 'parents', 'children', 'refs')).not.toThrow();
+    });
+
     test('is idempotent — a well-formed doc is left untouched', () => {
         const doc = makeDoc({ p1: ['c1'], p2: ['c2'] }, ['c1', 'c2']);
         const before = Y.encodeStateAsUpdate(doc);
