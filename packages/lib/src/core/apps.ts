@@ -13,12 +13,12 @@ import {
 } from '@workspace/lib/api';
 import {
     Calendar,
+    Diamond,
     FileText,
     HardDrive,
     LayoutDashboard,
     Mail,
     MessageSquare,
-    PenTool,
     Presentation,
     Sheet,
     SquareKanban,
@@ -79,7 +79,7 @@ const apps = [
         name: 'Vector',
         color: 'var(--app-vector-color)',
         href: getVectorAppUrl(),
-        icon: PenTool,
+        icon: Diamond,
         description: 'Draw and diagram',
     },
     {

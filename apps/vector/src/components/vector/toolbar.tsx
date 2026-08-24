@@ -2,7 +2,7 @@ import { useYjsUndoState } from '@workspace/lib/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, TooltipButton } from '@workspace/ui';
 import { VECTOR_TOOLS, type VectorTool } from '@workspace/ui/components/vector';
-import { PenTool } from 'lucide-react';
+import { Diamond } from 'lucide-react';
 
 type ToolbarProps = {
     path: DrivePath;
@@ -27,7 +27,7 @@ export function Toolbar({ path, canWrite, undoManager, tool, setTool, onAccessDi
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}
                         createLabel="New vector"
-                        createIcon={PenTool}
+                        createIcon={Diamond}
                         createType="vector"
                     />
                     {/* Render unconditionally once vector has a DocSearchProvider (Find items survive read-only). */}

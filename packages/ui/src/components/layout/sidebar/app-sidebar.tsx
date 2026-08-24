@@ -13,12 +13,12 @@ import { teamOwnerId } from '@workspace/lib/types';
 import { Badge } from '@workspace/ui/components/badge';
 import {
     Bell,
+    Diamond,
     Download,
     FileText,
     Home,
     Image,
     MessageSquare,
-    PenTool,
     Presentation,
     Sheet,
     SquareKanban,
@@ -97,7 +97,7 @@ const FILTER_ENTRIES: ReadonlyArray<FilterEntry> = [
     {
         targetApp: 'vector',
         label: 'All vectors',
-        icon: <PenTool className="h-4 w-4" />,
+        icon: <Diamond className="h-4 w-4" />,
         driveMime: 'application-eigenvector',
         appHref: () => getVectorAppUrl(),
     },
