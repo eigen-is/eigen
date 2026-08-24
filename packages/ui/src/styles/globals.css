@@ -598,10 +598,11 @@
     word-break: normal;
 }
 
+/* Position-neutral chip look (shared everywhere the label renders: docs caret, sheet overlay,
+   vector CollabPointer). Placement is scoped to each context — the caret rule below, and the sheet
+   overlay's `.fortune-presence-selection` descendant rule — so the chip's look is one source while
+   each editor positions its own chip. */
 .collaboration-cursor__label {
-    position: absolute;
-    top: -1.4em;
-    left: -1px;
     font-size: 12px;
     font-weight: 600;
     font-style: normal;
@@ -617,6 +618,13 @@
     pointer-events: none;
 }
 
+/* Caret placement: float the chip above-left of the inline Tiptap caret (docs). */
+.collaboration-cursor__caret .collaboration-cursor__label {
+    position: absolute;
+    top: -1.4em;
+    left: -1px;
+}
+
 /* Selected-object chrome (shared: docs figure via ImageResizeHandles, slides
    SelectionChrome overlay, sheets floating image via ImgBoxs): the ring around
    the object and the square resize grips, one visual for all three editors. */
@@ -629,6 +637,14 @@
 /* Group/multi-selection bounds: same floated ring, dashed (Excalidraw group convention). */
 .eigen-selection-ring-dashed {
     outline-style: dashed;
+}
+
+/* A remote collaborator's selection ring (vector CollabPointer, later slides/stickies): the same
+   geometry as .eigen-selection-ring, tinted to the peer's color via the inline --peer-color custom
+   property. One source for local and remote rings — apply alongside .eigen-selection-ring. */
+/* Must stay AFTER .eigen-selection-ring: equal specificity, source order carries the tint. */
+.eigen-selection-ring-peer {
+    outline-color: var(--peer-color);
 }
 
 .eigen-selection-handle {

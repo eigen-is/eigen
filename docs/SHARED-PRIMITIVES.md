@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1003 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1008 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (131)
+## Components (134)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -75,7 +75,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatMessageList` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-list.tsx |
 | `ChatPlayerSuggest` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-player-suggest.tsx |
 | `ChatSlashSuggest` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-slash-suggest.tsx |
+| `CollabPointer` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/collab-pointer.tsx |
 | `PresenceLabel` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
+| `RemoteSelectionRing` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/remote-selection-ring.tsx |
 | `ActivityPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/activity-panel.tsx |
 | `AssigneeMenuItems` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-menu-items.tsx |
 | `AssigneePicker` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/assignee-picker.tsx |
@@ -144,6 +146,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItem` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserName` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UserNameCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
+| `CursorLayer` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/cursor-layer.tsx |
 | `VectorCanvas` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-canvas.tsx |
 | `VectorPropertiesPanel` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-properties-panel.tsx |
 
@@ -171,7 +174,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (235)
+## Hooks (237)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -381,6 +384,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useContactAvatarUpload` | `@workspace/ui` | packages/ui/src/components/use-contact-avatar-upload.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useAttachmentMeta` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-meta.ts |
+| `useAwarenessPeers` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-peers.ts |
+| `useThrottledAwarenessField` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-throttled-awareness-field.ts |
 | `useContactInput` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/use-contact-input.ts |
 | `useContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/use-context-menu.ts |
 | `useDocumentExport` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/use-document-export.tsx |
