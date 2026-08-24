@@ -10,6 +10,7 @@ import {
     DEFAULT_FONT_FAMILY,
     type FillStyle,
     isTransparent,
+    type Roundness,
     type StrokeStyle,
     type VectorElement,
     type VectorElementType,
@@ -30,7 +31,6 @@ import {
     PropertySection,
 } from '@workspace/ui/components/properties-panel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { Toggle } from '@workspace/ui/components/toggle';
 import { BringToFront, ChevronDown, ChevronUp, SendToBack } from 'lucide-react';
 import { useState } from 'react';
 import type * as Y from 'yjs';
@@ -56,6 +56,10 @@ const ROUGHNESS_OPTIONS: { value: string; label: string }[] = [
     { value: '0', label: 'Architect' },
     { value: '1', label: 'Artist' },
     { value: '2', label: 'Cartoonist' },
+];
+const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
+    { value: 'sharp', label: 'Sharp' },
+    { value: 'round', label: 'Rounded' },
 ];
 const STROKE_STYLE_OPTIONS: { value: StrokeStyle; label: string }[] = [
     { value: 'solid', label: 'Solid' },
@@ -188,15 +192,11 @@ export function VectorPropertiesPanel({
                         </PropertyRow>
                         {allRectDiamond && (
                             <PropertyRow label="Edges">
-                                <Toggle
-                                    size="sm"
-                                    className="h-7 w-full text-xs"
-                                    pressed={roundness === 'round'}
-                                    data-mixed={isMixed(roundness) ? '' : undefined}
-                                    onPressedChange={(p) => applyToAll({ roundness: p ? 'round' : 'sharp' })}
-                                >
-                                    Rounded
-                                </Toggle>
+                                <MergedSelect
+                                    value={roundness}
+                                    onChange={(v) => applyToAll({ roundness: v })}
+                                    options={EDGES_OPTIONS}
+                                />
                             </PropertyRow>
                         )}
                     </PropertySection>
