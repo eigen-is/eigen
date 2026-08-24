@@ -4,7 +4,7 @@ import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
-import type { Selection, Sheet, SheetConfig } from './types';
+import type { Image, Selection, Sheet, SheetConfig } from './types';
 
 // Cell value as accepted by setCellValue / surfaced through update hooks. Covers
 // raw scalar input from the formula bar / paste path plus the `Cell` object form
@@ -123,6 +123,10 @@ export type Hooks = {
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;
+    // Fired whenever the active floating image changes (selected, deselected, or its geometry
+    // committed), so the app can mount/refresh its image properties panel. `null` when nothing is
+    // active.
+    onActiveImageChange?: (image: Image | null) => void;
 };
 
 export type Settings = {
@@ -148,6 +152,10 @@ export type Settings = {
     hooks?: Hooks;
     currency?: string;
     fontList?: unknown[];
+    // Ephemeral aspect-lock state for the active image's ObjectTransform (U4b/D8c). The app owns it
+    // (via `useAspectLock`) so the same ON/OFF drives both the canvas handles and the panel checkbox;
+    // never stored on an element.
+    imageAspectLocked?: boolean;
 };
 
 export const defaultSettings: Required<Settings> = {
@@ -191,4 +199,5 @@ export const defaultSettings: Required<Settings> = {
     hooks: {},
     currency: '€',
     fontList: [],
+    imageAspectLocked: false,
 };

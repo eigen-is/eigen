@@ -13,12 +13,14 @@ import {
     deleteSheet,
     getFlowdata,
     getSheetIndex,
+    type Image,
     insertImage,
     insertRowCol,
     type Op,
     opToPatch,
     type Presence,
     type Range,
+    removeActiveImage,
     removeImageByMediaName,
     replaceAllMatches,
     replaceImageMediaName,
@@ -28,6 +30,7 @@ import {
     type SearchResult,
     type Settings,
     setSearchHighlights,
+    updateImage,
 } from '../../state';
 
 export function generateAPIs(
@@ -149,6 +152,13 @@ export function generateAPIs(
             setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName)),
 
         removeImageByMediaName: (name: string) => setContext((draftCtx) => removeImageByMediaName(draftCtx, name)),
+
+        // ObjectTransform resize/rotate commit + properties-panel numeric edits — one op + undo step
+        // each (default setContext).
+        updateImage: (id: string, fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>) =>
+            setContext((draftCtx) => updateImage(draftCtx, id, fields)),
+
+        removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
 
         undo: handleUndo,
         redo: handleRedo,

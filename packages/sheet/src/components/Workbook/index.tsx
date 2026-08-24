@@ -349,6 +349,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
 
+        // Surface the active floating image to the app so it can mount its properties panel. Fires on
+        // select/deselect and after a geometry commit (insertedImgs changes); `find` returns a stable
+        // reference while unchanged, so the app's setState bails when nothing moved.
+        useEffect(() => {
+            const active = context.insertedImgs?.find((img) => img.id === context.activeImg) ?? null;
+            mergedSettings.hooks?.onActiveImageChange?.(active);
+        }, [context.activeImg, context.insertedImgs, mergedSettings.hooks]);
+
         const providerValue = useMemo(
             () => ({
                 context,

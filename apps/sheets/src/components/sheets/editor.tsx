@@ -9,13 +9,14 @@ import {
 } from '@workspace/lib/drive';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Workbook, type WorkbookInstance } from '@workspace/sheet';
+import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
 import { DocumentShareCluster, FileDropOverlay, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { type TransformFields, useAspectLock } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
@@ -25,6 +26,7 @@ import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
 import { useSheet } from './hooks/use-sheet';
+import { ImagePropertiesPanel } from './image-properties-panel';
 import { ToolbarLeftItems } from './toolbar';
 
 type SheetEditorProps = {
@@ -63,6 +65,11 @@ function SheetEditorInner({
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    // The active floating image (surfaced from the workbook via onActiveImageChange) drives the
+    // right-side properties panel. Its aspect-lock — images default CHECKED (D8b) — feeds BOTH the
+    // panel checkbox and the canvas ObjectTransform, so it lives here, one level above both.
+    const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
+    const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
 
     const { initialData, snapshotVersion, synced, handleOp, onDataChange, docRef, provider } = useSheet(
         ownerId,
@@ -229,6 +236,14 @@ function SheetEditorInner({
         [addTargetCell, addInitialTitle, createCard, assignComment],
     );
 
+    // One op per edit; the workbook re-surfaces the committed image via onActiveImageChange.
+    const handleImageTransform = useCallback(
+        (fields: TransformFields) => {
+            if (activeImage) workbookRef.current?.updateImage(activeImage.id, fields);
+        },
+        [activeImage],
+    );
+
     const leftItems = useMemo(
         () => <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} />,
         [path, canWrite, onAccessDialogOpen],
@@ -307,12 +322,14 @@ function SheetEditorInner({
                                 defaultRowHeight={20}
                                 defaultFontSize={10}
                                 defaultColWidth={100}
+                                imageAspectLocked={imageAspectLocked}
                                 hooks={{
                                     afterSelectionChange: (sheetId, selection) => {
                                         const r = selection.row_focus ?? selection.row?.[0];
                                         const c = selection.column_focus ?? selection.column?.[0];
                                         if (r != null && c != null) publishSelection(sheetId, r, c);
                                     },
+                                    onActiveImageChange: setActiveImage,
                                     ...(canWrite && mediaFolderId
                                         ? { onInsertImage: () => setImagePickerOpen(true) }
                                         : {}),
@@ -390,6 +407,16 @@ function SheetEditorInner({
                         activeComments={activeComments}
                         commentContextMenu={commentContextMenu}
                         onOpenCard={setOpenCardId}
+                    />
+                )}
+                {activeImage && !mobilePanelOpen && (
+                    <ImagePropertiesPanel
+                        image={activeImage}
+                        canWrite={canWrite}
+                        aspectLocked={imageAspectLocked}
+                        onAspectLockChange={setImageAspectLocked}
+                        onChange={handleImageTransform}
+                        onDelete={() => workbookRef.current?.removeActiveImage()}
                     />
                 )}
             </div>

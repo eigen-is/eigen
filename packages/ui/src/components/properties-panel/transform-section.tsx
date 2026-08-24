@@ -35,6 +35,8 @@ type TransformSectionProps = {
     // util is the sole dim writer). The aspect checkbox is hidden with them: locking W↔H is
     // meaningless when neither is editable, and it must never override text's forced 'aspect' mode.
     sizeDisabled?: boolean;
+    // Disables EVERY input (read-only viewers): a visible read-out whose fields can't be edited.
+    disabled?: boolean;
     // Aspect-ratio checkbox. Controlled by the host; omit `onAspectLockChange` to hide it entirely.
     aspectLocked?: boolean;
     onAspectLockChange?: (locked: boolean) => void;
@@ -51,12 +53,14 @@ export function TransformSection({
     angle,
     onChange,
     sizeDisabled = false,
+    disabled = false,
     aspectLocked = false,
     onAspectLockChange,
     aspectRatio,
 }: TransformSectionProps) {
     const aspectId = useId();
-    const showAspect = !sizeDisabled && onAspectLockChange !== undefined;
+    const sizeOff = disabled || sizeDisabled;
+    const showAspect = !sizeOff && onAspectLockChange !== undefined;
 
     // Effective ratio: host intrinsic when supplied, else the current box ratio (only when both dims
     // are concrete — a mixed selection has no single ratio). null disables coupling entirely.
@@ -77,22 +81,16 @@ export function TransformSection({
         <PropertySection title="Transform">
             <div className="grid grid-cols-2 gap-2">
                 <PropertyRow label="X">
-                    <MergedNumberInput value={x} onChange={(v) => onChange({ x: v })} step={1} />
+                    <MergedNumberInput value={x} onChange={(v) => onChange({ x: v })} step={1} disabled={disabled} />
                 </PropertyRow>
                 <PropertyRow label="Y">
-                    <MergedNumberInput value={y} onChange={(v) => onChange({ y: v })} step={1} />
+                    <MergedNumberInput value={y} onChange={(v) => onChange({ y: v })} step={1} disabled={disabled} />
                 </PropertyRow>
                 <PropertyRow label="W">
-                    <MergedNumberInput value={width} onChange={changeWidth} step={1} min={1} disabled={sizeDisabled} />
+                    <MergedNumberInput value={width} onChange={changeWidth} step={1} min={1} disabled={sizeOff} />
                 </PropertyRow>
                 <PropertyRow label="H">
-                    <MergedNumberInput
-                        value={height}
-                        onChange={changeHeight}
-                        step={1}
-                        min={1}
-                        disabled={sizeDisabled}
-                    />
+                    <MergedNumberInput value={height} onChange={changeHeight} step={1} min={1} disabled={sizeOff} />
                 </PropertyRow>
             </div>
             {showAspect && (
@@ -114,6 +112,7 @@ export function TransformSection({
                     step={1}
                     min={0}
                     max={360}
+                    disabled={disabled}
                 />
             </PropertyRow>
         </PropertySection>
