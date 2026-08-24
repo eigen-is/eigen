@@ -333,6 +333,19 @@ export function ObjectTransform({
                     {Math.round(normalizeAngle(box.angle))}°
                 </div>
             )}
+            {dragging && !rotating && (
+                // Live W×H readout during a RESIZE gesture — the angle pill's twin (unit-transform
+                // checklist item 3). `dragging && !rotating` is exactly a resize in flight (rotate
+                // sets both, resize only `dragging`); move is host-side, so it never mounts this.
+                // Sits below the box, counter-rotated like the angle pill so it stays upright on a
+                // rotated element. Values are the live box in the host's units, rounded.
+                <div
+                    className="absolute left-1/2 top-full mt-2 pointer-events-none whitespace-nowrap rounded bg-foreground px-1.5 py-0.5 text-xs text-background"
+                    style={{ transform: `translateX(-50%) rotate(${-box.angle}deg)` }}
+                >
+                    {Math.round(box.width)} × {Math.round(box.height)}
+                </div>
+            )}
         </div>
     );
 }

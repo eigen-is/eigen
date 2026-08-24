@@ -18,6 +18,8 @@ import {
     PropertiesPanel,
     PropertyRow,
     PropertySection,
+    type TransformFields,
+    TransformSection,
 } from '@workspace/ui/components/properties-panel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Toggle } from '@workspace/ui/components/toggle';
@@ -48,9 +50,20 @@ type SlidePropertiesPanelProps = {
     onUpdate: (ids: string[], updates: Partial<SlideObject>) => void;
     onDelete?: (ids: string[]) => void;
     onArrange?: (op: ArrangeOp) => void;
+    // Ephemeral per-selection aspect lock (Override 3), owned by the editor so the same ON/OFF also
+    // feeds SlideCanvas' ObjectTransform resizeMode.
+    aspectLocked: boolean;
+    onAspectLockChange: (locked: boolean) => void;
 };
 
-export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }: SlidePropertiesPanelProps) {
+export function SlidePropertiesPanel({
+    objects,
+    onUpdate,
+    onDelete,
+    onArrange,
+    aspectLocked,
+    onAspectLockChange,
+}: SlidePropertiesPanelProps) {
     const ids = useMemo(() => objects.map((o) => o.id), [objects]);
 
     const allText = objects.every((o) => o.type === 'text');
@@ -63,6 +76,8 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
         [ids, onUpdate],
     );
 
+    const handleTransform = useCallback((fields: TransformFields) => handleUpdate(fields), [handleUpdate]);
+
     const x = getMergedValue(objects, (o) => Math.round(o.x));
     const y = getMergedValue(objects, (o) => Math.round(o.y));
     const width = getMergedValue(objects, (o) => Math.round(o.width));
@@ -73,41 +88,16 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
         <PropertiesPanel
             title={objects.length === 1 ? (objects[0].type === 'text' ? 'Text' : 'Image') : `${objects.length} objects`}
         >
-            <PropertySection title="Transform">
-                <div className="grid grid-cols-2 gap-2">
-                    <PropertyRow label="X">
-                        <MergedNumberInput value={x} onChange={(v) => handleUpdate({ x: v })} step={1} />
-                    </PropertyRow>
-                    <PropertyRow label="Y">
-                        <MergedNumberInput value={y} onChange={(v) => handleUpdate({ y: v })} step={1} />
-                    </PropertyRow>
-                    <PropertyRow label="W">
-                        <MergedNumberInput
-                            value={width}
-                            onChange={(v) => handleUpdate({ width: v })}
-                            step={1}
-                            min={1}
-                        />
-                    </PropertyRow>
-                    <PropertyRow label="H">
-                        <MergedNumberInput
-                            value={height}
-                            onChange={(v) => handleUpdate({ height: v })}
-                            step={1}
-                            min={1}
-                        />
-                    </PropertyRow>
-                </div>
-                <PropertyRow label="°">
-                    <MergedNumberInput
-                        value={angle}
-                        onChange={(v) => handleUpdate({ angle: v })}
-                        step={1}
-                        min={-360}
-                        max={360}
-                    />
-                </PropertyRow>
-            </PropertySection>
+            <TransformSection
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                angle={angle}
+                onChange={handleTransform}
+                aspectLocked={aspectLocked}
+                onAspectLockChange={onAspectLockChange}
+            />
 
             {onArrange && objects.length >= 2 && <ArrangeProperties count={objects.length} onArrange={onArrange} />}
 

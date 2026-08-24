@@ -28,6 +28,7 @@ import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cn } from '@workspace/ui/lib/utils';
@@ -753,6 +754,11 @@ function SlideEditorInner({
         [selectedObjectIds, deck.objects],
     );
 
+    // Aspect lock (Override 3), lifted here so the panel checkbox and the canvas' ObjectTransform
+    // resizeMode share one ephemeral setting. Default ON for image-only selections (D8b).
+    const allImageSelected = selectedObjects.length > 0 && selectedObjects.every((o) => o.type === 'image');
+    const [aspectLocked, setAspectLocked] = useAspectLock(selectedObjectIds.join(','), allImageSelected);
+
     const slideBackgroundImageUrl =
         activeSlide?.background?.type === 'image' && activeSlide.background.mediaName
             ? resolveMediaUrl(activeSlide.background.mediaName)
@@ -894,6 +900,7 @@ function SlideEditorInner({
                                                 onUpdateObject={updateObject}
                                                 onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
                                                 onTransformActiveChange={setTransformActive}
+                                                aspectLocked={aspectLocked}
                                                 provider={provider}
                                                 publishCursor={publishCursor}
                                                 onDropImage={canWrite ? handleDropImage : undefined}
@@ -937,6 +944,8 @@ function SlideEditorInner({
                                                 onUpdate={updateObjects}
                                                 onDelete={handleDeleteSelectedObjects}
                                                 onArrange={arrangeSelected}
+                                                aspectLocked={aspectLocked}
+                                                onAspectLockChange={setAspectLocked}
                                             />
                                         ) : canWrite && activeSlideId ? (
                                             <SlideBackgroundPanel

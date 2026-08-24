@@ -70,6 +70,10 @@ type SlideCanvasProps = {
     // Lets the editor's layered Escape bail while an ObjectTransform grip drag is live (that gesture
     // owns Escape in the capture phase to cancel itself; the editor must not deselect underneath it).
     onTransformActiveChange?: (active: boolean) => void;
+    // Aspect lock (Override 3), shared with the properties-panel checkbox: maps to ObjectTransform's
+    // 'aspect-default' resizeMode (Shift frees), else 'free'. Never 'aspect' — that kills single-axis
+    // stretch, which slides images legitimately use with objectFit.
+    aspectLocked?: boolean;
     searchActiveObjectId?: string | null;
     searchMatchedObjectIds?: ReadonlySet<string>;
     // Awareness: the provider drives the shared CursorLayer's own subscription; publishCursor pushes
@@ -108,6 +112,7 @@ export function SlideCanvas({
     onCommentDelete,
     onDuplicateObjects,
     onTransformActiveChange,
+    aspectLocked,
     searchActiveObjectId,
     searchMatchedObjectIds,
     provider,
@@ -414,6 +419,7 @@ export function SlideCanvas({
                         boxToStyle={boxToStyle}
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate
+                        resizeMode={aspectLocked ? 'aspect-default' : 'free'}
                         minSize={SLIDE_MIN_SIZE}
                         snapBox={snapBox}
                         onTransform={(next) => {

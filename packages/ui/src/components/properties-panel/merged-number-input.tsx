@@ -7,9 +7,10 @@ type MergedNumberInputProps = {
     min?: number;
     max?: number;
     step?: number;
+    disabled?: boolean;
 };
 
-export function MergedNumberInput({ value, onChange, min, max, step }: MergedNumberInputProps) {
+export function MergedNumberInput({ value, onChange, min, max, step, disabled }: MergedNumberInputProps) {
     const mixed = isMixed(value);
     return (
         <PropertyNumberInput
@@ -18,6 +19,7 @@ export function MergedNumberInput({ value, onChange, min, max, step }: MergedNum
             min={min}
             max={max}
             step={step}
+            disabled={disabled}
             placeholder={mixed ? '—' : undefined}
         />
     );

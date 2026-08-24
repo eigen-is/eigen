@@ -29,6 +29,8 @@ import {
     PropertiesPanel,
     PropertyRow,
     PropertySection,
+    type TransformFields,
+    TransformSection,
 } from '@workspace/ui/components/properties-panel';
 import { BringToFront, ChevronDown, ChevronUp, SendToBack } from 'lucide-react';
 import type * as Y from 'yjs';
@@ -79,6 +81,10 @@ type VectorPropertiesPanelProps = {
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     undoManager: Y.UndoManager | null;
+    // Aspect lock (Override 3), owned by the editor so the panel checkbox and the canvas'
+    // ObjectTransform resizeMode share one ephemeral setting.
+    aspectLocked: boolean;
+    onAspectLockChange: (locked: boolean) => void;
 };
 
 export function VectorPropertiesPanel({
@@ -86,6 +92,8 @@ export function VectorPropertiesPanel({
     selectedElements,
     updateElements,
     undoManager,
+    aspectLocked,
+    onAspectLockChange,
 }: VectorPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
     const isShape = (t: VectorElementType) => t === 'rectangle' || t === 'diamond' || t === 'ellipse';
@@ -124,6 +132,15 @@ export function VectorPropertiesPanel({
 
     const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
 
+    // Numeric transform (U4b) — x/y/angle write straight through applyToAll; width/height are
+    // disabled for text (its dims are DERIVED from fontSize via the measurement util, the sole dim
+    // writer), so applyToAll never receives them for a text selection.
+    const tx = getMergedValue(selectedElements, (el) => Math.round(el.x));
+    const ty = getMergedValue(selectedElements, (el) => Math.round(el.y));
+    const tWidth = getMergedValue(selectedElements, (el) => Math.round(el.width));
+    const tHeight = getMergedValue(selectedElements, (el) => Math.round(el.height));
+    const tAngle = getMergedValue(selectedElements, (el) => Math.round(el.angle));
+
     const strokeColor = getMergedValue(selectedElements, (el) => el.strokeColor);
     const strokeWidth = getMergedValue(selectedElements, (el) => el.strokeWidth);
     const strokeStyle = getMergedValue(selectedElements, (el) => el.strokeStyle);
@@ -144,6 +161,22 @@ export function VectorPropertiesPanel({
 
     return (
         <PropertiesPanel title={title}>
+            <TransformSection
+                x={tx}
+                y={ty}
+                width={tWidth}
+                height={tHeight}
+                angle={tAngle}
+                onChange={(fields: TransformFields) => applyToAll(fields)}
+                // Text dims are derived — disable W/H (and, with them, the aspect checkbox); size
+                // lives in fontSize.
+                // ANY text in the selection disables W/H: applyToAll writes every field to every
+                // selected element, and text dims are derived (measurement util is the sole writer).
+                sizeDisabled={textEls.length > 0}
+                aspectLocked={aspectLocked}
+                onAspectLockChange={onAspectLockChange}
+            />
+
             {allShapes && (
                 <>
                     <PropertySection title="Stroke">

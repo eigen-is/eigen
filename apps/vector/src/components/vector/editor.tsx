@@ -2,6 +2,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
+import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
     useSelection,
     useTool,
@@ -48,6 +49,11 @@ export function VectorEditor({
     );
     const showPanel = canWrite && selectedElements.length > 0;
 
+    // Aspect lock (Override 3), lifted here so the panel checkbox and the canvas' ObjectTransform
+    // resizeMode share one ephemeral setting. Default ON for image-only selections (D8b).
+    const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
+    const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
+
     return (
         <MediaResolverProvider
             ownerId={ownerId}
@@ -91,6 +97,7 @@ export function VectorEditor({
                                     selectedIds={selectedIds}
                                     setSelectedIds={setSelectedIds}
                                     toggle={toggle}
+                                    aspectLocked={aspectLocked}
                                     provider={doc.provider}
                                     publishCursor={publishCursor}
                                 />
@@ -101,6 +108,8 @@ export function VectorEditor({
                                     selectedElements={selectedElements}
                                     updateElements={doc.updateElements}
                                     undoManager={doc.undoManager}
+                                    aspectLocked={aspectLocked}
+                                    onAspectLockChange={setAspectLocked}
                                 />
                             )}
                         </div>

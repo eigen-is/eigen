@@ -6,3 +6,5 @@ export { MergedSelect } from './merged-select';
 export { getMergedValue, isMixed, type MergedValue, MIXED } from './merged-value';
 export { PROPERTIES_PANEL_WIDTH_PX, PropertiesPanel, PropertyRow, PropertySection } from './properties-panel';
 export { PropertyNumberInput } from './property-number-input';
+export { type TransformFields, TransformSection } from './transform-section';
+export { useAspectLock } from './use-aspect-lock';

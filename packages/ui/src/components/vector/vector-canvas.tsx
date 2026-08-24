@@ -178,6 +178,9 @@ type VectorCanvasProps = {
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
     toggle: (id: string) => void;
+    // Aspect lock (Override 3), shared with the properties-panel checkbox. Non-text selections map
+    // it to ObjectTransform's 'aspect-default'/'free' resizeMode; text stays forced 'aspect'.
+    aspectLocked: boolean;
     // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
     // local pointer's scene position (throttled in the editor's use-vector-presence).
     provider: WebsocketProvider | null;
@@ -203,6 +206,7 @@ export function VectorCanvas({
     selectedIds,
     setSelectedIds,
     toggle,
+    aspectLocked,
     provider,
     publishCursor,
 }: VectorCanvasProps) {
@@ -845,12 +849,11 @@ export function VectorCanvas({
                         boxToStyle={boxToStyle}
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate
-                        // Text has derived dims + no wrap, so only corners, aspect always locked; a
-                        // resize maps the width ratio → fontSize, then re-measures (see onCommit).
-                        // Images resize aspect-locked by default (Shift frees), all 8 grips.
-                        resizeMode={
-                            single.type === 'text' ? 'aspect' : single.type === 'image' ? 'aspect-default' : 'free'
-                        }
+                        // Text has derived dims + no wrap, so only corners, aspect ALWAYS locked
+                        // regardless of the checkbox; a resize maps the width ratio → fontSize, then
+                        // re-measures (see onCommit). Every other type follows the shared aspect lock:
+                        // 'aspect-default' (Shift frees) when checked, else 'free'.
+                        resizeMode={single.type === 'text' ? 'aspect' : aspectLocked ? 'aspect-default' : 'free'}
                         minSize={MIN_ELEMENT_SIZE}
                         onTransform={(next) => {
                             if (!transformStartedRef.current) {
