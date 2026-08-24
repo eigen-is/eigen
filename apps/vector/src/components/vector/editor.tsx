@@ -165,7 +165,7 @@ export function VectorEditor({
                 <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
                     <Column
                         id="editor"
-                        width="w-full"
+                        width="flex"
                         className="flex-1 h-full"
                         toolbarBorder="always"
                         toolbar={

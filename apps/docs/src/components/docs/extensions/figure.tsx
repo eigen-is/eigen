@@ -45,7 +45,11 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
 
     // Safety net: ObjectTransform's Escape-cancel and no-move-click paths fire no onCommit, so a
     // leftover preview width would otherwise stick. Any pointerup drops it and re-arms the latch.
+    // Scoped to the transform-chrome window (selected + editable) so at most one figure in the
+    // document holds these global listeners; teardown also clears, so a deselect mid-gesture can't
+    // strand a stale preview.
     useEffect(() => {
+        if (!(selected && isEditable)) return;
         const clear = () => {
             transformStarted.current = false;
             setPreviewWidth((p) => (p === null ? p : null));
@@ -55,8 +59,9 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
         return () => {
             document.removeEventListener('pointerup', clear);
             document.removeEventListener('pointercancel', clear);
+            clear();
         };
-    }, []);
+    }, [selected, isEditable]);
 
     const getMaxWidth = useCallback(() => {
         const container = containerRef.current?.closest('[data-document]');
@@ -199,8 +204,12 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                         onKeyDown={selected && isEditable ? handleKeyResize : undefined}
                         // A body click must not move DOM focus out of ProseMirror onto this tabIndex
                         // wrapper (the deleted component's grips preventDefault'd for the same
-                        // reason); Tab-focus for keyboard resize is unaffected.
-                        onMouseDown={(e) => e.preventDefault()}
+                        // reason); Tab-focus for keyboard resize is unaffected. Scoped to exactly
+                        // when the wrapper is focusable: the figure node is draggable, and a
+                        // prevented mousedown suppresses native drag start in spec-following
+                        // browsers — with no tabIndex there is no steal, so an unselected (or
+                        // read-only) figure's press stays fully native for PM click-select + drag.
+                        onMouseDown={selected && isEditable ? (e) => e.preventDefault() : undefined}
                     >
                         {showPlaceholder ? (
                             <div

@@ -40,9 +40,6 @@ type TransformSectionProps = {
     // Aspect-ratio checkbox. Controlled by the host; omit `onAspectLockChange` to hide it entirely.
     aspectLocked?: boolean;
     onAspectLockChange?: (locked: boolean) => void;
-    // Ratio (width / height) the lock uses. The host resolves an intrinsic image ratio when it can
-    // (D8a); null/undefined falls back to the current box ratio at edit time.
-    aspectRatio?: number | null;
 };
 
 export function TransformSection({
@@ -56,19 +53,17 @@ export function TransformSection({
     disabled = false,
     aspectLocked = false,
     onAspectLockChange,
-    aspectRatio,
 }: TransformSectionProps) {
     const aspectId = useId();
     const sizeOff = disabled || sizeDisabled;
     const showAspect = !sizeOff && onAspectLockChange !== undefined;
 
-    // Effective ratio: host intrinsic when supplied, else the current box ratio (only when both dims
-    // are concrete — a mixed selection has no single ratio). null disables coupling entirely.
-    const boxRatio =
+    // Coupling ratio: the current box ratio, only when both dims are concrete — a mixed selection has
+    // no single ratio. null disables coupling entirely.
+    const ratio =
         !isMixed(width) && width !== undefined && !isMixed(height) && height !== undefined && height !== 0
             ? width / height
             : null;
-    const ratio = aspectRatio ?? boxRatio;
     const coupled = showAspect && aspectLocked && ratio !== null && ratio > 0;
 
     // The derived dim is floored at 1 — an extreme ratio must not couple a valid edit to a 0-size.

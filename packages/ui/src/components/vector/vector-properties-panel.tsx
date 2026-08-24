@@ -26,10 +26,10 @@ import {
     MergedNumberInput,
     MergedSelect,
     type MergedValue,
+    numToStr,
     PropertiesPanel,
     PropertyRow,
     PropertySection,
-    type TransformFields,
     TransformSection,
     type ZOp,
     ZOrderButtons,
@@ -68,9 +68,6 @@ const FILL_STYLE_OPTIONS: { value: FillStyle; label: string }[] = [
     { value: 'hachure', label: 'Hachure' },
     { value: 'cross-hatch', label: 'Cross-hatch' },
 ];
-
-const numToStr = (v: MergedValue<number>): MergedValue<string> =>
-    isMixed(v) ? v : v === undefined ? undefined : String(v);
 
 type VectorPropertiesPanelProps = {
     // All elements — z-order reorders the selection relative to the rest (computeZOrder needs both).
@@ -164,7 +161,7 @@ export function VectorPropertiesPanel({
                 width={tWidth}
                 height={tHeight}
                 angle={tAngle}
-                onChange={(fields: TransformFields) => applyToAll(fields)}
+                onChange={applyToAll}
                 // Text dims are derived — disable W/H (and, with them, the aspect checkbox); size
                 // lives in fontSize.
                 // ANY text in the selection disables W/H: applyToAll writes every field to every

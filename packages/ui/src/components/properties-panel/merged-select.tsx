@@ -7,6 +7,13 @@ type MergedSelectProps<T extends string> = {
     options: { value: T; label: string }[];
 };
 
+// MergedSelect is string-typed; project a stored numeric value to its Select string (MIXED and
+// undefined pass through). A value not in the option list round-trips to its string and simply shows
+// no selected preset — the value keeps rendering, nothing is overwritten. Pair with `Number(v)` in
+// onChange.
+export const numToStr = (v: MergedValue<number>): MergedValue<string> =>
+    isMixed(v) ? v : v === undefined ? undefined : String(v);
+
 export function MergedSelect<T extends string>({ value, onChange, options }: MergedSelectProps<T>) {
     const mixed = isMixed(value);
     // Always-controlled: '' (never undefined) for mixed — Radix renders the placeholder for '',

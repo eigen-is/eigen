@@ -16,11 +16,10 @@ import {
     isMixed,
     MergedNumberInput,
     MergedSelect,
-    type MergedValue,
+    numToStr,
     PropertiesPanel,
     PropertyRow,
     PropertySection,
-    type TransformFields,
     TransformSection,
     type ZOp,
     ZOrderButtons,
@@ -84,8 +83,6 @@ export function SlidePropertiesPanel({
         [ids, onUpdate],
     );
 
-    const handleTransform = useCallback((fields: TransformFields) => handleUpdate(fields), [handleUpdate]);
-
     const x = getMergedValue(objects, (o) => Math.round(o.x));
     const y = getMergedValue(objects, (o) => Math.round(o.y));
     const width = getMergedValue(objects, (o) => Math.round(o.width));
@@ -102,7 +99,7 @@ export function SlidePropertiesPanel({
                 width={width}
                 height={height}
                 angle={angle}
-                onChange={handleTransform}
+                onChange={handleUpdate}
                 aspectLocked={aspectLocked}
                 onAspectLockChange={onAspectLockChange}
             />
@@ -420,12 +417,6 @@ function ImageProperties({
         </PropertySection>
     );
 }
-
-// MergedSelect is string-typed; project the stored numeric width to its Select string (MIXED and
-// undefined pass through). A legacy width not in STROKE_WIDTH_OPTIONS (e.g. 10) round-trips to its
-// string and simply shows no selected preset — the value keeps rendering, nothing is overwritten.
-const numToStr = (v: MergedValue<number>): MergedValue<string> =>
-    isMixed(v) ? v : v === undefined ? undefined : String(v);
 
 function BorderProperties({
     objects,

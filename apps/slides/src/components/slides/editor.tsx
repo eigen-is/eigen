@@ -29,6 +29,7 @@ import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { readImageSize, readImageSizeFromUrl } from '@workspace/ui/components/media';
 import { useAspectLock, useZOrderHotkeys, type ZOp } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
@@ -54,27 +55,6 @@ import {
     SLIDE_BASE_WIDTH,
     type SlideObject,
 } from './types';
-
-// Read an image file's intrinsic px (vector's createImageBitmap idiom); null when it can't be
-// decoded (e.g. an SVG with no intrinsic size) so the shared default box takes over.
-async function readImageIntrinsic(file: File): Promise<ImageSize | null> {
-    const bmp = await createImageBitmap(file).catch(() => null);
-    if (!bmp) return null;
-    const size = { width: bmp.width, height: bmp.height };
-    bmp.close();
-    return size;
-}
-
-// A Drive-picked image is already uploaded — read its intrinsic px off the resolved media URL.
-function readImageIntrinsicFromUrl(url: string): Promise<ImageSize | null> {
-    return new Promise((resolve) => {
-        const img = new window.Image();
-        // A dimensionless SVG reports naturalWidth 0 — null falls back to the fitted default box.
-        img.onload = () => resolve(img.naturalWidth ? { width: img.naturalWidth, height: img.naturalHeight } : null);
-        img.onerror = () => resolve(null);
-        img.src = url;
-    });
-}
 
 // Size a placed image via the shared fit (intrinsic px = slide units 1:1 per AUDIT-f; natural size
 // where it fits within 80% of the 1920×1080 slide, never upscaled; unreadable → the shared default
@@ -487,7 +467,7 @@ function SlideEditorInner({
         async (file: File) => {
             if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
             const { pendingName, promise } = startUpload(file);
-            const intrinsic = await readImageIntrinsic(file);
+            const intrinsic = await readImageSize(file);
             const objId = addObject(activeSlideId, {
                 ...DEFAULT_IMAGE_OBJECT,
                 ...centeredImageProps(intrinsic),
@@ -514,13 +494,18 @@ function SlideEditorInner({
             if (!activeSlideId || !mediaFolderId) return;
             const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId }).catch(() => null);
             if (!results) return;
-            for (const result of results) {
-                const url = resolveMediaUrl(result.name);
-                const intrinsic = url ? await readImageIntrinsicFromUrl(url) : null;
+            // Independent loads — measure in parallel, then add in one tight synchronous run.
+            const measured = await Promise.all(
+                results.map(async (result) => {
+                    const url = resolveMediaUrl(result.name);
+                    return { name: result.name, intrinsic: url ? await readImageSizeFromUrl(url) : null };
+                }),
+            );
+            for (const { name, intrinsic } of measured) {
                 addObject(activeSlideId, {
                     ...DEFAULT_IMAGE_OBJECT,
                     ...centeredImageProps(intrinsic),
-                    mediaName: result.name,
+                    mediaName: name,
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         },

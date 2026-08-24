@@ -30,6 +30,7 @@ import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
 import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
+import { readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
@@ -510,16 +511,9 @@ export function VectorCanvas({
             const images = files.filter((f) => f.type.startsWith('image/'));
             if (!images.length) return;
             const measured = await Promise.all(
-                images.map(async (file) => {
-                    // createImageBitmap rejects on some valid files (e.g. an SVG with no intrinsic
-                    // size) — fall back to a default box rather than silently dropping the file
-                    // (fitImageSize maps null → the default box, still viewport-capped).
-                    const bmp = await createImageBitmap(file).catch(() => null);
-                    if (!bmp) return { file, intrinsic: null };
-                    const intrinsic = { width: bmp.width, height: bmp.height };
-                    bmp.close();
-                    return { file, intrinsic };
-                }),
+                // readImageSize → null for a file with no intrinsic size (e.g. an SVG); fitImageSize
+                // maps null → the default box (viewport-capped), so the file is placed, not dropped.
+                images.map(async (file) => ({ file, intrinsic: await readImageSize(file) })),
             );
 
             const rect = containerRef.current?.getBoundingClientRect();

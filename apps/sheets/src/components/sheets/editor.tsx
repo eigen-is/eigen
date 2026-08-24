@@ -17,6 +17,7 @@ import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { readImageSizeFromUrl } from '@workspace/ui/components/media';
 import { type TransformFields, useAspectLock } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
@@ -153,20 +154,15 @@ function SheetEditorInner({
             if (!mediaFolderId || !file.type.startsWith('image/')) return;
             const { pendingName, promise } = startUpload(file);
 
-            // Read natural dimensions so the workbook can size the inserted image correctly.
-            const objectUrl = URL.createObjectURL(file);
-            const img = new window.Image();
-            img.onload = () => {
-                const { width, height } = fitToPane({ width: img.naturalWidth, height: img.naturalHeight });
-                workbookRef.current?.insertImage(pendingName, width, height);
-                URL.revokeObjectURL(objectUrl);
-            };
-            img.onerror = () => {
-                const { width, height } = fitToPane(null);
-                workbookRef.current?.insertImage(pendingName, width, height);
-                URL.revokeObjectURL(objectUrl);
-            };
-            img.src = objectUrl;
+            // Read the intrinsic px (vector's createImageBitmap idiom; rejects on e.g. a
+            // dimensionless SVG → null → the shared default box). Awaited BEFORE the upload result
+            // so the insert always precedes the pending→real mediaName swap — a swap that ran first
+            // would no-op and strand the insert as a placeholder for the zombie sweep to delete.
+            const bmp = await createImageBitmap(file).catch(() => null);
+            const intrinsic = bmp ? { width: bmp.width, height: bmp.height } : null;
+            bmp?.close();
+            const { width, height } = fitToPane(intrinsic);
+            workbookRef.current?.insertImage(pendingName, width, height);
 
             const result = await promise;
             if (result) workbookRef.current?.replaceImageMediaName(pendingName, result.name);
@@ -216,21 +212,9 @@ function SheetEditorInner({
             if (!result?.[0]) return;
             const mediaName = result[0].name;
             const previewUrl = resolveMediaUrl(mediaName);
-            if (!previewUrl) {
-                const { width, height } = fitToPane(null);
-                workbookRef.current?.insertImage(mediaName, width, height);
-                return;
-            }
-            const img = new window.Image();
-            img.onload = () => {
-                const { width, height } = fitToPane({ width: img.naturalWidth, height: img.naturalHeight });
-                workbookRef.current?.insertImage(mediaName, width, height);
-            };
-            img.onerror = () => {
-                const { width, height } = fitToPane(null);
-                workbookRef.current?.insertImage(mediaName, width, height);
-            };
-            img.src = previewUrl;
+            const intrinsic = previewUrl ? await readImageSizeFromUrl(previewUrl) : null;
+            const { width, height } = fitToPane(intrinsic);
+            workbookRef.current?.insertImage(mediaName, width, height);
         },
         [mediaFolderId, copyToMediaFolder, resolveMediaUrl, fitToPane],
     );
@@ -430,7 +414,8 @@ function SheetEditorInner({
                         onOpenCard={setOpenCardId}
                     />
                 )}
-                {activeImage && !mobilePanelOpen && (
+                {/* The comment/activity pane wins over the properties panel (the slides arrangement). */}
+                {activeImage && !panel && (
                     <ImagePropertiesPanel
                         image={activeImage}
                         canWrite={canWrite}

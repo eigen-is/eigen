@@ -2,7 +2,7 @@ export { AlignmentPicker } from './alignment-picker';
 export { BackgroundFillBlock } from './background-fill-block';
 export { ColorRow } from './color-row';
 export { MergedNumberInput } from './merged-number-input';
-export { MergedSelect } from './merged-select';
+export { MergedSelect, numToStr } from './merged-select';
 export { getMergedValue, isMixed, type MergedValue, MIXED } from './merged-value';
 export { PROPERTIES_PANEL_WIDTH_PX, PropertiesPanel, PropertyRow, PropertySection } from './properties-panel';
 export { PropertyNumberInput } from './property-number-input';
