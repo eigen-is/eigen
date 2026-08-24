@@ -6,6 +6,7 @@ import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import type { Box } from '@workspace/lib/vector';
 import { FileDropOverlay } from '@workspace/ui';
+import { CursorLayer } from '@workspace/ui/components/collab';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
@@ -13,9 +14,11 @@ import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { WebsocketProvider } from 'y-websocket';
 import { boundingBox } from './arrange';
 import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { useObjectDrag } from './hooks/use-object-drag';
+import type { PublishCursor, SlidesPeerState } from './hooks/use-slides-presence';
 import { snapRect, useSnapTargets } from './hooks/use-snap-lines';
 import { SlideObjectView } from './slide-object';
 import { getCommentItems, SlideObjectMenu } from './slide-object-menu';
@@ -69,6 +72,10 @@ type SlideCanvasProps = {
     onTransformActiveChange?: (active: boolean) => void;
     searchActiveObjectId?: string | null;
     searchMatchedObjectIds?: ReadonlySet<string>;
+    // Awareness: the provider drives the shared CursorLayer's own subscription; publishCursor pushes
+    // the local pointer (slide-unit space) onto awareness so peers see it live.
+    provider?: WebsocketProvider | null;
+    publishCursor?: PublishCursor;
 };
 
 export function SlideCanvas({
@@ -103,6 +110,8 @@ export function SlideCanvas({
     onTransformActiveChange,
     searchActiveObjectId,
     searchMatchedObjectIds,
+    provider,
+    publishCursor,
 }: SlideCanvasProps) {
     const { resolveMediaUrl } = useMediaResolver();
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -246,6 +255,37 @@ export function SlideCanvas({
         return { dx: (dxPx / w) * SLIDE_BASE_WIDTH, dy: (dyPx / h) * SLIDE_BASE_HEIGHT };
     }, []);
 
+    // Publish the local pointer to peers in slide-unit space — the same units boxToStyle maps to
+    // percent, so a peer renders at the right spot on any canvas size. Throttled downstream (no React
+    // state → no re-render). Attached regardless of write access: viewers are visible peers.
+    const publishPointer = useCallback(
+        (e: React.PointerEvent) => {
+            if (!publishCursor) return;
+            const el = canvasRef.current;
+            if (!el) return;
+            const rect = el.getBoundingClientRect();
+            publishCursor({
+                x: ((e.clientX - rect.left) / rect.width) * SLIDE_BASE_WIDTH,
+                y: ((e.clientY - rect.top) / rect.height) * SLIDE_BASE_HEIGHT,
+            });
+        },
+        [publishCursor],
+    );
+    // Clear our published cursor when the canvas unmounts (entering present, closing the deck) so a
+    // stale point doesn't linger for peers.
+    useEffect(() => () => publishCursor?.(null), [publishCursor]);
+
+    // Object boxes by id for the shared CursorLayer's remote selection rings — rebuilt only when the
+    // slide's objects change, never on a peer cursor tick (the layer holds its own subscription).
+    const cursorBoxes = useMemo(() => {
+        const m = new Map<string, Box>();
+        for (const o of objects) m.set(o.id, objToBox(o));
+        return m;
+    }, [objects]);
+    // Host-side per-slide filter: hide peers whose active slide differs, so the shared layer stays
+    // scope-agnostic. A peer that hasn't published a slideId yet reads as elsewhere until it does.
+    const isPeerVisible = useCallback((s: SlidesPeerState) => s.slideId === slide.id, [slide.id]);
+
     // Resize-time snapping (the resize half of the old snap system). Pure: ObjectTransform applies
     // it before the latch and re-clamps minSize after, and only on a plain resize (aspect/from-center
     // skip it). A rotated box's axis-aligned rect doesn't match its visual box, so it isn't snapped
@@ -317,6 +357,8 @@ export function SlideCanvas({
                     ...getBackgroundStyle(slide.background, resolveMediaUrl),
                 }}
                 onMouseDown={handleCanvasMouseDown}
+                onPointerMove={publishPointer}
+                onPointerLeave={() => publishCursor?.(null)}
                 {...fileDropProps}
             >
                 {objects.map((obj) => {
@@ -417,6 +459,15 @@ export function SlideCanvas({
                     />
                 )}
                 <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
+                {/* Remote presence — a sibling of the objects so a peer cursor tick re-renders only
+                    this layer (its own awareness subscription), never the slide objects. Screen-space
+                    over the percent-rendered slide; peers on other slides are filtered host-side. */}
+                <CursorLayer
+                    provider={provider ?? null}
+                    boxes={cursorBoxes}
+                    boxToStyle={boxToStyle}
+                    isPeerVisible={isPeerVisible}
+                />
             </div>
             <SlideObjectMenu
                 contextMenu={objectContextMenu}

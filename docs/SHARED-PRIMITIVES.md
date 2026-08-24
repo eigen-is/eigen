@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1008 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1009 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -76,6 +76,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ChatPlayerSuggest` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-player-suggest.tsx |
 | `ChatSlashSuggest` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-slash-suggest.tsx |
 | `CollabPointer` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/collab-pointer.tsx |
+| `CursorLayer` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |
 | `PresenceLabel` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
 | `RemoteSelectionRing` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/remote-selection-ring.tsx |
 | `ActivityPanel` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/activity-panel.tsx |
@@ -146,7 +147,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UserItem` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-item.tsx |
 | `UserName` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name.tsx |
 | `UserNameCard` | `@workspace/ui/components/user` | packages/ui/src/components/user/user-name-card.tsx |
-| `CursorLayer` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/cursor-layer.tsx |
 | `VectorCanvas` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-canvas.tsx |
 | `VectorPropertiesPanel` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-properties-panel.tsx |
 
@@ -416,7 +416,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (279)
+## Types (280)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -662,6 +662,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TooltipButtonProps` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
 | `ChatMessageInputHandle` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-message-input.tsx |
 | `SlashTargetContext` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
+| `CursorPeerState` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/cursor-layer.tsx |
 | `PresenceUser` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
 | `CommentContextMenuItem` | `@workspace/ui/components/comments` | packages/ui/src/components/comments/comment-menu-items.tsx |
 | `ContactAutosuggestProps` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/types.ts |

@@ -1,4 +1,3 @@
-export { CursorLayer } from './cursor-layer';
 export { useSelection } from './hooks/use-selection';
 export { useTool, VECTOR_TOOLS, type VectorTool } from './hooks/use-tool';
 export type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';

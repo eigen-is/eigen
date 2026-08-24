@@ -520,5 +520,6 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         moveObjectToBack,
         yjsDoc: docRef.current,
         undoManager: undoManager.current,
+        provider: providerRef.current,
     };
 };

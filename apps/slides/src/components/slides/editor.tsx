@@ -38,6 +38,7 @@ import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
 import { useSlidesDocSearch } from './hooks/use-slides-doc-search';
+import { useSlidesPresence } from './hooks/use-slides-presence';
 import { SlideCanvas } from './slide-canvas';
 import { ReadOnlySlideObject } from './slide-object';
 import { SlidePanel } from './slide-panel';
@@ -164,6 +165,7 @@ function SlideEditorInner({
         deleteObjects,
         yjsDoc,
         undoManager,
+        provider,
         moveObjectUp,
         moveObjectDown,
         moveObjectToFront,
@@ -223,6 +225,9 @@ function SlideEditorInner({
     }, []);
 
     const auth = useAuth();
+    // Awareness: publish this user's identity + selection + active slide, get a throttled cursor
+    // publisher for the canvas. Read-only viewers publish too (a viewer is a visible peer).
+    const publishCursor = useSlidesPresence(provider, auth.user, selectedObjectIds, activeSlideId);
     const {
         panel,
         commentPanelOpen,
@@ -889,6 +894,8 @@ function SlideEditorInner({
                                                 onUpdateObject={updateObject}
                                                 onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
                                                 onTransformActiveChange={setTransformActive}
+                                                provider={provider}
+                                                publishCursor={publishCursor}
                                                 onDropImage={canWrite ? handleDropImage : undefined}
                                                 onCopyObject={handleCopyObject}
                                                 onDeleteObject={canWrite ? handleDeleteObject : undefined}

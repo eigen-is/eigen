@@ -1,11 +1,19 @@
-import type { Box, VectorElement } from '@workspace/lib/vector';
+import type { Box } from '@workspace/lib/vector';
 import { memo, useMemo, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
-import { CollabPointer, RemoteSelectionRing, useAwarenessPeers } from '../collab';
+import { CollabPointer } from './collab-pointer';
+import { RemoteSelectionRing } from './remote-selection-ring';
+import { useAwarenessPeers } from './use-awareness-peers';
 
-// The awareness state each vector client publishes (see use-vector-presence). A per-app shape — the
-// generic useAwarenessPeers hook stays projection-free.
-type VectorAwareness = {
+// The awareness state a collaborating client publishes (see use-vector-presence / use-slides-presence).
+// One documented convention shape — every host writes a subset; `slideId` scopes a peer to a
+// sub-surface (slides publishes it so peers on other slides can be hidden; vector omits it). This is
+// NOT a shared union imported everywhere: it is the concrete shape the shared cursor layer projects,
+// and the generic useAwarenessPeers hook stays projection-free. Each host validates what it writes.
+// Exactly the fields the shared layer reads — nothing more. Host-private awareness fields (slides'
+// slideId, a future boardId, …) extend this per app: `type SlidesPeerState = CursorPeerState &
+// { slideId?: string }`, inferred through the generic `isPeerVisible` — never added here.
+export type CursorPeerState = {
     user?: { name: string; color: string; userId?: string };
     cursor?: { x: number; y: number } | null;
     selection?: string[];
@@ -19,12 +27,19 @@ type Peer = {
     selection: string[];
 };
 
-type CursorLayerProps = {
+type CursorLayerProps<S extends CursorPeerState> = {
     provider: WebsocketProvider | null;
-    // Scene elements — the box source for remote selection rings.
-    elements: VectorElement[];
-    // Scene box → container-relative px (position + size only); the same seam ObjectTransform draws on.
+    // Object boxes by id — the source for remote selection rings. The host builds it (memoized) from
+    // its scene so cursor ticks don't rebuild it. Vector's already-memoized `boxById` reduced to
+    // exactly this; slides hands over the active slide's objects.
+    boxes: Map<string, Box>;
+    // Scene box → container-relative px (position + size only); the same seam ObjectTransform / the
+    // host's selection chrome draws on.
     boxToStyle: (box: Box) => React.CSSProperties;
+    // Optional host filter: return false to hide a peer entirely (cursor + rings). Slides hides peers
+    // whose active slide differs; the layer stays scope-agnostic — the host owns what "visible" means,
+    // and `S` carries the host's private awareness fields into the predicate.
+    isPeerVisible?: (state: S) => boolean;
 };
 
 function peerEqual(a: Peer, b: Peer): boolean {
@@ -37,22 +52,30 @@ function peerEqual(a: Peer, b: Peer): boolean {
 }
 
 // Renders remote collaborators only: a name-tagged cursor at each peer's scene position and a thin
-// ring around each of their selected elements. Screen-space, mounted OUTSIDE the SVG zoom group like
-// the selection chrome. useAwarenessPeers holds the awareness subscription, so a peer cursor tick
-// re-renders this layer alone — never the scene (elementToSvg / rough path generation is untouched).
-export function CursorLayer({ provider, elements, boxToStyle }: CursorLayerProps) {
-    const states = useAwarenessPeers<VectorAwareness>(provider);
+// ring around each of their selected objects. Screen-space, mounted OUTSIDE the host's zoom/scale
+// group like the selection chrome. useAwarenessPeers holds the awareness subscription, so a peer
+// cursor tick re-renders this layer alone — never the host's scene (element/object rendering is
+// untouched). The box seam is app-agnostic: any host that maps a `Map<id, Box>` + a `boxToStyle`
+// mounts it (vector's elements, slides' active-slide objects).
+export function CursorLayer<S extends CursorPeerState = CursorPeerState>({
+    provider,
+    boxes,
+    boxToStyle,
+    isPeerVisible,
+}: CursorLayerProps<S>) {
+    const states = useAwarenessPeers<S>(provider);
 
     // Project the raw awareness states into render-ready peers, preserving object identity for
     // unchanged peers (peerEqual) so the memoized PeerView skips them — only the peer that actually
     // moved / reselected re-renders on a tick. `states` is already reference-stable per peer, so this
-    // recomputes only when a peer's state changed or a peer joined / left.
+    // recomputes only when a peer's state changed, a peer joined / left, or the host filter changed.
     const prevPeers = useRef<Peer[]>([]);
     const peers = useMemo(() => {
         const prevById = new Map(prevPeers.current.map((p) => [p.clientId, p]));
         const next: Peer[] = [];
         for (const [clientId, s] of states) {
             if (!s.user) continue;
+            if (isPeerVisible && !isPeerVisible(s)) continue;
             const built: Peer = {
                 clientId,
                 name: s.user.name,
@@ -65,23 +88,14 @@ export function CursorLayer({ provider, elements, boxToStyle }: CursorLayerProps
         }
         prevPeers.current = next;
         return next;
-    }, [states]);
-
-    // Element boxes by id, rebuilt only when the scene changes — not on cursor ticks.
-    const boxById = useMemo(() => {
-        const m = new Map<string, Box>();
-        for (const el of elements) {
-            m.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height, angle: el.angle });
-        }
-        return m;
-    }, [elements]);
+    }, [states, isPeerVisible]);
 
     if (peers.length === 0) return null;
 
     return (
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
             {peers.map((peer) => (
-                <PeerView key={peer.clientId} peer={peer} boxById={boxById} boxToStyle={boxToStyle} />
+                <PeerView key={peer.clientId} peer={peer} boxes={boxes} boxToStyle={boxToStyle} />
             ))}
         </div>
     );
@@ -89,11 +103,11 @@ export function CursorLayer({ provider, elements, boxToStyle }: CursorLayerProps
 
 const PeerView = memo(function PeerView({
     peer,
-    boxById,
+    boxes,
     boxToStyle,
 }: {
     peer: Peer;
-    boxById: Map<string, Box>;
+    boxes: Map<string, Box>;
     boxToStyle: (box: Box) => React.CSSProperties;
 }) {
     const cursorStyle = peer.cursor
@@ -102,7 +116,7 @@ const PeerView = memo(function PeerView({
     return (
         <>
             {peer.selection.map((id) => {
-                const box = boxById.get(id);
+                const box = boxes.get(id);
                 if (!box) return null;
                 return <RemoteSelectionRing key={id} box={box} boxToStyle={boxToStyle} color={peer.color} />;
             })}

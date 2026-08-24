@@ -26,8 +26,8 @@ import type * as Y from 'yjs';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
+import { CursorLayer } from '../collab';
 import { FileDropOverlay } from '../file-drop-overlay';
-import { CursorLayer } from './cursor-layer';
 import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
@@ -231,6 +231,15 @@ export function VectorCanvas({
     editingRef.current = editing;
 
     const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
+
+    // Element boxes by id for the shared CursorLayer's remote selection rings — rebuilt only when the
+    // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
+    const cursorBoxes = useMemo(() => {
+        const m = new Map<string, Box>();
+        for (const el of ordered)
+            m.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height, angle: el.angle });
+        return m;
+    }, [ordered]);
 
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
     // no preview → same object identity, so the memo skips it.
@@ -919,7 +928,7 @@ export function VectorCanvas({
             </div>
             {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
                 the scene + local chrome; renders nothing when alone. */}
-            <CursorLayer provider={provider} elements={ordered} boxToStyle={boxToStyle} />
+            <CursorLayer provider={provider} boxes={cursorBoxes} boxToStyle={boxToStyle} />
             {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
                 hook stays enabled even when it wouldn't — see above). */}
             <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
