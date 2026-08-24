@@ -46,6 +46,36 @@ export function getElementBounds(box: Box): Bounds {
     return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
 }
 
+// Marquee (rubber-band) selection semantics, shared by slides + vector (U6c/D16). Drag direction
+// picks the mode — the AutoCAD/Figma convention — with slides' dashed border (intersect) vs solid
+// (contain) as the visual signal.
+export type MarqueeMode = 'contain' | 'intersect';
+
+// Rightward drag (current x ≥ start x) = 'contain'; leftward = 'intersect'. Resolve from the RAW
+// start/current x, before the marquee rect is normalized to a min-corner box (that loses direction).
+export function marqueeMode(startX: number, currentX: number): MarqueeMode {
+    return currentX < startX ? 'intersect' : 'contain';
+}
+
+// Does an element (its axis-aligned bounds) fall in the marquee under `mode`? contain = fully inside;
+// intersect = the boxes overlap at all. Pure AABB math — hosts map their element + marquee to Bounds.
+export function marqueeHits(bounds: Bounds, marquee: Bounds, mode: MarqueeMode): boolean {
+    if (mode === 'contain') {
+        return (
+            bounds.minX >= marquee.minX &&
+            bounds.minY >= marquee.minY &&
+            bounds.maxX <= marquee.maxX &&
+            bounds.maxY <= marquee.maxY
+        );
+    }
+    return (
+        bounds.minX < marquee.maxX &&
+        bounds.maxX > marquee.minX &&
+        bounds.minY < marquee.maxY &&
+        bounds.maxY > marquee.minY
+    );
+}
+
 export function unionBounds(a: Bounds, b: Bounds): Bounds {
     return {
         minX: Math.min(a.minX, b.minX),

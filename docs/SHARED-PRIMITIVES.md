@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1045 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1048 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -428,7 +428,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (288)
+## Types (289)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -650,6 +650,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
 | `ImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
+| `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -721,7 +722,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (360)
+## Utilities & constants (362)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1029,6 +1030,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isTransparent` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isValidFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `marqueeHits` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `orderByFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |

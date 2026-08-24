@@ -2,7 +2,15 @@
 // marquee "contain" test. Chrome (ObjectTransform vs plain union ring) is chosen by the canvas
 // from selectedIds; group move/nudge/delete apply to the whole set.
 
-import { type Bounds, getElementBounds, hitTestElement, type Point, type VectorElement } from '@workspace/lib/vector';
+import {
+    type Bounds,
+    getElementBounds,
+    hitTestElement,
+    type MarqueeMode,
+    marqueeHits,
+    type Point,
+    type VectorElement,
+} from '@workspace/lib/vector';
 import { useCallback, useState } from 'react';
 
 // Top-most element under a scene point — `ordered` is back-to-front, so scan in reverse.
@@ -13,15 +21,12 @@ export function hitTestTopmost(ordered: VectorElement[], point: Point): string |
     return null;
 }
 
-// Marquee "contain" rule: an element is picked only when its rotated AABB is fully inside the
-// marquee bounds (Excalidraw's default). Stroke-width inflation is optional polish, skipped here.
-export function marqueeContain(ordered: VectorElement[], marquee: Bounds): string[] {
+// Marquee selection under the shared direction-mode rule (U6c): `mode` picks contain vs intersect;
+// each element's rotated AABB is tested against the marquee bounds by the shared geometry helper.
+export function marqueeSelect(ordered: VectorElement[], marquee: Bounds, mode: MarqueeMode): string[] {
     const ids: string[] = [];
     for (const el of ordered) {
-        const b = getElementBounds(el);
-        if (b.minX >= marquee.minX && b.minY >= marquee.minY && b.maxX <= marquee.maxX && b.maxY <= marquee.maxY) {
-            ids.push(el.id);
-        }
+        if (marqueeHits(getElementBounds(el), marquee, mode)) ids.push(el.id);
     }
     return ids;
 }

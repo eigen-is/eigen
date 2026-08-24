@@ -28,7 +28,9 @@ import {
     fitImageSize,
     getElementsBounds,
     isTransparent,
+    type MarqueeMode,
     type MediaResolver,
+    marqueeMode,
     orderByFractionalIndex,
     type Roundness,
     type StrokeStyle,
@@ -38,6 +40,7 @@ import {
     type VectorTextElement,
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
+import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
@@ -50,7 +53,7 @@ import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { deriveImageHeightFromUrl, readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
-import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
+import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
 import { applyZOrder, deleteSelection, duplicateSelection, useVectorKeyboard } from './hooks/use-vector-keyboard';
@@ -348,7 +351,9 @@ export function VectorCanvas({
 
     const [previews, setPreviews] = useState<Record<string, Box>>({});
     const [creating, setCreating] = useState<CreatingState | null>(null);
-    const [marquee, setMarquee] = useState<Box | null>(null);
+    // The marquee carries its direction mode so the render can signal it (solid = contain, dashed =
+    // intersect) — slides' visual convention, shared here (U6c).
+    const [marquee, setMarquee] = useState<{ box: Box; mode: MarqueeMode } | null>(null);
     const [spaceHeld, setSpaceHeld] = useState(false);
     const [panning, setPanning] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
@@ -1211,7 +1216,7 @@ export function VectorCanvas({
             additive,
             base: additive ? selectedIds : [],
         };
-        setMarquee({ x: p.x, y: p.y, width: 0, height: 0, angle: 0 });
+        setMarquee({ box: { x: p.x, y: p.y, width: 0, height: 0, angle: 0 }, mode: 'contain' });
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
@@ -1258,11 +1263,13 @@ export function VectorCanvas({
             setPreviews(next);
             return;
         }
-        // marquee
+        // marquee — direction picks the mode (rightward = contain, leftward = intersect), resolved
+        // from the raw start/current x before normalizeRect drops the direction.
         const box = normalizeRect(g.startX, g.startY, p.x, p.y);
-        setMarquee(box);
-        const contained = marqueeContain(ordered, boxToBounds(box));
-        setSelectedIds(g.additive ? [...new Set([...g.base, ...contained])] : contained);
+        const mode = marqueeMode(g.startX, p.x);
+        setMarquee({ box, mode });
+        const hits = marqueeSelect(ordered, boxToBounds(box), mode);
+        setSelectedIds(g.additive ? [...new Set([...g.base, ...hits])] : hits);
     };
 
     const finishGesture = () => {
@@ -1437,8 +1444,11 @@ export function VectorCanvas({
                 )}
                 {marquee && (
                     <div
-                        className="pointer-events-none absolute border border-selection-handle/70 bg-selection-handle/10"
-                        style={boxToStyle(marquee)}
+                        className={cn(
+                            'pointer-events-none absolute border border-selection-handle/70 bg-selection-handle/10',
+                            marquee.mode === 'intersect' && 'border-dashed',
+                        )}
+                        style={boxToStyle(marquee.box)}
                     />
                 )}
                 {editing && (

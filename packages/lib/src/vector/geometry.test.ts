@@ -9,6 +9,8 @@ import {
     hitTestDiamond,
     hitTestElement,
     hitTestEllipse,
+    marqueeHits,
+    marqueeMode,
     normalizeAngle,
     type Point,
     resizeRotatedRect,
@@ -282,5 +284,36 @@ describe('normalizeAngle', () => {
         expect(normalizeAngle(720)).toBe(0);
         expect(normalizeAngle(-10)).toBe(350);
         expect(normalizeAngle(-370)).toBe(350);
+    });
+});
+
+describe('marqueeMode', () => {
+    test('rightward drag is contain, leftward is intersect', () => {
+        expect(marqueeMode(10, 50)).toBe('contain');
+        expect(marqueeMode(50, 10)).toBe('intersect');
+    });
+
+    test('zero-width drag ties to contain', () => {
+        expect(marqueeMode(30, 30)).toBe('contain');
+    });
+});
+
+describe('marqueeHits', () => {
+    const marquee = { minX: 0, minY: 0, maxX: 100, maxY: 100 };
+
+    test('contain requires the full bounds inside, edges inclusive', () => {
+        expect(marqueeHits({ minX: 10, minY: 10, maxX: 90, maxY: 90 }, marquee, 'contain')).toBe(true);
+        expect(marqueeHits({ minX: 0, minY: 0, maxX: 100, maxY: 100 }, marquee, 'contain')).toBe(true);
+        expect(marqueeHits({ minX: 10, minY: 10, maxX: 101, maxY: 90 }, marquee, 'contain')).toBe(false);
+    });
+
+    test('intersect takes any strict overlap; edge-touching does not count', () => {
+        expect(marqueeHits({ minX: 90, minY: 90, maxX: 150, maxY: 150 }, marquee, 'intersect')).toBe(true);
+        expect(marqueeHits({ minX: 100, minY: 0, maxX: 150, maxY: 100 }, marquee, 'intersect')).toBe(false);
+        expect(marqueeHits({ minX: 120, minY: 120, maxX: 150, maxY: 150 }, marquee, 'intersect')).toBe(false);
+    });
+
+    test('a contained box also intersects', () => {
+        expect(marqueeHits({ minX: 10, minY: 10, maxX: 90, maxY: 90 }, marquee, 'intersect')).toBe(true);
     });
 });
