@@ -18,15 +18,17 @@ const RESIZE_CURSORS = ['ns-resize', 'nesw-resize', 'ew-resize', 'nwse-resize'] 
 
 // 4 corners (always shown) + 4 side midpoints (`side`, gated by the 40px screen threshold).
 // `cursorIndex` is the unrotated base index into RESIZE_CURSORS.
+// Grips sit ON the floated selection ring (outline-offset 4px, globals.css): the corner/side
+// offsets are the 6px half-grip plus that 4px ring gap.
 const RESIZE_HANDLES = [
-    { mode: 'resize-nw', position: '-top-1.5 -left-1.5', cursorIndex: 3, side: false },
-    { mode: 'resize-ne', position: '-top-1.5 -right-1.5', cursorIndex: 1, side: false },
-    { mode: 'resize-sw', position: '-bottom-1.5 -left-1.5', cursorIndex: 1, side: false },
-    { mode: 'resize-se', position: '-bottom-1.5 -right-1.5', cursorIndex: 3, side: false },
-    { mode: 'resize-n', position: '-top-1.5 left-1/2 -translate-x-1/2', cursorIndex: 0, side: true },
-    { mode: 'resize-s', position: '-bottom-1.5 left-1/2 -translate-x-1/2', cursorIndex: 0, side: true },
-    { mode: 'resize-w', position: 'top-1/2 -left-1.5 -translate-y-1/2', cursorIndex: 2, side: true },
-    { mode: 'resize-e', position: 'top-1/2 -right-1.5 -translate-y-1/2', cursorIndex: 2, side: true },
+    { mode: 'resize-nw', position: '-top-2.5 -left-2.5', cursorIndex: 3, side: false },
+    { mode: 'resize-ne', position: '-top-2.5 -right-2.5', cursorIndex: 1, side: false },
+    { mode: 'resize-sw', position: '-bottom-2.5 -left-2.5', cursorIndex: 1, side: false },
+    { mode: 'resize-se', position: '-bottom-2.5 -right-2.5', cursorIndex: 3, side: false },
+    { mode: 'resize-n', position: '-top-2.5 left-1/2 -translate-x-1/2', cursorIndex: 0, side: true },
+    { mode: 'resize-s', position: '-bottom-2.5 left-1/2 -translate-x-1/2', cursorIndex: 0, side: true },
+    { mode: 'resize-w', position: 'top-1/2 -left-2.5 -translate-y-1/2', cursorIndex: 2, side: true },
+    { mode: 'resize-e', position: 'top-1/2 -right-2.5 -translate-y-1/2', cursorIndex: 2, side: true },
 ] as const;
 
 // Below this on-screen size the 12px grips swallow the element, so the 4 side grips hide and
@@ -311,9 +313,9 @@ export function ObjectTransform({
             )}
             {showRotate && (
                 <>
-                    <div className="absolute left-1/2 -translate-x-1/2 -top-6 h-6 w-px bg-selection-handle pointer-events-none" />
+                    <div className="absolute left-1/2 -translate-x-1/2 -top-7 h-6 w-px bg-selection-handle pointer-events-none" />
                     <div
-                        className="absolute left-1/2 -translate-x-1/2 -top-9 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-selection-handle pointer-events-auto cursor-grab touch-none"
+                        className="absolute left-1/2 -translate-x-1/2 -top-10 flex h-4 w-4 items-center justify-center rounded-full bg-background border border-selection-handle pointer-events-auto cursor-grab touch-none"
                         onPointerDown={startRotate}
                     >
                         <RotateCw className="h-2.5 w-2.5 text-selection-handle" />

@@ -886,7 +886,10 @@ export function VectorCanvas({
                     />
                 )}
                 {showChrome && !showTransform && unionBox && (
-                    <div className="eigen-selection-ring pointer-events-none absolute" style={boxToStyle(unionBox)} />
+                    <div
+                        className="eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute"
+                        style={boxToStyle(unionBox)}
+                    />
                 )}
                 {marquee && (
                     <div

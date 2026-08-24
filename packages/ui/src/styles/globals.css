@@ -622,6 +622,13 @@
    the object and the square resize grips, one visual for all three editors. */
 .eigen-selection-ring {
     outline: 1px solid var(--selection-handle);
+    /* Excalidraw's breathing room: the ring floats off the object (SCOUT-M2 §9). */
+    outline-offset: 4px;
+}
+
+/* Group/multi-selection bounds: same floated ring, dashed (Excalidraw group convention). */
+.eigen-selection-ring-dashed {
+    outline-style: dashed;
 }
 
 .eigen-selection-handle {

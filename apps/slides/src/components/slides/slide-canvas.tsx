@@ -400,7 +400,7 @@ export function SlideCanvas({
                 ))}
                 {multiSelectBounds && !dragPreviews.length && (
                     <div
-                        className="absolute z-20 border border-dashed border-selection-handle cursor-move"
+                        className="eigen-selection-ring eigen-selection-ring-dashed absolute z-20 cursor-move"
                         style={{
                             left: `${pxToPercent(multiSelectBounds.x, 'x')}%`,
                             top: `${pxToPercent(multiSelectBounds.y, 'y')}%`,
