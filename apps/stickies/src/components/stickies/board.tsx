@@ -31,6 +31,7 @@ import { ColumnSettingsDialog } from './column-settings-dialog';
 import { useBoard } from './hooks/use-board';
 import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { useStickiesDocSearch } from './hooks/use-stickies-doc-search';
+import { useCardPresence, useStickiesPresence } from './hooks/use-stickies-presence';
 import { Toolbar } from './toolbar';
 import type { ColumnItem } from './types';
 
@@ -89,6 +90,7 @@ export function StickiesBoard({
         isSynced,
         yjsDoc,
         undoManager,
+        provider,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
     const { user } = useAuth();
 
@@ -116,7 +118,7 @@ export function StickiesBoard({
         initialCardId,
         onCardNotFound: onClearInitialCard,
     });
-    const { allComments, cards, createCard, assignComment, members, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, setOpenCardId, openCard } = lifecycle;
 
     // Palette IN COMMENTS capability. Plain object per render — usePaletteDocSearch stabilises via
     // ref + docKey, so the reveal closure always sees the current cards.
@@ -143,6 +145,13 @@ export function StickiesBoard({
         for (const c of allComments) map.set(c.chatName, c);
         return map;
     }, [allComments]);
+
+    // Presence: the card the local user is "working on" — the open edit dialog's card, else the card
+    // being dragged. Published to awareness; peers render it as a colored outline + name chip.
+    const workingCardId = openCard?.id ?? (dragState.activeType === 'task' ? dragState.activeId : null);
+    const presenceCardIds = useMemo(() => (workingCardId ? [workingCardId] : []), [workingCardId]);
+    useStickiesPresence(provider, user, presenceCardIds);
+    const cardPresence = useCardPresence(provider);
 
     useYjsUndoHotkeys(undoManager, canWrite);
 
@@ -384,6 +393,7 @@ export function StickiesBoard({
                                                             onCardLongPress={canWrite ? handleCardLongPress : undefined}
                                                             highlighted={highlightedColumnIds.has(column.id)}
                                                             highlightedCardIds={highlightedCardIds}
+                                                            cardPresence={cardPresence}
                                                             isMobile={isMobile}
                                                             scrollToTopSignal={
                                                                 scrollToTopOf?.columnId === column.id

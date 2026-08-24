@@ -220,5 +220,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         deleteCardFromBoard,
         yjsDoc: docRef.current,
         undoManager: undoManager.current,
+        provider: providerRef.current,
     };
 };
