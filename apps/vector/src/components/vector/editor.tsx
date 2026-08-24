@@ -4,7 +4,15 @@ import { Column, ColumnLayout, LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
-import { useTool, useVectorDoc, VECTOR_TOOLS, VectorCanvas } from '@workspace/ui/components/vector';
+import {
+    useSelection,
+    useTool,
+    useVectorDoc,
+    VECTOR_TOOLS,
+    VectorCanvas,
+    VectorPropertiesPanel,
+} from '@workspace/ui/components/vector';
+import { useMemo } from 'react';
 
 type VectorEditorProps = {
     ownerId: string;
@@ -12,12 +20,19 @@ type VectorEditorProps = {
     canWrite: boolean;
 };
 
-// M2: the live scene plus pointer/keyboard interaction. Tool state is lifted here so the toolbar
-// and the canvas share one source; everything else (viewport, selection, gestures) lives in the
-// canvas. The properties panel and text/image tools land in M3.
+// The live scene plus pointer/keyboard interaction. Tool and selection state are lifted here so the
+// toolbar, canvas, and properties panel share one source (the slides editor/canvas idiom); viewport
+// and gestures stay in the canvas.
 export function VectorEditor({ ownerId, path, canWrite }: VectorEditorProps) {
     const doc = useVectorDoc(ownerId, path.mountId, path.id);
     const { tool, setTool } = useTool();
+    const { selectedIds, setSelectedIds, toggle } = useSelection();
+
+    const selectedElements = useMemo(
+        () => doc.elements.filter((el) => selectedIds.includes(el.id)),
+        [doc.elements, selectedIds],
+    );
+    const showPanel = canWrite && selectedElements.length > 0;
 
     return (
         <ColumnLayout>
@@ -56,19 +71,34 @@ export function VectorEditor({ ownerId, path, canWrite }: VectorEditorProps) {
                 {!doc.synced ? (
                     <LoadingState />
                 ) : (
-                    <VectorCanvas
-                        elements={doc.elements}
-                        meta={doc.meta}
-                        tool={tool}
-                        setTool={setTool}
-                        canWrite={canWrite}
-                        addElement={doc.addElement}
-                        updateElement={doc.updateElement}
-                        updateElements={doc.updateElements}
-                        deleteElements={doc.deleteElements}
-                        duplicateElements={doc.duplicateElements}
-                        undoManager={doc.undoManager}
-                    />
+                    <div className="flex h-full w-full overflow-hidden">
+                        <div className="flex-1 min-w-0">
+                            <VectorCanvas
+                                elements={doc.elements}
+                                meta={doc.meta}
+                                tool={tool}
+                                setTool={setTool}
+                                canWrite={canWrite}
+                                addElement={doc.addElement}
+                                updateElement={doc.updateElement}
+                                updateElements={doc.updateElements}
+                                deleteElements={doc.deleteElements}
+                                duplicateElements={doc.duplicateElements}
+                                undoManager={doc.undoManager}
+                                selectedIds={selectedIds}
+                                setSelectedIds={setSelectedIds}
+                                toggle={toggle}
+                            />
+                        </div>
+                        {showPanel && (
+                            <VectorPropertiesPanel
+                                elements={doc.elements}
+                                selectedElements={selectedElements}
+                                updateElements={doc.updateElements}
+                                undoManager={doc.undoManager}
+                            />
+                        )}
+                    </div>
                 )}
             </Column>
         </ColumnLayout>

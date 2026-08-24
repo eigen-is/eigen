@@ -91,5 +91,5 @@ export function useViewport() {
         return () => el.removeEventListener('wheel', onWheel);
     }, []);
 
-    return { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef };
+    return { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef, zoom };
 }

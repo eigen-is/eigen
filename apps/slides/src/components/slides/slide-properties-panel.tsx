@@ -12,6 +12,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/component
 import {
     AlignmentPicker,
     BackgroundFillBlock,
+    getMergedValue,
+    isMixed,
+    type MergedValue,
     PropertiesPanel,
     PropertyNumberInput,
     PropertyRow,
@@ -40,20 +43,6 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ArrangeOp } from './arrange';
 import type { ApplyTo, ImageObject, SlideObject, TextObject } from './types';
 import { BORDER_RADIUS_ROUND } from './types';
-
-const MIXED = 'mixed' as const;
-type MergedValue<T> = T | typeof MIXED | undefined;
-
-function getMergedValue<O, T>(objects: O[], getter: (obj: O) => T | undefined): MergedValue<T> {
-    const values = objects.map(getter).filter((v): v is T => v !== undefined);
-    if (values.length === 0) return undefined;
-    if (values.every((v) => v === values[0])) return values[0];
-    return MIXED;
-}
-
-function isMixed<T>(v: MergedValue<T>): v is typeof MIXED {
-    return v === MIXED;
-}
 
 type SlidePropertiesPanelProps = {
     objects: SlideObject[];

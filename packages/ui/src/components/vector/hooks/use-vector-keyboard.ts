@@ -26,7 +26,7 @@ export function isTypingTarget(): boolean {
     return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable;
 }
 
-type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
+export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
 // NON-selected elements, so a non-contiguous multi-selection collapses into one clean gap
@@ -63,6 +63,23 @@ function computeZOrder(ordered: VectorElement[], selectedIds: string[], op: ZOp)
     return sel.map((e, i) => ({ id: e.id, index: keys[i] }));
 }
 
+// The z-order write, shared by the keyboard brackets and the properties panel's Arrange buttons so
+// the fractional-index math lives in one place. Seals the undo group on both sides (one step) and
+// no-ops when the block is already at the edge.
+export function applyZOrder(
+    op: ZOp,
+    elements: VectorElement[],
+    selectedIds: string[],
+    updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void,
+    undoManager: Y.UndoManager | null,
+): void {
+    const patches = computeZOrder(orderByFractionalIndex(elements), selectedIds, op);
+    if (!patches.length) return;
+    undoManager?.stopCapturing();
+    updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } })));
+    undoManager?.stopCapturing();
+}
+
 type VectorKeyboardParams = {
     enabled: boolean;
     elements: VectorElement[];
@@ -93,6 +110,8 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     useHotkey('3', () => setTool('diamond'), { enabled });
     useHotkey('O', () => setTool('ellipse'), { enabled });
     useHotkey('4', () => setTool('ellipse'), { enabled });
+    useHotkey('T', () => setTool('text'), { enabled });
+    useHotkey('8', () => setTool('text'), { enabled });
 
     // Discrete ops seal the undo group on BOTH sides: stopCapturing before opens a fresh step,
     // stopCapturing after keeps a nudge inside the 500ms capture window from merging into it.
@@ -162,12 +181,7 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
             e.preventDefault();
             const op: ZOp =
                 e.code === 'BracketLeft' ? (e.shiftKey ? 'toBack' : 'backward') : e.shiftKey ? 'toFront' : 'forward';
-            const patches = computeZOrder(orderByFractionalIndex(els), ids, op);
-            if (patches.length) {
-                undoManager?.stopCapturing();
-                updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } })));
-                undoManager?.stopCapturing();
-            }
+            applyZOrder(op, els, ids, updateElements, undoManager);
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);

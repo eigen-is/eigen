@@ -54,6 +54,10 @@ export type ObjectTransformProps = {
     screenDeltaToScene: (dxPx: number, dyPx: number) => { dx: number; dy: number };
     // Rotate grip visibility (hosts hide it for multi-select, which never mounts this anyway).
     showRotate: boolean;
+    // 'aspect' mounts corner grips only (side grips never, independent of the 40px threshold) and
+    // forces aspect-lock regardless of Shift — for derived-dims hosts like text elements (no wrap,
+    // so one-axis resize is meaningless). Default 'free' leaves every existing host unchanged.
+    resizeMode?: 'free' | 'aspect';
     // Scene-unit resize floor (slides 30, vector ~1). Defaults to 1.
     minSize?: number;
     // Per-move LOCAL preview — never a Yjs write. The host feeds the result back in as `box`.
@@ -73,6 +77,7 @@ export function ObjectTransform({
     boxToStyle,
     screenDeltaToScene,
     showRotate,
+    resizeMode = 'free',
     minSize = DEFAULT_MIN_SIZE,
     onTransform,
     onCommit,
@@ -113,7 +118,7 @@ export function ObjectTransform({
                 dx,
                 dy,
                 snapshot,
-                { fromCenter: cursor.altKey, keepAspect: cursor.shiftKey },
+                { fromCenter: cursor.altKey, keepAspect: cursor.shiftKey || resizeMode === 'aspect' },
                 minSize,
             );
             latest = next;
@@ -277,7 +282,7 @@ export function ObjectTransform({
             }}
         >
             {RESIZE_HANDLES.map(({ mode, position, cursorIndex, side }) =>
-                side && !showSides ? null : (
+                side && (resizeMode === 'aspect' || !showSides) ? null : (
                     <div
                         key={mode}
                         className={cn('eigen-selection-handle pointer-events-auto touch-none', position)}

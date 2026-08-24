@@ -2,6 +2,8 @@ import {
     type Bounds,
     type Box,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_FONT_SIZE,
     DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elementToSvg,
@@ -9,23 +11,48 @@ import {
     isTransparent,
     type MediaResolver,
     orderByFractionalIndex,
+    type TextAlign,
     type VectorElement,
     type VectorMeta,
+    type VectorTextElement,
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
-import { hitTestTopmost, marqueeContain, useSelection } from './hooks/use-selection';
+import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
 import { isTypingTarget, useVectorKeyboard } from './hooks/use-vector-keyboard';
 import { useViewport } from './hooks/use-viewport';
+import { isVectorFontLoaded, loadVectorFont, measureVectorText, type TextDimensions } from './text-measure';
+import { TextOverlay } from './text-overlay';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const CREATING_ID = '__creating__';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded (SCOUT §7).
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
+// fontSize clamp for resize-scaling of text (a resize maps width ratio → fontSize).
+const MIN_FONT_SIZE = 4;
+const MAX_FONT_SIZE = 400;
+
+// An open text-editing session. A new element stays LOCAL (id never written) until its first
+// commit — an empty discard writes nothing; re-editing an existing element commits one update, or
+// deletes it when committed empty.
+type EditingState = {
+    id: string;
+    isNew: boolean;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    angle: number;
+    text: string;
+    fontSize: number;
+    fontFamily: string;
+    textAlign: TextAlign;
+    strokeColor: string;
+};
 
 // readVectorFromDoc materializes fresh element objects on every Yjs tick, so identity-based memo
 // never hits; every ELEMENT_FIELDS value is a scalar/string, so a field compare is exact. Only
@@ -58,6 +85,10 @@ function boundsToBox(b: Bounds): Box {
 
 function boxToBounds(b: Box): Bounds {
     return { minX: b.x, minY: b.y, maxX: b.x + b.width, maxY: b.y + b.height };
+}
+
+function clampFontSize(size: number): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
 }
 
 function normalizeRect(x0: number, y0: number, x1: number, y1: number): Box {
@@ -124,6 +155,11 @@ type VectorCanvasProps = {
     deleteElements: (ids: string[]) => void;
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
     undoManager: Y.UndoManager | null;
+    // Selection is lifted to the editor so the properties panel and canvas share one source (the
+    // slides editor/canvas idiom).
+    selectedIds: string[];
+    setSelectedIds: (ids: string[]) => void;
+    toggle: (id: string) => void;
     // Images resolve to an <image> href; omitted → images render nothing (elementToSvg null path).
     resolveMedia?: MediaResolver;
 };
@@ -144,10 +180,12 @@ export function VectorCanvas({
     deleteElements,
     duplicateElements,
     undoManager,
+    selectedIds,
+    setSelectedIds,
+    toggle,
     resolveMedia,
 }: VectorCanvasProps) {
-    const { selectedIds, setSelectedIds, toggle } = useSelection();
-    const { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef } =
+    const { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef, zoom } =
         useViewport();
 
     const [previews, setPreviews] = useState<Record<string, Box>>({});
@@ -155,6 +193,7 @@ export function VectorCanvas({
     const [marquee, setMarquee] = useState<Box | null>(null);
     const [spaceHeld, setSpaceHeld] = useState(false);
     const [panning, setPanning] = useState(false);
+    const [editing, setEditing] = useState<EditingState | null>(null);
 
     const gestureRef = useRef<Gesture | null>(null);
     // First onTransform of a resize/rotate is the de-facto gesture start (ObjectTransform fires it
@@ -162,6 +201,10 @@ export function VectorCanvas({
     const transformStartedRef = useRef(false);
     // Latest finishGesture closure, for the window-blur listener bound once below.
     const finishRef = useRef<() => void>(() => {});
+    // Live editing session, read from event listeners (bound once) that must know a text overlay is
+    // open — the freeze safety-net below and commitEditing both consult it.
+    const editingRef = useRef<EditingState | null>(null);
+    editingRef.current = editing;
 
     const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
 
@@ -172,8 +215,11 @@ export function VectorCanvas({
         return p ? { ...el, x: p.x, y: p.y, width: p.width, height: p.height, angle: p.angle } : el;
     };
 
+    // Every canvas hotkey (V/R/D/O/T, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
+    // off while a text overlay is open — the textarea's native undo/typing owns keys in-session; we
+    // don't rely on the hotkey lib's input-target detection alone (UX-RULING, commit-trigger).
     useVectorKeyboard({
-        enabled: canWrite,
+        enabled: canWrite && !editing,
         elements,
         selectedIds,
         tool,
@@ -184,6 +230,16 @@ export function VectorCanvas({
         updateElements,
         duplicateElements,
     });
+
+    // Freeze the viewport while an overlay is open (same latch as gestures): a pan/zoom would
+    // desync the overlay from the element it sits over.
+    useEffect(() => {
+        if (!editing) return;
+        frozenRef.current = true;
+        return () => {
+            frozenRef.current = false;
+        };
+    }, [editing, frozenRef]);
 
     // Space tracks the pan affordance (grab cursor + pan on pointerdown); ignore while typing.
     useEffect(() => {
@@ -211,11 +267,17 @@ export function VectorCanvas({
     // released pointer when focus returns.
     useEffect(() => {
         const clear = () => {
+            // An open text session owns the freeze until it commits/discards — the opening click's
+            // own pointerup and every intra-textarea caret click must NOT unfreeze it (else wheel
+            // zoom, a re-opened session, or a spurious move gesture leak in mid-edit). The editing
+            // effect below clears the freeze when the session ends.
+            if (editingRef.current) return;
             frozenRef.current = false;
             transformStartedRef.current = false;
             setPreviews((p) => (Object.keys(p).length ? {} : p));
         };
         const onBlur = () => {
+            if (editingRef.current) return; // the textarea's own onBlur commits the session
             finishRef.current();
             clear();
         };
@@ -267,6 +329,128 @@ export function VectorCanvas({
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [frozenRef, setTool, setSelectedIds]);
 
+    // Open the overlay on a fresh, still-LOCAL text element at the scene point (text tool click on
+    // empty canvas / on a non-text hit).
+    const openNewText = (x: number, y: number) => {
+        setSelectedIds([]);
+        setEditing({
+            id: '__new_text__',
+            isNew: true,
+            x,
+            y,
+            width: 0,
+            height: 0,
+            angle: 0,
+            text: '',
+            fontSize: DEFAULT_FONT_SIZE,
+            fontFamily: DEFAULT_FONT_FAMILY,
+            textAlign: 'left',
+            strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
+        });
+    };
+
+    // Open the overlay on an existing text element (text-tool click that hits it, or select-tool
+    // double-click) — never stacks a fresh empty on top.
+    const openEditExisting = (el: VectorTextElement) => {
+        setSelectedIds([el.id]);
+        setEditing({
+            id: el.id,
+            isNew: false,
+            x: el.x,
+            y: el.y,
+            width: el.width,
+            height: el.height,
+            angle: el.angle,
+            text: el.text,
+            fontSize: el.fontSize,
+            fontFamily: el.fontFamily,
+            textAlign: el.textAlign,
+            strokeColor: el.strokeColor,
+        });
+    };
+
+    // The overlay awaits loadVectorFont on open, so commit-time measureVectorText is normally exact.
+    // The safety net for the rare commit-before-load-resolves race: if the face isn't loaded, load it
+    // and re-measure into the element once it swaps in (self-healing — stored dims are the server
+    // renderer's source of truth, and the measurement util stays the sole dim writer).
+    const healTextDims = useCallback(
+        (id: string, text: string, fontSize: number, fontFamily: string, measured: TextDimensions) => {
+            if (isVectorFontLoaded(fontSize, fontFamily)) return;
+            loadVectorFont(fontSize, fontFamily)
+                .then(() => {
+                    const healed = measureVectorText(text, fontSize, fontFamily);
+                    if (healed.width === measured.width && healed.height === measured.height) return;
+                    undoManager?.stopCapturing();
+                    updateElement(id, { width: healed.width, height: healed.height });
+                    undoManager?.stopCapturing();
+                })
+                .catch(() => {});
+        },
+        [updateElement, undoManager],
+    );
+
+    // One editing session → exactly one Yjs write (or zero for an empty new element). stopCapturing
+    // on both sides so the session is its own undo step. The measurement util is the sole writer of
+    // the stored width/height. Read the live session from a ref (not a closure) so the callback stays
+    // stable and side effects run once, never inside a state updater.
+    const commitEditing = useCallback(
+        (text: string) => {
+            const ed = editingRef.current;
+            editingRef.current = null;
+            setEditing(null);
+            if (!ed) return;
+            const empty = text.trim().length === 0;
+            if (ed.isNew) {
+                if (!empty) {
+                    const { width, height } = measureVectorText(text, ed.fontSize, ed.fontFamily);
+                    undoManager?.stopCapturing();
+                    // One addElement transact. Per-field LWW on concurrent text edits is accepted v1
+                    // (same as slides' text object): the later commit wins the `text` field whole.
+                    const id = addElement({
+                        type: 'text',
+                        x: ed.x,
+                        y: ed.y,
+                        width,
+                        height,
+                        text,
+                        fontSize: ed.fontSize,
+                        fontFamily: ed.fontFamily,
+                        textAlign: ed.textAlign,
+                    });
+                    undoManager?.stopCapturing();
+                    if (id) {
+                        setSelectedIds([id]);
+                        healTextDims(id, text, ed.fontSize, ed.fontFamily, { width, height });
+                    }
+                }
+                // empty → zero Yjs writes, no element, no undo step
+            } else if (empty) {
+                undoManager?.stopCapturing();
+                deleteElements([ed.id]);
+                undoManager?.stopCapturing();
+                setSelectedIds([]);
+            } else {
+                const { width, height } = measureVectorText(text, ed.fontSize, ed.fontFamily);
+                undoManager?.stopCapturing();
+                updateElement(ed.id, { text, width, height }); // per-field LWW, accepted v1
+                undoManager?.stopCapturing();
+                setSelectedIds([ed.id]);
+                healTextDims(ed.id, text, ed.fontSize, ed.fontFamily, { width, height });
+            }
+            // A text-tool session reverts to select; a double-click session was already select.
+            setTool('select');
+        },
+        [addElement, updateElement, deleteElements, undoManager, setSelectedIds, setTool, healTextDims],
+    );
+
+    const onDoubleClick = (e: React.MouseEvent) => {
+        if (!canWrite || tool !== 'select' || editing) return;
+        const p = clientToScene(e.clientX, e.clientY);
+        const hit = hitTestTopmost(ordered, p);
+        const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
+        if (hitEl?.type === 'text') openEditExisting(hitEl);
+    };
+
     const onPointerDown = (e: React.PointerEvent) => {
         if (frozenRef.current) return; // a gesture is already active (defensive)
         // Pan: space-drag or middle mouse.
@@ -281,8 +465,19 @@ export function VectorCanvas({
         if (e.button !== 0) return;
         if (!canWrite) return;
 
-        containerRef.current?.setPointerCapture(e.pointerId);
         const p = clientToScene(e.clientX, e.clientY);
+
+        // Text tool: click places a caret (no drag-create, no capture). A click that hits an existing
+        // text element edits THAT element instead of stacking a fresh empty on top.
+        if (tool === 'text') {
+            const hit = hitTestTopmost(ordered, p);
+            const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
+            if (hitEl?.type === 'text') openEditExisting(hitEl);
+            else openNewText(p.x, p.y);
+            return;
+        }
+
+        containerRef.current?.setPointerCapture(e.pointerId);
 
         // Shape tool → start a local (not-yet-Yjs) drag-create.
         if (tool !== 'select') {
@@ -444,13 +639,22 @@ export function VectorCanvas({
     const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
     const unionBox = selectedRender.length >= 1 ? boundsToBox(getElementsBounds(selectedRender.map(elementBox))) : null;
-    // Chrome is suppressed while a create/marquee drag is in flight (grip flicker); move keeps it
-    // (the ring follows the moving element). Single + write → full transform; everything else → a
-    // plain translate-only union ring (multi-select never mounts ObjectTransform, UX-RULING 7).
-    const showChrome = !creating && !marquee;
+    // Chrome is suppressed while a create/marquee drag is in flight (grip flicker) or while a text
+    // overlay is open; move keeps it (the ring follows the moving element). Single + write → full
+    // transform; everything else → a plain translate-only union ring (multi-select never mounts
+    // ObjectTransform, UX-RULING 7).
+    const showChrome = !creating && !marquee && !editing;
     const showTransform = showChrome && canWrite && single !== null;
 
-    const cursor = panning ? 'grabbing' : spaceHeld ? 'grab' : tool !== 'select' ? 'crosshair' : 'default';
+    const cursor = panning
+        ? 'grabbing'
+        : spaceHeld
+          ? 'grab'
+          : tool === 'text'
+            ? 'text'
+            : tool !== 'select'
+              ? 'crosshair'
+              : 'default';
     const background = isTransparent(meta.background) ? undefined : meta.background;
 
     return (
@@ -462,12 +666,16 @@ export function VectorCanvas({
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
+            onDoubleClick={onDoubleClick}
         >
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
                 <g transform={groupTransform}>
-                    {ordered.map((el) => (
-                        <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMedia} />
-                    ))}
+                    {ordered.map((el) =>
+                        // The element under edit is drawn only by the overlay textarea (WYSIWYG).
+                        editing?.id === el.id ? null : (
+                            <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMedia} />
+                        ),
+                    )}
                     {creating && <ElementNode el={creatingElement(creating)} resolveMedia={resolveMedia} />}
                 </g>
             </svg>
@@ -478,6 +686,9 @@ export function VectorCanvas({
                         boxToStyle={boxToStyle}
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate
+                        // Text has derived dims + no wrap, so only corners, aspect always locked; a
+                        // resize maps the width ratio → fontSize, then re-measures (see onCommit).
+                        resizeMode={single.type === 'text' ? 'aspect' : 'free'}
                         minSize={MIN_ELEMENT_SIZE}
                         onTransform={(next) => {
                             if (!transformStartedRef.current) {
@@ -495,9 +706,23 @@ export function VectorCanvas({
                             const fields: VectorElementPatch = {};
                             if (next.x !== start.x) fields.x = next.x;
                             if (next.y !== start.y) fields.y = next.y;
-                            if (next.width !== start.width) fields.width = next.width;
-                            if (next.height !== start.height) fields.height = next.height;
                             if (next.angle !== start.angle) fields.angle = next.angle;
+                            if (single.type === 'text') {
+                                // Resize scales fontSize by the width ratio, then RE-MEASURES the
+                                // dims at that size — never the Box arithmetic dims (they'd drift off
+                                // the renderer's layout). The measurement util is the only dim writer.
+                                if (next.width !== start.width && start.width > 0) {
+                                    const size = clampFontSize(single.fontSize * (next.width / start.width));
+                                    const { width, height } = measureVectorText(single.text, size, single.fontFamily);
+                                    fields.fontSize = size;
+                                    fields.width = width;
+                                    fields.height = height;
+                                    healTextDims(single.id, single.text, size, single.fontFamily, { width, height });
+                                }
+                            } else {
+                                if (next.width !== start.width) fields.width = next.width;
+                                if (next.height !== start.height) fields.height = next.height;
+                            }
                             if (Object.keys(fields).length) {
                                 updateElement(single.id, fields);
                                 undoManager?.stopCapturing(); // trailing seal, same as create/move
@@ -513,6 +738,25 @@ export function VectorCanvas({
                     <div
                         className="pointer-events-none absolute border border-selection-handle/70 bg-selection-handle/10"
                         style={boxToStyle(marquee)}
+                    />
+                )}
+                {editing && (
+                    <TextOverlay
+                        key={editing.id}
+                        x={editing.x}
+                        y={editing.y}
+                        width={editing.width}
+                        height={editing.height}
+                        angle={editing.angle}
+                        zoom={zoom}
+                        containerRef={containerRef}
+                        boxToStyle={boxToStyle}
+                        initialText={editing.text}
+                        fontSize={editing.fontSize}
+                        fontFamily={editing.fontFamily}
+                        textAlign={editing.textAlign}
+                        color={editing.strokeColor}
+                        onCommit={commitEditing}
                     />
                 )}
             </div>
