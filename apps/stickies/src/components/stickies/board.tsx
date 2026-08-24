@@ -9,13 +9,12 @@ import {
     useCommentLifecycle,
 } from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
-import { useIsMobile } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ColumnLayout, DeleteDialog, Column as LayoutColumn, LoadingState } from '@workspace/ui';
+import { ColumnLayout, DeleteDialog, Column as LayoutColumn, LoadingState, useLayout } from '@workspace/ui';
 import { useAttachmentMeta } from '@workspace/ui/components/attachment';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
@@ -157,7 +156,7 @@ export function StickiesBoard({
 
     useYjsUndoHotkeys(undoManager, canWrite);
 
-    const isMobile = useIsMobile();
+    const { isMobile } = useLayout();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
     // Board shows resolved cards by default (status:'all'); clear() returns to that.
     const commentFilter = useCommentFilter({ status: 'all' });

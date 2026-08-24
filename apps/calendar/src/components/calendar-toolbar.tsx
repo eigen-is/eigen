@@ -1,7 +1,6 @@
 import type { ViewMode } from '@workspace/lib/calendar';
 import { formatMonth } from '@workspace/lib/date';
-import { useIsMobile } from '@workspace/lib/media';
-import { KebabTrigger, Toolbar, ToolbarTitle } from '@workspace/ui';
+import { KebabTrigger, Toolbar, ToolbarTitle, useLayout } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -55,7 +54,7 @@ export function CalendarToolbar({
     onPrev,
     onNext,
 }: CalendarToolbarProps) {
-    const isMobile = useIsMobile();
+    const { isMobile } = useLayout();
 
     return (
         <Toolbar>

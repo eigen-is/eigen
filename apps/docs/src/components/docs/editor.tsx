@@ -42,7 +42,7 @@ import type {
     EigenClipboardItem,
     EigenClipboardTextItem,
 } from '@workspace/lib/types/clipboard';
-import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, LoadingState, useLayout } from '@workspace/ui';
@@ -75,6 +75,7 @@ import { CommentMark, updateCommentDecorations } from './extensions/comment-mark
 import { Figure } from './extensions/figure';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
+import { useActiveComments } from './hooks/use-active-comments';
 import { TablePropertiesPanel } from './table-properties-panel';
 
 function findCommentMarkPositions(doc: Node, cardId: string): { pos: number; end: number }[] {
@@ -213,51 +214,6 @@ export const CollaborativeEditor = ({
         </MediaResolverProvider>
     );
 };
-
-const EMPTY_ACTIVE: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
-
-function useActiveComments(editor: Editor | null): ActiveComments {
-    const [result, setResult] = useState<ActiveComments>(EMPTY_ACTIVE);
-
-    useEffect(() => {
-        if (!editor) return;
-        let timer: ReturnType<typeof setTimeout>;
-
-        const update = () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                const ids = new Set<string>();
-                const texts = new Map<string, string>();
-
-                editor.state.doc.descendants((node, pos) => {
-                    for (const mark of node.marks) {
-                        if (mark.type.name === 'comment' && mark.attrs.cardId) {
-                            const cardId = mark.attrs.cardId as string;
-                            ids.add(cardId);
-                            if (!texts.has(cardId)) {
-                                texts.set(
-                                    cardId,
-                                    editor.state.doc.textBetween(pos, pos + node.nodeSize, ' ').slice(0, 100),
-                                );
-                            }
-                        }
-                    }
-                });
-
-                setResult({ ids, anchorTexts: texts });
-            }, 200);
-        };
-
-        update();
-        editor.on('update', update);
-        return () => {
-            editor.off('update', update);
-            clearTimeout(timer);
-        };
-    }, [editor]);
-
-    return result;
-}
 
 const TiptapEditor = ({
     yDoc,
