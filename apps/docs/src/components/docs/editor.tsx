@@ -1,6 +1,6 @@
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
-import type { Node } from '@tiptap/pm/model';
+import type { Mark, Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
@@ -15,7 +15,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
-import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
 import { A4_WIDTH_PX, getDocExtensions, PAGE_MARGIN_PX } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -95,6 +95,36 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
                 tr.setNodeAttribute(pos, 'mediaName', newName);
             }
         }
+        if (dispatch) dispatch(tr);
+        return true;
+    });
+}
+
+// Docs historically stored the textStyle `fontFamily` attr as a full CSS stack; the canon is now
+// the EIGEN_FONTS name (matching slides/vector). New writes store the name, but stored collab docs
+// hydrate through y-prosemirror without ever running parseHTML, so this one-shot pass collapses any
+// recognized stack to its name on editable load — killing the dual representation. renderHTML maps
+// the name back to the same stack, so rendered output is unchanged. Kept out of the undo history.
+function normalizeFontFamilyMarks(editor: Editor) {
+    const markType = editor.schema.marks.textStyle;
+    if (!markType) return;
+    const targets: { from: number; to: number; attrs: Record<string, unknown> }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+        if (!node.isText) return;
+        const mark = node.marks.find((m: Mark) => m.type === markType);
+        if (!mark) return;
+        const family = mark.attrs.fontFamily;
+        if (typeof family !== 'string' || !family) return;
+        const canon = getFontName(family);
+        if (canon === family) return;
+        targets.push({ from: pos, to: pos + node.nodeSize, attrs: { ...mark.attrs, fontFamily: canon } });
+    });
+    if (targets.length === 0) return;
+    editor.commands.command(({ tr, dispatch }) => {
+        for (const { from, to, attrs } of targets) {
+            tr.addMark(from, to, markType.create(attrs));
+        }
+        tr.setMeta('addToHistory', false);
         if (dispatch) dispatch(tr);
         return true;
     });
@@ -692,6 +722,14 @@ const TiptapEditor = ({
         }, 60_000);
         return () => clearTimeout(timer);
     }, [editor]);
+
+    // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
+    // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
+    // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
+    useEffect(() => {
+        if (!editor || !canWrite) return;
+        normalizeFontFamilyMarks(editor);
+    }, [editor, canWrite]);
 
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);
