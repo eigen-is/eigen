@@ -621,7 +621,7 @@
    SelectionChrome overlay, sheets floating image via ImgBoxs): the ring around
    the object and the square resize grips, one visual for all three editors. */
 .eigen-selection-ring {
-    outline: 2px solid var(--selection-handle);
+    outline: 1px solid var(--selection-handle);
 }
 
 .eigen-selection-handle {
