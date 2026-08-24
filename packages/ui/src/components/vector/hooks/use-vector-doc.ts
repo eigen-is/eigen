@@ -215,6 +215,9 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         undoManager: undoManager.current,
         // Exposed for awareness (cursors + remote selections) — same ref-current shape as undoManager.
         provider: providerRef.current,
+        // The live Y.Doc, for the document-level comment lifecycle (its `comments` Y.Map). Null until
+        // the effect runs; the editor gates comment reads on `synced` like the rest of the panel.
+        yjsDoc: docRef.current,
         synced: isSynced,
     };
 };

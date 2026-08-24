@@ -13,9 +13,29 @@ type ToolbarProps = {
     tool: VectorTool;
     setTool: (tool: VectorTool) => void;
     onAccessDialogOpen: () => void;
+    // Document-level comments + activity (the props U1 deliberately omitted until vector had a
+    // comment lifecycle). Always offered when the panels are wired: desktop draws the side panel,
+    // mobile the Column.
+    onToggleCommentPanel: () => void;
+    commentPanelOpen: boolean;
+    unresolvedCommentCount: number;
+    onToggleActivityPanel: () => void;
+    activityPanelOpen: boolean;
 };
 
-export function Toolbar({ path, canWrite, undoManager, tool, setTool, onAccessDialogOpen }: ToolbarProps) {
+export function Toolbar({
+    path,
+    canWrite,
+    undoManager,
+    tool,
+    setTool,
+    onAccessDialogOpen,
+    onToggleCommentPanel,
+    commentPanelOpen,
+    unresolvedCommentCount,
+    onToggleActivityPanel,
+    activityPanelOpen,
+}: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
 
     return (
@@ -55,6 +75,11 @@ export function Toolbar({ path, canWrite, undoManager, tool, setTool, onAccessDi
                         canWrite={canWrite}
                         onAccessDialogOpen={onAccessDialogOpen}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                        onToggleCommentPanel={onToggleCommentPanel}
+                        commentPanelOpen={commentPanelOpen}
+                        unresolvedCommentCount={unresolvedCommentCount}
+                        onToggleActivityPanel={onToggleActivityPanel}
+                        activityPanelOpen={activityPanelOpen}
                     />
                 </div>
             }

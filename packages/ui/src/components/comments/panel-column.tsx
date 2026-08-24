@@ -3,7 +3,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { ActiveComments, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import type { useContextMenu } from '../context-menu';
 import { Column } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
@@ -35,6 +35,10 @@ type PanelColumnProps = {
     activeComments?: ActiveComments;
     commentContextMenu: ReturnType<typeof useContextMenu<CommentContextMenuItem>>;
     onOpenCard: (cardId: string) => void;
+    // Document-level hosts (vector) create comments from the panel — cards anchor to the document, not
+    // to a selected object/text/cell, so there is no in-canvas add affordance. Absent for the
+    // content-anchored hosts (docs/slides/sheets/stickies), which add against their own anchor.
+    onAddComment?: () => void;
 };
 
 export function PanelColumn({
@@ -49,6 +53,7 @@ export function PanelColumn({
     activeComments = NO_ACTIVE_COMMENTS,
     commentContextMenu,
     onOpenCard,
+    onAddComment,
 }: PanelColumnProps) {
     const { isMobile } = useLayout();
     const showComments = activePanel === 'comments';
@@ -64,6 +69,9 @@ export function PanelColumn({
                 <>
                     <ToolbarTitle>{showComments ? 'Comments' : 'Activity'}</ToolbarTitle>
                     <div className="ml-auto flex items-center gap-1">
+                        {showComments && onAddComment && (
+                            <TooltipButton icon={Plus} tooltipText="New comment" onClick={onAddComment} />
+                        )}
                         {showComments && (
                             <CommentFilterButton
                                 filter={filter}

@@ -307,6 +307,13 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   `!isMobile`, hides nothing and passes no `onOpenChange`, and its toolbar toggle is absent on mobile.
   Giving stickies the mobile pane is recorded as next-round work in
   [MOBILE.md](MOBILE.md).
+  **Vector is the fifth host and is document-level**: cards live in the doc's `comments` Y.Map with no
+  element anchoring (every card is active by construction; `anchorTexts` empty). Because there is no
+  in-canvas anchor to add against, `PanelColumn` grew an optional `onAddComment` — a "New comment"
+  button in the comments-pane toolbar that only renders when a host passes it; content-anchored hosts
+  omit it and are unaffected. Vector's card delete removes the map entry directly and is deliberately
+  outside the canvas `UndoManager` scope (tracking the comments map would let ⌘Z resurrect cards
+  mid-edit — every host keeps comment maps untracked).
 - **Open state**: `useDocumentPanels(isMobile)` (`@workspace/lib/comments`) owns the comments/activity
   pair for docs, slides and sheets — one `panel: 'comments' | 'activity' | null` slot, so the two can
   never both be open. Host-owned like `useCommentFilter`. It also returns `mobilePanelOpen` and the

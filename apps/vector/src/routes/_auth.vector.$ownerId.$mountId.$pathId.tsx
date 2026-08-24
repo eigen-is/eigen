@@ -12,6 +12,9 @@ export const Route = createFileRoute('/_auth/vector/$ownerId/$mountId/$pathId')(
 
 function VectorView() {
     const { ownerId, mountId, pathId } = Route.useParams();
+    // ?chat=<chatName> deep-links straight to a comment thread (validated by eigenDocEditorValidateSearch;
+    // ?q= stays unconsumed — vector has no in-document find bar, D15 is out of this program).
+    const { chat } = Route.useSearch();
     const {
         docInfo,
         isLoading,
@@ -35,6 +38,7 @@ function VectorView() {
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={openAccessDialog}
+                initialChatName={chat}
             />
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>
