@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1020 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1019 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (139)
+## Components (138)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -125,7 +125,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ColorPickerButton` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `FontPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/font-picker.tsx |
 | `ImagePlaceholder` | `@workspace/ui/components/media` | packages/ui/src/components/media/image-placeholder.tsx |
-| `ImageResizeHandles` | `@workspace/ui/components/media` | packages/ui/src/components/media/image-resize-handles.tsx |
 | `MountForm` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
 | `S3ConfigCard` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/s3-config-card.tsx |
 | `NoteCard` | `@workspace/ui/components/notes` | packages/ui/src/components/notes/note-card.tsx |

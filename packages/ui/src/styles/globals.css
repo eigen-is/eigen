@@ -625,9 +625,9 @@
     left: -1px;
 }
 
-/* Selected-object chrome (shared: docs figure via ImageResizeHandles, slides
-   SelectionChrome overlay, sheets floating image via ImgBoxs): the ring around
-   the object and the square resize grips, one visual for all three editors. */
+/* Selected-object chrome (shared: docs figure, slides, and vector via ObjectTransform,
+   sheets floating image via ImgBoxs): the ring around the object and the square resize
+   grips, one visual for every editor. */
 .eigen-selection-ring {
     outline: 1px solid var(--selection-handle);
     /* Excalidraw's breathing room: the ring floats off the object (SCOUT-M2 §9). */
