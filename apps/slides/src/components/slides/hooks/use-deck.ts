@@ -68,13 +68,19 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         mountId,
         pathId,
         undoScope: (doc) => [doc.getMap('slides'), doc.getMap('objects'), doc.getArray('slideOrder')],
-        onInit: ({ doc }) => {
+        onInit: ({ doc, provider, undoManager }) => {
             const slidesMap = doc.getMap('slides');
             const objectsMap = doc.getMap('objects');
             const slideOrderArray = doc.getArray('slideOrder');
 
-            const updateReactState = () => {
-                normalizeDeck(doc);
+            // Normalize only on REMOTE merges — concurrent edits are what dupe/orphan a ref; local
+            // edits are well-formed by construction, so a local tick just reads (U6d cadence fix; this
+            // ran on every observer tick before). The initial read (no transaction) skips it too — the
+            // doc is empty until sync, and onSync normalizes the loaded content.
+            const updateReactState = (_events?: unknown, tr?: Y.Transaction) => {
+                // Undo/redo re-applies historical state that may predate a repair, so it is exactly
+                // as suspect as a remote merge (⌘Z after an orphan-rehome can resurrect a dupe).
+                if (tr?.origin === provider || tr?.origin === undoManager) normalizeDeck(doc);
                 const newState: DeckData = {
                     slides: {},
                     objects: {},
@@ -110,7 +116,10 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             };
         },
         onSync: ({ doc }, synced) => {
-            if (synced && doc.getMap('slides').size === 0) {
+            if (!synced) return;
+            // Once-on-sync: repair the freshly loaded content before the empty-check + seeding.
+            normalizeDeck(doc);
+            if (doc.getMap('slides').size === 0) {
                 initializeDefaultDeck(doc);
             }
         },
