@@ -243,12 +243,16 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 options.addSheet = {};
                                 options.addSheet!.id = result.sheets[result.sheets.length - 1].id;
                             }
-                            globalCache.current.undoList.push({
-                                patches: filteredPatches,
-                                inversePatches: filteredInversePatches,
-                                options,
-                            });
-                            globalCache.current.redoList = [];
+                            // noUndo: emit the op (peers need the swap/correction) but record no local
+                            // undo entry, so a cross-mount paste stays a single ⌘Z.
+                            if (!options.noUndo) {
+                                globalCache.current.undoList.push({
+                                    patches: filteredPatches,
+                                    inversePatches: filteredInversePatches,
+                                    options,
+                                });
+                                globalCache.current.redoList = [];
+                            }
                             emitOp(result, filteredPatches, options);
                         }
                     } else {

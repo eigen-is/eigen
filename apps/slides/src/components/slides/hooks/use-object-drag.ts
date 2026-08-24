@@ -12,8 +12,8 @@ type ObjectDragState = {
     startY: number;
     startObjX: number;
     startObjY: number;
-    // Kept for the snap rect (edges) and the rotated-object snap-skip below; a rotated box's
-    // axis-aligned snap rect doesn't match its visual box, so it is not snapped.
+    // Feed the snap rect; startAngle picks the snap mode — a rotated box snaps by centre only (its
+    // axis-aligned edges don't match its visual box), an unrotated box snaps on edges + centre.
     startObjW: number;
     startObjH: number;
     startAngle: number;
@@ -24,6 +24,8 @@ type GroupDragState = {
     startY: number;
     objects: { id: string; x: number; y: number; w: number; h: number }[];
     bounds: { x: number; y: number; w: number; h: number };
+    // True when any selected object is rotated → snap the group by centre only.
+    anyRotated: boolean;
 };
 
 type DragPreview = { objId: string; x: number; y: number };
@@ -88,16 +90,15 @@ export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], h
                 const x = s.startObjX + dx;
                 const y = s.startObjY + dy;
 
-                // A rotated object's axis-aligned snap rect doesn't match its visual box — skip snapping.
-                const snapped =
-                    s.startAngle !== 0
-                        ? { x, y, w: s.startObjW, h: s.startObjH, lines: [] as SnapLine[] }
-                        : snapRect(
-                              { x, y, w: s.startObjW, h: s.startObjH },
-                              snapsRef.current.vSnaps,
-                              snapsRef.current.hSnaps,
-                              'move',
-                          );
+                // A rotated object snaps by CENTRE only (its axis-aligned edges lie about the visual box,
+                // but cx/cy is rotation-invariant); an unrotated object snaps on edges + centre.
+                const snapped = snapRect(
+                    { x, y, w: s.startObjW, h: s.startObjH },
+                    snapsRef.current.vSnaps,
+                    snapsRef.current.hSnaps,
+                    'move',
+                    s.startAngle !== 0,
+                );
 
                 // Mousemove fires ~60Hz; bail when the snapped position is identical to skip re-renders.
                 const prev = lastSnappedRef.current;
@@ -153,6 +154,7 @@ export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], h
                 startY: e.clientY,
                 objects: selectedObjects.map((o) => ({ id: o.id, x: o.x, y: o.y, w: o.width, h: o.height })),
                 bounds,
+                anyRotated: selectedObjects.some((o) => o.angle !== 0),
             };
             stateRef.current = {
                 objId: null,
@@ -172,9 +174,17 @@ export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], h
                 const dx = ((me.clientX - g.startX) / canvas.w) * SLIDE_BASE_WIDTH;
                 const dy = ((me.clientY - g.startY) / canvas.h) * SLIDE_BASE_HEIGHT;
 
-                // Snap the bounding box, then derive the snapped delta
+                // Snap the bounding box, then derive the snapped delta. If any selected object is
+                // rotated, snap the group by centre only (the simplest consistent rule — a rotated
+                // member makes the group's axis-aligned edges an unreliable snap reference).
                 const movedBounds = { x: g.bounds.x + dx, y: g.bounds.y + dy, w: g.bounds.w, h: g.bounds.h };
-                const snapped = snapRect(movedBounds, snapsRef.current.vSnaps, snapsRef.current.hSnaps, 'move');
+                const snapped = snapRect(
+                    movedBounds,
+                    snapsRef.current.vSnaps,
+                    snapsRef.current.hSnaps,
+                    'move',
+                    g.anyRotated,
+                );
                 const snapDx = snapped.x - g.bounds.x;
                 const snapDy = snapped.y - g.bounds.y;
 

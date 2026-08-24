@@ -148,15 +148,22 @@ export function generateAPIs(
         insertImage: (mediaName: string, width: number, height: number, angle?: number) =>
             setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height, angle)),
 
+        // Pending→real swap after an upload/paste settles — a technical fixup, never the user's own
+        // undo step (noUndo emits the op to peers but records no local undo entry).
         replaceImageMediaName: (oldName: string, newName: string) =>
-            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName)),
+            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName), { noUndo: true }),
 
-        removeImageByMediaName: (name: string) => setContext((draftCtx) => removeImageByMediaName(draftCtx, name)),
+        removeImageByMediaName: (name: string) =>
+            setContext((draftCtx) => removeImageByMediaName(draftCtx, name), { noUndo: true }),
 
         // ObjectTransform resize/rotate commit + properties-panel numeric edits — one op + undo step
-        // each (default setContext).
-        updateImage: (id: string, fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>) =>
-            setContext((draftCtx) => updateImage(draftCtx, id, fields)),
+        // each (default setContext). The paste-flow height correction passes { noUndo: true } so it
+        // rides the same paste as one ⌘Z (op still emitted for peers).
+        updateImage: (
+            id: string,
+            fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>,
+            options?: { noUndo?: boolean },
+        ) => setContext((draftCtx) => updateImage(draftCtx, id, fields), options),
 
         removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
 

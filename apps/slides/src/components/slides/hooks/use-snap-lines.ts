@@ -40,26 +40,37 @@ export function computeSnapLines(
         if (excludeIds.has(obj.id)) continue;
         // getEdges works on the app-private w/h Rect scratch type; map the canonical object in.
         const e = getEdges({ x: obj.x, y: obj.y, w: obj.width, h: obj.height });
-        vSnaps.push(e.left, e.right, e.cx);
-        hSnaps.push(e.top, e.bottom, e.cy);
+        // A rotated object's axis-aligned left/right/top/bottom don't match its visual box, so they'd
+        // be false snap targets — only its centre (cx/cy) is rotation-invariant. Contribute centre only.
+        if (obj.angle) {
+            vSnaps.push(e.cx);
+            hSnaps.push(e.cy);
+        } else {
+            vSnaps.push(e.left, e.right, e.cx);
+            hSnaps.push(e.top, e.bottom, e.cy);
+        }
     }
 
     return { vSnaps, hSnaps };
 }
 
-export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: string): SnapResult {
+// `centerOnly` (move-mode) snaps the box by its centre alone — the rule for a rotated object, whose
+// axis-aligned edges lie about its visual box but whose centre stays rotation-invariant.
+export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: string, centerOnly = false): SnapResult {
     const edges = getEdges(rect);
     const lines: SnapLine[] = [];
     let { x, y, w, h } = rect;
 
     if (mode === 'move') {
+        const vEdges = centerOnly ? [edges.cx] : [edges.left, edges.right, edges.cx];
+        const hEdges = centerOnly ? [edges.cy] : [edges.top, edges.bottom, edges.cy];
         let bestDx = Infinity;
         let bestDy = Infinity;
         let snapX = x;
         let snapY = y;
 
         for (const vs of vSnaps) {
-            for (const edge of [edges.left, edges.right, edges.cx]) {
+            for (const edge of vEdges) {
                 const d = Math.abs(edge - vs);
                 if (d < SNAP_THRESHOLD && d < Math.abs(bestDx)) {
                     bestDx = edge - vs;
@@ -69,7 +80,7 @@ export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: s
         }
 
         for (const hs of hSnaps) {
-            for (const edge of [edges.top, edges.bottom, edges.cy]) {
+            for (const edge of hEdges) {
                 const d = Math.abs(edge - hs);
                 if (d < SNAP_THRESHOLD && d < Math.abs(bestDy)) {
                     bestDy = edge - hs;
@@ -81,8 +92,9 @@ export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: s
         if (bestDx !== Infinity) {
             x = snapX;
             const snappedEdges = getEdges({ x, y, w, h });
+            const vSnapped = centerOnly ? [snappedEdges.cx] : [snappedEdges.left, snappedEdges.right, snappedEdges.cx];
             for (const vs of vSnaps) {
-                for (const edge of [snappedEdges.left, snappedEdges.right, snappedEdges.cx]) {
+                for (const edge of vSnapped) {
                     if (Math.abs(edge - vs) < 0.1) {
                         lines.push({ orientation: 'vertical', position: vs });
                     }
@@ -93,8 +105,9 @@ export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: s
         if (bestDy !== Infinity) {
             y = snapY;
             const snappedEdges = getEdges({ x, y, w, h });
+            const hSnapped = centerOnly ? [snappedEdges.cy] : [snappedEdges.top, snappedEdges.bottom, snappedEdges.cy];
             for (const hs of hSnaps) {
-                for (const edge of [snappedEdges.top, snappedEdges.bottom, snappedEdges.cy]) {
+                for (const edge of hSnapped) {
                     if (Math.abs(edge - hs) < 0.1) {
                         lines.push({ orientation: 'horizontal', position: hs });
                     }

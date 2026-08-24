@@ -18,7 +18,12 @@ export type RefValues = {
 };
 
 export type SetContextOptions = {
+    // Skip patch generation entirely: no op emitted to peers AND no undo entry.
     noHistory?: boolean;
+    // Emit the collaborative op but record NO local undo entry. For technical fixups a user never
+    // undoes as their own step — the pending→real image mediaName swap and the paste-flow height
+    // correction — so a single paste stays one ⌘Z. Distinct from noHistory, which skips op emission too.
+    noUndo?: boolean;
     logPatch?: boolean;
 } & PatchOptions;
 

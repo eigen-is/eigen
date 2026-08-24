@@ -228,7 +228,8 @@ function SheetEditorInner({
                 if (widthOnly) {
                     const height = await deriveHeight(resolveMediaUrl(result.mediaName), width);
                     const id = findImageId(result.mediaName);
-                    if (id) workbookRef.current?.updateImage(id, { height });
+                    // Non-undoable: rides the paste's single insert undo step (op still emitted).
+                    if (id) workbookRef.current?.updateImage(id, { height }, { noUndo: true });
                 }
             } else {
                 // Same media folder: the file is already here — probe before inserting so the box is
