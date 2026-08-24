@@ -255,15 +255,32 @@ export function SlideCanvas({
         return { dx: (dxPx / w) * SLIDE_BASE_WIDTH, dy: (dyPx / h) * SLIDE_BASE_HEIGHT };
     }, []);
 
+    // Cached canvas rect for the per-move publish below: getBoundingClientRect at pointermove
+    // frequency forces a sync layout on every move, before the awareness throttle discards most of
+    // them. Refreshed on pointerenter (the canvas is position-stable while the pointer is inside);
+    // a canvas resize (window, panel toggle) invalidates it so the next move re-measures.
+    const canvasRectRef = useRef<DOMRect | null>(null);
+    const refreshCanvasRect = useCallback(() => {
+        canvasRectRef.current = canvasRef.current?.getBoundingClientRect() ?? null;
+    }, []);
+    useEffect(() => {
+        const el = canvasRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(() => {
+            canvasRectRef.current = null;
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+
     // Publish the local pointer to peers in slide-unit space — the same units boxToStyle maps to
     // percent, so a peer renders at the right spot on any canvas size. Throttled downstream (no React
     // state → no re-render). Attached regardless of write access: viewers are visible peers.
     const publishPointer = useCallback(
         (e: React.PointerEvent) => {
             if (!publishCursor) return;
-            const el = canvasRef.current;
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
+            const rect = (canvasRectRef.current ??= canvasRef.current?.getBoundingClientRect() ?? null);
+            if (!rect) return;
             publishCursor({
                 x: ((e.clientX - rect.left) / rect.width) * SLIDE_BASE_WIDTH,
                 y: ((e.clientY - rect.top) / rect.height) * SLIDE_BASE_HEIGHT,
@@ -357,6 +374,7 @@ export function SlideCanvas({
                     ...getBackgroundStyle(slide.background, resolveMediaUrl),
                 }}
                 onMouseDown={handleCanvasMouseDown}
+                onPointerEnter={refreshCanvasRect}
                 onPointerMove={publishPointer}
                 onPointerLeave={() => publishCursor?.(null)}
                 {...fileDropProps}

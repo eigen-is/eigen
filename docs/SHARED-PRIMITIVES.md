@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1009 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1010 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -174,7 +174,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (237)
+## Hooks (238)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -384,6 +384,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useContactAvatarUpload` | `@workspace/ui` | packages/ui/src/components/use-contact-avatar-upload.ts |
 | `useLayout` | `@workspace/ui` | packages/ui/src/components/layout/app/layout-context.tsx |
 | `useAttachmentMeta` | `@workspace/ui/components/attachment` | packages/ui/src/components/attachment/use-attachment-meta.ts |
+| `useAwarenessIdentity` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-identity.ts |
 | `useAwarenessPeers` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-awareness-peers.ts |
 | `useThrottledAwarenessField` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/use-throttled-awareness-field.ts |
 | `useContactInput` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/use-contact-input.ts |

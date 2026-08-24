@@ -1,8 +1,7 @@
 import type { AuthUser } from '@workspace/lib/auth';
-import { userColor } from '@workspace/lib/constants/colors';
 import { useEffect } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
-import { useThrottledAwarenessField } from '../../collab';
+import { useAwarenessIdentity, useThrottledAwarenessField } from '../../collab';
 
 // A scene point, or null when the pointer leaves the canvas. Published on the awareness `cursor`
 // field; the canvas feeds it from pointer moves.
@@ -22,14 +21,7 @@ export function useVectorPresence(
     user: AuthUser | null,
     selectedIds: string[],
 ): PublishCursor {
-    useEffect(() => {
-        if (!provider || !user) return;
-        provider.awareness.setLocalStateField('user', {
-            name: user.name,
-            color: userColor(user.id),
-            userId: user.id,
-        });
-    }, [provider, user]);
+    useAwarenessIdentity(provider, user);
 
     useEffect(() => {
         if (!provider) return;

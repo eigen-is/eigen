@@ -236,8 +236,7 @@ export function VectorCanvas({
     // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
     const cursorBoxes = useMemo(() => {
         const m = new Map<string, Box>();
-        for (const el of ordered)
-            m.set(el.id, { x: el.x, y: el.y, width: el.width, height: el.height, angle: el.angle });
+        for (const el of ordered) m.set(el.id, elementBox(el));
         return m;
     }, [ordered]);
 

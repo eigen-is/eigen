@@ -16,7 +16,7 @@ const identityOf = (peer: PeerPresence): Identity | null =>
 // and mirrors every peer's cursor into addPresences/removePresences. Sits on the shared
 // `useAwarenessPeers` hook for the subscription + clientId-keyed diff bookkeeping; the sheets-specific
 // invariants (identity-keyed multi-tab dedupe, removed-client re-feed, snapshotVersion remount
-// survival, self-skip by userId) live in the reconcile pass and `presencesFromPeers` below.
+// survival) live in the reconcile pass and `presencesFromPeers` below.
 // Returns a publishSelection callback the editor calls from the Workbook's afterSelectionChange hook.
 export function usePresence(
     provider: WebsocketProvider | null,
@@ -33,8 +33,8 @@ export function usePresence(
     const prevPeersRef = useRef<Map<number, PeerPresence>>(new Map());
 
     // clientId-keyed remote awareness states; the local client (by clientId) is already omitted by
-    // the hook. Multi-tab self-skip (same userId, different clientId) still happens in
-    // presencesFromPeers, so a user never sees their own cursor from another tab.
+    // the hook. A same-user entry is the user's other window and shows like any peer — unified with
+    // the other apps (you see yourself across windows).
     const peers = useAwarenessPeers<PeerPresence>(provider);
 
     // Publish the local identity. snapshotVersion is a dep because a peer snapshot flush remounts the
@@ -57,7 +57,6 @@ export function usePresence(
         if (!provider || !user || !synced) return;
         const workbook = workbookRef.current;
         if (!workbook) return;
-        const selfUserId = user.id;
 
         // Departed = present in the previous map, gone from the current one.
         const removed: Identity[] = [];
@@ -71,7 +70,7 @@ export function usePresence(
         // under a new clientId. removePresences() just deleted that shared row, so adding the live set
         // back restores it. addPresences overwrites by key, so a peer's moved cursor updates in place.
         if (removed.length > 0) workbook.removePresences(removed);
-        const toAdd = presencesFromPeers([...peers.values()], selfUserId);
+        const toAdd = presencesFromPeers([...peers.values()]);
         if (toAdd.length > 0) workbook.addPresences(toAdd);
 
         prevPeersRef.current = peers;

@@ -21,7 +21,19 @@ export function useAwarenessPeers<S>(provider: WebsocketProvider | null): Map<nu
         }
         const { awareness } = provider;
         const selfId = awareness.clientID;
-        const rebuild = () => {
+        const rebuild = (delta?: { added: number[]; updated: number[]; removed: number[] }) => {
+            // Local-only tick (our own throttled cursor / selection publish) changes no peer-visible
+            // state — skip the full getStates() rebuild + Map allocation before doing it. This is the
+            // hottest path (a ~50ms cursor publish fires 'change' with updated: [selfId]). Genuine
+            // peer joins / leaves / updates fall through to the rebuild + identity-compare bail below.
+            if (
+                delta &&
+                delta.added.length === 0 &&
+                delta.removed.length === 0 &&
+                delta.updated.every((id) => id === selfId)
+            ) {
+                return;
+            }
             setPeers((prev) => {
                 const next = new Map<number, S>();
                 for (const [clientId, state] of awareness.getStates()) {

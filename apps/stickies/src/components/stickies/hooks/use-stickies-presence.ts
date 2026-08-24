@@ -1,6 +1,5 @@
 import type { AuthUser } from '@workspace/lib/auth';
-import { userColor } from '@workspace/lib/constants/colors';
-import { type CursorPeerState, useAwarenessPeers } from '@workspace/ui/components/collab';
+import { type CursorPeerState, useAwarenessIdentity, useAwarenessPeers } from '@workspace/ui/components/collab';
 import { useEffect, useMemo, useRef } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 
@@ -24,14 +23,7 @@ export function useStickiesPresence(
     user: AuthUser | null,
     selectedCardIds: string[],
 ): void {
-    useEffect(() => {
-        if (!provider || !user) return;
-        provider.awareness.setLocalStateField('user', {
-            name: user.name,
-            color: userColor(user.id),
-            userId: user.id,
-        });
-    }, [provider, user]);
+    useAwarenessIdentity(provider, user);
 
     useEffect(() => {
         if (!provider) return;

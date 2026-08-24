@@ -234,7 +234,7 @@ export function OverlayVisuals({ containerRef }: Props) {
                             style={
                                 {
                                     left: col_pre,
-                                    top: row_pre - 2,
+                                    top: row_pre,
                                     width,
                                     height,
                                     '--peer-color': color,

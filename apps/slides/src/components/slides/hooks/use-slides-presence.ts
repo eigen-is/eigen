@@ -1,6 +1,9 @@
 import type { AuthUser } from '@workspace/lib/auth';
-import { userColor } from '@workspace/lib/constants/colors';
-import { type CursorPeerState, useThrottledAwarenessField } from '@workspace/ui/components/collab';
+import {
+    type CursorPeerState,
+    useAwarenessIdentity,
+    useThrottledAwarenessField,
+} from '@workspace/ui/components/collab';
 import { useEffect } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 
@@ -28,14 +31,7 @@ export function useSlidesPresence(
     selectedIds: string[],
     activeSlideId: string | null,
 ): PublishCursor {
-    useEffect(() => {
-        if (!provider || !user) return;
-        provider.awareness.setLocalStateField('user', {
-            name: user.name,
-            color: userColor(user.id),
-            userId: user.id,
-        });
-    }, [provider, user]);
+    useAwarenessIdentity(provider, user);
 
     useEffect(() => {
         if (!provider) return;
