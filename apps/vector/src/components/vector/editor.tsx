@@ -195,7 +195,10 @@ export function VectorEditor({
                                         tool={tool}
                                         setTool={setTool}
                                         canWrite={canWrite}
+                                        ownerId={ownerId}
+                                        mountId={path.mountId}
                                         addElement={doc.addElement}
+                                        addElements={doc.addElements}
                                         updateElement={doc.updateElement}
                                         updateElements={doc.updateElements}
                                         deleteElements={doc.deleteElements}

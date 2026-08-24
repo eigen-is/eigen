@@ -131,6 +131,40 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         return id;
     }, []);
 
+    // Batch add — the whole set in ONE transact (paste's element ADDS: CONTRACT §A one gesture = one
+    // transact / one undo step). Consecutive fractional keys above the current top preserve the
+    // callers' order as the pasted stack's relative z-order. Each element gets a fresh id + seed (or a
+    // caller-supplied seed). Returns the new ids in input order so the caller reselects the paste.
+    const addElements = useCallback((partials: NewVectorElement[]): string[] => {
+        const doc = docRef.current;
+        if (!doc || partials.length === 0) return [];
+        const ids: string[] = [];
+        doc.transact(() => {
+            const elementsMap = doc.getMap('elements');
+            const keys = generateNKeysBetween(topmostIndex(elementsMap), null, partials.length);
+            partials.forEach((partial, i) => {
+                const id = `el-${nanoid(10)}`;
+                const seed = partial.seed ?? Math.floor(Math.random() * 2 ** 31);
+                const record: Record<string, unknown> = {
+                    ...elementDefaults(partial.type),
+                    ...partial,
+                    id,
+                    type: partial.type,
+                    seed,
+                    index: keys[i],
+                };
+                const elMap = new Y.Map();
+                for (const field of ELEMENT_FIELDS) {
+                    const v = record[field];
+                    if (v !== undefined) elMap.set(field, v);
+                }
+                elementsMap.set(id, elMap);
+                ids.push(id);
+            });
+        });
+        return ids;
+    }, []);
+
     // Batch update — the whole set in ONE transact, so a group move / nudge / z-order rewrite is a
     // single undo step and a single broadcast (CONTRACT §A: one gesture = one transact). Missing ids
     // no-op (a peer may have deleted one mid-gesture).
@@ -208,6 +242,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         elements: scene.elements,
         meta: scene.meta,
         addElement,
+        addElements,
         updateElement,
         updateElements,
         deleteElements,

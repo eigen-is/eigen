@@ -1,4 +1,16 @@
-import { useMediaResolver } from '@workspace/lib/drive';
+import {
+    buildImageClipboardItem,
+    buildTextClipboardItem,
+    needsReUpload,
+    readClipboardBox,
+    readEigenClipboard,
+    readEigenClipboardAsync,
+    reUploadImage,
+    writeEigenClipboard,
+    writeEigenClipboardAsync,
+} from '@workspace/lib/clipboard';
+import { useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type Bounds,
@@ -9,11 +21,14 @@ import {
     DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elementToSvg,
+    type FillStyle,
     fitImageSize,
     getElementsBounds,
     isTransparent,
     type MediaResolver,
     orderByFractionalIndex,
+    type Roundness,
+    type StrokeStyle,
     type TextAlign,
     type VectorElement,
     type VectorMeta,
@@ -56,6 +71,96 @@ const MAX_FONT_SIZE = 400;
 // Each subsequent image in a multi-file drop staggers by this many scene units so a stack of
 // natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
 const IMAGE_CASCADE_OFFSET = 20;
+// Fallback box for a pasted item whose typed size is absent (only reachable for a partial cross-app
+// item; vector/slides always carry both dims). Vector→vector paste never uses these.
+const DEFAULT_PASTE_IMAGE_SIZE = 200;
+const DEFAULT_PASTE_SHAPE_SIZE = 100;
+
+// Vector-private clipboard meta, carried under `item.meta.vector` so cross-app consumers (slides/docs)
+// ignore it and only vector restores exact scene coords + per-element fields. Absolute scene x/y ride
+// here — NOT the typed contract fields (which forbid x/y) — so a vector→vector paste preserves the
+// selection's relative layout before it's re-anchored on the viewport. A shape has no contract item
+// kind, so it rides as a text item; `type` present ⇒ restore a shape, else a text element.
+type VectorClipMeta = {
+    x: number;
+    y: number;
+    type?: 'rectangle' | 'diamond' | 'ellipse';
+    strokeColor?: string;
+    backgroundColor?: string;
+    fillStyle?: FillStyle;
+    strokeStyle?: StrokeStyle;
+    strokeWidth?: number;
+    roughness?: number;
+    opacity?: number;
+    roundness?: Roundness;
+};
+
+function readVectorMeta(item: EigenClipboardItem): VectorClipMeta | null {
+    const v = item.meta?.vector as VectorClipMeta | undefined;
+    return v && typeof v.x === 'number' && typeof v.y === 'number' ? v : null;
+}
+
+function toVectorTextAlign(v: string | undefined): TextAlign {
+    return v === 'center' || v === 'right' ? v : 'left';
+}
+
+// Produce a clipboard item for one element: images → typed mediaName + geometry (+ a portable source
+// path via the resolver); text → typed text + typography (vector's three canonical fields); shapes →
+// a text-item carrier with the shape rebuilt from meta.vector on a vector→vector paste. Every item
+// also carries the element's scene x/y (+ vector-private fields) under meta.vector. Returns null when
+// an image's media can't be resolved to a portable path (a still-pending upload).
+function buildElementClipboardItem(
+    el: VectorElement,
+    resolveMediaPath: (name: string) => DrivePath | undefined,
+): EigenClipboardItem | null {
+    const box = { width: el.width, height: el.height, angle: el.angle };
+    if (el.type === 'image') {
+        const source = resolveMediaPath(el.mediaName);
+        if (!source) return null;
+        return buildImageClipboardItem({
+            mediaName: el.mediaName,
+            source,
+            box,
+            meta: { vector: { x: el.x, y: el.y } },
+        });
+    }
+    if (el.type === 'text') {
+        return buildTextClipboardItem({
+            text: el.text,
+            box,
+            typography: { fontFamily: el.fontFamily, fontSize: el.fontSize, textAlign: el.textAlign },
+            meta: {
+                vector: {
+                    x: el.x,
+                    y: el.y,
+                    strokeColor: el.strokeColor,
+                    backgroundColor: el.backgroundColor,
+                    opacity: el.opacity,
+                },
+            },
+        });
+    }
+    // shape (rectangle/diamond/ellipse)
+    return buildTextClipboardItem({
+        text: '',
+        box,
+        meta: {
+            vector: {
+                x: el.x,
+                y: el.y,
+                type: el.type,
+                strokeColor: el.strokeColor,
+                backgroundColor: el.backgroundColor,
+                fillStyle: el.fillStyle,
+                strokeStyle: el.strokeStyle,
+                strokeWidth: el.strokeWidth,
+                roughness: el.roughness,
+                opacity: el.opacity,
+                roundness: el.roundness,
+            },
+        },
+    });
+}
 
 // An open text-editing session. A new element stays LOCAL (id never written) until its first
 // commit — an empty discard writes nothing; re-editing an existing element commits one update, or
@@ -170,7 +275,12 @@ type VectorCanvasProps = {
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
     canWrite: boolean;
+    // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
+    ownerId: string;
+    mountId: string;
     addElement: (partial: NewVectorElement) => string | undefined;
+    // Batch add (paste) — the whole set in ONE transact / one undo step.
+    addElements: (partials: NewVectorElement[]) => string[];
     updateElement: (id: string, fields: VectorElementPatch) => void;
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     deleteElements: (ids: string[]) => void;
@@ -200,7 +310,10 @@ export function VectorCanvas({
     tool,
     setTool,
     canWrite,
+    ownerId,
+    mountId,
     addElement,
+    addElements,
     updateElement,
     updateElements,
     deleteElements,
@@ -216,8 +329,11 @@ export function VectorCanvas({
     const { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef, zoom } =
         useViewport();
     // Images resolve/upload through the container's media/ folder (the provider the editor wraps
-    // us in). resolveMediaUrl feeds every <image> href; startUpload drives the optimistic insert.
-    const { resolveMediaUrl, startUpload, mediaFolderId } = useMediaResolver();
+    // us in). resolveMediaUrl feeds every <image> href; startUpload drives the optimistic insert;
+    // resolveMediaPath gives a copied image a portable source path for cross-mount paste.
+    const { resolveMediaUrl, resolveMediaPath, startUpload, mediaFolderId } = useMediaResolver();
+    // Cross-mount paste re-uploads a copied image's blob into OUR media/ folder; mutateAsync is stable.
+    const uploadFile = useUploadFile(ownerId, mountId);
 
     const [previews, setPreviews] = useState<Record<string, Box>>({});
     const [creating, setCreating] = useState<CreatingState | null>(null);
@@ -576,6 +692,239 @@ export function VectorCanvas({
         void insertImageFiles(files, viewportCenterScene());
     }, imagesEnabled);
 
+    // Element clipboard PRODUCER: one eigen item per selected element, in z-order (so a paste keeps the
+    // relative stacking). Images with unresolved (still-uploading) media are skipped.
+    const buildSelectionItems = useCallback((): EigenClipboardItem[] => {
+        const items: EigenClipboardItem[] = [];
+        for (const el of ordered) {
+            if (!selectedIds.includes(el.id)) continue;
+            const item = buildElementClipboardItem(el, resolveMediaPath);
+            if (item) items.push(item);
+        }
+        return items;
+    }, [ordered, selectedIds, resolveMediaPath]);
+
+    // Concatenated plain text of the selected TEXT elements — the only flavor written alongside eigen
+    // JSON (D6: text copies carry text/plain, image/shape copies carry neither; no png in v1). undefined
+    // when the selection has no text element (a pure image/shape copy writes no text/plain).
+    const selectionPlainText = useCallback((): string | undefined => {
+        const texts: string[] = [];
+        for (const el of ordered) {
+            if (selectedIds.includes(el.id) && el.type === 'text' && el.text.length > 0) texts.push(el.text);
+        }
+        return texts.length ? texts.join('\n') : undefined;
+    }, [ordered, selectedIds]);
+
+    // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
+    // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
+    // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text) and
+    // self-heals once the face loads. Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
+    // set is re-anchored on the viewport centre preserving each element's relative offset.
+    const pasteEigenItems = useCallback(
+        (items: EigenClipboardItem[]) => {
+            if (!items.length) return;
+            const anchor = viewportCenterScene();
+
+            // Translate the vector-origin items (those carrying scene coords) so their bounding-box
+            // centre lands on the viewport; cross-app items (no meta.vector) cascade from the anchor.
+            const positioned = items.map((item) => ({ item, meta: readVectorMeta(item), box: readClipboardBox(item) }));
+            const withCoords = positioned.filter(
+                (p): p is typeof p & { meta: NonNullable<typeof p.meta> } => p.meta != null,
+            );
+            let dx = 0;
+            let dy = 0;
+            if (withCoords.length) {
+                let minX = Number.POSITIVE_INFINITY;
+                let minY = Number.POSITIVE_INFINITY;
+                let maxX = Number.NEGATIVE_INFINITY;
+                let maxY = Number.NEGATIVE_INFINITY;
+                for (const { meta, box } of withCoords) {
+                    minX = Math.min(minX, meta.x);
+                    minY = Math.min(minY, meta.y);
+                    maxX = Math.max(maxX, meta.x + (box.width ?? 0));
+                    maxY = Math.max(maxY, meta.y + (box.height ?? 0));
+                }
+                dx = anchor.x - (minX + maxX) / 2;
+                dy = anchor.y - (minY + maxY) / 2;
+            }
+
+            const partials: NewVectorElement[] = [];
+            const textHeals: { index: number; text: string; fontSize: number; fontFamily: string }[] = [];
+            const crossMount: { index: number; item: EigenClipboardImageItem }[] = [];
+            let cascade = 0;
+            const placeAt = (meta: VectorClipMeta | null, w: number, h: number) => {
+                if (meta) return { x: meta.x + dx, y: meta.y + dy };
+                const off = cascade * IMAGE_CASCADE_OFFSET;
+                cascade += 1;
+                return { x: anchor.x - w / 2 + off, y: anchor.y - h / 2 + off };
+            };
+
+            for (const { item, meta, box } of positioned) {
+                const angle = box.angle ?? 0;
+                if (item.type === 'image') {
+                    const w = box.width ?? DEFAULT_PASTE_IMAGE_SIZE;
+                    const h = box.height ?? w;
+                    const pos = placeAt(meta, w, h);
+                    const index = partials.length;
+                    if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
+                        // Optimistic add with a pending name; the real name swaps in a late transact.
+                        partials.push({
+                            type: 'image',
+                            ...pos,
+                            width: w,
+                            height: h,
+                            angle,
+                            mediaName: `pending:${crypto.randomUUID()}`,
+                        });
+                        crossMount.push({ index, item });
+                    } else {
+                        partials.push({ type: 'image', ...pos, width: w, height: h, angle, mediaName: item.mediaName });
+                    }
+                    continue;
+                }
+                // Shape carrier (a text item whose meta.vector names a shape type).
+                if (meta?.type) {
+                    const w = box.width ?? DEFAULT_PASTE_SHAPE_SIZE;
+                    const h = box.height ?? DEFAULT_PASTE_SHAPE_SIZE;
+                    const pos = placeAt(meta, w, h);
+                    partials.push({
+                        type: meta.type,
+                        ...pos,
+                        width: w,
+                        height: h,
+                        angle,
+                        strokeColor: meta.strokeColor,
+                        backgroundColor: meta.backgroundColor,
+                        fillStyle: meta.fillStyle,
+                        strokeStyle: meta.strokeStyle,
+                        strokeWidth: meta.strokeWidth,
+                        roughness: meta.roughness,
+                        opacity: meta.opacity,
+                        roundness: meta.roundness,
+                    });
+                    continue;
+                }
+                // Real text element — re-measure dims locally (never the wire size).
+                const typo = item.typography ?? {};
+                const fontFamily = typo.fontFamily ?? DEFAULT_FONT_FAMILY;
+                const fontSize = typo.fontSize ?? DEFAULT_FONT_SIZE;
+                const textAlign = toVectorTextAlign(typo.textAlign);
+                const { width: w, height: h } = measureVectorText(item.text, fontSize, fontFamily);
+                const pos = placeAt(meta, w, h);
+                textHeals.push({ index: partials.length, text: item.text, fontSize, fontFamily });
+                partials.push({
+                    type: 'text',
+                    ...pos,
+                    width: w,
+                    height: h,
+                    angle,
+                    text: item.text,
+                    fontSize,
+                    fontFamily,
+                    textAlign,
+                    strokeColor: meta?.strokeColor,
+                    backgroundColor: meta?.backgroundColor,
+                    opacity: meta?.opacity,
+                });
+            }
+
+            if (!partials.length) return;
+            undoManager?.stopCapturing();
+            const ids = addElements(partials); // ONE transact for all adds
+            undoManager?.stopCapturing();
+            if (!ids.length) return;
+            setSelectedIds(ids);
+
+            // Text: heal dims once the face resolves (late transact each, self-sealing + live-validated).
+            for (const { index, text, fontSize, fontFamily } of textHeals) {
+                const id = ids[index];
+                if (id) healTextDims(id, text, fontSize, fontFamily);
+            }
+            // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
+            // (late transact) or drop the element on failure — the shipped M4 optimistic-insert idiom.
+            for (const { index, item } of crossMount) {
+                const id = ids[index];
+                if (!id || !mediaFolderId) continue;
+                reUploadImage(
+                    item.sourcePathId,
+                    item.sourceOwnerId,
+                    item.sourceMountId,
+                    mediaFolderId,
+                    uploadFile.mutateAsync,
+                    ownerId,
+                    mountId,
+                    item.mediaName,
+                )
+                    .then((result) =>
+                        result ? updateElement(id, { mediaName: result.mediaName }) : deleteElements([id]),
+                    )
+                    .catch(() => {});
+            }
+        },
+        [
+            viewportCenterScene,
+            mediaFolderId,
+            addElements,
+            setSelectedIds,
+            undoManager,
+            healTextDims,
+            updateElement,
+            deleteElements,
+            uploadFile.mutateAsync,
+            ownerId,
+            mountId,
+        ],
+    );
+
+    // ⌘C / ⌘X / ⌘V via document-level ClipboardEvent listeners (the slides idiom — native events are
+    // required to write the MIME flavors and to read the DataTransfer synchronously). Gated
+    // canWrite && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
+    // clipboard (the typing-target invariant). Eigen items are consumed FIRST; a non-eigen paste falls
+    // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
+    useEffect(() => {
+        const onCopyEvent = (e: ClipboardEvent) => {
+            if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
+            const items = buildSelectionItems();
+            if (!items.length) return;
+            e.preventDefault();
+            writeEigenClipboard(e, { version: 1, items }, selectionPlainText());
+        };
+        const onCutEvent = (e: ClipboardEvent) => {
+            if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
+            const items = buildSelectionItems();
+            if (!items.length) return;
+            e.preventDefault();
+            writeEigenClipboard(e, { version: 1, items }, selectionPlainText());
+            // One sealed undo step (deleteSelection stopCaptures on both sides).
+            deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+        };
+        const onPasteEvent = (e: ClipboardEvent) => {
+            if (isTypingTarget() || !canWrite || editingRef.current) return;
+            const data = e.clipboardData ? readEigenClipboard(e.clipboardData) : null;
+            if (!data) return; // no eigen payload → let OS files reach useFilePasteTarget
+            e.preventDefault();
+            e.stopPropagation();
+            pasteEigenItems(data.items);
+        };
+        document.addEventListener('copy', onCopyEvent);
+        document.addEventListener('cut', onCutEvent);
+        document.addEventListener('paste', onPasteEvent, true);
+        return () => {
+            document.removeEventListener('copy', onCopyEvent);
+            document.removeEventListener('cut', onCutEvent);
+            document.removeEventListener('paste', onPasteEvent, true);
+        };
+    }, [
+        canWrite,
+        selectedIds,
+        buildSelectionItems,
+        selectionPlainText,
+        pasteEigenItems,
+        deleteElements,
+        setSelectedIds,
+        undoManager,
+    ]);
+
     const onDoubleClick = (e: React.MouseEvent) => {
         if (!canWrite || tool !== 'select' || editing) return;
         const p = clientToScene(e.clientX, e.clientY);
@@ -603,6 +952,24 @@ export function VectorCanvas({
     const onMenuArrange = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+    // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
+    // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as
+    // the keyboard path, so the two stay one behavior.
+    const onMenuCopy = () => {
+        const items = buildSelectionItems();
+        if (items.length) writeEigenClipboardAsync({ version: 1, items }, selectionPlainText()).catch(() => {});
+    };
+    const onMenuCut = () => {
+        const items = buildSelectionItems();
+        if (!items.length) return;
+        writeEigenClipboardAsync({ version: 1, items }, selectionPlainText()).catch(() => {});
+        deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+    };
+    const onMenuPaste = () => {
+        readEigenClipboardAsync()
+            .then((data) => data && pasteEigenItems(data.items))
+            .catch(() => {});
+    };
 
     const onPointerDown = (e: React.PointerEvent) => {
         if (frozenRef.current) return; // a gesture is already active (defensive)
@@ -955,6 +1322,9 @@ export function VectorCanvas({
             <VectorObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}
+                onCopy={onMenuCopy}
+                onCut={onMenuCut}
+                onPaste={onMenuPaste}
                 onDuplicate={onMenuDuplicate}
                 onDelete={onMenuDelete}
             />

@@ -7,7 +7,17 @@
 // builders for the useContextMenu singleton — and they borrow the `ZOp` union from the properties
 // panel's Arrange chrome so the vocabulary lives in one place.
 
-import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, CopyPlus, Trash2 } from 'lucide-react';
+import {
+    ArrowDownToLine,
+    ArrowUpToLine,
+    ChevronDown,
+    ChevronUp,
+    ClipboardPaste,
+    Copy,
+    CopyPlus,
+    Scissors,
+    Trash2,
+} from 'lucide-react';
 import { DropdownMenuItem } from '../dropdown-menu';
 import type { ZOp } from '../properties-panel/z-order';
 
@@ -28,6 +38,39 @@ export function ArrangeMenuItems({ onApply }: { onApply: (op: ZOp) => void }) {
             <DropdownMenuItem onClick={() => onApply('toBack')}>
                 <ArrowDownToLine className="h-4 w-4 mr-2" /> Send to back
             </DropdownMenuItem>
+        </>
+    );
+}
+
+// Clipboard group: Copy / Cut / Paste. Each row appears only when its callback is supplied, so a host
+// with only synchronous copy (slides today) and one with the full set (vector) compose the same
+// builder. Labels + order are the single source so the apps' menus read identically.
+export function ClipboardMenuItems({
+    onCopy,
+    onCut,
+    onPaste,
+}: {
+    onCopy?: () => void;
+    onCut?: () => void;
+    onPaste?: () => void;
+}) {
+    return (
+        <>
+            {onCopy && (
+                <DropdownMenuItem onClick={onCopy}>
+                    <Copy className="h-4 w-4 mr-2" /> Copy
+                </DropdownMenuItem>
+            )}
+            {onCut && (
+                <DropdownMenuItem onClick={onCut}>
+                    <Scissors className="h-4 w-4 mr-2" /> Cut
+                </DropdownMenuItem>
+            )}
+            {onPaste && (
+                <DropdownMenuItem onClick={onPaste}>
+                    <ClipboardPaste className="h-4 w-4 mr-2" /> Paste
+                </DropdownMenuItem>
+            )}
         </>
     );
 }

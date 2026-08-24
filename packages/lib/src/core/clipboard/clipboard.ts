@@ -93,6 +93,31 @@ export function readEigenClipboard(clipboardData: DataTransfer): EigenClipboardD
     return null;
 }
 
+// Async read of eigen data via the Async Clipboard API, for handlers with no ClipboardEvent to read
+// (a context-menu Paste row). Symmetric with writeEigenClipboardAsync: the payload rides the
+// `text/html` marker span (custom MIME types can't survive navigator.clipboard). Returns null when
+// the read is denied/unavailable or no marker is present.
+export async function readEigenClipboardAsync(): Promise<EigenClipboardData | null> {
+    try {
+        const clipItems = await navigator.clipboard.read();
+        for (const clip of clipItems) {
+            if (!clip.types.includes('text/html')) continue;
+            const html = await (await clip.getType('text/html')).text();
+            const match = html.match(new RegExp(`${HTML_MARKER}="([^"]*?)"`));
+            if (match?.[1]) {
+                try {
+                    return parseEigenJson(decodeURIComponent(match[1]));
+                } catch {
+                    /* invalid encoding */
+                }
+            }
+        }
+    } catch {
+        /* clipboard read denied or unavailable */
+    }
+    return null;
+}
+
 export function writeEigenClipboard(e: ClipboardEvent, data: EigenClipboardData, plainText?: string, html?: string) {
     e.clipboardData?.setData(EIGEN_CLIPBOARD_MIME, JSON.stringify(data));
     const encoded = encodeURIComponent(JSON.stringify(data));
