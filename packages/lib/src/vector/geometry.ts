@@ -15,6 +15,12 @@ export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 const DEG_TO_RAD = Math.PI / 180;
 
+// Canvas interaction steps shared by vector + slides (U6f), in scene/document units: arrow-key nudge
+// (Shift = large) and the duplicate/paste cascade offset. One source so the two apps' keymaps match.
+export const NUDGE_STEP = 1;
+export const NUDGE_STEP_LARGE = 5;
+export const DUPLICATE_OFFSET = 10;
+
 export function boxCenter(box: Box): Point {
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }

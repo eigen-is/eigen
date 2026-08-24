@@ -7,15 +7,18 @@
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
-import { generateNKeysBetween, orderByFractionalIndex, type VectorElement } from '@workspace/lib/vector';
+import {
+    DUPLICATE_OFFSET,
+    generateNKeysBetween,
+    NUDGE_STEP,
+    NUDGE_STEP_LARGE,
+    orderByFractionalIndex,
+    type VectorElement,
+} from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
 import type { VectorTool } from './use-tool';
 import type { VectorElementPatch } from './use-vector-doc';
-
-const NUDGE = 1;
-const NUDGE_LARGE = 5;
-const DUPLICATE_OFFSET = 10;
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
 // NON-selected elements, so a non-contiguous multi-selection collapses into one clean gap
@@ -169,14 +172,14 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
         nudge(dx, dy);
     };
     const nudgeEnabled = { enabled: enabled && hasSelection };
-    useHotkey('ArrowLeft', arrow(-NUDGE, 0), nudgeEnabled);
-    useHotkey('ArrowRight', arrow(NUDGE, 0), nudgeEnabled);
-    useHotkey('ArrowUp', arrow(0, -NUDGE), nudgeEnabled);
-    useHotkey('ArrowDown', arrow(0, NUDGE), nudgeEnabled);
-    useHotkey('Shift+ArrowLeft', arrow(-NUDGE_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowRight', arrow(NUDGE_LARGE, 0), nudgeEnabled);
-    useHotkey('Shift+ArrowUp', arrow(0, -NUDGE_LARGE), nudgeEnabled);
-    useHotkey('Shift+ArrowDown', arrow(0, NUDGE_LARGE), nudgeEnabled);
+    useHotkey('ArrowLeft', arrow(-NUDGE_STEP, 0), nudgeEnabled);
+    useHotkey('ArrowRight', arrow(NUDGE_STEP, 0), nudgeEnabled);
+    useHotkey('ArrowUp', arrow(0, -NUDGE_STEP), nudgeEnabled);
+    useHotkey('ArrowDown', arrow(0, NUDGE_STEP), nudgeEnabled);
+    useHotkey('Shift+ArrowLeft', arrow(-NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowRight', arrow(NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowUp', arrow(0, -NUDGE_STEP_LARGE), nudgeEnabled);
+    useHotkey('Shift+ArrowDown', arrow(0, NUDGE_STEP_LARGE), nudgeEnabled);
 
     // Z-order: ⌘[/⌘] step, ⌘⇧[/⌘⇧] to back/front — shared hook owns the manual event.code listener,
     // fed vector's fractional-index write.

@@ -1272,7 +1272,7 @@ export function VectorCanvas({
         setSelectedIds(g.additive ? [...new Set([...g.base, ...hits])] : hits);
     };
 
-    const finishGesture = () => {
+    const finishGesture = (altKey = false) => {
         const g = gestureRef.current;
         // No active gesture → nothing to finish, and crucially DON'T touch frozenRef: a text session
         // freezes the viewport with no gesture, and this handler runs on the session's opening
@@ -1309,11 +1309,23 @@ export function VectorCanvas({
         }
         if (g.kind === 'move') {
             if (g.moved) {
-                const patches = g.ids
-                    .filter((id) => previews[id])
-                    .map((id) => ({ id, fields: { x: previews[id].x, y: previews[id].y } }));
-                if (patches.length) updateElements(patches);
-                undoManager?.stopCapturing(); // trailing seal, same as create
+                // Alt-drag duplicate (slides' idiom): clones materialize at gesture END in ONE transact
+                // (the drag only ever showed local preview ghosts — no Yjs write happened yet), so it's
+                // a single undo step and the originals stay put. Plain drag commits the move.
+                const anchor = g.ids.find((id) => previews[id] && g.originals[id]);
+                const dx = anchor ? previews[anchor].x - g.originals[anchor].x : 0;
+                const dy = anchor ? previews[anchor].y - g.originals[anchor].y : 0;
+                if (altKey && (dx !== 0 || dy !== 0)) {
+                    const ids = duplicateElements(g.ids, dx, dy);
+                    undoManager?.stopCapturing(); // trailing seal (leading seal fired at pointerdown)
+                    if (ids.length) setSelectedIds(ids);
+                } else {
+                    const patches = g.ids
+                        .filter((id) => previews[id])
+                        .map((id) => ({ id, fields: { x: previews[id].x, y: previews[id].y } }));
+                    if (patches.length) updateElements(patches);
+                    undoManager?.stopCapturing(); // trailing seal, same as create
+                }
             }
             setPreviews({});
             return;
@@ -1326,7 +1338,8 @@ export function VectorCanvas({
     const onPointerUp = (e: React.PointerEvent) => {
         const g = gestureRef.current;
         if (g && e.pointerId !== g.pointerId) return;
-        finishGesture();
+        // Read Alt off the terminal event (drop-time modifier) for Alt-drag duplicate.
+        finishGesture(e.altKey);
     };
 
     const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);

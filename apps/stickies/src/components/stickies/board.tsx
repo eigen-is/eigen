@@ -138,6 +138,7 @@ export function StickiesBoard({
         cards,
         yjsDoc,
         undoManager,
+        createCard,
         onRecordEvent: recordHistory.mutate,
     });
 

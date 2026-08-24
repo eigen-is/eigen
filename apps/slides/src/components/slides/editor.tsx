@@ -7,6 +7,7 @@ import {
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
+    readEigenClipboardAsync,
     reUploadImage,
     writeEigenClipboard,
     writeEigenClipboardAsync,
@@ -27,7 +28,7 @@ import { OBJECT_FIELDS } from '@workspace/lib/slides';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
+import { DUPLICATE_OFFSET, fitImageSize, type ImageSize, NUDGE_STEP, NUDGE_STEP_LARGE } from '@workspace/lib/vector';
 import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -495,7 +496,7 @@ function SlideEditorInner({
         'ArrowLeft',
         (e) => {
             e.preventDefault();
-            moveSelected(-1, 0);
+            moveSelected(-NUDGE_STEP, 0);
         },
         { enabled: canEdit && hasSelection && !isEditing },
     );
@@ -503,7 +504,7 @@ function SlideEditorInner({
         'ArrowRight',
         (e) => {
             e.preventDefault();
-            moveSelected(1, 0);
+            moveSelected(NUDGE_STEP, 0);
         },
         { enabled: canEdit && hasSelection && !isEditing },
     );
@@ -511,7 +512,7 @@ function SlideEditorInner({
         'ArrowUp',
         (e) => {
             e.preventDefault();
-            moveSelected(0, -1);
+            moveSelected(0, -NUDGE_STEP);
         },
         { enabled: canEdit && hasSelection && !isEditing },
     );
@@ -519,9 +520,44 @@ function SlideEditorInner({
         'ArrowDown',
         (e) => {
             e.preventDefault();
-            moveSelected(0, 1);
+            moveSelected(0, NUDGE_STEP);
         },
         { enabled: canEdit && hasSelection && !isEditing },
+    );
+    // Shift-nudge — large step, shared with vector. Same typing-target guard as the 1px arrows.
+    const nudgeEnabled = { enabled: canEdit && hasSelection && !isEditing };
+    const shiftNudge = (dx: number, dy: number) => (e: KeyboardEvent) => {
+        e.preventDefault();
+        moveSelected(dx, dy);
+    };
+    useHotkey('Shift+ArrowLeft', shiftNudge(-NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowRight', shiftNudge(NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowUp', shiftNudge(0, -NUDGE_STEP_LARGE), nudgeEnabled);
+    useHotkey('Shift+ArrowDown', shiftNudge(0, NUDGE_STEP_LARGE), nudgeEnabled);
+    // ⌘A select-all (active slide's objects) and ⌘D duplicate (shared DUPLICATE_OFFSET, same as vector).
+    // Mod combos default ignoreInputs off, so opt in — ⌘A must not hijack select-all in a text input.
+    useHotkey(
+        'Mod+A',
+        (e) => {
+            e.preventDefault();
+            const ids = activeSlideId ? (deck.slides[activeSlideId]?.objectIds ?? []) : [];
+            if (ids.length) setSelectedObjectIds(ids);
+        },
+        { enabled: canEdit && !isEditing && !!activeSlideId, ignoreInputs: true },
+    );
+    useHotkey(
+        'Mod+D',
+        (e) => {
+            e.preventDefault();
+            const placements = selectedObjectIds
+                .map((id) => deck.objects[id])
+                .filter((o): o is SlideObject => !!o)
+                .map((o) => ({ id: o.id, x: o.x + DUPLICATE_OFFSET, y: o.y + DUPLICATE_OFFSET }));
+            if (!placements.length) return;
+            const ids = duplicateObjects(placements);
+            if (ids.length) setSelectedObjectIds(ids);
+        },
+        { enabled: canEdit && hasSelection && !isEditing, ignoreInputs: true },
     );
     const handleImageFile = useCallback(
         async (file: File) => {
@@ -572,6 +608,66 @@ function SlideEditorInner({
         [activeSlideId, mediaFolderId, copyToMediaFolder, addObject, resolveMediaUrl],
     );
 
+    // Consume eigen clipboard items into new objects on the active slide — shared by the paste event
+    // listener and the object-menu Paste row (U6f). Text sanitises/escapes into LightEditor HTML;
+    // width-only images probe the intrinsic ratio; cross-mount images re-upload, skip-on-failure.
+    const pasteEigenData = useCallback(
+        (data: EigenClipboardData) => {
+            if (!activeSlideId) return;
+            for (const item of data.items) {
+                if (item.type === 'text') {
+                    const richHtml =
+                        typeof item.meta?.html === 'string' ? sanitizeToLightEditorHtml(item.meta.html).trim() : '';
+                    const plain = item.text.trim();
+                    if (!richHtml && !plain) continue;
+                    const text = richHtml || `<p>${escapeHtml(plain).replace(/\n/g, '<br>')}</p>`;
+                    const overrides = clipboardItemOverrides(item, activeSlideId);
+                    if (item.typography) {
+                        for (const [k, v] of Object.entries(item.typography)) {
+                            if (v != null) overrides[k] = v;
+                        }
+                    }
+                    addObject(activeSlideId, {
+                        ...DEFAULT_TEXT_OBJECT,
+                        text,
+                        ...overrides,
+                    } as Omit<SlideObject, 'id' | 'slideId'>);
+                } else if (item.type === 'image') {
+                    const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...clipboardItemOverrides(item, activeSlideId) };
+                    const widthOnlyWidth = item.height == null ? item.width : undefined;
+                    const insertAt = async (mediaName: string) => {
+                        if (widthOnlyWidth != null) {
+                            imageProps.height = await deriveImageHeightFromUrl(
+                                resolveMediaUrl(mediaName),
+                                widthOnlyWidth,
+                                DEFAULT_IMAGE_OBJECT.width / DEFAULT_IMAGE_OBJECT.height,
+                            );
+                        }
+                        addObject(activeSlideId, {
+                            ...imageProps,
+                            mediaName,
+                        } as Omit<ImageObject, 'id' | 'slideId'>);
+                    };
+                    if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
+                        reUploadImage(
+                            item.sourcePathId,
+                            item.sourceOwnerId,
+                            item.sourceMountId,
+                            mediaFolderId,
+                            uploadFile.mutateAsync,
+                            item.mediaName,
+                        ).then((result) => {
+                            if (result) void insertAt(result.mediaName);
+                        });
+                    } else {
+                        void insertAt(item.mediaName);
+                    }
+                }
+            }
+        },
+        [activeSlideId, addObject, mediaFolderId, resolveMediaUrl, uploadFile.mutateAsync],
+    );
+
     useEffect(() => {
         if (isPresenting) return;
         const handleCopy = (e: ClipboardEvent) => {
@@ -603,63 +699,7 @@ function SlideEditorInner({
             const eigenData = e.clipboardData ? readEigenClipboard(e.clipboardData) : null;
             if (eigenData) {
                 e.preventDefault();
-                for (const item of eigenData.items) {
-                    if (item.type === 'text') {
-                        // Never trust wire HTML into dangerouslySetInnerHTML: slides' own rich HTML
-                        // (meta.html) is re-sanitized, plain `text` is escaped. Empty carriers
-                        // (vector shapes ride as empty text items) insert nothing.
-                        const richHtml =
-                            typeof item.meta?.html === 'string' ? sanitizeToLightEditorHtml(item.meta.html).trim() : '';
-                        const plain = item.text.trim();
-                        if (!richHtml && !plain) continue;
-                        const text = richHtml || `<p>${escapeHtml(plain).replace(/\n/g, '<br>')}</p>`;
-                        const overrides = clipboardItemOverrides(item, activeSlideId);
-                        if (item.typography) {
-                            for (const [k, v] of Object.entries(item.typography)) {
-                                if (v != null) overrides[k] = v;
-                            }
-                        }
-                        addObject(activeSlideId, {
-                            ...DEFAULT_TEXT_OBJECT,
-                            text,
-                            ...overrides,
-                        } as Omit<SlideObject, 'id' | 'slideId'>);
-                    } else if (item.type === 'image') {
-                        const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...clipboardItemOverrides(item, activeSlideId) };
-                        // Width-only item (a docs figure: height derives from the intrinsic ratio on
-                        // load) must not keep the default box height — probe the ratio like the
-                        // sheets/vector consumers, default-box ratio on probe failure, never stretch.
-                        const widthOnlyWidth = item.height == null ? item.width : undefined;
-                        const insertAt = async (mediaName: string) => {
-                            if (widthOnlyWidth != null) {
-                                imageProps.height = await deriveImageHeightFromUrl(
-                                    resolveMediaUrl(mediaName),
-                                    widthOnlyWidth,
-                                    DEFAULT_IMAGE_OBJECT.width / DEFAULT_IMAGE_OBJECT.height,
-                                );
-                            }
-                            addObject(activeSlideId, {
-                                ...imageProps,
-                                mediaName,
-                            } as Omit<ImageObject, 'id' | 'slideId'>);
-                        };
-                        if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
-                            reUploadImage(
-                                item.sourcePathId,
-                                item.sourceOwnerId,
-                                item.sourceMountId,
-                                mediaFolderId,
-                                uploadFile.mutateAsync,
-                                item.mediaName,
-                            ).then((result) => {
-                                // Re-upload failed: skip insertion, don't write the source deck's unresolvable mediaName.
-                                if (result) void insertAt(result.mediaName);
-                            });
-                        } else {
-                            void insertAt(item.mediaName);
-                        }
-                    }
-                }
+                pasteEigenData(eigenData);
                 return;
             }
 
@@ -716,9 +756,7 @@ function SlideEditorInner({
         addObject,
         handleImageFile,
         resolveMediaPath,
-        resolveMediaUrl,
-        mediaFolderId,
-        uploadFile.mutateAsync,
+        pasteEigenData,
     ]);
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot object ids
@@ -753,14 +791,16 @@ function SlideEditorInner({
         setEditingObjectId(objId);
     }, []);
 
+    // Returns null when nothing was copied (missing object / unresolvable media) so Cut can bail
+    // instead of deleting content that never reached the clipboard.
     const handleCopyObject = useCallback(
-        (objId: string) => {
+        (objId: string): Promise<void> | null => {
             const obj = deck.objects[objId];
-            if (!obj) return;
+            if (!obj) return null;
             const item = buildClipboardItem(obj, resolveMediaPath);
-            if (!item) return;
+            if (!item) return null;
             const data: EigenClipboardData = { version: 1, items: [item] };
-            writeEigenClipboardAsync(data, obj.type === 'text' ? htmlToPlainText(obj.text) : undefined);
+            return writeEigenClipboardAsync(data, obj.type === 'text' ? htmlToPlainText(obj.text) : undefined);
         },
         [deck.objects, resolveMediaPath],
     );
@@ -781,6 +821,33 @@ function SlideEditorInner({
             setEditingObjectId((prev) => (prev && ids.includes(prev) ? null : prev));
         },
         [deleteObjects],
+    );
+
+    // Object-menu clipboard rows (U6f menu parity). Copy/Cut act on the right-clicked object; Paste
+    // reads the async clipboard (a menu click carries no ClipboardEvent). Duplicate offsets by DUPLICATE_OFFSET.
+    // Delete only after the async write resolves — a denied clipboard write must not destroy
+    // content that would then exist nowhere but the undo stack (vector's cut discipline).
+    const handleCutObject = useCallback(
+        (objId: string) => {
+            handleCopyObject(objId)
+                ?.then(() => handleDeleteObject(objId))
+                .catch(() => {});
+        },
+        [handleCopyObject, handleDeleteObject],
+    );
+    const handlePasteFromMenu = useCallback(() => {
+        readEigenClipboardAsync()
+            .then((data) => data && pasteEigenData(data))
+            .catch(() => {});
+    }, [pasteEigenData]);
+    const handleDuplicateObject = useCallback(
+        (objId: string) => {
+            const o = deck.objects[objId];
+            if (!o) return;
+            const ids = duplicateObjects([{ id: objId, x: o.x + DUPLICATE_OFFSET, y: o.y + DUPLICATE_OFFSET }]);
+            if (ids.length) setSelectedObjectIds(ids);
+        },
+        [deck.objects, duplicateObjects],
     );
 
     const handleSelectObject = useCallback(
@@ -1036,6 +1103,9 @@ function SlideEditorInner({
                                                 publishCursor={publishCursor}
                                                 onDropImage={canWrite ? handleDropImage : undefined}
                                                 onCopyObject={handleCopyObject}
+                                                onCutObject={canWrite ? handleCutObject : undefined}
+                                                onPasteObject={canWrite ? handlePasteFromMenu : undefined}
+                                                onDuplicateObject={canWrite ? handleDuplicateObject : undefined}
                                                 onDeleteObject={canWrite ? handleDeleteObject : undefined}
                                                 onMoveUp={canWrite ? moveObjectUp : undefined}
                                                 onMoveDown={canWrite ? moveObjectDown : undefined}

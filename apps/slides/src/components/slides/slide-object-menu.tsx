@@ -4,6 +4,7 @@ import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { type CommentContextMenuItem, CommentMenuItems } from '@workspace/ui/components/comments';
 import {
     ArrangeMenuItems,
+    ClipboardMenuItems,
     ContextMenuAnchor,
     ObjectActionMenuItems,
     type useContextMenu,
@@ -16,7 +17,6 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import type { ZOp } from '@workspace/ui/components/properties-panel';
-import { Copy } from 'lucide-react';
 import type { SlideObject } from './types';
 
 export function getCommentItems(
@@ -39,6 +39,9 @@ type SlideObjectMenuProps = {
     cards?: Record<string, CommentCard>;
     entries?: CommentEntry[];
     onCopy?: (objId: string) => void;
+    onCut?: (objId: string) => void;
+    onPaste?: () => void;
+    onDuplicate?: (objId: string) => void;
     onDelete?: (objId: string) => void;
     onMoveUp?: (objId: string) => void;
     onMoveDown?: (objId: string) => void;
@@ -60,6 +63,9 @@ export function SlideObjectMenu({
     cards,
     entries,
     onCopy,
+    onCut,
+    onPaste,
+    onDuplicate,
     onDelete,
     onMoveUp,
     onMoveDown,
@@ -106,13 +112,18 @@ export function SlideObjectMenu({
         <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
             {obj && (
                 <>
-                    <DropdownMenuItem onClick={() => onCopy?.(obj.id)}>
-                        <Copy className="h-4 w-4 mr-2" /> Copy
-                    </DropdownMenuItem>
+                    <ClipboardMenuItems
+                        onCopy={onCopy ? () => onCopy(obj.id) : undefined}
+                        onCut={onCut ? () => onCut(obj.id) : undefined}
+                        onPaste={onPaste}
+                    />
                     <DropdownMenuSeparator />
                     <ArrangeMenuItems onApply={onArrange} />
                     <DropdownMenuSeparator />
-                    <ObjectActionMenuItems onDelete={() => onDelete?.(obj.id)} />
+                    <ObjectActionMenuItems
+                        onDuplicate={onDuplicate ? () => onDuplicate(obj.id) : undefined}
+                        onDelete={() => onDelete?.(obj.id)}
+                    />
                     {(single || showAdd) && (
                         <>
                             <DropdownMenuSeparator />

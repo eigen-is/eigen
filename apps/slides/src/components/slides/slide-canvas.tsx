@@ -49,6 +49,9 @@ type SlideCanvasProps = {
     onUpdateObject: (objId: string, updates: Partial<SlideObject>) => void;
     onDropImage?: (file: File) => void;
     onCopyObject?: (objId: string) => void;
+    onCutObject?: (objId: string) => void;
+    onPasteObject?: () => void;
+    onDuplicateObject?: (objId: string) => void;
     onDeleteObject?: (objId: string) => void;
     onMoveUp?: (objId: string) => void;
     onMoveDown?: (objId: string) => void;
@@ -93,6 +96,9 @@ export function SlideCanvas({
     onUpdateObject,
     onDropImage,
     onCopyObject,
+    onCutObject,
+    onPasteObject,
+    onDuplicateObject,
     onDeleteObject,
     onMoveUp,
     onMoveDown,
@@ -498,6 +504,9 @@ export function SlideCanvas({
                 cards={cards}
                 entries={entries}
                 onCopy={onCopyObject}
+                onCut={onCutObject}
+                onPaste={onPasteObject}
+                onDuplicate={onDuplicateObject}
                 onDelete={onDeleteObject}
                 onMoveUp={onMoveUp}
                 onMoveDown={onMoveDown}
