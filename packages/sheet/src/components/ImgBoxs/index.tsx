@@ -40,8 +40,8 @@ function ActiveImage({ img }: { img: Image }) {
                 zIndex: 20,
                 width: w,
                 height: h,
-                left: img.left,
-                top: img.top,
+                left: img.x,
+                top: img.y,
             }}
         >
             {/* Class kept for DOM querySelector in image.ts resize logic */}
@@ -101,8 +101,8 @@ function InactiveImage({ img }: { img: Image }) {
                     style={{
                         width: w,
                         height: h,
-                        left: img.left,
-                        top: img.top,
+                        left: img.x,
+                        top: img.y,
                         zIndex: 19,
                     }}
                 >
@@ -121,8 +121,8 @@ function InactiveImage({ img }: { img: Image }) {
             style={{
                 width: w,
                 height: h,
-                left: img.left,
-                top: img.top,
+                left: img.x,
+                top: img.y,
                 zIndex: 19,
             }}
             onMouseDown={(e) => e.stopPropagation()}

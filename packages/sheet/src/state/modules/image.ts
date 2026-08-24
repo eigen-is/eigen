@@ -69,8 +69,8 @@ export function insertImage(ctx: Context, mediaName: string, width: number, heig
     const img = {
         id: generateImageId(),
         mediaName,
-        left,
-        top,
+        x: left,
+        y: top,
         width: width * 0.5,
         height: height * 0.5,
     };
@@ -128,8 +128,8 @@ export function onImageMoveEnd(ctx: Context, globalCache: GlobalCache) {
         if (position) {
             const img = find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
             if (img) {
-                img.left = position.left;
-                img.top = position.top;
+                img.x = position.left;
+                img.y = position.top;
                 saveImage(ctx);
             }
         }
@@ -208,8 +208,8 @@ export function onImageResizeEnd(ctx: Context, globalCache: GlobalCache) {
         if (position) {
             const img = find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
             if (img) {
-                img.left = position.left;
-                img.top = position.top;
+                img.x = position.left;
+                img.y = position.top;
                 img.width = position.width;
                 img.height = position.height;
                 saveImage(ctx);

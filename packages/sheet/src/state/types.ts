@@ -119,8 +119,8 @@ export type Image = {
     id: string;
     width: number;
     height: number;
-    left: number;
-    top: number;
+    x: number;
+    y: number;
     mediaName: string;
 };
 
