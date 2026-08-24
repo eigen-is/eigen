@@ -230,15 +230,16 @@ export function OverlayVisuals({ containerRef }: Props) {
                     return (
                         <div
                             key={presence?.userId || index}
-                            className="fortune-presence-selection"
-                            style={{
-                                left: col_pre,
-                                top: row_pre - 2,
-                                width,
-                                height,
-                                borderColor: color,
-                                borderWidth: 1,
-                            }}
+                            className="fortune-presence-selection eigen-selection-ring eigen-selection-ring-peer"
+                            style={
+                                {
+                                    left: col_pre,
+                                    top: row_pre - 2,
+                                    width,
+                                    height,
+                                    '--peer-color': color,
+                                } as React.CSSProperties
+                            }
                         >
                             <PresenceLabel color={color} name={presence.username} />
                         </div>

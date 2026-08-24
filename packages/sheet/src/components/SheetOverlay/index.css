@@ -797,17 +797,23 @@
     height: 6px;
 }
 
-/* The presence name chip now renders via @workspace/ui PresenceLabel
-   (.collaboration-cursor__label), shared with the docs caret. The shared class is
-   position-neutral (the D10 label split), so re-add the above-the-box placement here —
-   without it the chip falls inside the cell outline instead of floating above it. */
-
+/* A peer's focused-cell box carries the shared remote-ring treatment — 1px solid, peer-coloured via
+   --peer-color — from @workspace/ui globals (.eigen-selection-ring / .eigen-selection-ring-peer),
+   one CSS source with vector/slides/stickies. Only the geometry (below) is sheets-specific. */
 .fortune-presence-selection {
     position: absolute;
-    border-style: solid;
-    border-width: 1;
 }
 
+/* Cells abut, so the shared ring's 4px outline-offset would bleed the outline into neighbouring
+   cells; hug the cell instead (the Google Sheets idiom). The two-class selector outranks
+   .eigen-selection-ring's own offset regardless of stylesheet order. */
+.fortune-presence-selection.eigen-selection-ring {
+    outline-offset: 0;
+}
+
+/* The presence name chip renders via @workspace/ui PresenceLabel (.collaboration-cursor__label),
+   shared with the docs caret. The shared class is position-neutral (the D10 label split), so re-add
+   the above-the-box placement here — without it the chip falls inside the cell outline. */
 .fortune-presence-selection .collaboration-cursor__label {
     position: absolute;
     top: -1.4em;
