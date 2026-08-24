@@ -9,6 +9,7 @@ import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import {
     buildImageClipboardItem,
+    hasRichHtmlBeyondMarker,
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
@@ -31,9 +32,15 @@ import {
     useMediaResolver,
     useUploadFile,
 } from '@workspace/lib/drive';
+import { htmlToPlainText } from '@workspace/lib/html-dom';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
+import type {
+    EigenClipboardData,
+    EigenClipboardImageItem,
+    EigenClipboardItem,
+    EigenClipboardTextItem,
+} from '@workspace/lib/types/clipboard';
 import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -138,6 +145,9 @@ function normalizeFontFamilyMarks(editor: Editor) {
 }
 
 const lowlight = createLowlight(common);
+
+// Block-level text-align values docs models; an unrecognized wire value drops rather than storing garbage.
+const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
@@ -458,12 +468,15 @@ const TiptapEditor = ({
                     if (!event.clipboardData) return false;
 
                     const eigenData = readEigenClipboard(event.clipboardData);
-                    if (eigenData) {
-                        const imageItem = eigenData.items.find((i): i is EigenClipboardImageItem => i.type === 'image');
-                        if (imageItem) {
+                    if (eigenData && eigenData.items.length > 0) {
+                        // Image payloads MUST take the eigen path (the cross-mount re-upload seam).
+                        // A text-only payload is consumed directly only when text/html is marker-only
+                        // (slides — PM fallthrough there pastes nothing); a rich-HTML producer (sheets
+                        // tables) is left to PM so its <table> parses as a real docs table.
+                        const hasImage = eigenData.items.some((i) => i.type === 'image');
+                        if (hasImage || !hasRichHtmlBeyondMarker(event.clipboardData)) {
                             event.preventDefault();
-                            const { width } = readClipboardBox(imageItem);
-                            handleEigenImagePaste(imageItem, width).catch(() => {});
+                            handleEigenItemsPaste(eigenData.items).catch(() => {});
                             return true;
                         }
                     }
@@ -575,6 +588,43 @@ const TiptapEditor = ({
         }
     };
 
+    // A text item (from slides/vector) lands as a single paragraph at the caret. Docs models
+    // fontFamily (name, per the fontFamily value canon — getFontName tolerates a name or a legacy
+    // stack) and color as textStyle attrs, and textAlign as a block attr; fontSize and the rest of the
+    // slides typography superset drop gracefully (docs has no fontSize control by design). Slides text
+    // is HTML (LightEditor), so flatten to plain text — item-level typography is the best-effort
+    // fidelity the wire block carries.
+    const insertEigenTextItem = (item: EigenClipboardTextItem) => {
+        if (!editorRef.current) return;
+        const text = htmlToPlainText(item.text);
+        const typo = item.typography;
+        const textStyleAttrs: Record<string, string> = {};
+        if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
+        if (typo?.color) textStyleAttrs.color = typo.color;
+        const marks =
+            Object.keys(textStyleAttrs).length > 0 ? [{ type: 'textStyle', attrs: textStyleAttrs }] : undefined;
+        const paragraph = {
+            type: 'paragraph',
+            ...(typo?.textAlign && TEXT_ALIGNS.has(typo.textAlign) ? { attrs: { textAlign: typo.textAlign } } : {}),
+            content: text ? [{ type: 'text', text, ...(marks ? { marks } : {}) }] : [],
+        };
+        editorRef.current.chain().focus().insertContent(paragraph).run();
+    };
+
+    // Consume every eigen item in wire order so a mixed slides selection keeps its paragraph/figure
+    // sequence at the caret. Image inserts await the per-item re-upload seam (skip-on-failure), so the
+    // loop stays ordered; text inserts are synchronous.
+    const handleEigenItemsPaste = async (items: EigenClipboardItem[]) => {
+        for (const item of items) {
+            if (item.type === 'text') {
+                insertEigenTextItem(item);
+            } else {
+                const { width } = readClipboardBox(item);
+                await handleEigenImagePaste(item, width);
+            }
+        }
+    };
+
     useEffect(() => {
         if (!editor) return;
         const handleCopyOrCut = (e: ClipboardEvent) => {
@@ -602,8 +652,14 @@ const TiptapEditor = ({
 
             if (items.length > 0) {
                 const text = editor.state.doc.textBetween(from, to, '\n').trim();
+                // PM's own clipboard serialization emits the selection as rich HTML — figures via the
+                // FigureNode renderHTML (<figure><img data-media-name…>), text with its typography marks
+                // — so docs→slides/sheets keeps typography and docs→anywhere keeps readable content. The
+                // helper prepends the eigen marker span (marker first). Pure-text selections never reach
+                // here (items.length === 0): PM's native copy already carries full rich HTML.
+                const { dom } = editor.view.serializeForClipboard(editor.state.selection.content());
                 e.preventDefault();
-                writeEigenClipboard(e, { version: 1, items }, text || undefined);
+                writeEigenClipboard(e, { version: 1, items }, text || undefined, dom.innerHTML);
             }
         };
         document.addEventListener('copy', handleCopyOrCut);

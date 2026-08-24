@@ -75,6 +75,22 @@ function parseEigenJson(raw: string): EigenClipboardData | null {
     return null;
 }
 
+// True when the clipboard's `text/html` carries real content beyond the eigen marker span — i.e. a
+// rich-HTML producer wrote `marker + html` (docs figures, sheets tables) rather than a marker-only
+// write (slides objects, which pass no html). Consumers use it to choose between letting the platform
+// parse the HTML (rich content present — a sheets <table> lands as a real table) and consuming the
+// typed eigen items directly (marker-only — platform fallthrough would paste nothing). Wrapper noise
+// the OS clipboard adds (`<meta charset>`, `<html>`/`<body>`) is ignored: the marker element is
+// removed from a parsed document, then the body is tested for text or an embedded/structural element.
+export function hasRichHtmlBeyondMarker(clipboardData: DataTransfer): boolean {
+    const html = clipboardData.getData('text/html');
+    if (!html) return false;
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    for (const el of doc.querySelectorAll(`[${HTML_MARKER}]`)) el.remove();
+    if ((doc.body.textContent ?? '').trim().length > 0) return true;
+    return doc.body.querySelector('img, table, figure, hr, picture, svg, video, li') != null;
+}
+
 export function readEigenClipboard(clipboardData: DataTransfer): EigenClipboardData | null {
     const raw = clipboardData.getData(EIGEN_CLIPBOARD_MIME);
     if (raw) return parseEigenJson(raw);
