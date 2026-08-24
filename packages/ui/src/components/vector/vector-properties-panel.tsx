@@ -11,6 +11,7 @@ import {
     type FillStyle,
     isTransparent,
     type Roundness,
+    STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
     type VectorElement,
     type VectorElementType,
@@ -46,12 +47,8 @@ const TYPE_LABELS: Record<VectorElementType, string> = {
     image: 'Image',
 };
 
-// Discrete presets, the Excalidraw constants (SCOUT §6): strokeWidth 1/2/4, roughness 0/1/2.
-const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
-    { value: '1', label: 'Thin' },
-    { value: '2', label: 'Medium' },
-    { value: '4', label: 'Bold' },
-];
+// Discrete presets, the Excalidraw constants (SCOUT §6): strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,
+// shared from lib), roughness 0/1/2.
 const ROUGHNESS_OPTIONS: { value: string; label: string }[] = [
     { value: '0', label: 'Architect' },
     { value: '1', label: 'Artist' },

@@ -120,6 +120,17 @@ export const DEFAULT_TEXT_PROPS = {
     textAlign: 'left',
 } satisfies Pick<VectorTextElement, 'text' | 'fontSize' | 'fontFamily' | 'textAlign'>;
 
+// Shared line-width presets — the ONE source for the thin/medium/bold vocabulary, consumed by both
+// the vector panel (strokeWidth, scene-px) and the slides panel (borderWidth, slide-units ≡ scene-px).
+// The Excalidraw constants (1/2/4). Data-driven: growing to more weights is an array edit, no UI
+// change. Values are Select strings (MergedSelect is string-typed, like sibling ROUGHNESS_OPTIONS);
+// consumers parse them back to the literal numeric width with Number().
+export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
+    { value: '1', label: 'Thin' },
+    { value: '2', label: 'Medium' },
+    { value: '4', label: 'Bold' },
+];
+
 export function isVectorElementType(v: unknown): v is VectorElementType {
     return v === 'rectangle' || v === 'diamond' || v === 'ellipse' || v === 'text' || v === 'image';
 }

@@ -3,6 +3,7 @@ import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { STROKE_WIDTH_OPTIONS } from '@workspace/lib/vector';
 import { TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
@@ -15,6 +16,7 @@ import {
     isMixed,
     MergedNumberInput,
     MergedSelect,
+    type MergedValue,
     PropertiesPanel,
     PropertyRow,
     PropertySection,
@@ -419,6 +421,12 @@ function ImageProperties({
     );
 }
 
+// MergedSelect is string-typed; project the stored numeric width to its Select string (MIXED and
+// undefined pass through). A legacy width not in STROKE_WIDTH_OPTIONS (e.g. 10) round-trips to its
+// string and simply shows no selected preset — the value keeps rendering, nothing is overwritten.
+const numToStr = (v: MergedValue<number>): MergedValue<string> =>
+    isMixed(v) ? v : v === undefined ? undefined : String(v);
+
 function BorderProperties({
     objects,
     onUpdate,
@@ -433,14 +441,14 @@ function BorderProperties({
 
     return (
         <PropertySection title="Border">
+            {/* "No border" is the color reset (render gates on borderWidth && borderColor); the preset
+                list carries weight only, so it has no 0/None entry — clearing the color removes the border. */}
             <ColorRow label="Color" value={borderColor} onChange={(c) => onUpdate({ borderColor: c })} showReset />
             <PropertyRow label="Width">
-                <MergedNumberInput
-                    value={borderWidth}
-                    onChange={(v) => onUpdate({ borderWidth: v })}
-                    step={1}
-                    min={0}
-                    max={20}
+                <MergedSelect
+                    value={numToStr(borderWidth)}
+                    onChange={(v) => onUpdate({ borderWidth: Number(v) })}
+                    options={STROKE_WIDTH_OPTIONS}
                 />
             </PropertyRow>
             <div className="grid grid-cols-2 gap-2">
