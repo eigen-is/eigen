@@ -1,4 +1,9 @@
-import { buildImageClipboardItem, readEigenClipboard, writeEigenClipboard } from '@workspace/lib/clipboard';
+import {
+    buildImageClipboardItem,
+    clipboardTextItemHasContent,
+    readEigenClipboard,
+    writeEigenClipboard,
+} from '@workspace/lib/clipboard';
 import type {
     EigenClipboardData,
     EigenClipboardImageItem,
@@ -579,21 +584,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                 e.preventDefault();
 
-                // Build eigen clipboard data with the cell text
+                // Cell text as an eigen text item, carried on the same wire as the image branch above:
+                // the sheet's HTML table rides after the marker span so a non-eigen consumer still pastes
+                // a real table, and the custom MIME lands for same-origin reads.
                 const eigenData: EigenClipboardData = {
                     version: 1,
                     items: [{ type: 'text', text: pending.plainText }],
                 };
-
-                // Embed eigen clipboard marker in the HTML alongside the sheet HTML table
-                const eigenJson = JSON.stringify(eigenData);
-                const eigenMarker = `<span data-eigen-clipboard="${encodeURIComponent(eigenJson)}"></span>`;
-                const combinedHtml = eigenMarker + pending.html;
-
-                e.clipboardData?.setData('text/html', combinedHtml);
-                e.clipboardData?.setData('text/plain', pending.plainText);
-                // Also set the custom MIME type for same-origin reads
-                e.clipboardData?.setData('application/eigen-clipboard', eigenJson);
+                writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
             [context.activeImg, context.insertedImgs, mergedSettings.hooks],
         );
@@ -625,9 +623,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                       (item): item is EigenClipboardImageItem => item.type === 'image',
                                   )
                                 : [];
-                            // Extract text from eigen clipboard items and paste as plain text
+                            // Extract text from eigen clipboard items and paste as plain text. Empty
+                            // carriers (vector shapes ride as empty text items) must not paste as blank
+                            // cells over existing content.
                             const textParts = eigenData.items
-                                .filter((item): item is EigenClipboardTextItem => item.type === 'text')
+                                .filter(
+                                    (item): item is EigenClipboardTextItem =>
+                                        item.type === 'text' && clipboardTextItemHasContent(item),
+                                )
                                 .map((item) => item.text);
                             if (imageItems.length > 0 || textParts.length > 0) {
                                 e.preventDefault();

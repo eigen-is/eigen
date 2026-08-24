@@ -1,6 +1,7 @@
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
+    clipboardTextItemHasContent,
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
@@ -47,7 +48,7 @@ import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
 import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
-import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
+import { deriveImageHeightFromUrl, readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { hitTestTopmost, marqueeContain } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
@@ -289,6 +290,9 @@ type VectorCanvasProps = {
     updateElementUntracked: (id: string, fields: VectorElementPatch) => void;
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     deleteElements: (ids: string[]) => void;
+    // Non-undoable delete — cleanup of a failed optimistic image insert, so the failed paste/drop
+    // leaves no undo step that resurrects a broken pending element.
+    deleteElementsUntracked: (ids: string[]) => void;
     duplicateElements: (ids: string[], dx: number, dy: number) => string[];
     undoManager: Y.UndoManager | null;
     // Selection is lifted to the editor so the properties panel and canvas share one source (the
@@ -323,6 +327,7 @@ export function VectorCanvas({
     updateElementUntracked,
     updateElements,
     deleteElements,
+    deleteElementsUntracked,
     duplicateElements,
     undoManager,
     selectedIds,
@@ -668,7 +673,7 @@ export function VectorCanvas({
                     // Untracked swap: the drop's insert stays the sole undo step (one ⌘Z), same as the
                     // cross-mount paste path; peers still receive the real name.
                     .then((result) =>
-                        result ? updateElementUntracked(id, { mediaName: result.name }) : deleteElements([id]),
+                        result ? updateElementUntracked(id, { mediaName: result.name }) : deleteElementsUntracked([id]),
                     )
                     .catch(() => {});
             }
@@ -679,7 +684,7 @@ export function VectorCanvas({
             startUpload,
             addElement,
             updateElementUntracked,
-            deleteElements,
+            deleteElementsUntracked,
             setSelectedIds,
             undoManager,
             containerRef,
@@ -773,11 +778,8 @@ export function VectorCanvas({
             // ratio) must NOT land square. Derive its height from the image's own ratio, falling back to
             // the default-box ratio, NEVER width (advocate-sheets ruling, mirrored from the U5c sheets fix).
             const defaultRatio = DEFAULT_IMAGE_BOX.width / DEFAULT_IMAGE_BOX.height;
-            const deriveHeight = async (url: string | null, width: number): Promise<number> => {
-                const intrinsic = url ? await readImageSizeFromUrl(url) : null;
-                const ratio = intrinsic && intrinsic.height > 0 ? intrinsic.width / intrinsic.height : defaultRatio;
-                return width / ratio;
-            };
+            const deriveHeight = (url: string | null, width: number) =>
+                deriveImageHeightFromUrl(url, width, defaultRatio);
             const isWidthOnly = (item: EigenClipboardItem): item is EigenClipboardImageItem =>
                 item.type === 'image' && item.width != null && item.height == null;
             // Resolve each width-only image's height BEFORE the batch. Same-mount (media resolvable now)
@@ -843,7 +845,9 @@ export function VectorCanvas({
                     });
                     continue;
                 }
-                // Real text element — re-measure dims locally (never the wire size).
+                // Real text element — re-measure dims locally (never the wire size). An empty text
+                // item is another app's contentless carrier (a shape from a foreign doc) — skip it.
+                if (!clipboardTextItemHasContent(item)) continue;
                 const typo = item.typography ?? {};
                 const fontFamily = typo.fontFamily ?? DEFAULT_FONT_FAMILY;
                 const fontSize = typo.fontSize ?? DEFAULT_FONT_SIZE;
@@ -890,13 +894,11 @@ export function VectorCanvas({
                     item.sourceMountId,
                     mediaFolderId,
                     uploadFile.mutateAsync,
-                    ownerId,
-                    mountId,
                     item.mediaName,
                 )
                     .then(async (result) => {
                         if (!result) {
-                            deleteElements([id]);
+                            deleteElementsUntracked([id]);
                             return;
                         }
                         const fields: VectorElementPatch = { mediaName: result.mediaName };
@@ -923,10 +925,8 @@ export function VectorCanvas({
             undoManager,
             healTextDims,
             updateElementUntracked,
-            deleteElements,
+            deleteElementsUntracked,
             uploadFile.mutateAsync,
-            ownerId,
-            mountId,
         ],
     );
 
@@ -956,6 +956,20 @@ export function VectorCanvas({
             healTextDims(id, text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
         },
         [viewportCenterScene, addElement, setSelectedIds, undoManager, healTextDims],
+    );
+
+    // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
+    // text, or the flattened text of pasted HTML, becomes one text element. Prose alignment rides in
+    // text/html as a block text-align; carry it through toVectorTextAlign (justify→left). Returns true
+    // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
+    const pasteNonEigenText = useCallback(
+        (html: string, plain: string): boolean => {
+            const content = plain || htmlToPlainText(html);
+            if (!content.trim()) return false;
+            pasteTextElement(content, html ? toVectorTextAlign(readDominantTextAlign(html) ?? undefined) : 'left');
+            return true;
+        },
+        [pasteTextElement],
     );
 
     // ⌘C / ⌘X / ⌘V via document-level ClipboardEvent listeners (the slides idiom — native events are
@@ -992,15 +1006,12 @@ export function VectorCanvas({
             }
             // No eigen payload. OS files fall through to useFilePasteTarget (image drop path).
             if (!cd || cd.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new text element. Prose alignment rides in
-            // text/html as a block text-align; carry it through toVectorTextAlign (justify→left).
-            const rawHtml = cd.getData('text/html');
-            const text = cd.getData('text/plain') || htmlToPlainText(rawHtml);
-            if (!text.trim()) return;
-            e.preventDefault();
-            e.stopPropagation();
-            const align = rawHtml ? toVectorTextAlign(readDominantTextAlign(rawHtml) ?? undefined) : 'left';
-            pasteTextElement(text, align);
+            // Plain text (or the text of pasted HTML) → a new text element; only claim the event when
+            // content is actually consumed, else it falls through to the OS-file path.
+            if (pasteNonEigenText(cd.getData('text/html'), cd.getData('text/plain'))) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
         };
         document.addEventListener('copy', onCopyEvent);
         document.addEventListener('cut', onCutEvent);
@@ -1016,7 +1027,7 @@ export function VectorCanvas({
         buildSelectionItems,
         selectionPlainText,
         pasteEigenItems,
-        pasteTextElement,
+        pasteNonEigenText,
         deleteElements,
         setSelectedIds,
         undoManager,
@@ -1059,13 +1070,32 @@ export function VectorCanvas({
     const onMenuCut = () => {
         const items = buildSelectionItems();
         if (!items.length) return;
-        writeEigenClipboardAsync({ version: 1, items }, selectionPlainText()).catch(() => {});
-        deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+        // Delete only once the async write lands — a denied/failed clipboard write must not destroy
+        // the selection (the content would exist nowhere but the undo stack).
+        writeEigenClipboardAsync({ version: 1, items }, selectionPlainText())
+            .then(() => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager))
+            .catch(() => {});
     };
     const onMenuPaste = () => {
-        readEigenClipboardAsync()
-            .then((data) => data && pasteEigenItems(data.items))
-            .catch(() => {});
+        (async () => {
+            const data = await readEigenClipboardAsync();
+            if (data) {
+                await pasteEigenItems(data.items);
+                return;
+            }
+            // Non-eigen clipboard: mirror the keyboard path's plain-text fallback (same
+            // pasteNonEigenText policy). OS-file image paste stays ⌘V-only (the async API exposes no
+            // File objects for the drop pipeline).
+            let html = '';
+            let text = '';
+            for (const clip of await navigator.clipboard.read()) {
+                if (!html && clip.types.includes('text/html')) html = await (await clip.getType('text/html')).text();
+                if (!text && clip.types.includes('text/plain')) text = await (await clip.getType('text/plain')).text();
+            }
+            pasteNonEigenText(html, text);
+        })().catch(() => {
+            /* clipboard read denied or unavailable */
+        });
     };
 
     const onPointerDown = (e: React.PointerEvent) => {

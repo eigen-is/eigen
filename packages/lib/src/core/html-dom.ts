@@ -2,9 +2,11 @@
 // code (anything importable by apps/api) must never import this module. The BE-safe HTML
 // helpers (escapeHtml, stripTagsServer) live in ./html.
 export function htmlToPlainText(html: string): string {
-    const div = document.createElement('div');
-    div.innerHTML = html;
-    return div.textContent ?? '';
+    // DOMParser, never a live-element innerHTML: callers feed untrusted clipboard HTML, and a
+    // detached element still loads images and fires their onerror handlers — an inert parsed
+    // document does neither.
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return doc.body.textContent ?? '';
 }
 
 // Tags the shared LightEditor (StarterKit, headings/code/hr disabled) actually keeps. Block nodes

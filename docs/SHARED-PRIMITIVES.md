@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1038 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1040 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -716,7 +716,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (358)
+## Utilities & constants (360)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -833,6 +833,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EMOTE_COMMANDS` | `@workspace/lib/chat/emotes` | packages/lib/src/core/chat/emotes.ts |
 | `buildImageClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `buildTextClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `clipboardTextItemHasContent` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `copyToClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `hasRichHtmlBeyondMarker` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1059,6 +1060,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `createAuthRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/auth-route.tsx |
 | `createLoginRouteOptions` | `@workspace/ui/components/layout/pages` | packages/ui/src/components/layout/pages/login-route.tsx |
 | `DEFAULT_COLORS` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
+| `deriveImageHeightFromUrl` | `@workspace/ui/components/media` | packages/ui/src/components/media/read-image-size.ts |
 | `readImageSize` | `@workspace/ui/components/media` | packages/ui/src/components/media/read-image-size.ts |
 | `readImageSizeFromUrl` | `@workspace/ui/components/media` | packages/ui/src/components/media/read-image-size.ts |
 | `getMergedValue` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/merged-value.ts |

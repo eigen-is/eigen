@@ -40,8 +40,8 @@ export function buildImageClipboardItem(args: {
     };
 }
 
-// Build a text item with geometry + typography on typed fields. `meta` is app-private extras only
-// (slides borders + text-box background).
+// Build a text item with geometry + typography on typed fields. `text` is plain text (see the type's
+// contract note); `meta` is app-private extras only (slides borders + text-box background + rich html).
 export function buildTextClipboardItem(args: {
     text: string;
     box?: ClipboardBox;
@@ -63,6 +63,13 @@ export function buildTextClipboardItem(args: {
 // to fall back to (geometry is only ever on the typed fields).
 export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
     return { width: item.width, height: item.height, angle: item.angle };
+}
+
+// A text item with a real payload, not an empty carrier. Vector shapes ride the wire as empty text
+// items (buildTextClipboardItem with text: ''); every consumer skips those so a foreign shape never
+// lands as a blank paragraph/cell. The one home for that carrier convention.
+export function clipboardTextItemHasContent(item: EigenClipboardTextItem): boolean {
+    return item.text.trim().length > 0;
 }
 
 function parseEigenJson(raw: string): EigenClipboardData | null {
@@ -173,8 +180,6 @@ export async function reUploadImage(
     sourceMountId: string,
     mediaFolderId: string,
     uploadFn: (args: { parentId: string; file: File }) => Promise<DrivePath | null>,
-    _targetOwnerId: string,
-    _targetMountId: string,
     fileName: string,
 ): Promise<{ mediaName: string; pathId: string; parentId: string } | null> {
     let file: File;

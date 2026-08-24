@@ -30,6 +30,10 @@ export type EigenClipboardTypography = {
 
 export type EigenClipboardTextItem = {
     type: 'text';
+    // PLAIN text, never HTML — consumers insert it literally (vector canvas text, sheet cells) or
+    // escape it into markup. A rich-text producer flattens here and carries its HTML in its own
+    // `meta` (slides: `meta.html`), and MUST sanitize that HTML again on consumption: the wire is
+    // forgeable by any web page via the text/html marker.
     text: string;
     // Rendered box at copy time, source app's document-space units (best-effort cross-app fidelity).
     width?: number;

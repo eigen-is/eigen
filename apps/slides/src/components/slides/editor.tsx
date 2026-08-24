@@ -32,7 +32,7 @@ import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { readImageSize, readImageSizeFromUrl } from '@workspace/ui/components/media';
+import { deriveImageHeightFromUrl, readImageSize, readImageSizeFromUrl } from '@workspace/ui/components/media';
 import { useAspectLock, useZOrderHotkeys, type ZOp } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
@@ -146,8 +146,12 @@ function buildClipboardItem(
             meta: { ...border, objectFit: obj.objectFit, x: obj.x, y: obj.y, slideId: obj.slideId },
         });
     }
+    // The typed `text` field is PLAIN text (the cross-app contract — vector/sheets/docs consume it
+    // literally); slides' own rich LightEditor HTML rides slides-private meta.html and is
+    // re-sanitized on consumption (the marker wire is forgeable by any web page, and object text
+    // renders via dangerouslySetInnerHTML).
     return buildTextClipboardItem({
-        text: obj.text,
+        text: htmlToPlainText(obj.text),
         box,
         typography: {
             fontFamily: obj.fontFamily,
@@ -162,7 +166,7 @@ function buildClipboardItem(
             lineHeight: obj.lineHeight,
             highlightColor: obj.highlightColor,
         },
-        meta: { ...border, background: obj.background, x: obj.x, y: obj.y, slideId: obj.slideId },
+        meta: { ...border, background: obj.background, html: obj.text, x: obj.x, y: obj.y, slideId: obj.slideId },
     });
 }
 
@@ -596,6 +600,14 @@ function SlideEditorInner({
                 e.preventDefault();
                 for (const item of eigenData.items) {
                     if (item.type === 'text') {
+                        // Never trust wire HTML into dangerouslySetInnerHTML: slides' own rich HTML
+                        // (meta.html) is re-sanitized, plain `text` is escaped. Empty carriers
+                        // (vector shapes ride as empty text items) insert nothing.
+                        const richHtml =
+                            typeof item.meta?.html === 'string' ? sanitizeToLightEditorHtml(item.meta.html).trim() : '';
+                        const plain = item.text.trim();
+                        if (!richHtml && !plain) continue;
+                        const text = richHtml || `<p>${escapeHtml(plain).replace(/\n/g, '<br>')}</p>`;
                         const overrides = clipboardItemOverrides(item, activeSlideId);
                         if (item.typography) {
                             for (const [k, v] of Object.entries(item.typography)) {
@@ -604,11 +616,28 @@ function SlideEditorInner({
                         }
                         addObject(activeSlideId, {
                             ...DEFAULT_TEXT_OBJECT,
-                            text: item.text,
+                            text,
                             ...overrides,
                         } as Omit<SlideObject, 'id' | 'slideId'>);
                     } else if (item.type === 'image') {
                         const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...clipboardItemOverrides(item, activeSlideId) };
+                        // Width-only item (a docs figure: height derives from the intrinsic ratio on
+                        // load) must not keep the default box height — probe the ratio like the
+                        // sheets/vector consumers, default-box ratio on probe failure, never stretch.
+                        const widthOnlyWidth = item.height == null ? item.width : undefined;
+                        const insertAt = async (mediaName: string) => {
+                            if (widthOnlyWidth != null) {
+                                imageProps.height = await deriveImageHeightFromUrl(
+                                    resolveMediaUrl(mediaName),
+                                    widthOnlyWidth,
+                                    DEFAULT_IMAGE_OBJECT.width / DEFAULT_IMAGE_OBJECT.height,
+                                );
+                            }
+                            addObject(activeSlideId, {
+                                ...imageProps,
+                                mediaName,
+                            } as Omit<ImageObject, 'id' | 'slideId'>);
+                        };
                         if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
                             reUploadImage(
                                 item.sourcePathId,
@@ -616,22 +645,13 @@ function SlideEditorInner({
                                 item.sourceMountId,
                                 mediaFolderId,
                                 uploadFile.mutateAsync,
-                                ownerId,
-                                path.mountId,
                                 item.mediaName,
                             ).then((result) => {
                                 // Re-upload failed: skip insertion, don't write the source deck's unresolvable mediaName.
-                                if (!result) return;
-                                addObject(activeSlideId, {
-                                    ...imageProps,
-                                    mediaName: result.mediaName,
-                                } as Omit<ImageObject, 'id' | 'slideId'>);
+                                if (result) void insertAt(result.mediaName);
                             });
                         } else {
-                            addObject(activeSlideId, {
-                                ...imageProps,
-                                mediaName: item.mediaName,
-                            } as Omit<ImageObject, 'id' | 'slideId'>);
+                            void insertAt(item.mediaName);
                         }
                     }
                 }
@@ -691,10 +711,9 @@ function SlideEditorInner({
         addObject,
         handleImageFile,
         resolveMediaPath,
+        resolveMediaUrl,
         mediaFolderId,
         uploadFile.mutateAsync,
-        ownerId,
-        path.mountId,
     ]);
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload.

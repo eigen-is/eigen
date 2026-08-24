@@ -20,7 +20,7 @@ import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { readImageSizeFromUrl } from '@workspace/ui/components/media';
+import { deriveImageHeightFromUrl, readImageSizeFromUrl } from '@workspace/ui/components/media';
 import { type TransformFields, useAspectLock } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
@@ -190,11 +190,8 @@ function SheetEditorInner({
             const defaultRatio = DEFAULT_IMAGE_BOX.width / DEFAULT_IMAGE_BOX.height;
             const widthOnly = item.width != null && item.height == null;
             // Height from a probed intrinsic ratio, DEFAULT_IMAGE_BOX ratio on failure (never square).
-            const deriveHeight = async (url: string | null, width: number): Promise<number> => {
-                const intrinsic = url ? await readImageSizeFromUrl(url) : null;
-                const ratio = intrinsic && intrinsic.height > 0 ? intrinsic.width / intrinsic.height : defaultRatio;
-                return width / ratio;
-            };
+            const deriveHeight = (url: string | null, width: number) =>
+                deriveImageHeightFromUrl(url, width, defaultRatio);
             const findImageId = (mediaName: string): string | undefined => {
                 for (const sheet of workbookRef.current?.getAllSheets() ?? []) {
                     const img = sheet.images?.find((i) => i.mediaName === mediaName);
@@ -215,8 +212,6 @@ function SheetEditorInner({
                     item.sourceMountId,
                     mediaFolderId,
                     uploadFile.mutateAsync,
-                    ownerId,
-                    path.mountId,
                     item.mediaName,
                 );
                 if (!result) {
@@ -241,7 +236,7 @@ function SheetEditorInner({
                 workbookRef.current?.insertImage(item.mediaName, width, height, angle);
             }
         },
-        [mediaFolderId, ownerId, path.mountId, uploadFile.mutateAsync, fitToPane, resolveMediaUrl],
+        [mediaFolderId, uploadFile.mutateAsync, fitToPane, resolveMediaUrl],
     );
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload.

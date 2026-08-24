@@ -208,14 +208,21 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         [updateElements],
     );
 
-    const deleteElements = useCallback((ids: string[]) => {
+    const deleteElements = useCallback((ids: string[], origin: unknown = null) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
             const elementsMap = doc.getMap('elements');
             for (const id of ids) elementsMap.delete(id);
-        });
+        }, origin);
     }, []);
+
+    // Non-undoable delete (see UNTRACKED_ORIGIN): cleanup of a failed optimistic insert — ⌘Z must
+    // not resurrect a broken pending element as its own step; peers still receive the delete.
+    const deleteElementsUntracked = useCallback(
+        (ids: string[]) => deleteElements(ids, UNTRACKED_ORIGIN),
+        [deleteElements],
+    );
 
     // Clone elements offset by (dx, dy) in ONE transact, stacked on top preserving their relative
     // z-order, each with a fresh id + seed. Returns the new ids so the caller reselects the clones.
@@ -266,6 +273,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         updateElementUntracked,
         updateElements,
         deleteElements,
+        deleteElementsUntracked,
         duplicateElements,
         undoManager: undoManager.current,
         // Exposed for awareness (cursors + remote selections) — same ref-current shape as undoManager.

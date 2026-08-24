@@ -564,8 +564,6 @@ const TiptapEditor = ({
                 item.sourceMountId,
                 currentMediaFolderId,
                 uploadFile.mutateAsync,
-                path.ownerId,
-                path.mountId,
                 item.mediaName,
             );
             // Re-upload failed: skip insertion, don't fall through to the source doc's unresolvable mediaName.
@@ -591,12 +589,14 @@ const TiptapEditor = ({
     // A text item (from slides/vector) lands as a single paragraph at the caret. Docs models
     // fontFamily (name, per the fontFamily value canon — getFontName tolerates a name or a legacy
     // stack) and color as textStyle attrs, and textAlign as a block attr; fontSize and the rest of the
-    // slides typography superset drop gracefully (docs has no fontSize control by design). Slides text
-    // is HTML (LightEditor), so flatten to plain text — item-level typography is the best-effort
-    // fidelity the wire block carries.
+    // slides typography superset drop gracefully (docs has no fontSize control by design). `text` is
+    // plain on the wire (slides keeps its rich HTML in private meta); htmlToPlainText guards against a
+    // non-conforming payload — item-level typography is the best-effort fidelity the wire block carries.
     const insertEigenTextItem = (item: EigenClipboardTextItem) => {
         if (!editorRef.current) return;
         const text = htmlToPlainText(item.text);
+        // Empty carriers (vector shapes ride as empty text items) must not land as blank paragraphs.
+        if (!text.trim()) return;
         const typo = item.typography;
         const textStyleAttrs: Record<string, string> = {};
         if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
@@ -606,7 +606,7 @@ const TiptapEditor = ({
         const paragraph = {
             type: 'paragraph',
             ...(typo?.textAlign && TEXT_ALIGNS.has(typo.textAlign) ? { attrs: { textAlign: typo.textAlign } } : {}),
-            content: text ? [{ type: 'text', text, ...(marks ? { marks } : {}) }] : [],
+            content: [{ type: 'text', text, ...(marks ? { marks } : {}) }],
         };
         editorRef.current.chain().focus().insertContent(paragraph).run();
     };
