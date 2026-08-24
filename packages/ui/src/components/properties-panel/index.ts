@@ -8,3 +8,4 @@ export { PROPERTIES_PANEL_WIDTH_PX, PropertiesPanel, PropertyRow, PropertySectio
 export { PropertyNumberInput } from './property-number-input';
 export { type TransformFields, TransformSection } from './transform-section';
 export { useAspectLock } from './use-aspect-lock';
+export { useZOrderHotkeys, type ZOp, ZOrderButtons } from './z-order';

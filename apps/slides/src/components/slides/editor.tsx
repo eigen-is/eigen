@@ -28,7 +28,7 @@ import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { useAspectLock } from '@workspace/ui/components/properties-panel';
+import { useAspectLock, useZOrderHotkeys, type ZOp } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cn } from '@workspace/ui/lib/utils';
@@ -171,6 +171,7 @@ function SlideEditorInner({
         moveObjectDown,
         moveObjectToFront,
         moveObjectToBack,
+        moveObjectsZOrder,
         addCommentToObject,
         removeCommentFromObject,
     } = useDeck(ownerId, path.mountId, path.id);
@@ -386,7 +387,7 @@ function SlideEditorInner({
         },
         [selectedObjectIds, deck.objects, yjsDoc],
     );
-    const arrangeSelected = useCallback(
+    const alignSelected = useCallback(
         (op: ArrangeOp) => {
             if (!yjsDoc) return;
             const objects = selectedObjectIds.map((id) => deck.objects[id]).filter(Boolean);
@@ -406,6 +407,12 @@ function SlideEditorInner({
         },
         [selectedObjectIds, deck.objects, yjsDoc],
     );
+    // Z-order over the current selection — panel Arrange buttons + ⌘[/⌘] brackets share one path.
+    const zOrderSelected = useCallback(
+        (op: ZOp) => moveObjectsZOrder(op, selectedObjectIds),
+        [moveObjectsZOrder, selectedObjectIds],
+    );
+    useZOrderHotkeys(canEdit && hasSelection && !isEditing, zOrderSelected);
     useHotkey(
         'ArrowLeft',
         (e) => {
@@ -943,7 +950,8 @@ function SlideEditorInner({
                                                 objects={selectedObjects}
                                                 onUpdate={updateObjects}
                                                 onDelete={handleDeleteSelectedObjects}
-                                                onArrange={arrangeSelected}
+                                                onAlign={alignSelected}
+                                                onZOrder={zOrderSelected}
                                                 aspectLocked={aspectLocked}
                                                 onAspectLockChange={setAspectLocked}
                                             />

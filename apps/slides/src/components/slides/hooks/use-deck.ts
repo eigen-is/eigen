@@ -2,6 +2,7 @@ import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
 import { yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { ZOp } from '@workspace/ui/components/properties-panel';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
@@ -332,93 +333,68 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, []);
 
-    const moveObjectUp = useCallback(
-        (objId: string) => {
+    // Z-order over the objectIds Y.Array (later in the array = painted on top): `forward`/`toFront`
+    // move an id toward the end, `backward`/`toBack` toward the start. Every id in a multi-selection
+    // is spliced inside ONE transact (one undo step) — `forward`/`toBack` iterate the block top-down,
+    // `backward`/`toFront` bottom-up, indices recomputed live per id so single-step splices preserve
+    // the block's relative stacking without leapfrogging within it. A non-contiguous selection moves each
+    // id one step relative to its neighbours (no block-collapse — that's vector's fractional-index
+    // model, not this Y.Array one).
+    const moveObjectsZOrder = useCallback(
+        (op: ZOp, objIds: string[]) => {
             const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
+            if (!doc || objIds.length === 0) return;
+            const first = deck.objects[objIds[0]];
+            if (!first) return;
             doc.transact(() => {
                 const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
+                const slideMap = slidesMap.get(first.slideId) as Y.Map<unknown> | undefined;
                 if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
+                const objIdsArr = slideMap.get('objectIds') as Y.Array<string> | undefined;
                 if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx === -1 || idx === arr.length - 1) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.insert(idx + 1, [objId]);
+                const currentOrder = objIdsArr.toArray();
+                const inSel = objIds.filter((id) => currentOrder.includes(id));
+                inSel.sort((a, b) => currentOrder.indexOf(a) - currentOrder.indexOf(b));
+                const ordered = op === 'forward' || op === 'toBack' ? [...inSel].reverse() : inSel;
+                // Step ops never swap past a selected neighbour: a block at the array edge would
+                // otherwise oscillate its outer pair on repeated presses (and select-all would
+                // rotate the whole stack). Mid-stack the neighbour is already-moved and unselected.
+                const selSet = new Set(inSel);
+                for (const id of ordered) {
+                    const arr = objIdsArr.toArray();
+                    const idx = arr.indexOf(id);
+                    if (idx === -1) continue;
+                    if (op === 'toFront') {
+                        if (idx === arr.length - 1) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.push([id]);
+                    } else if (op === 'toBack') {
+                        if (idx === 0) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.insert(0, [id]);
+                    } else if (op === 'forward') {
+                        if (idx === arr.length - 1 || selSet.has(arr[idx + 1])) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.insert(idx + 1, [id]);
+                    } else {
+                        if (idx === 0 || selSet.has(arr[idx - 1])) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.insert(idx - 1, [id]);
+                    }
+                }
             });
         },
         [deck.objects],
     );
 
-    const moveObjectDown = useCallback(
-        (objId: string) => {
-            const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
-            doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
-                if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx <= 0) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.insert(idx - 1, [objId]);
-            });
-        },
-        [deck.objects],
-    );
-
+    // Single-object context-menu wiring delegates to the batched reorder (one id = one splice).
+    const moveObjectUp = useCallback((objId: string) => moveObjectsZOrder('forward', [objId]), [moveObjectsZOrder]);
+    const moveObjectDown = useCallback((objId: string) => moveObjectsZOrder('backward', [objId]), [moveObjectsZOrder]);
     const moveObjectToFront = useCallback(
-        (objId: string) => {
-            const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
-            doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
-                if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx === -1 || idx === arr.length - 1) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.push([objId]);
-            });
-        },
-        [deck.objects],
+        (objId: string) => moveObjectsZOrder('toFront', [objId]),
+        [moveObjectsZOrder],
     );
-
-    const moveObjectToBack = useCallback(
-        (objId: string) => {
-            const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
-            doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
-                if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx <= 0) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.insert(0, [objId]);
-            });
-        },
-        [deck.objects],
-    );
+    const moveObjectToBack = useCallback((objId: string) => moveObjectsZOrder('toBack', [objId]), [moveObjectsZOrder]);
 
     const updateObjects = useCallback((objIds: string[], updates: Partial<SlideObject>) => {
         const doc = docRef.current;
@@ -518,6 +494,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         moveObjectDown,
         moveObjectToFront,
         moveObjectToBack,
+        moveObjectsZOrder,
         yjsDoc: docRef.current,
         undoManager: undoManager.current,
         provider: providerRef.current,

@@ -1,24 +1,21 @@
 // Every canvas keyboard command except the layered Escape (that one lives in the canvas because it
-// reads live gesture state to cancel an in-progress create/marquee/move). Bindings go through
+// reads live gesture state to cancel an in-progress create/marquee/move) and the z-order brackets
+// (shared `useZOrderHotkeys`, which owns the manual event.code listener). Bindings go through
 // @tanstack/react-hotkeys (available from packages/ui) mirroring the slides editor's useHotkey +
 // enabled-gating discipline, so shortcuts keep working while focus sits off-canvas and auto-ignore
-// text inputs. The z-order brackets are a manual event.code listener: the hotkey lib matches by
-// event.key (⌘⇧[ arrives as '{') and its type surface forbids Shift+punctuation.
+// text inputs.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { generateNKeysBetween, orderByFractionalIndex, type VectorElement } from '@workspace/lib/vector';
-import { useEffect, useRef } from 'react';
 import type * as Y from 'yjs';
-import { isTypingTarget } from '../../../hooks/is-typing-target';
+import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
 import type { VectorTool } from './use-tool';
 import type { VectorElementPatch } from './use-vector-doc';
 
 const NUDGE = 1;
 const NUDGE_LARGE = 5;
 const DUPLICATE_OFFSET = 10;
-
-export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
 // NON-selected elements, so a non-contiguous multi-selection collapses into one clean gap
@@ -161,21 +158,9 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     useHotkey('Shift+ArrowUp', arrow(0, -NUDGE_LARGE), nudgeEnabled);
     useHotkey('Shift+ArrowDown', arrow(0, NUDGE_LARGE), nudgeEnabled);
 
-    // Z-order: ⌘[/⌘] step, ⌘⇧[/⌘⇧] to back/front. Manual listener keyed on event.code (see header).
-    const stateRef = useRef({ enabled, elements, selectedIds });
-    stateRef.current = { enabled, elements, selectedIds };
-    useEffect(() => {
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (!(e.metaKey || e.ctrlKey)) return;
-            if (e.code !== 'BracketLeft' && e.code !== 'BracketRight') return;
-            const { enabled: on, elements: els, selectedIds: ids } = stateRef.current;
-            if (!on || ids.length === 0 || isTypingTarget()) return;
-            e.preventDefault();
-            const op: ZOp =
-                e.code === 'BracketLeft' ? (e.shiftKey ? 'toBack' : 'backward') : e.shiftKey ? 'toFront' : 'forward';
-            applyZOrder(op, els, ids, updateElements, undoManager);
-        };
-        document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, [undoManager, updateElements]);
+    // Z-order: ⌘[/⌘] step, ⌘⇧[/⌘⇧] to back/front — shared hook owns the manual event.code listener,
+    // fed vector's fractional-index write.
+    useZOrderHotkeys(enabled && hasSelection, (op) =>
+        applyZOrder(op, elements, selectedIds, updateElements, undoManager),
+    );
 }

@@ -16,7 +16,6 @@ import {
     type VectorElementType,
     type VectorTextElement,
 } from '@workspace/lib/vector';
-import { TooltipButton } from '@workspace/ui';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignmentPicker,
@@ -31,11 +30,12 @@ import {
     PropertySection,
     type TransformFields,
     TransformSection,
+    type ZOp,
+    ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
-import { BringToFront, ChevronDown, ChevronUp, SendToBack } from 'lucide-react';
 import type * as Y from 'yjs';
 import type { VectorElementPatch } from './hooks/use-vector-doc';
-import { applyZOrder, type ZOp } from './hooks/use-vector-keyboard';
+import { applyZOrder } from './hooks/use-vector-keyboard';
 import { loadVectorFont, measureVectorText } from './text-measure';
 
 const TYPE_LABELS: Record<VectorElementType, string> = {
@@ -279,32 +279,7 @@ export function VectorPropertiesPanel({
             </PropertySection>
 
             <PropertySection title="Arrange">
-                <div className="flex items-center gap-1">
-                    <TooltipButton
-                        className="h-7 w-7"
-                        icon={SendToBack}
-                        tooltipText="Send to back"
-                        onClick={() => handleZOrderApply('toBack')}
-                    />
-                    <TooltipButton
-                        className="h-7 w-7"
-                        icon={ChevronDown}
-                        tooltipText="Send backward"
-                        onClick={() => handleZOrderApply('backward')}
-                    />
-                    <TooltipButton
-                        className="h-7 w-7"
-                        icon={ChevronUp}
-                        tooltipText="Bring forward"
-                        onClick={() => handleZOrderApply('forward')}
-                    />
-                    <TooltipButton
-                        className="h-7 w-7"
-                        icon={BringToFront}
-                        tooltipText="Bring to front"
-                        onClick={() => handleZOrderApply('toFront')}
-                    />
-                </div>
+                <ZOrderButtons onApply={handleZOrderApply} />
             </PropertySection>
         </PropertiesPanel>
     );

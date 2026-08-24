@@ -94,14 +94,15 @@ export function SlideObjectMenu({
                         <Copy className="h-4 w-4 mr-2" /> Copy
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => onMoveUp?.(obj.id)}>
-                        <ChevronUp className="h-4 w-4 mr-2" /> Move up
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onMoveDown?.(obj.id)}>
-                        <ChevronDown className="h-4 w-4 mr-2" /> Move down
-                    </DropdownMenuItem>
+                    {/* Z-order — shares the ZOrderButtons vocabulary/order (front at top). */}
                     <DropdownMenuItem onClick={() => onMoveToFront?.(obj.id)}>
                         <ArrowUpToLine className="h-4 w-4 mr-2" /> Bring to front
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onMoveUp?.(obj.id)}>
+                        <ChevronUp className="h-4 w-4 mr-2" /> Bring forward
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onMoveDown?.(obj.id)}>
+                        <ChevronDown className="h-4 w-4 mr-2" /> Send backward
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => onMoveToBack?.(obj.id)}>
                         <ArrowDownToLine className="h-4 w-4 mr-2" /> Send to back
