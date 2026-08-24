@@ -66,9 +66,9 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
 
     const x = getMergedValue(objects, (o) => Math.round(o.x));
     const y = getMergedValue(objects, (o) => Math.round(o.y));
-    const w = getMergedValue(objects, (o) => Math.round(o.w));
-    const h = getMergedValue(objects, (o) => Math.round(o.h));
-    const rotation = getMergedValue(objects, (o) => o.rotation);
+    const width = getMergedValue(objects, (o) => Math.round(o.width));
+    const height = getMergedValue(objects, (o) => Math.round(o.height));
+    const angle = getMergedValue(objects, (o) => o.angle);
 
     return (
         <PropertiesPanel
@@ -83,16 +83,26 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
                         <MergedNumberInput value={y} onChange={(v) => handleUpdate({ y: v })} step={1} />
                     </PropertyRow>
                     <PropertyRow label="W">
-                        <MergedNumberInput value={w} onChange={(v) => handleUpdate({ w: v })} step={1} min={1} />
+                        <MergedNumberInput
+                            value={width}
+                            onChange={(v) => handleUpdate({ width: v })}
+                            step={1}
+                            min={1}
+                        />
                     </PropertyRow>
                     <PropertyRow label="H">
-                        <MergedNumberInput value={h} onChange={(v) => handleUpdate({ h: v })} step={1} min={1} />
+                        <MergedNumberInput
+                            value={height}
+                            onChange={(v) => handleUpdate({ height: v })}
+                            step={1}
+                            min={1}
+                        />
                     </PropertyRow>
                 </div>
                 <PropertyRow label="°">
                     <MergedNumberInput
-                        value={rotation}
-                        onChange={(v) => handleUpdate({ rotation: v })}
+                        value={angle}
+                        onChange={(v) => handleUpdate({ angle: v })}
                         step={1}
                         min={-360}
                         max={360}

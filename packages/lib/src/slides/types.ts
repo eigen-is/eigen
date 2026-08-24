@@ -5,9 +5,9 @@ type BaseObject = {
     slideId: string;
     x: number;
     y: number;
-    w: number;
-    h: number;
-    rotation: number;
+    width: number;
+    height: number;
+    angle: number;
     borderColor: string;
     borderWidth: number;
     borderRadius: number;

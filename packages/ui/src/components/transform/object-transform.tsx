@@ -62,6 +62,12 @@ export type ObjectTransformProps = {
     resizeMode?: 'free' | 'aspect' | 'aspect-default';
     // Scene-unit resize floor (slides 30, vector ~1). Defaults to 1.
     minSize?: number;
+    // Optional resize-time box snapping (slides' edge/center guides). Applied on the RESIZE path
+    // ONLY — never rotate, never the pointerdown start echo — before `latest`, so the committed
+    // box is the snapped one; minSize is re-clamped after it. Skipped while a modifier is shaping
+    // the box (aspect-lock / from-center), so it can't fight those. A host that doesn't snap omits
+    // it (vector), which is a full no-op — zero behavior change.
+    snapBox?: (b: Box) => Box;
     // Per-move LOCAL preview — never a Yjs write. The host feeds the result back in as `box`.
     onTransform: (next: Box) => void;
     // Fires exactly once per gesture at pointerup / window-blur / pointercancel, with angle
@@ -81,6 +87,7 @@ export function ObjectTransform({
     showRotate,
     resizeMode = 'free',
     minSize = DEFAULT_MIN_SIZE,
+    snapBox,
     onTransform,
     onCommit,
 }: ObjectTransformProps) {
@@ -115,20 +122,20 @@ export function ObjectTransform({
 
         const update = () => {
             const { dx, dy } = screenDeltaToScene(cursor.clientX - startX, cursor.clientY - startY);
-            const next = resizeRotatedRect(
-                mode,
-                dx,
-                dy,
-                snapshot,
-                {
-                    fromCenter: cursor.altKey,
-                    // 'aspect' always locks; 'aspect-default' locks unless Shift; 'free' locks on Shift.
-                    keepAspect:
-                        resizeMode === 'aspect' ||
-                        (resizeMode === 'aspect-default' ? !cursor.shiftKey : cursor.shiftKey),
-                },
-                minSize,
-            );
+            // 'aspect' always locks; 'aspect-default' locks unless Shift; 'free' locks on Shift.
+            const keepAspect =
+                resizeMode === 'aspect' || (resizeMode === 'aspect-default' ? !cursor.shiftKey : cursor.shiftKey);
+            let next = resizeRotatedRect(mode, dx, dy, snapshot, { fromCenter: cursor.altKey, keepAspect }, minSize);
+            // Host snapping, before the latch. Skipped when a modifier is shaping the box (aspect /
+            // from-center) so it can't break the ratio or the centered mirror; minSize re-clamped after.
+            if (snapBox && !cursor.altKey && !keepAspect) {
+                const snapped = snapBox(next);
+                next = {
+                    ...snapped,
+                    width: Math.max(minSize, snapped.width),
+                    height: Math.max(minSize, snapped.height),
+                };
+            }
             latest = next;
             onTransform(next);
         };

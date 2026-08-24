@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-997 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1000 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -694,7 +694,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (339)
+## Utilities & constants (342)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -898,10 +898,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `BORDER_RADIUS_ROUND` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
+| `OBJECT_FIELDS` | `@workspace/lib/slides` | packages/lib/src/slides/fields.ts |
 | `pxToPercent` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SLIDE_ASPECT_RATIO` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SLIDE_BASE_HEIGHT` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
 | `SLIDE_BASE_WIDTH` | `@workspace/lib/slides` | packages/lib/src/slides/types.ts |
+| `yMapToObject` | `@workspace/lib/slides` | packages/lib/src/slides/fields.ts |
 | `CHATS_FOLDER_NAME` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `CLIENT_FILE_EVENT_TYPES` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `CODE_EXTENSIONS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -1003,6 +1005,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |
 | `formatDownloadLabel` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
+| `isTypingTarget` | `@workspace/ui` | packages/ui/src/hooks/is-typing-target.ts |
 | `nextSortDir` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `getAtSuggestQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |
 | `getSlashTargetQuery` | `@workspace/ui/components/chat` | packages/ui/src/components/chat/chat-utils.ts |

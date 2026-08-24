@@ -40,8 +40,8 @@ describe('slides export — assembled HTML surface', () => {
             obj.set('type', 'text');
             obj.set('x', 0);
             obj.set('y', 0);
-            obj.set('w', 200);
-            obj.set('h', 100);
+            obj.set('width', 200);
+            obj.set('height', 100);
             obj.set('fontSize', 24);
             obj.set('text', '<p>legit body</p><script>alert(1)</script>');
             obj.set('color', 'red;" onload="alert(1)');

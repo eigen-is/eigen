@@ -1,51 +1,6 @@
-import type { DeckData, SlideObject } from '@workspace/lib/slides';
+import { type DeckData, yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type * as Y from 'yjs';
-
-const OBJECT_FIELDS = [
-    'id',
-    'slideId',
-    'type',
-    'x',
-    'y',
-    'w',
-    'h',
-    'rotation',
-    'borderColor',
-    'borderWidth',
-    'borderRadius',
-    'text',
-    'fontFamily',
-    'fontSize',
-    'fontWeight',
-    'fontStyle',
-    'textDecoration',
-    'textAlign',
-    'verticalAlign',
-    'color',
-    'letterSpacing',
-    'lineHeight',
-    'highlightColor',
-    'background',
-    'mediaName',
-    'objectFit',
-    'commentCardIds',
-] as const;
-
-function yMapToSlideObject(yMap: Y.Map<unknown>): SlideObject {
-    const obj: Record<string, unknown> = {};
-    for (const field of OBJECT_FIELDS) {
-        const val = yMap.get(field);
-        if (val !== undefined) obj[field] = val;
-    }
-    const raw = obj['commentCardIds'];
-    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') {
-        obj['commentCardIds'] = (raw as Y.Array<string>).toArray();
-    } else if (!Array.isArray(raw)) {
-        obj['commentCardIds'] = [];
-    }
-    return obj as SlideObject;
-}
 
 // Materialized Yjs doc → DeckData. Media-free, so it runs identically on the main
 // thread and inside the document-transform Worker (which has no Mount). Every consumer
@@ -71,7 +26,7 @@ export function readDeckFromDoc(doc: Y.Doc): DeckData {
     }
 
     for (const [objId, objMapValue] of objectsMap) {
-        deck.objects[objId] = yMapToSlideObject(objMapValue as Y.Map<unknown>);
+        deck.objects[objId] = yMapToObject(objMapValue as Y.Map<unknown>);
     }
 
     return deck;

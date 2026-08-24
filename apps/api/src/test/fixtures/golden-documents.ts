@@ -203,9 +203,9 @@ function textObject(id: string, slideId: string, overrides: Partial<TextObject>)
         type: 'text',
         x: 160,
         y: 120,
-        w: 1600,
-        h: 400,
-        rotation: 0,
+        width: 1600,
+        height: 400,
+        angle: 0,
         borderColor: '',
         borderWidth: 0,
         borderRadius: 0,
@@ -234,9 +234,9 @@ function imageObject(id: string, slideId: string): ImageObject {
         type: 'image',
         x: 320,
         y: 200,
-        w: 640,
-        h: 360,
-        rotation: 0,
+        width: 640,
+        height: 360,
+        angle: 0,
         borderColor: '#1a5fb4',
         borderWidth: 4,
         borderRadius: 12,
@@ -279,7 +279,7 @@ export function buildGoldenDeck(): DeckData {
             textObject(`obj-${i}`, `slide-${i}`, {
                 text: `<p>Slide ${i}${beyond}</p>`,
                 background: { type: 'solid', color: '#eef2ff' },
-                rotation: i === 5 ? 15 : 0,
+                angle: i === 5 ? 15 : 0,
             }),
         ]);
     }
@@ -298,8 +298,8 @@ export function buildHeavyDeck(slides = 60, objectsPerSlide = 6): DeckData {
             const object = textObject(`heavy-obj-${s}-${o}`, slideId, {
                 x: 160 + (o % 2) * 880,
                 y: 120 + Math.floor(o / 2) * 300,
-                w: 800,
-                h: 260,
+                width: 800,
+                height: 260,
                 text:
                     o === 0
                         ? `<p>Slide ${s} — <strong>heavy deck</strong></p>`

@@ -10,21 +10,13 @@ import { useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { generateNKeysBetween, orderByFractionalIndex, type VectorElement } from '@workspace/lib/vector';
 import { useEffect, useRef } from 'react';
 import type * as Y from 'yjs';
+import { isTypingTarget } from '../../../hooks/is-typing-target';
 import type { VectorTool } from './use-tool';
 import type { VectorElementPatch } from './use-vector-doc';
 
 const NUDGE = 1;
 const NUDGE_LARGE = 5;
 const DUPLICATE_OFFSET = 10;
-
-// The manual listeners' equivalent of the hotkey lib's input gate; the canvas reuses it for its
-// own Space/Escape listeners.
-export function isTypingTarget(): boolean {
-    const el = document.activeElement;
-    if (!el) return false;
-    const tag = el.tagName.toLowerCase();
-    return tag === 'input' || tag === 'textarea' || (el as HTMLElement).isContentEditable;
-}
 
 export type ZOp = 'backward' | 'forward' | 'toBack' | 'toFront';
 

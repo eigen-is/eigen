@@ -19,10 +19,11 @@ import {
 } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
 import { htmlToPlainText } from '@workspace/lib/html-dom';
+import { OBJECT_FIELDS } from '@workspace/lib/slides';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@workspace/ui';
+import { Column, ColumnLayout, EmptyState, isTypingTarget, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
@@ -43,11 +44,20 @@ import { SlideBackgroundPanel, SlidePropertiesPanel } from './slide-properties-p
 import { Toolbar } from './toolbar';
 import { DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, type SlideObject } from './types';
 
+// Object fields a pasted clipboard item may restore from its (untyped) meta. Derived from the
+// canonical registry minus identity/position/content — x/y anchor separately, text/mediaName come
+// off the item itself — so the consumer can never drift from buildClipboardItem's producer. One
+// list serves both item types: a field absent from an item's meta is simply skipped.
+const PASTE_META_FIELDS = OBJECT_FIELDS.filter(
+    (f) =>
+        !(['id', 'slideId', 'type', 'x', 'y', 'text', 'mediaName', 'commentCardIds'] as readonly string[]).includes(f),
+);
+
 function buildClipboardItem(
     obj: SlideObject,
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): EigenClipboardItem | null {
-    const rect = { x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation };
+    const rect = { x: obj.x, y: obj.y, width: obj.width, height: obj.height, angle: obj.angle };
     const border = { borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius };
     if (obj.type === 'image') {
         const mediaPath = resolveMediaPath(obj.mediaName);
@@ -325,9 +335,18 @@ function SlideEditorInner({
     // this listener never goes stale.
     const escStateRef = useRef({ isPresenting, isEditing, searchOpen });
     escStateRef.current = { isPresenting, isEditing, searchOpen };
+    // True while an ObjectTransform grip drag is live. That gesture owns Escape in the capture phase
+    // (to cancel itself) but registers its listener AFTER this one, so this capture listener would
+    // otherwise deselect first and unmount the transform mid-drag. Bail while it's active and let the
+    // transform's own capture listener handle the Escape.
+    const transformActiveRef = useRef(false);
+    const setTransformActive = useCallback((active: boolean) => {
+        transformActiveRef.current = active;
+    }, []);
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
+            if (transformActiveRef.current) return;
             const { isPresenting: presenting, isEditing: editing, searchOpen: barOpen } = escStateRef.current;
             if (presenting) {
                 e.stopPropagation();
@@ -373,8 +392,8 @@ function SlideEditorInner({
                     if (!objMap) continue;
                     if (patch.x !== undefined) objMap.set('x', patch.x);
                     if (patch.y !== undefined) objMap.set('y', patch.y);
-                    if (patch.w !== undefined) objMap.set('w', patch.w);
-                    if (patch.h !== undefined) objMap.set('h', patch.h);
+                    if (patch.width !== undefined) objMap.set('width', patch.width);
+                    if (patch.height !== undefined) objMap.set('height', patch.height);
                 }
             });
         },
@@ -454,9 +473,7 @@ function SlideEditorInner({
     useEffect(() => {
         if (isPresenting) return;
         const handleCopy = (e: ClipboardEvent) => {
-            const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-            if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable)
-                return;
+            if (isTypingTarget()) return;
             if (selectedObjectIds.length === 0) return;
             const items = selectedObjectIds
                 .map((id) => deck.objects[id])
@@ -471,9 +488,7 @@ function SlideEditorInner({
             writeEigenClipboard(e, data, textPreview);
         };
         const handlePaste = (e: ClipboardEvent) => {
-            const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-            if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable)
-                return;
+            if (isTypingTarget()) return;
             if (!activeSlideId || !canWrite) return;
 
             const imageFile = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));
@@ -492,26 +507,7 @@ function SlideEditorInner({
                         const overrides: Record<string, unknown> = {};
                         if (m.x != null) overrides.x = m.x;
                         if (m.y != null) overrides.y = m.y;
-                        for (const k of [
-                            'w',
-                            'h',
-                            'rotation',
-                            'borderColor',
-                            'borderWidth',
-                            'borderRadius',
-                            'fontFamily',
-                            'fontSize',
-                            'fontWeight',
-                            'fontStyle',
-                            'textDecoration',
-                            'textAlign',
-                            'verticalAlign',
-                            'color',
-                            'letterSpacing',
-                            'lineHeight',
-                            'highlightColor',
-                            'background',
-                        ] as const) {
+                        for (const k of PASTE_META_FIELDS) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         addObject(activeSlideId, {
@@ -523,15 +519,7 @@ function SlideEditorInner({
                         const overrides: Record<string, unknown> = {};
                         if (m.x != null) overrides.x = m.x;
                         if (m.y != null) overrides.y = m.y;
-                        for (const k of [
-                            'w',
-                            'h',
-                            'rotation',
-                            'borderColor',
-                            'borderWidth',
-                            'borderRadius',
-                            'objectFit',
-                        ] as const) {
+                        for (const k of PASTE_META_FIELDS) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...overrides };
@@ -899,6 +887,7 @@ function SlideEditorInner({
                                                 onStartEditing={handleStartEditing}
                                                 onUpdateObject={updateObject}
                                                 onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
+                                                onTransformActiveChange={setTransformActive}
                                                 onDropImage={canWrite ? handleDropImage : undefined}
                                                 onCopyObject={handleCopyObject}
                                                 onDeleteObject={canWrite ? handleDeleteObject : undefined}

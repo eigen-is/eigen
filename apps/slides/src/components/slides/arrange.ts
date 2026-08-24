@@ -12,7 +12,7 @@ export type ArrangeOp =
     | 'match-width'
     | 'match-height';
 
-export type ArrangePatch = { id: string; x?: number; y?: number; w?: number; h?: number };
+export type ArrangePatch = { id: string; x?: number; y?: number; width?: number; height?: number };
 
 type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
@@ -20,8 +20,8 @@ export function boundingBox(objects: SlideObject[]): Bounds {
     return {
         minX: Math.min(...objects.map((o) => o.x)),
         minY: Math.min(...objects.map((o) => o.y)),
-        maxX: Math.max(...objects.map((o) => o.x + o.w)),
-        maxY: Math.max(...objects.map((o) => o.y + o.h)),
+        maxX: Math.max(...objects.map((o) => o.x + o.width)),
+        maxY: Math.max(...objects.map((o) => o.y + o.height)),
     };
 }
 
@@ -34,25 +34,25 @@ export function computeArrange(objects: SlideObject[], op: ArrangeOp): ArrangePa
             return objects.map((o) => ({ id: o.id, x: Math.round(minX) }));
         case 'align-h-center': {
             const cx = (minX + maxX) / 2;
-            return objects.map((o) => ({ id: o.id, x: Math.round(cx - o.w / 2) }));
+            return objects.map((o) => ({ id: o.id, x: Math.round(cx - o.width / 2) }));
         }
         case 'align-right':
-            return objects.map((o) => ({ id: o.id, x: Math.round(maxX - o.w) }));
+            return objects.map((o) => ({ id: o.id, x: Math.round(maxX - o.width) }));
         case 'align-top':
             return objects.map((o) => ({ id: o.id, y: Math.round(minY) }));
         case 'align-v-center': {
             const cy = (minY + maxY) / 2;
-            return objects.map((o) => ({ id: o.id, y: Math.round(cy - o.h / 2) }));
+            return objects.map((o) => ({ id: o.id, y: Math.round(cy - o.height / 2) }));
         }
         case 'align-bottom':
-            return objects.map((o) => ({ id: o.id, y: Math.round(maxY - o.h) }));
+            return objects.map((o) => ({ id: o.id, y: Math.round(maxY - o.height) }));
         case 'match-width': {
-            const w = Math.max(...objects.map((o) => o.w));
-            return objects.map((o) => ({ id: o.id, w }));
+            const width = Math.max(...objects.map((o) => o.width));
+            return objects.map((o) => ({ id: o.id, width }));
         }
         case 'match-height': {
-            const h = Math.max(...objects.map((o) => o.h));
-            return objects.map((o) => ({ id: o.id, h }));
+            const height = Math.max(...objects.map((o) => o.height));
+            return objects.map((o) => ({ id: o.id, height }));
         }
         case 'distribute-h':
             return distribute(objects, 'h');
@@ -65,7 +65,7 @@ export function computeArrange(objects: SlideObject[], op: ArrangeOp): ArrangePa
 function distribute(objects: SlideObject[], axis: 'h' | 'v'): ArrangePatch[] {
     if (objects.length < 3) return [];
     const pos = (o: SlideObject) => (axis === 'h' ? o.x : o.y);
-    const size = (o: SlideObject) => (axis === 'h' ? o.w : o.h);
+    const size = (o: SlideObject) => (axis === 'h' ? o.width : o.height);
 
     const sorted = [...objects].sort((a, b) => pos(a) - pos(b));
     const first = sorted[0];

@@ -71,13 +71,13 @@ export const useMarqueeSelect = ({ objects, canvasRef, onSelect }: UseMarqueeSel
                         .filter((obj) =>
                             rect.mode === 'intersect'
                                 ? obj.x < rect.x + rect.w &&
-                                  obj.x + obj.w > rect.x &&
+                                  obj.x + obj.width > rect.x &&
                                   obj.y < rect.y + rect.h &&
-                                  obj.y + obj.h > rect.y
+                                  obj.y + obj.height > rect.y
                                 : obj.x >= rect.x &&
                                   obj.y >= rect.y &&
-                                  obj.x + obj.w <= rect.x + rect.w &&
-                                  obj.y + obj.h <= rect.y + rect.h,
+                                  obj.x + obj.width <= rect.x + rect.w &&
+                                  obj.y + obj.height <= rect.y + rect.h,
                         )
                         .map((obj) => obj.id);
 

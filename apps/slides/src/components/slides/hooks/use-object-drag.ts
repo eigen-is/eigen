@@ -1,31 +1,22 @@
 import { useCallback, useRef, useState } from 'react';
-import { normalizeAngle, resizeRotatedRect, snapAngle } from '../transform-geometry';
 import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 import { type SnapLine, snapRect } from './use-snap-lines';
 
-export type DragMode =
-    | 'move'
-    | 'rotate'
-    | 'resize-se'
-    | 'resize-sw'
-    | 'resize-ne'
-    | 'resize-nw'
-    | 'resize-e'
-    | 'resize-w'
-    | 'resize-n'
-    | 'resize-s'
-    | null;
+// Object MOVE + group move. Resize and rotate live in the shared ObjectTransform now (the slides
+// selection chrome), so this hook only translates objects — one gesture = one commit that writes
+// ONLY the changed x/y (never the whole box), so a concurrent peer resize survives the merge.
 
 type ObjectDragState = {
     objId: string | null;
-    mode: DragMode;
     startX: number;
     startY: number;
     startObjX: number;
     startObjY: number;
+    // Kept for the snap rect (edges) and the rotated-object snap-skip below; a rotated box's
+    // axis-aligned snap rect doesn't match its visual box, so it is not snapped.
     startObjW: number;
     startObjH: number;
-    startRotation: number;
+    startAngle: number;
 };
 
 type GroupDragState = {
@@ -35,17 +26,10 @@ type GroupDragState = {
     bounds: { x: number; y: number; w: number; h: number };
 };
 
-type DragPreview = {
-    objId: string;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    rotation?: number;
-};
+type DragPreview = { objId: string; x: number; y: number };
 
 type UseObjectDragProps = {
-    onUpdate: (objId: string, updates: { x?: number; y?: number; w?: number; h?: number; rotation?: number }) => void;
+    onUpdate: (objId: string, updates: { x?: number; y?: number }) => void;
     onDuplicate?: (placements: { id: string; x: number; y: number }[]) => void;
     canvasRef: React.RefObject<HTMLDivElement | null>;
     vSnaps?: number[];
@@ -55,22 +39,19 @@ type UseObjectDragProps = {
 export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], hSnaps = [] }: UseObjectDragProps) => {
     const [activeSnapLines, setActiveSnapLines] = useState<SnapLine[]>([]);
     const [dragPreviews, setDragPreviews] = useState<DragPreview[]>([]);
-    const lastSnappedRef = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+    const lastSnappedRef = useRef<{ x: number; y: number } | null>(null);
     const lastGroupDeltaRef = useRef<{ dx: number; dy: number } | null>(null);
-    const lastRotationRef = useRef<number | null>(null);
-    const rotateRef = useRef<{ centerX: number; centerY: number; startAngle: number } | null>(null);
     const snapsRef = useRef({ vSnaps, hSnaps });
     snapsRef.current = { vSnaps, hSnaps };
     const stateRef = useRef<ObjectDragState>({
         objId: null,
-        mode: null,
         startX: 0,
         startY: 0,
         startObjX: 0,
         startObjY: 0,
         startObjW: 0,
         startObjH: 0,
-        startRotation: 0,
+        startAngle: 0,
     });
     const groupStateRef = useRef<GroupDragState | null>(null);
 
@@ -81,152 +62,72 @@ export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], h
     }, [canvasRef]);
 
     const startDrag = useCallback(
-        (
-            e: React.MouseEvent,
-            objId: string,
-            mode: DragMode,
-            objX: number,
-            objY: number,
-            objW: number,
-            objH: number,
-            objRotation = 0,
-        ) => {
+        (e: React.MouseEvent, objId: string, objX: number, objY: number, objW: number, objH: number, angle = 0) => {
             e.preventDefault();
             e.stopPropagation();
             stateRef.current = {
                 objId,
-                mode,
                 startX: e.clientX,
                 startY: e.clientY,
                 startObjX: objX,
                 startObjY: objY,
                 startObjW: objW,
                 startObjH: objH,
-                startRotation: objRotation,
+                startAngle: angle,
             };
-            if (mode === 'rotate') {
-                const rect = canvasRef.current?.getBoundingClientRect();
-                if (rect) {
-                    const centerX = rect.left + ((objX + objW / 2) / SLIDE_BASE_WIDTH) * rect.width;
-                    const centerY = rect.top + ((objY + objH / 2) / SLIDE_BASE_HEIGHT) * rect.height;
-                    rotateRef.current = {
-                        centerX,
-                        centerY,
-                        startAngle: Math.atan2(e.clientY - centerY, e.clientX - centerX),
-                    };
-                }
-            }
             groupStateRef.current = null;
-            const cursor = {
-                clientX: e.clientX,
-                clientY: e.clientY,
-                altKey: e.altKey,
-                shiftKey: e.shiftKey,
-            };
+            const cursor = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey };
 
             const update = () => {
                 const s = stateRef.current;
-                if (!s.objId || !s.mode) return;
-
-                if (s.mode === 'rotate') {
-                    const r = rotateRef.current;
-                    if (!r) return;
-                    const angle = Math.atan2(cursor.clientY - r.centerY, cursor.clientX - r.centerX);
-                    const deltaDeg = ((angle - r.startAngle) * 180) / Math.PI;
-                    let next = s.startRotation + deltaDeg;
-                    if (cursor.shiftKey) next = snapAngle(next);
-                    if (lastRotationRef.current === next) return;
-                    lastRotationRef.current = next;
-                    setDragPreviews([
-                        {
-                            objId: s.objId,
-                            x: s.startObjX,
-                            y: s.startObjY,
-                            w: s.startObjW,
-                            h: s.startObjH,
-                            rotation: next,
-                        },
-                    ]);
-                    return;
-                }
+                if (!s.objId) return;
 
                 const canvas = getCanvasSize();
                 const dx = ((cursor.clientX - s.startX) / canvas.w) * SLIDE_BASE_WIDTH;
                 const dy = ((cursor.clientY - s.startY) / canvas.h) * SLIDE_BASE_HEIGHT;
-                const isResize = s.mode !== 'move';
-                const fromCenter = cursor.altKey && isResize;
-                const keepAspect = cursor.shiftKey && isResize;
+                const x = s.startObjX + dx;
+                const y = s.startObjY + dy;
 
-                let x = s.startObjX;
-                let y = s.startObjY;
-                let w = s.startObjW;
-                let h = s.startObjH;
-
-                if (s.mode === 'move') {
-                    x = s.startObjX + dx;
-                    y = s.startObjY + dy;
-                } else {
-                    const resized = resizeRotatedRect(
-                        s.mode,
-                        dx,
-                        dy,
-                        { x: s.startObjX, y: s.startObjY, w: s.startObjW, h: s.startObjH },
-                        s.startRotation,
-                        { fromCenter, keepAspect },
-                    );
-                    x = resized.x;
-                    y = resized.y;
-                    w = resized.w;
-                    h = resized.h;
-                }
-
-                // Skip snapping while modifiers are held (center mirror / aspect lock) or when the object is
-                // rotated — the axis-aligned snap rect doesn't match a rotated object's visual box.
+                // A rotated object's axis-aligned snap rect doesn't match its visual box — skip snapping.
                 const snapped =
-                    fromCenter || keepAspect || s.startRotation !== 0
-                        ? { x, y, w, h, lines: [] as SnapLine[] }
-                        : snapRect({ x, y, w, h }, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
+                    s.startAngle !== 0
+                        ? { x, y, w: s.startObjW, h: s.startObjH, lines: [] as SnapLine[] }
+                        : snapRect(
+                              { x, y, w: s.startObjW, h: s.startObjH },
+                              snapsRef.current.vSnaps,
+                              snapsRef.current.hSnaps,
+                              'move',
+                          );
 
-                // Mousemove fires ~60Hz; bail out when the snapped rect is identical to skip downstream re-renders.
+                // Mousemove fires ~60Hz; bail when the snapped position is identical to skip re-renders.
                 const prev = lastSnappedRef.current;
-                if (
-                    prev &&
-                    prev.x === snapped.x &&
-                    prev.y === snapped.y &&
-                    prev.w === snapped.w &&
-                    prev.h === snapped.h
-                ) {
-                    return;
-                }
-                lastSnappedRef.current = { x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h };
+                if (prev && prev.x === snapped.x && prev.y === snapped.y) return;
+                lastSnappedRef.current = { x: snapped.x, y: snapped.y };
                 setActiveSnapLines(snapped.lines);
-                setDragPreviews([{ objId: s.objId, x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h }]);
+                setDragPreviews([{ objId: s.objId, x: snapped.x, y: snapped.y }]);
             };
 
             const handleMouseMove = (me: MouseEvent) => {
                 cursor.clientX = me.clientX;
                 cursor.clientY = me.clientY;
                 cursor.altKey = me.altKey;
-                cursor.shiftKey = me.shiftKey;
                 update();
             };
 
             const handleKey = (ke: KeyboardEvent) => {
-                if (ke.key !== 'Alt' && ke.key !== 'Shift') return;
+                if (ke.key !== 'Alt') return;
                 cursor.altKey = ke.altKey;
-                cursor.shiftKey = ke.shiftKey;
-                update();
             };
 
             const endDrag = () => {
                 const s = stateRef.current;
-                if (s.objId && s.mode === 'rotate' && lastRotationRef.current !== null) {
-                    onUpdate(s.objId, { rotation: normalizeAngle(lastRotationRef.current) });
-                } else if (s.objId && lastSnappedRef.current) {
-                    if (s.mode === 'move' && cursor.altKey && onDuplicate) {
-                        onDuplicate([{ id: s.objId, x: lastSnappedRef.current.x, y: lastSnappedRef.current.y }]);
+                if (s.objId && lastSnappedRef.current) {
+                    const { x, y } = lastSnappedRef.current;
+                    if (cursor.altKey && onDuplicate) {
+                        onDuplicate([{ id: s.objId, x, y }]);
                     } else {
-                        onUpdate(s.objId, lastSnappedRef.current);
+                        // Move writes ONLY x/y — never w/h/angle — so a concurrent peer resize survives.
+                        onUpdate(s.objId, { x, y });
                     }
                 }
                 cleanup();
@@ -258,19 +159,18 @@ export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], h
             groupStateRef.current = {
                 startX: e.clientX,
                 startY: e.clientY,
-                objects: selectedObjects.map((o) => ({ id: o.id, x: o.x, y: o.y, w: o.w, h: o.h })),
+                objects: selectedObjects.map((o) => ({ id: o.id, x: o.x, y: o.y, w: o.width, h: o.height })),
                 bounds,
             };
             stateRef.current = {
                 objId: null,
-                mode: null,
                 startX: 0,
                 startY: 0,
                 startObjX: 0,
                 startObjY: 0,
                 startObjW: 0,
                 startObjH: 0,
-                startRotation: 0,
+                startAngle: 0,
             };
 
             const cursor = { altKey: e.altKey };
@@ -297,15 +197,7 @@ export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], h
                 if (prev && prev.dx === snapDx && prev.dy === snapDy) return;
                 lastGroupDeltaRef.current = { dx: snapDx, dy: snapDy };
                 setActiveSnapLines(snapped.lines);
-                setDragPreviews(
-                    g.objects.map((o) => ({
-                        objId: o.id,
-                        x: o.x + snapDx,
-                        y: o.y + snapDy,
-                        w: o.w,
-                        h: o.h,
-                    })),
-                );
+                setDragPreviews(g.objects.map((o) => ({ objId: o.id, x: o.x + snapDx, y: o.y + snapDy })));
             };
 
             const handleMouseUp = () => {
@@ -343,19 +235,16 @@ export const useObjectDrag = ({ onUpdate, onDuplicate, canvasRef, vSnaps = [], h
         setDragPreviews([]);
         lastSnappedRef.current = null;
         lastGroupDeltaRef.current = null;
-        lastRotationRef.current = null;
-        rotateRef.current = null;
         groupStateRef.current = null;
         stateRef.current = {
             objId: null,
-            mode: null,
             startX: 0,
             startY: 0,
             startObjX: 0,
             startObjY: 0,
             startObjW: 0,
             startObjH: 0,
-            startRotation: 0,
+            startAngle: 0,
         };
     }, []);
 

@@ -38,7 +38,8 @@ export function computeSnapLines(
 
     for (const obj of objects) {
         if (excludeIds.has(obj.id)) continue;
-        const e = getEdges(obj);
+        // getEdges works on the app-private w/h Rect scratch type; map the canonical object in.
+        const e = getEdges({ x: obj.x, y: obj.y, w: obj.width, h: obj.height });
         vSnaps.push(e.left, e.right, e.cx);
         hSnaps.push(e.top, e.bottom, e.cy);
     }
@@ -101,10 +102,13 @@ export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: s
             }
         }
     } else {
-        const isRight = mode.includes('e');
-        const isLeft = mode.includes('w');
-        const isBottom = mode.includes('s');
-        const isTop = mode.includes('n');
+        // Strip the 'resize-' prefix first — 'resize' itself contains 'e' and 's', poisoning the
+        // substring checks (matches applyResize's guard).
+        const dir = mode.startsWith('resize-') ? mode.slice('resize-'.length) : mode;
+        const isRight = dir.includes('e');
+        const isLeft = dir.includes('w');
+        const isBottom = dir.includes('s');
+        const isTop = dir.includes('n');
 
         if (isRight) {
             const right = x + w;

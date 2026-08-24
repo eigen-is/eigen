@@ -2,15 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { boundingBox, computeArrange } from './arrange';
 import type { SlideObject } from './types';
 
-function obj(id: string, x: number, y: number, w: number, h: number): SlideObject {
+function obj(id: string, x: number, y: number, width: number, height: number): SlideObject {
     return {
         id,
         slideId: 's1',
         x,
         y,
-        w,
-        h,
-        rotation: 0,
+        width,
+        height,
+        angle: 0,
         borderColor: '',
         borderWidth: 0,
         borderRadius: 0,
@@ -94,20 +94,20 @@ describe('computeArrange - align', () => {
 });
 
 describe('computeArrange - match size', () => {
-    test('match-width → every w = max width, x/y untouched', () => {
+    test('match-width → every width = max width, x/y untouched', () => {
         const objs = [obj('a', 0, 0, 100, 10), obj('b', 0, 0, 250, 10), obj('c', 0, 0, 80, 10)];
         expect(computeArrange(objs, 'match-width')).toEqual([
-            { id: 'a', w: 250 },
-            { id: 'b', w: 250 },
-            { id: 'c', w: 250 },
+            { id: 'a', width: 250 },
+            { id: 'b', width: 250 },
+            { id: 'c', width: 250 },
         ]);
     });
 
-    test('match-height → every h = max height', () => {
+    test('match-height → every height = max height', () => {
         const objs = [obj('a', 0, 0, 10, 40), obj('b', 0, 0, 10, 90)];
         expect(computeArrange(objs, 'match-height')).toEqual([
-            { id: 'a', h: 90 },
-            { id: 'b', h: 90 },
+            { id: 'a', height: 90 },
+            { id: 'b', height: 90 },
         ]);
     });
 });

@@ -1,5 +1,6 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
+import { yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -7,52 +8,6 @@ import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
 import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
-
-const OBJECT_FIELDS = [
-    'id',
-    'slideId',
-    'type',
-    'x',
-    'y',
-    'w',
-    'h',
-    'rotation',
-    'borderColor',
-    'borderWidth',
-    'borderRadius',
-    'text',
-    'fontFamily',
-    'fontSize',
-    'fontWeight',
-    'fontStyle',
-    'textDecoration',
-    'textAlign',
-    'verticalAlign',
-    'color',
-    'letterSpacing',
-    'lineHeight',
-    'highlightColor',
-    'background',
-    'mediaName',
-    'objectFit',
-    'commentCardIds',
-] as const;
-
-function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
-    const obj: Record<string, unknown> = {};
-    for (const field of OBJECT_FIELDS) {
-        const val = yMap.get(field);
-        if (val !== undefined) obj[field] = val;
-    }
-    // Ensure commentCardIds is always a string array (may be stored as Y.Array or plain array)
-    const raw = obj.commentCardIds;
-    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') {
-        obj.commentCardIds = (raw as Y.Array<string>).toArray();
-    } else if (!Array.isArray(raw)) {
-        obj.commentCardIds = [];
-    }
-    return obj;
-}
 
 export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const [deck, setDeck] = useState<DeckData>({ slides: {}, objects: {}, slideOrder: [] });
@@ -84,7 +39,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             objYMap.set('fontSize', 64);
             objYMap.set('color', '#ffffff');
             objYMap.set('y', 378);
-            objYMap.set('h', 324);
+            objYMap.set('height', 324);
             objectsMap.set(objId, objYMap);
 
             const slideYMap = new Y.Map();
@@ -136,8 +91,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             }
             for (const [objId, objMapValue] of objectsMap) {
                 const objMap = objMapValue as Y.Map<unknown>;
-                const obj = yMapToObject(objMap) as SlideObject;
-                newState.objects[objId] = obj;
+                newState.objects[objId] = yMapToObject(objMap);
             }
             setDeck(newState);
         };
