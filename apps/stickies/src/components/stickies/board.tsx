@@ -137,6 +137,7 @@ export function StickiesBoard({
         board,
         cards,
         yjsDoc,
+        undoManager,
         onRecordEvent: recordHistory.mutate,
     });
 
@@ -438,6 +439,7 @@ export function StickiesBoard({
                                             columnTitle={board.columns[editColumnId]?.title || ''}
                                             cardCount={board.columns[editColumnId]?.taskIds.length || 0}
                                             yjsDoc={yjsDoc}
+                                            undoManager={undoManager}
                                         />
                                     )}
 

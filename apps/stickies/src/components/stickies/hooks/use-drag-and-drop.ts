@@ -16,6 +16,8 @@ type UseDragAndDropProps = {
     board: BoardData;
     cards: Record<string, CommentCard>;
     yjsDoc: Y.Doc | null;
+    // Seals the drag-end commit as its own undo step (U6e).
+    undoManager: Y.UndoManager | null;
     // cardId required: the write contract (POST /history typebox), not the optional read shape.
     onRecordEvent?: (event: {
         eventType: 'sticky-moved';
@@ -23,7 +25,7 @@ type UseDragAndDropProps = {
     }) => void;
 };
 
-export const useDragAndDrop = ({ board, cards, yjsDoc, onRecordEvent }: UseDragAndDropProps) => {
+export const useDragAndDrop = ({ board, cards, yjsDoc, undoManager, onRecordEvent }: UseDragAndDropProps) => {
     const [dragState, setDragState] = useState<DragState>({
         activeId: null,
         activeType: null,
@@ -59,6 +61,7 @@ export const useDragAndDrop = ({ board, cards, yjsDoc, onRecordEvent }: UseDragA
         const columnsMap = yjsDoc.getMap('columns');
         const columnOrderArray = yjsDoc.getArray('columnOrder');
 
+        undoManager?.stopCapturing();
         const movedColumns = yjsDoc.transact(() => {
             let moved: { oldColumn: string; newColumn: string } | null = null;
             if (dragState.activeType === 'column') {
@@ -107,6 +110,7 @@ export const useDragAndDrop = ({ board, cards, yjsDoc, onRecordEvent }: UseDragA
             normalizeBoard(yjsDoc);
             return moved;
         });
+        undoManager?.stopCapturing();
         if (movedColumns) {
             onRecordEvent?.({
                 eventType: 'sticky-moved',

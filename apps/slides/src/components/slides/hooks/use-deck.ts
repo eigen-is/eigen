@@ -4,7 +4,7 @@ import { yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { ZOp } from '@workspace/ui/components/properties-panel';
 import { nanoid } from 'nanoid';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
 import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
@@ -125,6 +125,14 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         },
     });
 
+    // Seal discrete ops (delete/duplicate/arrange/z-order) as their own undo step — a stopCapturing()
+    // bracket around each transact stops Y.UndoManager from merging it into the previous step within
+    // its 500ms captureTimeout (vector's discipline, adopted in U6e). Held in a ref so the `[]`-deps
+    // op callbacks read the live manager without re-creating. Nudges/text typing stay UNSEALED so they
+    // coalesce.
+    const undoManagerRef = useRef(undoManager);
+    undoManagerRef.current = undoManager;
+
     useEffect(() => {
         if (deck.slideOrder.length > 0) {
             if (!activeSlideId || !deck.slideOrder.includes(activeSlideId)) {
@@ -156,6 +164,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         (slideId: string) => {
             const doc = docRef.current;
             if (!doc) return;
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const slidesMap = doc.getMap('slides');
                 const objectsMap = doc.getMap('objects');
@@ -172,6 +181,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 if (idx !== -1) slideOrderArray.delete(idx, 1);
                 slidesMap.delete(slideId);
             });
+            undoManagerRef.current?.stopCapturing();
             if (activeSlideId === slideId) {
                 const remaining = deck.slideOrder.filter((id) => id !== slideId);
                 setActiveSlideId(remaining[0] || null);
@@ -188,6 +198,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             if (!slide) return;
 
             const newSlideId = `slide-${nanoid(6)}`;
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const slidesMap = doc.getMap('slides');
                 const objectsMap = doc.getMap('objects');
@@ -221,6 +232,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 const idx = order.indexOf(slideId);
                 slideOrderArray.insert(idx + 1, [newSlideId]);
             });
+            undoManagerRef.current?.stopCapturing();
             setActiveSlideId(newSlideId);
         },
         [deck],
@@ -259,6 +271,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const doc = docRef.current;
             if (!doc) return [];
             const newIds: string[] = [];
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const objectsMap = doc.getMap('objects');
                 const slidesMap = doc.getMap('slides');
@@ -283,6 +296,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                     newIds.push(newObjId);
                 }
             });
+            undoManagerRef.current?.stopCapturing();
             return newIds;
         },
         [deck],
@@ -339,6 +353,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             if (!doc || objIds.length === 0) return;
             const first = deck.objects[objIds[0]];
             if (!first) return;
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const slidesMap = doc.getMap('slides');
                 const slideMap = slidesMap.get(first.slideId) as Y.Map<unknown> | undefined;
@@ -376,6 +391,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                     }
                 }
             });
+            undoManagerRef.current?.stopCapturing();
         },
         [deck.objects],
     );
@@ -408,6 +424,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const deleteObjects = useCallback((objIds: string[]) => {
         const doc = docRef.current;
         if (!doc) return;
+        undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
             const objectsMap = doc.getMap('objects');
             const slidesMap = doc.getMap('slides');
@@ -428,6 +445,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 objectsMap.delete(objId);
             }
         });
+        undoManagerRef.current?.stopCapturing();
     }, []);
 
     const deleteObject = useCallback(

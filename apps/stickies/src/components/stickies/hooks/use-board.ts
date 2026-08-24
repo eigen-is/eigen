@@ -162,9 +162,16 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         },
     });
 
+    // Seal discrete ops (column add, card delete) as their own undo step — a stopCapturing() bracket
+    // stops Y.UndoManager from merging into the previous step within its 500ms captureTimeout (vector's
+    // discipline, adopted in U6e). Held in a ref so the `[]`-deps callback reads the live manager.
+    const undoManagerRef = useRef(undoManager);
+    undoManagerRef.current = undoManager;
+
     const handleAddColumn = (title: string) => {
         if (!docRef.current) return;
         const doc = docRef.current;
+        undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
             const columnId = `column-${nanoid(10)}`;
             const columnsMap = doc.getMap('columns');
@@ -178,6 +185,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             columnsMap.set(columnId, newColumnMap);
             columnOrderArray.push([columnId]);
         });
+        undoManagerRef.current?.stopCapturing();
         setIsAddColumnDialogOpen(false);
     };
 
@@ -186,6 +194,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         const doc = docRef.current;
         // Walk columns + remove the tasks entry in one transact: single undo step, no orphan
         // column refs. The `.eigenchat` + comments.db row persist for undo / version revert.
+        undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
             const columnsMap = doc.getMap('columns');
             for (const [, columnMapValue] of columnsMap) {
@@ -200,6 +209,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             }
             doc.getMap('tasks').delete(cardId);
         });
+        undoManagerRef.current?.stopCapturing();
     }, []);
 
     return {

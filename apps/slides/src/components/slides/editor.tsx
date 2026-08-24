@@ -468,6 +468,8 @@ function SlideEditorInner({
             const objects = selectedObjectIds.map((id) => deck.objects[id]).filter(Boolean);
             const patches = computeArrange(objects, op);
             if (patches.length === 0) return;
+            // Arrange is a discrete op — seal it as its own undo step (U6e).
+            undoManager?.stopCapturing();
             yjsDoc.transact(() => {
                 const objectsMap = yjsDoc.getMap('objects');
                 for (const patch of patches) {
@@ -479,8 +481,9 @@ function SlideEditorInner({
                     if (patch.height !== undefined) objMap.set('height', patch.height);
                 }
             });
+            undoManager?.stopCapturing();
         },
-        [selectedObjectIds, deck.objects, yjsDoc],
+        [selectedObjectIds, deck.objects, yjsDoc, undoManager],
     );
     // Z-order over the current selection — panel Arrange buttons + ⌘[/⌘] brackets share one path.
     const zOrderSelected = useCallback(
