@@ -200,6 +200,7 @@ export function VectorEditor({
                                         addElement={doc.addElement}
                                         addElements={doc.addElements}
                                         updateElement={doc.updateElement}
+                                        updateElementUntracked={doc.updateElementUntracked}
                                         updateElements={doc.updateElements}
                                         deleteElements={doc.deleteElements}
                                         duplicateElements={doc.duplicateElements}
