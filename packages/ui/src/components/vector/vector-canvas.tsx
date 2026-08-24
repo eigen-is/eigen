@@ -9,6 +9,7 @@ import {
     DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elementToSvg,
+    fitImageSize,
     getElementsBounds,
     isTransparent,
     type MediaResolver,
@@ -48,11 +49,9 @@ const MIN_ELEMENT_SIZE = 1;
 // fontSize clamp for resize-scaling of text (a resize maps width ratio → fontSize).
 const MIN_FONT_SIZE = 4;
 const MAX_FONT_SIZE = 400;
-// A dropped/pasted image fits within this fraction of the visible viewport (never upscaled).
-const IMAGE_VIEWPORT_FIT = 0.8;
-// Fallback box for an image whose intrinsic size can't be read (e.g. an SVG with no intrinsic
-// dimensions) — placed at this size, still run through the 80% viewport cap below.
-const DEFAULT_IMAGE_SIZE = { w: 400, h: 300 };
+// Image drop/paste SIZING (natural-size-that-fits, 80% viewport cap, never upscale, unreadable →
+// default box) is the shared `fitImageSize` helper — vector is its reference behavior. Only the
+// CASCADE offset stays vector-side.
 // Each subsequent image in a multi-file drop staggers by this many scene units so a stack of
 // natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
 const IMAGE_CASCADE_OFFSET = 20;
@@ -513,13 +512,13 @@ export function VectorCanvas({
             const measured = await Promise.all(
                 images.map(async (file) => {
                     // createImageBitmap rejects on some valid files (e.g. an SVG with no intrinsic
-                    // size) — fall back to a default box rather than silently dropping the file; the
-                    // 80% viewport cap below still applies.
+                    // size) — fall back to a default box rather than silently dropping the file
+                    // (fitImageSize maps null → the default box, still viewport-capped).
                     const bmp = await createImageBitmap(file).catch(() => null);
-                    if (!bmp) return { file, size: DEFAULT_IMAGE_SIZE };
-                    const size = { w: bmp.width, h: bmp.height };
+                    if (!bmp) return { file, intrinsic: null };
+                    const intrinsic = { width: bmp.width, height: bmp.height };
                     bmp.close();
-                    return { file, size };
+                    return { file, intrinsic };
                 }),
             );
 
@@ -529,11 +528,9 @@ export function VectorCanvas({
 
             undoManager?.stopCapturing();
             const pending: { id: string; promise: Promise<DrivePath | null> }[] = [];
-            for (const [i, { file, size }] of measured.entries()) {
-                // Fit within 80% of the visible viewport, uniform scale, never upscale.
-                const scale = Math.min(1, (IMAGE_VIEWPORT_FIT * viewW) / size.w, (IMAGE_VIEWPORT_FIT * viewH) / size.h);
-                const w = size.w * scale;
-                const h = size.h * scale;
+            for (const [i, { file, intrinsic }] of measured.entries()) {
+                // Natural size that fits within 80% of the visible viewport, uniform, never upscale.
+                const { width: w, height: h } = fitImageSize(intrinsic, { width: viewW, height: viewH });
                 const cx = anchor.x + i * IMAGE_CASCADE_OFFSET;
                 const cy = anchor.y + i * IMAGE_CASCADE_OFFSET;
                 const { pendingName, promise } = startUpload(file);

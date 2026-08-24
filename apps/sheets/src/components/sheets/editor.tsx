@@ -9,6 +9,7 @@ import {
 } from '@workspace/lib/drive';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
 import { DocumentShareCluster, FileDropOverlay, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
@@ -64,6 +65,9 @@ function SheetEditorInner({
     initialSearchTerm,
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
+    // The workbook-pane wrapper — its box is the "visible pane" viewport for image-fit sizing. Sheets
+    // has no zoom, so container px map 1:1 to the sheet-pixel units insertImage stores.
+    const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     // The active floating image (surfaced from the workbook via onActiveImageChange) drives the
     // right-side properties panel. Its aspect-lock — images default CHECKED (D8b) — feeds BOTH the
@@ -136,6 +140,14 @@ function SheetEditorInner({
         setAddOpen(true);
     }, []);
 
+    // Size a placed image to fit the visible pane via the shared helper — natural size where it
+    // fits within 80% of the pane, never upscaled; unreadable intrinsic → the shared default box.
+    // Replaces insertImage's old halve-natural-dims quirk (killed in state/modules/image.ts).
+    const fitToPane = useCallback((intrinsic: ImageSize | null): ImageSize => {
+        const rect = paneRef.current?.getBoundingClientRect();
+        return fitImageSize(intrinsic, { width: rect?.width ?? 0, height: rect?.height ?? 0 });
+    }, []);
+
     const handleImageFile = useCallback(
         async (file: File) => {
             if (!mediaFolderId || !file.type.startsWith('image/')) return;
@@ -145,11 +157,13 @@ function SheetEditorInner({
             const objectUrl = URL.createObjectURL(file);
             const img = new window.Image();
             img.onload = () => {
-                workbookRef.current?.insertImage(pendingName, img.naturalWidth, img.naturalHeight);
+                const { width, height } = fitToPane({ width: img.naturalWidth, height: img.naturalHeight });
+                workbookRef.current?.insertImage(pendingName, width, height);
                 URL.revokeObjectURL(objectUrl);
             };
             img.onerror = () => {
-                workbookRef.current?.insertImage(pendingName, 200, 200);
+                const { width, height } = fitToPane(null);
+                workbookRef.current?.insertImage(pendingName, width, height);
                 URL.revokeObjectURL(objectUrl);
             };
             img.src = objectUrl;
@@ -158,7 +172,7 @@ function SheetEditorInner({
             if (result) workbookRef.current?.replaceImageMediaName(pendingName, result.name);
             else workbookRef.current?.removeImageByMediaName(pendingName);
         },
-        [mediaFolderId, startUpload],
+        [mediaFolderId, startUpload, fitToPane],
     );
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
@@ -203,15 +217,22 @@ function SheetEditorInner({
             const mediaName = result[0].name;
             const previewUrl = resolveMediaUrl(mediaName);
             if (!previewUrl) {
-                workbookRef.current?.insertImage(mediaName, 200, 200);
+                const { width, height } = fitToPane(null);
+                workbookRef.current?.insertImage(mediaName, width, height);
                 return;
             }
             const img = new window.Image();
-            img.onload = () => workbookRef.current?.insertImage(mediaName, img.naturalWidth, img.naturalHeight);
-            img.onerror = () => workbookRef.current?.insertImage(mediaName, 200, 200);
+            img.onload = () => {
+                const { width, height } = fitToPane({ width: img.naturalWidth, height: img.naturalHeight });
+                workbookRef.current?.insertImage(mediaName, width, height);
+            };
+            img.onerror = () => {
+                const { width, height } = fitToPane(null);
+                workbookRef.current?.insertImage(mediaName, width, height);
+            };
             img.src = previewUrl;
         },
-        [mediaFolderId, copyToMediaFolder, resolveMediaUrl],
+        [mediaFolderId, copyToMediaFolder, resolveMediaUrl, fitToPane],
     );
 
     const handleSaveNew = useCallback(
@@ -302,7 +323,7 @@ function SheetEditorInner({
                         onUndo={() => workbookRef.current?.undo()}
                         onRedo={() => workbookRef.current?.redo()}
                     >
-                        <div className="relative h-full w-full" {...imageDropProps}>
+                        <div ref={paneRef} className="relative h-full w-full" {...imageDropProps}>
                             <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
                             <Workbook
                                 key={snapshotVersion}

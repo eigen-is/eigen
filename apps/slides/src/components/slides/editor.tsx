@@ -23,6 +23,7 @@ import { OBJECT_FIELDS } from '@workspace/lib/slides';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -45,7 +46,44 @@ import { ReadOnlySlideObject } from './slide-object';
 import { SlidePanel } from './slide-panel';
 import { SlideBackgroundPanel, SlidePropertiesPanel } from './slide-properties-panel';
 import { Toolbar } from './toolbar';
-import { DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, type SlideObject } from './types';
+import {
+    DEFAULT_IMAGE_OBJECT,
+    DEFAULT_TEXT_OBJECT,
+    type ImageObject,
+    SLIDE_BASE_HEIGHT,
+    SLIDE_BASE_WIDTH,
+    type SlideObject,
+} from './types';
+
+// Read an image file's intrinsic px (vector's createImageBitmap idiom); null when it can't be
+// decoded (e.g. an SVG with no intrinsic size) so the shared default box takes over.
+async function readImageIntrinsic(file: File): Promise<ImageSize | null> {
+    const bmp = await createImageBitmap(file).catch(() => null);
+    if (!bmp) return null;
+    const size = { width: bmp.width, height: bmp.height };
+    bmp.close();
+    return size;
+}
+
+// A Drive-picked image is already uploaded — read its intrinsic px off the resolved media URL.
+function readImageIntrinsicFromUrl(url: string): Promise<ImageSize | null> {
+    return new Promise((resolve) => {
+        const img = new window.Image();
+        // A dimensionless SVG reports naturalWidth 0 — null falls back to the fitted default box.
+        img.onload = () => resolve(img.naturalWidth ? { width: img.naturalWidth, height: img.naturalHeight } : null);
+        img.onerror = () => resolve(null);
+        img.src = url;
+    });
+}
+
+// Size a placed image via the shared fit (intrinsic px = slide units 1:1 per AUDIT-f; natural size
+// where it fits within 80% of the 1920×1080 slide, never upscaled; unreadable → the shared default
+// box), then CENTER it. DEFAULT_IMAGE_OBJECT's fixed x/y centered its fixed box — this keeps that
+// placement rule and changes only the size.
+function centeredImageProps(intrinsic: ImageSize | null): Pick<ImageObject, 'x' | 'y' | 'width' | 'height'> {
+    const { width, height } = fitImageSize(intrinsic, { width: SLIDE_BASE_WIDTH, height: SLIDE_BASE_HEIGHT });
+    return { x: (SLIDE_BASE_WIDTH - width) / 2, y: (SLIDE_BASE_HEIGHT - height) / 2, width, height };
+}
 
 // Object fields a pasted clipboard item may restore from its (untyped) meta. Derived from the
 // canonical registry minus identity/position/content — x/y anchor separately, text/mediaName come
@@ -449,8 +487,10 @@ function SlideEditorInner({
         async (file: File) => {
             if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
             const { pendingName, promise } = startUpload(file);
+            const intrinsic = await readImageIntrinsic(file);
             const objId = addObject(activeSlideId, {
                 ...DEFAULT_IMAGE_OBJECT,
+                ...centeredImageProps(intrinsic),
                 mediaName: pendingName,
             } as Omit<SlideObject, 'id' | 'slideId'>);
             if (!objId) return;
@@ -475,13 +515,16 @@ function SlideEditorInner({
             const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId }).catch(() => null);
             if (!results) return;
             for (const result of results) {
+                const url = resolveMediaUrl(result.name);
+                const intrinsic = url ? await readImageIntrinsicFromUrl(url) : null;
                 addObject(activeSlideId, {
                     ...DEFAULT_IMAGE_OBJECT,
+                    ...centeredImageProps(intrinsic),
                     mediaName: result.name,
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         },
-        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject],
+        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject, resolveMediaUrl],
     );
 
     useEffect(() => {

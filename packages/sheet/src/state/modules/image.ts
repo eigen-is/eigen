@@ -67,13 +67,15 @@ export function insertImage(ctx: Context, mediaName: string, width: number, heig
             [left] = margeset.column;
         }
     }
+    // Stored as given — the caller has already sized the image (OS-file/upload inserts run the
+    // shared fitImageSize; typed clipboard sizes are authoritative). No sizing quirk lives here.
     const img = {
         id: generateImageId(),
         mediaName,
         x: left,
         y: top,
-        width: width * 0.5,
-        height: height * 0.5,
+        width,
+        height,
         angle: 0,
     };
     ctx.insertedImgs = (ctx.insertedImgs || []).concat(img);
