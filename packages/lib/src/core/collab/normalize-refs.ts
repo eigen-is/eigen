@@ -10,17 +10,46 @@ export const NORMALIZE_ORIGIN = Symbol('normalize-refs');
 // Repair a parent→child reference structure held in a Yjs doc as: a `parentMap` of Y.Maps, each with
 // a `childRefField` Y.Array<string> of child ids, plus a `childMap` of the children themselves. Two
 // corruptions a concurrent merge can introduce:
-//   1. a child referenced by MORE THAN ONE parent → keep the LAST parent's copy, delete the earlier;
-//   2. a child referenced by NO parent (an orphan) → append it to the FIRST parent's ref array.
-// Slides (slides / objects / objectIds) and stickies (columns / tasks / taskIds) share this exactly;
-// slides' fontFamily backfill is a separate pass and stays slides-side. All writes run in ONE
+//   1. a child referenced by MORE THAN ONE parent → keep the copy in the LAST parent in document order;
+//   2. a child referenced by NO parent (an orphan) → append it to the FIRST parent in document order.
+// "Document order" is the host's `orderArrayName` Y.Array (slides' slideOrder, stickies' columnOrder),
+// which converges across peers where Y.Map key order does not. Parents present in the map but absent
+// from that array are "strays" — themselves a corruption — and rank BEFORE every ordered parent, so a
+// stray only wins the dedupe when it is the sole holder and is never chosen as a re-home target (both
+// would park a child on a parent the UI never renders). With no ordered parents at all (order array
+// empty/unseeded) we fall back to map-key order. Slides (slides / objects / objectIds / slideOrder)
+// and stickies (columns / tasks / taskIds / columnOrder) share this exactly; slides' fontFamily
+// backfill and slideId reconciliation are separate passes and stay slides-side. All writes run in ONE
 // transaction under NORMALIZE_ORIGIN. Idempotent — a well-formed doc writes nothing, so it is safe to
 // run once on sync and on every remote-origin merge.
-export function normalizeParentChildRefs(doc: Y.Doc, parentMap: string, childMap: string, childRefField: string): void {
+export function normalizeParentChildRefs(
+    doc: Y.Doc,
+    parentMap: string,
+    childMap: string,
+    childRefField: string,
+    orderArrayName: string,
+): void {
     const parents = doc.getMap(parentMap);
     const children = doc.getMap(childMap);
     const parentIds = Array.from(parents.keys());
     const childIds = Array.from(children.keys());
+
+    // Rank parents by document order. Ordered parents are the order array's entries that actually
+    // exist, de-duplicated keeping first occurrence (a merged order array can hold duplicates); strays
+    // rank ahead of them, in map-key order. Higher rank = later in the sequence = dedupe survivor.
+    const parentSet = new Set(parentIds);
+    const orderedParents: string[] = [];
+    const seen = new Set<string>();
+    for (const id of doc.getArray<string>(orderArrayName).toArray()) {
+        if (parentSet.has(id) && !seen.has(id)) {
+            seen.add(id);
+            orderedParents.push(id);
+        }
+    }
+    const strays = parentIds.filter((id) => !seen.has(id));
+    const sequence = [...strays, ...orderedParents];
+    const rank: Record<string, number> = {};
+    for (let i = 0; i < sequence.length; i++) rank[sequence[i]] = i;
 
     const childToParents: Record<string, string[]> = {};
     for (const parentId of parentIds) {
@@ -36,9 +65,12 @@ export function normalizeParentChildRefs(doc: Y.Doc, parentMap: string, childMap
     }
 
     doc.transact(() => {
-        // Dedupe: keep the LAST parent's copy, delete from every earlier parent.
+        // Dedupe: keep the highest-ranked holder (last in document order), delete from every lower one.
+        // A parent listing the same child twice appears twice in `owners`, so one of its entries is a
+        // lower "holder" and gets deleted — the re-read after each delete is what collapses it.
         for (const [childId, owners] of Object.entries(childToParents)) {
             if (owners.length <= 1) continue;
+            owners.sort((a, b) => rank[a] - rank[b]);
             for (let i = 0; i < owners.length - 1; i++) {
                 const parentValue = parents.get(owners[i]);
                 if (!parentValue) continue;
@@ -49,16 +81,18 @@ export function normalizeParentChildRefs(doc: Y.Doc, parentMap: string, childMap
             }
         }
 
-        // Orphan re-home: a child in no parent's refs → append to the FIRST parent's ref array.
-        if (parentIds.length > 0) {
-            const firstParentValue = parents.get(parentIds[0]);
-            if (firstParentValue) {
-                const firstParent = firstParentValue as Y.Map<unknown>;
-                const firstRefs = firstParent.get(childRefField) as Y.Array<string> | undefined;
-                if (!firstRefs) return; // tolerate here too — a throw would escape into the observer
+        // Orphan re-home: a child in no parent's refs → append to the first ordered parent, skipping
+        // strays. No ordered parents → fall back to map-key order (sequence[0]).
+        const homeParentId = orderedParents.length > 0 ? orderedParents[0] : sequence[0];
+        if (homeParentId !== undefined) {
+            const homeValue = parents.get(homeParentId);
+            if (homeValue) {
+                const homeParent = homeValue as Y.Map<unknown>;
+                const homeRefs = homeParent.get(childRefField) as Y.Array<string> | undefined;
+                if (!homeRefs) return; // tolerate here too — a throw would escape into the observer
                 for (const childId of childIds) {
                     if (!childToParents[childId] || childToParents[childId].length === 0) {
-                        firstRefs.push([childId]);
+                        homeRefs.push([childId]);
                     }
                 }
             }

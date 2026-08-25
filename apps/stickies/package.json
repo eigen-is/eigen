@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
+    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
