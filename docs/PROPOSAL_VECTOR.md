@@ -14,7 +14,7 @@
 
 - **Embedding or forking Excalidraw.** Decided below (§ Decision). We study and vendor small pieces; we do not take the package or the repo.
 - **Frames, embeddable iframes, and mermaid-to-diagram import.** Excalidraw ships these (`element/src/types.ts:206` — `frame`, `magicframe`, `iframe`, `embeddable`); they are out of scope for v1. Mermaid pulls in the full CodeMirror 6 stack in Excalidraw's own build — not a dependency we take on.
-- **Re-rendering slides on the vector engine.** The old proposal's "Phase 7" astronautics. Slides works on DOM rendering; users want shapes *in* slides, delivered by embedding drawings, not by rewriting a working renderer. Marked **maybe-never**, as before.
+- **Re-rendering slides on the vector engine.** The old proposal's "Phase 7" astronautics. Slides works on DOM rendering; users want shapes *in* slides, delivered by embedding drawings, not by rewriting a working renderer. Marked **maybe-never**, as before. Sharing only the *renderer* is a different and much cheaper proposition — see § Native shape objects in slides.
 - **A new top-level workspace package.** The engine is a `packages/lib` subpath and the editor is a `packages/ui` component. `packages/sheet` is a fork special-case, not a precedent (AGENTS.md); the lib+ui split is the norm and lets docs/slides/sheets consume the editor with no new workspace dependency.
 - **Point-level collaborative editing of freehand strokes.** Strokes commit once; their points are a serialized payload, not per-point CRDT state (§ Yjs data model).
 
@@ -181,6 +181,21 @@ Creation stays generic via `Drive.create(..., 'vector', user)` and the existing 
 **Reuse rule:** inserting an *existing standalone* `.eigenvector` into a host **copies it into the host's `drawings/` folder**, keeping the one-container-one-ACL invariant intact. A host never points at a drawing it does not own a copy of.
 
 **Rejected alternative — an inline "drawing block" in the host's own Y.Doc.** Storing element data directly in the host document's Yjs was considered and rejected: it produces no standalone file, allows no reuse, bloats the host doc's update log with every stroke, and mixes two element models in one doc. The sub-resource model gives a real file, free reuse via copy, isolated update logs, and ACL/copy semantics that already work.
+
+### Native shape objects in slides — share the renderer, not the model
+
+**Idea, not scheduled.** Distinct from both the sub-resource embed above and the inline-block alternative it rejects: rather than putting a *whole drawing* into a slide, give slides its own `rectangle`/`diamond`/`ellipse` object types and paint them with vector's renderer. Each app keeps the text engine it is good at — slides its rich HTML prose, vector its measured SVG text — and they share one shape-and-image renderer. This is the cheap middle between the "re-render slides on the vector engine" non-goal and a full drawing embed, and it does not compete with either: a whole diagram you want to edit as a unit is still a `drawings/` sub-resource.
+
+It works because `elementToSvg` is already a per-element renderer and the live vector canvas already goes through it (`packages/ui/src/components/vector/vector-canvas.tsx:207` — `dangerouslySetInnerHTML={{ __html: elementToSvg(el, { resolveMedia }) }}`), so editor and export output are byte-identical by construction. Slides' `ReadOnlySlideObject` already switches on `obj.type` and already injects HTML for its text branch, so a shape branch sits directly beside it. `renderShape` emits only roughjs `<path>` inside a `<g transform>` — no `foreignObject`, no filters — which DOMPurify keeps under its default profile.
+
+The work: extend the `SlideObject` union; grow `OBJECT_FIELDS` by the shape scalars (`strokeColor`, `backgroundColor`, `fillStyle`, `strokeWidth`, `strokeStyle`, `roughness`, `seed`, `roundness` — all scalars, so no `Y.Array` normalization); a near-pass-through `SlideShapeObject → VectorShapeElement` adapter (the geometry names already match since U2a); a render branch in `slide-object.tsx` and `export/slides/render.ts`; reuse vector's existing shape controls in the properties panel. `seed` is load-bearing — it is what makes roughjs output deterministic across renders and peers, so the editor and the PDF agree.
+
+Two decisions to get right:
+
+- **Per-object `<svg>`, not one slide-wide SVG layer.** `elementToSvg` bakes `translate(x y) rotate(angle …)` into its `<g>`, but slides already positions each object with its own absolutely-positioned div (`getObjectPositionStyle`), so the adapter zeroes `x`/`y`/`angle` and lets the div keep doing that. A single 1920×1080 SVG layer per slide would preserve `elementToSvg` verbatim but force *all* shapes above or below *all* text, breaking the z-order interleaving slides gets from `objectIds` order.
+- **Roughjs strokes paint outside the element box.** Hand-drawn wobble plus `strokeWidth` overflows `0 0 w h` — which is why `sceneToSvg` carries `DEFAULT_PADDING = 10`. A per-object `viewBox="0 0 w h"` clips the stroke edges, so the wrapper needs padding plus `overflow: visible`, or the same shape looks subtly shaved next to its vector twin.
+
+**Verify first:** a WeasyPrint golden with roughjs paths across a few stroke widths and roughness values. PDF is where SVG support is least certain and the one place the fidelity claim could quietly fail.
 
 ### Server pipeline
 
