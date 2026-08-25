@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { supportFrontmatterSchema } from './content-types';
-import { parseContentFile } from './frontmatter';
+import { supportFrontmatterSchema } from '../../../../scripts/lib/content-types';
+import { parseContentFile } from '../../../../scripts/lib/frontmatter';
 
 describe('parseContentFile', () => {
     test('parses valid frontmatter and returns the body', () => {

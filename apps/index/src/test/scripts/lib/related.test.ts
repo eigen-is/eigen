@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { ArticleMeta } from './content-types';
-import { resolveRelated } from './related';
+import type { ArticleMeta } from '../../../../scripts/lib/content-types';
+import { resolveRelated } from '../../../../scripts/lib/related';
 
 function meta(slug: string, section: string, tags: string[], related: string[] = []): ArticleMeta {
-    return { slug, section, title: slug, description: '', tags, order: 100, toc: [], related };
+    return { slug, section, title: slug, description: '', tags, order: 100, toc: [], related, crossSections: [] };
 }
 
 describe('resolveRelated', () => {

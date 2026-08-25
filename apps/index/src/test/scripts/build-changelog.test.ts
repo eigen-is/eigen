@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { renderChangelog } from './build-changelog';
+import { renderChangelog } from '../../../scripts/build-changelog';
 
 describe('renderChangelog', () => {
     const sample = `# Changelog

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { renderMarkdown } from './render-markdown';
+import { renderMarkdown } from '../../../../scripts/lib/render-markdown';
 
 describe('renderMarkdown', () => {
     test('renders Markdown to HTML', () => {
