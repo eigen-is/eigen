@@ -24,7 +24,7 @@ export function EigenDocNewButton({ config, rootPath, condensed = false }: Eigen
             <DriveCreateEigenDoc
                 open={createOpen}
                 onOpenChange={setCreateOpen}
-                type={config.createType}
+                type={config.type}
                 defaultOwnerId={rootPath?.ownerId}
                 defaultFolderId={rootPath?.id}
                 defaultMountId={rootPath?.mountId}

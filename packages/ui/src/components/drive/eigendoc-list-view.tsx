@@ -96,7 +96,7 @@ export function EigenDocListView({
             capabilities={{
                 ...DRIVE_CAPABILITIES.listing,
                 canMove: allowMove,
-                createTypes: new Set([config.createType]),
+                createTypes: new Set([config.type]),
             }}
             title={config.allLabel}
             currentPath={rootPath}

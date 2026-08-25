@@ -9,7 +9,7 @@ import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
 import { DRIVE_CAPABILITIES } from './drive-capabilities';
 import { DriveLayout } from './drive-layout';
-import type { EigenDocAppConfig } from './eigendoc-config';
+import { type EigenDocAppConfig, eigenDocSharedTitle } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
 
 type EigenDocSharedViewProps = {
@@ -36,7 +36,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
         error: isFolderContentLoadingError,
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
-    const folderContents = unfilteredFolderContents.filter((path) => path.type === config.driveType);
+    const folderContents = unfilteredFolderContents.filter((path) => path.type === config.type);
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {
@@ -71,9 +71,9 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
                 ...DRIVE_CAPABILITIES.listing,
                 canDelete: to === 'by-me',
                 canRename: to === 'by-me',
-                createTypes: new Set([config.createType]),
+                createTypes: new Set([config.type]),
             }}
-            title={`${config.labelPlural} shared ${to === 'by-me' ? 'by' : 'with'} me`}
+            title={eigenDocSharedTitle(to === 'by-me' ? 'by' : 'with', config.labelPlural)}
             currentPath={rootPath}
             emptyState={
                 <EmptyState
