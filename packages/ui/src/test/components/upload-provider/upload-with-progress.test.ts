@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { uploadWithProgress } from './upload-with-progress';
+import { uploadWithProgress } from '../../../components/upload-provider/upload-with-progress';
 
 // The transport has a single outcome channel: the returned promise. A failure rejects exactly
 // once (no second onError callback), carrying the server's message so callers can show something

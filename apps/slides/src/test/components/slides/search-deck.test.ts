@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { buildSearchRegex } from '@workspace/lib/doc-search';
-import { searchDeck } from './search-deck';
-import { DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type DeckData } from './types';
+import { searchDeck } from '../../../components/slides/search-deck';
+import { DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type DeckData } from '../../../components/slides/types';
 
 const OPTS = { matchCase: false, wholeWord: false, regex: false };
 function re(q: string, opts = OPTS): RegExp {

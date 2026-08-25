@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import * as Y from 'yjs';
-import { normalizeDeck } from './normalize-deck';
+import { normalizeDeck } from '../../../components/slides/normalize-deck';
 
 // Build a slides doc the way use-deck does: a `slides` map of Y.Maps (each with an `objectIds`
 // Y.Array), an `objects` map of Y.Maps (each carrying a `slideId` back-reference), and a `slideOrder`

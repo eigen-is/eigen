@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import { buildSearchRegex } from '@workspace/lib/doc-search';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import { searchBoard } from './search-board';
-import type { BoardData } from './types';
+import { searchBoard } from '../../../components/stickies/search-board';
+import type { BoardData } from '../../../components/stickies/types';
 
 const OPTS = { matchCase: false, wholeWord: false, regex: false };
 function re(q: string): RegExp {
