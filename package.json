@@ -30,7 +30,7 @@
     "test:sheet": "bun --filter '@workspace/sheet' test",
     "primitives": "bun scripts/generate-shared-primitives.ts",
     "primitives:check": "bun scripts/generate-shared-primitives.ts --check",
-    "check": "bun run lint && bun run typecheck && bun scripts/check-home-imports.ts && bun run primitives:check && bun run test"
+    "check": "bun run lint && bun run typecheck && bun scripts/check-home-imports.ts && bun scripts/check-test-layout.ts && bun run primitives:check && bun run test"
   },
   "workspaces": [
     "packages/*",
