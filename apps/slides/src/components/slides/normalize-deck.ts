@@ -1,5 +1,4 @@
 import { NORMALIZE_ORIGIN, normalizeParentChildRefs } from '@workspace/lib/collab';
-import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import type * as Y from 'yjs';
 
 export function normalizeDeck(doc: Y.Doc) {
@@ -7,22 +6,12 @@ export function normalizeDeck(doc: Y.Doc) {
     // last in slideOrder) and re-home orphaned objects to the first slide in slideOrder.
     normalizeParentChildRefs(doc, 'slides', 'objects', 'objectIds', 'slideOrder');
 
-    // Slides-only passes, both untracked like the shared ref repair (NORMALIZE_ORIGIN escapes the
+    // Slides-only pass, untracked like the shared ref repair (NORMALIZE_ORIGIN escapes the
     // UndoManager) — a corruption fix is never a user undo step; nested in a remote transaction it rides
     // that origin, also untracked.
     const objectsMap = doc.getMap('objects');
     const slidesMap = doc.getMap('slides');
     doc.transact(() => {
-        // Backfill a default font on legacy text objects that stored none.
-        for (const objId of Array.from(objectsMap.keys())) {
-            const objValue = objectsMap.get(objId);
-            if (!objValue) continue;
-            const obj = objValue as Y.Map<unknown>;
-            if (obj.get('type') === 'text' && !obj.get('fontFamily')) {
-                obj.set('fontFamily', EIGEN_FONTS[0].name);
-            }
-        }
-
         // Reconcile each object's slideId back-reference to the slide that actually holds it. objectIds
         // is the source of truth; the shared repair may have re-homed or dedupe-moved an object without
         // touching its slideId, which drives duplicate/z-order writes and comment/search navigation.

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import * as Y from 'yjs';
 import { normalizeDeck } from '../../../components/slides/normalize-deck';
 
@@ -9,7 +8,7 @@ import { normalizeDeck } from '../../../components/slides/normalize-deck';
 function makeDeck(opts: {
     slideOrder: string[];
     slides: Record<string, string[]>;
-    objects: Record<string, { slideId: string; type?: string; fontFamily?: string }>;
+    objects: Record<string, { slideId: string }>;
 }): Y.Doc {
     const doc = new Y.Doc();
     doc.transact(() => {
@@ -27,8 +26,6 @@ function makeDeck(opts: {
             const m = new Y.Map();
             m.set('id', objId);
             m.set('slideId', o.slideId);
-            if (o.type) m.set('type', o.type);
-            if (o.fontFamily) m.set('fontFamily', o.fontFamily);
             objectsMap.set(objId, m);
         }
         doc.getArray<string>('slideOrder').push(opts.slideOrder);
@@ -75,15 +72,5 @@ describe('normalizeDeck', () => {
         const before = Y.encodeStateAsUpdate(doc).length;
         normalizeDeck(doc);
         expect(Y.encodeStateAsUpdate(doc).length).toBe(before);
-    });
-
-    it('still backfills a default fontFamily on legacy text objects (regression guard)', () => {
-        const doc = makeDeck({
-            slideOrder: ['s1'],
-            slides: { s1: ['o1'] },
-            objects: { o1: { slideId: 's1', type: 'text' } }, // no fontFamily
-        });
-        normalizeDeck(doc);
-        expect((doc.getMap('objects').get('o1') as Y.Map<unknown>).get('fontFamily')).toBe(EIGEN_FONTS[0].name);
     });
 });
