@@ -13,7 +13,9 @@ const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
 
 // Geometry carried on every placeable clipboard item, in the source app's document-space units.
-export type ClipboardBox = { width?: number; height?: number; angle?: number };
+// Both dims are mandatory (see the type's contract note) — a producer that stores only one measures
+// the other before it writes.
+export type ClipboardBox = { width: number; height: number; angle?: number };
 
 // Build an image item so producers never hand-assemble the five source-path fields (slides + docs
 // wrote the same block verbatim) and geometry lands on the typed fields, never in `meta`. `source`
@@ -21,7 +23,7 @@ export type ClipboardBox = { width?: number; height?: number; angle?: number };
 export function buildImageClipboardItem(args: {
     mediaName: string;
     source: DrivePath;
-    box?: ClipboardBox;
+    box: ClipboardBox;
     caption?: string;
     meta?: Record<string, unknown>;
 }): EigenClipboardImageItem {
@@ -33,9 +35,9 @@ export function buildImageClipboardItem(args: {
         sourceOwnerId: args.source.ownerId,
         sourceMountId: args.source.mountId,
         caption: args.caption,
-        width: args.box?.width,
-        height: args.box?.height,
-        angle: args.box?.angle,
+        width: args.box.width,
+        height: args.box.height,
+        angle: args.box.angle,
         meta: args.meta,
     };
 }
@@ -44,16 +46,16 @@ export function buildImageClipboardItem(args: {
 // contract note); `meta` is app-private extras only (slides borders + text-box background + rich html).
 export function buildTextClipboardItem(args: {
     text: string;
-    box?: ClipboardBox;
+    box: ClipboardBox;
     typography?: EigenClipboardTypography;
     meta?: Record<string, unknown>;
 }): EigenClipboardTextItem {
     return {
         type: 'text',
         text: args.text,
-        width: args.box?.width,
-        height: args.box?.height,
-        angle: args.box?.angle,
+        width: args.box.width,
+        height: args.box.height,
+        angle: args.box.angle,
         typography: args.typography,
         meta: args.meta,
     };
@@ -75,7 +77,10 @@ export function clipboardTextItemHasContent(item: EigenClipboardTextItem): boole
 function parseEigenJson(raw: string): EigenClipboardData | null {
     try {
         const data = JSON.parse(raw) as EigenClipboardData;
-        if (data.version === 1 && Array.isArray(data.items)) return data;
+        if (data.version !== 1 || !Array.isArray(data.items)) return null;
+        // The wire is forgeable by any web page, and consumers place items straight from the typed
+        // box with no fallbacks — so a missing/NaN dim must be dropped here, not written into a doc.
+        return { version: 1, items: data.items.filter((i) => Number.isFinite(i.width) && Number.isFinite(i.height)) };
     } catch {
         /* invalid data */
     }

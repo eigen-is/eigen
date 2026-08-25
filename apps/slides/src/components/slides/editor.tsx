@@ -42,7 +42,7 @@ import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { deriveImageHeightFromUrl, readImageSize, readImageSizeFromUrl } from '@workspace/ui/components/media';
+import { readImageSize, readImageSizeFromUrl } from '@workspace/ui/components/media';
 import { useAspectLock, useZOrderHotkeys, type ZOp } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
@@ -124,8 +124,8 @@ const PASTE_OFFSET = 24;
 function clipboardItemOverrides(item: EigenClipboardItem, activeSlideId: string | null): Record<string, unknown> {
     const overrides: Record<string, unknown> = {};
     const box = readClipboardBox(item);
-    if (box.width != null) overrides.width = box.width;
-    if (box.height != null) overrides.height = box.height;
+    overrides.width = box.width;
+    overrides.height = box.height;
     if (box.angle != null) overrides.angle = box.angle;
     const m = item.meta ?? {};
     for (const k of PASTE_META_FIELDS) {
@@ -261,7 +261,7 @@ function SlideEditorInner({
     } = useDeck(ownerId, path.mountId, path.id);
 
     const { isMobile } = useLayout();
-    const { resolveMediaUrl, resolveMediaPath, startUpload } = useMediaResolver();
+    const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, startUpload } = useMediaResolver();
     const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ yjsDoc });
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
@@ -570,12 +570,13 @@ function SlideEditorInner({
             if (!activeSlideId || !mediaFolderId) return;
             const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId }).catch(() => null);
             if (!results) return;
-            // Independent loads — measure in parallel, then add in one tight synchronous run.
+            // Independent loads — measure in parallel, then add in one tight synchronous run. The URL
+            // comes from the copy result's own path: by NAME it would miss the pre-copy media listing.
             const measured = await Promise.all(
-                results.map(async (result) => {
-                    const url = resolveMediaUrl(result.name);
-                    return { name: result.name, intrinsic: url ? await readImageSizeFromUrl(url) : null };
-                }),
+                results.map(async (result) => ({
+                    name: result.name,
+                    intrinsic: await readImageSizeFromUrl(resolveMediaUrlByPath(result)),
+                })),
             );
             for (const { name, intrinsic } of measured) {
                 addObject(activeSlideId, {
@@ -585,12 +586,12 @@ function SlideEditorInner({
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         },
-        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject, resolveMediaUrl],
+        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject, resolveMediaUrlByPath],
     );
 
     // Consume eigen clipboard items into new objects on the active slide — shared by the paste event
     // listener and the object-menu Paste row (U6f). Text sanitises/escapes into LightEditor HTML;
-    // width-only images probe the intrinsic ratio; cross-mount images re-upload, skip-on-failure.
+    // images place at the wire's exact box; cross-mount images re-upload, skip-on-failure.
     const pasteEigenData = useCallback(
         (data: EigenClipboardData) => {
             if (!activeSlideId) return;
@@ -614,15 +615,7 @@ function SlideEditorInner({
                     } as Omit<SlideObject, 'id' | 'slideId'>);
                 } else if (item.type === 'image') {
                     const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...clipboardItemOverrides(item, activeSlideId) };
-                    const widthOnlyWidth = item.height == null ? item.width : undefined;
-                    const insertAt = async (mediaName: string) => {
-                        if (widthOnlyWidth != null) {
-                            imageProps.height = await deriveImageHeightFromUrl(
-                                resolveMediaUrl(mediaName),
-                                widthOnlyWidth,
-                                DEFAULT_IMAGE_OBJECT.width / DEFAULT_IMAGE_OBJECT.height,
-                            );
-                        }
+                    const insertAt = (mediaName: string) => {
                         addObject(activeSlideId, {
                             ...imageProps,
                             mediaName,
@@ -637,15 +630,15 @@ function SlideEditorInner({
                             uploadFile.mutateAsync,
                             item.mediaName,
                         ).then((result) => {
-                            if (result) void insertAt(result.mediaName);
+                            if (result) insertAt(result.mediaName);
                         });
                     } else {
-                        void insertAt(item.mediaName);
+                        insertAt(item.mediaName);
                     }
                 }
             }
         },
-        [activeSlideId, addObject, mediaFolderId, resolveMediaUrl, uploadFile.mutateAsync],
+        [activeSlideId, addObject, mediaFolderId, uploadFile.mutateAsync],
     );
 
     useEffect(() => {

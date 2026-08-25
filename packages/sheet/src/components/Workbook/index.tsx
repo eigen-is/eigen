@@ -1,5 +1,6 @@
 import {
     buildImageClipboardItem,
+    buildTextClipboardItem,
     clipboardTextItemHasContent,
     readEigenClipboard,
     writeEigenClipboard,
@@ -25,6 +26,7 @@ import {
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
+    getFlowdata,
     getSheetIndex,
     groupValuesRefresh,
     handleGlobalKeyDown,
@@ -56,6 +58,24 @@ type AdditionalProps = {
     toolbarLeftItems?: React.ReactNode;
     toolbarRightItems?: React.ReactNode;
 };
+
+// The copied cell range as a text item. Every clipboard item carries its rendered box, and sheets'
+// document-space units are px (no zoom), so the cumulative edge arrays give both dims directly. The
+// anchor cell's font size rides along so a consumer that honours the box (slides) renders the text
+// at the size it had here rather than at its own much larger default, which the box would clip.
+// A staged copy always has a selection (handleCopy bails without one); the [0, 0] only satisfies TS.
+function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboardTextItem {
+    const [r1, r2] = ctx.selections?.[0]?.row ?? [0, 0];
+    const [c1, c2] = ctx.selections?.[0]?.column ?? [0, 0];
+    return buildTextClipboardItem({
+        text,
+        box: {
+            width: ctx.visibledatacolumn[c2] - (c1 === 0 ? 0 : ctx.visibledatacolumn[c1 - 1]),
+            height: ctx.visibledatarow[r2] - (r1 === 0 ? 0 : ctx.visibledatarow[r1 - 1]),
+        },
+        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? 10 }, // 10 = the default cell size
+    });
+}
 
 const triggerGroupValuesRefresh = (ctx: Context) => {
     if (ctx.groupValuesRefreshData.length > 0) {
@@ -589,11 +609,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // a real table, and the custom MIME lands for same-origin reads.
                 const eigenData: EigenClipboardData = {
                     version: 1,
-                    items: [{ type: 'text', text: pending.plainText }],
+                    items: [buildCellRangeClipboardItem(context, pending.plainText)],
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
-            [context.activeImg, context.insertedImgs, mergedSettings.hooks],
+            [context, mergedSettings.hooks],
         );
 
         const onPaste = useCallback(

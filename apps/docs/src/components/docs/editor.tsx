@@ -6,6 +6,7 @@ import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { useAuth } from '@workspace/lib/auth';
+import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildImageClipboardItem,
     hasRichHtmlBeyondMarker,
@@ -45,6 +46,7 @@ import type {
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
 import { Column, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
@@ -114,6 +116,27 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
         if (dispatch) dispatch(tr);
         return true;
     });
+}
+
+// The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
+// the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
+// clientWidth, not getBoundingClientRect: layout px are the space the stored width lives in (the
+// identity mapping in extensions/figure.tsx), while a narrow viewport puts a `scale()` on the page.
+// Height comes from the image's own intrinsic ratio rather than its laid-out height, so a mid-load
+// layout can't skew it. Nothing measurable (node view not mounted, image not loaded) → the stored
+// width at the shared default ratio, the single fallback.
+function figureClipboardBox(editor: Editor, pos: number, storedWidth: unknown): ClipboardBox {
+    const dom = editor.view.nodeDOM(pos);
+    const img = dom instanceof HTMLElement ? dom.querySelector('img') : null;
+    if (img && img.clientWidth > 0 && img.clientHeight > 0) {
+        const ratio =
+            img.naturalWidth > 0 && img.naturalHeight > 0
+                ? img.naturalWidth / img.naturalHeight
+                : img.clientWidth / img.clientHeight;
+        return { width: img.clientWidth, height: img.clientWidth / ratio };
+    }
+    const width = typeof storedWidth === 'number' && storedWidth > 0 ? storedWidth : DEFAULT_IMAGE_BOX.width;
+    return { width, height: (width * DEFAULT_IMAGE_BOX.height) / DEFAULT_IMAGE_BOX.width };
 }
 
 // Docs historically stored the textStyle `fontFamily` attr as a full CSS stack; the canon is now
@@ -586,16 +609,15 @@ const TiptapEditor = ({
             if (from === to) return;
 
             const items: EigenClipboardData['items'] = [];
-            editor.state.doc.nodesBetween(from, to, (node) => {
+            editor.state.doc.nodesBetween(from, to, (node, pos) => {
                 if (node.type.name === 'figure' && node.attrs.mediaName) {
                     const mediaPath = resolveMediaPath(node.attrs.mediaName);
                     if (mediaPath) {
-                        // Figures store width only; height derives from the image's aspect ratio on load.
                         items.push(
                             buildImageClipboardItem({
                                 mediaName: node.attrs.mediaName,
                                 source: mediaPath,
-                                box: { width: node.attrs.width ?? undefined },
+                                box: figureClipboardBox(editor, pos, node.attrs.width),
                                 caption: node.attrs.caption || undefined,
                             }),
                         );

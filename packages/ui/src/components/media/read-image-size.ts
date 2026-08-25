@@ -25,17 +25,3 @@ export function readImageSizeFromUrl(url: string): Promise<ImageSize | null> {
         img.src = url;
     });
 }
-
-// Height for a width-only clipboard image, whose aspect ratio must come from the pixels, not the
-// wire (a docs figure carries width but derives height from the image on load). Probes the intrinsic
-// ratio from `url`; falls back to `fallbackRatio` — NEVER squares — when the URL is absent or the
-// dims are unreadable. The one source for the vector/slides/sheets U5 clipboard consumers.
-export async function deriveImageHeightFromUrl(
-    url: string | null,
-    width: number,
-    fallbackRatio: number,
-): Promise<number> {
-    const intrinsic = url ? await readImageSizeFromUrl(url) : null;
-    const ratio = intrinsic && intrinsic.height > 0 ? intrinsic.width / intrinsic.height : fallbackRatio;
-    return width / ratio;
-}

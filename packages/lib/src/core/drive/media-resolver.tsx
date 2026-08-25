@@ -10,8 +10,17 @@ export function isPendingMediaName(name: string): boolean {
     return name.startsWith(PENDING_PREFIX);
 }
 
+// URL for a file we already hold the DrivePath of — a fresh copy/upload result. By-NAME resolution
+// goes through the media-folder listing, which still predates that write, so it would miss and hand
+// back null; the path is authoritative right now. Use this whenever a mutation just returned the
+// path, and keep the by-name resolver for render (a name is all Yjs stores, and it self-heals).
+function resolveMediaUrlByPath(path: DrivePath): string {
+    return getDrivePreviewUrl(path.ownerId, path.mountId, path.id, path.updatedAt);
+}
+
 type MediaResolverValue = {
     resolveMediaUrl: (name: string) => string | null;
+    resolveMediaUrlByPath: (path: DrivePath) => string;
     resolveMediaPath: (name: string) => DrivePath | undefined;
     resolveChatId: (name: string) => string | null;
     mediaFolderId: string | null;
@@ -20,6 +29,7 @@ type MediaResolverValue = {
 
 const MediaResolverContext = createContext<MediaResolverValue>({
     resolveMediaUrl: () => null,
+    resolveMediaUrlByPath,
     resolveMediaPath: () => undefined,
     resolveChatId: () => null,
     mediaFolderId: null,
@@ -113,6 +123,7 @@ export function MediaResolverProvider({
     const value = useMemo<MediaResolverValue>(
         () => ({
             resolveMediaUrl,
+            resolveMediaUrlByPath,
             resolveMediaPath: (name: string) => media.findByName(name),
             resolveChatId: (name: string) => chat.findByName(name)?.id ?? null,
             mediaFolderId,

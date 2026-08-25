@@ -21,7 +21,6 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
-    DEFAULT_IMAGE_BOX,
     DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elementToSvg,
@@ -56,7 +55,7 @@ import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
 import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
-import { deriveImageHeightFromUrl, readImageSize } from '../media/read-image-size';
+import { readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
@@ -82,10 +81,6 @@ const MAX_FONT_SIZE = 400;
 // Each subsequent image in a multi-file drop staggers by this many scene units so a stack of
 // natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
 const IMAGE_CASCADE_OFFSET = 20;
-// Fallback box for a pasted item whose typed size is absent (only reachable for a partial cross-app
-// item; vector/slides always carry both dims). Vector→vector paste never uses these.
-const DEFAULT_PASTE_IMAGE_SIZE = 200;
-const DEFAULT_PASTE_SHAPE_SIZE = 100;
 // Half-length of a snap guide line in scene units — large enough to span the viewport at any pan/zoom.
 const SNAP_LINE_EXTENT = 1_000_000;
 
@@ -825,7 +820,7 @@ export function VectorCanvas({
     // self-heals once the face loads. Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
     // set is re-anchored on the viewport centre preserving each element's relative offset.
     const pasteEigenItems = useCallback(
-        async (items: EigenClipboardItem[]) => {
+        (items: EigenClipboardItem[]) => {
             if (!items.length) return;
             const anchor = viewportCenterScene();
 
@@ -845,8 +840,8 @@ export function VectorCanvas({
                 for (const { meta, box } of withCoords) {
                     minX = Math.min(minX, meta.x);
                     minY = Math.min(minY, meta.y);
-                    maxX = Math.max(maxX, meta.x + (box.width ?? 0));
-                    maxY = Math.max(maxY, meta.y + (box.height ?? 0));
+                    maxX = Math.max(maxX, meta.x + box.width);
+                    maxY = Math.max(maxY, meta.y + box.height);
                 }
                 dx = anchor.x - (minX + maxX) / 2;
                 dy = anchor.y - (minY + maxY) / 2;
@@ -863,37 +858,11 @@ export function VectorCanvas({
                 return { x: anchor.x - w / 2 + off, y: anchor.y - h / 2 + off };
             };
 
-            // A width-only image (a docs figure: width measured, height derived from the intrinsic
-            // ratio) must NOT land square. Derive its height from the image's own ratio, falling back to
-            // the default-box ratio, NEVER width (advocate-sheets ruling, mirrored from the U5c sheets fix).
-            const defaultRatio = DEFAULT_IMAGE_BOX.width / DEFAULT_IMAGE_BOX.height;
-            const deriveHeight = (url: string | null, width: number) =>
-                deriveImageHeightFromUrl(url, width, defaultRatio);
-            const isWidthOnly = (item: EigenClipboardItem): item is EigenClipboardImageItem =>
-                item.type === 'image' && item.width != null && item.height == null;
-            // Resolve each width-only image's height BEFORE the batch. Same-mount (media resolvable now)
-            // probes the intrinsic ratio so the element is born correct; cross-mount takes a provisional
-            // default-box ratio here and is corrected after the re-upload swap. The await only suspends
-            // when a same-mount width-only image is present (docs→same-folder — rare), so the normal
-            // paste stays fully synchronous and atomic.
-            const widthOnlyHeights = new Map<EigenClipboardImageItem, number>();
-            for (const { item } of positioned) {
-                if (!isWidthOnly(item)) continue;
-                const width = item.width as number;
-                if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
-                    widthOnlyHeights.set(item, width / defaultRatio); // provisional, corrected post-swap
-                } else {
-                    widthOnlyHeights.set(item, await deriveHeight(resolveMediaUrl(item.mediaName), width));
-                }
-            }
-
             for (const { item, meta, box } of positioned) {
                 const angle = box.angle ?? 0;
                 if (item.type === 'image') {
-                    const w = box.width ?? DEFAULT_PASTE_IMAGE_SIZE;
-                    // Width-only → the ratio-derived height resolved above; both-dims / dimensionless
-                    // keep their prior behavior (typed height, or square when nothing is known).
-                    const h = widthOnlyHeights.get(item) ?? box.height ?? w;
+                    const w = box.width;
+                    const h = box.height;
                     const pos = placeAt(meta, w, h);
                     const index = partials.length;
                     if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
@@ -914,8 +883,8 @@ export function VectorCanvas({
                 }
                 // Shape carrier (a text item whose meta.vector names a shape type).
                 if (meta?.type) {
-                    const w = box.width ?? DEFAULT_PASTE_SHAPE_SIZE;
-                    const h = box.height ?? DEFAULT_PASTE_SHAPE_SIZE;
+                    const w = box.width;
+                    const h = box.height;
                     const pos = placeAt(meta, w, h);
                     partials.push({
                         type: meta.type,
@@ -985,22 +954,16 @@ export function VectorCanvas({
                     uploadFile.mutateAsync,
                     item.mediaName,
                 )
-                    .then(async (result) => {
+                    .then((result) => {
                         if (!result) {
                             deleteElementsUntracked([id]);
                             return;
-                        }
-                        const fields: VectorElementPatch = { mediaName: result.mediaName };
-                        // Width-only figure: probe the now-uploaded image and correct the provisional
-                        // height IN THE SAME write as the name swap — one transaction.
-                        if (isWidthOnly(item)) {
-                            fields.height = await deriveHeight(resolveMediaUrl(result.mediaName), item.width as number);
                         }
                         // Untracked: this technical swap is NOT its own undo step, so the whole
                         // cross-mount paste is a single ⌘Z (reverts the insert; peers converge via its
                         // inverse). Redo re-adds the element at its recorded pending name — the same
                         // accepted optimistic-insert redo edge as the sheets fix.
-                        updateElementUntracked(id, fields);
+                        updateElementUntracked(id, { mediaName: result.mediaName });
                     })
                     .catch(() => {});
             }
@@ -1008,7 +971,6 @@ export function VectorCanvas({
         [
             viewportCenterScene,
             mediaFolderId,
-            resolveMediaUrl,
             addElements,
             setSelectedIds,
             undoManager,
@@ -1090,7 +1052,7 @@ export function VectorCanvas({
             if (data) {
                 e.preventDefault();
                 e.stopPropagation();
-                pasteEigenItems(data.items).catch(() => {});
+                pasteEigenItems(data.items);
                 return;
             }
             // No eigen payload. OS files fall through to useFilePasteTarget (image drop path).
@@ -1169,7 +1131,7 @@ export function VectorCanvas({
         (async () => {
             const data = await readEigenClipboardAsync();
             if (data) {
-                await pasteEigenItems(data.items);
+                pasteEigenItems(data.items);
                 return;
             }
             // Non-eigen clipboard: mirror the keyboard path's plain-text fallback (same

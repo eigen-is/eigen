@@ -157,13 +157,9 @@ export function generateAPIs(
             setContext((draftCtx) => removeImageByMediaName(draftCtx, name), { noUndo: true }),
 
         // ObjectTransform resize/rotate commit + properties-panel numeric edits — one op + undo step
-        // each (default setContext). The paste-flow height correction passes { noUndo: true } so it
-        // rides the same paste as one ⌘Z (op still emitted for peers).
-        updateImage: (
-            id: string,
-            fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>,
-            options?: { noUndo?: boolean },
-        ) => setContext((draftCtx) => updateImage(draftCtx, id, fields), options),
+        // each (default setContext).
+        updateImage: (id: string, fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>) =>
+            setContext((draftCtx) => updateImage(draftCtx, id, fields)),
 
         removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
 

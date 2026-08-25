@@ -8,6 +8,12 @@
 // fields and NEVER sniff `meta` for size/rotation/typography. `meta` survives only for app-private
 // extras a given app carries opaquely (slides borders + objectFit + text-box background).
 //
+// `width`/`height` are MANDATORY on every item — the producer measures its own rendered box (docs
+// measures the figure's <img>, which stores width only) so no consumer ever probes the pixels to
+// recover a ratio. That probe was the aspect-ratio bug: it resolved the image BY NAME against a
+// media listing captured before the paste's own re-upload, missed, and fell back to a 4:3 default.
+// Forged wires are filtered at the read seam (parseEigenJson), so consumers carry no fallbacks.
+//
 // No `x`/`y`: paste anchors at each app's own default/cursor/viewport-centre, so absolute scene
 // position is not carried.
 
@@ -36,8 +42,8 @@ export type EigenClipboardTextItem = {
     // forgeable by any web page via the text/html marker.
     text: string;
     // Rendered box at copy time, source app's document-space units (best-effort cross-app fidelity).
-    width?: number;
-    height?: number;
+    width: number;
+    height: number;
     angle?: number; // degrees, clockwise
     typography?: EigenClipboardTypography;
     meta?: Record<string, unknown>; // app-private extras only (never geometry/typography)
@@ -51,11 +57,11 @@ export type EigenClipboardImageItem = {
     sourceOwnerId: string;
     sourceMountId: string;
     caption?: string;
-    // Rendered box at copy time, source app's document-space units. `width` may be absent when the
-    // producer has not measured it yet (a docs figure loaded but never sized); `height` is absent for
-    // width-only hosts (docs figures derive height from the image's aspect ratio on load).
-    width?: number;
-    height?: number;
+    // Rendered box at copy time, source app's document-space units. Both dims always present, even
+    // for a width-only host: docs measures the figure's rendered <img> and carries the height its
+    // own aspect ratio produced, so the consumer places the image exactly and never probes it.
+    width: number;
+    height: number;
     angle?: number; // degrees, clockwise
     meta?: Record<string, unknown>; // app-private extras only (never geometry)
 };
