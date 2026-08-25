@@ -258,7 +258,7 @@ the share client-side or ask the owner. A `DELETE .../acl/me` endpoint can be ad
 `isEffectiveOwnerSync()` uses `parseOwnerId()` plus pre-fetched `memberships.teamIds` to grant them full ACL control
 on team paths, including toggling the flag itself.
 
-Integration tests: `apps/api/src/test/acl-bubbling.test.ts`, `apps/api/src/test/sharing-restricted.test.ts`.
+Integration tests: `apps/api/src/test/acl/acl-bubbling.test.ts`, `apps/api/src/test/acl/sharing-restricted.test.ts`.
 
 See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat
 system, [SERVER-SETTINGS.md](SERVER-SETTINGS.md) for the email-notification settings

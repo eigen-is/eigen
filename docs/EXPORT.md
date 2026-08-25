@@ -166,7 +166,7 @@ deliberately left alone: link targets are not fetched
 during render, and docs and sheets carry legitimate http(s) hyperlinks.
 
 The hook is added and removed around each synchronous `DOMPurify.sanitize()` call, so it never leaks
-to other DOMPurify users in the process. Regression tests: `apps/api/src/test/export-pdf-ssrf.test.ts`.
+to other DOMPurify users in the process. Regression tests: `apps/api/src/test/export/export-pdf-ssrf.test.ts`.
 
 ### CSS Handling
 

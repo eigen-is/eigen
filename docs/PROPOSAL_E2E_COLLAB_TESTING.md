@@ -13,7 +13,7 @@
 
 Eigen's core promise is multi-user real-time collaboration on Yjs documents, and it is the one thing
 no committed test exercises end-to-end. The API integration tests (`apps/api/src/test/`) drive
-`app.handle()` in-process (serially: `bun test --preload ./src/test/preload.ts --concurrency 1`) — no
+`app.handle()` in-process (serially: `bun test --preload ./src/test/preload.ts`) — no
 real WebSocket, no browser, no second concurrent client. `collab.test.ts` covers storage operations and
 read-revocation enforcement via in-process spy connections — its own header notes the HTTP→WS upgrade
 never completes under `app.handle()` — never two real editors converging. The collab data-loss incidents (the

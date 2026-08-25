@@ -405,7 +405,7 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
 
 - **Canonicaliser unit tests**: group flattening, cross-field dedupe with to > cc > bcc
   precedence, case-insensitive internal/external classification, caps → 400.
-- **Send tests** (extend `apps/api/src/test/mail-drive-attachments.test.ts`, send-bake test
+- **Send tests** (extend `apps/api/src/test/mail/mail-drive-attachments.test.ts`, send-bake test
   at `:403-455`): mixed internal/external recipients produce one internal + N external
   copies; external copies carry `?email=<that recipient>` in **both** HTML and text;
   assertions run against the final nodemailer options (envelope `{ from, to }` per copy,

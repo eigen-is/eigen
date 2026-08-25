@@ -343,7 +343,7 @@ pending state and the doc appears exactly once even if the request is slow or er
 ## Testing
 
 **Unit (backend, §2).** Extract the existing `FaultStorage` test double
-(`apps/api/src/test/sync-resilience.test.ts` — a `StorageBackend` wrapper over `LocalStorage` with
+(`apps/api/src/test/storage/sync-resilience.test.ts` — a `StorageBackend` wrapper over `LocalStorage` with
 injectable write delays/failures) into a shared test helper — `mount-mutation-sync.test.ts` already
 carries a sibling `S3LikeStorage`, so this is the third copy — and extend it with `failNextExists` /
 `existsDelayMs`. Then, in a `create-resilience.test.ts` using the established

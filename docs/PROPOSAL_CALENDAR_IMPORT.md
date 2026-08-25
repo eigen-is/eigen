@@ -453,7 +453,7 @@ Thunderbird. Users coming from any of those products will have correct expectati
 
 ## Testing
 
-Extend `apps/api/src/test/calendar.test.ts` using `getTestContext()` / `authedRequest()` from
+Extend `apps/api/src/test/calendar/calendar.test.ts` using `getTestContext()` / `authedRequest()` from
 `setup.ts`, serving fixture feeds from an in-process `Bun.serve`:
 
 - Subscribe → events appear; feed change + refresh → adds/updates/deletes apply; tombstones exist

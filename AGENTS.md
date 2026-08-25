@@ -294,7 +294,9 @@ is set to `external_{email}` (e.g. `external_alice@example.com`). Same prefix co
 
 ## Testing
 
-The API integration tests are in `apps/api/src/test/`. `bun run test` runs every workspace's tests (api + sheet + lib + index); `bun run test:api` runs the API suite alone. A single file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/[file].test.ts`.
+**Every workspace keeps its tests in `<workspace>/src/test/` — nothing named `*.test.ts` lives anywhere else.** Within that folder, a test covering one module mirrors that module's path (`packages/lib/src/vector/snap.ts` → `packages/lib/src/test/vector/snap.test.ts`); a test covering a feature end-to-end gets a feature folder (`apps/api/src/test/mail/`). `bun scripts/check-test-layout.ts` enforces both the location rule and the "a workspace with tests has a `test` script" rule as part of `bun run check`. Full rationale in [TESTING.md](docs/TESTING.md).
+
+The API integration tests are in feature folders under `apps/api/src/test/`. `bun run test` runs every workspace's tests (api + sheet + lib + index); `bun run test:api` runs the API suite alone. A single file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/<domain>/<file>.test.ts`.
 
 **Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`:
 - `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients

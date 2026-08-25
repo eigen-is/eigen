@@ -8,7 +8,7 @@
 > `blobsSkipped` and `readYjsStateFromFile` throws `ApiError(422, 'Snapshot is corrupted…')`, so a
 > restore from a snapshot with unreadable Yjs blobs aborts instead of silently degrading
 > (`apps/api/src/lib/collab/yjs-loader.ts`); plus the Phase-1 regression test "restore from a corrupt
-> snapshot fails 422 and leaves the live doc untouched" (`apps/api/src/test/versioning.test.ts`).
+> snapshot fails 422 and leaves the live doc untouched" (`apps/api/src/test/storage/versioning.test.ts`).
 > That skip-count return is also Phase 3's prerequisite, so §3's semantic verification now builds on
 > an existing signal.
 >

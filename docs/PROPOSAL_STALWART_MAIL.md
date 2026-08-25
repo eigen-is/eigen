@@ -541,7 +541,7 @@ Each phase is independently shippable / abandonable.
 
 Phase 0 takes 1–2 days. Phase 2 is the riskiest (auth, type adaptation, EventSource). If phases
 2–4 each take a week, we're looking at ~6 weeks total for someone going at it focused, plus
-test coverage in `apps/api/src/test/mail.test.ts` running against an ephemeral Stalwart Docker.
+test coverage in `apps/api/src/test/mail/mail.test.ts` running against an ephemeral Stalwart Docker.
 
 ## Risks and reasons not to do this
 

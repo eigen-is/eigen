@@ -235,4 +235,4 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `packages/ui/.../app/demo-banner.tsx` | Workspace banner |
 | `packages/ui/.../pages/login-page.tsx` | Enter-demo entry (app login card) |
 | `apps/index/src/routes/index.tsx` | Enter-demo entry (landing-page button) |
-| `apps/api/src/test/demo-mode.test.ts`, `seed-demo.test.ts` | Contract tests |
+| `apps/api/src/test/server/demo-mode.test.ts`, `apps/api/src/test/server/seed-demo.test.ts` | Contract tests |

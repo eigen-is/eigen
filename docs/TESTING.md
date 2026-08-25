@@ -1,13 +1,27 @@
 # Testing
 
-> **TLDR**: API integration tests using Bun test runner + real Elysia app via `app.handle()` + Eden Treaty. No HTTP
-> server needed. Temp data dir per run. Test users: Alice, Bob, Charlie. Run: `bun run test`. Tests in
-> `apps/api/src/test/`.
+> **TLDR**: Every workspace keeps its tests in `<workspace>/src/test/` — nothing named `*.test.ts` lives anywhere else, and `bun scripts/check-test-layout.ts` enforces it. API integration tests use the Bun test runner + real Elysia app via `app.handle()` + Eden Treaty. No HTTP server needed. Temp data dir per run. Test users: Alice, Bob, Charlie. Run: `bun run test`.
+
+## Where tests live
+
+Every workspace has exactly one test folder, `<workspace>/src/test/`. Inside it, tests group by subject:
+
+- **A test covering one module mirrors that module's path.** `packages/lib/src/vector/snap.ts` is tested by `packages/lib/src/test/vector/snap.test.ts`. This is the shape in `packages/lib`, `packages/ui`, `packages/sheet`, `apps/slides` and `apps/stickies`, where tests genuinely target single modules.
+- **A test covering a feature end-to-end gets a feature folder.** `apps/api/src/test/mail/`, `.../drive/`, `.../caldav/`. Most of the API suite boots a Home and drives the real API, so its subject is a feature, not a module — there is no module path to mirror.
+
+Shared harness files (`setup.ts`, `preload.ts`, `contacts-test-helpers.ts`, `fixtures/`, `bench/`) sit at the `src/test/` root, not in a feature folder.
+
+Two rules are enforced by `bun scripts/check-test-layout.ts`, which runs as part of `bun run check`:
+
+1. No `*.test.ts` outside `<workspace>/src/test/`.
+2. Every workspace that has tests has a `test` script — otherwise `bun --filter '*' test` skips it silently and the tests never run.
+
+Note the second rule only fires once a workspace actually has tests. Do not add `"test": "bun test"` to a workspace pre-emptively: `bun test` exits 1 when it finds no test files, which would break `bun run check`.
 
 ## Running
 
 ```bash
-bun run check              # lint + typecheck + home-import check + primitives:check + test
+bun run check              # lint + typecheck + home-import check + test-layout check + primitives:check + test
 bun run test               # tests only (all workspaces)
 bun run test:api           # API tests only
 bun run test:sheet         # sheet package unit tests only (packages/sheet, plain `bun test`, no preload)
@@ -18,20 +32,27 @@ bun run lint               # lint + format check (biome)
 The API test command (in `apps/api/package.json`) is:
 
 ```bash
-bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/
+bun test --preload ./src/test/preload.ts
 ```
 
 - `--preload ./src/test/preload.ts` registers an `afterAll` hook that calls `cleanup()`
-- `--concurrency 1` required because tests share SQLite via the Home singleton
+- No path argument: the layout rule already says where tests are, and a path here would mean a stray
+  test file silently never runs
+- The suite needs test files to run one at a time, because they share SQLite via the Home singleton.
+  That comes free — Bun runs test files sequentially by default. This command used to carry
+  `--concurrency 1`, which never did anything: Bun has no such flag (it has `--concurrent` and
+  `--max-concurrency=<val>`), so `--concurrency` was ignored and the `1` was parsed as a positional
+  test-name filter. It went unnoticed because the `./src/test/` path argument was a second filter that
+  matched everything
 
 ### One file at a time
 
-`bun test apps/api/src/test/drive.test.ts` from the repo root **fails** with `Setup has already been
+`bun test apps/api/src/test/drive/drive.test.ts` from the repo root **fails** with `Setup has already been
 completed`: Bun auto-loads the root `.env`, which collides with the harness's fresh-`EIGEN_DATA_ROOT`
 setup flow. Run it from `apps/api` with the package script's own flags, and `-t` to filter by name:
 
 ```bash
-cd apps/api && bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/drive.test.ts -t "rename"
+cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/drive/drive.test.ts -t "rename"
 ```
 
 ## Architecture
@@ -49,10 +70,12 @@ Test -> Eden Treaty / authedRequest() -> app.handle() -> Real business logic -> 
 
 ## Test Files
 
-Every API test lives in `apps/api/src/test/`, one `<subject>.test.ts` per subject, plus a `webdav/`
-subdirectory for the WebDAV method suites and a `fixtures/` folder. Coverage spans CalDAV, WebDAV, mail,
-drive, collab, file history, search, import/export, demo mode, upload-queue chaos and more — grep the
-directory rather than assuming an area is untested.
+Every API test lives in a feature folder under `apps/api/src/test/` — `acl/`, `auth/`, `caldav/`,
+`calendar/`, `carddav/`, `chat/`, `collab/`, `comments/`, `contacts/`, `core/`, `document/`, `drive/`,
+`export/`, `home/`, `import/`, `mail/`, `mount/`, `preview/`, `search/`, `server/`, `storage/`, `webdav/`
+— one `<subject>.test.ts` per subject. Coverage spans CalDAV, WebDAV, mail, drive, collab, file history,
+search, import/export, demo mode, upload-queue chaos and more — grep the tree rather than assuming an
+area is untested.
 
 Not part of the suite: `src/test/transform-benchmark.ts` is a standalone responsiveness/memory benchmark for
 document transforms — run it from `apps/api` with `bun src/test/transform-benchmark.ts` (see PREVIEWS.md).
@@ -78,5 +101,6 @@ steps:
   - bun --filter '*' test
 ```
 
-The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set
-plus `bun scripts/check-home-imports.ts`: lint → typecheck → home-import check → `primitives:check` → test.
+The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set plus
+`bun scripts/check-home-imports.ts` and `bun scripts/check-test-layout.ts`: lint → typecheck → home-import
+check → test-layout check → `primitives:check` → test.

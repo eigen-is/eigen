@@ -534,7 +534,7 @@ Each phase ships independently; nothing user-visible changes until a real migrat
 
 ## Testing
 
-Integration tests extend `apps/api/src/test/collab.test.ts` patterns (`getTestContext`, real WS
+Integration tests extend `apps/api/src/test/collab/collab.test.ts` patterns (`getTestContext`, real WS
 connections against the test server); migration-runner units live beside the registry.
 
 - **Runner:** synthetic v1→v2 entry per root kind (map/array/text/xmlfragment) on fixture docs —
