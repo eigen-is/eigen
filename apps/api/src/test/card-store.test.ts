@@ -220,6 +220,10 @@ describe('card file helpers', () => {
     });
 });
 
+// The search re-serializes a 5 MiB card ~23 times, so its result is memoized per target size and uid length
+// (randomUUID is always 36 chars) — the exact-size check below still re-verifies it against the caller's uid.
+const paddingCache = new Map<string, { notesLength: number; companyLength: number }>();
+
 // The 5 MiB ceiling is a property of the assembled card, not of any single field, so a test that wants to
 // sit exactly on it has to pad one: NOTE carries the bulk (folded, so its cost per character isn't 1) and a
 // short ORG line — which never folds — tops the card up to the exact byte. createVCard is the same
@@ -231,42 +235,62 @@ function contactOfExactly(bytes: number, uid: string): CreateContactInput {
             createVCard({ ...base, company: 'c'.repeat(companyLength), notes: 'n'.repeat(notesLength) }, uid),
         ).byteLength;
 
-    // Largest NOTE that still leaves room for the ORG top-up (its line is 'ORG:' + padding + CRLF).
-    let low = 0;
-    let high = bytes;
-    while (low < high) {
-        const mid = Math.ceil((low + high) / 2);
-        if (sizeOf(mid, 0) <= bytes - 64) low = mid;
-        else high = mid - 1;
+    const cacheKey = `${bytes}:${uid.length}`;
+    let padding = paddingCache.get(cacheKey);
+    if (!padding) {
+        // Largest NOTE that still leaves room for the ORG top-up (its line is 'ORG:' + padding + CRLF).
+        let low = 0;
+        let high = bytes;
+        while (low < high) {
+            const mid = Math.ceil((low + high) / 2);
+            if (sizeOf(mid, 0) <= bytes - 64) low = mid;
+            else high = mid - 1;
+        }
+        padding = { notesLength: low, companyLength: bytes - sizeOf(low, 0) - 6 };
+        paddingCache.set(cacheKey, padding);
     }
-    const companyLength = bytes - sizeOf(low, 0) - 6;
-    if (sizeOf(low, companyLength) !== bytes) throw new Error('could not build a card of exactly the target size');
-    return { ...base, company: 'c'.repeat(companyLength), notes: 'n'.repeat(low) };
+
+    const { notesLength, companyLength } = padding;
+    if (sizeOf(notesLength, companyLength) !== bytes)
+        throw new Error('could not build a card of exactly the target size');
+    return { ...base, company: 'c'.repeat(companyLength), notes: 'n'.repeat(notesLength) };
 }
 
+// Whichever test warms the padding cache pays the ~23-probe serializer search; the default 5s leaves it no
+// headroom on a machine loaded by the rest of the suite.
+const CEILING_TIMEOUT_MS = 20_000;
+
 describe('CARD_MAX_BYTES', () => {
-    test('a card exactly at the ceiling is written', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const id = await contacts.addContact(contactOfExactly(CARD_MAX_BYTES, randomUUID()));
+    test(
+        'a card exactly at the ceiling is written',
+        async () => {
+            const { contacts, db, dir } = await makeContacts();
+            const id = await contacts.addContact(contactOfExactly(CARD_MAX_BYTES, randomUUID()));
 
-        expect(statSync(join(cardsDirOf(dir), `${id}.vcf`)).size).toBe(CARD_MAX_BYTES);
-        expect(db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.size).toBe(
-            CARD_MAX_BYTES,
-        );
-    });
+            expect(statSync(join(cardsDirOf(dir), `${id}.vcf`)).size).toBe(CARD_MAX_BYTES);
+            expect(
+                db.select().from(contactsSchema.contacts).where(eq(contactsSchema.contacts.id, id)).get()!.size,
+            ).toBe(CARD_MAX_BYTES);
+        },
+        CEILING_TIMEOUT_MS,
+    );
 
-    test('one byte over the ceiling is refused with 413, before anything is written', async () => {
-        const { contacts, db, dir } = await makeContacts();
-        const exact = contactOfExactly(CARD_MAX_BYTES, randomUUID());
-        const before = readdirSync(cardsDirOf(dir)).length;
+    test(
+        'one byte over the ceiling is refused with 413, before anything is written',
+        async () => {
+            const { contacts, db, dir } = await makeContacts();
+            const exact = contactOfExactly(CARD_MAX_BYTES, randomUUID());
+            const before = readdirSync(cardsDirOf(dir)).length;
 
-        // One more ORG character is one more byte on the card.
-        await expect(contacts.addContact({ ...exact, company: `${exact.company}c` })).rejects.toThrow(/too large/i);
+            // One more ORG character is one more byte on the card.
+            await expect(contacts.addContact({ ...exact, company: `${exact.company}c` })).rejects.toThrow(/too large/i);
 
-        // Refused before the write intent is recorded: no card file, and no pending row for a drain to chase.
-        expect(readdirSync(cardsDirOf(dir)).length).toBe(before);
-        expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
-    });
+            // Refused before the write intent is recorded: no card file, and no pending row for a drain to chase.
+            expect(readdirSync(cardsDirOf(dir)).length).toBe(before);
+            expect(db.select().from(contactsSchema.pendingCardWrites).all()).toEqual([]);
+        },
+        CEILING_TIMEOUT_MS,
+    );
 
     test('an update that would push a card over the ceiling is refused and leaves the stored card intact', async () => {
         const { contacts, db, dir } = await makeContacts();
