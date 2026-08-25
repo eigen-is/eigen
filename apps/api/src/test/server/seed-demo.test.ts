@@ -9,6 +9,8 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
+import { readSheetsFromDoc } from '../../lib/document/sheets';
+import { readDeckFromDoc } from '../../lib/document/slides';
 import { BRANDING, BUDGET, KANBAN, PHOTOS, personaByRole, SPONSOR_DECK, TEAM_NAME } from '../../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
@@ -192,8 +194,13 @@ describe('seed-demo', () => {
             expect(notesDoc[0].n).toBe(1);
 
             // Budget sheet: hand-maintained fixture placed onto the team drive with real data.db bytes.
+            // Decoded through the shipped reader, not just size-checked — the fixture bytes predate
+            // every stored-shape change, so a rename that skips them has to fail here.
             const sheetDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, `${BUDGET.name}.eigensheets`);
             expect(statSync(sheetDataDb).size).toBeGreaterThan(0);
+            const { sheets } = readSheetsFromDoc(await loadCollabDoc(sheetDataDb));
+            expect(sheets.length).toBeGreaterThanOrEqual(1);
+            expect(sheets[0].celldata?.length ?? 0).toBeGreaterThan(0);
 
             // Sponsor deck: its embedded image (media/logo.svg) landed as a real blob, so the
             // byte-copied deck stays whole (the deck references it by name).
@@ -216,6 +223,33 @@ describe('seed-demo', () => {
                 const blob = join(mountsDir, mountId!, 'data', img.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(0);
+            }
+
+            // ...and the deck itself reads back through the shipped reader with canonical geometry on
+            // every object. yMapToObject materializes only OBJECT_FIELDS, so a fixture still carrying
+            // pre-rename keys (w/h/rotation) yields undefined width/height/angle rather than throwing —
+            // it would silently render collapsed in the demo. Assert the numbers, not just the read.
+            const deckDoc = await loadCollabDoc(
+                findContainerDataDb(metadataDb, mountsDir, mountId!, `${SPONSOR_DECK.name}.eigenslides`),
+            );
+            const deckData = readDeckFromDoc(deckDoc);
+            expect(deckData.slideOrder.length).toBeGreaterThanOrEqual(1);
+            const deckObjects = Object.values(deckData.objects);
+            expect(deckObjects.length).toBeGreaterThanOrEqual(1);
+            for (const obj of deckObjects) {
+                for (const field of ['x', 'y', 'width', 'height', 'angle'] as const) {
+                    expect(Number.isFinite(obj[field])).toBe(true);
+                }
+                expect(obj.width).toBeGreaterThan(0);
+                expect(obj.height).toBeGreaterThan(0);
+            }
+            // Every slide's objectIds resolve, and each image object points at a media file that landed.
+            const deckMediaNames = new Set(deckImages.map((img) => img.name));
+            for (const slide of Object.values(deckData.slides)) {
+                for (const objId of slide.objectIds) expect(deckData.objects[objId]).toBeDefined();
+            }
+            for (const obj of deckObjects) {
+                if (obj.type === 'image') expect(deckMediaNames.has(obj.mediaName)).toBe(true);
             }
 
             // Team calendar: seeded events exist on the enabled team calendar.
