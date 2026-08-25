@@ -3,66 +3,66 @@ import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { TooltipButton } from '@workspace/ui';
+import { type ArrangeOp, STROKE_WIDTH_OPTIONS } from '@workspace/lib/vector';
 import { Button } from '@workspace/ui/components/button';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
-import { ColorPicker } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import {
     AlignmentPicker,
+    AlignSection,
     BackgroundFillBlock,
+    ColorRow,
+    getMergedValue,
+    isMixed,
+    MergedNumberInput,
+    MergedSelect,
+    numToStr,
     PropertiesPanel,
-    PropertyNumberInput,
     PropertyRow,
     PropertySection,
+    TransformSection,
+    type ZOp,
+    ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Toggle } from '@workspace/ui/components/toggle';
 import {
-    AlignHorizontalDistributeCenter,
-    AlignHorizontalJustifyCenter,
-    AlignHorizontalJustifyEnd,
-    AlignHorizontalJustifyStart,
-    AlignVerticalDistributeCenter,
     AlignVerticalJustifyCenter,
     AlignVerticalJustifyEnd,
     AlignVerticalJustifyStart,
     Bold,
     Italic,
-    MoveHorizontal,
-    MoveVertical,
     Strikethrough,
     Trash2,
     Underline,
 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
-import type { ArrangeOp } from './arrange';
 import type { ApplyTo, ImageObject, SlideObject, TextObject } from './types';
 import { BORDER_RADIUS_ROUND } from './types';
-
-const MIXED = 'mixed' as const;
-type MergedValue<T> = T | typeof MIXED | undefined;
-
-function getMergedValue<O, T>(objects: O[], getter: (obj: O) => T | undefined): MergedValue<T> {
-    const values = objects.map(getter).filter((v): v is T => v !== undefined);
-    if (values.length === 0) return undefined;
-    if (values.every((v) => v === values[0])) return values[0];
-    return MIXED;
-}
-
-function isMixed<T>(v: MergedValue<T>): v is typeof MIXED {
-    return v === MIXED;
-}
 
 type SlidePropertiesPanelProps = {
     objects: SlideObject[];
     onUpdate: (ids: string[], updates: Partial<SlideObject>) => void;
     onDelete?: (ids: string[]) => void;
-    onArrange?: (op: ArrangeOp) => void;
+    // Align/distribute/match-size (the "Align" section) — align+distribute math in arrange.ts.
+    onAlign?: (op: ArrangeOp) => void;
+    // Z-order (the "Arrange" section) — shares vector's ZOp vocabulary; wired to the Y.Array reorder.
+    onZOrder?: (op: ZOp) => void;
+    // Ephemeral per-selection aspect lock (Override 3), owned by the editor so the same ON/OFF also
+    // feeds SlideCanvas' ObjectTransform resizeMode.
+    aspectLocked: boolean;
+    onAspectLockChange: (locked: boolean) => void;
 };
 
-export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }: SlidePropertiesPanelProps) {
+export function SlidePropertiesPanel({
+    objects,
+    onUpdate,
+    onDelete,
+    onAlign,
+    onZOrder,
+    aspectLocked,
+    onAspectLockChange,
+}: SlidePropertiesPanelProps) {
     const ids = useMemo(() => objects.map((o) => o.id), [objects]);
 
     const allText = objects.every((o) => o.type === 'text');
@@ -77,41 +77,32 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
 
     const x = getMergedValue(objects, (o) => Math.round(o.x));
     const y = getMergedValue(objects, (o) => Math.round(o.y));
-    const w = getMergedValue(objects, (o) => Math.round(o.w));
-    const h = getMergedValue(objects, (o) => Math.round(o.h));
-    const rotation = getMergedValue(objects, (o) => o.rotation);
+    const width = getMergedValue(objects, (o) => Math.round(o.width));
+    const height = getMergedValue(objects, (o) => Math.round(o.height));
+    const angle = getMergedValue(objects, (o) => o.angle);
 
     return (
         <PropertiesPanel
             title={objects.length === 1 ? (objects[0].type === 'text' ? 'Text' : 'Image') : `${objects.length} objects`}
         >
-            <PropertySection title="Transform">
-                <div className="grid grid-cols-2 gap-2">
-                    <PropertyRow label="X">
-                        <MergedNumberInput value={x} onChange={(v) => handleUpdate({ x: v })} step={1} />
-                    </PropertyRow>
-                    <PropertyRow label="Y">
-                        <MergedNumberInput value={y} onChange={(v) => handleUpdate({ y: v })} step={1} />
-                    </PropertyRow>
-                    <PropertyRow label="W">
-                        <MergedNumberInput value={w} onChange={(v) => handleUpdate({ w: v })} step={1} min={1} />
-                    </PropertyRow>
-                    <PropertyRow label="H">
-                        <MergedNumberInput value={h} onChange={(v) => handleUpdate({ h: v })} step={1} min={1} />
-                    </PropertyRow>
-                </div>
-                <PropertyRow label="°">
-                    <MergedNumberInput
-                        value={rotation}
-                        onChange={(v) => handleUpdate({ rotation: v })}
-                        step={1}
-                        min={-360}
-                        max={360}
-                    />
-                </PropertyRow>
-            </PropertySection>
+            <TransformSection
+                x={x}
+                y={y}
+                width={width}
+                height={height}
+                angle={angle}
+                onChange={handleUpdate}
+                aspectLocked={aspectLocked}
+                onAspectLockChange={onAspectLockChange}
+            />
 
-            {onArrange && objects.length >= 2 && <ArrangeProperties count={objects.length} onArrange={onArrange} />}
+            {onZOrder && (
+                <PropertySection title="Arrange">
+                    <ZOrderButtons onApply={onZOrder} />
+                </PropertySection>
+            )}
+
+            {onAlign && objects.length >= 2 && <AlignSection count={objects.length} onApply={onAlign} />}
 
             {allText && (
                 <TextProperties objects={objects as (SlideObject & { type: 'text' })[]} onUpdate={handleUpdate} />
@@ -135,80 +126,6 @@ export function SlidePropertiesPanel({ objects, onUpdate, onDelete, onArrange }:
     );
 }
 
-function ArrangeProperties({ count, onArrange }: { count: number; onArrange: (op: ArrangeOp) => void }) {
-    const canDistribute = count >= 3;
-    return (
-        <PropertySection title="Arrange">
-            <div className="flex items-center gap-1">
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalJustifyStart}
-                    tooltipText="Align left"
-                    onClick={() => onArrange('align-left')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalJustifyCenter}
-                    tooltipText="Align horizontal center"
-                    onClick={() => onArrange('align-h-center')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalJustifyEnd}
-                    tooltipText="Align right"
-                    onClick={() => onArrange('align-right')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalJustifyStart}
-                    tooltipText="Align top"
-                    onClick={() => onArrange('align-top')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalJustifyCenter}
-                    tooltipText="Align vertical center"
-                    onClick={() => onArrange('align-v-center')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalJustifyEnd}
-                    tooltipText="Align bottom"
-                    onClick={() => onArrange('align-bottom')}
-                />
-            </div>
-            <div className="flex items-center gap-1">
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignHorizontalDistributeCenter}
-                    tooltipText={canDistribute ? 'Distribute horizontally' : 'Select 3+ objects to distribute'}
-                    disabled={!canDistribute}
-                    onClick={() => onArrange('distribute-h')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={AlignVerticalDistributeCenter}
-                    tooltipText={canDistribute ? 'Distribute vertically' : 'Select 3+ objects to distribute'}
-                    disabled={!canDistribute}
-                    onClick={() => onArrange('distribute-v')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={MoveHorizontal}
-                    tooltipText="Match width"
-                    onClick={() => onArrange('match-width')}
-                />
-                <TooltipButton
-                    className="h-7 w-7"
-                    icon={MoveVertical}
-                    tooltipText="Match height"
-                    onClick={() => onArrange('match-height')}
-                />
-            </div>
-        </PropertySection>
-    );
-}
-
 function TextProperties({
     objects,
     onUpdate,
@@ -216,9 +133,6 @@ function TextProperties({
     objects: TextObject[];
     onUpdate: (updates: Partial<SlideObject>) => void;
 }) {
-    const [colorOpen, setColorOpen] = useState(false);
-    const [highlightOpen, setHighlightOpen] = useState(false);
-
     const fontFamily = getMergedValue(objects, (o) => o.fontFamily);
     const fontSize = getMergedValue(objects, (o) => o.fontSize);
     const fontWeight = getMergedValue(objects, (o) => o.fontWeight);
@@ -354,25 +268,11 @@ function TextProperties({
             </PropertySection>
 
             <PropertySection title="Color">
-                <ColorRow
-                    label="Text"
-                    value={color}
-                    onOpen={setColorOpen}
-                    open={colorOpen}
-                    onChange={(c) => {
-                        onUpdate({ color: c || '#000000' });
-                        setColorOpen(false);
-                    }}
-                />
+                <ColorRow label="Text" value={color} onChange={(c) => onUpdate({ color: c || '#000000' })} />
                 <ColorRow
                     label="Highlight"
                     value={highlightColor}
-                    onOpen={setHighlightOpen}
-                    open={highlightOpen}
-                    onChange={(c) => {
-                        onUpdate({ highlightColor: c });
-                        setHighlightOpen(false);
-                    }}
+                    onChange={(c) => onUpdate({ highlightColor: c })}
                     showReset
                 />
             </PropertySection>
@@ -422,19 +322,15 @@ function ImageProperties({
                 </div>
             )}
             <PropertyRow label="Fit">
-                <Select
-                    value={isMixed(objectFit) ? undefined : objectFit}
-                    onValueChange={(v) => onUpdate({ objectFit: v as 'contain' | 'cover' | 'fill' })}
-                >
-                    <SelectTrigger className="h-7 text-xs">
-                        <SelectValue placeholder={isMixed(objectFit) ? '—' : undefined} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="contain">Contain</SelectItem>
-                        <SelectItem value="cover">Cover</SelectItem>
-                        <SelectItem value="fill">Fill</SelectItem>
-                    </SelectContent>
-                </Select>
+                <MergedSelect
+                    value={objectFit}
+                    onChange={(v) => onUpdate({ objectFit: v })}
+                    options={[
+                        { value: 'contain', label: 'Contain' },
+                        { value: 'cover', label: 'Cover' },
+                        { value: 'fill', label: 'Fill' },
+                    ]}
+                />
             </PropertyRow>
         </PropertySection>
     );
@@ -447,7 +343,6 @@ function BorderProperties({
     objects: SlideObject[];
     onUpdate: (updates: Partial<SlideObject>) => void;
 }) {
-    const [colorOpen, setColorOpen] = useState(false);
     const borderColor = getMergedValue(objects, (o) => o.borderColor);
     const borderWidth = getMergedValue(objects, (o) => o.borderWidth);
     const borderRadius = getMergedValue(objects, (o) => o.borderRadius);
@@ -455,24 +350,14 @@ function BorderProperties({
 
     return (
         <PropertySection title="Border">
-            <ColorRow
-                label="Color"
-                value={borderColor}
-                onOpen={setColorOpen}
-                open={colorOpen}
-                onChange={(c) => {
-                    onUpdate({ borderColor: c });
-                    setColorOpen(false);
-                }}
-                showReset
-            />
+            {/* "No border" is the color reset (render gates on borderWidth && borderColor); the preset
+                list carries weight only, so it has no 0/None entry — clearing the color removes the border. */}
+            <ColorRow label="Color" value={borderColor} onChange={(c) => onUpdate({ borderColor: c })} showReset />
             <PropertyRow label="Width">
-                <MergedNumberInput
-                    value={borderWidth}
-                    onChange={(v) => onUpdate({ borderWidth: v })}
-                    step={1}
-                    min={0}
-                    max={20}
+                <MergedSelect
+                    value={numToStr(borderWidth)}
+                    onChange={(v) => onUpdate({ borderWidth: Number(v) })}
+                    options={STROKE_WIDTH_OPTIONS}
                 />
             </PropertyRow>
             <div className="grid grid-cols-2 gap-2">
@@ -497,80 +382,6 @@ function BorderProperties({
                 </PropertyRow>
             </div>
         </PropertySection>
-    );
-}
-
-function ColorRow({
-    label,
-    value,
-    open,
-    onOpen,
-    onChange,
-    showReset,
-}: {
-    label: string;
-    value: MergedValue<string>;
-    open: boolean;
-    onOpen: (open: boolean) => void;
-    onChange: (color: string) => void;
-    showReset?: boolean;
-}) {
-    const mixed = isMixed(value);
-    const displayColor = mixed ? undefined : value || undefined;
-
-    return (
-        <Popover open={open} onOpenChange={onOpen}>
-            <PopoverTrigger asChild>
-                <button className="flex items-center gap-2 h-8 px-2 rounded hover:bg-accent text-sm w-full">
-                    <div
-                        className="h-5 w-5 rounded border border-border shrink-0"
-                        style={{ backgroundColor: displayColor }}
-                    >
-                        {mixed && (
-                            <span className="text-xs text-muted-foreground flex items-center justify-center h-full">
-                                —
-                            </span>
-                        )}
-                        {!mixed && !value && (
-                            <span className="text-xs text-muted-foreground flex items-center justify-center h-full">
-                                ∅
-                            </span>
-                        )}
-                    </div>
-                    <span className="text-xs flex-1 text-left">{label}</span>
-                    {!mixed && value && <span className="text-xs text-muted-foreground">{value}</span>}
-                </button>
-            </PopoverTrigger>
-            <PopoverContent side="left" align="start" className="w-auto">
-                <ColorPicker value={mixed ? '#000000' : value || '#000000'} onChange={onChange} showReset={showReset} />
-            </PopoverContent>
-        </Popover>
-    );
-}
-
-function MergedNumberInput({
-    value,
-    onChange,
-    min,
-    max,
-    step,
-}: {
-    value: MergedValue<number>;
-    onChange: (v: number) => void;
-    min?: number;
-    max?: number;
-    step?: number;
-}) {
-    const mixed = isMixed(value);
-    return (
-        <PropertyNumberInput
-            value={mixed ? undefined : value}
-            onChange={onChange}
-            min={min}
-            max={max}
-            step={step}
-            placeholder={mixed ? '—' : undefined}
-        />
     );
 }
 

@@ -10,13 +10,13 @@ export type PeerPresence = {
 };
 
 // Peers that have published both an identity and a cursor become `Presence` rows.
-// Peers sharing the local user's id are skipped so a user never sees — or fights
-// across tabs — their own cursor.
-export function presencesFromPeers(peers: PeerPresence[], selfUserId: string): Presence[] {
+// The local TAB is already absent (useAwarenessPeers omits the local client), so a
+// same-user entry here is the user's other window — shown like any peer, unified
+// with the other apps (Reinder ruling 2026-08-24: you see yourself across windows).
+export function presencesFromPeers(peers: PeerPresence[]): Presence[] {
     const result: Presence[] = [];
     for (const { user, selection } of peers) {
         if (!user || !selection) continue;
-        if (user.userId != null && user.userId === selfUserId) continue;
         result.push({
             sheetId: selection.sheetId,
             username: user.name,

@@ -18,7 +18,7 @@ type EigenDocEditorRoute = {
     setAccessDialogOpen: (open: boolean) => void;
 };
 
-// The ?q= landing term for the in-document find bar, shared by the same four routes. Latched once:
+// The ?q= landing term for the in-document find bar, shared by the doc/slide/board/sheet routes. Latched once:
 // the editors defer their subtree until collab sync, so the DocSearchProvider mounts long after the
 // route resolves — a clear timed against the consumer's mount would race it and wipe q first.
 // Latched, the URL strip is timing-proof (replace: true → no history entry; the link still works on
@@ -35,7 +35,7 @@ export function useLatchedDocSearchTerm(q: string | undefined): string | undefin
     return initialSearchTerm;
 }
 
-// Shared scaffold for the four EigenDoc editor routes (docs/slides/sheets/stickies).
+// Shared scaffold for the EigenDoc editor routes (docs/slides/sheets/stickies/vector).
 // Each route loads the same collab document info, mirrors the doc name into the
 // document title, publishes the open doc as a palette selection, derives the media/chat
 // folder ids, and owns the access-dialog open state. Editors differ only in the JSX they

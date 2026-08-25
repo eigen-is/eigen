@@ -1635,8 +1635,10 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 pasteHandler(ctx, data, borderInfo);
                 ele.remove();
             }
-            // the copied content is an image
+            // the copied content is an image file — hand it to the app's fit-to-pane insert + upload
+            // (the Insert-menu / OS-drop path); the engine carries no upload seam of its own (U5c).
             else if (clipboardData.files.length === 1 && clipboardData.files[0].type.indexOf('image') > -1) {
+                ctx.hooks.onPasteImageFile?.(clipboardData.files[0]);
             } else {
                 txtdata = clipboardData.getData('text/plain');
                 const isExcelFormula = txtdata.startsWith('=');

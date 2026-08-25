@@ -13,12 +13,14 @@ import {
     deleteSheet,
     getFlowdata,
     getSheetIndex,
+    type Image,
     insertImage,
     insertRowCol,
     type Op,
     opToPatch,
     type Presence,
     type Range,
+    removeActiveImage,
     removeImageByMediaName,
     replaceAllMatches,
     replaceImageMediaName,
@@ -28,6 +30,7 @@ import {
     type SearchResult,
     type Settings,
     setSearchHighlights,
+    updateImage,
 } from '../../state';
 
 export function generateAPIs(
@@ -142,13 +145,23 @@ export function generateAPIs(
             });
         },
 
-        insertImage: (mediaName: string, width: number, height: number) =>
-            setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height)),
+        insertImage: (mediaName: string, width: number, height: number, angle?: number) =>
+            setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height, angle)),
 
+        // Pending→real swap after an upload/paste settles — a technical fixup, never the user's own
+        // undo step (noUndo emits the op to peers but records no local undo entry).
         replaceImageMediaName: (oldName: string, newName: string) =>
-            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName)),
+            setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName), { noUndo: true }),
 
-        removeImageByMediaName: (name: string) => setContext((draftCtx) => removeImageByMediaName(draftCtx, name)),
+        removeImageByMediaName: (name: string) =>
+            setContext((draftCtx) => removeImageByMediaName(draftCtx, name), { noUndo: true }),
+
+        // ObjectTransform resize/rotate commit + properties-panel numeric edits — one op + undo step
+        // each (default setContext).
+        updateImage: (id: string, fields: Partial<Pick<Image, 'x' | 'y' | 'width' | 'height' | 'angle'>>) =>
+            setContext((draftCtx) => updateImage(draftCtx, id, fields)),
+
+        removeActiveImage: () => setContext((draftCtx) => removeActiveImage(draftCtx)),
 
         undo: handleUndo,
         redo: handleRedo,

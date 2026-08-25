@@ -1,0 +1,12 @@
+:root {
+    --app-current-color: var(--app-vector-color);
+    --app-current-color-soft: var(--app-vector-color-soft);
+}
+
+.bg-app {
+    background-color: var(--app-vector-color);
+}
+
+.text-app {
+    color: var(--app-vector-color);
+}

@@ -45,6 +45,7 @@ export const trustedOrigins = [
     'http://localhost:3011',
     'http://localhost:3012',
     'http://localhost:3013',
+    'http://localhost:3014',
     ...(deploymentDomain !== 'localhost' ? [`https://${deploymentDomain}`] : []),
 ];
 

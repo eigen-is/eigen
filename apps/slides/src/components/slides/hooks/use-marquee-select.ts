@@ -1,16 +1,15 @@
+import { type Bounds, type MarqueeMode, marqueeHits, marqueeMode } from '@workspace/lib/vector';
 import { useCallback, useRef, useState } from 'react';
 import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 
-// Drag direction determines selection mode (AutoCAD/Figma convention):
-// left-to-right = 'contain' (object fully inside marquee), right-to-left = 'intersect' (object overlaps marquee)
-type SelectionMode = 'contain' | 'intersect';
-
+// Drag direction determines selection mode (AutoCAD/Figma convention) via the shared U6c helper:
+// rightward = 'contain' (object fully inside marquee), leftward = 'intersect' (object overlaps).
 type MarqueeRect = {
     x: number;
     y: number;
     w: number;
     h: number;
-    mode: SelectionMode;
+    mode: MarqueeMode;
 };
 
 type UseMarqueeSelectProps = {
@@ -21,8 +20,6 @@ type UseMarqueeSelectProps = {
 
 export const useMarqueeSelect = ({ objects, canvasRef, onSelect }: UseMarqueeSelectProps) => {
     const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
-    const marqueeRef = useRef<MarqueeRect | null>(null);
-    marqueeRef.current = marquee;
     const startRef = useRef<{ clientX: number; clientY: number } | null>(null);
     const objectsRef = useRef(objects);
     objectsRef.current = objects;
@@ -54,37 +51,34 @@ export const useMarqueeSelect = ({ objects, canvasRef, onSelect }: UseMarqueeSel
 
                 const s = getSlideCoords(start.clientX, start.clientY);
                 const c = getSlideCoords(me.clientX, me.clientY);
-
-                setMarquee({
+                const mode = marqueeMode(start.clientX, me.clientX);
+                const rect: MarqueeRect = {
                     x: Math.min(s.x, c.x),
                     y: Math.min(s.y, c.y),
                     w: Math.abs(c.x - s.x),
                     h: Math.abs(c.y - s.y),
-                    mode: me.clientX < start.clientX ? 'intersect' : 'contain',
-                });
+                    mode,
+                };
+                setMarquee(rect);
+
+                // Live update (slides adopts vector's live-selection during the drag — U6c). The empty
+                // canvas mousedown already cleared, so reflecting the current hits (empty included)
+                // never independently clears a user's selection.
+                const marq: Bounds = { minX: rect.x, minY: rect.y, maxX: rect.x + rect.w, maxY: rect.y + rect.h };
+                const selected = objectsRef.current
+                    .filter((obj) =>
+                        marqueeHits(
+                            { minX: obj.x, minY: obj.y, maxX: obj.x + obj.width, maxY: obj.y + obj.height },
+                            marq,
+                            mode,
+                        ),
+                    )
+                    .map((obj) => obj.id);
+                onSelect(selected);
             };
 
             const handleMouseUp = () => {
-                const rect = marqueeRef.current;
-                if (rect) {
-                    const selected = objectsRef.current
-                        .filter((obj) =>
-                            rect.mode === 'intersect'
-                                ? obj.x < rect.x + rect.w &&
-                                  obj.x + obj.w > rect.x &&
-                                  obj.y < rect.y + rect.h &&
-                                  obj.y + obj.h > rect.y
-                                : obj.x >= rect.x &&
-                                  obj.y >= rect.y &&
-                                  obj.x + obj.w <= rect.x + rect.w &&
-                                  obj.y + obj.h <= rect.y + rect.h,
-                        )
-                        .map((obj) => obj.id);
-
-                    if (selected.length > 0) {
-                        onSelect(selected);
-                    }
-                }
+                // Selection was applied live during the move; just tear the marquee down.
                 setMarquee(null);
                 startRef.current = null;
                 document.removeEventListener('mousemove', handleMouseMove);

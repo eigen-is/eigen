@@ -5,6 +5,7 @@ import {
     DRIVE_TYPE_SHEETS,
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
+    DRIVE_TYPE_VECTOR,
     isFolderType,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
@@ -57,6 +58,8 @@ function buildReferenceUrl(ref: AttachmentReference): string {
             return `${appUrl('VITE_APP_SLIDES_URL', 'http://localhost:3012/slides')}/slide/${path}`;
         case DRIVE_TYPE_SHEETS:
             return `${appUrl('VITE_APP_SHEETS_URL', 'http://localhost:3013/sheets')}/sheet/${path}`;
+        case DRIVE_TYPE_VECTOR:
+            return `${appUrl('VITE_APP_VECTOR_URL', 'http://localhost:3014/vector')}/vector/${path}`;
         case DRIVE_TYPE_CHAT:
             return `${appUrl('VITE_APP_CHAT_URL', 'http://localhost:3008/chat')}/${path}`;
     }

@@ -148,6 +148,8 @@ Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic
 | **Validation**     | `packages/lib/src/validation/`                        | Shared FE/BE validation                                    |
 | **Colors**         | `packages/lib/src/constants/colors.ts`                | `EIGEN_COLORS`, `EIGEN_ACCENT_COLORS`                      |
 | **Yjs utilities**  | `packages/lib/src/core/collab/yjs-utils.ts`           | `restoreYjsDoc` — server-side only (used by `CollabDocument.applySnapshotState` during version restore to replace the live Y.Doc's declared roots inside one transaction, so connected editors converge with no reload). Handles Y.Map, Y.Array, Y.Text, and Y.XmlFragment/Tiptap, with arbitrary nesting |
+| **Collab lifecycle** | `packages/lib/src/core/collab/hooks/use-collab-doc.ts` | `useCollabDoc` owns the Y.Doc + WebsocketProvider + UndoManager for every collab editor (docs/slides/stickies/vector; sheets layers its op-log on top). Exposes live `synced` (presence + seed-on-sync) AND a latched `loaded` — **gate the loading screen on `loaded`, never `synced`**, so a WS blip doesn't unmount the editor. Repairs/technical fixups write under non-null origin sentinels (`NORMALIZE_ORIGIN`, vector's `UNTRACKED_ORIGIN`) that escape the default `{null}` trackedOrigins. See [CANVAS.md](docs/CANVAS.md) |
+| **Canvas editors** | `packages/ui/src/components/vector/` + `apps/slides/` | Free-canvas editors share one keymap, layered-Escape stack, and primitives: `ObjectTransform` + `snapBox`, `TransformSection`/`AlignSection`/`ZOrderButtons`, `marqueeMode`/`marqueeHits`, `snap.ts` (screen-vs-scene threshold, `centerOnly` for rotated), `computeArrange`, `stopCapturing` sealing. Typed clipboard items carry geometry + typography as first-class fields; D6 flavor policy avoids double-paste. See [CANVAS.md](docs/CANVAS.md) + [CLIPBOARD.md](docs/CLIPBOARD.md) |
 | **App shell**      | `packages/ui/src/components/layout/app/app-shell.tsx` | Wraps every app (Topbar + sidebar + content)               |
 | **Provider stack** | `packages/ui/src/components/layout/app/eigen-app.tsx` | Auth → SSE → Upload → Preview → CommandPalette → Toaster   |
 | **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
@@ -292,7 +294,9 @@ is set to `external_{email}` (e.g. `external_alice@example.com`). Same prefix co
 
 ## Testing
 
-The API integration tests are in `apps/api/src/test/`. `bun run test` runs every workspace's tests (api + sheet + lib + index); `bun run test:api` runs the API suite alone. A single file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/[file].test.ts`.
+**Every workspace keeps its tests in `<workspace>/src/test/` — nothing named `*.test.ts` lives anywhere else.** Within that folder, a test covering one module mirrors that module's path (`packages/lib/src/vector/snap.ts` → `packages/lib/src/test/vector/snap.test.ts`); a test covering a feature end-to-end gets a feature folder (`apps/api/src/test/mail/`). `bun scripts/check-test-layout.ts` enforces both the location rule and the "a workspace with tests has a `test` script" rule as part of `bun run check`. Full rationale in [TESTING.md](docs/TESTING.md).
+
+The API integration tests are in feature folders under `apps/api/src/test/`. `bun run test` runs every workspace's tests (api + sheet + lib + index); `bun run test:api` runs the API suite alone. A single file needs the preload and must run from `apps/api`: `cd apps/api && bun test --preload ./src/test/preload.ts ./src/test/<domain>/<file>.test.ts`.
 
 **Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`:
 - `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients

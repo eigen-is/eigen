@@ -41,6 +41,7 @@ next-env.d.ts
 
 .idea
 /apps/api/data/home
+/apps/api/data/server
 /apps/api/data/bucket
 /apps/api/data/users3.db
 /apps/api/data/config.db

@@ -1,10 +1,11 @@
 import type { CommentEntry } from '@workspace/lib/types/chat';
+import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
-import type { Selection, Sheet, SheetConfig } from './types';
+import type { Image, Selection, Sheet, SheetConfig } from './types';
 
 // Cell value as accepted by setCellValue / surfaced through update hooks. Covers
 // raw scalar input from the formula bar / paste path plus the `Cell` object form
@@ -123,6 +124,20 @@ export type Hooks = {
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;
+    // Resolve a floating image's mediaName to its portable DrivePath, so an image copy can carry a
+    // cross-mount source path (U5c produce). `undefined` when the media isn't resolvable yet (a
+    // still-pending upload) — the copy then falls through to the pending-cell path.
+    resolveImagePath?: (mediaName: string) => DrivePath | undefined;
+    // Insert a pasted eigen image item as a floating image at its TYPED size (never fit-to-pane),
+    // handling the cross-mount re-upload + pending→real mediaName swap app-side (U5c consume).
+    onPasteEigenImage?: (item: EigenClipboardImageItem) => void;
+    // Paste of an OS image file (no eigen payload) — the app runs its fit-to-pane insert + upload
+    // (the same path as the Insert menu and OS-file drop) (U5c OS branch).
+    onPasteImageFile?: (file: File) => void;
+    // Fired whenever the active floating image changes (selected, deselected, or its geometry
+    // committed), so the app can mount/refresh its image properties panel. `null` when nothing is
+    // active.
+    onActiveImageChange?: (image: Image | null) => void;
 };
 
 export type Settings = {
@@ -148,6 +163,10 @@ export type Settings = {
     hooks?: Hooks;
     currency?: string;
     fontList?: unknown[];
+    // Ephemeral aspect-lock state for the active image's ObjectTransform (U4b/D8c). The app owns it
+    // (via `useAspectLock`) so the same ON/OFF drives both the canvas handles and the panel checkbox;
+    // never stored on an element.
+    imageAspectLocked?: boolean;
 };
 
 export const defaultSettings: Required<Settings> = {
@@ -191,4 +210,5 @@ export const defaultSettings: Required<Settings> = {
     hooks: {},
     currency: '€',
     fontList: [],
+    imageAspectLocked: false,
 };

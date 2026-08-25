@@ -1,6 +1,6 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
-import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONTS, getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
 import { DOCX_MIME } from '@workspace/lib/constants/mime';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -156,8 +156,9 @@ export const EditorToolbar = ({
               ? 'Heading 4'
               : 'Normal';
 
-    const activeFontFamily = editor.getAttributes('textStyle').fontFamily || '';
-    const activeFontName = activeFontFamily.match(/^'([^']+)'/)?.[1] ?? EIGEN_FONTS[0].name;
+    // Docs stores the fontFamily attr as an EIGEN_FONTS name now; getFontName also collapses any
+    // legacy full-stack value a not-yet-normalized doc still carries.
+    const activeFontName = getFontName(editor.getAttributes('textStyle').fontFamily || '') || EIGEN_FONTS[0].name;
 
     return (
         <>
@@ -203,11 +204,7 @@ export const EditorToolbar = ({
                                                     <DropdownMenuItem
                                                         key={font.name}
                                                         onClick={() =>
-                                                            editor
-                                                                .chain()
-                                                                .focus()
-                                                                .setFontFamily(getFontFamily(font.name))
-                                                                .run()
+                                                            editor.chain().focus().setFontFamily(font.name).run()
                                                         }
                                                     >
                                                         <span style={{ fontFamily: getFontFamily(font.name) }}>
@@ -421,7 +418,7 @@ export const EditorToolbar = ({
                             {/* Font family selector */}
                             <FontPicker
                                 value={activeFontName}
-                                onChange={(f) => editor.chain().focus().setFontFamily(getFontFamily(f)).run()}
+                                onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
                             />
 
                             <ToolbarSeparator />

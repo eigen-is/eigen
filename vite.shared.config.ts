@@ -74,6 +74,7 @@ const APP_PORTS: Record<string, number> = {
     admin: 3009,
     slides: 3012,
     sheets: 3013,
+    vector: 3014,
 };
 
 export function createAppConfig(appName: string, extraConfig?: UserConfig) {

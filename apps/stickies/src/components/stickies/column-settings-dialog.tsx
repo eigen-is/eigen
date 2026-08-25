@@ -13,6 +13,8 @@ type ColumnSettingsDialogProps = {
     columnTitle: string;
     cardCount?: number;
     yjsDoc: Y.Doc | null;
+    // Seals the column delete as its own undo step (U6e).
+    undoManager: Y.UndoManager | null;
 };
 
 export function ColumnSettingsDialog({
@@ -22,6 +24,7 @@ export function ColumnSettingsDialog({
     columnTitle,
     cardCount = 0,
     yjsDoc,
+    undoManager,
 }: ColumnSettingsDialogProps) {
     const [title, setTitle] = useState(columnTitle);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -42,6 +45,7 @@ export function ColumnSettingsDialog({
     const handleDelete = () => {
         if (!yjsDoc) return;
 
+        undoManager?.stopCapturing();
         yjsDoc.transact(() => {
             const columnsMap = yjsDoc.getMap('columns');
             const tasksMap = yjsDoc.getMap('tasks');
@@ -63,6 +67,7 @@ export function ColumnSettingsDialog({
 
             columnsMap.delete(columnId);
         });
+        undoManager?.stopCapturing();
 
         onClose();
     };

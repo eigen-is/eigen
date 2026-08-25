@@ -6,6 +6,7 @@ import { TooltipButton } from '@workspace/ui';
 import { cn } from '@workspace/ui/lib/utils';
 import { Pencil, Plus } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef } from 'react';
+import type { CardPeer } from './hooks/use-stickies-presence';
 import { SortableNoteCard } from './sortable-note-card';
 import type { ColumnItem } from './types';
 
@@ -23,6 +24,8 @@ type ColumnProps = {
     scrollToTopSignal?: number;
     highlighted?: boolean;
     highlightedCardIds?: ReadonlySet<string>;
+    // Remote presence by card id — the peer whose selection/drag is on that card, if any.
+    cardPresence?: ReadonlyMap<string, CardPeer>;
 };
 
 export const Column = memo(function Column({
@@ -39,6 +42,7 @@ export const Column = memo(function Column({
     scrollToTopSignal,
     highlighted,
     highlightedCardIds,
+    cardPresence,
 }: ColumnProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: column.id,
@@ -120,6 +124,7 @@ export const Column = memo(function Column({
                                         assigneeEmail={entry?.assignee}
                                         canWrite={canWrite}
                                         highlighted={highlightedCardIds?.has(card.id)}
+                                        peer={cardPresence?.get(card.id)}
                                         onOpen={onCardOpen}
                                         onContextMenu={onCardContextMenu}
                                         onLongPress={onCardLongPress}

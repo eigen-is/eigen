@@ -1,67 +1,25 @@
-import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
+import { useCollabDoc } from '@workspace/lib/collab';
+import { yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
+import type { ZOp } from '@workspace/ui/components/properties-panel';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
 import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
 
-const OBJECT_FIELDS = [
-    'id',
-    'slideId',
-    'type',
-    'x',
-    'y',
-    'w',
-    'h',
-    'rotation',
-    'borderColor',
-    'borderWidth',
-    'borderRadius',
-    'text',
-    'fontFamily',
-    'fontSize',
-    'fontWeight',
-    'fontStyle',
-    'textDecoration',
-    'textAlign',
-    'verticalAlign',
-    'color',
-    'letterSpacing',
-    'lineHeight',
-    'highlightColor',
-    'background',
-    'mediaName',
-    'objectFit',
-    'commentCardIds',
-] as const;
-
-function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
-    const obj: Record<string, unknown> = {};
-    for (const field of OBJECT_FIELDS) {
-        const val = yMap.get(field);
-        if (val !== undefined) obj[field] = val;
-    }
-    // Ensure commentCardIds is always a string array (may be stored as Y.Array or plain array)
-    const raw = obj.commentCardIds;
-    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') {
-        obj.commentCardIds = (raw as Y.Array<string>).toArray();
-    } else if (!Array.isArray(raw)) {
-        obj.commentCardIds = [];
-    }
-    return obj;
+// commentCardIds may still be a legacy Y.Array (yMapToObject tolerates it on read) — normalize
+// before rewriting so an anchor write can't silently drop the existing ids.
+function readCommentCardIds(objMap: Y.Map<unknown>): string[] {
+    const raw = objMap.get('commentCardIds');
+    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') return (raw as Y.Array<string>).toArray();
+    return Array.isArray(raw) ? [...raw] : [];
 }
 
 export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const [deck, setDeck] = useState<DeckData>({ slides: {}, objects: {}, slideOrder: [] });
     const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
-    const [isSynced, setIsSynced] = useState(false);
-
-    const docRef = useRef<Y.Doc | null>(null);
-    const providerRef = useRef<WebsocketProvider | null>(null);
-    const undoManager = useRef<Y.UndoManager | null>(null);
 
     const initializeDefaultDeck = useCallback((doc: Y.Doc) => {
         const slidesMap = doc.getMap('slides');
@@ -84,7 +42,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             objYMap.set('fontSize', 64);
             objYMap.set('color', '#ffffff');
             objYMap.set('y', 378);
-            objYMap.set('h', 324);
+            objYMap.set('height', 324);
             objectsMap.set(objId, objYMap);
 
             const slideYMap = new Y.Map();
@@ -99,75 +57,82 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, []);
 
-    useEffect(() => {
-        const doc = new Y.Doc();
-        docRef.current = doc;
+    const {
+        docRef,
+        provider,
+        undoManager,
+        doc: yjsDoc,
+        synced: isSynced,
+        loaded,
+    } = useCollabDoc({
+        ownerId,
+        mountId,
+        pathId,
+        undoScope: (doc) => [doc.getMap('slides'), doc.getMap('objects'), doc.getArray('slideOrder')],
+        onInit: ({ doc, provider, undoManager }) => {
+            const slidesMap = doc.getMap('slides');
+            const objectsMap = doc.getMap('objects');
+            const slideOrderArray = doc.getArray('slideOrder');
 
-        const slidesMap = doc.getMap('slides');
-        const objectsMap = doc.getMap('objects');
-        const slideOrderArray = doc.getArray('slideOrder');
-
-        undoManager.current = new Y.UndoManager([slidesMap, objectsMap, slideOrderArray]);
-
-        const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
-        const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
-            resyncInterval: 5000,
-            connect: true,
-        });
-        providerRef.current = wsProvider;
-
-        const updateReactState = () => {
-            normalizeDeck(doc);
-            const newState: DeckData = {
-                slides: {},
-                objects: {},
-                slideOrder: slideOrderArray.toArray() as string[],
-            };
-            for (const [slideId, slideMapValue] of slidesMap) {
-                const slideMap = slideMapValue as Y.Map<unknown>;
-                const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
-                const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
-                const bgRaw = slideMap.get('background');
-                newState.slides[slideId] = {
-                    id: slideId,
-                    objectIds: objIds,
-                    background: bgRaw && typeof bgRaw === 'object' ? (bgRaw as BackgroundFill) : null,
+            // Normalize only on REMOTE merges — concurrent edits are what dupe/orphan a ref; local
+            // edits are well-formed by construction, so a local tick just reads (U6d cadence fix; this
+            // ran on every observer tick before). The initial read (no transaction) skips it too — the
+            // doc is empty until sync, and onSync normalizes the loaded content.
+            const updateReactState = (_events?: unknown, tr?: Y.Transaction) => {
+                // Undo/redo re-applies historical state that may predate a repair, so it is exactly
+                // as suspect as a remote merge (⌘Z after an orphan-rehome can resurrect a dupe).
+                if (tr?.origin === provider || tr?.origin === undoManager) normalizeDeck(doc);
+                const newState: DeckData = {
+                    slides: {},
+                    objects: {},
+                    slideOrder: slideOrderArray.toArray() as string[],
                 };
-            }
-            for (const [objId, objMapValue] of objectsMap) {
-                const objMap = objMapValue as Y.Map<unknown>;
-                const obj = yMapToObject(objMap) as SlideObject;
-                newState.objects[objId] = obj;
-            }
-            setDeck(newState);
-        };
+                for (const [slideId, slideMapValue] of slidesMap) {
+                    const slideMap = slideMapValue as Y.Map<unknown>;
+                    const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
+                    const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
+                    const bgRaw = slideMap.get('background');
+                    newState.slides[slideId] = {
+                        id: slideId,
+                        objectIds: objIds,
+                        background: bgRaw && typeof bgRaw === 'object' ? (bgRaw as BackgroundFill) : null,
+                    };
+                }
+                for (const [objId, objMapValue] of objectsMap) {
+                    const objMap = objMapValue as Y.Map<unknown>;
+                    newState.objects[objId] = yMapToObject(objMap);
+                }
+                setDeck(newState);
+            };
 
-        slidesMap.observeDeep(updateReactState);
-        objectsMap.observeDeep(updateReactState);
-        slideOrderArray.observe(updateReactState);
-        updateReactState();
+            slidesMap.observeDeep(updateReactState);
+            objectsMap.observeDeep(updateReactState);
+            slideOrderArray.observe(updateReactState);
+            updateReactState();
 
-        wsProvider.on('sync', (synced: boolean) => {
-            setIsSynced(synced);
-            if (synced && slidesMap.size === 0) {
+            return () => {
+                slidesMap.unobserveDeep(updateReactState);
+                objectsMap.unobserveDeep(updateReactState);
+                slideOrderArray.unobserve(updateReactState);
+            };
+        },
+        onSync: ({ doc }, synced) => {
+            if (!synced) return;
+            // Once-on-sync: repair the freshly loaded content before the empty-check + seeding.
+            normalizeDeck(doc);
+            if (doc.getMap('slides').size === 0) {
                 initializeDefaultDeck(doc);
             }
-        });
+        },
+    });
 
-        return () => {
-            setIsSynced(false);
-            // Unregister observers and tear down the UndoManager + provider; the effect re-runs on
-            // pathId change without an unmount, so without this the old ones leak (and fire on
-            // torn-down state). provider.destroy() before doc.destroy() — it detaches its own doc listener.
-            slidesMap.unobserveDeep(updateReactState);
-            objectsMap.unobserveDeep(updateReactState);
-            slideOrderArray.unobserve(updateReactState);
-            undoManager.current?.destroy();
-            undoManager.current = null;
-            wsProvider.destroy();
-            doc.destroy();
-        };
-    }, [ownerId, mountId, pathId, initializeDefaultDeck]);
+    // Seal discrete ops (delete/duplicate/arrange/z-order) as their own undo step — a stopCapturing()
+    // bracket around each transact stops Y.UndoManager from merging it into the previous step within
+    // its 500ms captureTimeout (vector's discipline, adopted in U6e). Held in a ref so the `[]`-deps
+    // op callbacks read the live manager without re-creating. Nudges/text typing stay UNSEALED so they
+    // coalesce.
+    const undoManagerRef = useRef(undoManager);
+    undoManagerRef.current = undoManager;
 
     useEffect(() => {
         if (deck.slideOrder.length > 0) {
@@ -200,6 +165,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         (slideId: string) => {
             const doc = docRef.current;
             if (!doc) return;
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const slidesMap = doc.getMap('slides');
                 const objectsMap = doc.getMap('objects');
@@ -216,6 +182,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 if (idx !== -1) slideOrderArray.delete(idx, 1);
                 slidesMap.delete(slideId);
             });
+            undoManagerRef.current?.stopCapturing();
             if (activeSlideId === slideId) {
                 const remaining = deck.slideOrder.filter((id) => id !== slideId);
                 setActiveSlideId(remaining[0] || null);
@@ -232,6 +199,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             if (!slide) return;
 
             const newSlideId = `slide-${nanoid(6)}`;
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const slidesMap = doc.getMap('slides');
                 const objectsMap = doc.getMap('objects');
@@ -265,6 +233,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 const idx = order.indexOf(slideId);
                 slideOrderArray.insert(idx + 1, [newSlideId]);
             });
+            undoManagerRef.current?.stopCapturing();
             setActiveSlideId(newSlideId);
         },
         [deck],
@@ -303,6 +272,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const doc = docRef.current;
             if (!doc) return [];
             const newIds: string[] = [];
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const objectsMap = doc.getMap('objects');
                 const slidesMap = doc.getMap('slides');
@@ -327,6 +297,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                     newIds.push(newObjId);
                 }
             });
+            undoManagerRef.current?.stopCapturing();
             return newIds;
         },
         [deck],
@@ -370,93 +341,70 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, []);
 
-    const moveObjectUp = useCallback(
-        (objId: string) => {
+    // Z-order over the objectIds Y.Array (later in the array = painted on top): `forward`/`toFront`
+    // move an id toward the end, `backward`/`toBack` toward the start. Every id in a multi-selection
+    // is spliced inside ONE transact (one undo step) — `forward`/`toBack` iterate the block top-down,
+    // `backward`/`toFront` bottom-up, indices recomputed live per id so single-step splices preserve
+    // the block's relative stacking without leapfrogging within it. A non-contiguous selection moves each
+    // id one step relative to its neighbours (no block-collapse — that's vector's fractional-index
+    // model, not this Y.Array one).
+    const moveObjectsZOrder = useCallback(
+        (op: ZOp, objIds: string[]) => {
             const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
+            if (!doc || objIds.length === 0) return;
+            const first = deck.objects[objIds[0]];
+            if (!first) return;
+            undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
                 const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
+                const slideMap = slidesMap.get(first.slideId) as Y.Map<unknown> | undefined;
                 if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
+                const objIdsArr = slideMap.get('objectIds') as Y.Array<string> | undefined;
                 if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx === -1 || idx === arr.length - 1) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.insert(idx + 1, [objId]);
+                const currentOrder = objIdsArr.toArray();
+                const inSel = objIds.filter((id) => currentOrder.includes(id));
+                inSel.sort((a, b) => currentOrder.indexOf(a) - currentOrder.indexOf(b));
+                const ordered = op === 'forward' || op === 'toBack' ? [...inSel].reverse() : inSel;
+                // Step ops never swap past a selected neighbour: a block at the array edge would
+                // otherwise oscillate its outer pair on repeated presses (and select-all would
+                // rotate the whole stack). Mid-stack the neighbour is already-moved and unselected.
+                const selSet = new Set(inSel);
+                for (const id of ordered) {
+                    const arr = objIdsArr.toArray();
+                    const idx = arr.indexOf(id);
+                    if (idx === -1) continue;
+                    if (op === 'toFront') {
+                        if (idx === arr.length - 1) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.push([id]);
+                    } else if (op === 'toBack') {
+                        if (idx === 0) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.insert(0, [id]);
+                    } else if (op === 'forward') {
+                        if (idx === arr.length - 1 || selSet.has(arr[idx + 1])) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.insert(idx + 1, [id]);
+                    } else {
+                        if (idx === 0 || selSet.has(arr[idx - 1])) continue;
+                        objIdsArr.delete(idx, 1);
+                        objIdsArr.insert(idx - 1, [id]);
+                    }
+                }
             });
+            undoManagerRef.current?.stopCapturing();
         },
         [deck.objects],
     );
 
-    const moveObjectDown = useCallback(
-        (objId: string) => {
-            const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
-            doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
-                if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx <= 0) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.insert(idx - 1, [objId]);
-            });
-        },
-        [deck.objects],
-    );
-
+    // Single-object context-menu wiring delegates to the batched reorder (one id = one splice).
+    const moveObjectUp = useCallback((objId: string) => moveObjectsZOrder('forward', [objId]), [moveObjectsZOrder]);
+    const moveObjectDown = useCallback((objId: string) => moveObjectsZOrder('backward', [objId]), [moveObjectsZOrder]);
     const moveObjectToFront = useCallback(
-        (objId: string) => {
-            const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
-            doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
-                if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx === -1 || idx === arr.length - 1) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.push([objId]);
-            });
-        },
-        [deck.objects],
+        (objId: string) => moveObjectsZOrder('toFront', [objId]),
+        [moveObjectsZOrder],
     );
-
-    const moveObjectToBack = useCallback(
-        (objId: string) => {
-            const doc = docRef.current;
-            if (!doc) return;
-            const obj = deck.objects[objId];
-            if (!obj) return;
-            doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
-                if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                if (!objIdsArr) return;
-                const arr = objIdsArr.toArray() as string[];
-                const idx = arr.indexOf(objId);
-                if (idx <= 0) return;
-                objIdsArr.delete(idx, 1);
-                objIdsArr.insert(0, [objId]);
-            });
-        },
-        [deck.objects],
-    );
+    const moveObjectToBack = useCallback((objId: string) => moveObjectsZOrder('toBack', [objId]), [moveObjectsZOrder]);
 
     const updateObjects = useCallback((objIds: string[], updates: Partial<SlideObject>) => {
         const doc = docRef.current;
@@ -477,6 +425,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const deleteObjects = useCallback((objIds: string[]) => {
         const doc = docRef.current;
         if (!doc) return;
+        undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
             const objectsMap = doc.getMap('objects');
             const slidesMap = doc.getMap('slides');
@@ -497,6 +446,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 objectsMap.delete(objId);
             }
         });
+        undoManagerRef.current?.stopCapturing();
     }, []);
 
     const deleteObject = useCallback(
@@ -513,8 +463,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const objectsMap = doc.getMap('objects');
             const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
             if (!objMap) return;
-            const current = (objMap.get('commentCardIds') as string[] | undefined) || [];
-            const arr = Array.isArray(current) ? [...current] : [];
+            const arr = readCommentCardIds(objMap);
             if (!arr.includes(cardId)) {
                 arr.push(cardId);
                 objMap.set('commentCardIds', arr);
@@ -529,15 +478,17 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const objectsMap = doc.getMap('objects');
             const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
             if (!objMap) return;
-            const current = (objMap.get('commentCardIds') as string[] | undefined) || [];
-            const arr = Array.isArray(current) ? current.filter((c) => c !== cardId) : [];
-            objMap.set('commentCardIds', arr);
+            objMap.set(
+                'commentCardIds',
+                readCommentCardIds(objMap).filter((c) => c !== cardId),
+            );
         }, 'comment');
     }, []);
 
     return {
         deck,
         isSynced,
+        loaded,
         activeSlideId,
         setActiveSlideId,
         addSlide,
@@ -556,7 +507,9 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         moveObjectDown,
         moveObjectToFront,
         moveObjectToBack,
-        yjsDoc: docRef.current,
-        undoManager: undoManager.current,
+        moveObjectsZOrder,
+        yjsDoc,
+        undoManager,
+        provider,
     };
 };

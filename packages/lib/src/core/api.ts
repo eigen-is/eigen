@@ -6,6 +6,7 @@ import {
     DRIVE_TYPE_SHEETS,
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
+    DRIVE_TYPE_VECTOR,
     type DriveItemRef,
     type DrivePath,
     isFolderType,
@@ -75,6 +76,7 @@ export const STICKIES_APP_URL = import.meta.env.VITE_APP_STICKIES_URL as string;
 export const CHAT_APP_URL = import.meta.env.VITE_APP_CHAT_URL as string;
 export const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL as string;
 export const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL as string;
+export const VECTOR_APP_URL = import.meta.env.VITE_APP_VECTOR_URL as string;
 export const CALENDAR_APP_URL = import.meta.env.VITE_APP_CALENDAR_URL as string;
 export const ADMIN_APP_URL = import.meta.env.VITE_APP_ADMIN_URL as string;
 // Only set in dev, where each app runs on its own port. In production the index app is
@@ -98,6 +100,7 @@ export const getStickiesAppUrl = (path?: string) => joinAppUrl(STICKIES_APP_URL,
 export const getChatAppUrl = (path?: string) => joinAppUrl(CHAT_APP_URL, path);
 export const getSlidesAppUrl = (path?: string) => joinAppUrl(SLIDES_APP_URL, path);
 export const getSheetsAppUrl = (path?: string) => joinAppUrl(SHEETS_APP_URL, path);
+export const getVectorAppUrl = (path?: string) => joinAppUrl(VECTOR_APP_URL, path);
 export const getCalendarAppUrl = (path?: string) => joinAppUrl(CALENDAR_APP_URL, path);
 export const getAdminAppUrl = (path?: string) => joinAppUrl(ADMIN_APP_URL, path);
 export const getIndexAppUrl = (path?: string) => joinAppUrl(INDEX_APP_URL, path);
@@ -116,6 +119,9 @@ const getSlideUrl = (ownerId: string, mountId: string, pathId: string) =>
 
 const getSheetUrl = (ownerId: string, mountId: string, pathId: string) =>
     getSheetsAppUrl(`sheet/${ownerId}/${mountId}/${pathId}`);
+
+const getVectorUrl = (ownerId: string, mountId: string, pathId: string) =>
+    getVectorAppUrl(`vector/${ownerId}/${mountId}/${pathId}`);
 
 export const getMailComposeUrl = (address: string) =>
     getMailAppUrl(`box/inbox?mode=compose&to=${encodeURIComponent(address)}`);
@@ -196,6 +202,7 @@ function getDocumentUrl(path: DriveItemRef): string | undefined {
     if (path.type === DRIVE_TYPE_STICKIES) return getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
     if (path.type === DRIVE_TYPE_SHEETS) return getSheetUrl(path.ownerId, path.mountId, path.id);
     if (path.type === DRIVE_TYPE_SLIDES) return getSlideUrl(path.ownerId, path.mountId, path.id);
+    if (path.type === DRIVE_TYPE_VECTOR) return getVectorUrl(path.ownerId, path.mountId, path.id);
     if (path.type === DRIVE_TYPE_CHAT) return getChatRoomUrl(path.ownerId, path.mountId, path.id);
     return undefined;
 }

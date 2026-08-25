@@ -9,9 +9,11 @@ import {
     getSlidesAppUrl,
     getSpaceAppUrl,
     getStickiesAppUrl,
+    getVectorAppUrl,
 } from '@workspace/lib/api';
 import {
     Calendar,
+    Diamond,
     FileText,
     HardDrive,
     LayoutDashboard,
@@ -72,6 +74,13 @@ const apps = [
         href: getSlidesAppUrl(),
         icon: Presentation,
         description: 'Create presentations',
+    },
+    {
+        name: 'Vector',
+        color: 'var(--app-vector-color)',
+        href: getVectorAppUrl(),
+        icon: Diamond,
+        description: 'Draw and diagram',
     },
     {
         name: 'Stickies',

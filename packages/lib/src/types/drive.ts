@@ -16,6 +16,7 @@ export const DRIVE_TYPE_STICKIES = 'stickies' as const;
 export const DRIVE_TYPE_SLIDES = 'slides' as const;
 export const DRIVE_TYPE_SHEETS = 'sheets' as const;
 export const DRIVE_TYPE_CHAT = 'chat' as const;
+export const DRIVE_TYPE_VECTOR = 'vector' as const;
 export const DRIVE_TYPE_FOLDER = 'folder' as const;
 export const DRIVE_TYPE_FILE = 'file' as const;
 
@@ -25,12 +26,14 @@ export const DRIVE_MIME_STICKIES = 'application/eigenstickies' as const;
 export const DRIVE_MIME_SLIDES = 'application/eigenslides' as const;
 export const DRIVE_MIME_SHEETS = 'application/eigensheets' as const;
 export const DRIVE_MIME_CHAT = 'application/eigenchat' as const;
+export const DRIVE_MIME_VECTOR = 'application/eigenvector' as const;
 
 export type DriveTypeDoc = typeof DRIVE_TYPE_DOC;
 export type DriveTypeStickies = typeof DRIVE_TYPE_STICKIES;
 export type DriveTypeSlides = typeof DRIVE_TYPE_SLIDES;
 export type DriveTypeSheets = typeof DRIVE_TYPE_SHEETS;
 export type DriveTypeChat = typeof DRIVE_TYPE_CHAT;
+export type DriveTypeVector = typeof DRIVE_TYPE_VECTOR;
 export type DriveTypeFolder = typeof DRIVE_TYPE_FOLDER;
 export type DriveTypeFile = typeof DRIVE_TYPE_FILE;
 
@@ -40,11 +43,12 @@ export type DrivePathType =
     | DriveTypeSlides
     | DriveTypeSheets
     | DriveTypeChat
+    | DriveTypeVector
     | DriveTypeFolder
     | DriveTypeFile;
 export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 
-export const EIGEN_DOC_TYPES = ['doc', 'stickies', 'slides', 'sheets', 'chat'] as const;
+export const EIGEN_DOC_TYPES = ['doc', 'stickies', 'slides', 'sheets', 'chat', 'vector'] as const;
 export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 
 // `mime` is the real mime (`application/eigendoc`); `urlSlug` is the route-safe
@@ -132,6 +136,18 @@ export const EIGEN_DOC_TYPE_INFO = {
         softColorVar: '--app-chat-color-soft',
         appName: 'chat',
     },
+    vector: {
+        type: DRIVE_TYPE_VECTOR,
+        mime: DRIVE_MIME_VECTOR,
+        urlSlug: 'application-eigenvector',
+        extension: '.eigenvector',
+        label: 'Vector',
+        labelPlural: 'Vectors',
+        colorVar: '--app-vector-color',
+        softColorVar: '--app-vector-color-soft',
+        appName: 'vector',
+        yjsRoots: { elements: 'map', meta: 'map' },
+    },
 } as const satisfies Record<EigenDocType, EigenDocTypeInfo>;
 
 export const DRIVE_EXTENSIONS = {
@@ -140,6 +156,7 @@ export const DRIVE_EXTENSIONS = {
     slides: EIGEN_DOC_TYPE_INFO.slides.extension,
     sheets: EIGEN_DOC_TYPE_INFO.sheets.extension,
     chat: EIGEN_DOC_TYPE_INFO.chat.extension,
+    vector: EIGEN_DOC_TYPE_INFO.vector.extension,
 } as const satisfies Record<EigenDocType, string>;
 
 export function getEigenDocInfoByType(type: DrivePathType): EigenDocTypeInfo | undefined {
@@ -162,7 +179,7 @@ export function stripEigenExtension(name: string): string {
     return name;
 }
 
-export type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets;
+export type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets | DriveTypeVector;
 export type DriveChatType = DriveTypeChat;
 export type DriveContainerType = DriveTypeFolder | DriveCollabType | DriveChatType;
 
@@ -175,7 +192,8 @@ export function isCollabType(type: DrivePathType): type is DriveCollabType {
         type === DRIVE_TYPE_DOC ||
         type === DRIVE_TYPE_STICKIES ||
         type === DRIVE_TYPE_SLIDES ||
-        type === DRIVE_TYPE_SHEETS
+        type === DRIVE_TYPE_SHEETS ||
+        type === DRIVE_TYPE_VECTOR
     );
 }
 

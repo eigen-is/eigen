@@ -12,6 +12,7 @@ export const eigenDocTypeSchema = t.Union([
     t.Literal('slides'),
     t.Literal('sheets'),
     t.Literal('chat'),
+    t.Literal('vector'),
 ]);
 // Compile-time guard: fails if EIGEN_DOC_TYPES gains or loses a member without updating the schema above.
 type _EigenDocSchemaCoversAll =
@@ -31,6 +32,7 @@ export const attachmentReferenceSchema = t.Object({
         t.Literal('slides'),
         t.Literal('sheets'),
         t.Literal('chat'),
+        t.Literal('vector'),
         t.Literal('folder'),
         t.Literal('file'),
     ]),

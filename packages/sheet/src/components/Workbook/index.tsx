@@ -1,5 +1,15 @@
-import { readEigenClipboard } from '@workspace/lib/clipboard';
-import type { EigenClipboardData, EigenClipboardTextItem } from '@workspace/lib/types/clipboard';
+import {
+    buildImageClipboardItem,
+    buildTextClipboardItem,
+    clipboardTextItemHasContent,
+    readEigenClipboard,
+    writeEigenClipboard,
+} from '@workspace/lib/clipboard';
+import type {
+    EigenClipboardData,
+    EigenClipboardImageItem,
+    EigenClipboardTextItem,
+} from '@workspace/lib/types/clipboard';
 import { cloneDeep } from 'es-toolkit/compat';
 import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
@@ -16,6 +26,7 @@ import {
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
+    getFlowdata,
     getSheetIndex,
     groupValuesRefresh,
     handleGlobalKeyDown,
@@ -47,6 +58,24 @@ type AdditionalProps = {
     toolbarLeftItems?: React.ReactNode;
     toolbarRightItems?: React.ReactNode;
 };
+
+// The copied cell range as a text item. Every clipboard item carries its rendered box, and sheets'
+// document-space units are px (no zoom), so the cumulative edge arrays give both dims directly. The
+// anchor cell's font size rides along so a consumer that honours the box (slides) renders the text
+// at the size it had here rather than at its own much larger default, which the box would clip.
+// A staged copy always has a selection (handleCopy bails without one); the [0, 0] only satisfies TS.
+function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboardTextItem {
+    const [r1, r2] = ctx.selections?.[0]?.row ?? [0, 0];
+    const [c1, c2] = ctx.selections?.[0]?.column ?? [0, 0];
+    return buildTextClipboardItem({
+        text,
+        box: {
+            width: ctx.visibledatacolumn[c2] - (c1 === 0 ? 0 : ctx.visibledatacolumn[c1 - 1]),
+            height: ctx.visibledatarow[r2] - (r1 === 0 ? 0 : ctx.visibledatarow[r1 - 1]),
+        },
+        typography: { fontSize: getFlowdata(ctx)?.[r1]?.[c1]?.fs ?? 10 }, // 10 = the default cell size
+    });
+}
 
 const triggerGroupValuesRefresh = (ctx: Context) => {
     if (ctx.groupValuesRefreshData.length > 0) {
@@ -239,12 +268,16 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 options.addSheet = {};
                                 options.addSheet!.id = result.sheets[result.sheets.length - 1].id;
                             }
-                            globalCache.current.undoList.push({
-                                patches: filteredPatches,
-                                inversePatches: filteredInversePatches,
-                                options,
-                            });
-                            globalCache.current.redoList = [];
+                            // noUndo: emit the op (peers need the swap/correction) but record no local
+                            // undo entry, so a cross-mount paste stays a single ⌘Z.
+                            if (!options.noUndo) {
+                                globalCache.current.undoList.push({
+                                    patches: filteredPatches,
+                                    inversePatches: filteredInversePatches,
+                                    options,
+                                });
+                                globalCache.current.redoList = [];
+                            }
                             emitOp(result, filteredPatches, options);
                         }
                     } else {
@@ -348,6 +381,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 mergedSettings.hooks?.afterSelectionChange?.(context.currentSheetId, context.selections[0]);
             }
         }, [context.currentSheetId, context.selections, mergedSettings.hooks]);
+
+        // Surface the active floating image to the app so it can mount its properties panel. Fires on
+        // select/deselect and after a geometry commit (insertedImgs changes); `find` returns a stable
+        // reference while unchanged, so the app's setState bails when nothing moved.
+        useEffect(() => {
+            const active = context.insertedImgs?.find((img) => img.id === context.activeImg) ?? null;
+            mergedSettings.hooks?.onActiveImageChange?.(active);
+        }, [context.activeImg, context.insertedImgs, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({
@@ -535,28 +576,45 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [handleRedo, handleUndo, setContextWithProduce],
         );
 
-        const onCopy = useCallback((e: ClipboardEvent) => {
-            const pending = consumePendingCopy();
-            if (!pending) return;
+        const onCopy = useCallback(
+            (e: ClipboardEvent) => {
+                // A selected floating image takes precedence over the pending cell copy (U5c): its
+                // copy is a pure image — eigen JSON only, no text/plain and no png (matching vector's
+                // v1 flavor; a native copy event can't await a media/ blob fetch, so png is dropped).
+                const activeImg = context.insertedImgs?.find((img) => img.id === context.activeImg);
+                if (activeImg) {
+                    const source = mergedSettings.hooks?.resolveImagePath?.(activeImg.mediaName);
+                    if (source) {
+                        e.preventDefault();
+                        // Drop any cell table the keyboard copy staged, so a later native-menu copy
+                        // with no image active can't emit this stale table (U5c gate).
+                        consumePendingCopy();
+                        const item = buildImageClipboardItem({
+                            mediaName: activeImg.mediaName,
+                            source,
+                            box: { width: activeImg.width, height: activeImg.height, angle: activeImg.angle },
+                        });
+                        writeEigenClipboard(e, { version: 1, items: [item] });
+                        return;
+                    }
+                }
 
-            e.preventDefault();
+                const pending = consumePendingCopy();
+                if (!pending) return;
 
-            // Build eigen clipboard data with the cell text
-            const eigenData: EigenClipboardData = {
-                version: 1,
-                items: [{ type: 'text', text: pending.plainText }],
-            };
+                e.preventDefault();
 
-            // Embed eigen clipboard marker in the HTML alongside the sheet HTML table
-            const eigenJson = JSON.stringify(eigenData);
-            const eigenMarker = `<span data-eigen-clipboard="${encodeURIComponent(eigenJson)}"></span>`;
-            const combinedHtml = eigenMarker + pending.html;
-
-            e.clipboardData?.setData('text/html', combinedHtml);
-            e.clipboardData?.setData('text/plain', pending.plainText);
-            // Also set the custom MIME type for same-origin reads
-            e.clipboardData?.setData('application/eigen-clipboard', eigenJson);
-        }, []);
+                // Cell text as an eigen text item, carried on the same wire as the image branch above:
+                // the sheet's HTML table rides after the marker span so a non-eigen consumer still pastes
+                // a real table, and the custom MIME lands for same-origin reads.
+                const eigenData: EigenClipboardData = {
+                    version: 1,
+                    items: [buildCellRangeClipboardItem(context, pending.plainText)],
+                };
+                writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
+            },
+            [context, mergedSettings.hooks],
+        );
 
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
@@ -576,25 +634,42 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (!isInternalCopy) {
                         const eigenData = readEigenClipboard(clipboardData);
                         if (eigenData) {
-                            // Extract text from eigen clipboard items and paste as plain text
+                            // Mixed eigen payloads split by kind: image items become floating images,
+                            // text items land in cells. Both apply when both are present (U5c). The image
+                            // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
+                            const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
+                            const imageItems = onPasteEigenImage
+                                ? eigenData.items.filter(
+                                      (item): item is EigenClipboardImageItem => item.type === 'image',
+                                  )
+                                : [];
+                            // Extract text from eigen clipboard items and paste as plain text. Empty
+                            // carriers (vector shapes ride as empty text items) must not paste as blank
+                            // cells over existing content.
                             const textParts = eigenData.items
-                                .filter((item): item is EigenClipboardTextItem => item.type === 'text')
+                                .filter(
+                                    (item): item is EigenClipboardTextItem =>
+                                        item.type === 'text' && clipboardTextItemHasContent(item),
+                                )
                                 .map((item) => item.text);
-                            if (textParts.length > 0) {
+                            if (imageItems.length > 0 || textParts.length > 0) {
                                 e.preventDefault();
-                                // Create a synthetic paste with the text — let handlePaste process it
-                                const syntheticTransfer = new DataTransfer();
-                                syntheticTransfer.setData('text/plain', textParts.join('\n'));
-                                const syntheticEvent = new ClipboardEvent('paste', {
-                                    clipboardData: syntheticTransfer,
-                                });
-                                setContextWithProduce((draftCtx) => {
-                                    try {
-                                        handlePaste(draftCtx, syntheticEvent);
-                                    } catch (err) {
-                                        console.error(err);
-                                    }
-                                });
+                                for (const item of imageItems) onPasteEigenImage?.(item);
+                                if (textParts.length > 0) {
+                                    // Create a synthetic paste with the text — let handlePaste process it
+                                    const syntheticTransfer = new DataTransfer();
+                                    syntheticTransfer.setData('text/plain', textParts.join('\n'));
+                                    const syntheticEvent = new ClipboardEvent('paste', {
+                                        clipboardData: syntheticTransfer,
+                                    });
+                                    setContextWithProduce((draftCtx) => {
+                                        try {
+                                            handlePaste(draftCtx, syntheticEvent);
+                                        } catch (err) {
+                                            console.error(err);
+                                        }
+                                    });
+                                }
                                 return;
                             }
                         }
@@ -640,7 +715,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     });
                 }
             },
-            [context, setContextWithProduce],
+            [context, setContextWithProduce, mergedSettings.hooks],
         );
 
         useEffect(() => {

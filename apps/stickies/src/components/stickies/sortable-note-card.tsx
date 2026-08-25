@@ -2,10 +2,12 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import { useAttachmentMeta } from '@workspace/ui/components/attachment';
+import { PresenceLabel } from '@workspace/ui/components/collab';
 import { NoteCard } from '@workspace/ui/components/notes';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { cn } from '@workspace/ui/lib/utils';
 import { memo, useCallback, useRef } from 'react';
+import type { CardPeer } from './hooks/use-stickies-presence';
 
 type SortableNoteCardProps = {
     card: CommentCard;
@@ -14,6 +16,8 @@ type SortableNoteCardProps = {
     assigneeEmail?: string | null;
     canWrite?: boolean;
     highlighted?: boolean;
+    // A remote peer working on this card (dialog open or dragging), or undefined.
+    peer?: CardPeer;
     onOpen?: (cardId: string) => void;
     onContextMenu?: (e: React.MouseEvent, card: CommentCard) => void;
     onLongPress?: (card: CommentCard, x: number, y: number) => void;
@@ -26,6 +30,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     assigneeEmail,
     canWrite = true,
     highlighted,
+    peer,
     onOpen,
     onContextMenu,
     onLongPress,
@@ -75,37 +80,50 @@ export const SortableNoteCard = memo(function SortableNoteCard({
     };
 
     return (
-        <NoteCard
-            ref={setRef}
-            title={card.title}
-            description={card.description}
-            color={card.color}
-            replyCount={replyCount}
-            resolved={resolved}
-            assigneeEmail={assigneeEmail}
-            coverThumbnailUrl={coverThumbnailUrl}
-            attachmentCount={attachmentCount}
-            onPointerDownCapture={(e: React.PointerEvent) => {
-                pointerStart.current = { x: e.clientX, y: e.clientY };
-            }}
-            onClick={handleClick}
-            onClickCapture={bound.onClickCapture}
-            onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
-            onPointerDown={handlePointerDown}
-            onPointerMove={bound.onPointerMove}
-            onPointerUp={bound.onPointerUp}
-            onPointerCancel={bound.onPointerCancel}
-            className={cn(
-                canWrite && 'cursor-grab touch-none',
-                isDragging && 'opacity-50',
-                highlighted && 'eigen-search-ring',
+        // Relative wrapper so the peer name chip anchors to the card; the drag transform stays on the
+        // NoteCard node dnd-kit measures. The chip sits just inside the top-left corner rather than
+        // floating above the card — the column's own scroll container (overflow-y-auto) would clip a
+        // chip rendered above the top card. The peer-colored outline uses the shared ring treatment.
+        <div className="relative">
+            <NoteCard
+                ref={setRef}
+                title={card.title}
+                description={card.description}
+                color={card.color}
+                replyCount={replyCount}
+                resolved={resolved}
+                assigneeEmail={assigneeEmail}
+                coverThumbnailUrl={coverThumbnailUrl}
+                attachmentCount={attachmentCount}
+                onPointerDownCapture={(e: React.PointerEvent) => {
+                    pointerStart.current = { x: e.clientX, y: e.clientY };
+                }}
+                onClick={handleClick}
+                onClickCapture={bound.onClickCapture}
+                onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
+                onPointerDown={handlePointerDown}
+                onPointerMove={bound.onPointerMove}
+                onPointerUp={bound.onPointerUp}
+                onPointerCancel={bound.onPointerCancel}
+                className={cn(
+                    canWrite && 'cursor-grab touch-none',
+                    isDragging && 'opacity-50',
+                    highlighted && 'eigen-search-ring',
+                    peer && 'eigen-selection-ring eigen-selection-ring-peer',
+                )}
+                style={{
+                    transform: CSS.Transform.toString(transform) || undefined,
+                    transition,
+                    zIndex: isDragging ? 10 : 0,
+                    ...(peer ? ({ '--peer-color': peer.color } as React.CSSProperties) : undefined),
+                }}
+                {...(canWrite ? attributes : {})}
+            />
+            {peer && (
+                <div className="pointer-events-none absolute left-1 top-1 z-10">
+                    <PresenceLabel color={peer.color} name={peer.name} />
+                </div>
             )}
-            style={{
-                transform: CSS.Transform.toString(transform) || undefined,
-                transition,
-                zIndex: isDragging ? 10 : 0,
-            }}
-            {...(canWrite ? attributes : {})}
-        />
+        </div>
     );
 });

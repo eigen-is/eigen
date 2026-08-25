@@ -140,7 +140,7 @@ Built as the `transform-workers` program, shipped 2026-08-04 (phases: sheets pre
 doc/slides/docx → extraction + tuning, plus an external review round). Representative wins: cold heavy sheet
 preview 14.1s stall → 9ms worst delay; xlsx export worst loop delay 519ms → 3.4ms; 619ms module evaluation
 and 72MB RSS moved off the API process. Documents and snapshots stayed byte-identical through the move
-(goldens in `src/test/document-transform.test.ts`; runner behavior in `document-transform-runner.test.ts`;
+(goldens in `src/test/document/document-transform.test.ts`; runner behavior in `document-transform-runner.test.ts`;
 route contracts in the export/import route tests).
 
 Post-ship amendments: preview/extract reads no longer recalc (2026-08-05, after a legacy never-computed

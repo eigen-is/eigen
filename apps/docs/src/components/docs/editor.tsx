@@ -5,9 +5,18 @@ import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
-import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
+import type { ClipboardBox } from '@workspace/lib/clipboard';
+import {
+    buildImageClipboardItem,
+    hasRichHtmlBeyondMarker,
+    needsReUpload,
+    readClipboardBox,
+    readEigenClipboard,
+    reUploadImage,
+    writeEigenClipboard,
+} from '@workspace/lib/clipboard';
+import { useCollabDoc } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
     useCommentFilter,
@@ -15,7 +24,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import { userColor } from '@workspace/lib/constants/colors';
-import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
 import { A4_WIDTH_PX, getDocExtensions, PAGE_MARGIN_PX } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
@@ -23,13 +32,21 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
+    useZombieMediaSweep,
 } from '@workspace/lib/drive';
+import { htmlToPlainText } from '@workspace/lib/html-dom';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
-import type { ActiveComments, CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
+import type {
+    EigenClipboardData,
+    EigenClipboardImageItem,
+    EigenClipboardItem,
+    EigenClipboardTextItem,
+} from '@workspace/lib/types/clipboard';
+import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
 import { Column, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
@@ -52,14 +69,15 @@ import { useProseMirrorSearchController } from '@workspace/ui/components/search/
 import { SearchHighlight } from '@workspace/ui/components/search/prosemirror-search-highlight';
 import { cn } from '@workspace/ui/lib/utils';
 import { common, createLowlight } from 'lowlight';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { WebsocketProvider } from 'y-websocket';
-import * as Y from 'yjs';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { WebsocketProvider } from 'y-websocket';
+import type * as Y from 'yjs';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
+import { useActiveComments } from './hooks/use-active-comments';
 import { TablePropertiesPanel } from './table-properties-panel';
 
 function findCommentMarkPositions(doc: Node, cardId: string): { pos: number; end: number }[] {
@@ -100,7 +118,61 @@ function swapFigureMediaName(editor: Editor, pendingName: string, newName: strin
     });
 }
 
+// The clipboard box for a figure at `pos`. Figures store WIDTH ONLY on purpose (the doc reflows and
+// the height must follow the image), but the wire carries both dims, so measure the rendered <img>.
+// clientWidth, not getBoundingClientRect: layout px are the space the stored width lives in (the
+// identity mapping in extensions/figure.tsx), while a narrow viewport puts a `scale()` on the page.
+// Height comes from the image's own intrinsic ratio rather than its laid-out height, so a mid-load
+// layout can't skew it. Nothing measurable (node view not mounted, image not loaded) → the stored
+// width at the shared default ratio, the single fallback.
+function figureClipboardBox(editor: Editor, pos: number, storedWidth: unknown): ClipboardBox {
+    const dom = editor.view.nodeDOM(pos);
+    const img = dom instanceof HTMLElement ? dom.querySelector('img') : null;
+    if (img && img.clientWidth > 0 && img.clientHeight > 0) {
+        const ratio =
+            img.naturalWidth > 0 && img.naturalHeight > 0
+                ? img.naturalWidth / img.naturalHeight
+                : img.clientWidth / img.clientHeight;
+        return { width: img.clientWidth, height: img.clientWidth / ratio };
+    }
+    const width = typeof storedWidth === 'number' && storedWidth > 0 ? storedWidth : DEFAULT_IMAGE_BOX.width;
+    return { width, height: (width * DEFAULT_IMAGE_BOX.height) / DEFAULT_IMAGE_BOX.width };
+}
+
+// Docs historically stored the textStyle `fontFamily` attr as a full CSS stack; the canon is now
+// the EIGEN_FONTS name (matching slides/vector). New writes store the name, but stored collab docs
+// hydrate through y-prosemirror without ever running parseHTML, so this one-shot pass collapses any
+// recognized stack to its name on editable load — killing the dual representation. renderHTML maps
+// the name back to the same stack, so rendered output is unchanged. Kept out of the undo history.
+function normalizeFontFamilyMarks(editor: Editor) {
+    const markType = editor.schema.marks.textStyle;
+    if (!markType) return;
+    const targets: { from: number; to: number; attrs: Record<string, unknown> }[] = [];
+    editor.state.doc.descendants((node, pos) => {
+        if (!node.isText) return;
+        const mark = node.marks.find((m) => m.type === markType);
+        if (!mark) return;
+        const family = mark.attrs.fontFamily;
+        if (typeof family !== 'string' || !family) return;
+        const canon = getFontName(family);
+        if (canon === family) return;
+        targets.push({ from: pos, to: pos + node.nodeSize, attrs: { ...mark.attrs, fontFamily: canon } });
+    });
+    if (targets.length === 0) return;
+    editor.commands.command(({ tr, dispatch }) => {
+        for (const { from, to, attrs } of targets) {
+            tr.addMark(from, to, markType.create(attrs));
+        }
+        tr.setMeta('addToHistory', false);
+        if (dispatch) dispatch(tr);
+        return true;
+    });
+}
+
 const lowlight = createLowlight(common);
+
+// Block-level text-align values docs models; an unrecognized wire value drops rather than storing garbage.
+const TEXT_ALIGNS = new Set(['left', 'center', 'right', 'justify']);
 
 // The panel is an absolute overlay, so it covers all of the scroll box's content box but its p-4 gutter.
 const PANEL_INTRUSION_PX = PROPERTIES_PANEL_WIDTH_PX - 16;
@@ -126,28 +198,23 @@ export const CollaborativeEditor = ({
     initialChatName?: string;
     initialSearchTerm?: string;
 }) => {
-    const [connected, setConnected] = useState(false);
-    const [provider, setProvider] = useState<WebsocketProvider>();
+    // Shared collab lifecycle. This also fixes the long-standing leak where docs created its Y.Doc
+    // via useMemo and never destroyed it (only the provider was torn down); the hook destroys the
+    // doc on unmount / pathId switch. No UndoManager — y-prosemirror's history plugin owns undo.
+    const {
+        doc: yDoc,
+        provider,
+        loaded,
+    } = useCollabDoc({
+        ownerId: path.ownerId,
+        mountId: path.mountId,
+        pathId: path.id,
+    });
 
-    const yDoc = useMemo(() => new Y.Doc(), []);
-
-    useEffect(() => {
-        const wsUrl = getCollabWebSocketUrl(path.ownerId, path.mountId, path.id);
-
-        const yProvider = new WebsocketProvider(wsUrl, '', yDoc, {
-            resyncInterval: 5000,
-            connect: true,
-        });
-        yProvider.on('sync', setConnected);
-        setProvider(yProvider);
-
-        return () => {
-            yProvider?.off('sync', setConnected);
-            yProvider?.destroy();
-        };
-    }, [yDoc, path.ownerId, path.mountId, path.id]);
-
-    if (!connected || !provider) {
+    // Gate on the LATCHED loaded flag, not live `synced`: a mid-session WS blip must not unmount
+    // TiptapEditor (y-prosemirror's undo history is destroyed on unmount); the mounted editor
+    // converges on reconnect.
+    if (!loaded || !provider || !yDoc) {
         return <LoadingState />;
     }
 
@@ -159,6 +226,7 @@ export const CollaborativeEditor = ({
             chatFolderId={chatFolderId}
         >
             <TiptapEditor
+                key={path.id}
                 path={path}
                 yDoc={yDoc}
                 provider={provider}
@@ -172,51 +240,6 @@ export const CollaborativeEditor = ({
         </MediaResolverProvider>
     );
 };
-
-const EMPTY_ACTIVE: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
-
-function useActiveComments(editor: Editor | null): ActiveComments {
-    const [result, setResult] = useState<ActiveComments>(EMPTY_ACTIVE);
-
-    useEffect(() => {
-        if (!editor) return;
-        let timer: ReturnType<typeof setTimeout>;
-
-        const update = () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                const ids = new Set<string>();
-                const texts = new Map<string, string>();
-
-                editor.state.doc.descendants((node, pos) => {
-                    for (const mark of node.marks) {
-                        if (mark.type.name === 'comment' && mark.attrs.cardId) {
-                            const cardId = mark.attrs.cardId as string;
-                            ids.add(cardId);
-                            if (!texts.has(cardId)) {
-                                texts.set(
-                                    cardId,
-                                    editor.state.doc.textBetween(pos, pos + node.nodeSize, ' ').slice(0, 100),
-                                );
-                            }
-                        }
-                    }
-                });
-
-                setResult({ ids, anchorTexts: texts });
-            }, 200);
-        };
-
-        update();
-        editor.on('update', update);
-        return () => {
-            editor.off('update', update);
-            clearTimeout(timer);
-        };
-    }, [editor]);
-
-    return result;
-}
 
 const TiptapEditor = ({
     yDoc,
@@ -421,12 +444,15 @@ const TiptapEditor = ({
                     if (!event.clipboardData) return false;
 
                     const eigenData = readEigenClipboard(event.clipboardData);
-                    if (eigenData) {
-                        const imageItem = eigenData.items.find((i): i is EigenClipboardImageItem => i.type === 'image');
-                        if (imageItem) {
+                    if (eigenData && eigenData.items.length > 0) {
+                        // Image payloads MUST take the eigen path (the cross-mount re-upload seam).
+                        // A text-only payload is consumed directly only when text/html is marker-only
+                        // (slides — PM fallthrough there pastes nothing); a rich-HTML producer (sheets
+                        // tables) is left to PM so its <table> parses as a real docs table.
+                        const hasImage = eigenData.items.some((i) => i.type === 'image');
+                        if (hasImage || !hasRichHtmlBeyondMarker(event.clipboardData)) {
                             event.preventDefault();
-                            const width = imageItem.meta?.width as number | undefined;
-                            handleEigenImagePaste(imageItem, width).catch(() => {});
+                            handleEigenItemsPaste(eigenData.items).catch(() => {});
                             return true;
                         }
                     }
@@ -514,8 +540,6 @@ const TiptapEditor = ({
                 item.sourceMountId,
                 currentMediaFolderId,
                 uploadFile.mutateAsync,
-                path.ownerId,
-                path.mountId,
                 item.mediaName,
             );
             // Re-upload failed: skip insertion, don't fall through to the source doc's unresolvable mediaName.
@@ -538,6 +562,45 @@ const TiptapEditor = ({
         }
     };
 
+    // A text item (from slides/vector) lands as a single paragraph at the caret. Docs models
+    // fontFamily (name, per the fontFamily value canon — getFontName tolerates a name or a legacy
+    // stack) and color as textStyle attrs, and textAlign as a block attr; fontSize and the rest of the
+    // slides typography superset drop gracefully (docs has no fontSize control by design). `text` is
+    // plain on the wire (slides keeps its rich HTML in private meta); htmlToPlainText guards against a
+    // non-conforming payload — item-level typography is the best-effort fidelity the wire block carries.
+    const insertEigenTextItem = (item: EigenClipboardTextItem) => {
+        if (!editorRef.current) return;
+        const text = htmlToPlainText(item.text);
+        // Empty carriers (vector shapes ride as empty text items) must not land as blank paragraphs.
+        if (!text.trim()) return;
+        const typo = item.typography;
+        const textStyleAttrs: Record<string, string> = {};
+        if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
+        if (typo?.color) textStyleAttrs.color = typo.color;
+        const marks =
+            Object.keys(textStyleAttrs).length > 0 ? [{ type: 'textStyle', attrs: textStyleAttrs }] : undefined;
+        const paragraph = {
+            type: 'paragraph',
+            ...(typo?.textAlign && TEXT_ALIGNS.has(typo.textAlign) ? { attrs: { textAlign: typo.textAlign } } : {}),
+            content: [{ type: 'text', text, ...(marks ? { marks } : {}) }],
+        };
+        editorRef.current.chain().focus().insertContent(paragraph).run();
+    };
+
+    // Consume every eigen item in wire order so a mixed slides selection keeps its paragraph/figure
+    // sequence at the caret. Image inserts await the per-item re-upload seam (skip-on-failure), so the
+    // loop stays ordered; text inserts are synchronous.
+    const handleEigenItemsPaste = async (items: EigenClipboardItem[]) => {
+        for (const item of items) {
+            if (item.type === 'text') {
+                insertEigenTextItem(item);
+            } else {
+                const { width } = readClipboardBox(item);
+                await handleEigenImagePaste(item, width);
+            }
+        }
+    };
+
     useEffect(() => {
         if (!editor) return;
         const handleCopyOrCut = (e: ClipboardEvent) => {
@@ -546,28 +609,32 @@ const TiptapEditor = ({
             if (from === to) return;
 
             const items: EigenClipboardData['items'] = [];
-            editor.state.doc.nodesBetween(from, to, (node) => {
+            editor.state.doc.nodesBetween(from, to, (node, pos) => {
                 if (node.type.name === 'figure' && node.attrs.mediaName) {
                     const mediaPath = resolveMediaPath(node.attrs.mediaName);
                     if (mediaPath) {
-                        items.push({
-                            type: 'image',
-                            mediaName: node.attrs.mediaName,
-                            sourcePathId: mediaPath.id,
-                            sourceParentId: mediaPath.parentId,
-                            sourceOwnerId: mediaPath.ownerId,
-                            sourceMountId: mediaPath.mountId,
-                            caption: node.attrs.caption || undefined,
-                            meta: { width: node.attrs.width ?? undefined },
-                        });
+                        items.push(
+                            buildImageClipboardItem({
+                                mediaName: node.attrs.mediaName,
+                                source: mediaPath,
+                                box: figureClipboardBox(editor, pos, node.attrs.width),
+                                caption: node.attrs.caption || undefined,
+                            }),
+                        );
                     }
                 }
             });
 
             if (items.length > 0) {
                 const text = editor.state.doc.textBetween(from, to, '\n').trim();
+                // PM's own clipboard serialization emits the selection as rich HTML — figures via the
+                // FigureNode renderHTML (<figure><img data-media-name…>), text with its typography marks
+                // — so docs→slides/sheets keeps typography and docs→anywhere keeps readable content. The
+                // helper prepends the eigen marker span (marker first). Pure-text selections never reach
+                // here (items.length === 0): PM's native copy already carries full rich HTML.
+                const { dom } = editor.view.serializeForClipboard(editor.state.selection.content());
                 e.preventDefault();
-                writeEigenClipboard(e, { version: 1, items }, text || undefined);
+                writeEigenClipboard(e, { version: 1, items }, text || undefined, dom.innerHTML);
             }
         };
         document.addEventListener('copy', handleCopyOrCut);
@@ -670,28 +737,37 @@ const TiptapEditor = ({
         };
     }, [editor]);
 
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot the pending
+    // figure mediaNames; a completed upload has swapped the name, so the stale name no longer matches.
+    useZombieMediaSweep({
+        ready: !!editor,
+        scan: () => {
+            const names: string[] = [];
+            editor?.state.doc.descendants((node) => {
+                if (
+                    node.type.name === 'figure' &&
+                    typeof node.attrs.mediaName === 'string' &&
+                    isPendingMediaName(node.attrs.mediaName)
+                ) {
+                    names.push(node.attrs.mediaName);
+                }
+                return true;
+            });
+            return names;
+        },
+        remove: (names) => {
+            if (!editor) return;
+            for (const name of names) swapFigureMediaName(editor, name, null);
+        },
+    });
+
+    // One-shot: collapse any legacy full-stack fontFamily marks to their EIGEN_FONTS name once the
+    // synced doc is open for editing. The parent gates this subtree on first sync, so the content is
+    // present at mount; idempotent, so a canWrite flip re-running it is a no-op.
     useEffect(() => {
-        if (!editor) return;
-        const snapshot: string[] = [];
-        editor.state.doc.descendants((node) => {
-            if (
-                node.type.name === 'figure' &&
-                typeof node.attrs.mediaName === 'string' &&
-                isPendingMediaName(node.attrs.mediaName)
-            ) {
-                snapshot.push(node.attrs.mediaName);
-            }
-            return true;
-        });
-        if (snapshot.length === 0) return;
-        const timer = setTimeout(() => {
-            for (const pendingName of snapshot) {
-                swapFigureMediaName(editor, pendingName, null);
-            }
-        }, 60_000);
-        return () => clearTimeout(timer);
-    }, [editor]);
+        if (!editor || !canWrite) return;
+        normalizeFontFamilyMarks(editor);
+    }, [editor, canWrite]);
 
     const docSearchController = useProseMirrorSearchController(editor, canWrite);
     const commentSearchHalf = useDocCommentSearchHalf(path.ownerId, path.mountId, path.id);

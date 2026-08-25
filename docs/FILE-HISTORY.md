@@ -135,7 +135,7 @@ can cancel) — delete `file_events` older than **90 days**, then trim each `pat
 
 Hooks live in `packages/lib/src/core/drive/hooks/`: `use-file-history.ts` (`useFileHistory` — keyed
 by limit, so the 5-row and 50-row panels cache apart — `useRecordHistory`, `invalidateFileHistory`)
-and `use-watch.ts`. Tests: `apps/api/src/test/file-history.test.ts`, `file-watch.test.ts`.
+and `use-watch.ts`. Tests: `apps/api/src/test/drive/file-history.test.ts`, `file-watch.test.ts`.
 
 ## Not built yet
 

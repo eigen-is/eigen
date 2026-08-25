@@ -18,6 +18,7 @@ function useEigenDocDialogs(): Record<EigenDocType, ReturnType<typeof useDialogS
         slides: useDialogState(),
         sheets: useDialogState(),
         chat: useDialogState(),
+        vector: useDialogState(),
     };
 }
 

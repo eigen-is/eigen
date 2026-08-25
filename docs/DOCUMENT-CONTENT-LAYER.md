@@ -157,4 +157,4 @@ Export has a matching dispatcher: `lib/export/export-document.ts` owns the whole
 - [SEARCH.md](SEARCH.md) — the drive content index built on `extract-text.ts`
 - [STORAGE.md](STORAGE.md) — Mount, `data.db` layout, `loadYjsState()`
 - `packages/lib/src/sheets/yjs-ops.ts` — `opToPatchOnSheets` helper
-- `apps/api/src/test/document-sheets.test.ts` — round-trip tests for the sheets module
+- `apps/api/src/test/document/document-sheets.test.ts` — round-trip tests for the sheets module

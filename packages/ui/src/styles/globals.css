@@ -313,6 +313,7 @@
         --app-docs-color: var(--color-violet-600);
         --app-chat-color: var(--color-fuchsia-700);
         --app-slides-color: var(--color-pink-600);
+        --app-vector-color: var(--color-orange-600);
         --app-admin-color: var(--color-slate-600);
 
         /* `-soft` is the saturated app color washed 14% over the current
@@ -329,6 +330,7 @@
         --app-docs-color-soft: color-mix(in oklab, var(--app-docs-color) 14%, var(--background));
         --app-chat-color-soft: color-mix(in oklab, var(--app-chat-color) 14%, var(--background));
         --app-slides-color-soft: color-mix(in oklab, var(--app-slides-color) 14%, var(--background));
+        --app-vector-color-soft: color-mix(in oklab, var(--app-vector-color) 14%, var(--background));
         --app-admin-color-soft: color-mix(in oklab, var(--app-admin-color) 14%, var(--background));
 
         --app-drive-light-color: var(--color-yellow-200);
@@ -596,10 +598,11 @@
     word-break: normal;
 }
 
+/* Position-neutral chip look (shared everywhere the label renders: docs caret, sheet overlay,
+   vector CollabPointer). Placement is scoped to each context — the caret rule below, and the sheet
+   overlay's `.fortune-presence-selection` descendant rule — so the chip's look is one source while
+   each editor positions its own chip. */
 .collaboration-cursor__label {
-    position: absolute;
-    top: -1.4em;
-    left: -1px;
     font-size: 12px;
     font-weight: 600;
     font-style: normal;
@@ -615,11 +618,33 @@
     pointer-events: none;
 }
 
-/* Selected-object chrome (shared: docs figure via ImageResizeHandles, slides
-   SelectionChrome overlay, sheets floating image via ImgBoxs): the ring around
-   the object and the square resize grips, one visual for all three editors. */
+/* Caret placement: float the chip above-left of the inline Tiptap caret (docs). */
+.collaboration-cursor__caret .collaboration-cursor__label {
+    position: absolute;
+    top: -1.4em;
+    left: -1px;
+}
+
+/* Selected-object chrome (shared: docs figure, slides, vector, and sheets' floating
+   image (ImgBoxs), all via ObjectTransform): the ring around the object and the square
+   resize grips, one visual for every editor. */
 .eigen-selection-ring {
-    outline: 2px solid var(--selection-handle);
+    outline: 1px solid var(--selection-handle);
+    /* Excalidraw's breathing room: the ring floats off the object (SCOUT-M2 §9). */
+    outline-offset: 4px;
+}
+
+/* Group/multi-selection bounds: same floated ring, dashed (Excalidraw group convention). */
+.eigen-selection-ring-dashed {
+    outline-style: dashed;
+}
+
+/* A remote collaborator's selection ring (vector CollabPointer, later slides/stickies): the same
+   geometry as .eigen-selection-ring, tinted to the peer's color via the inline --peer-color custom
+   property. One source for local and remote rings — apply alongside .eigen-selection-ring. */
+/* Must stay AFTER .eigen-selection-ring: equal specificity, source order carries the tint. */
+.eigen-selection-ring-peer {
+    outline-color: var(--peer-color);
 }
 
 .eigen-selection-handle {

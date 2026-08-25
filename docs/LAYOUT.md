@@ -250,6 +250,8 @@ const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'my-ty
 // Sidebar: <DroppableSidebarItem acceptTypes={['my-type']} onDrop={...} />
 ```
 
+**Which DnD system**: reordering items in place (a kanban column, a sortable list) uses `@dnd-kit` (see the stickies board). Dragging BETWEEN lists, onto sidebar drop targets, or interoperating with OS files uses the native HTML5 `useListDrag` / `useListDropTarget` (and `useFileDropTarget` / `useFilePasteTarget` for OS files) — dnd-kit does not see OS-file drops, and the native path carries the drag type across lists.
+
 ### Existing Lists
 
 | List                     | File                                                                    | Drag type    |

@@ -9,4 +9,5 @@ export * from './use-export-document';
 export * from './use-file-history';
 export * from './use-import-document';
 export * from './use-watch';
+export * from './use-zombie-media-sweep';
 export * from './writes';

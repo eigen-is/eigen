@@ -7,8 +7,6 @@ import {
     onFormulaRangeDragEnd,
     onImageMove,
     onImageMoveEnd,
-    onImageResize,
-    onImageResizeEnd,
     rangeDrag,
 } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
@@ -381,7 +379,6 @@ export function handleOverlayMouseMove(
     fxInput?: HTMLDivElement | null,
 ) {
     if (onImageMove(ctx, globalCache, e)) return;
-    if (onImageResize(ctx, globalCache, e)) return;
     onCellsMove(ctx, globalCache, e, scrollEl, container);
     onRangeSelectionModalMove(globalCache, e);
 
@@ -415,7 +412,6 @@ export function handleOverlayMouseUp(
 ) {
     const rect = container.getBoundingClientRect();
     onImageMoveEnd(ctx, globalCache);
-    onImageResizeEnd(ctx, globalCache);
     onFormulaRangeDragEnd(ctx);
     onRangeSelectionModalMoveEnd(globalCache);
     onCellsMoveEnd(ctx, globalCache, e, scrollEl, container);

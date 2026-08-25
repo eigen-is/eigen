@@ -6,7 +6,7 @@ import { canonicalRecipients, useAttachFromDrive, useUploadDraftAttachment } fro
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, isContainerType, stripEigenExtension } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
-import { ConfirmDialog, Toolbar, TooltipButton } from '@workspace/ui';
+import { ConfirmDialog, FileDropOverlay, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { ContactAutosuggest } from '@workspace/ui/components/contacts';
 import {
@@ -22,7 +22,6 @@ import { LightEditor } from '@workspace/ui/components/editor';
 import { Input } from '@workspace/ui/components/input';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { useFilePasteTarget } from '@workspace/ui/hooks/use-file-paste-target';
-import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
@@ -469,17 +468,7 @@ export function EmailDraft({
                 onPickFromDevice={(files) => void uploadFiles(files)}
                 multiple
             />
-            <div
-                className={cn(
-                    'pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity',
-                    isDragging ? 'opacity-100' : 'opacity-0',
-                )}
-            >
-                <div className="flex items-center gap-2 text-primary text-sm font-medium">
-                    <Paperclip className="h-4 w-4" />
-                    Drop files to attach
-                </div>
-            </div>
+            <FileDropOverlay visible={isDragging} label="Drop files to attach" icon={Paperclip} />
             {alertState && (
                 <Dialog open onOpenChange={() => setAlertState(null)}>
                     <DialogContent>

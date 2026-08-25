@@ -2,8 +2,12 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { useAuth } from '@workspace/lib/auth';
 import { getBackgroundStyle } from '@workspace/lib/background';
 import {
+    buildImageClipboardItem,
+    buildTextClipboardItem,
     needsReUpload,
+    readClipboardBox,
     readEigenClipboard,
+    readEigenClipboardAsync,
     reUploadImage,
     writeEigenClipboard,
     writeEigenClipboardAsync,
@@ -16,58 +20,149 @@ import {
     useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
+    useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
-import { htmlToPlainText } from '@workspace/lib/html-dom';
+import { htmlToPlainText, readDominantTextAlign, sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
+import { OBJECT_FIELDS } from '@workspace/lib/slides';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import {
+    type ArrangeOp,
+    computeArrange,
+    DUPLICATE_OFFSET,
+    fitImageSize,
+    type ImageSize,
+    NUDGE_STEP,
+    NUDGE_STEP_LARGE,
+} from '@workspace/lib/vector';
 import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
+import { readImageSize, readImageSizeFromUrl } from '@workspace/ui/components/media';
+import { useAspectLock, useZOrderHotkeys, type ZOp } from '@workspace/ui/components/properties-panel';
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
+import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type ArrangeOp, computeArrange } from './arrange';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
 import { useSlidesDocSearch } from './hooks/use-slides-doc-search';
+import { useSlidesPresence } from './hooks/use-slides-presence';
 import { SlideCanvas } from './slide-canvas';
 import { ReadOnlySlideObject } from './slide-object';
 import { SlidePanel } from './slide-panel';
 import { SlideBackgroundPanel, SlidePropertiesPanel } from './slide-properties-panel';
 import { Toolbar } from './toolbar';
-import { DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, type SlideObject } from './types';
+import {
+    DEFAULT_IMAGE_OBJECT,
+    DEFAULT_TEXT_OBJECT,
+    type ImageObject,
+    SLIDE_BASE_HEIGHT,
+    SLIDE_BASE_WIDTH,
+    type SlideObject,
+} from './types';
+
+// Size a placed image via the shared fit (intrinsic px = slide units 1:1 per AUDIT-f; natural size
+// where it fits within 80% of the 1920×1080 slide, never upscaled; unreadable → the shared default
+// box), then CENTER it. DEFAULT_IMAGE_OBJECT's fixed x/y centered its fixed box — this keeps that
+// placement rule and changes only the size.
+function centeredImageProps(intrinsic: ImageSize | null): Pick<ImageObject, 'x' | 'y' | 'width' | 'height'> {
+    const { width, height } = fitImageSize(intrinsic, { width: SLIDE_BASE_WIDTH, height: SLIDE_BASE_HEIGHT });
+    return { x: (SLIDE_BASE_WIDTH - width) / 2, y: (SLIDE_BASE_HEIGHT - height) / 2, width, height };
+}
+
+// App-private object fields a pasted item restores from its (untyped) meta via this loop. Geometry
+// (width/height/angle) and typography ride typed clipboard fields; text/mediaName come off the item
+// itself; x/y/slideId are slides-private meta restored separately below (paste-in-place) — so this
+// list holds only borders, objectFit, and the text-box background. Derived from the canonical
+// registry minus everything carried elsewhere, so the consumer can never drift from the producer.
+const PASTE_META_FIELDS = OBJECT_FIELDS.filter(
+    (f) =>
+        !(
+            [
+                'id',
+                'slideId',
+                'type',
+                'x',
+                'y',
+                'width',
+                'height',
+                'angle',
+                'text',
+                'mediaName',
+                'commentCardIds',
+                'fontFamily',
+                'fontSize',
+                'fontWeight',
+                'fontStyle',
+                'textDecoration',
+                'textAlign',
+                'verticalAlign',
+                'color',
+                'letterSpacing',
+                'lineHeight',
+                'highlightColor',
+            ] as readonly string[]
+        ).includes(f),
+);
+
+// Same-slide pastes shift by this so the copy is visibly distinct (cross-slide lands in place).
+const PASTE_OFFSET = 24;
+
+// Overrides a pasted item restores onto a DEFAULT_*_OBJECT: typed geometry + app-private meta
+// extras (borders/objectFit/background) + slides-private position. x/y are deliberately NOT in the
+// shared typed contract (no cross-app meaning) — slides carries them in its own meta so the
+// shipped paste-in-place UX survives: cross-slide paste lands at the source coordinates
+// (footer/logo workflows), same-slide paste offsets. Cross-app items have no meta.x/y and anchor
+// at the defaults. Typography is layered on top for text items by the caller.
+function clipboardItemOverrides(item: EigenClipboardItem, activeSlideId: string | null): Record<string, unknown> {
+    const overrides: Record<string, unknown> = {};
+    const box = readClipboardBox(item);
+    overrides.width = box.width;
+    overrides.height = box.height;
+    if (box.angle != null) overrides.angle = box.angle;
+    const m = item.meta ?? {};
+    for (const k of PASTE_META_FIELDS) {
+        if (m[k] != null) overrides[k] = m[k];
+    }
+    if (typeof m.x === 'number' && typeof m.y === 'number') {
+        const offset = m.slideId === activeSlideId ? PASTE_OFFSET : 0;
+        overrides.x = m.x + offset;
+        overrides.y = m.y + offset;
+    }
+    return overrides;
+}
 
 function buildClipboardItem(
     obj: SlideObject,
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): EigenClipboardItem | null {
-    const rect = { x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation };
+    const box = { width: obj.width, height: obj.height, angle: obj.angle };
     const border = { borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius };
     if (obj.type === 'image') {
         const mediaPath = resolveMediaPath(obj.mediaName);
         if (!mediaPath) return null;
-        return {
-            type: 'image',
+        return buildImageClipboardItem({
             mediaName: obj.mediaName,
-            sourcePathId: mediaPath.id,
-            sourceParentId: mediaPath.parentId,
-            sourceOwnerId: mediaPath.ownerId,
-            sourceMountId: mediaPath.mountId,
-            meta: { ...rect, ...border, objectFit: obj.objectFit },
-        };
+            source: mediaPath,
+            box,
+            meta: { ...border, objectFit: obj.objectFit, x: obj.x, y: obj.y, slideId: obj.slideId },
+        });
     }
-    return {
-        type: 'text',
-        text: obj.text,
-        meta: {
-            ...rect,
-            ...border,
+    // The typed `text` field is PLAIN text (the cross-app contract — vector/sheets/docs consume it
+    // literally); slides' own rich LightEditor HTML rides slides-private meta.html and is
+    // re-sanitized on consumption (the marker wire is forgeable by any web page, and object text
+    // renders via dangerouslySetInnerHTML).
+    return buildTextClipboardItem({
+        text: htmlToPlainText(obj.text),
+        box,
+        typography: {
             fontFamily: obj.fontFamily,
             fontSize: obj.fontSize,
             fontWeight: obj.fontWeight,
@@ -79,9 +174,9 @@ function buildClipboardItem(
             letterSpacing: obj.letterSpacing,
             lineHeight: obj.lineHeight,
             highlightColor: obj.highlightColor,
-            background: obj.background,
         },
-    };
+        meta: { ...border, background: obj.background, html: obj.text, x: obj.x, y: obj.y, slideId: obj.slideId },
+    });
 }
 
 type SlideEditorProps = {
@@ -113,6 +208,7 @@ export function SlideEditor({
             chatFolderId={chatFolderId}
         >
             <SlideEditorInner
+                key={path.id}
                 ownerId={ownerId}
                 path={path}
                 canWrite={canWrite}
@@ -139,6 +235,7 @@ function SlideEditorInner({
     const {
         deck,
         isSynced,
+        loaded,
         activeSlideId,
         setActiveSlideId,
         addSlide,
@@ -153,16 +250,18 @@ function SlideEditorInner({
         deleteObjects,
         yjsDoc,
         undoManager,
+        provider,
         moveObjectUp,
         moveObjectDown,
         moveObjectToFront,
         moveObjectToBack,
+        moveObjectsZOrder,
         addCommentToObject,
         removeCommentFromObject,
     } = useDeck(ownerId, path.mountId, path.id);
 
     const { isMobile } = useLayout();
-    const { resolveMediaUrl, resolveMediaPath, startUpload } = useMediaResolver();
+    const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, startUpload } = useMediaResolver();
     const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ yjsDoc });
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
@@ -212,6 +311,9 @@ function SlideEditorInner({
     }, []);
 
     const auth = useAuth();
+    // Awareness: publish this user's identity + selection + active slide, get a throttled cursor
+    // publisher for the canvas. Read-only viewers publish too (a viewer is a visible peer).
+    const publishCursor = useSlidesPresence(provider, auth.user, selectedObjectIds, activeSlideId);
     const {
         panel,
         commentPanelOpen,
@@ -325,9 +427,18 @@ function SlideEditorInner({
     // this listener never goes stale.
     const escStateRef = useRef({ isPresenting, isEditing, searchOpen });
     escStateRef.current = { isPresenting, isEditing, searchOpen };
+    // True while an ObjectTransform grip drag is live. That gesture owns Escape in the capture phase
+    // (to cancel itself) but registers its listener AFTER this one, so this capture listener would
+    // otherwise deselect first and unmount the transform mid-drag. Bail while it's active and let the
+    // transform's own capture listener handle the Escape.
+    const transformActiveRef = useRef(false);
+    const setTransformActive = useCallback((active: boolean) => {
+        transformActiveRef.current = active;
+    }, []);
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key !== 'Escape') return;
+            if (transformActiveRef.current) return;
             const { isPresenting: presenting, isEditing: editing, searchOpen: barOpen } = escStateRef.current;
             if (presenting) {
                 e.stopPropagation();
@@ -360,12 +471,14 @@ function SlideEditorInner({
         },
         [selectedObjectIds, deck.objects, yjsDoc],
     );
-    const arrangeSelected = useCallback(
+    const alignSelected = useCallback(
         (op: ArrangeOp) => {
             if (!yjsDoc) return;
             const objects = selectedObjectIds.map((id) => deck.objects[id]).filter(Boolean);
             const patches = computeArrange(objects, op);
             if (patches.length === 0) return;
+            // Arrange is a discrete op — seal it as its own undo step (U6e).
+            undoManager?.stopCapturing();
             yjsDoc.transact(() => {
                 const objectsMap = yjsDoc.getMap('objects');
                 for (const patch of patches) {
@@ -373,51 +486,67 @@ function SlideEditorInner({
                     if (!objMap) continue;
                     if (patch.x !== undefined) objMap.set('x', patch.x);
                     if (patch.y !== undefined) objMap.set('y', patch.y);
-                    if (patch.w !== undefined) objMap.set('w', patch.w);
-                    if (patch.h !== undefined) objMap.set('h', patch.h);
+                    if (patch.width !== undefined) objMap.set('width', patch.width);
+                    if (patch.height !== undefined) objMap.set('height', patch.height);
                 }
             });
+            undoManager?.stopCapturing();
         },
-        [selectedObjectIds, deck.objects, yjsDoc],
+        [selectedObjectIds, deck.objects, yjsDoc, undoManager],
     );
+    // Z-order over the current selection — panel Arrange buttons + ⌘[/⌘] brackets share one path.
+    const zOrderSelected = useCallback(
+        (op: ZOp) => moveObjectsZOrder(op, selectedObjectIds),
+        [moveObjectsZOrder, selectedObjectIds],
+    );
+    useZOrderHotkeys(canEdit && hasSelection && !isEditing, zOrderSelected);
+    // Arrow nudge (1px) + Shift-nudge (large step, shared with vector), one factory + guard for both.
+    const nudgeEnabled = { enabled: canEdit && hasSelection && !isEditing };
+    const nudge = (dx: number, dy: number) => (e: KeyboardEvent) => {
+        e.preventDefault();
+        moveSelected(dx, dy);
+    };
+    useHotkey('ArrowLeft', nudge(-NUDGE_STEP, 0), nudgeEnabled);
+    useHotkey('ArrowRight', nudge(NUDGE_STEP, 0), nudgeEnabled);
+    useHotkey('ArrowUp', nudge(0, -NUDGE_STEP), nudgeEnabled);
+    useHotkey('ArrowDown', nudge(0, NUDGE_STEP), nudgeEnabled);
+    useHotkey('Shift+ArrowLeft', nudge(-NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowRight', nudge(NUDGE_STEP_LARGE, 0), nudgeEnabled);
+    useHotkey('Shift+ArrowUp', nudge(0, -NUDGE_STEP_LARGE), nudgeEnabled);
+    useHotkey('Shift+ArrowDown', nudge(0, NUDGE_STEP_LARGE), nudgeEnabled);
+    // ⌘A select-all (active slide's objects) and ⌘D duplicate (shared DUPLICATE_OFFSET, same as vector).
+    // Mod combos default ignoreInputs off, so opt in — ⌘A must not hijack select-all in a text input.
     useHotkey(
-        'ArrowLeft',
+        'Mod+A',
         (e) => {
             e.preventDefault();
-            moveSelected(-1, 0);
+            const ids = activeSlideId ? (deck.slides[activeSlideId]?.objectIds ?? []) : [];
+            if (ids.length) setSelectedObjectIds(ids);
         },
-        { enabled: canEdit && hasSelection && !isEditing },
+        { enabled: canEdit && !isEditing && !!activeSlideId, ignoreInputs: true },
     );
     useHotkey(
-        'ArrowRight',
+        'Mod+D',
         (e) => {
             e.preventDefault();
-            moveSelected(1, 0);
+            const placements = selectedObjectIds
+                .map((id) => deck.objects[id])
+                .filter((o): o is SlideObject => !!o)
+                .map((o) => ({ id: o.id, x: o.x + DUPLICATE_OFFSET, y: o.y + DUPLICATE_OFFSET }));
+            if (!placements.length) return;
+            const ids = duplicateObjects(placements);
+            if (ids.length) setSelectedObjectIds(ids);
         },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    useHotkey(
-        'ArrowUp',
-        (e) => {
-            e.preventDefault();
-            moveSelected(0, -1);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
-    );
-    useHotkey(
-        'ArrowDown',
-        (e) => {
-            e.preventDefault();
-            moveSelected(0, 1);
-        },
-        { enabled: canEdit && hasSelection && !isEditing },
+        { enabled: canEdit && hasSelection && !isEditing, ignoreInputs: true },
     );
     const handleImageFile = useCallback(
         async (file: File) => {
             if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
             const { pendingName, promise } = startUpload(file);
+            const intrinsic = await readImageSize(file);
             const objId = addObject(activeSlideId, {
                 ...DEFAULT_IMAGE_OBJECT,
+                ...centeredImageProps(intrinsic),
                 mediaName: pendingName,
             } as Omit<SlideObject, 'id' | 'slideId'>);
             if (!objId) return;
@@ -441,22 +570,81 @@ function SlideEditorInner({
             if (!activeSlideId || !mediaFolderId) return;
             const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId }).catch(() => null);
             if (!results) return;
-            for (const result of results) {
+            // Independent loads — measure in parallel, then add in one tight synchronous run. The URL
+            // comes from the copy result's own path: by NAME it would miss the pre-copy media listing.
+            const measured = await Promise.all(
+                results.map(async (result) => ({
+                    name: result.name,
+                    intrinsic: await readImageSizeFromUrl(resolveMediaUrlByPath(result)),
+                })),
+            );
+            for (const { name, intrinsic } of measured) {
                 addObject(activeSlideId, {
                     ...DEFAULT_IMAGE_OBJECT,
-                    mediaName: result.name,
+                    ...centeredImageProps(intrinsic),
+                    mediaName: name,
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         },
-        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject],
+        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject, resolveMediaUrlByPath],
+    );
+
+    // Consume eigen clipboard items into new objects on the active slide — shared by the paste event
+    // listener and the object-menu Paste row (U6f). Text sanitises/escapes into LightEditor HTML;
+    // images place at the wire's exact box; cross-mount images re-upload, skip-on-failure.
+    const pasteEigenData = useCallback(
+        (data: EigenClipboardData) => {
+            if (!activeSlideId) return;
+            for (const item of data.items) {
+                if (item.type === 'text') {
+                    const richHtml =
+                        typeof item.meta?.html === 'string' ? sanitizeToLightEditorHtml(item.meta.html).trim() : '';
+                    const plain = item.text.trim();
+                    if (!richHtml && !plain) continue;
+                    const text = richHtml || `<p>${escapeHtml(plain).replace(/\n/g, '<br>')}</p>`;
+                    const overrides = clipboardItemOverrides(item, activeSlideId);
+                    if (item.typography) {
+                        for (const [k, v] of Object.entries(item.typography)) {
+                            if (v != null) overrides[k] = v;
+                        }
+                    }
+                    addObject(activeSlideId, {
+                        ...DEFAULT_TEXT_OBJECT,
+                        text,
+                        ...overrides,
+                    } as Omit<SlideObject, 'id' | 'slideId'>);
+                } else if (item.type === 'image') {
+                    const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...clipboardItemOverrides(item, activeSlideId) };
+                    const insertAt = (mediaName: string) => {
+                        addObject(activeSlideId, {
+                            ...imageProps,
+                            mediaName,
+                        } as Omit<ImageObject, 'id' | 'slideId'>);
+                    };
+                    if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
+                        reUploadImage(
+                            item.sourcePathId,
+                            item.sourceOwnerId,
+                            item.sourceMountId,
+                            mediaFolderId,
+                            uploadFile.mutateAsync,
+                            item.mediaName,
+                        ).then((result) => {
+                            if (result) insertAt(result.mediaName);
+                        });
+                    } else {
+                        insertAt(item.mediaName);
+                    }
+                }
+            }
+        },
+        [activeSlideId, addObject, mediaFolderId, uploadFile.mutateAsync],
     );
 
     useEffect(() => {
         if (isPresenting) return;
         const handleCopy = (e: ClipboardEvent) => {
-            const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-            if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable)
-                return;
+            if (isTypingTarget()) return;
             if (selectedObjectIds.length === 0) return;
             const items = selectedObjectIds
                 .map((id) => deck.objects[id])
@@ -471,9 +659,7 @@ function SlideEditorInner({
             writeEigenClipboard(e, data, textPreview);
         };
         const handlePaste = (e: ClipboardEvent) => {
-            const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-            if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable)
-                return;
+            if (isTypingTarget()) return;
             if (!activeSlideId || !canWrite) return;
 
             const imageFile = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));
@@ -486,81 +672,34 @@ function SlideEditorInner({
             const eigenData = e.clipboardData ? readEigenClipboard(e.clipboardData) : null;
             if (eigenData) {
                 e.preventDefault();
-                for (const item of eigenData.items) {
-                    const m = item.meta ?? {};
-                    if (item.type === 'text') {
-                        const overrides: Record<string, unknown> = {};
-                        if (m.x != null) overrides.x = m.x;
-                        if (m.y != null) overrides.y = m.y;
-                        for (const k of [
-                            'w',
-                            'h',
-                            'rotation',
-                            'borderColor',
-                            'borderWidth',
-                            'borderRadius',
-                            'fontFamily',
-                            'fontSize',
-                            'fontWeight',
-                            'fontStyle',
-                            'textDecoration',
-                            'textAlign',
-                            'verticalAlign',
-                            'color',
-                            'letterSpacing',
-                            'lineHeight',
-                            'highlightColor',
-                            'background',
-                        ] as const) {
-                            if (m[k] != null) overrides[k] = m[k];
-                        }
-                        addObject(activeSlideId, {
-                            ...DEFAULT_TEXT_OBJECT,
-                            text: item.text,
-                            ...overrides,
-                        } as Omit<SlideObject, 'id' | 'slideId'>);
-                    } else if (item.type === 'image') {
-                        const overrides: Record<string, unknown> = {};
-                        if (m.x != null) overrides.x = m.x;
-                        if (m.y != null) overrides.y = m.y;
-                        for (const k of [
-                            'w',
-                            'h',
-                            'rotation',
-                            'borderColor',
-                            'borderWidth',
-                            'borderRadius',
-                            'objectFit',
-                        ] as const) {
-                            if (m[k] != null) overrides[k] = m[k];
-                        }
-                        const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...overrides };
-                        if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
-                            reUploadImage(
-                                item.sourcePathId,
-                                item.sourceOwnerId,
-                                item.sourceMountId,
-                                mediaFolderId,
-                                uploadFile.mutateAsync,
-                                ownerId,
-                                path.mountId,
-                                item.mediaName,
-                            ).then((result) => {
-                                // Re-upload failed: skip insertion, don't write the source deck's unresolvable mediaName.
-                                if (!result) return;
-                                addObject(activeSlideId, {
-                                    ...imageProps,
-                                    mediaName: result.mediaName,
-                                } as Omit<ImageObject, 'id' | 'slideId'>);
-                            });
-                        } else {
-                            addObject(activeSlideId, {
-                                ...imageProps,
-                                mediaName: item.mediaName,
-                            } as Omit<ImageObject, 'id' | 'slideId'>);
-                        }
-                    }
-                }
+                pasteEigenData(eigenData);
+                return;
+            }
+
+            // Rich HTML (docs → slides): keep bold/italic/lists by mapping onto LightEditor's schema.
+            // This branch is already post-eigen, so any HTML here is external. One text object holds all
+            // paragraphs (LightEditor is multi-block). fontSize 16 = docs body px mapped 1:1 into slide
+            // units (1 unit = 1px @1080p), NOT DEFAULT_TEXT_OBJECT's 48 — same prose, same size whether
+            // or not it carried formatting.
+            const html = e.clipboardData?.getData('text/html');
+            const richHtml = html ? sanitizeToLightEditorHtml(html).trim() : '';
+            // Only take the rich branch when a block element survived. Div-structured clipboards (VS
+            // Code, terminals) unwrap to merged inline text with no <p>, losing line breaks — those fall
+            // through to the text/plain path, which preserves lines as <br>.
+            const hasBlock = /<(?:p|ul|ol|blockquote)[\s>]/i.test(richHtml);
+            if (richHtml && hasBlock) {
+                e.preventDefault();
+                // Prose alignment rides in the RAW html as a block text-align (stripped by the
+                // sanitizer); carry it onto the object field. slides accepts all four values, so no map.
+                // null means implicit left (Tiptap only emits styles for non-default alignments) — the
+                // centered DEFAULT_TEXT_OBJECT is a title affordance, wrong for pasted prose.
+                const align = readDominantTextAlign(html ?? '');
+                addObject(activeSlideId, {
+                    ...DEFAULT_TEXT_OBJECT,
+                    text: richHtml,
+                    fontSize: 16,
+                    textAlign: align ?? 'left',
+                } as Omit<SlideObject, 'id' | 'slideId'>);
                 return;
             }
 
@@ -570,6 +709,8 @@ function SlideEditorInner({
                 addObject(activeSlideId, {
                     ...DEFAULT_TEXT_OBJECT,
                     text: `<p>${escapeHtml(text.trim()).replace(/\n/g, '<br>')}</p>`,
+                    fontSize: 16,
+                    textAlign: 'left',
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         };
@@ -588,34 +729,30 @@ function SlideEditorInner({
         addObject,
         handleImageFile,
         resolveMediaPath,
-        mediaFolderId,
-        uploadFile.mutateAsync,
-        ownerId,
-        path.mountId,
+        pasteEigenData,
     ]);
 
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload.
+    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot object ids
+    // and re-check pending at removal — a since-completed upload has swapped its mediaName, so it is
+    // skipped (ids, not names, because slides deletes by object id).
     const deckRef = useRef(deck);
     deckRef.current = deck;
-    useEffect(() => {
-        if (!isSynced) return;
-        const snapshot: string[] = [];
-        for (const obj of Object.values(deckRef.current.objects)) {
-            if (obj.type === 'image' && isPendingMediaName(obj.mediaName)) {
-                snapshot.push(obj.id);
+    useZombieMediaSweep({
+        ready: isSynced,
+        scan: () => {
+            const ids: string[] = [];
+            for (const obj of Object.values(deckRef.current.objects)) {
+                if (obj.type === 'image' && isPendingMediaName(obj.mediaName)) ids.push(obj.id);
             }
-        }
-        if (snapshot.length === 0) return;
-        const timer = setTimeout(() => {
-            for (const objId of snapshot) {
+            return ids;
+        },
+        remove: (ids) => {
+            for (const objId of ids) {
                 const obj = deckRef.current.objects[objId];
-                if (obj?.type === 'image' && isPendingMediaName(obj.mediaName)) {
-                    deleteObject(objId);
-                }
+                if (obj?.type === 'image' && isPendingMediaName(obj.mediaName)) deleteObject(objId);
             }
-        }, 60_000);
-        return () => clearTimeout(timer);
-    }, [isSynced, deleteObject]);
+        },
+    });
 
     const handleAddText = useCallback(() => {
         if (!activeSlideId) return;
@@ -627,14 +764,16 @@ function SlideEditorInner({
         setEditingObjectId(objId);
     }, []);
 
+    // Returns null when nothing was copied (missing object / unresolvable media) so Cut can bail
+    // instead of deleting content that never reached the clipboard.
     const handleCopyObject = useCallback(
-        (objId: string) => {
+        (objId: string): Promise<void> | null => {
             const obj = deck.objects[objId];
-            if (!obj) return;
+            if (!obj) return null;
             const item = buildClipboardItem(obj, resolveMediaPath);
-            if (!item) return;
+            if (!item) return null;
             const data: EigenClipboardData = { version: 1, items: [item] };
-            writeEigenClipboardAsync(data, obj.type === 'text' ? htmlToPlainText(obj.text) : undefined);
+            return writeEigenClipboardAsync(data, obj.type === 'text' ? htmlToPlainText(obj.text) : undefined);
         },
         [deck.objects, resolveMediaPath],
     );
@@ -655,6 +794,33 @@ function SlideEditorInner({
             setEditingObjectId((prev) => (prev && ids.includes(prev) ? null : prev));
         },
         [deleteObjects],
+    );
+
+    // Object-menu clipboard rows (U6f menu parity). Copy/Cut act on the right-clicked object; Paste
+    // reads the async clipboard (a menu click carries no ClipboardEvent). Duplicate offsets by DUPLICATE_OFFSET.
+    // Delete only after the async write resolves — a denied clipboard write must not destroy
+    // content that would then exist nowhere but the undo stack (vector's cut discipline).
+    const handleCutObject = useCallback(
+        (objId: string) => {
+            handleCopyObject(objId)
+                ?.then(() => handleDeleteObject(objId))
+                .catch(() => {});
+        },
+        [handleCopyObject, handleDeleteObject],
+    );
+    const handlePasteFromMenu = useCallback(() => {
+        readEigenClipboardAsync()
+            .then((data) => data && pasteEigenData(data))
+            .catch(() => {});
+    }, [pasteEigenData]);
+    const handleDuplicateObject = useCallback(
+        (objId: string) => {
+            const o = deck.objects[objId];
+            if (!o) return;
+            const ids = duplicateObjects([{ id: objId, x: o.x + DUPLICATE_OFFSET, y: o.y + DUPLICATE_OFFSET }]);
+            if (ids.length) setSelectedObjectIds(ids);
+        },
+        [deck.objects, duplicateObjects],
     );
 
     const handleSelectObject = useCallback(
@@ -759,6 +925,11 @@ function SlideEditorInner({
         [selectedObjectIds, deck.objects],
     );
 
+    // Aspect lock (Override 3), lifted here so the panel checkbox and the canvas' ObjectTransform
+    // resizeMode share one ephemeral setting. Default ON for image-only selections (D8b).
+    const allImageSelected = selectedObjects.length > 0 && selectedObjects.every((o) => o.type === 'image');
+    const [aspectLocked, setAspectLocked] = useAspectLock(selectedObjectIds.join(','), allImageSelected);
+
     const slideBackgroundImageUrl =
         activeSlide?.background?.type === 'image' && activeSlide.background.mediaName
             ? resolveMediaUrl(activeSlide.background.mediaName)
@@ -768,7 +939,9 @@ function SlideEditorInner({
     // active slide and the user can write (or comments are open) — inset the find bar clear of it.
     const rightPanelShown = !isMobile && !!activeSlide && (commentPanelOpen || activityPanelOpen || canWrite);
 
-    if (!isSynced) return <LoadingState />;
+    // Latched: a WS blip keeps the editor mounted (transient selection/preview state survives) — see
+    // useCollabDoc. `isSynced` still drives presence + seed-on-sync, unchanged.
+    if (!loaded) return <LoadingState />;
 
     if (isPresenting && activeSlide) {
         return (
@@ -899,8 +1072,15 @@ function SlideEditorInner({
                                                 onStartEditing={handleStartEditing}
                                                 onUpdateObject={updateObject}
                                                 onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
+                                                onTransformActiveChange={setTransformActive}
+                                                aspectLocked={aspectLocked}
+                                                provider={provider}
+                                                publishCursor={publishCursor}
                                                 onDropImage={canWrite ? handleDropImage : undefined}
                                                 onCopyObject={handleCopyObject}
+                                                onCutObject={canWrite ? handleCutObject : undefined}
+                                                onPasteObject={canWrite ? handlePasteFromMenu : undefined}
+                                                onDuplicateObject={canWrite ? handleDuplicateObject : undefined}
                                                 onDeleteObject={canWrite ? handleDeleteObject : undefined}
                                                 onMoveUp={canWrite ? moveObjectUp : undefined}
                                                 onMoveDown={canWrite ? moveObjectDown : undefined}
@@ -939,7 +1119,10 @@ function SlideEditorInner({
                                                 objects={selectedObjects}
                                                 onUpdate={updateObjects}
                                                 onDelete={handleDeleteSelectedObjects}
-                                                onArrange={arrangeSelected}
+                                                onAlign={alignSelected}
+                                                onZOrder={zOrderSelected}
+                                                aspectLocked={aspectLocked}
+                                                onAspectLockChange={setAspectLocked}
                                             />
                                         ) : canWrite && activeSlideId ? (
                                             <SlideBackgroundPanel

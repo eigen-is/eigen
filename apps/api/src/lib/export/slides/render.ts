@@ -35,12 +35,12 @@ export function renderSlideObjectHtml(
         'position:absolute',
         `left:${pxToPercent(obj.x, 'x')}%`,
         `top:${pxToPercent(obj.y, 'y')}%`,
-        `width:${pxToPercent(obj.w, 'x')}%`,
-        `height:${pxToPercent(obj.h, 'y')}%`,
+        `width:${pxToPercent(obj.width, 'x')}%`,
+        `height:${pxToPercent(obj.height, 'y')}%`,
     ];
 
-    if (obj.rotation)
-        styles.push(`transform:rotate(${escapeHtml(String(obj.rotation))}deg)`, 'transform-origin:center center');
+    if (obj.angle)
+        styles.push(`transform:rotate(${escapeHtml(String(obj.angle))}deg)`, 'transform-origin:center center');
     if (obj.borderWidth && obj.borderColor) {
         // Colors/fonts are schemaless Yjs strings a collaborator can set to anything, so every
         // one is escapeHtml'd (as highlightColor already is) — a value must not break out of style="…".

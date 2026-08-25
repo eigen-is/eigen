@@ -6,7 +6,9 @@
 //
 // The slides deck (`sponsor-pitch.eigenslides`) and budget sheet (`festival-budget.eigensheets`)
 // fixtures are NOT authored here — they are hand-maintained (edited in a live demo and copied back),
-// so this script must never regenerate them or it would clobber those edits.
+// so this script must never regenerate them or it would clobber those edits. Their frozen bytes make
+// them the oldest stored shapes we ship: rename a persisted field and they need migrating too (the
+// seed-demo contract test reads all three back through the shipped readers to catch it).
 //
 // Re-run whenever the board content (KANBAN) in content.ts changes:
 //   cd apps/api && bun run src/scripts/demo/author-fixtures.ts

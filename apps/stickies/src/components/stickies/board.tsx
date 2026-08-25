@@ -9,13 +9,12 @@ import {
     useCommentLifecycle,
 } from '@workspace/lib/comments';
 import { MediaResolverProvider, useRecordHistory } from '@workspace/lib/drive';
-import { useIsMobile } from '@workspace/lib/media';
 import { useDocCommentSearchHalf } from '@workspace/lib/search';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ColumnLayout, DeleteDialog, Column as LayoutColumn, LoadingState } from '@workspace/ui';
+import { ColumnLayout, DeleteDialog, Column as LayoutColumn, LoadingState, useLayout } from '@workspace/ui';
 import { useAttachmentMeta } from '@workspace/ui/components/attachment';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
@@ -31,6 +30,7 @@ import { ColumnSettingsDialog } from './column-settings-dialog';
 import { useBoard } from './hooks/use-board';
 import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { useStickiesDocSearch } from './hooks/use-stickies-doc-search';
+import { useCardPresence, useStickiesPresence } from './hooks/use-stickies-presence';
 import { Toolbar } from './toolbar';
 import type { ColumnItem } from './types';
 
@@ -87,8 +87,10 @@ export function StickiesBoard({
         handleAddColumn,
         deleteCardFromBoard,
         isSynced,
+        loaded,
         yjsDoc,
         undoManager,
+        provider,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
     const { user } = useAuth();
 
@@ -116,7 +118,7 @@ export function StickiesBoard({
         initialCardId,
         onCardNotFound: onClearInitialCard,
     });
-    const { allComments, cards, createCard, assignComment, members, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, setOpenCardId, openCard } = lifecycle;
 
     // Palette IN COMMENTS capability. Plain object per render — usePaletteDocSearch stabilises via
     // ref + docKey, so the reveal closure always sees the current cards.
@@ -135,6 +137,8 @@ export function StickiesBoard({
         board,
         cards,
         yjsDoc,
+        undoManager,
+        createCard,
         onRecordEvent: recordHistory.mutate,
     });
 
@@ -144,9 +148,16 @@ export function StickiesBoard({
         return map;
     }, [allComments]);
 
+    // Presence: the card the local user is "working on" — the open edit dialog's card, else the card
+    // being dragged. Published to awareness; peers render it as a colored outline + name chip.
+    const workingCardId = openCard?.id ?? (dragState.activeType === 'task' ? dragState.activeId : null);
+    const presenceCardIds = useMemo(() => (workingCardId ? [workingCardId] : []), [workingCardId]);
+    useStickiesPresence(provider, user, presenceCardIds);
+    const cardPresence = useCardPresence(provider);
+
     useYjsUndoHotkeys(undoManager, canWrite);
 
-    const isMobile = useIsMobile();
+    const { isMobile } = useLayout();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
     // Board shows resolved cards by default (status:'all'); clear() returns to that.
     const commentFilter = useCommentFilter({ status: 'all' });
@@ -293,7 +304,8 @@ export function StickiesBoard({
         return null;
     };
 
-    if (!isSynced) return <LoadingState />;
+    // Latched: a WS blip keeps the board mounted; `isSynced` still gates presence + seeding. See useCollabDoc.
+    if (!loaded) return <LoadingState />;
 
     return (
         <MediaResolverProvider
@@ -384,6 +396,7 @@ export function StickiesBoard({
                                                             onCardLongPress={canWrite ? handleCardLongPress : undefined}
                                                             highlighted={highlightedColumnIds.has(column.id)}
                                                             highlightedCardIds={highlightedCardIds}
+                                                            cardPresence={cardPresence}
                                                             isMobile={isMobile}
                                                             scrollToTopSignal={
                                                                 scrollToTopOf?.columnId === column.id
@@ -428,6 +441,7 @@ export function StickiesBoard({
                                             columnTitle={board.columns[editColumnId]?.title || ''}
                                             cardCount={board.columns[editColumnId]?.taskIds.length || 0}
                                             yjsDoc={yjsDoc}
+                                            undoManager={undoManager}
                                         />
                                     )}
 

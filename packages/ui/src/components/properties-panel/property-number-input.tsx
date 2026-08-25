@@ -8,9 +8,18 @@ type PropertyNumberInputProps = {
     max?: number;
     step?: number;
     placeholder?: string;
+    disabled?: boolean;
 };
 
-export function PropertyNumberInput({ value, onChange, min, max, step, placeholder }: PropertyNumberInputProps) {
+export function PropertyNumberInput({
+    value,
+    onChange,
+    min,
+    max,
+    step,
+    placeholder,
+    disabled,
+}: PropertyNumberInputProps) {
     const [localValue, setLocalValue] = useState(() => String(value ?? ''));
     const [focused, setFocused] = useState(false);
 
@@ -43,6 +52,7 @@ export function PropertyNumberInput({ value, onChange, min, max, step, placehold
             min={min}
             max={max}
             step={step}
+            disabled={disabled}
         />
     );
 }

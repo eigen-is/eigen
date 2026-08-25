@@ -1,4 +1,12 @@
+export { AlignSection } from './align-section';
 export { AlignmentPicker } from './alignment-picker';
 export { BackgroundFillBlock } from './background-fill-block';
+export { ColorRow } from './color-row';
+export { MergedNumberInput } from './merged-number-input';
+export { MergedSelect, numToStr } from './merged-select';
+export { getMergedValue, isMixed, type MergedValue, MIXED } from './merged-value';
 export { PROPERTIES_PANEL_WIDTH_PX, PropertiesPanel, PropertyRow, PropertySection } from './properties-panel';
 export { PropertyNumberInput } from './property-number-input';
+export { type TransformFields, TransformSection } from './transform-section';
+export { useAspectLock } from './use-aspect-lock';
+export { useZOrderHotkeys, type ZOp, ZOrderButtons } from './z-order';

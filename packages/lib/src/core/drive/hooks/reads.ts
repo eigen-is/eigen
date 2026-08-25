@@ -4,7 +4,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { AppError } from '../../api-error';
 import { driveKeys } from './keys';
 
@@ -60,7 +60,7 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
 export function useFolderLookup(ownerId: string, mountId: string, folderId: string | null) {
     const { data = [], refetch } = useFolderContent(ownerId, mountId, folderId || '');
     const attemptedRef = useRef(new Set<string>());
-    const [refetchToken, setRefetchToken] = useState(0);
+    const refetchQueuedRef = useRef(false);
 
     useEffect(() => {
         for (const name of attemptedRef.current) {
@@ -70,20 +70,26 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
         }
     }, [data]);
 
-    useEffect(() => {
-        if (refetchToken > 0) refetch();
-    }, [refetchToken, refetch]);
-
     const findByName = useCallback(
         (name: string): DrivePath | undefined => {
             const item = data.find((f) => f.name === name);
             if (!item && name && folderId && !attemptedRef.current.has(name)) {
                 attemptedRef.current.add(name);
-                setRefetchToken((c) => c + 1);
+                // Consumers resolve names during render (image renderers, chat embeds), so the
+                // refetch kick must not setState here — that's an update to this hook's owner
+                // while a DIFFERENT component renders (React error). Defer to a microtask,
+                // collapsing a burst of misses (multi-file drop) into one refetch.
+                if (!refetchQueuedRef.current) {
+                    refetchQueuedRef.current = true;
+                    queueMicrotask(() => {
+                        refetchQueuedRef.current = false;
+                        refetch();
+                    });
+                }
             }
             return item;
         },
-        [data, folderId],
+        [data, folderId, refetch],
     );
 
     // Stable return object — MediaResolver's context value memoizes on it, and a fresh

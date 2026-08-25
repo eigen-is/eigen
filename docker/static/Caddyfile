@@ -90,6 +90,7 @@
     import app stickies
     import app slides
     import app sheets
+    import app vector
     import app space
     import app admin
 

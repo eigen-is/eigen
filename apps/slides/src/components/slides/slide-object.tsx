@@ -28,9 +28,9 @@ export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
     return {
         left: `${pxToPercent(obj.x, 'x')}%`,
         top: `${pxToPercent(obj.y, 'y')}%`,
-        width: `${pxToPercent(obj.w, 'x')}%`,
-        height: `${pxToPercent(obj.h, 'y')}%`,
-        transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
+        width: `${pxToPercent(obj.width, 'x')}%`,
+        height: `${pxToPercent(obj.height, 'y')}%`,
+        transform: obj.angle ? `rotate(${obj.angle}deg)` : undefined,
         transformOrigin: 'center center',
         ...(obj.type === 'text' ? getBackgroundStyle(obj.background) : {}),
         ...(obj.borderWidth && obj.borderColor
@@ -126,12 +126,11 @@ type SlideObjectViewProps = {
     onDragStart: (
         e: React.MouseEvent,
         objId: string,
-        mode: 'move',
         x: number,
         y: number,
-        w: number,
-        h: number,
-        rotation: number,
+        width: number,
+        height: number,
+        angle: number,
     ) => void;
     onContextMenu?: (e: React.MouseEvent, obj: SlideObject) => void;
     // Stable bind hoisted in SlideCanvas — spread onto the object so a touch long-press opens the menu.
@@ -172,7 +171,7 @@ export const SlideObjectView = memo(function SlideObjectView({
             onSelect(obj.id, true);
         }
         if (editable && !additive) {
-            onDragStart(e, obj.id, 'move', obj.x, obj.y, obj.w, obj.h, obj.rotation);
+            onDragStart(e, obj.id, obj.x, obj.y, obj.width, obj.height, obj.angle);
         }
     };
 
@@ -186,12 +185,24 @@ export const SlideObjectView = memo(function SlideObjectView({
     const textStyle = obj.type === 'text' ? getTextStyle(obj) : undefined;
     const verticalAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
     const imageUrl = obj.type === 'image' ? resolveMediaUrl(obj.mediaName) : null;
+    // An empty text box has no visible glyphs, so it keeps a dashed border to stay discoverable;
+    // a non-empty one relies on a subtle desktop hover outline instead (below). Cheap: only text
+    // objects run the (small-string) strip.
+    const isEmptyText = obj.type === 'text' && stripTrailingEmptyBlocks(obj.text).trim().length === 0;
 
     return (
         <div
             className={cn(
                 'absolute',
-                !selected && obj.type === 'text' && 'border border-dashed border-border',
+                // Text chrome: empty box → dashed border (discoverable); non-empty box → subtle
+                // hover outline on desktop. The border is always present (transparent when idle) so
+                // the affordance never shifts layout by 1px. On touch only the empty-box border
+                // shows — deliberately NO pointer-coarse rest variant (canvas chrome, not a button).
+                !selected &&
+                    obj.type === 'text' &&
+                    (isEmptyText
+                        ? 'border border-dashed border-border'
+                        : 'border border-transparent hover:border-border'),
                 editable && !editing ? 'cursor-move' : 'cursor-default',
                 searchMatched && !searchActive && 'eigen-search-ring',
                 searchActive && 'eigen-search-ring-active eigen-search-flash',

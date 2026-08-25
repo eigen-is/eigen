@@ -240,7 +240,7 @@ The design never keys on provider names — it keys on the **measured responses*
 
 ## Testing
 
-Extend the existing MinIO-gated live suite (`apps/api/src/test/s3-minio.test.ts`, opt-in via
+Extend the existing MinIO-gated live suite (`apps/api/src/test/storage/s3-minio.test.ts`, opt-in via
 `S3_TEST_ENDPOINT`, harness in `scripts/s3-local/`):
 
 - Happy path: harden a fresh bucket → versioning `enabled`, lifecycle `{ noncurrentDays: 30 }` read

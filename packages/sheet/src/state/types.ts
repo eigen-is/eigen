@@ -119,8 +119,12 @@ export type Image = {
     id: string;
     width: number;
     height: number;
-    left: number;
-    top: number;
+    x: number;
+    y: number;
+    // Rotation in degrees, center origin. Added with ObjectTransform adoption (U4h). Clean break:
+    // images stored before this field read `undefined` and are treated as 0 at the render/commit
+    // sites (`img.angle ?? 0`) — value-defaulting, not a BC shim.
+    angle?: number;
     mediaName: string;
 };
 
@@ -330,7 +334,6 @@ export type GlobalCache = {
     image?: {
         imgInitialPosition: Rect | undefined;
         cursorMoveStartPosition: { x: number; y: number } | undefined;
-        resizingSide: string | undefined;
     };
     linkCard?: {
         mouseEnter?: boolean;

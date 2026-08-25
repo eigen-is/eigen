@@ -17,7 +17,15 @@
 **File**: `packages/lib/src/types/clipboard.ts`
 
 ```typescript
-type EigenClipboardTextItem = { type: 'text'; text: string; meta?: Record<string, unknown> };
+type EigenClipboardTextItem = {
+    type: 'text';
+    text: string; // PLAIN text, never HTML
+    width: number;
+    height: number;
+    angle?: number;
+    typography?: EigenClipboardTypography;
+    meta?: Record<string, unknown>;
+};
 
 type EigenClipboardImageItem = {
     type: 'image';
@@ -26,6 +34,10 @@ type EigenClipboardImageItem = {
     sourceParentId: string | null;
     sourceOwnerId: string;
     sourceMountId: string;
+    caption?: string;
+    width: number;
+    height: number;
+    angle?: number;
     meta?: Record<string, unknown>;
 };
 
@@ -36,6 +48,29 @@ type EigenClipboardData = { version: 1; items: EigenClipboardItem[] };
 
 Image items carry the file **name** (for Yjs storage on paste) plus source identifiers (for re-upload detection and
 downloading). See [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md) for the full name-based reference design.
+
+Geometry (`width`/`height`/`angle`) and text `typography` are **first-class typed fields** — never entries in the
+untyped `meta` bag, which carries app-private extras only. Build items via `buildImageClipboardItem` /
+`buildTextClipboardItem` and read the box via `readClipboardBox`; the builders take a `box` and put it on the typed
+fields, so no producer hand-assembles an item.
+
+### Both dimensions are mandatory
+
+**Every item carries `width` AND `height`**, in the source app's document-space units, measured at copy time. A
+producer that stores only one dimension measures the other before it writes: a docs figure stores width only (the
+document reflows, so the height must follow the image), so the copy handler measures the rendered `<img>` and takes
+the height from its intrinsic ratio.
+
+This is a hard contract, not a nicety. Consumers place items straight from the typed box with **no fallbacks**. The
+alternative — the consumer probing the image to recover its ratio — was an aspect-ratio bug: the probe resolved the
+image *by name* against a media-folder listing captured before the paste's own re-upload, missed, and fell back to a
+4:3 default box, so every docs image pasted into slides/sheets/vector landed at the wrong shape. The rule that
+follows: **after a copy/upload mutation returns a `DrivePath`, build the URL from that path**
+(`resolveMediaUrlByPath` on the media resolver) — by-name resolution is for render, where the listing has caught up
+and self-heals.
+
+The wire is forgeable by any web page, so `parseEigenJson` drops any item whose `width`/`height` aren't finite
+numbers before a consumer ever sees it (the same threat model that makes rich HTML get re-sanitized on paste).
 
 ## Cross-Document Media
 
@@ -58,6 +93,6 @@ await writeEigenClipboardAsync(data, "plain text fallback");
 const eigenData = readEigenClipboard(e.clipboardData);
 ```
 
-Used by: eigendoc editor, eigenslides editor, eigensheets (sheet).
+Used by: eigendoc editor, eigenslides editor, eigensheets (sheet), eigenvector canvas.
 
 **Files**: `packages/lib/src/core/clipboard/`

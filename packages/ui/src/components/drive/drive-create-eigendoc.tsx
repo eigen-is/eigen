@@ -9,6 +9,7 @@ const LABELS: Record<EigenDocType, { title: string; nameLabel: string }> = {
     slides: { title: 'New slide', nameLabel: 'Slide name' },
     sheets: { title: 'New sheet', nameLabel: 'Sheet name' },
     chat: { title: 'New chat', nameLabel: 'Chat name' },
+    vector: { title: 'New vector', nameLabel: 'Vector name' },
 };
 
 type DriveCreateEigenDocProps = {
