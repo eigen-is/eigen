@@ -282,7 +282,10 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
 
         // The orphan lands after the ack — identical bytes, so the object is unchanged. This is the
         // benign half the code comment relies on; it only holds when nothing newer was written.
+        // Settlement still re-asserts the retained ack (it can't know the bytes matched), so wait for
+        // that repair PUT to finish before reading — otherwise the read races its overwrite.
         await fault.landAllRemaining();
+        await waitFor(() => mount.pendingUploadCount === 0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
     });
 
