@@ -197,6 +197,16 @@ Two decisions to get right:
 
 **Verify first:** a WeasyPrint golden with roughjs paths across a few stroke widths and roughness values. PDF is where SVG support is least certain and the one place the fidelity claim could quietly fail.
 
+### Gradient fills in vector
+
+**Idea, not scheduled.** Slides fills take the shared `BackgroundFill` union (`solid | gradient | image`, `packages/lib/src/types/background.ts`) through the shared `BackgroundFillBlock` picker, which already has an `allowedTypes` prop (slides passes `['solid', 'gradient']`). Vector's `backgroundColor` is a bare color string, so unifying is mostly adopting the type and the picker. `meta.background` can take the same treatment, making the vector canvas background symmetric with a slide background.
+
+Rendering is small: fill reaches SVG at exactly two presentation attributes in `drawableToSvg` (`fill=` for `fillPath`, `stroke=` for `fillSketch`'s hatch lines), and because we serialize roughjs ourselves rather than using `RoughSVG`, its `Options.fill` string is never parsed — pass `url(#id)` straight through and emit the `<defs><linearGradient>` inside the element's own `<g>` so the fragment stays self-contained. Hachure fills get gradient-tinted hatching for free.
+
+Three caveats: **SVG gradients do not interpolate the way the CSS ones do**, so the same `{from, to, angle}` needs stop sampling to match slides (and CSS's angle convention needs converting to an SVG gradient vector); **gradient ids must be unique per page**, since one page can hold many fragments — derive them from the element id; and **`restrictToDataRefs` tolerates `url(#…)` only by accident** (it scans the `style` attribute and `<style>` text, not presentation attributes), so a later hardening would silently kill gradients in exports — allow same-document fragment refs explicitly, as a fragment is not fetchable and carries no SSRF risk. Scope solid + gradient first; image fill needs `<pattern>` and clipping.
+
+**Open product question:** Excalidraw deliberately has no gradients and vector's look is hand-drawn roughjs, so this may read as off-style even though it unifies cleanly.
+
 ### Server pipeline
 
 Mirror the eigenslides worker modules. All Worker-imported modules stay pure (no `core/` barrel, no `sharp` in the Worker):
