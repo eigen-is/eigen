@@ -1,13 +1,14 @@
+import { useAuth } from '@workspace/lib/auth';
 import { useState } from 'react';
 import type * as Y from 'yjs';
 import { useAssignComment, useComments, useResolveComment } from '../../chat';
 import { useEffectiveMembers } from '../../drive';
+import { useAssignedCommentCount } from './use-assigned-comment-count';
 import { useCardIdFromChatName } from './use-card-id-from-chat-name';
 import { useCommentCards } from './use-comment-cards';
 import { useCreateCommentCard } from './use-create-comment-card';
 import { useOpenCardById } from './use-open-card-by-id';
 import { useOpenCommentCard } from './use-open-comment-card';
-import { useUnresolvedCommentCount } from './use-unresolved-comment-count';
 import { useUpdateCommentCard } from './use-update-comment-card';
 
 // The shared comment open/view bundle for the docs / slides / sheets / stickies editors. Each
@@ -55,6 +56,7 @@ export function useCommentLifecycle({
     // Edit mode is pinned to a card id, so opening another card lands in view mode on its own.
     const [editCardId, setEditCardId] = useState<string | null>(null);
 
+    const { user } = useAuth();
     const { data: allComments = [] } = useComments(ownerId, mountId, pathId);
     const resolveComment = useResolveComment(ownerId, mountId, pathId);
     const assignComment = useAssignComment(ownerId, mountId, pathId);
@@ -63,7 +65,7 @@ export function useCommentLifecycle({
     const createCard = useCreateCommentCard(ownerId, mountId, pathId, chatFolderId, mediaFolderId, doc, mapName);
     const updateCard = useUpdateCommentCard(doc, mapName);
 
-    const unresolvedCount = useUnresolvedCommentCount(cards, allComments, activeCardIds);
+    const assignedCount = useAssignedCommentCount(cards, allComments, activeCardIds, user?.email ?? '');
     const { card: openCard, entry: openEntry } = useOpenCommentCard(cards, allComments, openCardId);
     useCardIdFromChatName(cards, initialChatName, setOpenCardId, { ready, onChatNotFound });
     useOpenCardById(cards, initialCardId, setOpenCardId, { ready, onCardNotFound });
@@ -76,7 +78,7 @@ export function useCommentLifecycle({
         cards,
         createCard,
         updateCard,
-        unresolvedCount,
+        assignedCount,
         openCard,
         openEntry,
         setOpenCardId,

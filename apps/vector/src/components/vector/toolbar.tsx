@@ -18,7 +18,7 @@ type ToolbarProps = {
     // mobile the Column.
     onToggleCommentPanel: () => void;
     commentPanelOpen: boolean;
-    unresolvedCommentCount: number;
+    assignedCommentCount: number;
     onToggleActivityPanel: () => void;
     activityPanelOpen: boolean;
 };
@@ -32,7 +32,7 @@ export function Toolbar({
     onAccessDialogOpen,
     onToggleCommentPanel,
     commentPanelOpen,
-    unresolvedCommentCount,
+    assignedCommentCount,
     onToggleActivityPanel,
     activityPanelOpen,
 }: ToolbarProps) {
@@ -77,7 +77,7 @@ export function Toolbar({
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                         onToggleCommentPanel={onToggleCommentPanel}
                         commentPanelOpen={commentPanelOpen}
-                        unresolvedCommentCount={unresolvedCommentCount}
+                        assignedCommentCount={assignedCommentCount}
                         onToggleActivityPanel={onToggleActivityPanel}
                         activityPanelOpen={activityPanelOpen}
                     />

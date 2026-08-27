@@ -670,7 +670,7 @@ const TiptapEditor = ({
         activeCardIds: activeComments.ids,
         initialChatName,
     });
-    const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
     // Host-owned so the filter survives panel close/reopen.
     const commentFilter = useCommentFilter();
     allCommentsRef.current = allComments;
@@ -870,7 +870,7 @@ const TiptapEditor = ({
                                     commentPanelOpen={commentPanelOpen}
                                     onToggleActivityPanel={toggleActivity}
                                     activityPanelOpen={activityPanelOpen}
-                                    unresolvedCommentCount={unresolvedCount}
+                                    assignedCommentCount={assignedCount}
                                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                                     onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
                                     onAddComment={chatFolderId ? handleAddComment : undefined}

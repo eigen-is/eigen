@@ -267,6 +267,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `usePaletteDocSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
 | `usePaletteSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
 | `usePaletteSelectionActions` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection-actions.ts |
+| `useAssignedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-assigned-comment-count.ts |
 | `useCardIdFromChatName` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-card-id-from-chat-name.ts |
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `useCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
@@ -276,7 +277,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useOpenCardById` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-card-by-id.ts |
 | `useOpenCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-open-comment-card.ts |
 | `useResolveCardAttachments` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-resolve-card-attachments.ts |
-| `useUnresolvedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-unresolved-comment-count.ts |
 | `useUpdateCommentCard` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-update-comment-card.ts |
 | `useAddContact` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `useAddLabel` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-labels.ts |

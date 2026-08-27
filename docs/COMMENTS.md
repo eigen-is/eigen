@@ -213,7 +213,7 @@ y-websocket.
 | `useOpenCommentCard`      | `(cards, entries, openCardId)` → `{ card, entry }` — resolves the open dialog's `chatName` against the server-side entries |
 | `useResolveCardAttachments` | `(ownerId, mountId, mediaFolderId)` → async `(drafts) => ChatAttachment[]` — settles form drafts: uploads Files, copies regular drive picks into container `media/`, references containers |
 | `useCardIdFromChatName`   | Resolves a `?chat=<chatName>` URL param to a cardId. Optional `{ ready, onChatNotFound }` lets hosts gate on Yjs sync + clean up the URL when the chat genuinely doesn't exist |
-| `useUnresolvedCommentCount` | `(cards, entries) => number` — count of non-resolved active comments for badges/toolbar UI |
+| `useAssignedCommentCount` | `(cards, entries, activeCardIds, currentUserEmail) => number` — open active comments assigned to the current user. The toolbar badge is personal by design: a document-wide unresolved count showed the same red number to every viewer, including for threads owned by someone else |
 | `readCards`, `writeCardToDoc`, `applyCardPatch` | Pure Y.Doc helpers (React-free, unit-tested) |
 
 `useCommentCards` reads the map synchronously on mount (a host mounting after sync must see its

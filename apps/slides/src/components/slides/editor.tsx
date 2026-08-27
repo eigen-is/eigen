@@ -348,7 +348,7 @@ function SlideEditorInner({
         initialChatName,
         ready: isSynced,
     });
-    const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
 
     // Opening a comment card also reveals its slide + selects the anchored object (panel + activity share this).
     const openCommentCard = (cardId: string) => {
@@ -1025,7 +1025,7 @@ function SlideEditorInner({
                                 commentPanelOpen={commentPanelOpen}
                                 onToggleActivityPanel={toggleActivity}
                                 activityPanelOpen={activityPanelOpen}
-                                unresolvedCommentCount={unresolvedCount}
+                                assignedCommentCount={assignedCount}
                             />
                         }
                     >

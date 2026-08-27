@@ -81,7 +81,7 @@ type EditorToolbarProps = {
     commentPanelOpen?: boolean;
     onToggleActivityPanel?: () => void;
     activityPanelOpen?: boolean;
-    unresolvedCommentCount?: number;
+    assignedCommentCount?: number;
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
     // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
@@ -99,7 +99,7 @@ export const EditorToolbar = ({
     commentPanelOpen,
     onToggleActivityPanel,
     activityPanelOpen,
-    unresolvedCommentCount,
+    assignedCommentCount,
     onImageUpload,
     onImagePickFromDrive,
     onAddComment,
@@ -706,7 +706,7 @@ export const EditorToolbar = ({
                         commentPanelOpen={commentPanelOpen}
                         onToggleActivityPanel={onToggleActivityPanel}
                         activityPanelOpen={activityPanelOpen}
-                        unresolvedCommentCount={unresolvedCommentCount}
+                        assignedCommentCount={assignedCommentCount}
                         watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                     />
                 }

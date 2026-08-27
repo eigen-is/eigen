@@ -14,7 +14,7 @@ type DocumentShareClusterProps = {
     onRename?: () => void;
     onToggleCommentPanel?: () => void;
     commentPanelOpen?: boolean;
-    unresolvedCommentCount?: number;
+    assignedCommentCount?: number;
     watchTarget?: { ownerId: string; mountId: string; pathId: string };
     onToggleActivityPanel?: () => void;
     activityPanelOpen?: boolean;
@@ -33,7 +33,7 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
         onRename,
         onToggleCommentPanel,
         commentPanelOpen,
-        unresolvedCommentCount,
+        assignedCommentCount,
         watchTarget,
         onToggleActivityPanel,
         activityPanelOpen,
@@ -57,11 +57,13 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
                 <div className="relative">
                     <TooltipButton
                         icon={MessageSquare}
-                        tooltipText="Comments"
+                        tooltipText={
+                            assignedCommentCount ? `Comments (${assignedCommentCount} assigned to you)` : 'Comments'
+                        }
                         onClick={onToggleCommentPanel}
                         active={commentPanelOpen}
                     />
-                    <CountBadge count={unresolvedCommentCount ?? 0} />
+                    <CountBadge count={assignedCommentCount ?? 0} />
                 </div>
             )}
             {canWrite ? (
@@ -80,7 +82,7 @@ function MobileClusterKebab({
     onAccessDialogOpen,
     onRename,
     onToggleCommentPanel,
-    unresolvedCommentCount,
+    assignedCommentCount,
     watchTarget,
     onToggleActivityPanel,
 }: DocumentShareClusterProps) {
@@ -109,7 +111,7 @@ function MobileClusterKebab({
                     {onToggleCommentPanel && (
                         <DropdownMenuItem onClick={onToggleCommentPanel}>
                             <MessageSquare className="mr-2" />
-                            {unresolvedCommentCount ? `Comments (${unresolvedCommentCount})` : 'Comments'}
+                            {assignedCommentCount ? `Comments (${assignedCommentCount})` : 'Comments'}
                         </DropdownMenuItem>
                     )}
                     {canWrite && (
@@ -120,7 +122,7 @@ function MobileClusterKebab({
                     )}
                 </DropdownMenuContent>
             </DropdownMenu>
-            {onToggleCommentPanel && <CountBadge count={unresolvedCommentCount ?? 0} />}
+            {onToggleCommentPanel && <CountBadge count={assignedCommentCount ?? 0} />}
         </div>
     );
 }

@@ -98,7 +98,7 @@ export function VectorEditor({
         createCard,
         assignComment,
         members,
-        unresolvedCount,
+        assignedCount,
         setOpenCardId,
     } = lifecycle;
 
@@ -178,7 +178,7 @@ export function VectorEditor({
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
-                                unresolvedCommentCount={unresolvedCount}
+                                assignedCommentCount={assignedCount}
                                 onToggleActivityPanel={toggleActivity}
                                 activityPanelOpen={activityPanelOpen}
                             />

@@ -124,7 +124,7 @@ function SheetEditorInner({
         initialChatName,
         ready: synced,
     });
-    const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
     // Host-owned so the filter survives panel close/reopen.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -290,7 +290,7 @@ function SheetEditorInner({
                 commentPanelOpen={commentPanelOpen}
                 onToggleActivityPanel={toggleActivity}
                 activityPanelOpen={activityPanelOpen}
-                unresolvedCommentCount={unresolvedCount}
+                assignedCommentCount={assignedCount}
                 watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
             />
         ),
@@ -299,7 +299,7 @@ function SheetEditorInner({
             onAccessDialogOpen,
             commentPanelOpen,
             activityPanelOpen,
-            unresolvedCount,
+            assignedCount,
             path.ownerId,
             path.mountId,
             path.id,

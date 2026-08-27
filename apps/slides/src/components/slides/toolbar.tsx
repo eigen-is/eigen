@@ -26,7 +26,7 @@ type ToolbarProps = {
     commentPanelOpen?: boolean;
     onToggleActivityPanel?: () => void;
     activityPanelOpen?: boolean;
-    unresolvedCommentCount?: number;
+    assignedCommentCount?: number;
 };
 
 export function Toolbar({
@@ -42,7 +42,7 @@ export function Toolbar({
     commentPanelOpen,
     onToggleActivityPanel,
     activityPanelOpen,
-    unresolvedCommentCount,
+    assignedCommentCount,
 }: ToolbarProps) {
     const { exportPath, isExporting } = useDocumentExport();
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
@@ -111,7 +111,7 @@ export function Toolbar({
                             commentPanelOpen={commentPanelOpen}
                             onToggleActivityPanel={onToggleActivityPanel}
                             activityPanelOpen={activityPanelOpen}
-                            unresolvedCommentCount={unresolvedCommentCount}
+                            assignedCommentCount={assignedCommentCount}
                             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                         />
                     </div>
