@@ -108,14 +108,24 @@ Program history + measurements: gitignored `docs/superpowers/sheet-perf/PHASE0-M
 Shipped through P3b (snapshot v2, 56.5→12.6MB; import 21.4→4.7s; export idle-drop fix; smells
 sweep; class-based export styles, html render 153s/82MB → 7.3s/10.4MB on the reference workbook).
 
-- [ ] **P4 — prod-build browser open benchmark** (vite build + preview + CORS shim per
-      VERIFICATION.md): the open-path gate after the v2 codec — measures what remains of
-      workbook-init produce + first-render long tasks with bundled assets. Now the only
-      open question on tab-switch cost: after the 2026-08-27 CF fixes a repeat visit to the
-      slowest sheet is 1.1–1.5s of *generic* activation work (canvas text measurement ~8%,
-      the rest dev-mode React re-render), with the CF subsystem down to 0.1% of the profile.
-      That residual is dev-mode-inflated by an unquantified amount, so what a user actually
-      waits for is unknown until this runs
+- [x] **P4 — prod-build browser open benchmark** — DONE 2026-08-27, measured twice
+      (Docker/Caddy per `docker/LOCAL-TESTING.md`, and a vite preview; they agree).
+      **The dev-mode multiplier is 1.39x**, not the 1.6x this file had assumed — median
+      1.34x per switch over 15 comparable tab switches. A repeat visit to the slowest
+      sheet costs **0.8-1.3s in production** (dev: 1.1-2.2s). No dominant hotspot
+      survives: React halves to 9.9%, the CF subsystem stays at 0.2% (so the 2026-08-27
+      clamp + per-sheet cache hold up in a production bundle), and the largest cluster
+      in our own code is canvas text measurement at 8.9% (~115ms) — its *share* is
+      unchanged from dev, it only rose in rank. Full report:
+      gitignored `docs/superpowers/sheets-tickets/T10-prod-build-benchmark.md`
+- [ ] **persist the text-measure cache across sheet activations** — the one actionable
+      residue of P4. `measureText`/`getMeasureText`/`getCellTextInfo`/`getFontSet` is
+      ~115ms of every large-sheet activation; the cache behind it is cleared by the
+      100ms render-cache idle timer (`state/canvas.ts`, see SHEETS.md § Canvas renderer)
+      so every revisit re-measures the same strings. Small ticket, bounded win
+- [ ] **the 68s cold open is the bigger fish** — P4 measured 16.5s to first paint on a
+      production bundle plus the rest to settle. Nothing in the tab-switch work touches
+      it; it wants its own measurement pass
 - [ ] **snapshot v2.1 candidates, measured post-P4**: formula-pattern dedup (125k formula
       strings = 3.4MB, needs decode-side shifting budget) and style-only-cell rectangle
       compression (209k cells); only if P4 says size still hurts
