@@ -1427,11 +1427,12 @@ export function VectorCanvas({
     const background = isTransparent(meta.background) ? undefined : meta.background;
 
     return (
-        // eigen-paper: the drawing surface always renders light, in dark mode too (globals.css)
+        // eigen-paper: the drawing surface always renders light, in dark mode too (globals.css). Its
+        // paint must stay OPAQUE — a translucent tint lets the dark app surface bleed through it.
         <div
             ref={containerRef}
             tabIndex={-1}
-            className="eigen-paper relative h-full w-full select-none overflow-hidden bg-muted/30 touch-none outline-none"
+            className="eigen-paper relative h-full w-full select-none overflow-hidden bg-background touch-none outline-none"
             style={{ cursor, backgroundColor: background }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
