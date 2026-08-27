@@ -4,8 +4,15 @@
 
 import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/condition-format';
-import { validateCellData } from '../modules/data-verification';
-import { getCellTextInfo, getMeasureText } from '../modules/text';
+import {
+    CHECKBOX_LABEL_GAP,
+    type CheckboxRect,
+    checkboxRect,
+    isCheckboxChecked,
+    isDefaultCheckboxRule,
+    validateCellData,
+} from '../modules/data-verification';
+import { getCellTextInfo } from '../modules/text';
 import { cellOverflowRender, cellTextRender } from './cell-text';
 import { drawDataBar } from './data-bar';
 import { BORDER_FIX, HALF_PIXEL } from './geometry';
@@ -17,6 +24,25 @@ import { defaultStyle } from './types';
 // coerce (null, '', booleans); it only gates the forced-string indicator.
 function coercesToNumber(val: unknown) {
     return !Number.isNaN(Number(val));
+}
+
+// Data-verification tick box. Hardcoded light like every other canvas color —
+// the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
+// § Theming) — and grey rather than black, the way Google draws the box.
+const CHECKBOX_STROKE = '#5f6368';
+
+function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CheckboxRect, checked: boolean) {
+    renderCtx.lineWidth = 1;
+    renderCtx.strokeStyle = CHECKBOX_STROKE;
+    renderCtx.strokeRect(rect.x + HALF_PIXEL, rect.y + HALF_PIXEL, rect.size, rect.size);
+    if (!checked) return;
+
+    renderCtx.beginPath();
+    renderCtx.moveTo(rect.x + 2, rect.y + rect.size / 2);
+    renderCtx.lineTo(rect.x + rect.size / 2 - 1, rect.y + rect.size - 3);
+    renderCtx.lineTo(rect.x + rect.size - 2, rect.y + 2);
+    renderCtx.stroke();
+    renderCtx.closePath();
 }
 
 // The right/bottom cell grid lines all share the same 1px default-color stroke.
@@ -41,8 +67,18 @@ export function nullCellRender(
     endX: number,
     isMerge = false,
 ) {
-    const { sheetCtx, renderCtx, cfCompute, offsetLeft, offsetTop, cellOverflowMap, colEnd, flowdata, drawGridLines } =
-        pass;
+    const {
+        sheetCtx,
+        renderCtx,
+        cfCompute,
+        offsetLeft,
+        offsetTop,
+        dataVerification,
+        cellOverflowMap,
+        colEnd,
+        flowdata,
+        drawGridLines,
+    } = pass;
     const checksCF = checkCF(r, c, cfCompute);
 
     // Background color
@@ -95,6 +131,19 @@ export function nullCellRender(
         renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? '#FC6666';
         renderCtx.fill();
         renderCtx.closePath();
+    }
+
+    // An empty cell inside a tick-box range still shows an unchecked box, so the
+    // range reads as one uniform column.
+    if (dataVerification?.[`${r}_${c}`]?.type === 'checkbox') {
+        const box = {
+            left: startX + offsetLeft,
+            top: startY + offsetTop + 1,
+            width: endX - startX - 2,
+            height: endY - startY - 2,
+        };
+        const align = [normalizedAttr(flowdata, r, c, 'ht'), normalizedAttr(flowdata, r, c, 'vt')];
+        drawTickBox(renderCtx, checkboxRect(box, Number(align[0]), Number(align[1])), false);
     }
 
     // Check overflow cell relationship
@@ -275,8 +324,9 @@ export function cellRender(
             drawRightGridLine = false;
         }
     }
-    // Data validation checkbox
+    // Data validation tick box
     else if (dataVerification?.[`${r}_${c}`]?.type === 'checkbox') {
+        const rule = dataVerification[`${r}_${c}`];
         const pos_x = startX + offsetLeft;
         const pos_y = startY + offsetTop + 1;
 
@@ -285,50 +335,21 @@ export function cellRender(
         renderCtx.rect(pos_x, pos_y, cellWidth, cellHeight);
         renderCtx.clip();
 
-        const measureText = getMeasureText(value ?? '', renderCtx);
-        const textMetrics = measureText.width + 14;
-        const oneLineTextHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
+        const rect = checkboxRect(
+            { left: pos_x, top: pos_y, width: cellWidth, height: cellHeight },
+            horizonAlign,
+            verticalAlign,
+        );
+        drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
 
-        let horizonAlignPos = pos_x + space_width;
-        if (horizonAlign === 0) {
-            horizonAlignPos = pos_x + cellWidth / 2 - textMetrics / 2;
-        } else if (horizonAlign === 2) {
-            horizonAlignPos = pos_x + cellWidth - space_width - textMetrics;
-        }
-
-        const verticalCellHeight = cellHeight > oneLineTextHeight ? cellHeight : oneLineTextHeight;
-
-        let verticalAlignPos_text = pos_y + verticalCellHeight - space_height;
-        renderCtx.textBaseline = 'bottom';
-        let verticalAlignPos_checkbox = verticalAlignPos_text - 13;
-
-        if (verticalAlign === 0) {
-            verticalAlignPos_text = pos_y + verticalCellHeight / 2;
+        // A default TRUE/FALSE rule draws the box alone, the way Google does.
+        // Custom selected/not-selected values keep their label — it is the only
+        // way to tell "Yes" from "No".
+        if (!isDefaultCheckboxRule(rule)) {
             renderCtx.textBaseline = 'middle';
-            verticalAlignPos_checkbox = verticalAlignPos_text - 6;
-        } else if (verticalAlign === 1) {
-            verticalAlignPos_text = pos_y + space_height;
-            renderCtx.textBaseline = 'top';
-            verticalAlignPos_checkbox = verticalAlignPos_text + 1;
+            renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
+            renderCtx.fillText(String(value ?? ''), rect.x + rect.size + CHECKBOX_LABEL_GAP, rect.y + rect.size / 2);
         }
-
-        // Checkbox
-        renderCtx.lineWidth = 1;
-        renderCtx.strokeStyle = '#000';
-        renderCtx.strokeRect(horizonAlignPos, verticalAlignPos_checkbox, 10, 10);
-
-        if (dataVerification[`${r}_${c}`].checked) {
-            renderCtx.beginPath();
-            renderCtx.lineTo(horizonAlignPos + 1, verticalAlignPos_checkbox + 6);
-            renderCtx.lineTo(horizonAlignPos + 4, verticalAlignPos_checkbox + 9);
-            renderCtx.lineTo(horizonAlignPos + 9, verticalAlignPos_checkbox + 2);
-            renderCtx.stroke();
-            renderCtx.closePath();
-        }
-
-        // Text
-        renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
-        renderCtx.fillText(value == null ? '' : String(value), horizonAlignPos + 14, verticalAlignPos_text);
 
         renderCtx.restore();
     } else {

@@ -141,6 +141,30 @@ On mobile the pane takes the whole width, so `editor.tsx` **hides** the workbook
 of unmounting it — the engine's `ResizeObserver` re-measures the canvas when it comes back (see the
 container-resize contract above). Hiding that wrapper also takes the floating find bar with it.
 
+## Tick boxes (checkbox data verification)
+
+A tick box is a **data-verification rule**, not a cell format — the same model Google uses. `Insert →
+Tick box` writes `{ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }` over the selected range;
+`Data → Data verification` keeps the dialog for custom selected/not-selected labels. Everything lives
+in `packages/sheet/src/state/modules/data-verification.ts`.
+
+- **The cell value is the checked state.** `isCheckboxChecked(rule, value)` compares the cell's display
+  value against `rule.value1` case-insensitively — there is no flag on the rule. That is what makes an
+  imported, pasted, typed or formula-produced `TRUE` render ticked.
+- **Applying a rule never overwrites data.** `applyDataVerification` seeds `value2` into **empty** cells
+  only, so pointing a tick box at an existing TRUE/FALSE column is lossless.
+- **A formula cell is a read-only tick.** `checkboxChange` returns `false` when the cell carries `f`;
+  clicking it would otherwise replace the formula with a literal.
+- **Only the box toggles.** `checkboxRect` is the single geometry both the painter
+  (`state/render/cells.ts`) and the mousedown hit-test (`state/events/mouse-cell.ts`) use — the same
+  split as `FILTER_BUTTON_WIDTH`/`HEIGHT`. Clicking elsewhere in the cell selects it like any other;
+  Space/Enter toggle the focused cell (`state/events/keyboard.ts`).
+- **Default rules draw the box alone**, the way Google does; a rule with custom values also draws its
+  label, the only way to tell "Yes" from "No". Empty cells inside a range still draw an unchecked box
+  (`nullCellRender`), so the range reads as one column.
+- Applying to a whole column is deliberately not offered — a column-wide rule would write ~1M keys
+  into the snapshot.
+
 ## Headless Formula Engine
 
 A DOM-free formula engine lives in `packages/sheet/src/engine/`. It evaluates formulas using a
@@ -331,6 +355,10 @@ Recorded by the xlsx-fidelity program (cycles 0–8, 2026-06; full history in gi
   re-merges per-cell DV back to a handful of sqrefs; exported files stay smaller than their
   sources (size note only).
 - The DV exporter always writes `allowBlank: true` (Excel's UI default).
+- Tick boxes (`checkbox` DV rules) are editor-only: they are not exported, and the cells they decorate
+  export as plain booleans. Excel has no cell-level tick box in OOXML that exceljs can write, and
+  re-importing a `list` validation of `"TRUE,FALSE"` would come back as a *dropdown* rule — a different
+  feature, with a dropdown arrow where the user expects a box.
 - Excel comments/notes are not imported (decided 2026-06-10) — Eigen has its own comment cards.
 
 The engine is exposed as a `@workspace/sheet/engine` subpath export. Server-side

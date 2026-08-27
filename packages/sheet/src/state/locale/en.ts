@@ -8823,6 +8823,7 @@ export const en = {
         splitColumn: 'Split text',
         insertImage: 'Insert image',
         insertLink: 'Insert link',
+        tickBox: 'Tick box',
         dataVerification: 'Data verification',
         protection: 'Protect the sheet',
 

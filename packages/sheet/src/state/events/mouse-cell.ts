@@ -3,9 +3,11 @@ import { type Context, getFlowdata } from '../context';
 import {
     cancelActiveImgItem,
     cellFocus,
+    checkboxChange,
     createFormulaRangeSelect,
     createRangeHightlight,
     functionHTMLGenerate,
+    isCheckboxClick,
     israngeseleciton,
     rangeHightlightselected,
     rangeSetValue,
@@ -109,8 +111,25 @@ export function handleCellAreaMouseDown(
         return;
     }
 
+    // Data verification: a tick box toggles only when the click lands on the box
+    // itself; anywhere else in the cell selects the cell like any other. The box
+    // rect comes from the same checkboxRect the painter uses.
+    if (
+        e.button !== 2 &&
+        isCheckboxClick(
+            ctx,
+            row_index,
+            col_index,
+            { left: col_pre, top: row_pre, width: col - col_pre - 2, height: row - row_pre - 2 },
+            x,
+            y,
+        )
+    ) {
+        checkboxChange(ctx, row_index, col_index);
+    }
+
     // Data verification: cell focus
-    cellFocus(ctx, row_index, col_index, true);
+    cellFocus(ctx, row_index, col_index);
 
     // If clicked cell is not in viewport, request a programmatic scroll to reveal
     // it (one request for both axes); the read compares against the live mirror.

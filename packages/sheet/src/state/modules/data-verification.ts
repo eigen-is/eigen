@@ -9,6 +9,7 @@ import {
     getcellrange,
     getFlowdata,
     getRangeByTxt,
+    getRealCellValue,
     getSheetIndex,
     isAllowEdit,
     isdatetime,
@@ -16,7 +17,9 @@ import {
     isRealNum,
     jfrefreshgrid,
     mergeBorder,
+    normalizedAttr,
     rowLocationByIndex,
+    type SingleRange,
     setCellValue,
 } from '..';
 import type { en } from '../locale/en';
@@ -270,15 +273,131 @@ export function validateCellData(ctx: Context, item: DataVerificationRule, cellV
     return true;
 }
 
-// checkbox handling
-export function checkboxChange(ctx: Context, r: number, c: number) {
+// --- Tick boxes -------------------------------------------------------------
+// The rule names the value that counts as checked; the CELL says whether it is.
+// Nothing stores a second flag, so an imported, pasted, typed or
+// formula-produced TRUE renders ticked like any other.
+
+export const CHECKBOX_CHECKED_VALUE = 'TRUE';
+export const CHECKBOX_UNCHECKED_VALUE = 'FALSE';
+
+// Box side in px. Painted on the canvas (render/cells.ts) and hit-tested in the
+// mousedown path (events/mouse-cell.ts) from the same checkboxRect geometry —
+// same split as the filter button's FILTER_BUTTON_* constants.
+export const CHECKBOX_SIZE = 10;
+// Gap between the box and the label a custom-value rule keeps.
+export const CHECKBOX_LABEL_GAP = 4;
+// The painter's space_width/space_height cell padding.
+const CHECKBOX_PADDING = 2;
+
+// The cell's own text area: origin plus the width/height the painter lays text
+// out in. Callers work in canvas space (painter) or freeze-corrected sheet
+// space (hit test) — the box sits at the same offset either way.
+export type CheckboxCellBox = { left: number; top: number; width: number; height: number };
+export type CheckboxRect = { x: number; y: number; size: number };
+
+export function isDefaultCheckboxRule(item: DataVerificationRule) {
+    return item.value1 === CHECKBOX_CHECKED_VALUE && item.value2 === CHECKBOX_UNCHECKED_VALUE;
+}
+
+export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellValueForValidation) {
+    if (isRealNull(cellValue)) return false;
+    return String(cellValue).toUpperCase() === item.value1.toUpperCase();
+}
+
+// `horizonAlign`/`verticalAlign` are the normalized ht/vt attrs
+// (ht 0 centre / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
+// cell yields NaN, which lands on the same left/middle default the painter uses.
+export function checkboxRect(box: CheckboxCellBox, horizonAlign: number, verticalAlign: number): CheckboxRect {
+    let x = box.left + CHECKBOX_PADDING;
+    if (horizonAlign === 0) {
+        x = box.left + (box.width - CHECKBOX_SIZE) / 2;
+    } else if (horizonAlign === 2) {
+        x = box.left + box.width - CHECKBOX_PADDING - CHECKBOX_SIZE;
+    }
+
+    let y = box.top + (box.height - CHECKBOX_SIZE) / 2;
+    if (verticalAlign === 1) {
+        y = box.top + CHECKBOX_PADDING;
+    } else if (verticalAlign === 2) {
+        y = box.top + box.height - CHECKBOX_PADDING - CHECKBOX_SIZE;
+    }
+
+    return { x, y, size: CHECKBOX_SIZE };
+}
+
+// Only a click on the box toggles — anywhere else in the cell selects it like
+// any other, so a tick box can be copied, extended through and read in the fx
+// bar without flipping.
+export function isCheckboxClick(ctx: Context, r: number, c: number, box: CheckboxCellBox, x: number, y: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const currentDataVerification = ctx.sheets[index].dataVerification ?? {};
-    const item = currentDataVerification[`${r}_${c}`];
-    item.checked = !item.checked;
-    const value = item.checked ? item.value1 : item.value2;
+    if (ctx.sheets[index].dataVerification?.[`${r}_${c}`]?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
-    setCellValue(ctx, r, c, d, value);
+    if (!d) return false;
+    const rect = checkboxRect(box, Number(normalizedAttr(d, r, c, 'ht')), Number(normalizedAttr(d, r, c, 'vt')));
+    return x >= rect.x && x <= rect.x + rect.size && y >= rect.y && y <= rect.y + rect.size;
+}
+
+// Returns whether the cell actually toggled, so the mouse and keyboard callers
+// can fall through to their normal handling when it did not.
+export function checkboxChange(ctx: Context, r: number, c: number) {
+    if (!isAllowEdit(ctx)) return false;
+    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const item = ctx.sheets[index].dataVerification?.[`${r}_${c}`];
+    if (item?.type !== 'checkbox') return false;
+    const d = getFlowdata(ctx);
+    if (!d) return false;
+    // A computed check is read-only: writing the literal would eat the formula.
+    if (d[r]?.[c]?.f != null) return false;
+    const checked = isCheckboxChecked(item, getRealCellValue(r, c, d));
+    setCellValue(ctx, r, c, d, checked ? item.value2 : item.value1);
+    // Same tail as the dropdown's selectDataVerificationValue: the write has to
+    // kick dependent formulas, and the mousedown path has not moved the
+    // selection here yet, so name the toggled cell explicitly.
+    jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
+    return true;
+}
+
+// Apply one rule across a range. Tick boxes seed their unchecked value into
+// EMPTY cells only — pointing a tick box at a column of existing TRUE/FALSE
+// must keep the data; isCheckboxChecked reads whatever was already there.
+export function applyDataVerification(ctx: Context, range: SingleRange, item: DataVerificationRule) {
+    if (!isAllowEdit(ctx)) return;
+    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const d = getFlowdata(ctx);
+    if (!d) return;
+    const rules = ctx.sheets[index].dataVerification ?? {};
+    let seeded = false;
+    for (let r = range.row[0]; r <= range.row[1]; r += 1) {
+        if (!d[r]) continue;
+        for (let c = range.column[0]; c <= range.column[1]; c += 1) {
+            rules[`${r}_${c}`] = { ...item };
+            if (item.type === 'checkbox' && isRealNull(getRealCellValue(r, c, d))) {
+                setCellValue(ctx, r, c, d, item.value2);
+                seeded = true;
+            }
+        }
+    }
+    ctx.sheets[index].dataVerification = rules;
+    if (seeded) jfrefreshgrid(ctx, d, [range]);
+}
+
+// Insert -> Tick box: Google's one-click entry, no dialog. Applies to the
+// selected range only — a whole-column rule would write a million keys into the
+// snapshot. Data -> Data verification keeps the dialog for custom values.
+export function insertCheckbox(ctx: Context) {
+    const selection = ctx.selections?.[ctx.selections.length - 1];
+    if (!selection) return;
+    applyDataVerification(
+        ctx,
+        { row: selection.row, column: selection.column },
+        {
+            type: 'checkbox',
+            type2: '',
+            value1: CHECKBOX_CHECKED_VALUE,
+            value2: CHECKBOX_UNCHECKED_VALUE,
+        },
+    );
 }
 
 // error message when data is invalid
@@ -348,7 +467,7 @@ export function getHintText(ctx: Context, item: DataVerificationRule) {
 }
 
 // handle cell focus
-export function cellFocus(ctx: Context, r: number, c: number, clickMode: boolean) {
+export function cellFocus(ctx: Context, r: number, c: number) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
     const showHintBox = document.getElementById('luckysheet-dataVerification-showHintBox');
@@ -374,11 +493,6 @@ export function cellFocus(ctx: Context, r: number, c: number, clickMode: boolean
     }
     const item = dataVerification[`${r}_${c}`];
     if (!item) return;
-
-    // cell data validation type is checkbox
-    if (clickMode && item.type === 'checkbox') {
-        checkboxChange(ctx, r, c);
-    }
 
     // cell data validation type is dropdown
     if (item.type === 'dropdown') {

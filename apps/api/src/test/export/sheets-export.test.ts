@@ -64,7 +64,7 @@ function readView(ws: ExcelJS.Worksheet): { state?: string; xSplit?: number; ySp
 function dvRule(
     partial: Partial<DataVerificationRule> & Pick<DataVerificationRule, 'type' | 'type2' | 'value1'>,
 ): DataVerificationRule {
-    return { value2: '', checked: false, prohibitInput: false, hintShow: false, hintValue: '', ...partial };
+    return { value2: '', prohibitInput: false, hintShow: false, hintValue: '', ...partial };
 }
 
 describe('Sheets xlsx export', () => {
@@ -743,7 +743,7 @@ describe('Sheets xlsx export — data validation', () => {
                 name: 'DV',
                 celldata: [{ r: 0, c: 0, v: { v: 'done' } }],
                 dataVerification: {
-                    '0_0': dvRule({ type: 'checkbox', type2: '', value1: 'selected', checked: true }),
+                    '0_0': dvRule({ type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' }),
                 },
             },
         ];

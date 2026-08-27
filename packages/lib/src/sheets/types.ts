@@ -129,8 +129,9 @@ export type MergeCell = { r: number; c: number; rs: number; cs: number };
 // `value1` carries the encoded payload as a string regardless of `type`:
 // comma-separated list for `dropdown`, numeric literal for the `number*` and
 // `text_length` variants, "selected" label for `checkbox`, ISO date for `date`.
-// `value2` is only populated for `between`/`notBetween` ranges and is otherwise
-// blank. `checked` is the live checkbox state mutated by `checkboxChange`.
+// `value2` is only populated for `between`/`notBetween` ranges and by
+// `checkbox` (its not-selected label) and is otherwise blank. A tick box stores
+// no checked flag — the cell value answers that (see `isCheckboxChecked`).
 // `hintShow` + `hintValue` drive the cell-focus hint popup. `prohibitInput`
 // blocks the input when validation fails (read by `updateCell` in cell.ts).
 //
@@ -148,7 +149,6 @@ export type DataVerificationRule = {
     type2: string;
     value1: string;
     value2: string;
-    checked?: boolean;
     hintShow?: boolean;
     hintValue?: string;
     prohibitInput?: boolean;
