@@ -20,7 +20,7 @@ import { celldataToData, dataToCelldata } from './celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import { DependencyIndex } from './dependency-index';
-import { update } from './format';
+import { booleanDisplay, update } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { calPostfixExpression, iscelldata, operatorjson, operatorPriority } from './formula-utils';
 import type { CalcChainEntry, EvaluationResult, FormulaCellInfoMap, FormulaDependency } from './types';
@@ -590,7 +590,9 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     cell.v = result.value;
 
     if (result.type === 'boolean') {
-        cell.m = result.value ? 'TRUE' : 'FALSE';
+        // `result.type` does not narrow `value`; the previous inline ternary read it
+        // for truth the same way.
+        cell.m = booleanDisplay(Boolean(result.value));
         return;
     }
 
