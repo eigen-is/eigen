@@ -225,14 +225,21 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
         return cached.result;
     }
 
-    // Every entry pins a whole CellMatrix, so none may outlive its sheet: drop
-    // the ones this workbook can no longer address — sheets that were deleted,
-    // and every sheet of a workbook this session has since closed. A miss is the
-    // moment to do it, the recompute below dwarfs the sweep, and the hot path
-    // (the hit above) never pays for it.
-    const live = new Set(ctx.sheets.map((sheet) => sheet.id));
-    for (const id of _cfCache.keys()) {
-        if (!live.has(id)) _cfCache.delete(id);
+    // Every entry pins a whole CellMatrix and a ComputeMap, so none may outlive its
+    // usefulness: drop the ones this workbook can no longer address — sheets that
+    // were deleted, and every sheet of a workbook this session has since closed —
+    // and the ones whose sheet has moved on. Immer replaces `data`/`rules` by
+    // reference on any edit, and sheets are edited while not current routinely
+    // (cross-sheet recalc, a collab peer's edit, a row/col op), so such an entry can
+    // never hit again yet pinned its matrix until you navigated back. A miss is the
+    // moment to do it, the recompute below dwarfs the sweep, and the hot path (the
+    // hit above) never pays for it.
+    const live = new Map(ctx.sheets.map((sheet) => [sheet.id, sheet]));
+    for (const [id, entry] of _cfCache) {
+        const sheet = live.get(id);
+        if (!sheet || sheet.data !== entry.data || sheet.conditionalFormatRules !== entry.rules) {
+            _cfCache.delete(id);
+        }
     }
 
     // Evaluate CF formulas through the engine directly (same shape as the HTML export's

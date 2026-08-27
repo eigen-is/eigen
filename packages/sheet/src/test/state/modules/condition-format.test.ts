@@ -65,6 +65,26 @@ describe('state/condition-format — getComputeMap cache', () => {
         expect(getComputeMap(ctx)).not.toBe(second);
     });
 
+    it('drops the entry for a sheet that was edited while another was current', () => {
+        // Sheets are edited while not current routinely — cross-sheet recalc, a collab
+        // peer's edit, a row/col op. immer replaces `data` by reference, so that entry
+        // can never hit again, yet it pinned a whole CellMatrix + ComputeMap until you
+        // navigated back to the sheet.
+        const ctx = ctxWithRules();
+        const original = ctx.sheets[0].data;
+        const first = getComputeMap(ctx);
+
+        ctx.currentSheetId = 'id_2';
+        ctx.sheets[0].data = original!.map((row) => [...row]);
+        getComputeMap(ctx);
+
+        // Put the very same matrix back: an entry that survived the sweep still keys
+        // on it and would hit.
+        ctx.sheets[0].data = original;
+        ctx.currentSheetId = 'id_1';
+        expect(getComputeMap(ctx)).not.toBe(first);
+    });
+
     it('recomputes when the rules are replaced', () => {
         const ctx = ctxWithRules();
 
