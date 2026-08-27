@@ -201,7 +201,8 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
 // A→B→A tab switch a guaranteed miss, and on a sheet carrying formula rules that
 // recompute costs seconds. Entries invalidate themselves — immer replaces `rules`
 // and `data` by reference on any edit, rule change or row/col op, so both must
-// stay in the key.
+// stay in the key. Bounded by the workbook: a miss first drops every entry whose
+// sheet the current workbook no longer has.
 const _cfCache = new Map<
     string,
     {
@@ -222,6 +223,16 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     const cached = _cfCache.get(ctx.currentSheetId);
     if (cached && cached.rules === ruleArr && cached.data === data) {
         return cached.result;
+    }
+
+    // Every entry pins a whole CellMatrix, so none may outlive its sheet: drop
+    // the ones this workbook can no longer address — sheets that were deleted,
+    // and every sheet of a workbook this session has since closed. A miss is the
+    // moment to do it, the recompute below dwarfs the sweep, and the hot path
+    // (the hit above) never pays for it.
+    const live = new Set(ctx.sheets.map((sheet) => sheet.id));
+    for (const id of _cfCache.keys()) {
+        if (!live.has(id)) _cfCache.delete(id);
     }
 
     // Evaluate CF formulas through the engine directly (same shape as the HTML export's

@@ -46,6 +46,25 @@ describe('state/condition-format — getComputeMap cache', () => {
         expect(getComputeMap(ctx)).not.toBe(first);
     });
 
+    it('drops the entry for a sheet the workbook no longer has', () => {
+        // Each entry retains the sheet's whole CellMatrix, so a session that opened
+        // several large workbooks used to pin every matrix it had ever rendered.
+        const ctx = ctxWithRules();
+        ctx.currentSheetId = 'id_2';
+        const second = getComputeMap(ctx);
+        const removed = ctx.sheets[1];
+
+        // Sheet deleted (or the workbook closed) — the next miss sweeps it out.
+        ctx.sheets = [ctx.sheets[0]];
+        ctx.currentSheetId = 'id_1';
+        getComputeMap(ctx);
+
+        // Same rules and same data by reference: a surviving entry would hit.
+        ctx.sheets = [ctx.sheets[0], removed];
+        ctx.currentSheetId = 'id_2';
+        expect(getComputeMap(ctx)).not.toBe(second);
+    });
+
     it('recomputes when the rules are replaced', () => {
         const ctx = ctxWithRules();
 
