@@ -1,3 +1,4 @@
+import { escapeHtml } from '@workspace/lib/html';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
@@ -5,8 +6,6 @@ import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
     en,
-    escapeHTMLTag,
-    escapeScriptTag,
     getCellValue,
     getFlowdata,
     getInlineStringNoStyle,
@@ -65,7 +64,7 @@ export function FxEditor() {
                     value = shown == null ? '' : String(shown);
                 }
             }
-            refs.fxInput.current!.innerHTML = escapeHTMLTag(escapeScriptTag(value));
+            refs.fxInput.current!.innerHTML = escapeHtml(value);
         } else {
             refs.fxInput.current!.innerHTML = '';
         }

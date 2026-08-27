@@ -75,24 +75,6 @@ export function columnCharToIndex(a: string) {
     return numout - 1;
 }
 
-export function escapeScriptTag(str: string) {
-    if (typeof str !== 'string') return str;
-    return str.replace(/<script>/g, '&lt;script&gt;').replace(/<\/script>/g, '&lt;/script&gt;');
-}
-
-// Cell text is a schemaless CRDT string — any collaborator can author it, and an xlsx
-// import carries one in — and it lands in the formula bar and the in-cell editor through
-// innerHTML. This used to hand back anything starting with `<span` or `=` unescaped, on the
-// assumption that such a value was markup we had generated ourselves. Sniffing a string's
-// prefix cannot tell our markup from a user's: a cell reading `<span x><img onerror=...>`
-// executed for every viewer, read-only included. Callers that really do render generated
-// markup say so at their own callsite now. Angle brackets only, so `&` keeps rendering as
-// `&` and nothing double-escapes.
-export function escapeHTMLTag(str: string) {
-    if (typeof str !== 'string') return str;
-    return str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 export function getSheetIndex(ctx: Context, id: string) {
     for (let i = 0; i < ctx.sheets.length; i += 1) {
         if (ctx.sheets[i]?.id === id) {

@@ -3,7 +3,6 @@ import {
     type Context,
     cancelFunctionrangeSelected,
     createRangeHightlight,
-    escapeScriptTag,
     functionHTMLGenerate,
     rangeHightlightselected,
     resetRangeIndexes,
@@ -80,7 +79,7 @@ export function cycleReferenceInEditor(
 
     setContext((draftCtx) => {
         resetRangeIndexes();
-        const html = functionHTMLGenerate(escapeScriptTag(result.text));
+        const html = functionHTMLGenerate(result.text);
         editor.innerHTML = html;
         if (copyTo) copyTo.innerHTML = html;
         setSelectionOffsets(editor, result.selectionStart, result.selectionEnd);

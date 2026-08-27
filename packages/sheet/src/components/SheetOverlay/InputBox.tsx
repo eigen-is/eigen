@@ -1,3 +1,4 @@
+import { escapeHtml } from '@workspace/lib/html';
 import { isEqual } from 'es-toolkit/compat';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
@@ -7,8 +8,6 @@ import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
     createRangeHightlight,
-    escapeHTMLTag,
-    escapeScriptTag,
     getCellValue,
     getFlowdata,
     getInlineStringHTML,
@@ -95,7 +94,7 @@ export const InputBox: React.FC = () => {
             }
             refs.globalCache.overwriteCell = false;
             if (!refs.globalCache.ignoreWriteCell)
-                inputRef.current!.innerHTML = valueIsGeneratedHtml ? value : escapeHTMLTag(escapeScriptTag(value));
+                inputRef.current!.innerHTML = valueIsGeneratedHtml ? value : escapeHtml(value);
             refs.globalCache.ignoreWriteCell = false;
             if (!refs.globalCache.doNotFocus) {
                 // Synchronously too: the innerHTML write leaves the caret at 0, and

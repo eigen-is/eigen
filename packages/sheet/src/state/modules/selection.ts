@@ -1,3 +1,4 @@
+import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber, kebabCase, map } from 'es-toolkit/compat';
 import { format } from 'numfmt';
@@ -5,7 +6,7 @@ import { cfSplitRange } from '../../engine/conditional-format';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
-import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
+import { getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
 import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
 import {
     getCellValue,
@@ -1449,7 +1450,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                     c_value = '';
                 }
 
-                column += escapeHTMLTag(String(c_value));
+                column += escapeHtml(String(c_value));
             } else {
                 let style = '';
 
