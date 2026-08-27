@@ -130,7 +130,8 @@ shared Eigen comment-card infrastructure — see [COMMENTS.md](COMMENTS.md) for 
 components.
 
 - **Canvas indicator**: triangle (top-right) drawn when `cell.commentCardIds?.length > 0`; color comes
-  from the Y.Doc card via `hooks.getCommentInfo(r, c)`
+  from the Y.Doc card via `hooks.getCommentInfo(r, c)`. Same painter and same size as the other two
+  corner marks — see § Cell corner indicators
 - **Context menu**: the shared `CommentLifecycleMenuItems`, fed by `hooks.commentLifecycle` (the `useCommentLifecycle` bundle) plus `hooks.getCommentInfo` for the cell's card. Only the two cell-anchor writes stay sheet-specific hooks: `hooks.onAddComment` and `hooks.onDeleteComment`
 - **Comments/activity pane**: the shared `PanelColumn` — one component for both panels on every viewport,
   driven by `useDocumentPanels(isMobile)`
@@ -144,9 +145,12 @@ container-resize contract above). Hiding that wrapper also takes the floating fi
 ## Tick boxes (checkbox data verification)
 
 A tick box is a **data-verification rule**, not a cell format — the same model Google uses. `Insert →
-Tick box` writes `{ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }` over the selected range;
-`Data → Data verification` keeps the dialog for custom selected/not-selected labels. Everything lives
-in `packages/sheet/src/state/modules/data-verification.ts`.
+Tick box` and the **cell right-click menu** both write `{ type: 'checkbox', value1: 'TRUE',
+value2: 'FALSE' }` over the selected range (`insertCheckbox`); the context-menu entry is the one that
+matches the common intent, which is converting an existing TRUE/FALSE column rather than creating
+something. `Data → Data verification` keeps the dialog for custom selected/not-selected labels, and
+seeds it with the same TRUE/FALSE pair so a fresh checkbox rule is confirmable without typing.
+Everything lives in `packages/sheet/src/state/modules/data-verification.ts`.
 
 - **The cell value is the checked state.** `isCheckboxChecked(rule, value)` compares the cell's display
   value against `rule.value1` case-insensitively — there is no flag on the rule. That is what makes an
@@ -186,6 +190,35 @@ keyboard user who arrowed onto a validated cell saw nothing, and a read-only vie
   see the chevron but get no list — `cellFocus` never positions the anchor when editing is disallowed.
 - The DOM element that remains (`#luckysheet-dataVerification-dropdown-btn`) is an invisible,
   non-clickable anchor for the Radix portal, nothing more.
+
+## The validation card (prompt / rejection)
+
+A validated cell says two things: the prompt its author wrote (or a generated one), and — when the
+value in it fails the rule — why. Both render through one React card,
+`components/DataVerification/HintCard.tsx`, from one model, `getValidationHint(ctx, r, c)`.
+
+- **Derived from the focus cell, every render.** It replaced a singleton `<div>` that `cellFocus`
+  wrote with `innerHTML` and positioned in raw pixels from a mousedown handler. That one stranded
+  over the previous cell when you arrowed away, never appeared for a keyboard user at all, and put
+  any collaborator's rule text (or an imported xlsx's `dv.prompt`) straight into markup. Rendering
+  it declaratively closes all three: React makes the text content rather than markup.
+- **A rejection outranks a prompt** — one card serves both states, and the rejection is the more
+  urgent. `confirmMessage` refuses to write a rule it warns about, so an empty-valued rule can no
+  longer reach the painter.
+- **It stands down while the list is open** (`context.dataVerificationDropDownList`) — the two hang
+  over the same corner of the cell.
+- **Copy lives in the locale** (`state/locale/en.ts` → `dataVerification.hintCard` + `optionLabel`),
+  assembled by `describeValidationRule(item, kind)` — which also supplies the `prohibitInput` warn
+  dialog, so the two ways a rejected value is reported say the same thing.
+
+## Cell corner indicators
+
+Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string
+(top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one size,
+`CELL_INDICATOR_SIZE` — they used to be 11px, 5px and 6px of inline magic numbers, with the comment
+block copied verbatim between `nullCellRender` and `cellRender`. Unlike the tick box and the list
+chevron, no hit test reads this geometry, so it stays in the render module rather than the state one.
+Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
 
 ## Headless Formula Engine
 

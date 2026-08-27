@@ -67,8 +67,7 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
       `state/modules/condition-format.ts` and the HTML export's `buildCfFormulaEvaluator` —
       extract a shared helper if a third consumer appears
 - [ ] deprecated `document.execCommand` in `InputBox.tsx` (no clean replacement yet; revisit)
-- [ ] minor tidy-ups: no-delay `setTimeout(fn)` sequencing (`SheetTab`, `SheetOverlay`), DOM
-      mutation inside a `setContext` recipe (`DataVerification/DropdownList.tsx`), inline style
+- [ ] minor tidy-ups: no-delay `setTimeout(fn)` sequencing (`SheetTab`, `SheetOverlay`), inline style
       object in `context/modal.tsx`, `insertMenu` repeating `autoSelectionFormula` 4×,
       `.substr()` ×4 in `cell.ts`
 - [ ] operator-family seam: `=`/`<>` are coercing + case-insensitive (2026-07-12), but `<` `>`
