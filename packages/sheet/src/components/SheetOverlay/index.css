@@ -17,8 +17,6 @@
     --sheet-touch-knob-bg: #ffffff;
     --sheet-touch-knob-border: rgba(0, 0, 0, 0.15);
     --sheet-touch-btn: #018ffb;
-    --sheet-hintbox-border: #ccc;
-    --sheet-hintbox-shadow: rgba(0, 0, 0, 0.2);
 }
 
 .fortune-sheet-overlay {
@@ -95,7 +93,6 @@
 .fortune-cols-freeze-handle,
 .fortune-rows-freeze-handle,
 .fortune-col-header-hover .header-arrow,
-#luckysheet-dataVerification-showHintBox,
 .fortune-formula-functionrange-highlight .fortune-copy,
 .fortune-formula-functionrange-highlight .luckysheet-highlight {
     pointer-events: auto;
@@ -817,20 +814,6 @@
     position: absolute;
     top: -1.4em;
     left: -1px;
-}
-
-#luckysheet-dataVerification-showHintBox {
-    display: none;
-    padding: 10px;
-    background-color: var(--popover);
-    border: 1px solid var(--sheet-hintbox-border);
-    box-shadow: 0 2px 4px var(--sheet-hintbox-shadow);
-    position: absolute;
-    z-index: 30;
-    user-select: none;
-    cursor: default;
-    white-space: nowrap;
-    font-size: 12px;
 }
 
 /* Invisible anchor for the validation dropdown's Radix portal — the chevron a

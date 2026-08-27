@@ -15,13 +15,14 @@ import {
     DROPDOWN_CHEVRON_HIT_WIDTH,
     dropdownChevronRect,
     getDropdownList,
+    getValidationHint,
     isCheckboxChecked,
     isCheckboxClick,
     isDefaultCheckboxRule,
     isDropdownChevronClick,
     validateCellData,
 } from '../../../state/modules/data-verification';
-import type { DataRegulationProps, DataVerificationRule } from '../../../state/types';
+import type { Cell, DataRegulationProps, DataVerificationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
 describe('getDropdownList', () => {
@@ -277,7 +278,6 @@ function regulationContext(regulation: Partial<DataRegulationProps>) {
     ctx.dataVerification = {
         selectStatus: false,
         selectRange: [],
-        optionLabel: en.dataVerification.optionLabel,
         dataRegulation: {
             type: 'dropdown',
             type2: '',
@@ -318,5 +318,127 @@ describe('confirmMessage', () => {
     test('accepts the rules it has no complaint about', () => {
         expect(confirm(regulationContext({ type: 'dropdown', value1: 'Red,Green' }))).toBe(true);
         expect(confirm(regulationContext({ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }))).toBe(true);
+    });
+});
+
+// The in-grid validation card. It replaces a DOM singleton that cellFocus wrote
+// with innerHTML on mousedown: the model is derived from the focus cell on every
+// render instead, so it cannot strand over the wrong cell, an arrow-key user
+// gets it, and rule text is content rather than markup.
+function hintContext(rule: DataVerificationRule, value?: Cell) {
+    const ctx = contextFactory() as Context;
+    ctx.sheets[0].data = [
+        [null, null, null, null],
+        [null, value ?? null, null, null],
+        [null, null, null, null],
+        [null, null, null, null],
+    ];
+    ctx.sheets[0].dataVerification = { '1_1': rule };
+    return ctx;
+}
+
+describe('getValidationHint', () => {
+    test('explains a rejected value in place of the old "Failure:" translationese', () => {
+        const rule: DataVerificationRule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
+        const hint = getValidationHint(hintContext(rule, { v: 42, m: '42' }), 1, 1);
+        expect(hint).toEqual({
+            kind: 'invalid',
+            text: 'Input must be a number between 1 and 10.',
+            left: 74,
+            top: 40,
+        });
+    });
+
+    test('says what a list cell wants, the way Google does', () => {
+        const rule: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green', value2: '' };
+        expect(getValidationHint(hintContext(rule, { v: 'Purple', m: 'Purple' }), 1, 1)?.text).toBe(
+            'Input must be an item on the specified list.',
+        );
+        expect(getValidationHint(hintContext({ ...rule, hintShow: true }), 1, 1)).toEqual({
+            kind: 'prompt',
+            text: 'Pick an item from the list.',
+            left: 74,
+            top: 40,
+        });
+    });
+
+    test('phrases each remaining rule type as a sentence', () => {
+        const cases: [DataVerificationRule, Cell, string][] = [
+            [
+                { type: 'text_content', type2: 'include', value1: 'ACME', value2: '' },
+                { v: 'Globex', m: 'Globex' },
+                'Text must include ACME.',
+            ],
+            [
+                { type: 'text_content', type2: 'exclude', value1: 'ACME', value2: '' },
+                { v: 'ACME Corp', m: 'ACME Corp' },
+                'Text must not include ACME.',
+            ],
+            [
+                { type: 'text_content', type2: 'equal', value1: 'ACME', value2: '' },
+                { v: 'Globex', m: 'Globex' },
+                'Text must be ACME.',
+            ],
+            [
+                { type: 'text_length', type2: 'lessThan', value1: '3', value2: '' },
+                { v: 'Globex', m: 'Globex' },
+                'Text length must be less than 3.',
+            ],
+            [
+                { type: 'date', type2: 'between', value1: '2024-01-01', value2: '2024-12-31' },
+                { v: '2025-06-15', m: '2025-06-15' },
+                'Date must be between 2024-01-01 and 2024-12-31.',
+            ],
+            [
+                { type: 'number_integer', type2: 'moreThanThe', value1: '5', value2: '' },
+                { v: 2, m: '2' },
+                'Input must be a whole number greater than 5.',
+            ],
+        ];
+        for (const [rule, cell, text] of cases) {
+            expect(getValidationHint(hintContext(rule, cell), 1, 1)?.text).toBe(text);
+        }
+    });
+
+    test('shows the author prompt verbatim, markup and all — React renders it as text', () => {
+        const rule: DataVerificationRule = {
+            type: 'dropdown',
+            type2: '',
+            value1: 'Red',
+            value2: '',
+            hintShow: true,
+            hintValue: '<img src=x onerror=alert(1)>',
+        };
+        expect(getValidationHint(hintContext(rule), 1, 1)).toEqual({
+            kind: 'prompt',
+            text: '<img src=x onerror=alert(1)>',
+            left: 74,
+            top: 40,
+        });
+    });
+
+    test('a rejection outranks the prompt, and a valid value shows the prompt alone', () => {
+        const rule: DataVerificationRule = {
+            type: 'number',
+            type2: 'between',
+            value1: '1',
+            value2: '10',
+            hintShow: true,
+            hintValue: 'Score out of ten',
+        };
+        expect(getValidationHint(hintContext(rule, { v: 42, m: '42' }), 1, 1)?.kind).toBe('invalid');
+        expect(getValidationHint(hintContext(rule, { v: 4, m: '4' }), 1, 1)?.text).toBe('Score out of ten');
+    });
+
+    test('stays silent where there is nothing to say', () => {
+        const rule: DataVerificationRule = { type: 'number', type2: 'between', value1: '1', value2: '10' };
+        // Valid value, empty cell, a cell with no rule, and a tick box — which
+        // can never be invalid and needs no prompt.
+        expect(getValidationHint(hintContext(rule, { v: 4, m: '4' }), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule), 1, 1)).toBeUndefined();
+        expect(getValidationHint(hintContext(rule), 0, 0)).toBeUndefined();
+        expect(
+            getValidationHint(hintContext({ ...TICK_BOX, hintShow: true }, { v: 'nope', m: 'nope' }), 1, 1),
+        ).toBeUndefined();
     });
 });

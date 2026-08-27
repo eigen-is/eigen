@@ -22,7 +22,7 @@ import {
     type SingleRange,
     setCellValue,
 } from '..';
-import type { en } from '../locale/en';
+import { en } from '../locale/en';
 
 // Locale slices passed into confirmMessage from the React dialog — the parent
 // destructures the `en` locale object into these named groups.
@@ -441,136 +441,132 @@ export function insertCheckbox(ctx: Context) {
     );
 }
 
-// error message when data is invalid
-export function getFailureText(ctx: Context, item: DataVerificationRule) {
-    let failureText = '';
-    const { type, type2, value1, value2 } = item;
-    const optionLabel = ctx.dataVerification?.optionLabel;
-    if (!optionLabel) return failureText;
+// --- The in-grid validation card -------------------------------------------
+// What a validated cell has to say: why the value in it was rejected, or what
+// to type. Copy lives in the locale next to the rest of the dialog's strings;
+// the sentence frames slot in a rule-type word and a condition phrase.
 
-    if (type === 'dropdown') {
-        failureText += 'what you selected is not an option in the drop-down list';
-    } else if (type === 'checkbox') {
-        // checkbox cells can never be invalid — no message
-    } else if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
-        failureText += `what you entered is not a ${optionLabel[type]} ${optionLabel[type2]} ${value1}`;
-        if (type2 === 'between' || type2 === 'notBetween') {
-            failureText += ` and ${value2}`;
-        }
-    } else if (type === 'text_content') {
-        failureText += `what you entered is not text that ${optionLabel[type2]} ${value1}`;
-    } else if (type === 'text_length') {
-        failureText += `the text you entered is not length ${optionLabel[type2]} ${value1}`;
-        if (type2 === 'between' || type2 === 'notBetween') {
-            failureText += ` and ${value2}`;
-        }
-    } else if (type === 'date') {
-        failureText += `the date you entered is not ${optionLabel[type2]} ${value1}`;
-        if (type2 === 'between' || type2 === 'notBetween') {
-            failureText += ` and ${value2}`;
-        }
-    }
-    return failureText;
+export type ValidationHint = {
+    kind: 'invalid' | 'prompt';
+    text: string;
+    // Content coordinates of the cell's bottom-left corner — the card hangs
+    // under the cell, merge extent included.
+    left: number;
+    top: number;
+};
+
+// "between 1 and 10", "greater than 5", "earlier than 2024-01-01".
+function conditionPhrase(item: DataVerificationRule) {
+    const { type2, value1, value2 } = item;
+    const optionLabel: Record<string, string> = en.dataVerification.optionLabel;
+    const label = optionLabel[type2];
+    if (!label) return '';
+    if (type2 === 'between' || type2 === 'notBetween') return `${label} ${value1} and ${value2}`;
+    return `${label} ${value1}`;
 }
 
-// get the hint text
-export function getHintText(ctx: Context, item: DataVerificationRule) {
-    let hintValue = item.hintValue || '';
-    if (hintValue) return hintValue;
+// Also the copy for the `prohibitInput` warn dialog (modules/cell.ts), so the
+// two ways a rejected value is reported say the same thing.
+export function describeValidationRule(item: DataVerificationRule, kind: ValidationHint['kind']) {
+    const { hintCard } = en.dataVerification;
+    const optionLabel: Record<string, string> = en.dataVerification.optionLabel;
+    const invalid = kind === 'invalid';
+    const { type, type2 } = item;
 
-    const { type, type2, value1, value2 } = item;
-    const optionLabel = ctx.dataVerification?.optionLabel;
-    if (!optionLabel) return hintValue;
-
+    let frame = '';
     if (type === 'dropdown') {
-        hintValue += 'please select an option in the drop-down list';
-    } else if (type === 'checkbox') {
-        // checkbox cells need no hint
+        frame = invalid ? hintCard.listInvalid : hintCard.listPrompt;
     } else if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
-        hintValue += `please enter a ${optionLabel[type]} ${optionLabel[type2]} ${value1}`;
-        if (type2 === 'between' || type2 === 'notBetween') {
-            hintValue += ` and ${value2}`;
-        }
+        frame = invalid ? hintCard.numberInvalid : hintCard.numberPrompt;
     } else if (type === 'text_content') {
-        hintValue += `please enter text ${optionLabel[type2]} ${value1}`;
+        if (type2 === 'include') frame = invalid ? hintCard.textIncludeInvalid : hintCard.textIncludePrompt;
+        else if (type2 === 'exclude') frame = invalid ? hintCard.textExcludeInvalid : hintCard.textExcludePrompt;
+        else if (type2 === 'equal') frame = invalid ? hintCard.textEqualInvalid : hintCard.textEqualPrompt;
     } else if (type === 'text_length') {
-        hintValue += `please enter text of length ${optionLabel[type2]} ${value1}`;
-        if (type2 === 'between' || type2 === 'notBetween') {
-            hintValue += ` and ${value2}`;
-        }
+        frame = invalid ? hintCard.lengthInvalid : hintCard.lengthPrompt;
     } else if (type === 'date') {
-        hintValue += `please enter a date ${optionLabel[type2]} ${value1}`;
-        if (type2 === 'between' || type2 === 'notBetween') {
-            hintValue += ` and ${value2}`;
-        }
+        frame = invalid ? hintCard.dateInvalid : hintCard.datePrompt;
     }
-    return hintValue;
+    // A tick box can never hold an invalid value and needs no prompt: no frame,
+    // no card.
+    if (!frame) return '';
+
+    return frame
+        .replace('{type}', optionLabel[type] ?? '')
+        .replace('{condition}', conditionPhrase(item))
+        .replace('{value}', item.value1);
+}
+
+// The card's whole model — what to say and where — derived from the cell on
+// every render. It replaces a singleton div that a mousedown handler wrote with
+// innerHTML and positioned in raw pixels: that one stranded over the previous
+// cell when you arrowed away, never appeared for a keyboard user, and put any
+// collaborator's rule text into markup.
+export function getValidationHint(ctx: Context, r: number, c: number): ValidationHint | undefined {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null || index < 0) return undefined;
+    const item = ctx.sheets[index].dataVerification?.[`${r}_${c}`];
+    if (!item) return undefined;
+    const d = getFlowdata(ctx);
+    if (!d) return undefined;
+
+    const cellValue = getCellValue(r, c, d);
+    let kind: ValidationHint['kind'] | undefined;
+    let text = '';
+    // A rejection outranks the prompt — it is the more urgent of the two, and
+    // one card serves both.
+    if (!isRealNull(cellValue) && !validateCellData(ctx, item, cellValue)) {
+        kind = 'invalid';
+        text = describeValidationRule(item, 'invalid');
+    } else if (item.hintShow) {
+        kind = 'prompt';
+        text = item.hintValue || describeValidationRule(item, 'prompt');
+    }
+    if (!kind || !text) return undefined;
+
+    let top = ctx.visibledatarow[r];
+    let left = c === 0 ? 0 : ctx.visibledatacolumn[c - 1];
+    const margeSet = mergeBorder(ctx, d, r, c);
+    if (margeSet) {
+        top = margeSet.row[1];
+        left = margeSet.column[0];
+    }
+    return { kind, text, left, top };
 }
 
 // handle cell focus
 export function cellFocus(ctx: Context, r: number, c: number) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
-    const showHintBox = document.getElementById('luckysheet-dataVerification-showHintBox');
-    const dropDownBtn = document.getElementById('luckysheet-dataVerification-dropdown-btn');
+    // Reset first, whoever is looking: a viewer who arrives after a permission
+    // change would otherwise be stuck with whatever the last edit session left.
     ctx.dataVerificationDropDownList = false;
-    if (!showHintBox || !dropDownBtn) return;
-    showHintBox.style.display = 'none';
+    if (!isAllowEdit(ctx)) return;
+    const dropDownBtn = document.getElementById('luckysheet-dataVerification-dropdown-btn');
+    if (!dropDownBtn) return;
     dropDownBtn.style.display = 'none';
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const { dataVerification } = ctx.sheets[index];
-    ctx.dataVerificationDropDownList = false;
     if (!dataVerification) return;
+    const item = dataVerification[`${r}_${c}`];
+    if (item?.type !== 'dropdown') return;
+    const d = getFlowdata(ctx);
+    if (!d) return;
+
     let row = ctx.visibledatarow[r];
     let row_pre = r === 0 ? 0 : ctx.visibledatarow[r - 1];
     let col = ctx.visibledatacolumn[c];
     let col_pre = c === 0 ? 0 : ctx.visibledatacolumn[c - 1];
-    const d = getFlowdata(ctx);
-    if (!d) return;
     const margeSet = mergeBorder(ctx, d, r, c);
     if (margeSet) {
         [row_pre, row] = margeSet.row;
         [col_pre, col] = margeSet.column;
     }
-    const item = dataVerification[`${r}_${c}`];
-    if (!item) return;
 
-    // cell data validation type is dropdown
-    if (item.type === 'dropdown') {
-        dropDownBtn.style.display = 'block';
-        dropDownBtn.style.maxWidth = `${col - col_pre}px`;
-        dropDownBtn.style.maxHeight = `${row - row_pre}px`;
-        dropDownBtn.style.left = `${col - 20}px`;
-        dropDownBtn.style.top = `${row_pre + (row - row_pre - 20) / 2 - 2}px`;
-    }
-
-    // hint text — checkbox rules have no hint copy, so skip the popup entirely
-    // rather than rendering a stranded `Hint: ` label with empty body.
-    if (item.hintShow) {
-        const hintBody = getHintText(ctx, item);
-        if (hintBody) {
-            showHintBox.innerHTML = `<span style="color:#f5a623;">Hint: </span>${hintBody}`;
-            showHintBox.style.display = 'block';
-            showHintBox.style.left = `${col_pre}px`;
-            showHintBox.style.top = `${row}px`;
-        }
-    }
-
-    // data validation failed — show failure reminder (same empty-body guard)
-    const cellValue = getCellValue(r, c, d);
-    if (isRealNull(cellValue)) {
-        return;
-    }
-    const validate = validateCellData(ctx, item, cellValue);
-    if (!validate) {
-        const failureBody = getFailureText(ctx, item);
-        if (failureBody) {
-            showHintBox.innerHTML = `<span style="color:#f72626;">Failure: </span>${failureBody}`;
-            showHintBox.style.display = 'block';
-            showHintBox.style.left = `${col_pre}px`;
-            showHintBox.style.top = `${row}px`;
-        }
-    }
+    // The Radix anchor, not an indicator: the chevron is canvas paint.
+    dropDownBtn.style.display = 'block';
+    dropDownBtn.style.maxWidth = `${col - col_pre}px`;
+    dropDownBtn.style.maxHeight = `${row - row_pre}px`;
+    dropDownBtn.style.left = `${col - 20}px`;
+    dropDownBtn.style.top = `${row_pre + (row - row_pre - 20) / 2 - 2}px`;
 }
 
 // set the dropdown value

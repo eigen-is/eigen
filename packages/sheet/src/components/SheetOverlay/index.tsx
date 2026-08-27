@@ -30,6 +30,7 @@ import {
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
+import { ValidationHintCard } from '../DataVerification/HintCard';
 import { ImgBoxs } from '../ImgBoxs';
 import { LinkEditCard } from '../LinkEditCard';
 import { ColumnHeader } from './ColumnHeader';
@@ -462,12 +463,7 @@ export const SheetOverlay: React.FC = () => {
                             fixedLeft={dvRegion.fixedLeft}
                             fixedTop={dvRegion.fixedTop}
                         >
-                            {/* eigen-paper-chrome: popup chrome re-themes with the
-                                app inside the light-pinned workbook surface. */}
-                            <div
-                                id="luckysheet-dataVerification-showHintBox"
-                                className="luckysheet-mousedown-cancel eigen-paper-chrome"
-                            />
+                            <ValidationHintCard />
                         </OverlayRegion>
                         {context.linkCard?.sheetId === context.currentSheetId && (
                             <OverlayRegion

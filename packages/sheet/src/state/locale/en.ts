@@ -9560,27 +9560,47 @@ export const en = {
         tooltipInfo6: 'The value entered is not a date type',
         tooltipInfo7: 'Date 2 cannot be less than date 1',
         textlengthInteger: 'Text length must be an integer greater than or equal to 0',
-        // Lowercase phrase fragments for the failureText/hintValue sentence builders in
-        // modules/data-verification.ts (distinct from the Title Case labels above, which
-        // are for the rule-type Select).
+        // Lowercase phrase fragments the sentence builders in
+        // modules/data-verification.ts slot into `{type}` and `{condition}`
+        // (distinct from the Title Case labels above, which are for the
+        // rule-type Select). Text rules get their own frames below —
+        // "Text must equal to ACME" is not a sentence.
         optionLabel: {
-            number: 'numeric',
-            number_integer: 'integer',
-            number_decimal: 'decimal',
+            number: 'a number',
+            number_integer: 'a whole number',
+            number_decimal: 'a decimal number',
             between: 'between',
             notBetween: 'not between',
             equal: 'equal to',
             notEqualTo: 'not equal to',
-            moreThanThe: 'greater',
+            moreThanThe: 'greater than',
             lessThan: 'less than',
-            greaterOrEqualTo: 'greater or equal to',
+            greaterOrEqualTo: 'greater than or equal to',
             lessThanOrEqualTo: 'less than or equal to',
-            include: 'include',
-            exclude: 'not include',
             earlierThan: 'earlier than',
             noEarlierThan: 'not earlier than',
             laterThan: 'later than',
             noLaterThan: 'not later than',
+        },
+        // The in-grid validation card (components/DataVerification/HintCard.tsx),
+        // assembled by getValidationHint. Every rule type gets two sentences: why
+        // the value in the cell was rejected, and what to type instead.
+        hintCard: {
+            invalidLabel: 'Invalid:',
+            listInvalid: 'Input must be an item on the specified list.',
+            listPrompt: 'Pick an item from the list.',
+            numberInvalid: 'Input must be {type} {condition}.',
+            numberPrompt: 'Enter {type} {condition}.',
+            textIncludeInvalid: 'Text must include {value}.',
+            textIncludePrompt: 'Enter text that includes {value}.',
+            textExcludeInvalid: 'Text must not include {value}.',
+            textExcludePrompt: 'Enter text that does not include {value}.',
+            textEqualInvalid: 'Text must be {value}.',
+            textEqualPrompt: 'Enter {value}.',
+            lengthInvalid: 'Text length must be {condition}.',
+            lengthPrompt: 'Enter text of length {condition}.',
+            dateInvalid: 'Date must be {condition}.',
+            datePrompt: 'Enter a date {condition}.',
         },
     },
     formula: {

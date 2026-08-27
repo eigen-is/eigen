@@ -21,7 +21,7 @@ import { type Context, getFlowdata } from '../context';
 import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
 import { getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
-import { getFailureText, validateCellData } from './data-verification';
+import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
@@ -634,10 +634,8 @@ export function updateCell(
     if (!isNil(dataVerification)) {
         const dvItem = dataVerification[`${r}_${c}`];
         if (!isNil(dvItem) && dvItem.prohibitInput && !validateCellData(ctx, dvItem, inputText)) {
-            const failureText = getFailureText(ctx, dvItem);
-
             cancelNormalSelected(ctx);
-            ctx.warnDialog = failureText;
+            ctx.warnDialog = describeValidationRule(dvItem, 'invalid');
 
             return;
         }

@@ -31,14 +31,11 @@ export function DropDownList() {
         return { list, isMul, selected };
     }, [open, context]);
 
+    // The validation hint card reads the same flag and stands down while the list
+    // is open — it hangs over the same corner of the cell.
     const setOpen = (next: boolean) => {
         setContext((ctx) => {
             ctx.dataVerificationDropDownList = next;
-            if (next) {
-                // Hint box overlaps the dropdown — hide it while the menu is open
-                const hintBox = document.getElementById('luckysheet-dataVerification-showHintBox');
-                if (hintBox) hintBox.style.display = 'none';
-            }
         });
     };
 
