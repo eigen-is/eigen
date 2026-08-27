@@ -1,3 +1,8 @@
+// @ts-expect-error - No types available for @formulajs/formulajs
+import { utils } from '@formulajs/formulajs';
+
+const formulaErrors: Error[] = Object.values(utils.errors);
+
 export const ERROR = 'ERROR';
 export const ERROR_DIV_ZERO = 'DIV/0';
 export const ERROR_NAME = 'NAME';
@@ -38,4 +43,16 @@ export default function error(type: string): string | null {
 
 export function isValidStrict(type: string): boolean {
     return Object.values(errors).includes(type);
+}
+
+// formulajs's trapping functions (IFERROR, IFNA, ISERROR, ISERR, ISNA) recognize an error
+// by object IDENTITY against its own singletons, never `instanceof`. An Error thrown by one
+// of our operators — `Error('DIV/0')` from a division — is therefore invisible to them, so
+// `IFERROR(1/0, "fallback")` returned #DIV/0! instead of the fallback. Mapping onto the
+// singleton at the one seam where a thrown error becomes a returned value keeps every
+// trapping function working, whichever side raised the error. An error we don't recognize
+// (a genuine JS bug rather than a formula error) passes through untouched.
+export function toFormulaError(e: Error): Error {
+    const formatted = error(e.message);
+    return formulaErrors.find((f) => f.message === formatted) ?? e;
 }

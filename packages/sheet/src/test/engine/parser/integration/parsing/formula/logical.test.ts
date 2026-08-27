@@ -165,4 +165,36 @@ describe('.parse() logical formulas', () => {
             result: null,
         });
     });
+
+    // Errors reach a trapping function two ways: returned by formulajs (NA()) or thrown by
+    // one of our own operators (1/0). formulajs recognizes its errors by object identity, so
+    // the thrown flavor used to slip past every trap — `IFERROR(1/0, "fb")` yielded #DIV/0!.
+    it('IFERROR', () => {
+        expect(parser!.parse('IFERROR(1, "fb")')).toMatchObject({ error: null, result: 1 });
+        expect(parser!.parse('IFERROR(NA(), "fb")')).toMatchObject({ error: null, result: 'fb' });
+        expect(parser!.parse('IFERROR(1/0, "fb")')).toMatchObject({ error: null, result: 'fb' });
+        expect(parser!.parse('IFERROR(1 + "x", "fb")')).toMatchObject({ error: null, result: 'fb' });
+    });
+
+    it('IFNA', () => {
+        expect(parser!.parse('IFNA(1, "fb")')).toMatchObject({ error: null, result: 1 });
+        expect(parser!.parse('IFNA(NA(), "fb")')).toMatchObject({ error: null, result: 'fb' });
+        expect(parser!.parse('IFNA(1/0, "fb")')).toMatchObject({ error: '#DIV/0!', result: null });
+    });
+
+    it('ISERROR', () => {
+        expect(parser!.parse('ISERROR(1)')).toMatchObject({ error: null, result: false });
+        expect(parser!.parse('ISERROR(NA())')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('ISERROR(1/0)')).toMatchObject({ error: null, result: true });
+    });
+
+    it('ISERR', () => {
+        expect(parser!.parse('ISERR(NA())')).toMatchObject({ error: null, result: false });
+        expect(parser!.parse('ISERR(1/0)')).toMatchObject({ error: null, result: true });
+    });
+
+    it('ISNA', () => {
+        expect(parser!.parse('ISNA(NA())')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('ISNA(1/0)')).toMatchObject({ error: null, result: false });
+    });
 });

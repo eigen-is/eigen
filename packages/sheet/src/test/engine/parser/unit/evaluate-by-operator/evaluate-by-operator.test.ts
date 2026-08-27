@@ -14,12 +14,14 @@ describe('evaluate-by-operator dispatch', () => {
         expect(evaluateByOperator('&', [err, 'x'])).toBe(err);
     });
 
-    test('arithmetic operators convert thrown errors to returned Errors', () => {
+    test('arithmetic operators convert thrown errors to returned formulajs Errors', () => {
         // `"" + 1` throws #VALUE! inside add.ts; the dispatcher must return the
-        // Error so the grammar can keep reducing (an outer IF may discard it).
+        // Error so the grammar can keep reducing (an outer IF may discard it) —
+        // as formulajs's own singleton, so IFERROR/ISERROR recognize it by identity.
         const result = evaluateByOperator('+', ['', 1]);
         expect(result).toBeInstanceOf(Error);
-        expect((result as Error).message).toBe('VALUE');
+        expect((result as Error).message).toBe('#VALUE!');
+        expect(evaluateByOperator('IFERROR', [result, 'fallback'])).toBe('fallback');
     });
 
     test('comparison operators do NOT auto-propagate Error (kept as silent false)', () => {

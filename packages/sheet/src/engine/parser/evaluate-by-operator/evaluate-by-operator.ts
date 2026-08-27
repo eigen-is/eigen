@@ -1,5 +1,5 @@
 import type { FormulaArg, FormulaOutput } from '../../types';
-import { ERROR_NAME } from '../error';
+import { ERROR_NAME, toFormulaError } from '../error';
 import add from './operator/add';
 import ampersand from './operator/ampersand';
 import divide from './operator/divide';
@@ -67,7 +67,7 @@ export default function evaluateByOperator(operator: string, params: FormulaArg[
     try {
         return availableOperators[upperOperator](...params);
     } catch (e) {
-        if (e instanceof Error) return e;
+        if (e instanceof Error) return toFormulaError(e);
         throw e;
     }
 }
