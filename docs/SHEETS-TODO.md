@@ -75,6 +75,24 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
       `<=` `>=` still raw-JS coerce — blank `A1>=0` is TRUE while `A1=0` is FALSE, and `"A"<"a"`
       is TRUE alongside `"A"="a"` TRUE. Decide + implement Excel-parity ordering semantics
       (`engine/parser/evaluate-by-operator/operator/{greater,less}-than*.ts`)
+- [ ] IFERROR cannot trap an unknown name or function: `=IFERROR(XLOOKUP(...),"")` and
+      `=IFERROR(NOSUCHNAME,"fb")` still yield `#NAME?`, where Excel returns the fallback.
+      Errors raised *inside* operator evaluation are trapped (2026-08-27), but the unknown-symbol
+      throws — `evaluateByOperator`'s guard above its own try, and `_callVariable` — escape the
+      grammar's reduction and unwind the whole parse before IFERROR sees them. Visible today on
+      `=IFERROR(__xludf.DUMMYFUNCTION("...SPARKLINE..."),"")` cells, which render `#ERROR!`.
+      **Blocked on the operator-family decision above**: making those throws return an Error
+      instead would feed it to the comparison operators, which by documented design coerce an
+      Error operand to `false` — turning `=A1>NOSUCHFN(1)` from a visible `#NAME?` into a silent
+      wrong answer. Decide the comparison semantics first, then land both together
+- [ ] the client recalc path has no `hasNonErrorCachedValue` guard. `engine/recalc.ts` refuses to
+      overwrite Excel's cached value when our engine errors (a function this build lacks →
+      `#NAME?`), but `execFunctionGroup` → `groupValuesRefresh` → `setCellValue` writes
+      unconditionally, so editing an upstream cell replaces the imported value with the error,
+      pushes it as a Yjs op and bakes it into the next snapshot. Deliberately NOT mirrored into
+      the state layer (2026-08-27): freezing a stale value is right for a passive server-side
+      export, but in an editor whose inputs the user is actively changing, showing a number that
+      no longer matches its inputs is a lie. The real fix is covering the missing functions
 - [ ] `normalizeMonthMinuteTokens` (xlsx import) diverges from numfmt's classifier on three
       pathological formats (`;` consumed by a `_x` skip, `_\x` 3-char skip/fill, `B1`/`B2`
       calendar markers). Rendering is provably unaffected (numfmt classifies case-insensitively);
