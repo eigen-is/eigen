@@ -75,9 +75,14 @@ export const InputBox: React.FC = () => {
             const flowdata = getFlowdata(context);
             const cell = flowdata?.[row_index]?.[col_index];
             let value = '';
+            // The rich-text branch is the one case that really is generated markup — every
+            // run's text and style is escaped as it is built. Everything else is raw cell
+            // text and must be escaped here.
+            let valueIsGeneratedHtml = false;
             if (cell && !refs.globalCache.overwriteCell) {
                 if (isInlineStringCell(cell)) {
                     value = getInlineStringHTML(row_index, col_index, flowdata);
+                    valueIsGeneratedHtml = true;
                 } else if (cell.f) {
                     value = getCellValue(row_index, col_index, flowdata, 'f');
                     setContext((ctx) => {
@@ -89,7 +94,8 @@ export const InputBox: React.FC = () => {
                 }
             }
             refs.globalCache.overwriteCell = false;
-            if (!refs.globalCache.ignoreWriteCell) inputRef.current!.innerHTML = escapeHTMLTag(escapeScriptTag(value));
+            if (!refs.globalCache.ignoreWriteCell)
+                inputRef.current!.innerHTML = valueIsGeneratedHtml ? value : escapeHTMLTag(escapeScriptTag(value));
             refs.globalCache.ignoreWriteCell = false;
             if (!refs.globalCache.doNotFocus) {
                 // Synchronously too: the innerHTML write leaves the caret at 0, and

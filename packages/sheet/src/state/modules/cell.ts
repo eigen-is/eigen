@@ -18,7 +18,7 @@ import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
-import { getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
+import { escapeHTMLTag, getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
 import { getFailureText, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
@@ -1131,8 +1131,13 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
                 const style = getFontStyleByCell(strObj);
                 const styleStr = map(style, (v, key) => {
                     return `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`;
-                }).join('');
-                value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${strObj.v}</span>`;
+                })
+                    .join('')
+                    // Style values reach here from the cell (a colour like `red' onload='...`
+                    // would otherwise close the attribute); quotes and brackets are never
+                    // legitimate in the lengths and colours this builds.
+                    .replace(/['"<>]/g, '');
+                value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${escapeHTMLTag(strObj.v)}</span>`;
             }
         }
         return value;
