@@ -1,6 +1,8 @@
 import { isNil } from 'es-toolkit/compat';
+import { booleanDisplay } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import {
+    type CellMatrix,
     type Context,
     colLocationByIndex,
     type DataVerificationRule,
@@ -24,10 +26,9 @@ import {
 } from '..';
 import { en } from '../locale/en';
 
-// Locale slices passed into confirmMessage from the React dialog — the parent
-// destructures the `en` locale object into these named groups.
-type GeneralDialogLocale = typeof en.generalDialog;
-type DataVerificationLocale = typeof en.dataVerification;
+// The rule-type and condition words the hint sentences slot in, widened once:
+// `type`/`type2` are free-form strings, the locale object is not.
+const optionLabel: Record<string, string> = en.dataVerification.optionLabel;
 
 // Cell value handed to validateCellData by callers. Canvas passes the
 // formatted/raw cell value (`Cell['v']` flavour) and `updateCell` in cell.ts
@@ -278,8 +279,10 @@ export function validateCellData(ctx: Context, item: DataVerificationRule, cellV
 // Nothing stores a second flag, so an imported, pasted, typed or
 // formula-produced TRUE renders ticked like any other.
 
-export const CHECKBOX_CHECKED_VALUE = 'TRUE';
-export const CHECKBOX_UNCHECKED_VALUE = 'FALSE';
+// The engine's canonical boolean display, so a formula-produced TRUE reads as
+// ticked: recalc writes `cell.m` through the same function.
+export const CHECKBOX_CHECKED_VALUE = booleanDisplay(true);
+export const CHECKBOX_UNCHECKED_VALUE = booleanDisplay(false);
 
 // Box side in px. Painted on the canvas (render/cells.ts) and hit-tested in the
 // mousedown path (events/mouse-cell.ts) from the same checkboxRect geometry —
@@ -306,10 +309,6 @@ export function cellTextBox(left: number, top: number, right: number, bottom: nu
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
 }
 
-function isDefaultCheckboxRule(item: DataVerificationRule) {
-    return item.value1 === CHECKBOX_CHECKED_VALUE && item.value2 === CHECKBOX_UNCHECKED_VALUE;
-}
-
 // Whether a tick-box cell draws its value beside the box. A default TRUE/FALSE
 // rule draws the box alone, the way Google does, and an empty cell in the range
 // draws it alone too so the column reads as one. Anything else keeps its label:
@@ -317,7 +316,7 @@ function isDefaultCheckboxRule(item: DataVerificationRule) {
 // the rule does not name — applying a tick box over a column of prose must not
 // paint the prose out of existence.
 export function showsCheckboxLabel(item: DataVerificationRule, cellValue: CellValueForValidation) {
-    if (!isDefaultCheckboxRule(item)) return true;
+    if (item.value1 !== CHECKBOX_CHECKED_VALUE || item.value2 !== CHECKBOX_UNCHECKED_VALUE) return true;
     if (isRealNull(cellValue)) return false;
     const value = String(cellValue).toUpperCase();
     return value !== item.value1.toUpperCase() && value !== item.value2.toUpperCase();
@@ -349,12 +348,20 @@ export function checkboxRect(box: CellTextBox, horizonAlign: number, verticalAli
     return { x, y, size: CHECKBOX_SIZE };
 }
 
+// The rule that governs one cell on the current sheet, modelled on the sibling
+// getCellHyperlink (modules/hyperlink.ts) — the same lookup was written inline at
+// every callsite, most of them casting the sheet index past its not-found case.
+export function getCellDataVerification(ctx: Context, r: number, c: number) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null || index < 0) return undefined;
+    return ctx.sheets[index].dataVerification?.[`${r}_${c}`];
+}
+
 // Only a click on the box toggles — anywhere else in the cell selects it like
 // any other, so a tick box can be copied, extended through and read in the fx
 // bar without flipping.
 export function isCheckboxClick(ctx: Context, r: number, c: number, box: CellTextBox, x: number, y: number) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    if (ctx.sheets[index].dataVerification?.[`${r}_${c}`]?.type !== 'checkbox') return false;
+    if (getCellDataVerification(ctx, r, c)?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
     const rect = checkboxRect(box, Number(normalizedAttr(d, r, c, 'ht')), Number(normalizedAttr(d, r, c, 'vt')));
@@ -365,8 +372,7 @@ export function isCheckboxClick(ctx: Context, r: number, c: number, box: CellTex
 // can fall through to their normal handling when it did not.
 export function checkboxChange(ctx: Context, r: number, c: number) {
     if (!isAllowEdit(ctx)) return false;
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const item = ctx.sheets[index].dataVerification?.[`${r}_${c}`];
+    const item = getCellDataVerification(ctx, r, c);
     if (item?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
@@ -413,8 +419,7 @@ export function dropdownChevronRect(box: CellTextBox): CellGlyphRect | undefined
 // Clicking the chevron opens the list, like the canvas filter button opens its
 // menu; a click anywhere else in the cell just selects it.
 export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: CellTextBox, x: number, y: number) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    if (ctx.sheets[index].dataVerification?.[`${r}_${c}`]?.type !== 'dropdown') return false;
+    if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return false;
     const rect = dropdownChevronRect(box);
     if (!rect) return false;
     const right = rect.x + rect.size;
@@ -430,11 +435,15 @@ export function applyDataVerification(ctx: Context, range: SingleRange, item: Da
     const d = getFlowdata(ctx);
     if (!d) return;
     const rules = ctx.sheets[index].dataVerification ?? {};
+    // One clone for the whole range: the rules are read-only to everything that
+    // consumes them, paste and drop-cell already alias one rule across cells, and
+    // the serialized snapshot is the same either way.
+    const rule = { ...item };
     let seeded = false;
     for (let r = range.row[0]; r <= range.row[1]; r += 1) {
         if (!d[r]) continue;
         for (let c = range.column[0]; c <= range.column[1]; c += 1) {
-            rules[`${r}_${c}`] = { ...item };
+            rules[`${r}_${c}`] = rule;
             if (item.type === 'checkbox' && isRealNull(getRealCellValue(r, c, d))) {
                 setCellValue(ctx, r, c, d, item.value2);
                 seeded = true;
@@ -445,15 +454,32 @@ export function applyDataVerification(ctx: Context, range: SingleRange, item: Da
     if (seeded) jfrefreshgrid(ctx, d, [range]);
 }
 
-// Insert -> Tick box: Google's one-click entry, no dialog. Applies to the
-// selected range only — a whole-column rule would write a million keys into the
-// snapshot. Data -> Data verification keeps the dialog for custom values.
+// Insert -> Tick box: Google's one-click entry, no dialog. There is nowhere to
+// reconsider the selection, and a click on the column header hands over every
+// row the sheet has (events/mouse-header.ts) — the rules are keyed per cell, so
+// 130k rows is 130k snapshot keys and a quarter of a million immer patches for
+// the collab layer to turn into Yjs ops. A whole column is therefore bounded to
+// the rows that hold something; past the used extent a tick box marks nothing.
+// A range the user dragged out is applied as selected, so a checklist can still
+// be laid over empty cells. Data -> Data verification keeps the dialog.
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;
+    const d = getFlowdata(ctx);
+    if (!d) return;
+    let endRow = selection.row[1];
+    if (selection.row[0] === 0 && endRow >= ctx.visibledatarow.length - 1) {
+        endRow = 0;
+        for (let r = d.length - 1; r > 0; r -= 1) {
+            if (d[r]?.some((cell) => cell != null)) {
+                endRow = r;
+                break;
+            }
+        }
+    }
     applyDataVerification(
         ctx,
-        { row: selection.row, column: selection.column },
+        { row: [selection.row[0], endRow], column: selection.column },
         {
             type: 'checkbox',
             type2: '',
@@ -480,7 +506,6 @@ export type ValidationHint = {
 // "between 1 and 10", "greater than 5", "earlier than 2024-01-01".
 function conditionPhrase(item: DataVerificationRule) {
     const { type2, value1, value2 } = item;
-    const optionLabel: Record<string, string> = en.dataVerification.optionLabel;
     const label = optionLabel[type2];
     if (!label) return '';
     if (type2 === 'between' || type2 === 'notBetween') return `${label} ${value1} and ${value2}`;
@@ -491,7 +516,6 @@ function conditionPhrase(item: DataVerificationRule) {
 // two ways a rejected value is reported say the same thing.
 export function describeValidationRule(item: DataVerificationRule, kind: ValidationHint['kind']) {
     const { hintCard } = en.dataVerification;
-    const optionLabel: Record<string, string> = en.dataVerification.optionLabel;
     const invalid = kind === 'invalid';
     const { type, type2 } = item;
 
@@ -519,15 +543,30 @@ export function describeValidationRule(item: DataVerificationRule, kind: Validat
         .replace('{value}', item.value1);
 }
 
+// The cell's content-space rectangle, merge extent included — the card hangs off
+// its bottom-left corner and the hidden dropdown anchor sits in it.
+function cellRectAt(ctx: Context, d: CellMatrix, r: number, c: number) {
+    const rect = {
+        top: r === 0 ? 0 : ctx.visibledatarow[r - 1],
+        bottom: ctx.visibledatarow[r],
+        left: c === 0 ? 0 : ctx.visibledatacolumn[c - 1],
+        right: ctx.visibledatacolumn[c],
+    };
+    const margeSet = mergeBorder(ctx, d, r, c);
+    if (margeSet) {
+        [rect.top, rect.bottom] = margeSet.row;
+        [rect.left, rect.right] = margeSet.column;
+    }
+    return rect;
+}
+
 // The card's whole model — what to say and where — derived from the cell on
 // every render. It replaces a singleton div that a mousedown handler wrote with
 // innerHTML and positioned in raw pixels: that one stranded over the previous
 // cell when you arrowed away, never appeared for a keyboard user, and put any
 // collaborator's rule text into markup.
 export function getValidationHint(ctx: Context, r: number, c: number): ValidationHint | undefined {
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null || index < 0) return undefined;
-    const item = ctx.sheets[index].dataVerification?.[`${r}_${c}`];
+    const item = getCellDataVerification(ctx, r, c);
     if (!item) return undefined;
     const d = getFlowdata(ctx);
     if (!d) return undefined;
@@ -546,14 +585,8 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
     }
     if (!kind || !text) return undefined;
 
-    let top = ctx.visibledatarow[r];
-    let left = c === 0 ? 0 : ctx.visibledatacolumn[c - 1];
-    const margeSet = mergeBorder(ctx, d, r, c);
-    if (margeSet) {
-        top = margeSet.row[1];
-        left = margeSet.column[0];
-    }
-    return { kind, text, left, top };
+    const { bottom, left } = cellRectAt(ctx, d, r, c);
+    return { kind, text, left, top: bottom };
 }
 
 // handle cell focus
@@ -565,30 +598,18 @@ export function cellFocus(ctx: Context, r: number, c: number) {
     const dropDownBtn = document.getElementById('luckysheet-dataVerification-dropdown-btn');
     if (!dropDownBtn) return;
     dropDownBtn.style.display = 'none';
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const { dataVerification } = ctx.sheets[index];
-    if (!dataVerification) return;
-    const item = dataVerification[`${r}_${c}`];
-    if (item?.type !== 'dropdown') return;
+    if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return;
     const d = getFlowdata(ctx);
     if (!d) return;
 
-    let row = ctx.visibledatarow[r];
-    let row_pre = r === 0 ? 0 : ctx.visibledatarow[r - 1];
-    let col = ctx.visibledatacolumn[c];
-    let col_pre = c === 0 ? 0 : ctx.visibledatacolumn[c - 1];
-    const margeSet = mergeBorder(ctx, d, r, c);
-    if (margeSet) {
-        [row_pre, row] = margeSet.row;
-        [col_pre, col] = margeSet.column;
-    }
+    const { top, bottom, left, right } = cellRectAt(ctx, d, r, c);
 
     // The Radix anchor, not an indicator: the chevron is canvas paint.
     dropDownBtn.style.display = 'block';
-    dropDownBtn.style.maxWidth = `${col - col_pre}px`;
-    dropDownBtn.style.maxHeight = `${row - row_pre}px`;
-    dropDownBtn.style.left = `${col - 20}px`;
-    dropDownBtn.style.top = `${row_pre + (row - row_pre - 20) / 2 - 2}px`;
+    dropDownBtn.style.maxWidth = `${right - left}px`;
+    dropDownBtn.style.maxHeight = `${bottom - top}px`;
+    dropDownBtn.style.left = `${right - 20}px`;
+    dropDownBtn.style.top = `${top + (bottom - top - 20) / 2 - 2}px`;
 }
 
 // set the dropdown value
@@ -600,8 +621,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     const rowIndex = last.row_focus;
     const colIndex = last.column_focus;
     if (rowIndex == null || colIndex == null) return;
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const item = ctx.sheets[index].dataVerification?.[`${rowIndex}_${colIndex}`];
+    const item = getCellDataVerification(ctx, rowIndex, colIndex);
     if (!item) return;
     let nextValue = value;
     if (item.type2 === 'true') {
@@ -617,11 +637,8 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
 }
 
 // input data validation
-export function confirmMessage(
-    ctx: Context,
-    generalDialog: GeneralDialogLocale,
-    dataVerification: DataVerificationLocale,
-): boolean {
+export function confirmMessage(ctx: Context): boolean {
+    const { generalDialog, dataVerification } = en;
     const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
     if (range.length === 0) {
         ctx.warnDialog = generalDialog.noSeletionError;

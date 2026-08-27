@@ -17,6 +17,7 @@ import {
     dropdownChevronRect,
     getDropdownList,
     getValidationHint,
+    insertCheckbox,
     isCheckboxChecked,
     isCheckboxClick,
     isDropdownChevronClick,
@@ -200,6 +201,42 @@ describe('applyDataVerification', () => {
     });
 });
 
+// Insert -> Tick box has no dialog to reconsider the selection in, and a click on
+// the column header hands it every row the sheet has (events/mouse-header.ts).
+// One rule per cell in the snapshot, so a whole column is bounded to the rows
+// that hold something; a range the user dragged out is applied as selected.
+describe('insertCheckbox', () => {
+    function sheetWithRows(rows: number, usedThrough: number) {
+        const ctx = contextFactory() as Context;
+        ctx.sheets[0].data = Array.from({ length: rows }, (_, r) =>
+            Array.from({ length: 4 }, (_, c) => (r <= usedThrough && c === 0 ? { v: 'x', m: 'x' } : null)),
+        ) as Context['sheets'][number]['data'];
+        ctx.visibledatarow = Array.from({ length: rows }, (_, r) => (r + 1) * 20);
+        return ctx;
+    }
+
+    test('bounds a whole-column selection to the last row that holds data', () => {
+        const ctx = sheetWithRows(500, 2);
+        ctx.selections = [{ row: [0, 499], column: [0, 0], row_focus: 0, column_focus: 0 }];
+        insertCheckbox(ctx);
+        expect(Object.keys(ctx.sheets[0].dataVerification!)).toEqual(['0_0', '1_0', '2_0']);
+    });
+
+    test('a whole column of an empty sheet still ticks its first cell', () => {
+        const ctx = sheetWithRows(500, -1);
+        ctx.selections = [{ row: [0, 499], column: [0, 0], row_focus: 0, column_focus: 0 }];
+        insertCheckbox(ctx);
+        expect(Object.keys(ctx.sheets[0].dataVerification!)).toEqual(['0_0']);
+    });
+
+    test('a dragged range is applied as selected, past the used extent', () => {
+        const ctx = sheetWithRows(500, 0);
+        ctx.selections = [{ row: [0, 3], column: [0, 0], row_focus: 0, column_focus: 0 }];
+        insertCheckbox(ctx);
+        expect(Object.keys(ctx.sheets[0].dataVerification!)).toEqual(['0_0', '1_0', '2_0', '3_0']);
+    });
+});
+
 // Cell A1 spans x 0..74, y 0..20 (contextFactory's visibledata*). The painter
 // and the hit test used to build its text box three different ways, so the box
 // was drawn one pixel below the box that answered a click.
@@ -368,29 +405,25 @@ function regulationContext(regulation: Partial<DataRegulationProps>) {
     return ctx;
 }
 
-function confirm(ctx: Context) {
-    return confirmMessage(ctx, en.generalDialog, en.dataVerification);
-}
-
 describe('confirmMessage', () => {
     test('rejects a drop-down rule with no options', () => {
         const ctx = regulationContext({ type: 'dropdown', value1: '' });
-        expect(confirm(ctx)).toBe(false);
+        expect(confirmMessage(ctx)).toBe(false);
         expect(ctx.warnDialog).toBe(en.dataVerification.tooltipInfo1);
     });
 
     test('rejects a checkbox rule with an empty selected or not-selected value', () => {
         const empty = regulationContext({ type: 'checkbox', value1: '', value2: '' });
-        expect(confirm(empty)).toBe(false);
+        expect(confirmMessage(empty)).toBe(false);
         expect(empty.warnDialog).toBe(en.dataVerification.tooltipInfo2);
 
         const halfEmpty = regulationContext({ type: 'checkbox', value1: 'Yes', value2: '' });
-        expect(confirm(halfEmpty)).toBe(false);
+        expect(confirmMessage(halfEmpty)).toBe(false);
     });
 
     test('accepts the rules it has no complaint about', () => {
-        expect(confirm(regulationContext({ type: 'dropdown', value1: 'Red,Green' }))).toBe(true);
-        expect(confirm(regulationContext({ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }))).toBe(true);
+        expect(confirmMessage(regulationContext({ type: 'dropdown', value1: 'Red,Green' }))).toBe(true);
+        expect(confirmMessage(regulationContext({ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }))).toBe(true);
     });
 });
 

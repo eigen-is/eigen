@@ -79,7 +79,7 @@ export function DataVerification() {
         (type: string) => {
             if (type === 'confirm') {
                 setContext((ctx) => {
-                    const isPass = confirmMessage(ctx, generalDialog, dataVerification);
+                    const isPass = confirmMessage(ctx);
                     if (isPass) {
                         const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
                         if (range.length === 0) {
