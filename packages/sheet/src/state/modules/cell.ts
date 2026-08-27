@@ -1,17 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import {
-    cloneDeep,
-    every,
-    indexOf,
-    isEmpty,
-    isNil,
-    isNumber,
-    isPlainObject,
-    isString,
-    kebabCase,
-    map,
-} from 'es-toolkit/compat';
+import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
@@ -19,7 +8,7 @@ import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
-import { getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
+import { getSheetIndex, indexToColumnChar, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
@@ -1127,15 +1116,12 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
         for (let i = 0; i < strings.length; i += 1) {
             const strObj = strings[i];
             if (strObj.v) {
-                const style = getFontStyleByCell(strObj);
-                const styleStr = map(style, (v, key) => {
-                    return `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`;
-                }).join('');
                 // Both halves come from the cell: a colour like `red' onload='...` would
                 // otherwise close the style attribute and open an event handler. The HTML
                 // parser decodes entities inside an attribute before CSS sees it, so a
                 // quoted font family survives escaping intact.
-                value += `<span class="luckysheet-input-span" index='${i}' style='${escapeHtml(styleStr)}'>${escapeHtml(strObj.v)}</span>`;
+                const styleStr = escapeHtml(styleObjectToCss(getFontStyleByCell(strObj)));
+                value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${escapeHtml(strObj.v)}</span>`;
             }
         }
         return value;
