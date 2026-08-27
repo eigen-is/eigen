@@ -297,6 +297,15 @@ export type CellTextBox = { left: number; top: number; width: number; height: nu
 // A square glyph placed inside that box: the tick box, the list chevron.
 export type CellGlyphRect = { x: number; y: number; size: number };
 
+// The one construction of that box, from the cell's own bounds. The 1px top
+// inset and the 2px the width and height give up are the grid lines the cell
+// must not paint over — what the painter has always clipped and laid text out
+// to. The hit test used to rebuild the box without the inset, so the top
+// painted row of a tick box did not respond to a click and one row below it did.
+export function cellTextBox(left: number, top: number, right: number, bottom: number): CellTextBox {
+    return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
+}
+
 export function isDefaultCheckboxRule(item: DataVerificationRule) {
     return item.value1 === CHECKBOX_CHECKED_VALUE && item.value2 === CHECKBOX_UNCHECKED_VALUE;
 }

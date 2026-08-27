@@ -161,8 +161,9 @@ Everything lives in `packages/sheet/src/state/modules/data-verification.ts`.
   clicking it would otherwise replace the formula with a literal.
 - **Only the box toggles.** `checkboxRect` is the single geometry both the painter
   (`state/render/cells.ts`) and the mousedown hit-test (`state/events/mouse-cell.ts`) use — the same
-  split as `FILTER_BUTTON_WIDTH`/`HEIGHT`. Clicking elsewhere in the cell selects it like any other;
-  Space/Enter toggle the focused cell (`state/events/keyboard.ts`).
+  split as `FILTER_BUTTON_WIDTH`/`HEIGHT` — and both hand it the same box, built by `cellTextBox`
+  from the cell's own bounds. Clicking elsewhere in the cell selects it like any other; Space/Enter
+  toggle the focused cell (`state/events/keyboard.ts`).
 - **Default rules draw the box alone**, the way Google does; a rule with custom values also draws its
   label, the only way to tell "Yes" from "No". Empty cells inside a range still draw an unchecked box
   (`nullCellRender`), so the range reads as one column.

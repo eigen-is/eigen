@@ -9,6 +9,7 @@ import type { Context } from '../../../state/context';
 import { en } from '../../../state/locale/en';
 import {
     applyDataVerification,
+    cellTextBox,
     checkboxChange,
     checkboxRect,
     confirmMessage,
@@ -169,15 +170,38 @@ describe('applyDataVerification', () => {
     });
 });
 
+// Cell A1 spans x 0..74, y 0..20 (contextFactory's visibledata*). The painter
+// and the hit test used to build its text box three different ways, so the box
+// was drawn one pixel below the box that answered a click.
+describe('cellTextBox', () => {
+    test('insets the cell by the grid lines it must not paint over', () => {
+        expect(cellTextBox(0, 0, 74, 20)).toEqual({ left: 0, top: 1, width: 72, height: 18 });
+    });
+
+    test('painter and hit test describe the same box for the same cell', () => {
+        // The painter works in canvas space (the row/column headers already added
+        // in), the mousedown hit test in freeze-corrected sheet space. Take the
+        // offset back out and the two must be the same box, to the pixel.
+        const offsetLeft = 60;
+        const offsetTop = 20;
+        const painted = cellTextBox(0 + offsetLeft, 0 + offsetTop, 74 + offsetLeft, 20 + offsetTop);
+        const clickable = cellTextBox(0, 0, 74, 20);
+
+        expect(painted.left - offsetLeft).toBe(clickable.left);
+        expect(painted.top - offsetTop).toBe(clickable.top);
+        expect(painted.width).toBe(clickable.width);
+        expect(painted.height).toBe(clickable.height);
+    });
+});
+
 describe('isCheckboxClick', () => {
-    // Cell A1 spans x 0..74, y 0..20 (contextFactory's visibledata*), so a
-    // default left/middle rule puts the 10px box at x 2..12, y 4..14.
-    const box = { left: 0, top: 0, width: 72, height: 18 };
+    // A default left/middle rule puts the 10px box at x 2..12, y 5..15.
+    const box = cellTextBox(0, 0, 74, 20);
 
     test('places the box by the cell alignment', () => {
-        expect(checkboxRect(box, 1, 0)).toEqual({ x: 2, y: 4, size: 10 });
-        expect(checkboxRect(box, 0, 0)).toEqual({ x: 31, y: 4, size: 10 });
-        expect(checkboxRect(box, 2, 2)).toEqual({ x: 60, y: 6, size: 10 });
+        expect(checkboxRect(box, 1, 0)).toEqual({ x: 2, y: 5, size: 10 });
+        expect(checkboxRect(box, 0, 0)).toEqual({ x: 31, y: 5, size: 10 });
+        expect(checkboxRect(box, 2, 2)).toEqual({ x: 60, y: 7, size: 10 });
     });
 
     test('only a click on the box counts', () => {
@@ -192,6 +216,26 @@ describe('isCheckboxClick', () => {
         expect(isCheckboxClick(ctx, 0, 0, box, 13, 9)).toBe(false);
         expect(isCheckboxClick(ctx, 0, 0, box, 7, 16)).toBe(false);
         expect(isCheckboxClick(ctx, 0, 0, box, 60, 9)).toBe(false);
+    });
+
+    test('every pixel of the painted box answers a click, its top row included', () => {
+        const ctx = tickBoxContext([
+            [{ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } }, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+        ]);
+        const rect = checkboxRect(box, 1, 0);
+        for (const [x, y] of [
+            [rect.x, rect.y],
+            [rect.x + rect.size, rect.y],
+            [rect.x, rect.y + rect.size],
+            [rect.x + rect.size, rect.y + rect.size],
+        ]) {
+            expect(isCheckboxClick(ctx, 0, 0, box, x, y)).toBe(true);
+        }
+        // The row above the box is the cell, not the box.
+        expect(isCheckboxClick(ctx, 0, 0, box, rect.x, rect.y - 1)).toBe(false);
     });
 
     test('ignores cells without a tick box rule', () => {
@@ -221,17 +265,16 @@ function listContext() {
 }
 
 describe('dropdownChevronRect', () => {
-    // Cell A1 spans x 0..74, y 0..20 (contextFactory's visibledata*), so its
-    // text box is 72×18 and the 10px glyph lands at x 60..70, y 4..14.
-    const box = { left: 0, top: 0, width: 72, height: 18 };
+    // Cell A1's text box is 72×18, so the 10px glyph lands at x 60..70, y 5..15.
+    const box = cellTextBox(0, 0, 74, 20);
 
     test('right-aligns the glyph and centres it vertically, whatever the cell alignment', () => {
-        expect(dropdownChevronRect(box)).toEqual({ x: 60, y: 4, size: 10 });
+        expect(dropdownChevronRect(box)).toEqual({ x: 60, y: 5, size: 10 });
         expect(dropdownChevronRect({ left: 100, top: 40, width: 40, height: 30 })).toEqual({ x: 128, y: 50, size: 10 });
     });
 
     test('drops the glyph in a column too narrow to carry it', () => {
-        expect(dropdownChevronRect({ ...box, width: 22 })).toEqual({ x: 10, y: 4, size: 10 });
+        expect(dropdownChevronRect({ ...box, width: 22 })).toEqual({ x: 10, y: 5, size: 10 });
         expect(dropdownChevronRect({ ...box, width: 21 })).toBeUndefined();
         expect(dropdownChevronRect({ ...box, width: 0 })).toBeUndefined();
     });
@@ -239,19 +282,19 @@ describe('dropdownChevronRect', () => {
 
 describe('isDropdownChevronClick', () => {
     // Glyph at x 60..70 ⇒ the finger-sized hit box spans x 50..70, full height.
-    const box = { left: 0, top: 0, width: 72, height: 18 };
+    const box = cellTextBox(0, 0, 74, 20);
     const RIGHT = 70;
 
     test('only a click on the chevron counts', () => {
         const ctx = listContext();
         expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, 9)).toBe(true);
-        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - DROPDOWN_CHEVRON_HIT_WIDTH, 0)).toBe(true);
-        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT, box.height)).toBe(true);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - DROPDOWN_CHEVRON_HIT_WIDTH, box.top)).toBe(true);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT, box.top + box.height)).toBe(true);
         // One pixel outside each edge.
         expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - DROPDOWN_CHEVRON_HIT_WIDTH - 1, 9)).toBe(false);
         expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT + 1, 9)).toBe(false);
-        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, -1)).toBe(false);
-        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, box.height + 1)).toBe(false);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, box.top - 1)).toBe(false);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, box.top + box.height + 1)).toBe(false);
     });
 
     test('ignores every rule type that draws no chevron, and cells with no rule', () => {

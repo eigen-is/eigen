@@ -7,6 +7,7 @@ import { checkCF } from '../modules/condition-format';
 import {
     type CellGlyphRect,
     CHECKBOX_LABEL_GAP,
+    cellTextBox,
     checkboxRect,
     dropdownChevronRect,
     isCheckboxChecked,
@@ -101,12 +102,9 @@ function renderDropdownChevron(
     endX: number,
 ) {
     const { renderCtx, flowdata, offsetLeft, offsetTop } = pass;
-    const rect = dropdownChevronRect({
-        left: startX + offsetLeft,
-        top: startY + offsetTop + 1,
-        width: endX - startX - 2,
-        height: endY - startY - 2,
-    });
+    const rect = dropdownChevronRect(
+        cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop),
+    );
     // Too narrow a column drops the glyph rather than filling the cell with it.
     if (!rect) return;
 
@@ -213,12 +211,7 @@ export function nullCellRender(
     // An empty cell inside a tick-box range still shows an unchecked box, so the
     // range reads as one uniform column.
     if (rule?.type === 'checkbox') {
-        const box = {
-            left: startX + offsetLeft,
-            top: startY + offsetTop + 1,
-            width: endX - startX - 2,
-            height: endY - startY - 2,
-        };
+        const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
         const align = [normalizedAttr(flowdata, r, c, 'ht'), normalizedAttr(flowdata, r, c, 'vt')];
         drawTickBox(renderCtx, checkboxRect(box, Number(align[0]), Number(align[1])), false);
     } else if (rule?.type === 'dropdown') {
@@ -306,8 +299,8 @@ export function cellRender(
     } = pass;
     const cell = flowdata[r][c];
     const rule = dataVerification?.[`${r}_${c}`];
-    const cellWidth = endX - startX - 2;
-    const cellHeight = endY - startY - 2;
+    const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
+    const { width: cellWidth, height: cellHeight } = box;
     const space_width = 2;
     const space_height = 2;
 
@@ -395,19 +388,12 @@ export function cellRender(
     }
     // Data validation tick box
     else if (rule?.type === 'checkbox') {
-        const pos_x = startX + offsetLeft;
-        const pos_y = startY + offsetTop + 1;
-
         renderCtx.save();
         renderCtx.beginPath();
-        renderCtx.rect(pos_x, pos_y, cellWidth, cellHeight);
+        renderCtx.rect(box.left, box.top, box.width, box.height);
         renderCtx.clip();
 
-        const rect = checkboxRect(
-            { left: pos_x, top: pos_y, width: cellWidth, height: cellHeight },
-            horizonAlign,
-            verticalAlign,
-        );
+        const rect = checkboxRect(box, horizonAlign, verticalAlign);
         drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
 
         // A default TRUE/FALSE rule draws the box alone, the way Google does.
@@ -433,8 +419,8 @@ export function cellRender(
             );
         }
 
-        const pos_x = startX + offsetLeft;
-        const pos_y = startY + offsetTop + 1;
+        const pos_x = box.left;
+        const pos_y = box.top;
 
         renderCtx.save();
         renderCtx.beginPath();
