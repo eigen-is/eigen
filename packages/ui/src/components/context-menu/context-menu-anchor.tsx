@@ -39,8 +39,12 @@ export function ContextMenuAnchor({ contextMenu, children, className, onCloseAut
                 // Radix menus never stop propagation, and portaled content still
                 // bubbles through the React tree — without these stops, menu-internal
                 // keystrokes and clicks reach the host surface underneath (list
-                // keyboard navigation, grid selection handlers).
+                // keyboard navigation, grid selection handlers). Pointer events need
+                // their own stop: a canvas host (vector) hit-tests onPointerDown and
+                // would clear the selection the menu's ops act on. Scoped to events
+                // inside the content, so Radix's outside-dismissal is untouched.
                 onKeyDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => e.stopPropagation()}
                 onCloseAutoFocus={(e) => {
