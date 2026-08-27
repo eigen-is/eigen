@@ -396,4 +396,36 @@ describe('engine/conditional-format — null / empty / disabled', () => {
         );
         expect(styles['0_0']?.cellColor).toBe('#ff0000');
     });
+
+    // xlsx sqrefs routinely run far past the used range, and each evaluation costs a
+    // ref-shift plus a full formula parse: on a real workbook two thirds of them landed
+    // on rows the matrix doesn't hold (129 818 evaluations for 44 498 reachable rows).
+    // Columns are deliberately NOT clamped — a ragged matrix has no single column extent,
+    // and this branch evaluates cells the matrix lacks on purpose (see the edges suite).
+    test('formula rules are not evaluated past the last materialized row', () => {
+        const data = buildMatrix([[1, 2]]);
+        const seen: string[] = [];
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 99], column: [0, 2] }],
+                    format: { cellColor: '#ff0000' },
+                    conditionName: 'formula',
+                    conditionRange: [],
+                    conditionValue: ['=A1>0'],
+                },
+            ],
+            data,
+            {
+                evaluateFormula: (_f, _sr, _sc, r, c) => {
+                    seen.push(`${r}_${c}`);
+                    return true;
+                },
+            },
+        );
+        expect(seen).toEqual(['0_0', '0_1', '0_2']);
+        expect(styles['0_0']?.cellColor).toBe('#ff0000');
+        expect(styles['1_0']).toBeUndefined();
+    });
 });
