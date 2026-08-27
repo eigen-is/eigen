@@ -207,6 +207,33 @@ Three caveats: **SVG gradients do not interpolate the way the CSS ones do**, so 
 
 **Open product question:** Excalidraw deliberately has no gradients and vector's look is hand-drawn roughjs, so this may read as off-style even though it unifies cleanly.
 
+### Canvas performance — what scales with element count and what doesn't
+
+The per-element `Y.Map` earns its keep: **what crosses the wire is independent of how many objects the canvas holds.** Moving one object writes two keys on one nested map, an add writes that element's ≤23 fields, a delete removes one key from the top-level map, and a group op over k elements is one transact. Nothing is proportional to n. Writes are also **one transact per completed gesture, not per frame** (`vector-canvas.tsx` — drag/resize/rotate previews are local React state), so dragging 100 objects across the canvas is a single update on pointerup. The trade-off is that peers see the jump, not the motion; awareness carries cursors and selection, not in-flight geometry.
+
+| Layer | Cost of changing one object |
+|---|---|
+| Yjs update payload, undo entry, `data.db` append | O(1) — only the changed fields |
+| Server snapshot (`Y.encodeStateAsUpdate`) | O(n), amortized every 100 updates / 1 MB |
+| `readVectorFromDoc` re-materialization + index sort/heal | **O(n log n)**, once per gesture and per remote update |
+| `ElementNode` memo comparison | O(n), cheap |
+| `elementToSvg` / roughjs path generation | **O(changed)** — the expensive part, correctly bounded |
+
+Two things are easy to get wrong when reading this code:
+
+- **roughjs runs on every render that passes the memo, not once at mount.** Geometry is generated at local origin (`gen.rectangle(0, 0, width, height, …)`) and placement is baked into the `<g transform>`, so a move or rotate regenerates *byte-identical* path data purely because `x`/`y`/`angle` changed. `seed` is what makes that regeneration deterministic. A resize genuinely needs it; move, rotate and opacity do not.
+- **There is no viewport culling.** Every element sits in the SVG DOM regardless of visibility; pan/zoom is one `transform` on the parent `<g>`, and off-screen content is clipped by the container's `overflow-hidden`. That is deliberate — culling would trade a cheap constant walk for mount/unmount churn plus roughjs re-runs on every element scrolling back into view. Off-screen elements cost DOM size and style recalc, not rasterization.
+
+Panning is consequently the cheapest case: the `ordered`-keyed memos all stay cached, the comparator returns true for every element, no roughjs runs, and React patches a single attribute.
+
+**Shipped:** an identity fast-path in `sameElement`. `renderEl` returns the bare element object for anything without a live preview, so pan and drag frames were running the full ~23-field loop against two references to one object.
+
+**Idea, not scheduled — imperative move/rotate.** Mutate the element's `<g transform>` directly during the gesture and commit one transact on pointerup, skipping roughjs entirely. It fits the DOM shape: the transform lives inside the `dangerouslySetInnerHTML` fragment, so React never touches it while the memo holds. Three traps. `previews` must stay in React state regardless (the `ObjectTransform` chrome, selection ring and snap lines all read it), so this removes the roughjs work, not the re-render. Cancel paths break silently — Escape/pointercancel/blur clear previews but the element object never changed, so the memo returns true, the fragment is not rebuilt, and the imperative transform sticks. And a remote edit mid-drag flips the memo to false, replaces the fragment, and drops the transform, so the shape jumps out from under the cursor. Resize is excluded outright: width/height feed the generator, and hachure spacing and stroke width do not survive a scale transform.
+
+**Idea, not scheduled — CSS-transform pan.** Drive the viewport with a CSS transform on a layer-promoted wrapper instead of React state, so a pan moves an already-rasterized layer on the GPU. This targets the browser repaint, which an SVG `<g transform>` change cannot avoid — it is a paint-level invalidation, not a composited one. Three traps. An `<svg>` clips to its own viewport, so translating it reveals nothing past its original bounds; set `overflow: visible` on the `<svg>` and let the container's existing `overflow-hidden` clip instead. Zoom by CSS scale is a scaled bitmap, so it wants CSS during the gesture and one real re-render on commit. And every chrome overlay — `ObjectTransform`, selection rings, marquee, `CursorLayer` — is a sibling `<div>` *outside* the SVG positioned in container pixels by `boxToStyle`, so it detaches unless it moves in lockstep, is updated imperatively, or is hidden for the duration of the pan gesture.
+
+**Verify first:** both ideas are unmeasured, and they target different bottlenecks — the React walk versus the browser repaint. Profile a pan and an object drag on a seeded scene of a few thousand elements before building either; the answer decides which one is worth the risk, and neither is worth doing speculatively.
+
 ### Server pipeline
 
 Mirror the eigenslides worker modules. All Worker-imported modules stay pure (no `core/` barrel, no `sharp` in the Worker):
