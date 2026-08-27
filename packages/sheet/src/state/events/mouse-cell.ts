@@ -117,11 +117,17 @@ export function handleCellAreaMouseDown(
     // laid out in — the same box, from the same builder, the canvas painter
     // hands their geometry.
     const textBox = cellTextBox(col_pre, row_pre, col, row);
+    // While a cell edit is open the click belongs to the edit: it inserts the
+    // cell's reference into the formula being composed, or commits the value.
+    // Neither may also fire an affordance — a toggle mid-edit writes the cell
+    // and recalculates behind the formula the user is still typing. The
+    // keyboard path (events/keyboard.ts) bails on the same condition.
+    const editing = ctx.editingCellPosition.length > 0;
 
     // Data verification: a tick box toggles only when the click lands on the box
     // itself; anywhere else in the cell selects the cell like any other. The box
     // rect comes from the same checkboxRect the painter uses.
-    if (e.button !== 2 && isCheckboxClick(ctx, row_index, col_index, textBox, x, y)) {
+    if (e.button !== 2 && !editing && isCheckboxClick(ctx, row_index, col_index, textBox, x, y)) {
         checkboxChange(ctx, row_index, col_index);
     }
 
@@ -132,7 +138,12 @@ export function handleCellAreaMouseDown(
     // the canvas filter button opens its menu. cellFocus has just positioned the
     // hidden Radix anchor on this cell — and skips that when editing is not
     // allowed, so a read-only viewer sees the chevron but gets no list.
-    if (e.button !== 2 && isAllowEdit(ctx) && isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)) {
+    if (
+        e.button !== 2 &&
+        !editing &&
+        isAllowEdit(ctx) &&
+        isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)
+    ) {
         ctx.dataVerificationDropDownList = true;
     }
 

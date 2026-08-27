@@ -1,9 +1,12 @@
 // A mousedown on a cell carrying a data-verification affordance, driven through
-// handleCellAreaMouseDown itself — what the sibling data-verification.test.ts
-// covers as predicates, this covers as a click landing on a painted box.
+// handleCellAreaMouseDown itself — the gate under test lives at the callsite, not
+// in the predicates the sibling data-verification.test.ts covers.
 //
-// The handler needs a real DOM (getBoundingClientRect, window.getSelection, the
-// contenteditable a formula is composed in), so this file installs happy-dom at
+// While a cell edit is open the click belongs to the edit: clicking a tick box to
+// put its reference into an `=IF(` being composed used to ALSO toggle the box,
+// writing the cell and kicking a recalc behind the half-typed formula. The
+// handler needs a real DOM (getBoundingClientRect, window.getSelection, the
+// contenteditable the formula is composed in), so this file installs happy-dom at
 // module scope the way events/paste-html.test.ts does.
 
 import { describe, expect, test } from 'bun:test';
@@ -22,7 +25,7 @@ g.document = win.document;
 
 const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
-// A2 carries a tick box holding FALSE.
+// A2 carries a tick box holding FALSE; A1 is the cell a formula is composed in.
 function tickBoxContext(): Context {
     const ctx = contextFactory() as Context;
     ctx.sheets[0].data = [
@@ -70,5 +73,19 @@ describe('handleCellAreaMouseDown — tick box', () => {
         const above = tickBoxContext();
         mouseDownAt(above, PAINTED_BOX.x, PAINTED_BOX.y - 1);
         expect(above.sheets[0].data![1][0]).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
+    });
+
+    test('leaves the box alone while a formula is being composed, and still takes the reference', () => {
+        const ctx = tickBoxContext();
+        ctx.editingCellPosition = [0, 0];
+        ctx.formulaCache.rangestart = true;
+        ctx.formulaRangeHighlight = [];
+
+        mouseDownOnTickBox(ctx);
+
+        expect(ctx.sheets[0].data![1][0]).toEqual({ v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } });
+        // The click did its editing job: A2 is the range the formula picked up.
+        expect(ctx.formulaCache.func_selectedrange?.row).toEqual([1, 1]);
+        expect(ctx.formulaCache.func_selectedrange?.column).toEqual([0, 0]);
     });
 });

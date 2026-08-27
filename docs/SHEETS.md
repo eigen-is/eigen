@@ -164,6 +164,10 @@ Everything lives in `packages/sheet/src/state/modules/data-verification.ts`.
   split as `FILTER_BUTTON_WIDTH`/`HEIGHT` — and both hand it the same box, built by `cellTextBox`
   from the cell's own bounds. Clicking elsewhere in the cell selects it like any other; Space/Enter
   toggle the focused cell (`state/events/keyboard.ts`).
+- **Nothing toggles while a cell edit is open.** Clicking a tick box to put its reference into an
+  `=IF(` being composed inserts the reference and nothing else — a toggle would write the cell and
+  kick a recalc behind the half-typed formula. Same gate on the list chevron, which would otherwise
+  open a dropdown over the formula, and the keyboard path bails on the same condition.
 - **Default rules draw the box alone**, the way Google does; a rule with custom values also draws its
   label, the only way to tell "Yes" from "No". Empty cells inside a range still draw an unchecked box
   (`nullCellRender`), so the range reads as one column.
