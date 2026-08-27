@@ -110,7 +110,12 @@ sweep; class-based export styles, html render 153s/82MB → 7.3s/10.4MB on the r
 
 - [ ] **P4 — prod-build browser open benchmark** (vite build + preview + CORS shim per
       VERIFICATION.md): the open-path gate after the v2 codec — measures what remains of
-      workbook-init produce + first-render long tasks with bundled assets
+      workbook-init produce + first-render long tasks with bundled assets. Now the only
+      open question on tab-switch cost: after the 2026-08-27 CF fixes a repeat visit to the
+      slowest sheet is 1.1–1.5s of *generic* activation work (canvas text measurement ~8%,
+      the rest dev-mode React re-render), with the CF subsystem down to 0.1% of the profile.
+      That residual is dev-mode-inflated by an unquantified amount, so what a user actually
+      waits for is unknown until this runs
 - [ ] **snapshot v2.1 candidates, measured post-P4**: formula-pattern dedup (125k formula
       strings = 3.4MB, needs decode-side shifting budget) and style-only-cell rectangle
       compression (209k cells); only if P4 says size still hurts
