@@ -21,8 +21,9 @@ export function PropertiesPanel({ title, children, className }: PropertiesPanelP
                     <ToolbarTitle>{title}</ToolbarTitle>
                 </div>
             )}
+            {/* min-h-0: the auto minimum would otherwise hold this at the full panel height, hanging the title bar's worth of content below the clip. */}
             {/* Radix wraps viewport children in display:table (min-width:100%), which sizes to content and defeats truncate in this fixed-width panel — force block. */}
-            <ScrollArea className="flex-1 h-full [&_[data-slot=scroll-area-viewport]>div]:!block">
+            <ScrollArea className="flex-1 min-h-0 [&_[data-slot=scroll-area-viewport]>div]:!block">
                 {children}
             </ScrollArea>
         </div>
