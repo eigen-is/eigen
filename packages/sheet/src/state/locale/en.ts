@@ -9561,7 +9561,7 @@ export const en = {
         tooltipInfo7: 'Date 2 cannot be less than date 1',
         textlengthInteger: 'Text length must be an integer greater than or equal to 0',
         // Lowercase phrase fragments the sentence builders in
-        // modules/data-verification.ts slot into `{type}` and `{condition}`
+        // modules/data-verification.ts slot into `${type}` and `${condition}`
         // (distinct from the Title Case labels above, which are for the
         // rule-type Select). Text rules get their own frames below —
         // "Text must equal to ACME" is not a sentence.
@@ -9589,18 +9589,18 @@ export const en = {
             invalidLabel: 'Invalid:',
             listInvalid: 'Input must be an item on the specified list.',
             listPrompt: 'Pick an item from the list.',
-            numberInvalid: 'Input must be {type} {condition}.',
-            numberPrompt: 'Enter {type} {condition}.',
-            textIncludeInvalid: 'Text must include {value}.',
-            textIncludePrompt: 'Enter text that includes {value}.',
-            textExcludeInvalid: 'Text must not include {value}.',
-            textExcludePrompt: 'Enter text that does not include {value}.',
-            textEqualInvalid: 'Text must be {value}.',
-            textEqualPrompt: 'Enter {value}.',
-            lengthInvalid: 'Text length must be {condition}.',
-            lengthPrompt: 'Enter text of length {condition}.',
-            dateInvalid: 'Date must be {condition}.',
-            datePrompt: 'Enter a date {condition}.',
+            numberInvalid: 'Input must be ${type} ${condition}.',
+            numberPrompt: 'Enter ${type} ${condition}.',
+            textIncludeInvalid: 'Text must include ${value}.',
+            textIncludePrompt: 'Enter text that includes ${value}.',
+            textExcludeInvalid: 'Text must not include ${value}.',
+            textExcludePrompt: 'Enter text that does not include ${value}.',
+            textEqualInvalid: 'Text must be ${value}.',
+            textEqualPrompt: 'Enter ${value}.',
+            lengthInvalid: 'Text length must be ${condition}.',
+            lengthPrompt: 'Enter text of length ${condition}.',
+            dateInvalid: 'Date must be ${condition}.',
+            datePrompt: 'Enter a date ${condition}.',
         },
     },
     formula: {

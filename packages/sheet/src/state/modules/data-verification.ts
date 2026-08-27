@@ -25,6 +25,8 @@ import {
     setCellValue,
 } from '..';
 import { en } from '../locale/en';
+import type { Rect } from '../types';
+import { replaceHtml } from '../utils';
 
 // The rule-type and condition words the hint sentences slot in, widened once:
 // `type`/`type2` are free-form strings, the locale object is not.
@@ -293,10 +295,9 @@ export const CHECKBOX_LABEL_GAP = 4;
 // The painter's space_width/space_height cell padding.
 const CHECKBOX_PADDING = 2;
 
-// The cell's own text area: origin plus the width/height the painter lays text
-// out in. Callers work in canvas space (painter) or freeze-corrected sheet
-// space (hit test) — the box sits at the same offset either way.
-export type CellTextBox = { left: number; top: number; width: number; height: number };
+// The cell's own text area is a plain pixel Rect: origin plus the width/height the
+// painter lays text out in. Callers work in canvas space (painter) or freeze-corrected
+// sheet space (hit test) — the box sits at the same offset either way.
 // A square glyph placed inside that box: the tick box, the list chevron.
 export type CellGlyphRect = { x: number; y: number; size: number };
 
@@ -305,7 +306,7 @@ export type CellGlyphRect = { x: number; y: number; size: number };
 // must not paint over — what the painter has always clipped and laid text out
 // to. The hit test used to rebuild the box without the inset, so the top
 // painted row of a tick box did not respond to a click and one row below it did.
-export function cellTextBox(left: number, top: number, right: number, bottom: number): CellTextBox {
+export function cellTextBox(left: number, top: number, right: number, bottom: number): Rect {
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
 }
 
@@ -330,7 +331,7 @@ export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellVal
 // `horizonAlign`/`verticalAlign` are the normalized ht/vt attrs
 // (ht 0 centre / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
 // cell yields NaN, which lands on the same left/middle default the painter uses.
-export function checkboxRect(box: CellTextBox, horizonAlign: number, verticalAlign: number): CellGlyphRect {
+export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
     if (horizonAlign === 0) {
         x = box.left + (box.width - CHECKBOX_SIZE) / 2;
@@ -360,7 +361,7 @@ export function getCellDataVerification(ctx: Context, r: number, c: number) {
 // Only a click on the box toggles — anywhere else in the cell selects it like
 // any other, so a tick box can be copied, extended through and read in the fx
 // bar without flipping.
-export function isCheckboxClick(ctx: Context, r: number, c: number, box: CellTextBox, x: number, y: number) {
+export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
     if (getCellDataVerification(ctx, r, c)?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
@@ -407,7 +408,7 @@ const DROPDOWN_CHEVRON_MIN_WIDTH = DROPDOWN_CHEVRON_SIZE * 2 + DROPDOWN_CHEVRON_
 // The one geometry the painter (render/cells.ts) and the mousedown hit-test
 // share. Right-aligned and vertically centred whatever the cell's alignment —
 // the chevron marks the cell, it is not part of its content.
-export function dropdownChevronRect(box: CellTextBox): CellGlyphRect | undefined {
+export function dropdownChevronRect(box: Rect): CellGlyphRect | undefined {
     if (box.width < DROPDOWN_CHEVRON_MIN_WIDTH) return undefined;
     return {
         x: box.left + box.width - DROPDOWN_CHEVRON_PADDING - DROPDOWN_CHEVRON_SIZE,
@@ -418,7 +419,7 @@ export function dropdownChevronRect(box: CellTextBox): CellGlyphRect | undefined
 
 // Clicking the chevron opens the list, like the canvas filter button opens its
 // menu; a click anywhere else in the cell just selects it.
-export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: CellTextBox, x: number, y: number) {
+export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
     if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return false;
     const rect = dropdownChevronRect(box);
     if (!rect) return false;
@@ -537,10 +538,14 @@ export function describeValidationRule(item: DataVerificationRule, kind: Validat
     // no card.
     if (!frame) return '';
 
-    return frame
-        .replace('{type}', optionLabel[type] ?? '')
-        .replace('{condition}', conditionPhrase(item))
-        .replace('{value}', item.value1);
+    // replaceHtml, not chained String.replace: a rule's value is authored by a
+    // collaborator or carried in from an xlsx, and `$&`/`$1` in a replacement string
+    // are substitution patterns rather than literal text.
+    return replaceHtml(frame, {
+        type: optionLabel[type] ?? '',
+        condition: conditionPhrase(item),
+        value: item.value1,
+    });
 }
 
 // The cell's content-space rectangle, merge extent included — the card hangs off

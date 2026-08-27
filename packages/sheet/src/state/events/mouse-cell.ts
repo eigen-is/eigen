@@ -8,6 +8,7 @@ import {
     createFormulaRangeSelect,
     createRangeHightlight,
     functionHTMLGenerate,
+    getCellDataVerification,
     isCheckboxClick,
     isDropdownChevronClick,
     israngeseleciton,
@@ -22,7 +23,7 @@ import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protectio
 import { normalizeSelection } from '../modules/selection';
 import type { Settings } from '../settings';
 import type { GlobalCache } from '../types';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { isAllowEdit } from '../utils';
 import { extendSelectionGeometry } from './mouse-drag';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
@@ -536,13 +537,7 @@ export function handleCellAreaDoubleClick(
     let col_index = col_location[2];
 
     // Cancel double-click for checkbox cells -- do not allow editing
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const { dataVerification } = ctx.sheets[index];
-
-    if (dataVerification) {
-        const item = dataVerification[`${row_index}_${col_index}`];
-        if (item && item.type === 'checkbox') return;
-    }
+    if (getCellDataVerification(ctx, row_index, col_index)?.type === 'checkbox') return;
 
     const margeset = mergeBorder(ctx, flowdata, row_index, col_index);
     if (margeset) {

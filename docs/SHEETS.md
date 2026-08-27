@@ -173,8 +173,10 @@ Everything lives in `packages/sheet/src/state/modules/data-verification.ts`.
   of: `showsCheckboxLabel` is what keeps `Insert → Tick box` over a column of `Yes` / `Maybe` / `n/a`
   from painting the data out of existence (applying a rule never rewrites it). Empty cells inside a
   range still draw the plain unchecked box (`nullCellRender`), so the range reads as one column.
-- Applying to a whole column is deliberately not offered — a column-wide rule would write ~1M keys
-  into the snapshot.
+- Selecting a whole column (a header click, `row: [0, visibledatarow.length - 1]`) is bounded to the
+  last row that holds data, so one menu click cannot write ~1M keys into the snapshot. A range the
+  user dragged is applied exactly as selected, past the used extent included — that is how a
+  checklist over still-empty rows gets its boxes.
 
 ## List chevrons (dropdown data verification)
 

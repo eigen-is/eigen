@@ -6,7 +6,6 @@ import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/condition-format';
 import {
     type CellGlyphRect,
-    type CellTextBox,
     CHECKBOX_LABEL_GAP,
     cellTextBox,
     checkboxRect,
@@ -16,6 +15,7 @@ import {
     validateCellData,
 } from '../modules/data-verification';
 import { getCellTextInfo } from '../modules/text';
+import type { Rect } from '../types';
 import { cellOverflowRender, cellTextRender } from './cell-text';
 import { drawDataBar } from './data-bar';
 import { BORDER_FIX, HALF_PIXEL } from './geometry';
@@ -93,7 +93,7 @@ function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, c
 // sit on dark fills a fixed grey would vanish into.
 const DROPDOWN_CHEVRON_ALPHA = 0.55;
 
-function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: CellTextBox) {
+function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect) {
     const { renderCtx, flowdata } = pass;
     const rect = dropdownChevronRect(box);
     if (!rect) return;

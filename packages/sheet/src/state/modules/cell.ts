@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { genarate, update } from '../../engine/format';
+import { booleanDisplay, genarate, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
@@ -197,11 +197,11 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         cell.ct = { fa: '@', t: 's' };
         cell.v = vupdateStr;
     } else if (vupdateStr.toUpperCase() === 'TRUE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
-        cell.m = 'TRUE';
+        cell.m = booleanDisplay(true);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = true;
     } else if (vupdateStr.toUpperCase() === 'FALSE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
-        cell.m = 'FALSE';
+        cell.m = booleanDisplay(false);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = false;
     } else if (
