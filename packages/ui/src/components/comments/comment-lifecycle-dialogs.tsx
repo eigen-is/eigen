@@ -30,7 +30,7 @@ export function CommentLifecycleDialogs({
     noun,
     onCardDialogClose,
 }: CommentLifecycleDialogsProps) {
-    const { updateCard, resolveComment, assignComment, members, openCard, openEntry, setOpenCardId } = lifecycle;
+    const { updateCard, members, openCard, openEntry, setOpenCardId, resolveComment, assignComment } = lifecycle;
     const { user } = useAuth();
 
     return (
@@ -48,6 +48,8 @@ export function CommentLifecycleDialogs({
                 ownerId={path.ownerId}
                 mountId={path.mountId}
                 canWrite={canWrite}
+                isEditing={lifecycle.openCardEditing}
+                onEditingChange={lifecycle.setOpenCardEditing}
                 copyLinkUrl={
                     openCard?.chatName
                         ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
@@ -62,14 +64,10 @@ export function CommentLifecycleDialogs({
 
             <CommentContextMenu
                 contextMenu={commentContextMenu}
+                lifecycle={lifecycle}
+                canWrite={canWrite}
                 noun={noun}
-                onOpen={setOpenCardId}
-                onUpdateCard={updateCard}
-                onResolve={(chatName, status, title) => resolveComment.mutate({ chatName, status, title })}
                 onDelete={onDelete}
-                members={members}
-                currentUserEmail={user?.email}
-                onAssign={(chatName, email, title) => assignComment.mutate({ chatName, assignee: email, title })}
             />
         </>
     );

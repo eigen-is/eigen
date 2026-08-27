@@ -245,22 +245,19 @@ render in a `header` slot outside the filtered list so typing never hides them),
 (tiny tooltip avatar via `useResolvedUser`), `AssigneeChip` (avatar + resolved name). On top of
 those: `AssigneePicker` (Popover trigger = children; pinned **Assign to me** / **Unassigned**) used
 by `CardFormDialog` (staged, applied on Save — `onSave`'s third arg, `undefined` = untouched) and
-`CardDialog` (inline chip reassign, immediate PATCH); `AssigneeMenuItems` (an **Assign to**
-submenu, `SubContent p-0` combobox-in-menu pattern) embedded in `CommentMenuItems`, which gained
-optional `members`/`currentUserEmail`/`onAssign` props — the current assignee reads from
-`item.entry.assignee`, and the callbacks carry `card.title` so the server can cache it. Hosts pass
-everything from the `useCommentLifecycle` bundle (`assignComment`, `members`); sheets threads
-through `settings.hooks` (`onCommentAssign`, `commentMembers`, `currentUserEmail`). `NoteCard`
+`CardDialog` (inline chip reassign, immediate PATCH); `AssigneeMenuItems` (an **Assign to** submenu whose members are real menu items, so arrow-key roving and the mobile drill-in page work) embedded in `CommentMenuItems`, which gained optional `members`/`currentUserEmail`/`onAssign` props — the current assignee reads from `item.entry.assignee`, and the callbacks carry `card.title` so the server can cache it. Every host gets these from `CommentLifecycleMenuItems`, so the wiring is identical in all apps. `NoteCard`
 renders a muted assignee `MemberAvatar` at the far right of its footer meta row (`assigneeEmail`
 prop, board + panel pass `entry?.assignee`).
 
+### CommentLifecycleMenuItems (`packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx`)
+
+Binds every comment row — view, **edit**, colour, assign, resolve/re-open, delete — to a `useCommentLifecycle` bundle, so all hosts offer the same actions from one wiring and a new row lands everywhere at once. A host passes only what its anchor decides: the `item` under the cursor, `canWrite`, and its own `onAddComment`/`onDelete` (those strip or write the host anchor). Every mutating row is gated on `canWrite` here, not per app. Three hosts render it: `<CommentContextMenu>` (docs, stickies, vector, the panel rows), slides' `SlideObjectMenu`, and the sheet's cell menu via `hooks.commentLifecycle`. Selecting a row closes the host menu on its own — every row is a real menu item, and `ContextMenuAnchor` turns Radix's close into the singleton menu's `close()`.
+
+**Edit** calls `lifecycle.openCardForEdit(cardId)`, which opens `<CardDialog>` straight in its edit form. Edit mode lives in the lifecycle bundle (`openCardEditing` / `setOpenCardEditing`) pinned to a card id, so opening a different card lands in view mode with no reset effect.
+
 ### CommentContextMenu (`packages/ui/src/components/comments/comment-context-menu.tsx`)
 
-Convenience wrapper that pairs `<CommentMenuItems>` with the project's singleton
-`useContextMenu` + `ContextMenuAnchor` pattern; `noun` tunes the labels (stickies passes
-`"sticky"` through `<CommentLifecycleDialogs>`). All four editors render it via
-`<CommentLifecycleDialogs>`; only the per-object slides menu uses `<CommentMenuItems>` directly
-because its hosting menu differs.
+Convenience wrapper that pairs `<CommentLifecycleMenuItems>` with the project's singleton `useContextMenu` + `ContextMenuAnchor` pattern; `noun` tunes the labels (stickies passes `"sticky"` through `<CommentLifecycleDialogs>`). All four editors render it via `<CommentLifecycleDialogs>`.
 
 ### CommentLifecycleDialogs (`packages/ui/src/components/comments/comment-lifecycle-dialogs.tsx`)
 

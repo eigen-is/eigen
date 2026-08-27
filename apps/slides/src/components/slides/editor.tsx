@@ -348,17 +348,7 @@ function SlideEditorInner({
         initialChatName,
         ready: isSynced,
     });
-    const {
-        allComments,
-        resolveComment,
-        cards,
-        createCard,
-        updateCard,
-        assignComment,
-        members,
-        unresolvedCount,
-        setOpenCardId,
-    } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
 
     // Opening a comment card also reveals its slide + selects the anchored object (panel + activity share this).
     const openCommentCard = (cardId: string) => {
@@ -1087,22 +1077,9 @@ function SlideEditorInner({
                                                 onMoveToFront={canWrite ? moveObjectToFront : undefined}
                                                 onMoveToBack={canWrite ? moveObjectToBack : undefined}
                                                 canWrite={canWrite}
+                                                lifecycle={lifecycle}
                                                 onAddComment={canWrite && chatFolderId ? handleAddComment : undefined}
                                                 onCommentClick={setOpenCardId}
-                                                cards={cards}
-                                                entries={allComments}
-                                                members={members}
-                                                currentUserEmail={auth.user?.email}
-                                                onCommentAssign={(chatName, email, title) =>
-                                                    assignComment.mutate({ chatName, assignee: email, title })
-                                                }
-                                                onCommentResolve={(chatName, title) =>
-                                                    resolveComment.mutate({ chatName, status: 'resolved', title })
-                                                }
-                                                onCommentReopen={(chatName, title) =>
-                                                    resolveComment.mutate({ chatName, status: 'open', title })
-                                                }
-                                                onCommentChangeColor={(cardId, color) => updateCard(cardId, { color })}
                                                 onCommentDelete={removeCommentFromObject}
                                             />
                                             <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">

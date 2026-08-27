@@ -17,7 +17,8 @@ import { useUpdateCommentCard } from './use-update-comment-card';
 // resolution — is identical and lives here.
 //
 // Returns `setOpenCardId` so callers can compose app-specific side effects (slides selects the
-// object's slide, docs scrolls the mark into view) before opening the dialog.
+// object's slide, docs scrolls the mark into view) before opening the dialog, and `openCardForEdit`
+// for the menus' Edit row, which opens the same dialog straight in its edit form.
 //
 // Hosts that mount before Yjs sync (slides, sheets, stickies) must pass `ready` so the ?chat=
 // deep link keeps polling until cards arrive instead of giving up against an unsynced doc.
@@ -51,6 +52,8 @@ export function useCommentLifecycle({
     onCardNotFound?: () => void;
 }) {
     const [openCardId, setOpenCardId] = useState<string | null>(null);
+    // Edit mode is pinned to a card id, so opening another card lands in view mode on its own.
+    const [editCardId, setEditCardId] = useState<string | null>(null);
 
     const { data: allComments = [] } = useComments(ownerId, mountId, pathId);
     const resolveComment = useResolveComment(ownerId, mountId, pathId);
@@ -77,5 +80,11 @@ export function useCommentLifecycle({
         openCard,
         openEntry,
         setOpenCardId,
+        openCardForEdit: (cardId: string) => {
+            setOpenCardId(cardId);
+            setEditCardId(cardId);
+        },
+        openCardEditing: openCardId !== null && openCardId === editCardId,
+        setOpenCardEditing: (editing: boolean) => setEditCardId(editing ? openCardId : null),
     };
 }

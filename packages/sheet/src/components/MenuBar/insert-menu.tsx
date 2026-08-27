@@ -197,9 +197,10 @@ export function InsertMenu() {
 
             {hasComment ? (
                 <DropdownMenuItem
-                    disabled={!settings.hooks?.onViewComment}
+                    disabled={!settings.hooks?.commentLifecycle}
                     onClick={() => {
-                        settings.hooks?.onViewComment?.(commentRow, commentCol);
+                        const card = settings.hooks?.getCommentInfo?.(commentRow, commentCol)?.card;
+                        if (card) settings.hooks?.commentLifecycle?.setOpenCardId(card.id);
                     }}
                 >
                     View comment

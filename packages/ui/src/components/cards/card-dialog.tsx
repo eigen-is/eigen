@@ -6,7 +6,6 @@ import { isAttachmentReference } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { Check, RotateCcw } from 'lucide-react';
-import { useState } from 'react';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
@@ -25,6 +24,9 @@ type CardDialogProps = {
     ownerId: string;
     mountId: string;
     canWrite?: boolean;
+    // Edit mode is owned by the lifecycle bundle so the menus' Edit row can open straight into it.
+    isEditing: boolean;
+    onEditingChange: (editing: boolean) => void;
     copyLinkUrl?: string;
     members?: EffectiveMember[];
     currentUserEmail?: string;
@@ -46,6 +48,8 @@ export function CardDialog({
     ownerId,
     mountId,
     canWrite = true,
+    isEditing,
+    onEditingChange,
     copyLinkUrl,
     members,
     currentUserEmail,
@@ -53,14 +57,15 @@ export function CardDialog({
     onResolve,
     onAssign,
 }: CardDialogProps) {
-    const [isEditing, setIsEditing] = useState(false);
     const { mediaFolderId } = useMediaResolver();
     const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
 
     if (!card) return null;
 
+    // Resolve/re-open is a write, gated like the menus' row and the Edit pencil: a read-only viewer
+    // would only get the 403 the collab route answers with.
     const action =
-        entry && onResolve
+        canWrite && entry && onResolve
             ? {
                   actionIcon: entry.status === 'open' ? Check : RotateCcw,
                   actionTooltip: entry.status === 'open' ? 'Resolve' : 'Re-open',
@@ -151,14 +156,14 @@ export function CardDialog({
                 initialAssignee={entry?.assignee}
                 onSave={async (patch, drafts, assignee) => {
                     await handleEditSave(patch, drafts, assignee);
-                    setIsEditing(false);
+                    onEditingChange(false);
                 }}
-                onCancel={() => setIsEditing(false)}
+                onCancel={() => onEditingChange(false)}
             />
         ) : undefined;
 
     const handleOpenChange = (next: boolean) => {
-        if (!next) setIsEditing(false);
+        if (!next) onEditingChange(false);
         onOpenChange(next);
     };
 
@@ -171,7 +176,7 @@ export function CardDialog({
             meta={meta}
             color={card.color}
             canWrite={canWrite}
-            onEdit={canEdit ? () => setIsEditing(true) : undefined}
+            onEdit={canEdit ? () => onEditingChange(true) : undefined}
             editForm={editForm}
             copyLinkUrl={copyLinkUrl}
             onDescriptionChange={onUpdate ? (html) => onUpdate({ description: html }) : undefined}

@@ -1,7 +1,8 @@
+import type { useCommentLifecycle } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { CommentCard } from '@workspace/lib/types/comments';
-import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { v4 as uuidv4 } from 'uuid';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
@@ -113,14 +114,8 @@ export type Hooks = {
     beforeUpdateSheetName?: (id: string, oldName: string, newName: string) => boolean;
     afterUpdateSheetName?: (id: string, oldName: string, newName: string) => void;
     onAddComment?: (row: number, column: number) => void;
-    onViewComment?: (row: number, column: number) => void;
     onDeleteComment?: (row: number, column: number) => void;
-    onCommentColor?: (row: number, column: number, color: string) => void;
-    onCommentResolve?: (chatName: string, title?: string) => void;
-    onCommentReopen?: (chatName: string, title?: string) => void;
-    onCommentAssign?: (chatName: string, email: string | null, title?: string) => void;
-    commentMembers?: EffectiveMember[];
-    currentUserEmail?: string;
+    commentLifecycle?: ReturnType<typeof useCommentLifecycle>;
     getCommentInfo?: (row: number, column: number) => CommentInfo | null;
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;

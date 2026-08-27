@@ -2,7 +2,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { Check, MessageSquare, MessageSquarePlus, Palette, RotateCcw, Trash2 } from 'lucide-react';
+import { Check, MessageSquare, MessageSquarePlus, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import type { ElementType } from 'react';
 import { AssigneeMenuItems } from './assignee-menu-items';
 
@@ -27,6 +27,7 @@ type CommentMenuItemsProps = {
     noun?: string;
     onAddComment?: () => void;
     onOpen?: (cardId: string) => void;
+    onEdit?: (cardId: string) => void;
     onChangeColor?: (cardId: string, color: string) => void;
     onResolve?: (chatName: string, title?: string) => void;
     onReopen?: (chatName: string, title?: string) => void;
@@ -42,6 +43,7 @@ export function CommentMenuItems({
     noun = 'comment',
     onAddComment,
     onOpen,
+    onEdit,
     onChangeColor,
     onResolve,
     onReopen,
@@ -65,6 +67,11 @@ export function CommentMenuItems({
             {onOpen && (
                 <Item onClick={() => onOpen(card.id)}>
                     <MessageSquare className="h-4 w-4" /> View {noun}
+                </Item>
+            )}
+            {onEdit && (
+                <Item onClick={() => onEdit(card.id)}>
+                    <Pencil className="h-4 w-4" /> Edit {noun}
                 </Item>
             )}
             {onChangeColor && (

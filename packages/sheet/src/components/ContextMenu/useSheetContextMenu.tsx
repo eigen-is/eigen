@@ -1,4 +1,4 @@
-import { CommentMenuItems } from '@workspace/ui/components/comments';
+import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/context-menu';
 import {
     DropdownMenuItem,
@@ -308,18 +308,7 @@ function ImageItem() {
 
 function CommentItems() {
     const { context, settings } = useContext(WorkbookContext);
-    const {
-        getCommentInfo,
-        onAddComment,
-        onViewComment,
-        onCommentColor,
-        onCommentResolve,
-        onCommentReopen,
-        onCommentAssign,
-        commentMembers,
-        currentUserEmail,
-        onDeleteComment,
-    } = settings.hooks;
+    const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = settings.hooks;
     const last = context.selections?.[context.selections.length - 1];
     const row = last ? (last.row_focus ?? last.row[0]) : 0;
     const col = last ? (last.column_focus ?? last.column[0]) : 0;
@@ -327,8 +316,11 @@ function CommentItems() {
     const hasComment = (cell?.commentCardIds?.length ?? 0) > 0;
     const info = hasComment ? getCommentInfo?.(row, col) : null;
 
+    if (!commentLifecycle) return null;
+
     return (
-        <CommentMenuItems
+        <CommentLifecycleMenuItems
+            lifecycle={commentLifecycle}
             primitives={{
                 Item: DropdownMenuItem,
                 Sub: DropdownMenuSub,
@@ -336,14 +328,8 @@ function CommentItems() {
                 SubContent: DropdownMenuSubContent,
             }}
             item={info ? { card: info.card, entry: info.entry } : null}
+            canWrite={settings.allowEdit}
             onAddComment={onAddComment && (() => onAddComment(row, col))}
-            onOpen={onViewComment && (() => onViewComment(row, col))}
-            onChangeColor={onCommentColor && ((_cardId: string, color: string) => onCommentColor(row, col, color))}
-            onResolve={onCommentResolve}
-            onReopen={onCommentReopen}
-            members={commentMembers}
-            currentUserEmail={currentUserEmail}
-            onAssign={onCommentAssign}
             onDelete={onDeleteComment && (() => onDeleteComment(row, col))}
         />
     );

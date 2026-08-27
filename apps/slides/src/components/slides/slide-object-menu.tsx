@@ -1,7 +1,5 @@
-import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
-import { type CommentContextMenuItem, CommentMenuItems } from '@workspace/ui/components/comments';
+import type { useCommentLifecycle } from '@workspace/lib/comments';
+import { type CommentContextMenuItem, CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
 import {
     ArrangeMenuItems,
     ClipboardMenuItems,
@@ -21,14 +19,13 @@ import type { SlideObject } from './types';
 
 export function getCommentItems(
     obj: SlideObject,
-    cards: Record<string, CommentCard> | undefined,
-    entries: CommentEntry[] | undefined,
+    lifecycle: ReturnType<typeof useCommentLifecycle>,
 ): CommentContextMenuItem[] {
     const items: CommentContextMenuItem[] = [];
     for (const cardId of obj.commentCardIds ?? []) {
-        const card = cards?.[cardId];
+        const card = lifecycle.cards[cardId];
         if (!card) continue;
-        const entry = card.chatName ? entries?.find((e) => e.chatName === card.chatName) : undefined;
+        const entry = card.chatName ? lifecycle.allComments.find((e) => e.chatName === card.chatName) : undefined;
         items.push({ card, entry });
     }
     return items;
@@ -36,8 +33,8 @@ export function getCommentItems(
 
 type SlideObjectMenuProps = {
     contextMenu: ReturnType<typeof useContextMenu<SlideObject>>;
-    cards?: Record<string, CommentCard>;
-    entries?: CommentEntry[];
+    lifecycle: ReturnType<typeof useCommentLifecycle>;
+    canWrite: boolean;
     onCopy?: (objId: string) => void;
     onCut?: (objId: string) => void;
     onPaste?: () => void;
@@ -48,20 +45,13 @@ type SlideObjectMenuProps = {
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
     onAddComment?: (objId: string) => void;
-    onCommentClick?: (cardId: string) => void;
-    onCommentChangeColor?: (cardId: string, color: string) => void;
-    onCommentResolve?: (chatName: string, title?: string) => void;
-    onCommentReopen?: (chatName: string, title?: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
-    members?: EffectiveMember[];
-    currentUserEmail?: string;
-    onCommentAssign?: (chatName: string, email: string | null, title?: string) => void;
 };
 
 export function SlideObjectMenu({
     contextMenu,
-    cards,
-    entries,
+    lifecycle,
+    canWrite,
     onCopy,
     onCut,
     onPaste,
@@ -72,31 +62,12 @@ export function SlideObjectMenu({
     onMoveToFront,
     onMoveToBack,
     onAddComment,
-    onCommentClick,
-    onCommentChangeColor,
-    onCommentResolve,
-    onCommentReopen,
     onCommentDelete,
-    members,
-    currentUserEmail,
-    onCommentAssign,
 }: SlideObjectMenuProps) {
     const obj = contextMenu.item;
-    const commentItems = obj ? getCommentItems(obj, cards, entries) : [];
+    const commentItems = obj ? getCommentItems(obj, lifecycle) : [];
     const single = commentItems.length === 1 ? commentItems[0] : null;
     const showAdd = !!onAddComment && commentItems.length === 0;
-
-    // Color swatches are plain buttons, not menu items, so they don't auto-close the menu.
-    const handleChangeColor = (cardId: string, color: string) => {
-        onCommentChangeColor?.(cardId, color);
-        contextMenu.close();
-    };
-
-    // Assignee rows are plain buttons inside the sub-content, so they don't auto-close either.
-    const handleAssign = (chatName: string, email: string | null, title?: string) => {
-        onCommentAssign?.(chatName, email, title);
-        contextMenu.close();
-    };
 
     // The four z-order callbacks map onto the shared Arrange group's single ZOp verb — keeping
     // SlideObjectMenu's prop surface unchanged so slide-canvas' wiring stays byte-for-byte the same.
@@ -127,7 +98,8 @@ export function SlideObjectMenu({
                     {(single || showAdd) && (
                         <>
                             <DropdownMenuSeparator />
-                            <CommentMenuItems
+                            <CommentLifecycleMenuItems
+                                lifecycle={lifecycle}
                                 primitives={{
                                     Item: DropdownMenuItem,
                                     Sub: DropdownMenuSub,
@@ -135,15 +107,9 @@ export function SlideObjectMenu({
                                     SubContent: DropdownMenuSubContent,
                                 }}
                                 item={single}
+                                canWrite={canWrite}
                                 onAddComment={onAddComment ? () => onAddComment(obj.id) : undefined}
-                                onOpen={onCommentClick}
-                                onChangeColor={onCommentChangeColor ? handleChangeColor : undefined}
-                                onResolve={onCommentResolve}
-                                onReopen={onCommentReopen}
                                 onDelete={onCommentDelete ? (cardId) => onCommentDelete(obj.id, cardId) : undefined}
-                                members={members}
-                                currentUserEmail={currentUserEmail}
-                                onAssign={onCommentAssign ? handleAssign : undefined}
                             />
                         </>
                     )}

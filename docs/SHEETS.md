@@ -131,8 +131,7 @@ components.
 
 - **Canvas indicator**: triangle (top-right) drawn when `cell.commentCardIds?.length > 0`; color comes
   from the Y.Doc card via `hooks.getCommentInfo(r, c)`
-- **Context menu**: "Add comment" (no comment) or "View comment" / "Delete comment" (has comment), wired via
-  `hooks.onAddComment/onViewComment/onDeleteComment` from settings
+- **Context menu**: the shared `CommentLifecycleMenuItems`, fed by `hooks.commentLifecycle` (the `useCommentLifecycle` bundle) plus `hooks.getCommentInfo` for the cell's card. Only the two cell-anchor writes stay sheet-specific hooks: `hooks.onAddComment` and `hooks.onDeleteComment`
 - **Comments/activity pane**: the shared `PanelColumn` — one component for both panels on every viewport,
   driven by `useDocumentPanels(isMobile)`
 - **Card dialogs**: the shared `CommentLifecycleDialogs` (open card, edit, resolve, delete), fed by

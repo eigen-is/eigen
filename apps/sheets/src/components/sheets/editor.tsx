@@ -124,17 +124,7 @@ function SheetEditorInner({
         initialChatName,
         ready: synced,
     });
-    const {
-        allComments,
-        resolveComment,
-        cards,
-        createCard,
-        updateCard,
-        assignComment,
-        members,
-        unresolvedCount,
-        setOpenCardId,
-    } = lifecycle;
+    const { allComments, cards, createCard, assignComment, members, unresolvedCount, setOpenCardId } = lifecycle;
     // Host-owned so the filter survives panel close/reopen.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
@@ -392,11 +382,7 @@ function SheetEditorInner({
                                               },
                                           }
                                         : {}),
-                                    onViewComment: (r: number, c: number) => {
-                                        const fd = workbookRef.current?.getFlowdata();
-                                        const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                        if (cardId) setOpenCardId(cardId);
-                                    },
+                                    commentLifecycle: lifecycle,
                                     ...(canWrite
                                         ? {
                                               onDeleteComment: (r: number, c: number) => {
@@ -412,19 +398,6 @@ function SheetEditorInner({
                                                       );
                                                   }
                                               },
-                                              onCommentColor: (r: number, c: number, color: string) => {
-                                                  const fd = workbookRef.current?.getFlowdata();
-                                                  const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                                  if (cardId) updateCard(cardId, { color });
-                                              },
-                                              onCommentResolve: (chatName: string, title?: string) =>
-                                                  resolveComment.mutate({ chatName, status: 'resolved', title }),
-                                              onCommentReopen: (chatName: string, title?: string) =>
-                                                  resolveComment.mutate({ chatName, status: 'open', title }),
-                                              onCommentAssign: (chatName, email, title) =>
-                                                  assignComment.mutate({ chatName, assignee: email, title }),
-                                              commentMembers: members,
-                                              currentUserEmail: auth.user?.email,
                                           }
                                         : {}),
                                     getCommentInfo: (r: number, c: number) => {

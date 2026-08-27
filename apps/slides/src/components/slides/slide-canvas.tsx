@@ -1,9 +1,7 @@
 import { getBackgroundStyle } from '@workspace/lib/background';
+import type { useCommentLifecycle } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { useMediaResolver } from '@workspace/lib/drive';
-import type { CommentEntry } from '@workspace/lib/types/chat';
-import type { CommentCard } from '@workspace/lib/types/comments';
-import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { arrangeBoundingBox, type Box } from '@workspace/lib/vector';
 import { FileDropOverlay } from '@workspace/ui';
 import { CursorLayer } from '@workspace/ui/components/collab';
@@ -57,16 +55,9 @@ type SlideCanvasProps = {
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
     canWrite: boolean;
+    lifecycle: ReturnType<typeof useCommentLifecycle>;
     onAddComment?: (objId: string) => void;
     onCommentClick?: (cardId: string) => void;
-    cards?: Record<string, CommentCard>;
-    entries?: CommentEntry[];
-    members?: EffectiveMember[];
-    currentUserEmail?: string;
-    onCommentAssign?: (chatName: string, email: string | null, title?: string) => void;
-    onCommentResolve?: (chatName: string, title?: string) => void;
-    onCommentReopen?: (chatName: string, title?: string) => void;
-    onCommentChangeColor?: (cardId: string, color: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
     onDuplicateObjects?: (placements: { id: string; x: number; y: number }[]) => void;
     // Lets the editor's layered Escape bail while an ObjectTransform grip drag is live (that gesture
@@ -104,16 +95,9 @@ export function SlideCanvas({
     onMoveToFront,
     onMoveToBack,
     canWrite,
+    lifecycle,
     onAddComment,
     onCommentClick,
-    cards,
-    entries,
-    members,
-    currentUserEmail,
-    onCommentAssign,
-    onCommentResolve,
-    onCommentReopen,
-    onCommentChangeColor,
     onCommentDelete,
     onDuplicateObjects,
     onTransformActiveChange,
@@ -391,7 +375,7 @@ export function SlideCanvas({
             >
                 {objects.map((obj) => {
                     const displayObj = displayObject(obj);
-                    const commentItems = getCommentItems(obj, cards, entries);
+                    const commentItems = getCommentItems(obj, lifecycle);
                     const firstUnresolved = commentItems.find(({ entry }) => entry?.status !== 'resolved');
                     return (
                         <SlideObjectView
@@ -500,8 +484,8 @@ export function SlideCanvas({
             </div>
             <SlideObjectMenu
                 contextMenu={objectContextMenu}
-                cards={cards}
-                entries={entries}
+                lifecycle={lifecycle}
+                canWrite={canWrite}
                 onCopy={onCopyObject}
                 onCut={onCutObject}
                 onPaste={onPasteObject}
@@ -512,13 +496,6 @@ export function SlideCanvas({
                 onMoveToFront={onMoveToFront}
                 onMoveToBack={onMoveToBack}
                 onAddComment={onAddComment}
-                onCommentClick={onCommentClick}
-                onCommentChangeColor={onCommentChangeColor}
-                members={members}
-                currentUserEmail={currentUserEmail}
-                onCommentAssign={onCommentAssign}
-                onCommentResolve={onCommentResolve}
-                onCommentReopen={onCommentReopen}
                 onCommentDelete={onCommentDelete}
             />
         </div>
