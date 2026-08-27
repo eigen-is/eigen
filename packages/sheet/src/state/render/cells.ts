@@ -6,6 +6,7 @@ import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/condition-format';
 import {
     type CellGlyphRect,
+    type CellTextBox,
     CHECKBOX_LABEL_GAP,
     cellTextBox,
     checkboxRect,
@@ -92,20 +93,9 @@ function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, c
 // sit on dark fills a fixed grey would vanish into.
 const DROPDOWN_CHEVRON_ALPHA = 0.55;
 
-function renderDropdownChevron(
-    pass: RenderPass,
-    r: number,
-    c: number,
-    startY: number,
-    startX: number,
-    endY: number,
-    endX: number,
-) {
-    const { renderCtx, flowdata, offsetLeft, offsetTop } = pass;
-    const rect = dropdownChevronRect(
-        cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop),
-    );
-    // Too narrow a column drops the glyph rather than filling the cell with it.
+function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: CellTextBox) {
+    const { renderCtx, flowdata } = pass;
+    const rect = dropdownChevronRect(box);
     if (!rect) return;
 
     renderCtx.save();
@@ -158,8 +148,7 @@ export function nullCellRender(
         flowdata,
         drawGridLines,
     } = pass;
-    // One lookup for every validation affordance this cell may draw; sheets with
-    // no rules at all short-circuit on the optional chain, key never built.
+    // A sheet with no rules at all short-circuits here, key never built.
     const rule = dataVerification?.[`${r}_${c}`];
     const checksCF = checkCF(r, c, cfCompute);
 
@@ -208,16 +197,17 @@ export function nullCellRender(
         drawCommentIndicator(pass, r, c, startY, endX);
     }
 
-    // An empty cell inside a tick-box range still shows an unchecked box, so the
-    // range reads as one uniform column.
-    if (rule?.type === 'checkbox') {
+    if (rule) {
         const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
-        const align = [normalizedAttr(flowdata, r, c, 'ht'), normalizedAttr(flowdata, r, c, 'vt')];
-        drawTickBox(renderCtx, checkboxRect(box, Number(align[0]), Number(align[1])), false);
-    } else if (rule?.type === 'dropdown') {
-        // Most list-validated cells in a real workbook are empty ones waiting to
-        // be filled — this branch is the one that marks them.
-        renderDropdownChevron(pass, r, c, startY, startX, endY, endX);
+        // An empty cell inside a tick-box range still shows an unchecked box, so the
+        // range reads as one uniform column.
+        if (rule.type === 'checkbox') {
+            const horizonAlign = Number(normalizedAttr(flowdata, r, c, 'ht'));
+            const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
+            drawTickBox(renderCtx, checkboxRect(box, horizonAlign, verticalAlign), false);
+        } else if (rule.type === 'dropdown') {
+            renderDropdownChevron(pass, r, c, box);
+        }
     }
 
     // Check overflow cell relationship
@@ -456,7 +446,7 @@ export function cellRender(
     }
 
     if (rule?.type === 'dropdown') {
-        renderDropdownChevron(pass, r, c, startY, startX, endY, endX);
+        renderDropdownChevron(pass, r, c, box);
     }
 
     if (drawRightGridLine && drawGridLines) {

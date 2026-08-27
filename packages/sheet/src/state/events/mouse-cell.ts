@@ -124,9 +124,6 @@ export function handleCellAreaMouseDown(
     // keyboard path (events/keyboard.ts) bails on the same condition.
     const editing = ctx.editingCellPosition.length > 0;
 
-    // Data verification: a tick box toggles only when the click lands on the box
-    // itself; anywhere else in the cell selects the cell like any other. The box
-    // rect comes from the same checkboxRect the painter uses.
     if (e.button !== 2 && !editing && isCheckboxClick(ctx, row_index, col_index, textBox, x, y)) {
         checkboxChange(ctx, row_index, col_index);
     }
