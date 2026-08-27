@@ -22,6 +22,7 @@ import {
     MoveVertical,
     Plus,
     Scissors,
+    SquareCheck,
     Trash2,
     X,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ import {
     handleLink,
     handlePasteByClick,
     hideSelected,
+    insertCheckbox,
     readClipboardText,
     showSelected,
     sortSelection,
@@ -306,6 +308,25 @@ function ImageItem() {
     );
 }
 
+// Insert -> Tick box reads as a create verb; the first instinct for turning an
+// existing TRUE/FALSE column into tick boxes is the cell menu. Same action.
+function TickBoxItem() {
+    const { context, setContext } = useContext(WorkbookContext);
+    return (
+        <DropdownMenuItem
+            disabled={context.selections?.[0] == null}
+            onClick={() =>
+                setContext((d) => {
+                    insertCheckbox(d);
+                })
+            }
+        >
+            <SquareCheck className="size-4" />
+            Tick box
+        </DropdownMenuItem>
+    );
+}
+
 function CommentItems() {
     const { context, settings } = useContext(WorkbookContext);
     const { getCommentInfo, onAddComment, onDeleteComment, commentLifecycle } = settings.hooks;
@@ -354,6 +375,7 @@ function CellMenu() {
             <DropdownMenuSeparator />
             <LinkItem />
             <ImageItem />
+            <TickBoxItem />
             <CommentItems />
         </>
     );
