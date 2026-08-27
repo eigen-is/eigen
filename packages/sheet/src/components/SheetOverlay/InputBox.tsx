@@ -8,8 +8,8 @@ import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
     createRangeHightlight,
-    getCellValue,
     getFlowdata,
+    getFormulaHtml,
     getInlineStringHTML,
     getStyleByCell,
     handleFormulaInput,
@@ -54,8 +54,8 @@ export const InputBox: React.FC = () => {
             setContext((ctx) => {
                 const flowdata = getFlowdata(ctx);
                 if (flowdata != null && ctx.forceFormulaRef) {
-                    const value = getCellValue(row_index, col_index, flowdata, 'f');
-                    createRangeHightlight(ctx, value);
+                    const formulaHtml = getFormulaHtml(row_index, col_index, flowdata);
+                    if (formulaHtml) createRangeHightlight(ctx, formulaHtml);
                 }
             });
         }
@@ -73,26 +73,30 @@ export const InputBox: React.FC = () => {
             }
             const flowdata = getFlowdata(context);
             const cell = flowdata?.[row_index]?.[col_index];
-            // `value` is always HTML by the time it is written. The rich-text branch is
-            // the one case that really is generated markup — every run's text and style
-            // is escaped as it is built; everything else is raw cell text, escaped here.
             let value = '';
+            // Set when `value` is markup we generated rather than raw cell text.
+            let isGeneratedHtml = false;
             if (cell && !refs.globalCache.overwriteCell) {
                 if (isInlineStringCell(cell)) {
                     value = getInlineStringHTML(row_index, col_index, flowdata);
+                    isGeneratedHtml = true;
                 } else if (cell.f) {
-                    const formula = getCellValue(row_index, col_index, flowdata, 'f');
+                    // Coloured spans, escaped at their leaves — render, do not escape again.
+                    // createRangeHightlight parses those spans, so it wants the markup too.
+                    value = getFormulaHtml(row_index, col_index, flowdata) ?? '';
+                    isGeneratedHtml = true;
+                    const formulaHtml = value;
                     setContext((ctx) => {
-                        createRangeHightlight(ctx, formula);
+                        createRangeHightlight(ctx, formulaHtml);
                     });
-                    value = escapeHtml(formula);
                 } else {
                     const shown = valueShowEs(row_index, col_index, flowdata);
-                    value = escapeHtml(shown == null ? '' : String(shown));
+                    value = shown == null ? '' : String(shown);
                 }
             }
             refs.globalCache.overwriteCell = false;
-            if (!refs.globalCache.ignoreWriteCell) inputRef.current!.innerHTML = value;
+            if (!refs.globalCache.ignoreWriteCell)
+                inputRef.current!.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
             refs.globalCache.ignoreWriteCell = false;
             if (!refs.globalCache.doNotFocus) {
                 // Synchronously too: the innerHTML write leaves the caret at 0, and

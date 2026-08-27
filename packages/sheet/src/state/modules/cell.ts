@@ -107,11 +107,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
         const d = d_value as Cell;
         retv = d[attr];
 
-        if (attr === 'f' && !isNil(retv)) {
-            retv = functionHTMLGenerate(retv);
-        } else if (attr === 'f') {
-            retv = (d as Cell).v;
-        } else if (d?.ct && d.ct.t === 'd') {
+        if (d?.ct && d.ct.t === 'd') {
             retv = d.m;
         }
     }
@@ -1106,6 +1102,21 @@ export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number
     }
 
     return style;
+}
+
+// A formula is shown in the formula bar and the in-cell editor as coloured spans, not as
+// text — the reference tokens have to be clickable and highlightable. Returns null when
+// the cell carries no formula, so the caller applies its own fallback: the two editors
+// disagree about rich text (the bar shows it plain, the cell shows it styled), so that
+// rule belongs to them, not here.
+//
+// This lives apart from getCellValue on purpose. Generating the markup inside the getter
+// meant `getCellValue(r, c, data, 'f')` returned HTML rather than the formula, which read
+// as a plain attribute read at every callsite and cost us a shipped regression: an
+// escaping pass wrapped it in escapeHtml and printed the markup at the user.
+export function getFormulaHtml(r: number, c: number, data: CellMatrix): string | null {
+    const f = getCellValue(r, c, data, 'f');
+    return isNil(f) ? null : functionHTMLGenerate(String(f));
 }
 
 export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {

@@ -6,8 +6,8 @@ import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
     en,
-    getCellValue,
     getFlowdata,
+    getFormulaHtml,
     getInlineStringNoStyle,
     handleFormulaInput,
     isAllowEdit,
@@ -54,17 +54,20 @@ export function FxEditor() {
             if (r == null || c == null) return;
 
             const cell = d?.[r]?.[c];
+            let isGeneratedHtml = false;
             if (cell) {
                 if (isInlineStringCell(cell)) {
                     value = getInlineStringNoStyle(r, c, d);
                 } else if (cell.f) {
-                    value = getCellValue(r, c, d, 'f');
+                    // Coloured spans, escaped at their leaves — render, do not escape again.
+                    value = getFormulaHtml(r, c, d) ?? '';
+                    isGeneratedHtml = true;
                 } else {
                     const shown = valueShowEs(r, c, d);
                     value = shown == null ? '' : String(shown);
                 }
             }
-            refs.fxInput.current!.innerHTML = escapeHtml(value);
+            refs.fxInput.current!.innerHTML = isGeneratedHtml ? value : escapeHtml(value);
         } else {
             refs.fxInput.current!.innerHTML = '';
         }

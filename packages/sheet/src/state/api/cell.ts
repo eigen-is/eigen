@@ -6,7 +6,6 @@ import type { Context } from '../context';
 import {
     delFunctionGroup,
     dropCellCache,
-    functionHTMLGenerate,
     getTypeItemHide,
     setCellValue as setCellValueInternal,
     updateCell,
@@ -56,9 +55,7 @@ export function getCellValue(
     let ret: Cell[keyof Cell] | string | null = null;
 
     if (cellData && isPlainObject(cellData)) {
-        if (type === 'f') {
-            ret = cellData.f != null ? functionHTMLGenerate(cellData.f) : cellData.v;
-        } else if (cellData.ct && cellData.ct.fa === 'yyyy-MM-dd') {
+        if (cellData.ct && cellData.ct.fa === 'yyyy-MM-dd') {
             ret = cellData.m;
         } else if (cellData.ct?.t === 'inlineStr') {
             ret = (cellData.ct.s ?? []).reduce((prev, cur) => prev + (cur.v ?? ''), '');
