@@ -178,6 +178,9 @@ export function VectorPropertiesPanel({
     const title =
         selectedElements.length === 1 ? TYPE_LABELS[selectedElements[0].type] : `${selectedElements.length} elements`;
 
+    // Sections follow the canonical order documented on PropertiesPanel — geometry, content, paint,
+    // appearance, actions. Text and the shape paint sections never coexist (a selection is all-text
+    // or all-shapes), so they read as one slot.
     return (
         <PropertiesPanel title={title}>
             <TransformSection
@@ -195,63 +198,6 @@ export function VectorPropertiesPanel({
                 aspectLocked={aspectLocked}
                 onAspectLockChange={onAspectLockChange}
             />
-
-            {allShapes && (
-                <>
-                    <PropertySection title="Stroke">
-                        <ColorRow label="Color" value={strokeColor} onChange={(c) => applyToAll({ strokeColor: c })} />
-                        <PropertyRow label="Width">
-                            <MergedSelect
-                                value={numToStr(strokeWidth)}
-                                onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
-                                options={STROKE_WIDTH_OPTIONS}
-                            />
-                        </PropertyRow>
-                        <PropertyRow label="Style">
-                            <MergedSelect
-                                value={strokeStyle}
-                                onChange={(v) => applyToAll({ strokeStyle: v })}
-                                options={STROKE_STYLE_OPTIONS}
-                            />
-                        </PropertyRow>
-                    </PropertySection>
-
-                    <PropertySection title="Fill">
-                        <ColorRow
-                            label="Color"
-                            value={fill}
-                            onChange={(c) => applyToAll({ backgroundColor: c })}
-                            showReset
-                        />
-                        <PropertyRow label="Style">
-                            <MergedSelect
-                                value={fillStyle}
-                                onChange={(v) => applyToAll({ fillStyle: v })}
-                                options={FILL_STYLE_OPTIONS}
-                            />
-                        </PropertyRow>
-                    </PropertySection>
-
-                    <PropertySection title="Sketch">
-                        <PropertyRow label="Rough">
-                            <MergedSelect
-                                value={numToStr(roughness)}
-                                onChange={(v) => applyToAll({ roughness: Number(v) })}
-                                options={ROUGHNESS_OPTIONS}
-                            />
-                        </PropertyRow>
-                        {allRectDiamond && (
-                            <PropertyRow label="Edges">
-                                <MergedSelect
-                                    value={roundness}
-                                    onChange={(v) => applyToAll({ roundness: v })}
-                                    options={EDGES_OPTIONS}
-                                />
-                            </PropertyRow>
-                        )}
-                    </PropertySection>
-                </>
-            )}
 
             {allText && (
                 <PropertySection title="Text">
@@ -283,6 +229,63 @@ export function VectorPropertiesPanel({
                         />
                     </PropertyRow>
                 </PropertySection>
+            )}
+
+            {allShapes && (
+                <>
+                    <PropertySection title="Fill">
+                        <ColorRow
+                            label="Color"
+                            value={fill}
+                            onChange={(c) => applyToAll({ backgroundColor: c })}
+                            showReset
+                        />
+                        <PropertyRow label="Style">
+                            <MergedSelect
+                                value={fillStyle}
+                                onChange={(v) => applyToAll({ fillStyle: v })}
+                                options={FILL_STYLE_OPTIONS}
+                            />
+                        </PropertyRow>
+                    </PropertySection>
+
+                    <PropertySection title="Stroke">
+                        <ColorRow label="Color" value={strokeColor} onChange={(c) => applyToAll({ strokeColor: c })} />
+                        <PropertyRow label="Width">
+                            <MergedSelect
+                                value={numToStr(strokeWidth)}
+                                onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
+                                options={STROKE_WIDTH_OPTIONS}
+                            />
+                        </PropertyRow>
+                        <PropertyRow label="Style">
+                            <MergedSelect
+                                value={strokeStyle}
+                                onChange={(v) => applyToAll({ strokeStyle: v })}
+                                options={STROKE_STYLE_OPTIONS}
+                            />
+                        </PropertyRow>
+                    </PropertySection>
+
+                    <PropertySection title="Sketch">
+                        <PropertyRow label="Rough">
+                            <MergedSelect
+                                value={numToStr(roughness)}
+                                onChange={(v) => applyToAll({ roughness: Number(v) })}
+                                options={ROUGHNESS_OPTIONS}
+                            />
+                        </PropertyRow>
+                        {allRectDiamond && (
+                            <PropertyRow label="Edges">
+                                <MergedSelect
+                                    value={roundness}
+                                    onChange={(v) => applyToAll({ roundness: v })}
+                                    options={EDGES_OPTIONS}
+                                />
+                            </PropertyRow>
+                        )}
+                    </PropertySection>
+                </>
             )}
 
             <PropertySection title="Appearance">

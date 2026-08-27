@@ -81,6 +81,8 @@ export function SlidePropertiesPanel({
     const height = getMergedValue(objects, (o) => Math.round(o.height));
     const angle = getMergedValue(objects, (o) => o.angle);
 
+    // Sections follow the canonical order documented on PropertiesPanel — geometry, content, paint,
+    // appearance, actions, destructive.
     return (
         <PropertiesPanel
             title={objects.length === 1 ? (objects[0].type === 'text' ? 'Text' : 'Image') : `${objects.length} objects`}
@@ -96,14 +98,6 @@ export function SlidePropertiesPanel({
                 onAspectLockChange={onAspectLockChange}
             />
 
-            {onZOrder && (
-                <PropertySection title="Arrange">
-                    <ZOrderButtons onApply={onZOrder} />
-                </PropertySection>
-            )}
-
-            {onAlign && objects.length >= 2 && <AlignSection count={objects.length} onApply={onAlign} />}
-
             {allText && (
                 <TextProperties objects={objects as (SlideObject & { type: 'text' })[]} onUpdate={handleUpdate} />
             )}
@@ -113,6 +107,14 @@ export function SlidePropertiesPanel({
             )}
 
             <BorderProperties objects={objects} onUpdate={handleUpdate} />
+
+            {onZOrder && (
+                <PropertySection title="Arrange">
+                    <ZOrderButtons onApply={onZOrder} />
+                </PropertySection>
+            )}
+
+            {onAlign && objects.length >= 2 && <AlignSection count={objects.length} onApply={onAlign} />}
 
             {onDelete && (
                 <div className="px-3 py-3">

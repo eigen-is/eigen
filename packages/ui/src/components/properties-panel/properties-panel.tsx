@@ -6,6 +6,20 @@ import type { ReactNode } from 'react';
 // The w-64 below, for hosts that have to lay out around this panel.
 export const PROPERTIES_PANEL_WIDTH_PX = 256;
 
+// Section order is a cross-app convention, not a runtime sort — every host (vector, slides, docs,
+// sheets) authors its sections in this sequence so the panel reads the same everywhere:
+//
+//   1. geometry     Transform / Layout
+//   2. content      Text · Spacing · Image
+//   3. paint        Fill / Color / Background · Stroke / Border · Sketch
+//   4. appearance   Appearance
+//   5. actions      Arrange · Align
+//   6. destructive  Delete
+//
+// Titles are literals and the host guards only filter, so authored order IS rendered order — which
+// keeps DOM order (and with it tab order) matched to what the eye sees. A new section slots into its
+// group; a group a panel doesn't have is simply absent.
+
 type PropertiesPanelProps = {
     children: ReactNode;
     // Fixed title bar, pixel-matched to the comments/activity Column toolbar (h-12 + ToolbarTitle).
