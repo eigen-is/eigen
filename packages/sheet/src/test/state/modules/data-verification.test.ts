@@ -6,10 +6,12 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
+import { en } from '../../../state/locale/en';
 import {
     applyDataVerification,
     checkboxChange,
     checkboxRect,
+    confirmMessage,
     DROPDOWN_CHEVRON_HIT_WIDTH,
     dropdownChevronRect,
     getDropdownList,
@@ -19,7 +21,7 @@ import {
     isDropdownChevronClick,
     validateCellData,
 } from '../../../state/modules/data-verification';
-import type { DataVerificationRule } from '../../../state/types';
+import type { DataRegulationProps, DataVerificationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 
 describe('getDropdownList', () => {
@@ -262,5 +264,59 @@ describe('isDropdownChevronClick', () => {
         const ctx = listContext();
         const narrow = { ...box, width: 21 };
         expect(isDropdownChevronClick(ctx, 0, 0, narrow, narrow.width, 9)).toBe(false);
+    });
+});
+
+// confirmMessage validates the dialog's rule before it is written. Every branch
+// must return false when it warns — the dropdown and checkbox branches used to
+// set warnDialog and fall through, so an empty rule was applied anyway and the
+// range rendered as `☐ FALS`: an empty-valued rule is not a default TRUE/FALSE
+// rule, so the painter drew the label too.
+function regulationContext(regulation: Partial<DataRegulationProps>) {
+    const ctx = contextFactory() as Context;
+    ctx.dataVerification = {
+        selectStatus: false,
+        selectRange: [],
+        optionLabel: en.dataVerification.optionLabel,
+        dataRegulation: {
+            type: 'dropdown',
+            type2: '',
+            rangeTxt: 'A1:A3',
+            value1: '',
+            value2: '',
+            validity: '',
+            remote: false,
+            prohibitInput: false,
+            hintShow: false,
+            hintValue: '',
+            ...regulation,
+        },
+    };
+    return ctx;
+}
+
+function confirm(ctx: Context) {
+    return confirmMessage(ctx, en.generalDialog, en.dataVerification);
+}
+
+describe('confirmMessage', () => {
+    test('rejects a drop-down rule with no options', () => {
+        const ctx = regulationContext({ type: 'dropdown', value1: '' });
+        expect(confirm(ctx)).toBe(false);
+        expect(ctx.warnDialog).toBe(en.dataVerification.tooltipInfo1);
+    });
+
+    test('rejects a checkbox rule with an empty selected or not-selected value', () => {
+        const empty = regulationContext({ type: 'checkbox', value1: '', value2: '' });
+        expect(confirm(empty)).toBe(false);
+        expect(empty.warnDialog).toBe(en.dataVerification.tooltipInfo2);
+
+        const halfEmpty = regulationContext({ type: 'checkbox', value1: 'Yes', value2: '' });
+        expect(confirm(halfEmpty)).toBe(false);
+    });
+
+    test('accepts the rules it has no complaint about', () => {
+        expect(confirm(regulationContext({ type: 'dropdown', value1: 'Red,Green' }))).toBe(true);
+        expect(confirm(regulationContext({ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }))).toBe(true);
     });
 });

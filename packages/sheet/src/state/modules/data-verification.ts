@@ -636,10 +636,12 @@ export function confirmMessage(
     if (verifacationT === 'dropdown') {
         if (!value1) {
             ctx.warnDialog = dataVerification.tooltipInfo1;
+            return false;
         }
     } else if (verifacationT === 'checkbox') {
         if (!value1 || !value2) {
             ctx.warnDialog = dataVerification.tooltipInfo2;
+            return false;
         }
     } else if (verifacationT === 'number' || verifacationT === 'number_integer' || verifacationT === 'number_decimal') {
         if (!v1) {
