@@ -63,11 +63,11 @@ export function ActivityRow({
             </div>
             <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
-                    <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{action}</span>
+                    <span className="min-w-0 flex-1 line-clamp-2 text-xs text-muted-foreground">{action}</span>
                     <span className="shrink-0 text-xs text-muted-foreground/70">{formatTimeAgo(createdAt)}</span>
                 </div>
-                {primary ? <p className={cn('truncate text-sm', unread && 'font-medium')}>{primary}</p> : null}
-                {secondary ? <p className="truncate text-sm text-muted-foreground">{secondary}</p> : null}
+                {primary ? <p className={cn('line-clamp-2 text-sm', unread && 'font-medium')}>{primary}</p> : null}
+                {secondary ? <p className="line-clamp-2 text-sm text-muted-foreground">{secondary}</p> : null}
             </div>
             {trailing}
         </div>
