@@ -66,6 +66,11 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 - [ ] CF formula-evaluator wiring duplicated (8 lines) between
       `state/modules/condition-format.ts` and the HTML export's `buildCfFormulaEvaluator` —
       extract a shared helper if a third consumer appears
+- [ ] cross-sheet click-to-reference is dead: `formulaCache.rangetosheet` is declared and read
+      (`formula-range.ts` `createRangeHightlight` / `rangeSetValue`) but never assigned, so
+      `getRangetxt` always sees `currentId === sheetId` and a reference never carries a sheet
+      name — and switching tabs cancels the composition anyway. Decide: wire it, or delete the
+      field and the branches that read it
 - [ ] deprecated `document.execCommand` in `InputBox.tsx` (no clean replacement yet; revisit)
 - [ ] minor tidy-ups: no-delay `setTimeout(fn)` sequencing (`SheetTab`, `SheetOverlay`), inline style
       object in `context/modal.tsx`, `insertMenu` repeating `autoSelectionFormula` 4×,
