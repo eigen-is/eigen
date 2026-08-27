@@ -9,7 +9,16 @@ import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
-import { addSheet, autoSelectionFormula, en, getFlowdata, handleLink, handleSum, tryInsertRowCol } from '../../state';
+import {
+    addSheet,
+    autoSelectionFormula,
+    en,
+    getFlowdata,
+    handleLink,
+    handleSum,
+    insertCheckbox,
+    tryInsertRowCol,
+} from '../../state';
 import { InsertFunctionDialog } from '../InsertFunctionDialog';
 
 export function InsertMenu() {
@@ -191,6 +200,17 @@ export function InsertMenu() {
                 }}
             >
                 {toolbar.insertLink}
+            </DropdownMenuItem>
+
+            <DropdownMenuItem
+                disabled={selection == null}
+                onClick={() => {
+                    setContext((draftCtx) => {
+                        insertCheckbox(draftCtx);
+                    });
+                }}
+            >
+                {toolbar.tickBox}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

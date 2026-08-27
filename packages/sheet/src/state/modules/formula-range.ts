@@ -1,3 +1,4 @@
+import { escapeHtml } from '@workspace/lib/html';
 import type { Context } from '../context';
 import type { RangeOrWholeAxis, Rect } from '../types';
 import { seletedHighlistByindex } from '.';
@@ -108,11 +109,15 @@ export function rangeSetValue(
             `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`,
         ) as HTMLSpanElement;
         if (span) {
-            span.innerHTML = range;
+            // `range` embeds the sheet's name, which updateSheetName only screens for the
+            // six characters a reference may not contain — markup is a legal sheet name,
+            // and this is innerHTML. The caret offset stays the RAW length: that is what
+            // the browser renders, where the escaped markup is longer (commit ac3ff70df).
+            span.innerHTML = escapeHtml(range);
             setCaretPosition(ctx, span, 0, range.length);
         }
     } else {
-        const function_str = `<span class="fortune-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${colors[formulaUIState.functionHTMLIndex]};">${range}</span>`;
+        const function_str = `<span class="fortune-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${colors[formulaUIState.functionHTMLIndex]};">${escapeHtml(range)}</span>`;
         const newEle = parseElement(function_str);
         const refEle = ctx.formulaCache.rangeSetValueTo;
         if (refEle?.parentNode) {

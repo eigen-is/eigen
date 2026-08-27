@@ -30,7 +30,7 @@ state/render/
 ├── geometry.ts     # Pure viewport math (visible ranges, cell edges, HALF_PIXEL/BORDER_FIX) — unit-tested
 ├── headers.ts      # Row/column header strips
 ├── phases.ts       # collectVisibleCells → renderCells → renderMergedCells
-├── cells.ts        # nullCellRender/cellRender (background, indicators, checkbox, text, grid lines)
+├── cells.ts        # nullCellRender/cellRender (background, indicators, tick box, list chevron, text, grid lines)
 ├── cell-text.ts    # Text painter + overflow-span variant (layout stays in modules/text.ts)
 ├── data-bar.ts     # Conditional-format data bar
 ├── overflow.ts     # Text-spill map + trace + the shared per-row cache (cleared via the facade's idle timer)
@@ -130,7 +130,8 @@ shared Eigen comment-card infrastructure — see [COMMENTS.md](COMMENTS.md) for 
 components.
 
 - **Canvas indicator**: triangle (top-right) drawn when `cell.commentCardIds?.length > 0`; color comes
-  from the Y.Doc card via `hooks.getCommentInfo(r, c)`
+  from the Y.Doc card via `hooks.getCommentInfo(r, c)`. Same painter and same size as the other two
+  corner marks — see § Cell corner indicators
 - **Context menu**: the shared `CommentLifecycleMenuItems`, fed by `hooks.commentLifecycle` (the `useCommentLifecycle` bundle) plus `hooks.getCommentInfo` for the cell's card. Only the two cell-anchor writes stay sheet-specific hooks: `hooks.onAddComment` and `hooks.onDeleteComment`
 - **Comments/activity pane**: the shared `PanelColumn` — one component for both panels on every viewport,
   driven by `useDocumentPanels(isMobile)`
@@ -140,6 +141,93 @@ components.
 On mobile the pane takes the whole width, so `editor.tsx` **hides** the workbook wrapper (`hidden`) instead
 of unmounting it — the engine's `ResizeObserver` re-measures the canvas when it comes back (see the
 container-resize contract above). Hiding that wrapper also takes the floating find bar with it.
+
+## Tick boxes (checkbox data verification)
+
+A tick box is a **data-verification rule**, not a cell format — the same model Google uses. `Insert →
+Tick box` and the **cell right-click menu** both write `{ type: 'checkbox', value1: 'TRUE',
+value2: 'FALSE' }` over the selected range (`insertCheckbox`); the context-menu entry is the one that
+matches the common intent, which is converting an existing TRUE/FALSE column rather than creating
+something. `Data → Data verification` keeps the dialog for custom selected/not-selected labels, and
+seeds it with the same TRUE/FALSE pair so a fresh checkbox rule is confirmable without typing.
+Everything lives in `packages/sheet/src/state/modules/data-verification.ts`.
+
+- **The cell value is the checked state.** `isCheckboxChecked(rule, value)` compares the cell's display
+  value against `rule.value1` case-insensitively — there is no flag on the rule. That is what makes an
+  imported, pasted, typed or formula-produced `TRUE` render ticked.
+- **Applying a rule never overwrites data.** `applyDataVerification` seeds `value2` into **empty** cells
+  only, so pointing a tick box at an existing TRUE/FALSE column is lossless.
+- **A formula cell is a read-only tick.** `checkboxChange` returns `false` when the cell carries `f`;
+  clicking it would otherwise replace the formula with a literal.
+- **Only the box toggles.** `checkboxRect` is the single geometry both the painter
+  (`state/render/cells.ts`) and the mousedown hit-test (`state/events/mouse-cell.ts`) use — the same
+  split as `FILTER_BUTTON_WIDTH`/`HEIGHT` — and both hand it the same box, built by `cellTextBox`
+  from the cell's own bounds. Clicking elsewhere in the cell selects it like any other; Space/Enter
+  toggle the focused cell (`state/events/keyboard.ts`).
+- **Nothing toggles while a cell edit is open.** Clicking a tick box to put its reference into an
+  `=IF(` being composed inserts the reference and nothing else — a toggle would write the cell and
+  kick a recalc behind the half-typed formula. Same gate on the list chevron, which would otherwise
+  open a dropdown over the formula, and the keyboard path bails on the same condition.
+- **Default rules draw the box alone**, the way Google does; a rule with custom values also draws its
+  label, the only way to tell "Yes" from "No". So does a cell holding a value the rule names neither
+  of: `showsCheckboxLabel` is what keeps `Insert → Tick box` over a column of `Yes` / `Maybe` / `n/a`
+  from painting the data out of existence (applying a rule never rewrites it). Empty cells inside a
+  range still draw the plain unchecked box (`nullCellRender`), so the range reads as one column.
+- Selecting a whole column (a header click, `row: [0, visibledatarow.length - 1]`) is bounded to the
+  last row that holds data, so one menu click cannot write ~1M keys into the snapshot. A range the
+  user dragged is applied exactly as selected, past the used extent included — that is how a
+  checklist over still-empty rows gets its boxes.
+
+## List chevrons (dropdown data verification)
+
+A `dropdown` rule paints a chevron on **every** cell it covers, always — the same deal every other cell
+affordance offers. It used to be a single hidden DOM div that `cellFocus` un-hid on mousedown, so a
+keyboard user who arrowed onto a validated cell saw nothing, and a read-only viewer never saw it at all.
+
+- **The glyph is canvas paint** (`renderDropdownChevron` in `state/render/cells.ts`), called from both
+  `cellRender` and `nullCellRender` — in a real workbook most list-validated cells are empty, and a blank
+  validated cell is otherwise indistinguishable from a blank free-text one.
+- **One geometry, painter and hit-test.** `dropdownChevronRect` (`state/modules/data-verification.ts`)
+  right-aligns the 8px glyph and centres it vertically; `isDropdownChevronClick` builds its click target
+  from the same rect, and both drop out below `DROPDOWN_CHEVRON_MIN_WIDTH`. Same split as
+  `checkboxRect` and `FILTER_BUTTON_WIDTH`/`HEIGHT`.
+- **It overlays the cell text** rather than reserving width, the way Google's does — reserving would
+  reflow every validated column.
+- **Colour is the cell's own `fc` at 55% alpha**, not a flat grey: real workbooks put list rules on
+  dark-filled cells a fixed grey would vanish into.
+- **Clicking it opens the list**; a click anywhere else in the cell just selects. Read-only viewers still
+  see the chevron but get no list — `cellFocus` never positions the anchor when editing is disallowed.
+- The DOM element that remains (`#luckysheet-dataVerification-dropdown-btn`) is an invisible,
+  non-clickable anchor for the Radix portal, nothing more.
+
+## The validation card (prompt / rejection)
+
+A validated cell says two things: the prompt its author wrote (or a generated one), and — when the
+value in it fails the rule — why. Both render through one React card,
+`components/DataVerification/HintCard.tsx`, from one model, `getValidationHint(ctx, r, c)`.
+
+- **Derived from the focus cell, every render.** It replaced a singleton `<div>` that `cellFocus`
+  wrote with `innerHTML` and positioned in raw pixels from a mousedown handler. That one stranded
+  over the previous cell when you arrowed away, never appeared for a keyboard user at all, and put
+  any collaborator's rule text (or an imported xlsx's `dv.prompt`) straight into markup. Rendering
+  it declaratively closes all three: React makes the text content rather than markup.
+- **A rejection outranks a prompt** — one card serves both states, and the rejection is the more
+  urgent. `confirmMessage` refuses to write a rule it warns about, so an empty-valued rule can no
+  longer reach the painter.
+- **It stands down while the list is open** (`context.dataVerificationDropDownList`) — the two hang
+  over the same corner of the cell.
+- **Copy lives in the locale** (`state/locale/en.ts` → `dataVerification.hintCard` + `optionLabel`),
+  assembled by `describeValidationRule(item, kind)` — which also supplies the `prohibitInput` warn
+  dialog, so the two ways a rejected value is reported say the same thing.
+
+## Cell corner indicators
+
+Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string
+(top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one size,
+`CELL_INDICATOR_SIZE` — they used to be 11px, 5px and 6px of inline magic numbers, with the comment
+block copied verbatim between `nullCellRender` and `cellRender`. Unlike the tick box and the list
+chevron, no hit test reads this geometry, so it stays in the render module rather than the state one.
+Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
 
 ## Headless Formula Engine
 
@@ -331,6 +419,10 @@ Recorded by the xlsx-fidelity program (cycles 0–8, 2026-06; full history in gi
   re-merges per-cell DV back to a handful of sqrefs; exported files stay smaller than their
   sources (size note only).
 - The DV exporter always writes `allowBlank: true` (Excel's UI default).
+- Tick boxes (`checkbox` DV rules) are editor-only: they are not exported, and the cells they decorate
+  export as plain booleans. Excel has no cell-level tick box in OOXML that exceljs can write, and
+  re-importing a `list` validation of `"TRUE,FALSE"` would come back as a *dropdown* rule — a different
+  feature, with a dropdown arrow where the user expects a box.
 - Excel comments/notes are not imported (decided 2026-06-10) — Eigen has its own comment cards.
 
 The engine is exposed as a `@workspace/sheet/engine` subpath export. Server-side

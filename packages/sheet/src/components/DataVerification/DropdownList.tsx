@@ -5,10 +5,9 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ChevronDown } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
-import { getCellValue, getDropdownList, getFlowdata, getSheetIndex, setDropdownValue } from '../../state';
+import { getCellDataVerification, getCellValue, getDropdownList, getFlowdata, setDropdownValue } from '../../state';
 
 export function DropDownList() {
     const { context, setContext } = useContext(WorkbookContext);
@@ -20,9 +19,7 @@ export function DropDownList() {
         if (!last) return null;
         const { row_focus: r, column_focus: c } = last;
         if (r == null || c == null) return null;
-        const sheetIndex = getSheetIndex(context, context.currentSheetId);
-        if (sheetIndex == null || sheetIndex < 0) return null;
-        const dv = context.sheets[sheetIndex]?.dataVerification?.[`${r}_${c}`];
+        const dv = getCellDataVerification(context, r, c);
         if (!dv) return null;
         const list = getDropdownList(context, dv.value1);
         const isMul = dv.type2 === 'true';
@@ -32,14 +29,11 @@ export function DropDownList() {
         return { list, isMul, selected };
     }, [open, context]);
 
+    // The validation hint card reads the same flag and stands down while the list
+    // is open — it hangs over the same corner of the cell.
     const setOpen = (next: boolean) => {
         setContext((ctx) => {
             ctx.dataVerificationDropDownList = next;
-            if (next) {
-                // Hint box overlaps the dropdown — hide it while the menu is open
-                const hintBox = document.getElementById('luckysheet-dataVerification-showHintBox');
-                if (hintBox) hintBox.style.display = 'none';
-            }
         });
     };
 
@@ -57,15 +51,17 @@ export function DropDownList() {
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
+            {/* Pure anchor, not an indicator: the chevron itself is canvas paint on
+                every list-validated cell (state/render/cells.ts), and the canvas
+                mousedown hit-test opens this menu. cellFocus still moves and shows
+                this box so Radix has a rect to portal against. */}
             <DropdownMenuTrigger asChild>
                 <div
                     id="luckysheet-dataVerification-dropdown-btn"
-                    className="luckysheet-mousedown-cancel"
                     style={{ display: 'none' }}
-                    tabIndex={0}
-                >
-                    <ChevronDown width={16} height={16} aria-hidden="true" />
-                </div>
+                    tabIndex={-1}
+                    aria-hidden="true"
+                />
             </DropdownMenuTrigger>
             {/* Radix portals out of cellArea's DOM, but React synthetic events still bubble up
                 the React tree across portals — without this class, cellAreaMouseDown's DOM-level

@@ -446,7 +446,18 @@ export function evaluateConditionalFormat(
 
                     const formulaSrc = String(conditionValue0);
                     const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
-                    forEachCellInRanges([range], (r, c) => {
+                    // Clamp to the last materialized row before iterating. An xlsx sqref routinely
+                    // runs far past the used range, and every evaluation costs a ref-shift plus a
+                    // full formula parse — on a real workbook two thirds of them landed on rows
+                    // that don't exist. Rows only: `data.length` is an exact bound, while a ragged
+                    // matrix has no single column extent, and unlike the value-comparing branches
+                    // this one intentionally evaluates cells the matrix doesn't hold (a formula
+                    // rule may style an empty cell). The anchor stays the original top-left.
+                    const bounded = {
+                        row: [range.row[0], Math.min(range.row[1], data.length - 1)],
+                        column: range.column,
+                    };
+                    forEachCellInRanges([bounded], (r, c) => {
                         const raw = evaluateFormula(formulaTxt, str, stc, r, c);
                         const v = typeof raw === 'boolean' ? raw : !!Number(raw);
                         if (v) {

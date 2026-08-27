@@ -66,15 +66,37 @@ Direction decided 2026-07-12: behave like Excel/Google Sheets wherever the two a
 - [ ] CF formula-evaluator wiring duplicated (8 lines) between
       `state/modules/condition-format.ts` and the HTML export's `buildCfFormulaEvaluator` —
       extract a shared helper if a third consumer appears
+- [ ] cross-sheet click-to-reference is dead: `formulaCache.rangetosheet` is declared and read
+      (`formula-range.ts` `createRangeHightlight` / `rangeSetValue`) but never assigned, so
+      `getRangetxt` always sees `currentId === sheetId` and a reference never carries a sheet
+      name — and switching tabs cancels the composition anyway. Decide: wire it, or delete the
+      field and the branches that read it
 - [ ] deprecated `document.execCommand` in `InputBox.tsx` (no clean replacement yet; revisit)
-- [ ] minor tidy-ups: no-delay `setTimeout(fn)` sequencing (`SheetTab`, `SheetOverlay`), DOM
-      mutation inside a `setContext` recipe (`DataVerification/DropdownList.tsx`), inline style
+- [ ] minor tidy-ups: no-delay `setTimeout(fn)` sequencing (`SheetTab`, `SheetOverlay`), inline style
       object in `context/modal.tsx`, `insertMenu` repeating `autoSelectionFormula` 4×,
       `.substr()` ×4 in `cell.ts`
 - [ ] operator-family seam: `=`/`<>` are coercing + case-insensitive (2026-07-12), but `<` `>`
       `<=` `>=` still raw-JS coerce — blank `A1>=0` is TRUE while `A1=0` is FALSE, and `"A"<"a"`
       is TRUE alongside `"A"="a"` TRUE. Decide + implement Excel-parity ordering semantics
       (`engine/parser/evaluate-by-operator/operator/{greater,less}-than*.ts`)
+- [ ] IFERROR cannot trap an unknown name or function: `=IFERROR(XLOOKUP(...),"")` and
+      `=IFERROR(NOSUCHNAME,"fb")` still yield `#NAME?`, where Excel returns the fallback.
+      Errors raised *inside* operator evaluation are trapped (2026-08-27), but the unknown-symbol
+      throws — `evaluateByOperator`'s guard above its own try, and `_callVariable` — escape the
+      grammar's reduction and unwind the whole parse before IFERROR sees them. Visible today on
+      `=IFERROR(__xludf.DUMMYFUNCTION("...SPARKLINE..."),"")` cells, which render `#ERROR!`.
+      **Blocked on the operator-family decision above**: making those throws return an Error
+      instead would feed it to the comparison operators, which by documented design coerce an
+      Error operand to `false` — turning `=A1>NOSUCHFN(1)` from a visible `#NAME?` into a silent
+      wrong answer. Decide the comparison semantics first, then land both together
+- [ ] the client recalc path has no `hasNonErrorCachedValue` guard. `engine/recalc.ts` refuses to
+      overwrite Excel's cached value when our engine errors (a function this build lacks →
+      `#NAME?`), but `execFunctionGroup` → `groupValuesRefresh` → `setCellValue` writes
+      unconditionally, so editing an upstream cell replaces the imported value with the error,
+      pushes it as a Yjs op and bakes it into the next snapshot. Deliberately NOT mirrored into
+      the state layer (2026-08-27): freezing a stale value is right for a passive server-side
+      export, but in an editor whose inputs the user is actively changing, showing a number that
+      no longer matches its inputs is a lie. The real fix is covering the missing functions
 - [ ] `normalizeMonthMinuteTokens` (xlsx import) diverges from numfmt's classifier on three
       pathological formats (`;` consumed by a `_x` skip, `_\x` 3-char skip/fill, `B1`/`B2`
       calendar markers). Rendering is provably unaffected (numfmt classifies case-insensitively);
@@ -86,9 +108,24 @@ Program history + measurements: gitignored `docs/superpowers/sheet-perf/PHASE0-M
 Shipped through P3b (snapshot v2, 56.5→12.6MB; import 21.4→4.7s; export idle-drop fix; smells
 sweep; class-based export styles, html render 153s/82MB → 7.3s/10.4MB on the reference workbook).
 
-- [ ] **P4 — prod-build browser open benchmark** (vite build + preview + CORS shim per
-      VERIFICATION.md): the open-path gate after the v2 codec — measures what remains of
-      workbook-init produce + first-render long tasks with bundled assets
+- [x] **P4 — prod-build browser open benchmark** — DONE 2026-08-27, measured twice
+      (Docker/Caddy per `docker/LOCAL-TESTING.md`, and a vite preview; they agree).
+      **The dev-mode multiplier is 1.39x**, not the 1.6x this file had assumed — median
+      1.34x per switch over 15 comparable tab switches. A repeat visit to the slowest
+      sheet costs **0.8-1.3s in production** (dev: 1.1-2.2s). No dominant hotspot
+      survives: React halves to 9.9%, the CF subsystem stays at 0.2% (so the 2026-08-27
+      clamp + per-sheet cache hold up in a production bundle), and the largest cluster
+      in our own code is canvas text measurement at 8.9% (~115ms) — its *share* is
+      unchanged from dev, it only rose in rank. Full report:
+      gitignored `docs/superpowers/sheets-tickets/T10-prod-build-benchmark.md`
+- [ ] **persist the text-measure cache across sheet activations** — the one actionable
+      residue of P4. `measureText`/`getMeasureText`/`getCellTextInfo`/`getFontSet` is
+      ~115ms of every large-sheet activation; the cache behind it is cleared by the
+      100ms render-cache idle timer (`state/canvas.ts`, see SHEETS.md § Canvas renderer)
+      so every revisit re-measures the same strings. Small ticket, bounded win
+- [ ] **the 68s cold open is the bigger fish** — P4 measured 16.5s to first paint on a
+      production bundle plus the rest to settle. Nothing in the tab-switch work touches
+      it; it wants its own measurement pass
 - [ ] **snapshot v2.1 candidates, measured post-P4**: formula-pattern dedup (125k formula
       strings = 3.4MB, needs decode-side shifting budget) and style-only-cell rectangle
       compression (209k cells); only if P4 says size still hurts

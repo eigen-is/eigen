@@ -30,6 +30,7 @@ import {
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
 import { DropDownList } from '../DataVerification/DropdownList';
+import { ValidationHintCard } from '../DataVerification/HintCard';
 import { ImgBoxs } from '../ImgBoxs';
 import { LinkEditCard } from '../LinkEditCard';
 import { ColumnHeader } from './ColumnHeader';
@@ -75,12 +76,15 @@ export const SheetOverlay: React.FC = () => {
                         refs.canvas.current!.getContext('2d')!,
                     );
 
-                    // Skip the input focus when the mousedown opened the filter menu:
-                    // focusing the off-screen cell input auto-scrolls the cell area,
+                    // Skip the input focus when the mousedown opened a menu — the
+                    // filter menu, or a validation dropdown off its cell chevron.
+                    // Focusing the off-screen cell input auto-scrolls the cell area,
                     // which would snap the grid and close the menu via its
-                    // close-on-scroll listener.
+                    // close-on-scroll listener; the focus shift alone dismisses the
+                    // Radix popup.
                     if (
                         !consumed &&
+                        !draftCtx.dataVerificationDropDownList &&
                         draftCtx.selections?.[0] != null &&
                         Object.keys(draftCtx.selections[0]).length > 0 &&
                         refs.cellInput.current
@@ -459,12 +463,7 @@ export const SheetOverlay: React.FC = () => {
                             fixedLeft={dvRegion.fixedLeft}
                             fixedTop={dvRegion.fixedTop}
                         >
-                            {/* eigen-paper-chrome: popup chrome re-themes with the
-                                app inside the light-pinned workbook surface. */}
-                            <div
-                                id="luckysheet-dataVerification-showHintBox"
-                                className="luckysheet-mousedown-cancel eigen-paper-chrome"
-                            />
+                            <ValidationHintCard />
                         </OverlayRegion>
                         {context.linkCard?.sheetId === context.currentSheetId && (
                             <OverlayRegion

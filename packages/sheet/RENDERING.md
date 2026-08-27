@@ -169,7 +169,8 @@ pass, so freeze-region pinning and clipping match the cells underneath (not Reac
   has an active filter, with a green wash on hover
 - Geometry comes from `filterOptions.items` (`createFilterOptions` in `state/modules/filter.ts`) plus the
   shared `FILTER_BUTTON_WIDTH`/`FILTER_BUTTON_HEIGHT` constants — the same values the mousedown hit-test
-  reads, so the drawn button and its click target stay aligned
+  reads, so the drawn button and its click target stay aligned. The tick box and the data-verification
+  list chevron follow the same split (see § Data Verification Dropdown)
 
 ### 7. Images (React DOM + `<img>`)
 
@@ -198,13 +199,22 @@ Three modes:
 Positioned absolutely near the active cell. Class: `.fortune-link-modify-modal` (queried by
 `state/modules/hyperlink.ts`).
 
-### 10. Data Verification Dropdown (React DOM)
+### 10. Data Verification Dropdown (Canvas glyph + React DOM menu)
 
-**File**: `DataVerification/DropdownList.tsx`
+**Files**: `state/render/cells.ts` (`renderDropdownChevron`), `DataVerification/DropdownList.tsx`
 
-- A portaled shadcn `DropdownMenu` — checkbox items for multi-select validations, plain items otherwise
-- Relies on shadcn's default `z-index: 50` (Radix portal), not a bespoke high z-index
-- Anchored to a hidden trigger div positioned at the validated cell
+- The **chevron** is canvas paint, drawn unconditionally on every cell a `dropdown` rule covers —
+  from `cellRender` and from `nullCellRender`, because most validated cells in a real workbook are
+  empty. Like the other cell affordances (comment triangle, tick box, filter button) it is always on,
+  which makes it freeze-correct for free and visible to keyboard users and read-only viewers
+- Geometry is `dropdownChevronRect` in `state/modules/data-verification.ts` — the same function the
+  mousedown hit-test reads, so glyph and click target cannot drift; narrower than
+  `DROPDOWN_CHEVRON_MIN_WIDTH` and the glyph is dropped rather than filling the cell
+- Colour is the cell's own `fc` at 55% alpha, not a flat grey — validated cells sit on dark fills
+- The **menu** is a portaled shadcn `DropdownMenu` (checkbox items for multi-select validations, plain
+  items otherwise) on shadcn's default `z-index: 50`, not a bespoke high z-index
+- Its trigger div is a pure anchor: invisible, `pointer-events: none`, positioned on the focus cell by
+  `cellFocus`. The canvas hit-test in `state/events/mouse-cell.ts` is what opens the menu
 
 ### 11. Context Menus (React + shadcn)
 

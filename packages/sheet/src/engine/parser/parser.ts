@@ -79,13 +79,16 @@ class Parser {
         return { error, result };
     }
 
+    // Folded like function names (evaluate-by-operator) and cell labels (helper/cell):
+    // Excel writes bare TRUE/FALSE/NULL lower-cased into xlsx formula text, and both Excel
+    // and Sheets resolve them case-insensitively.
     setVariable(name: string, value: unknown): Parser {
-        this.variables[name] = value;
+        this.variables[name.toUpperCase()] = value;
         return this;
     }
 
     getVariable(name: string): unknown {
-        return this.variables[name];
+        return this.variables[name.toUpperCase()];
     }
 
     setFunction(name: string, fn: FormulaFunction): Parser {

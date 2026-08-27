@@ -1,0 +1,96 @@
+import { describe, expect, it } from 'bun:test';
+import type { Context } from '../../../index';
+import { getComputeMap } from '../../../state/modules/condition-format';
+import { contextFactory } from '../factories/context';
+
+function ctxWithRules(): Context {
+    const ctx = contextFactory() as Context;
+    for (const sheet of ctx.sheets) {
+        sheet.conditionalFormatRules = [
+            {
+                type: 'default',
+                cellrange: [{ row: [0, 3], column: [0, 3] }],
+                format: { cellColor: '#ff0000' },
+                conditionName: 'greaterThan',
+                conditionRange: [],
+                conditionValue: ['0'],
+            },
+        ];
+    }
+    return ctx;
+}
+
+describe('state/condition-format — getComputeMap cache', () => {
+    it('keeps a sheet computed across a visit to another sheet', () => {
+        // One cache slot made every A→B→A tab switch a guaranteed miss. On a sheet
+        // carrying formula rules that recompute costs seconds, which is what made
+        // reopening a tab as slow as opening it the first time.
+        const ctx = ctxWithRules();
+
+        const first = getComputeMap(ctx);
+        ctx.currentSheetId = 'id_2';
+        getComputeMap(ctx);
+        ctx.currentSheetId = 'id_1';
+
+        expect(getComputeMap(ctx)).toBe(first);
+    });
+
+    it('recomputes when the sheet data is replaced', () => {
+        // immer replaces `data` by reference on any edit, so reference equality on it
+        // is the whole invalidation contract — dropping it from the key serves stale styles.
+        const ctx = ctxWithRules();
+
+        const first = getComputeMap(ctx);
+        ctx.sheets[0].data = ctx.sheets[0].data!.map((row) => [...row]);
+
+        expect(getComputeMap(ctx)).not.toBe(first);
+    });
+
+    it('drops the entry for a sheet the workbook no longer has', () => {
+        // Each entry retains the sheet's whole CellMatrix, so a session that opened
+        // several large workbooks used to pin every matrix it had ever rendered.
+        const ctx = ctxWithRules();
+        ctx.currentSheetId = 'id_2';
+        const second = getComputeMap(ctx);
+        const removed = ctx.sheets[1];
+
+        // Sheet deleted (or the workbook closed) — the next miss sweeps it out.
+        ctx.sheets = [ctx.sheets[0]];
+        ctx.currentSheetId = 'id_1';
+        getComputeMap(ctx);
+
+        // Same rules and same data by reference: a surviving entry would hit.
+        ctx.sheets = [ctx.sheets[0], removed];
+        ctx.currentSheetId = 'id_2';
+        expect(getComputeMap(ctx)).not.toBe(second);
+    });
+
+    it('drops the entry for a sheet that was edited while another was current', () => {
+        // Sheets are edited while not current routinely — cross-sheet recalc, a collab
+        // peer's edit, a row/col op. immer replaces `data` by reference, so that entry
+        // can never hit again, yet it pinned a whole CellMatrix + ComputeMap until you
+        // navigated back to the sheet.
+        const ctx = ctxWithRules();
+        const original = ctx.sheets[0].data;
+        const first = getComputeMap(ctx);
+
+        ctx.currentSheetId = 'id_2';
+        ctx.sheets[0].data = original!.map((row) => [...row]);
+        getComputeMap(ctx);
+
+        // Put the very same matrix back: an entry that survived the sweep still keys
+        // on it and would hit.
+        ctx.sheets[0].data = original;
+        ctx.currentSheetId = 'id_1';
+        expect(getComputeMap(ctx)).not.toBe(first);
+    });
+
+    it('recomputes when the rules are replaced', () => {
+        const ctx = ctxWithRules();
+
+        const first = getComputeMap(ctx);
+        ctx.sheets[0].conditionalFormatRules = [...ctx.sheets[0].conditionalFormatRules!];
+
+        expect(getComputeMap(ctx)).not.toBe(first);
+    });
+});

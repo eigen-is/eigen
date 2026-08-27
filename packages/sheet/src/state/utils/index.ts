@@ -1,4 +1,4 @@
-import { every, isNil, isUndefined } from 'es-toolkit/compat';
+import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { en } from '../locale/en';
 import { checkCellIsLocked } from '../modules';
@@ -75,19 +75,6 @@ export function columnCharToIndex(a: string) {
     return numout - 1;
 }
 
-export function escapeScriptTag(str: string) {
-    if (typeof str !== 'string') return str;
-    return str.replace(/<script>/g, '&lt;script&gt;').replace(/<\/script>/g, '&lt;/script&gt;');
-}
-
-export function escapeHTMLTag(str: string) {
-    if (typeof str !== 'string') return str;
-    if (str.substr(0, 5) === '<span' || str.startsWith('=')) {
-        return str;
-    }
-    return str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 export function getSheetIndex(ctx: Context, id: string) {
     for (let i = 0; i < ctx.sheets.length; i += 1) {
         if (ctx.sheets[i]?.id === id) {
@@ -146,6 +133,17 @@ export function getNowDateTime(format: number) {
     }
 
     return time;
+}
+
+// A cell style object (getStyleByCell / getFontStyleByCell) as an inline CSS
+// declaration list. Both HTML producers in this package — the clipboard table in
+// modules/selection.ts and the rich-text runs in modules/cell.ts — wrote the same
+// three lines by hand, and only one of them was ever hardened. Callers escape the
+// result themselves: both halves come from the cell, and a colour like
+// `red' onload='…` would otherwise close the style attribute and open an event
+// handler. Numeric values are the pixel ones (font size, indent).
+export function styleObjectToCss(style: Record<string, string>): string {
+    return map(style, (v, key) => `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`).join('');
 }
 
 // Replace ${xxx} placeholders in `temp` (an HTML/string template) with values

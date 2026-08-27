@@ -197,13 +197,20 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
 }
 
 // Cache for getComputeMap — avoids recomputing the entire CF map on every
-// canvas paint / getStyleByCell call. Invalidates when sheet, rules or data change.
-let _cfCache: {
-    sheetId: string | undefined;
-    rules: ConditionalFormatRule[] | undefined;
-    data: CellMatrix;
-    result: ComputeMap;
-} | null = null;
+// canvas paint / getStyleByCell call. Keyed per sheet: a single slot made every
+// A→B→A tab switch a guaranteed miss, and on a sheet carrying formula rules that
+// recompute costs seconds. Entries invalidate themselves — immer replaces `rules`
+// and `data` by reference on any edit, rule change or row/col op, so both must
+// stay in the key. Bounded by the workbook: a miss first drops every entry whose
+// sheet the current workbook no longer has.
+const _cfCache = new Map<
+    string,
+    {
+        rules: ConditionalFormatRule[] | undefined;
+        data: CellMatrix;
+        result: ComputeMap;
+    }
+>();
 
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
@@ -213,8 +220,26 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     if (isNil(data)) return null;
 
     // Return cached result if inputs haven't changed (reference equality)
-    if (_cfCache && _cfCache.sheetId === ctx.currentSheetId && _cfCache.rules === ruleArr && _cfCache.data === data) {
-        return _cfCache.result;
+    const cached = _cfCache.get(ctx.currentSheetId);
+    if (cached && cached.rules === ruleArr && cached.data === data) {
+        return cached.result;
+    }
+
+    // Every entry pins a whole CellMatrix and a ComputeMap, so none may outlive its
+    // usefulness: drop the ones this workbook can no longer address — sheets that
+    // were deleted, and every sheet of a workbook this session has since closed —
+    // and the ones whose sheet has moved on. Immer replaces `data`/`rules` by
+    // reference on any edit, and sheets are edited while not current routinely
+    // (cross-sheet recalc, a collab peer's edit, a row/col op), so such an entry can
+    // never hit again yet pinned its matrix until you navigated back. A miss is the
+    // moment to do it, the recompute below dwarfs the sweep, and the hot path (the
+    // hit above) never pays for it.
+    const live = new Map(ctx.sheets.map((sheet) => [sheet.id, sheet]));
+    for (const [id, entry] of _cfCache) {
+        const sheet = live.get(id);
+        if (!sheet || sheet.data !== entry.data || sheet.conditionalFormatRules !== entry.rules) {
+            _cfCache.delete(id);
+        }
     }
 
     // Evaluate CF formulas through the engine directly (same shape as the HTML export's
@@ -236,12 +261,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
             return ctx.formulaCache.engine.evaluate(shifted, ctx.currentSheetId, targetRow, targetCol, resolver).value;
         },
     });
-    _cfCache = {
-        sheetId: ctx.currentSheetId,
-        rules: ruleArr,
-        data,
-        result: computeMap,
-    };
+    _cfCache.set(ctx.currentSheetId, { rules: ruleArr, data, result: computeMap });
     return computeMap;
 }
 

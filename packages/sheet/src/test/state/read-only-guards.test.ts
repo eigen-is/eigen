@@ -3,6 +3,7 @@ import { enablePatches, produce, produceWithPatches } from 'immer';
 import { generateAPIs } from '../../components/Workbook/api';
 import { copySheet, hideSheet, showSheet } from '../../state/api/sheet';
 import type { Context } from '../../state/context';
+import { checkboxChange, insertCheckbox } from '../../state/modules/data-verification';
 import { createFilter } from '../../state/modules/filter';
 import { deleteRowCol, insertRowCol } from '../../state/modules/rowcol';
 import { filterPatch, patchToOp } from '../../state/utils/patch';
@@ -59,6 +60,19 @@ describe('read-only (allowEdit === false) state guards', () => {
         const ctx = contextFactory({ allowEdit: true }) as Context;
         createFilter(ctx);
         expect(ctx.filterRange).toBeDefined();
+    });
+
+    test('insertCheckbox is a no-op for viewers', () => {
+        const ctx = contextFactory({ allowEdit: false }) as Context;
+        insertCheckbox(ctx);
+        expect(ctx.sheets[0].dataVerification).toBeUndefined();
+    });
+
+    test('checkboxChange is a no-op for viewers', () => {
+        const ctx = contextFactory({ allowEdit: false }) as Context;
+        ctx.sheets[0].dataVerification = { '0_0': { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' } };
+        expect(checkboxChange(ctx, 0, 0)).toBe(false);
+        expect(ctx.sheets[0].data![0][0]).toBeNull();
     });
 });
 

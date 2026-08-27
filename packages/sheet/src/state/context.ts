@@ -2,7 +2,6 @@ import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
 import type { SheetConfig } from '.';
-import { en } from './locale/en';
 import { FormulaCache } from './modules';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
@@ -64,7 +63,6 @@ export type Context = {
     dataVerification?: {
         selectStatus: boolean;
         selectRange: [];
-        optionLabel: Record<string, string>;
         dataRegulation?: DataRegulationProps; // data validation rule
     };
     // data validation dropdown list
@@ -240,7 +238,6 @@ export function defaultContext(refs: RefValues): Context {
         dataVerification: {
             selectStatus: false,
             selectRange: [],
-            optionLabel: en.dataVerification.optionLabel,
             dataRegulation: {
                 type: '',
                 type2: '',

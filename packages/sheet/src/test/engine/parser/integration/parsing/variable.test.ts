@@ -32,4 +32,22 @@ describe('.parse() variable', () => {
             result: 8.899999999999999,
         });
     });
+
+    // Excel and Google Sheets treat TRUE/FALSE/NULL as case-insensitive, and Excel writes
+    // them lower-cased into xlsx formula text — an imported `VLOOKUP(A1,B:C,2,false)` used
+    // to resolve `false` as an unknown name and return #NAME?.
+    test('should evaluate defaults variables regardless of case', () => {
+        expect(parser!.parse('true')).toMatchObject({ error: null, result: true });
+        expect(parser!.parse('False')).toMatchObject({ error: null, result: false });
+        expect(parser!.parse('null')).toMatchObject({ error: null, result: null });
+        expect(parser!.parse('IF(false, 1, 2)')).toMatchObject({ error: null, result: 2 });
+    });
+
+    test('should evaluate custom variables regardless of case', () => {
+        parser!.setVariable('Foo', 'bar');
+
+        expect(parser!.parse('foo')).toMatchObject({ error: null, result: 'bar' });
+        expect(parser!.parse('FOO')).toMatchObject({ error: null, result: 'bar' });
+        expect(parser!.getVariable('foo')).toBe('bar');
+    });
 });

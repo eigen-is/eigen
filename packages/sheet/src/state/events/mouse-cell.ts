@@ -3,9 +3,14 @@ import { type Context, getFlowdata } from '../context';
 import {
     cancelActiveImgItem,
     cellFocus,
+    cellTextBox,
+    checkboxChange,
     createFormulaRangeSelect,
     createRangeHightlight,
     functionHTMLGenerate,
+    getCellDataVerification,
+    isCheckboxClick,
+    isDropdownChevronClick,
     israngeseleciton,
     rangeHightlightselected,
     rangeSetValue,
@@ -18,7 +23,7 @@ import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protectio
 import { normalizeSelection } from '../modules/selection';
 import type { Settings } from '../settings';
 import type { GlobalCache } from '../types';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { isAllowEdit } from '../utils';
 import { extendSelectionGeometry } from './mouse-drag';
 import { fixPositionOnFrozenCells } from './mouse-resize';
 
@@ -109,8 +114,36 @@ export function handleCellAreaMouseDown(
         return;
     }
 
+    // The cell's text area, the space both data-verification affordances are
+    // laid out in — the same box, from the same builder, the canvas painter
+    // hands their geometry.
+    const textBox = cellTextBox(col_pre, row_pre, col, row);
+    // While a cell edit is open the click belongs to the edit: it inserts the
+    // cell's reference into the formula being composed, or commits the value.
+    // Neither may also fire an affordance — a toggle mid-edit writes the cell
+    // and recalculates behind the formula the user is still typing. The
+    // keyboard path (events/keyboard.ts) bails on the same condition.
+    const editing = ctx.editingCellPosition.length > 0;
+
+    if (e.button !== 2 && !editing && isCheckboxClick(ctx, row_index, col_index, textBox, x, y)) {
+        checkboxChange(ctx, row_index, col_index);
+    }
+
     // Data verification: cell focus
-    cellFocus(ctx, row_index, col_index, true);
+    cellFocus(ctx, row_index, col_index);
+
+    // A click on the painted list chevron opens the dropdown in one go, the way
+    // the canvas filter button opens its menu. cellFocus has just positioned the
+    // hidden Radix anchor on this cell — and skips that when editing is not
+    // allowed, so a read-only viewer sees the chevron but gets no list.
+    if (
+        e.button !== 2 &&
+        !editing &&
+        isAllowEdit(ctx) &&
+        isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)
+    ) {
+        ctx.dataVerificationDropDownList = true;
+    }
 
     // If clicked cell is not in viewport, request a programmatic scroll to reveal
     // it (one request for both axes); the read compares against the live mirror.
@@ -504,13 +537,7 @@ export function handleCellAreaDoubleClick(
     let col_index = col_location[2];
 
     // Cancel double-click for checkbox cells -- do not allow editing
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const { dataVerification } = ctx.sheets[index];
-
-    if (dataVerification) {
-        const item = dataVerification[`${row_index}_${col_index}`];
-        if (item && item.type === 'checkbox') return;
-    }
+    if (getCellDataVerification(ctx, row_index, col_index)?.type === 'checkbox') return;
 
     const margeset = mergeBorder(ctx, flowdata, row_index, col_index);
     if (margeset) {

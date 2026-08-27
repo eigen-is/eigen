@@ -5,6 +5,7 @@
 import { isPlainObject } from 'es-toolkit/compat';
 import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/condition-format';
+import { cellTextBox } from '../modules/data-verification';
 import type { CellTextInfo } from '../modules/text';
 import { getCellTextInfo, getFontSet } from '../modules/text';
 import { colEndX, colStartX, rowEndY, rowStartY } from './geometry';
@@ -92,16 +93,19 @@ export function cellOverflowRender(pass: RenderPass, r: number, c: number, stc: 
     const endX = colEndX(sheetCtx.visibledatacolumn, edc, scrollWidth);
 
     const cell = flowdata[r][c];
-    const cellWidth = endX - startX - 2;
-    const cellHeight = endY - startY - 2;
+    // The same box the painter and the hit test build for a single cell, over the
+    // full spill range: the 1px top inset and the 2px the width and height give up
+    // are the grid lines the text must not run over.
+    const {
+        left: pos_x,
+        top: pos_y,
+        width: cellWidth,
+        height: cellHeight,
+    } = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
     const space_width = 2;
     const space_height = 2;
 
-    const pos_x = startX + offsetLeft;
-    const pos_y = startY + offsetTop + 1;
-
-    const fontset = getFontSet(cell, sheetCtx.defaultFontSize);
-    renderCtx.font = fontset;
+    renderCtx.font = getFontSet(cell, sheetCtx.defaultFontSize);
 
     renderCtx.save();
     renderCtx.beginPath();

@@ -14,7 +14,15 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { functionCopy, iscelldata, parseA1Range, toA1, unquoteSheetName, update } from '@workspace/sheet/engine';
+import {
+    booleanDisplay,
+    functionCopy,
+    iscelldata,
+    parseA1Range,
+    toA1,
+    unquoteSheetName,
+    update,
+} from '@workspace/sheet/engine';
 import type {
     Alignment,
     AutoFilter,
@@ -680,7 +688,6 @@ function mapDataValidation(dv: XlsxDataValidation): DataVerificationRule | null 
         type2: '',
         value1: '',
         value2: '',
-        checked: false,
         // showErrorMessage with Excel's default "stop" style blocks invalid input;
         // warning/information let the value through. The error text itself is dropped —
         // the engine generates its own failure copy.
@@ -948,8 +955,12 @@ function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boo
         return { value: raw, display: numberDisplay(raw, cell.numFmt) };
     }
 
-    if (typeof raw === 'string' || typeof raw === 'boolean') {
-        return { value: raw, display: String(raw) };
+    if (typeof raw === 'boolean') {
+        return { value: raw, display: booleanDisplay(raw) };
+    }
+
+    if (typeof raw === 'string') {
+        return { value: raw, display: raw };
     }
 
     if (raw instanceof Date) {
@@ -989,8 +1000,11 @@ function resolveFormulaResult(
     if (typeof result === 'number') {
         return { value: result, display: numberDisplay(result, numFmt) };
     }
-    if (typeof result === 'string' || typeof result === 'boolean') {
-        return { value: result, display: String(result) };
+    if (typeof result === 'boolean') {
+        return { value: result, display: booleanDisplay(result) };
+    }
+    if (typeof result === 'string') {
+        return { value: result, display: result };
     }
     if (result instanceof Date) {
         return dateToSerialAndDisplay(result, numFmt);

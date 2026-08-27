@@ -67,18 +67,23 @@ export const settingsApi = api.settings;
 export const setupApi = api.setup;
 export const waitlistApi = api.waitlist;
 
-export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL as string;
-export const MAIL_APP_URL = import.meta.env.VITE_APP_MAIL_URL as string;
-export const CONTACTS_APP_URL = import.meta.env.VITE_APP_CONTACTS_URL as string;
-export const DRIVE_APP_URL = import.meta.env.VITE_APP_DRIVE_URL as string;
-export const DOCS_APP_URL = import.meta.env.VITE_APP_DOCS_URL as string;
-export const STICKIES_APP_URL = import.meta.env.VITE_APP_STICKIES_URL as string;
-export const CHAT_APP_URL = import.meta.env.VITE_APP_CHAT_URL as string;
-export const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL as string;
-export const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL as string;
-export const VECTOR_APP_URL = import.meta.env.VITE_APP_VECTOR_URL as string;
-export const CALENDAR_APP_URL = import.meta.env.VITE_APP_CALENDAR_URL as string;
-export const ADMIN_APP_URL = import.meta.env.VITE_APP_ADMIN_URL as string;
+// Read at module scope and fed to trimTrailingSlash, so a var missing from
+// .env.production used to throw before anything rendered — a blank page whose only
+// symptom was `TypeError: reading 'replace'`. A deployment generated before an app
+// existed hits exactly that until update.sh backfills it. Unset now degrades to a
+// same-origin relative link, which is what production serves anyway.
+export const SPACE_APP_URL = (import.meta.env.VITE_APP_SPACE_URL as string | undefined) ?? '';
+export const MAIL_APP_URL = (import.meta.env.VITE_APP_MAIL_URL as string | undefined) ?? '';
+export const CONTACTS_APP_URL = (import.meta.env.VITE_APP_CONTACTS_URL as string | undefined) ?? '';
+export const DRIVE_APP_URL = (import.meta.env.VITE_APP_DRIVE_URL as string | undefined) ?? '';
+export const DOCS_APP_URL = (import.meta.env.VITE_APP_DOCS_URL as string | undefined) ?? '';
+export const STICKIES_APP_URL = (import.meta.env.VITE_APP_STICKIES_URL as string | undefined) ?? '';
+export const CHAT_APP_URL = (import.meta.env.VITE_APP_CHAT_URL as string | undefined) ?? '';
+export const SLIDES_APP_URL = (import.meta.env.VITE_APP_SLIDES_URL as string | undefined) ?? '';
+export const SHEETS_APP_URL = (import.meta.env.VITE_APP_SHEETS_URL as string | undefined) ?? '';
+export const VECTOR_APP_URL = (import.meta.env.VITE_APP_VECTOR_URL as string | undefined) ?? '';
+export const CALENDAR_APP_URL = (import.meta.env.VITE_APP_CALENDAR_URL as string | undefined) ?? '';
+export const ADMIN_APP_URL = (import.meta.env.VITE_APP_ADMIN_URL as string | undefined) ?? '';
 // Only set in dev, where each app runs on its own port. In production the index app is
 // served same-origin at root, so an unset value falls back to a relative `/support` link.
 export const INDEX_APP_URL = (import.meta.env.VITE_APP_INDEX_URL as string | undefined) ?? '';

@@ -625,6 +625,25 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(byCoord.get('0:3')?.m).toBe('€180');
     });
 
+    test("convert displays literal booleans in the engine's uppercase TRUE/FALSE", async () => {
+        // extractValueAndDisplay used to cache m = String(raw), so a literal Excel
+        // boolean showed lowercase "false" while a formula-produced one showed
+        // "TRUE" (import-time recalc rewrites m through the engine). Both must
+        // agree — tick boxes read the display value to decide their state.
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Bools');
+        ws.getCell('A1').value = false;
+        ws.getCell('A2').value = true;
+        ws.getCell('B1').value = { formula: 'NOT(A1)', result: true };
+        const sheets = await parseWorkbook(workbook);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+
+        expect(byCoord.get('0:0')?.m).toBe('FALSE');
+        expect(byCoord.get('0:0')?.v).toBe(false);
+        expect(byCoord.get('1:0')?.m).toBe('TRUE');
+        expect(byCoord.get('0:1')?.m).toBe('TRUE');
+    });
+
     test('convert scales column widths from character units to pixels', async () => {
         const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
         const sheets = await parseXlsx(buffer);
@@ -1161,7 +1180,6 @@ describe('Sheets xlsx conversion fidelity', () => {
             type2: '',
             value1: 'Red,Green,Blue',
             value2: '',
-            checked: false,
             prohibitInput: false,
             hintShow: false,
             hintValue: '',
@@ -1171,9 +1189,10 @@ describe('Sheets xlsx conversion fidelity', () => {
 
     test('convert clones the shared exceljs validation object per cell key', async () => {
         // exceljs expands a sqref range to per-cell model entries that all alias ONE
-        // rule object; the engine mutates rules in place (checkboxChange), so the
-        // converter must emit a fresh object per key. JSON snapshot round-trips would
-        // mask aliasing — assert on the converter output directly.
+        // rule object; a shared reference would make one cell's rule edit every
+        // other cell in the range, so the converter must emit a fresh object per
+        // key. JSON snapshot round-trips would mask aliasing — assert on the
+        // converter output directly.
         const listRule: ExcelJS.DataValidation = { type: 'list', allowBlank: true, formulae: ['"A,B"'] };
         const buffer = await buildXlsxBuffer([
             { a1: 'B2', value: 'A', dataValidation: listRule },

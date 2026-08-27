@@ -9,14 +9,15 @@ import { useCallback, useContext, useEffect } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
+    applyDataVerification,
+    CHECKBOX_CHECKED_VALUE,
+    CHECKBOX_UNCHECKED_VALUE,
     confirmMessage,
     en,
     getDropdownList,
-    getFlowdata,
     getRangeByTxt,
     getRangetxt,
     getSheetIndex,
-    setCellValue,
 } from '../../state';
 import { RangeDialog } from './RangeDialog';
 
@@ -78,43 +79,20 @@ export function DataVerification() {
         (type: string) => {
             if (type === 'confirm') {
                 setContext((ctx) => {
-                    const isPass = confirmMessage(ctx, generalDialog, dataVerification);
+                    const isPass = confirmMessage(ctx);
                     if (isPass) {
                         const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
                         if (range.length === 0) {
                             return;
                         }
+                        const target = range[range.length - 1];
+                        if (!target) return;
                         const regulation = ctx.dataVerification!.dataRegulation!;
-                        const verifacationT = regulation?.type;
-                        const { value1 } = regulation;
-                        const item = {
-                            ...regulation,
-                            checked: false, // checkbox defaults to false in cell (unchecked), true for checked
-                        };
-                        if (verifacationT === 'dropdown') {
-                            const list = getDropdownList(ctx, value1);
-                            item.value1 = list.join(',');
+                        const item = { ...regulation };
+                        if (regulation.type === 'dropdown') {
+                            item.value1 = getDropdownList(ctx, regulation.value1).join(',');
                         }
-                        const currentDataVerification =
-                            ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
-
-                        const str = range[range.length - 1]?.row[0];
-                        const edr = range[range.length - 1]?.row[1];
-                        const stc = range[range.length - 1]?.column[0];
-                        const edc = range[range.length - 1]?.column[1];
-                        const d = getFlowdata(ctx);
-                        if (!d || str == null || stc == null || edr == null || edc == null) return;
-                        for (let r = str; r <= edr; r += 1) {
-                            for (let c = stc; c <= edc; c += 1) {
-                                const key = `${r}_${c}`;
-                                currentDataVerification[key] = item;
-                                if (regulation.type === 'checkbox') {
-                                    setCellValue(ctx, r, c, d, item.value2);
-                                }
-                            }
-                        }
-                        ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification =
-                            currentDataVerification;
+                        applyDataVerification(ctx, target, item);
                     }
                 });
             } else if (type === 'delete') {
@@ -271,8 +249,14 @@ export function DataVerification() {
                                 } else if (value === 'text_content') {
                                     ctx.dataVerification!.dataRegulation!.type2 = 'include';
                                 }
-                                ctx.dataVerification!.dataRegulation!.value1 = '';
-                                ctx.dataVerification!.dataRegulation!.value2 = '';
+                                // A tick box arrives usable: the same TRUE/FALSE
+                                // pair Insert → Tick box writes, so the two
+                                // routes to a checkbox rule agree.
+                                const isCheckbox = value === 'checkbox';
+                                ctx.dataVerification!.dataRegulation!.value1 = isCheckbox ? CHECKBOX_CHECKED_VALUE : '';
+                                ctx.dataVerification!.dataRegulation!.value2 = isCheckbox
+                                    ? CHECKBOX_UNCHECKED_VALUE
+                                    : '';
                             });
                         }}
                     >

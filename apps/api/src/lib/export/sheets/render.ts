@@ -9,6 +9,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
+    booleanDisplay,
     type CellFormatStyle,
     type CellResolver,
     type ComputeMap,
@@ -451,7 +452,7 @@ function getCellDisplay(v: Cell | null): string {
     if (!v) return '';
     if (v.m != null) return escapeHtml(String(v.m));
     if (v.v == null) return '';
-    if (typeof v.v === 'boolean') return v.v ? 'TRUE' : 'FALSE';
+    if (typeof v.v === 'boolean') return booleanDisplay(v.v);
     return escapeHtml(String(v.v));
 }
 

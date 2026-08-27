@@ -1,26 +1,16 @@
+import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import {
-    cloneDeep,
-    every,
-    indexOf,
-    isEmpty,
-    isNil,
-    isNumber,
-    isPlainObject,
-    isString,
-    kebabCase,
-    map,
-} from 'es-toolkit/compat';
+import { cloneDeep, every, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
-import { genarate, update } from '../../engine/format';
+import { booleanDisplay, genarate, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
-import { getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
+import { getSheetIndex, indexToColumnChar, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
-import { getFailureText, validateCellData } from './data-verification';
+import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
@@ -207,11 +197,11 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
         cell.ct = { fa: '@', t: 's' };
         cell.v = vupdateStr;
     } else if (vupdateStr.toUpperCase() === 'TRUE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
-        cell.m = 'TRUE';
+        cell.m = booleanDisplay(true);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = true;
     } else if (vupdateStr.toUpperCase() === 'FALSE' && (isNil(cell.ct?.fa) || cell.ct?.fa !== '@')) {
-        cell.m = 'FALSE';
+        cell.m = booleanDisplay(false);
         cell.ct = { fa: 'General', t: 'b' };
         cell.v = false;
     } else if (
@@ -633,10 +623,8 @@ export function updateCell(
     if (!isNil(dataVerification)) {
         const dvItem = dataVerification[`${r}_${c}`];
         if (!isNil(dvItem) && dvItem.prohibitInput && !validateCellData(ctx, dvItem, inputText)) {
-            const failureText = getFailureText(ctx, dvItem);
-
             cancelNormalSelected(ctx);
-            ctx.warnDialog = failureText;
+            ctx.warnDialog = describeValidationRule(dvItem, 'invalid');
 
             return;
         }
@@ -1128,11 +1116,12 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
         for (let i = 0; i < strings.length; i += 1) {
             const strObj = strings[i];
             if (strObj.v) {
-                const style = getFontStyleByCell(strObj);
-                const styleStr = map(style, (v, key) => {
-                    return `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`;
-                }).join('');
-                value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${strObj.v}</span>`;
+                // Both halves come from the cell: a colour like `red' onload='...` would
+                // otherwise close the style attribute and open an event handler. The HTML
+                // parser decodes entities inside an attribute before CSS sees it, so a
+                // quoted font family survives escaping intact.
+                const styleStr = escapeHtml(styleObjectToCss(getFontStyleByCell(strObj)));
+                value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${escapeHtml(strObj.v)}</span>`;
             }
         }
         return value;

@@ -4,6 +4,7 @@ import { hideCRCount } from '..';
 import { type Context, getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
 import { handleCut } from '../modules/clipboard';
+import { cellFocus, checkboxChange, getCellDataVerification } from '../modules/data-verification';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { jfrefreshgrid } from '../modules/refresh';
 import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
@@ -356,6 +357,33 @@ export function handleArrowKey(ctx: Context, e: KeyboardEvent) {
     }
 }
 
+// Space/Enter toggle the focused tick box — Google's keyboard route to the box
+// the mousedown hit-test reaches. Returns false for every other cell, so the
+// normal Enter/printable-input handling runs unchanged.
+function toggleFocusedCheckbox(ctx: Context, kstr: string) {
+    if (kstr !== ' ' && kstr !== 'Enter') return false;
+    if (ctx.editingCellPosition.length > 0) return false;
+    const selection = ctx.selections?.[ctx.selections.length - 1];
+    if (selection?.row_focus == null || selection.column_focus == null) return false;
+    return checkboxChange(ctx, selection.row_focus, selection.column_focus);
+}
+
+// Alt+Down opens the focused cell's list — Excel's and Google's shortcut, and the
+// keyboard's only route to the chevron the canvas paints on every list cell.
+// cellFocus is what positions the hidden Radix anchor, so it runs first, exactly as
+// the mousedown path does. Returns false for every other cell and key.
+function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
+    if (!e.altKey || e.key !== 'ArrowDown') return false;
+    if (ctx.editingCellPosition.length > 0 || !isAllowEdit(ctx)) return false;
+    const selection = ctx.selections?.[ctx.selections.length - 1];
+    if (selection?.row_focus == null || selection.column_focus == null) return false;
+    const { row_focus: r, column_focus: c } = selection;
+    if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return false;
+    cellFocus(ctx, r, c);
+    ctx.dataVerificationDropDownList = true;
+    return true;
+}
+
 export function handleGlobalKeyDown(
     ctx: Context,
     cellInput: HTMLDivElement,
@@ -416,7 +444,11 @@ export function handleGlobalKeyDown(
     if (!ctx.sheetFocused) {
         return;
     }
-    if (kstr === 'Enter') {
+    if (toggleFocusedCheckbox(ctx, kstr)) {
+        e.preventDefault();
+    } else if (openFocusedDropdown(ctx, e)) {
+        e.preventDefault();
+    } else if (kstr === 'Enter') {
         if (!allowEdit) return;
         handleGlobalEnter(ctx, cellInput, e, canvas);
     } else if (kstr === 'Tab') {

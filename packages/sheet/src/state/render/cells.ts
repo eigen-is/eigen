@@ -4,8 +4,18 @@
 
 import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/condition-format';
-import { validateCellData } from '../modules/data-verification';
-import { getCellTextInfo, getMeasureText } from '../modules/text';
+import {
+    type CellGlyphRect,
+    CHECKBOX_LABEL_GAP,
+    cellTextBox,
+    checkboxRect,
+    dropdownChevronRect,
+    isCheckboxChecked,
+    showsCheckboxLabel,
+    validateCellData,
+} from '../modules/data-verification';
+import { getCellTextInfo } from '../modules/text';
+import type { Rect } from '../types';
 import { cellOverflowRender, cellTextRender } from './cell-text';
 import { drawDataBar } from './data-bar';
 import { BORDER_FIX, HALF_PIXEL } from './geometry';
@@ -17,6 +27,91 @@ import { defaultStyle } from './types';
 // coerce (null, '', booleans); it only gates the forced-string indicator.
 function coercesToNumber(val: unknown) {
     return !Number.isNaN(Number(val));
+}
+
+// Data-verification tick box. Hardcoded light like every other canvas color —
+// the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
+// § Theming) — and grey rather than black, the way Google draws the box.
+const CHECKBOX_STROKE = '#5f6368';
+
+// Corner indicators: a comment top-right, an invalid value or a forced string
+// top-left. One size for all three so they read as one family of marks — they
+// used to be 11px, 5px and 6px. No hit test anywhere reads these, so unlike
+// the tick box and the list chevron the geometry stays here with the painter.
+export const CELL_INDICATOR_SIZE = 11;
+// One red for both attention marks: the invalid-value triangle, and the comment
+// triangle's fallback when its card carries no colour of its own.
+const INDICATOR_RED = '#FC6666';
+const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
+
+// A right-angled triangle in the cell's top-left or top-right corner, anchored
+// on the corner itself: one leg along the top edge, one down the side.
+export function drawCellIndicator(
+    renderCtx: CanvasRenderingContext2D,
+    corner: 'left' | 'right',
+    x: number,
+    y: number,
+    color: string,
+) {
+    renderCtx.beginPath();
+    renderCtx.moveTo(x, y);
+    renderCtx.lineTo(corner === 'left' ? x + CELL_INDICATOR_SIZE : x - CELL_INDICATOR_SIZE, y);
+    renderCtx.lineTo(x, y + CELL_INDICATOR_SIZE);
+    renderCtx.fillStyle = color;
+    renderCtx.fill();
+    renderCtx.closePath();
+}
+
+// Drawn identically by both render paths — most commented cells in a workbook
+// hold a value, plenty do not.
+function drawCommentIndicator(pass: RenderPass, r: number, c: number, startY: number, endX: number) {
+    const { renderCtx, sheetCtx, offsetLeft, offsetTop } = pass;
+    const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
+    const color = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? INDICATOR_RED;
+    drawCellIndicator(renderCtx, 'right', endX + offsetLeft - 1, startY + offsetTop, color);
+}
+
+function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, checked: boolean) {
+    renderCtx.lineWidth = 1;
+    renderCtx.strokeStyle = CHECKBOX_STROKE;
+    renderCtx.strokeRect(rect.x + HALF_PIXEL, rect.y + HALF_PIXEL, rect.size, rect.size);
+    if (!checked) return;
+
+    renderCtx.beginPath();
+    renderCtx.moveTo(rect.x + 2, rect.y + rect.size / 2);
+    renderCtx.lineTo(rect.x + rect.size / 2 - 1, rect.y + rect.size - 3);
+    renderCtx.lineTo(rect.x + rect.size - 2, rect.y + 2);
+    renderCtx.stroke();
+    renderCtx.closePath();
+}
+
+// Data-validation list chevron, painted on every cell a list rule covers —
+// empty ones included, which is where it earns its keep: a blank validated cell
+// is otherwise indistinguishable from a blank free-text one. It overlays the
+// cell text rather than reserving width, the way Google's does, and takes the
+// cell's OWN text colour at low alpha instead of a flat grey: validated cells
+// sit on dark fills a fixed grey would vanish into.
+const DROPDOWN_CHEVRON_ALPHA = 0.55;
+
+function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect) {
+    const { renderCtx, flowdata } = pass;
+    const rect = dropdownChevronRect(box);
+    if (!rect) return;
+
+    renderCtx.save();
+    renderCtx.globalAlpha = DROPDOWN_CHEVRON_ALPHA;
+    // An empty cell has no fc of its own; black is what its text would take.
+    renderCtx.strokeStyle = normalizedAttr(flowdata, r, c, 'fc') ?? '#000000';
+    renderCtx.lineWidth = 1.5;
+    renderCtx.lineCap = 'round';
+    renderCtx.lineJoin = 'round';
+    renderCtx.beginPath();
+    // Lucide chevron-down proportions inside the box: full width, middle fifth.
+    renderCtx.moveTo(rect.x + 1, rect.y + rect.size * 0.3);
+    renderCtx.lineTo(rect.x + rect.size / 2, rect.y + rect.size * 0.7);
+    renderCtx.lineTo(rect.x + rect.size - 1, rect.y + rect.size * 0.3);
+    renderCtx.stroke();
+    renderCtx.restore();
 }
 
 // The right/bottom cell grid lines all share the same 1px default-color stroke.
@@ -41,8 +136,20 @@ export function nullCellRender(
     endX: number,
     isMerge = false,
 ) {
-    const { sheetCtx, renderCtx, cfCompute, offsetLeft, offsetTop, cellOverflowMap, colEnd, flowdata, drawGridLines } =
-        pass;
+    const {
+        sheetCtx,
+        renderCtx,
+        cfCompute,
+        offsetLeft,
+        offsetTop,
+        dataVerification,
+        cellOverflowMap,
+        colEnd,
+        flowdata,
+        drawGridLines,
+    } = pass;
+    // A sheet with no rules at all short-circuits here, key never built.
+    const rule = dataVerification?.[`${r}_${c}`];
     const checksCF = checkCF(r, c, cfCompute);
 
     // Background color
@@ -87,14 +194,20 @@ export function nullCellRender(
 
     // Comment indicator triangle
     if (flowdata?.[r]?.[c]?.commentCardIds?.length) {
-        const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
-        renderCtx.beginPath();
-        renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-        renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? '#FC6666';
-        renderCtx.fill();
-        renderCtx.closePath();
+        drawCommentIndicator(pass, r, c, startY, endX);
+    }
+
+    if (rule) {
+        const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
+        // An empty cell inside a tick-box range still shows an unchecked box, so the
+        // range reads as one uniform column.
+        if (rule.type === 'checkbox') {
+            const horizonAlign = Number(normalizedAttr(flowdata, r, c, 'ht'));
+            const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
+            drawTickBox(renderCtx, checkboxRect(box, horizonAlign, verticalAlign), false);
+        } else if (rule.type === 'dropdown') {
+            renderDropdownChevron(pass, r, c, box);
+        }
     }
 
     // Check overflow cell relationship
@@ -175,8 +288,9 @@ export function cellRender(
         drawGridLines,
     } = pass;
     const cell = flowdata[r][c];
-    const cellWidth = endX - startX - 2;
-    const cellHeight = endY - startY - 2;
+    const rule = dataVerification?.[`${r}_${c}`];
+    const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
+    const { width: cellWidth, height: cellHeight } = box;
     const space_width = 2;
     const space_height = 2;
 
@@ -223,38 +337,25 @@ export function cellRender(
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
-    if (dataVerification?.[`${r}_${c}`] && !validateCellData(sheetCtx, dataVerification[`${r}_${c}`], value)) {
-        // Data validation error indicator (red triangle top-left)
-        renderCtx.beginPath();
-        renderCtx.moveTo(startX + offsetLeft, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft + 5, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft, startY + offsetTop + 5);
-        renderCtx.fillStyle = '#FC6666';
-        renderCtx.fill();
-        renderCtx.closePath();
+    // Invalid-value indicator (red triangle top-left)
+    if (rule && !validateCellData(sheetCtx, rule, value)) {
+        drawCellIndicator(renderCtx, 'left', startX + offsetLeft - 1, startY + offsetTop, INDICATOR_RED);
     }
 
     // Comment indicator triangle
     if (cell?.commentCardIds?.length) {
-        const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
-        renderCtx.beginPath();
-        renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-        renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? '#FC6666';
-        renderCtx.fill();
-        renderCtx.closePath();
+        drawCommentIndicator(pass, r, c, startY, endX);
     }
 
     // Forced-string indicator (green triangle top-left)
     if (cell?.qp === 1 && coercesToNumber(cell?.v)) {
-        renderCtx.beginPath();
-        renderCtx.moveTo(startX + offsetLeft + 5, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft - 1, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft - 1, startY + offsetTop + 6);
-        renderCtx.fillStyle = '#487f1e';
-        renderCtx.fill();
-        renderCtx.closePath();
+        drawCellIndicator(
+            renderCtx,
+            'left',
+            startX + offsetLeft - 1,
+            startY + offsetTop,
+            FORCED_STRING_INDICATOR_COLOR,
+        );
     }
 
     // Overflow cell handling
@@ -275,60 +376,21 @@ export function cellRender(
             drawRightGridLine = false;
         }
     }
-    // Data validation checkbox
-    else if (dataVerification?.[`${r}_${c}`]?.type === 'checkbox') {
-        const pos_x = startX + offsetLeft;
-        const pos_y = startY + offsetTop + 1;
-
+    // Data validation tick box
+    else if (rule?.type === 'checkbox') {
         renderCtx.save();
         renderCtx.beginPath();
-        renderCtx.rect(pos_x, pos_y, cellWidth, cellHeight);
+        renderCtx.rect(box.left, box.top, box.width, box.height);
         renderCtx.clip();
 
-        const measureText = getMeasureText(value ?? '', renderCtx);
-        const textMetrics = measureText.width + 14;
-        const oneLineTextHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
+        const rect = checkboxRect(box, horizonAlign, verticalAlign);
+        drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
 
-        let horizonAlignPos = pos_x + space_width;
-        if (horizonAlign === 0) {
-            horizonAlignPos = pos_x + cellWidth / 2 - textMetrics / 2;
-        } else if (horizonAlign === 2) {
-            horizonAlignPos = pos_x + cellWidth - space_width - textMetrics;
-        }
-
-        const verticalCellHeight = cellHeight > oneLineTextHeight ? cellHeight : oneLineTextHeight;
-
-        let verticalAlignPos_text = pos_y + verticalCellHeight - space_height;
-        renderCtx.textBaseline = 'bottom';
-        let verticalAlignPos_checkbox = verticalAlignPos_text - 13;
-
-        if (verticalAlign === 0) {
-            verticalAlignPos_text = pos_y + verticalCellHeight / 2;
+        if (showsCheckboxLabel(rule, value)) {
             renderCtx.textBaseline = 'middle';
-            verticalAlignPos_checkbox = verticalAlignPos_text - 6;
-        } else if (verticalAlign === 1) {
-            verticalAlignPos_text = pos_y + space_height;
-            renderCtx.textBaseline = 'top';
-            verticalAlignPos_checkbox = verticalAlignPos_text + 1;
+            renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
+            renderCtx.fillText(String(value ?? ''), rect.x + rect.size + CHECKBOX_LABEL_GAP, rect.y + rect.size / 2);
         }
-
-        // Checkbox
-        renderCtx.lineWidth = 1;
-        renderCtx.strokeStyle = '#000';
-        renderCtx.strokeRect(horizonAlignPos, verticalAlignPos_checkbox, 10, 10);
-
-        if (dataVerification[`${r}_${c}`].checked) {
-            renderCtx.beginPath();
-            renderCtx.lineTo(horizonAlignPos + 1, verticalAlignPos_checkbox + 6);
-            renderCtx.lineTo(horizonAlignPos + 4, verticalAlignPos_checkbox + 9);
-            renderCtx.lineTo(horizonAlignPos + 9, verticalAlignPos_checkbox + 2);
-            renderCtx.stroke();
-            renderCtx.closePath();
-        }
-
-        // Text
-        renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
-        renderCtx.fillText(value == null ? '' : String(value), horizonAlignPos + 14, verticalAlignPos_text);
 
         renderCtx.restore();
     } else {
@@ -344,8 +406,8 @@ export function cellRender(
             );
         }
 
-        const pos_x = startX + offsetLeft;
-        const pos_y = startY + offsetTop + 1;
+        const pos_x = box.left;
+        const pos_y = box.top;
 
         renderCtx.save();
         renderCtx.beginPath();
@@ -381,6 +443,10 @@ export function cellRender(
         });
 
         renderCtx.restore();
+    }
+
+    if (rule?.type === 'dropdown') {
+        renderDropdownChevron(pass, r, c, box);
     }
 
     if (drawRightGridLine && drawGridLines) {

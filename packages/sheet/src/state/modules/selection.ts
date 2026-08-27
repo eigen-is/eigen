@@ -1,11 +1,12 @@
+import { escapeHtml } from '@workspace/lib/html';
 import type { BorderSide, CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
-import { cloneDeep, isEmpty, isNil, isNumber, kebabCase, map } from 'es-toolkit/compat';
+import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
-import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
+import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
 import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
 import {
     getCellValue,
@@ -1381,10 +1382,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                     c_value = getCellValue(r, c, d, 'm');
                 }
 
-                const styleObj = getStyleByCell(ctx, d, r, c, cfCompute);
-                style += map(styleObj, (v, key) => {
-                    return `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`;
-                }).join('');
+                // Same escaping as the rich-text runs in modules/cell.ts: the values come
+                // from the cell and this lands inside a `style="..."` attribute, which the
+                // HTML parser decodes before CSS sees it.
+                style += escapeHtml(styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute)));
 
                 if (cell.mc) {
                     if ('rs' in cell.mc) {
@@ -1449,7 +1450,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                     c_value = '';
                 }
 
-                column += escapeHTMLTag(String(c_value));
+                column += escapeHtml(String(c_value));
             } else {
                 let style = '';
 

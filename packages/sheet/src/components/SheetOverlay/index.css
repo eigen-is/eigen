@@ -17,8 +17,6 @@
     --sheet-touch-knob-bg: #ffffff;
     --sheet-touch-knob-border: rgba(0, 0, 0, 0.15);
     --sheet-touch-btn: #018ffb;
-    --sheet-hintbox-border: #ccc;
-    --sheet-hintbox-shadow: rgba(0, 0, 0, 0.2);
 }
 
 .fortune-sheet-overlay {
@@ -95,8 +93,6 @@
 .fortune-cols-freeze-handle,
 .fortune-rows-freeze-handle,
 .fortune-col-header-hover .header-arrow,
-#luckysheet-dataVerification-dropdown-btn,
-#luckysheet-dataVerification-showHintBox,
 .fortune-formula-functionrange-highlight .fortune-copy,
 .fortune-formula-functionrange-highlight .luckysheet-highlight {
     pointer-events: auto;
@@ -820,28 +816,17 @@
     left: -1px;
 }
 
-#luckysheet-dataVerification-showHintBox {
-    display: none;
-    padding: 10px;
-    background-color: var(--popover);
-    border: 1px solid var(--sheet-hintbox-border);
-    box-shadow: 0 2px 4px var(--sheet-hintbox-shadow);
-    position: absolute;
-    z-index: 30;
-    user-select: none;
-    cursor: default;
-    white-space: nowrap;
-    font-size: 12px;
-}
-
+/* Invisible anchor for the validation dropdown's Radix portal — the chevron a
+   list-validated cell shows is canvas paint, and the canvas hit-test opens the
+   menu, so this box wants no ink and no clicks of its own. */
 #luckysheet-dataVerification-dropdown-btn {
     display: none;
     width: 20px;
     height: 20px;
-    background-color: var(--background);
     position: absolute;
-    z-index: 10;
-    overflow: hidden;
+    /* Radix hands focus back to the trigger when the menu closes; on an anchor
+       with nothing in it the focus ring is the only thing that would show. */
+    outline: none;
 }
 
 .sr-only {
