@@ -127,29 +127,23 @@ export function NoteCardDialog({
                         <div className="flex max-h-[42vh] min-h-0 shrink-0 flex-col">
                             {header}
 
-                            {description && (
-                                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 text-sm text-foreground">
-                                    <div
-                                        className="eigen-prose"
-                                        onClick={handleDescriptionClick}
-                                        dangerouslySetInnerHTML={{ __html: description }}
-                                    />
-                                </div>
-                            )}
+                            {/* Rendered even when empty, with a floor under it: a title-only card would
+                                otherwise drop the body entirely and butt the meta row straight against
+                                the colored header. */}
+                            <div className="min-h-14 flex-1 overflow-y-auto px-4 py-3 text-sm text-foreground">
+                                <div
+                                    className="eigen-prose"
+                                    onClick={handleDescriptionClick}
+                                    dangerouslySetInnerHTML={{ __html: description ?? '' }}
+                                />
+                            </div>
 
-                            {attachments && (
-                                <div className={cn('shrink-0 px-4 pb-3', !description && 'pt-2')}>{attachments}</div>
-                            )}
+                            {attachments && <div className="shrink-0 px-4 pb-3">{attachments}</div>}
 
                             {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
                                 // min-h-8 keeps the row height identical whether the assignee shows
                                 // "Unassigned" text or an avatar chip, so assigning never shifts the dialog.
-                                <div
-                                    className={cn(
-                                        'flex min-h-8 shrink-0 items-center gap-2 px-4 pt-1 pb-2',
-                                        !description && !attachments && 'pt-2',
-                                    )}
-                                >
+                                <div className="flex min-h-8 shrink-0 items-center gap-2 px-4 pt-1 pb-2">
                                     {/* min-w-0 lets long meta shrink/truncate so the shrink-0 icons stay on-screen at phone widths. */}
                                     {meta && <p className="min-w-0 flex-1 text-xs text-muted-foreground">{meta}</p>}
                                     {copyLinkUrl && (
