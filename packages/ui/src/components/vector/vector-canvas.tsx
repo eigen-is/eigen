@@ -188,10 +188,12 @@ type EditingState = {
     strokeColor: string;
 };
 
-// readVectorFromDoc materializes fresh element objects on every Yjs tick, so identity-based memo
-// never hits; every ELEMENT_FIELDS value is a scalar/string, so a field compare is exact. Only
-// changed elements re-run elementToSvg — rough path generation is the expensive part.
+// Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
+// a Yjs tick materializes fresh objects through readVectorFromDoc, so those need the field compare —
+// every ELEMENT_FIELDS value is a scalar/string, so it is exact. Only changed elements re-run
+// elementToSvg — rough path generation is the expensive part.
 function sameElement(a: VectorElement, b: VectorElement): boolean {
+    if (a === b) return true;
     const ra = a as Record<string, unknown>;
     const rb = b as Record<string, unknown>;
     for (const field of ELEMENT_FIELDS) {
