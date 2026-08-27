@@ -26,16 +26,14 @@ export function unescapeHtml(html: string): string {
 // plain-text fallback (`OutboundMail.text`) for spam filters.
 export function stripTagsServer(html: string): string {
     if (!html) return '';
-    return html
+    const text = html
         .replace(/<\/(p|div|li|h[1-6]|blockquote|tr)>/gi, '\n\n')
         .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/&amp;/gi, '&')
-        .replace(/&lt;/gi, '<')
-        .replace(/&gt;/gi, '>')
-        .replace(/&quot;/gi, '"')
-        .replace(/&#39;/gi, "'")
+        .replace(/<[^>]+>/g, '');
+    // `&nbsp;` is not one of escapeHtml's five, so it stays here; the rest decode through
+    // the shared inverse, which decodes `&amp;` LAST. Doing it first, as this used to,
+    // turned an escaped `&amp;lt;` into a `<` the source never contained.
+    return unescapeHtml(text.replace(/&nbsp;/gi, ' '))
         .replace(/[ \t]+/g, ' ')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
