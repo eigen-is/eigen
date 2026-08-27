@@ -1,8 +1,9 @@
+import { escapeHtml } from '@workspace/lib/html';
 import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
 import { iscelldata, operatorjson } from '../../engine/formula-utils';
 import type { Context } from '../context';
 import { en } from '../locale/en';
-import { escapeHTMLTag, escapeScriptTag } from '../utils';
+
 import { cancelFunctionrangeSelected } from '.';
 import { colors } from './color';
 import {
@@ -38,7 +39,7 @@ function functionHTML(txt: string) {
             matchConfig.bracket += 1;
 
             if (str.length > 0) {
-                function_str += `<span dir="auto" class="luckysheet-formula-text-func">${str}</span><span dir="auto" class="luckysheet-formula-text-lpar">(</span>`;
+                function_str += `<span dir="auto" class="luckysheet-formula-text-func">${escapeHtml(str)}</span><span dir="auto" class="luckysheet-formula-text-lpar">(</span>`;
             } else {
                 function_str += '<span dir="auto" class="luckysheet-formula-text-lpar">(</span>';
             }
@@ -57,7 +58,7 @@ function functionHTML(txt: string) {
         } else if (s === '"' && matchConfig.squote === 0) {
             if (matchConfig.dquote > 0) {
                 if (str.length > 0) {
-                    function_str += `${str}"</span>`;
+                    function_str += `${escapeHtml(str)}"</span>`;
                 } else {
                     function_str += '"</span>';
                 }
@@ -86,10 +87,10 @@ function functionHTML(txt: string) {
             str = '';
         } else if (s === '&' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             if (str.length > 0) {
-                function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-calc">&</span>`;
+                function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-calc">&amp;</span>`;
                 str = '';
             } else {
-                function_str += '<span dir="auto" class="luckysheet-formula-text-calc">' + '&' + '</span>';
+                function_str += '<span dir="auto" class="luckysheet-formula-text-calc">&amp;</span>';
             }
         } else if (
             s in operatorjson &&
@@ -115,10 +116,10 @@ function functionHTML(txt: string) {
                 if (str.length > 0) {
                     function_str += `${functionHTML(
                         str,
-                    )}<span dir="auto" class="luckysheet-formula-text-calc">${s}${s_next}</span>`;
+                    )}<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s + s_next)}</span>`;
                     str = '';
                 } else {
-                    function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${s}${s_next}</span>`;
+                    function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s + s_next)}</span>`;
                 }
 
                 i += 1;
@@ -132,10 +133,10 @@ function functionHTML(txt: string) {
                 if (str.length > 0) {
                     function_str += `${functionHTML(
                         str,
-                    )}<span dir="auto" class="luckysheet-formula-text-calc">${s}</span>`;
+                    )}<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s)}</span>`;
                     str = '';
                 } else {
-                    function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${s}</span>`;
+                    function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s)}</span>`;
                 }
             }
         } else {
@@ -149,10 +150,10 @@ function functionHTML(txt: string) {
                     formulaUIState.rangeIndexes.length > formulaUIState.functionHTMLIndex
                         ? formulaUIState.rangeIndexes[formulaUIState.functionHTMLIndex]
                         : formulaUIState.functionHTMLIndex;
-                function_str += `<span class="fortune-formula-functionrange-cell" rangeindex="${rangeIndex}" dir="auto" style="color:${colors[rangeIndex]};">${str}</span>`;
+                function_str += `<span class="fortune-formula-functionrange-cell" rangeindex="${rangeIndex}" dir="auto" style="color:${colors[rangeIndex]};">${escapeHtml(str)}</span>`;
                 setFunctionHTMLIndex(formulaUIState.functionHTMLIndex + 1);
             } else if (matchConfig.dquote > 0) {
-                function_str += `${str}</span>`;
+                function_str += `${escapeHtml(str)}</span>`;
             } else if (str.indexOf('</span>') === -1 && str.length > 0) {
                 const regx = /{.*?}/;
 
@@ -162,23 +163,18 @@ function functionHTML(txt: string) {
                     let alltxt = '';
 
                     if (arraystart > 0) {
-                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.slice(
-                            0,
-                            arraystart,
-                        )}</span>`;
+                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${escapeHtml(str.slice(0, arraystart))}</span>`;
                     }
 
-                    alltxt += `<span dir="auto" style="color:#959a05" class="luckysheet-formula-text-array">${arraytxt}</span>`;
+                    alltxt += `<span dir="auto" style="color:#959a05" class="luckysheet-formula-text-array">${escapeHtml(arraytxt)}</span>`;
 
                     if (arraystart + arraytxt.length < str.length) {
-                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.slice(
-                            arraystart + arraytxt.length,
-                        )}</span>`;
+                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${escapeHtml(str.slice(arraystart + arraytxt.length))}</span>`;
                     }
 
                     function_str += alltxt;
                 } else {
-                    function_str += `<span dir="auto" class="luckysheet-formula-text-color">${str}</span>`;
+                    function_str += `<span dir="auto" class="luckysheet-formula-text-color">${escapeHtml(str)}</span>`;
                 }
             }
         }
@@ -708,7 +704,6 @@ export function handleFormulaInput(
     let value1: string;
     const value1txt = preText ?? $editor.innerText;
     let value = $editor.innerText;
-    value = escapeScriptTag(value);
     if (value.length > 0 && value.substring(0, 1) === '=' && (kcode !== 229 || value.length === 1)) {
         if (!refreshRangeSelect) setRangeIndexes(getRangeIndexes($editor));
         value = functionHTMLGenerate(value);
@@ -759,15 +754,15 @@ export function handleFormulaInput(
         }
     } else if (startsWith(value1txt, '=') && !startsWith(value, '=')) {
         if ($copyTo) $copyTo.innerHTML = value;
-        $editor.innerHTML = escapeHTMLTag(value);
+        $editor.innerHTML = escapeHtml(value);
     } else if (!startsWith(value1txt, '=')) {
         if (!$copyTo) return;
         if ($copyTo.id === 'luckysheet-rich-text-editor') {
             if (!startsWith($copyTo.innerHTML, '<span')) {
-                $copyTo.innerHTML = escapeHTMLTag(value);
+                $copyTo.innerHTML = escapeHtml(value);
             }
         } else {
-            $copyTo.innerHTML = escapeHTMLTag(value);
+            $copyTo.innerHTML = escapeHtml(value);
         }
     }
 }
