@@ -395,9 +395,9 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
 // left keyboard users and read-only viewers with no indicator at all.
 
 // Glyph side in px, and its gap from the cell's right edge.
-export const DROPDOWN_CHEVRON_SIZE = 10;
+export const DROPDOWN_CHEVRON_SIZE = 8;
 const DROPDOWN_CHEVRON_PADDING = 2;
-// Click target around the 10px glyph, finger-sized the way the filter button's
+// Click target around the 8px glyph, finger-sized the way the filter button's
 // 20×15 rect is around a 12px strainer.
 export const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
 // The narrowest text box that still gets a chevron: the glyph, its padding, and

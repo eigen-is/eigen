@@ -188,7 +188,7 @@ keyboard user who arrowed onto a validated cell saw nothing, and a read-only vie
   `cellRender` and `nullCellRender` — in a real workbook most list-validated cells are empty, and a blank
   validated cell is otherwise indistinguishable from a blank free-text one.
 - **One geometry, painter and hit-test.** `dropdownChevronRect` (`state/modules/data-verification.ts`)
-  right-aligns the 10px glyph and centres it vertically; `isDropdownChevronClick` builds its click target
+  right-aligns the 8px glyph and centres it vertically; `isDropdownChevronClick` builds its click target
   from the same rect, and both drop out below `DROPDOWN_CHEVRON_MIN_WIDTH`. Same split as
   `checkboxRect` and `FILTER_BUTTON_WIDTH`/`HEIGHT`.
 - **It overlays the cell text** rather than reserving width, the way Google's does — reserving would

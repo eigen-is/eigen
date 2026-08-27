@@ -332,17 +332,18 @@ function listContext() {
 }
 
 describe('dropdownChevronRect', () => {
-    // Cell A1's text box is 72×18, so the 10px glyph lands at x 60..70, y 5..15.
+    // Cell A1's text box is 72×18, so the 8px glyph lands at x 62..70, y 6..14.
     const box = cellTextBox(0, 0, 74, 20);
 
     test('right-aligns the glyph and centres it vertically, whatever the cell alignment', () => {
-        expect(dropdownChevronRect(box)).toEqual({ x: 60, y: 5, size: 10 });
-        expect(dropdownChevronRect({ left: 100, top: 40, width: 40, height: 30 })).toEqual({ x: 128, y: 50, size: 10 });
+        expect(dropdownChevronRect(box)).toEqual({ x: 62, y: 6, size: 8 });
+        expect(dropdownChevronRect({ left: 100, top: 40, width: 40, height: 30 })).toEqual({ x: 130, y: 51, size: 8 });
     });
 
     test('drops the glyph in a column too narrow to carry it', () => {
-        expect(dropdownChevronRect({ ...box, width: 22 })).toEqual({ x: 10, y: 5, size: 10 });
-        expect(dropdownChevronRect({ ...box, width: 21 })).toBeUndefined();
+        // The threshold is the glyph, its padding, and as much again clear to its left.
+        expect(dropdownChevronRect({ ...box, width: 18 })).toEqual({ x: 8, y: 6, size: 8 });
+        expect(dropdownChevronRect({ ...box, width: 17 })).toBeUndefined();
         expect(dropdownChevronRect({ ...box, width: 0 })).toBeUndefined();
     });
 });
