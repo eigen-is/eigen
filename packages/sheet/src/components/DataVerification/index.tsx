@@ -10,6 +10,8 @@ import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
     applyDataVerification,
+    CHECKBOX_CHECKED_VALUE,
+    CHECKBOX_UNCHECKED_VALUE,
     confirmMessage,
     en,
     getDropdownList,
@@ -247,8 +249,14 @@ export function DataVerification() {
                                 } else if (value === 'text_content') {
                                     ctx.dataVerification!.dataRegulation!.type2 = 'include';
                                 }
-                                ctx.dataVerification!.dataRegulation!.value1 = '';
-                                ctx.dataVerification!.dataRegulation!.value2 = '';
+                                // A tick box arrives usable: the same TRUE/FALSE
+                                // pair Insert → Tick box writes, so the two
+                                // routes to a checkbox rule agree.
+                                const isCheckbox = value === 'checkbox';
+                                ctx.dataVerification!.dataRegulation!.value1 = isCheckbox ? CHECKBOX_CHECKED_VALUE : '';
+                                ctx.dataVerification!.dataRegulation!.value2 = isCheckbox
+                                    ? CHECKBOX_UNCHECKED_VALUE
+                                    : '';
                             });
                         }}
                     >
