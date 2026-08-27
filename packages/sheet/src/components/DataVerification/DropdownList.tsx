@@ -5,7 +5,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ChevronDown } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { getCellValue, getDropdownList, getFlowdata, getSheetIndex, setDropdownValue } from '../../state';
@@ -57,15 +56,17 @@ export function DropDownList() {
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
+            {/* Pure anchor, not an indicator: the chevron itself is canvas paint on
+                every list-validated cell (state/render/cells.ts), and the canvas
+                mousedown hit-test opens this menu. cellFocus still moves and shows
+                this box so Radix has a rect to portal against. */}
             <DropdownMenuTrigger asChild>
                 <div
                     id="luckysheet-dataVerification-dropdown-btn"
-                    className="luckysheet-mousedown-cancel"
                     style={{ display: 'none' }}
-                    tabIndex={0}
-                >
-                    <ChevronDown width={16} height={16} aria-hidden="true" />
-                </div>
+                    tabIndex={-1}
+                    aria-hidden="true"
+                />
             </DropdownMenuTrigger>
             {/* Radix portals out of cellArea's DOM, but React synthetic events still bubble up
                 the React tree across portals — without this class, cellAreaMouseDown's DOM-level

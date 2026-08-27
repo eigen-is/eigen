@@ -8,6 +8,7 @@ import {
     createRangeHightlight,
     functionHTMLGenerate,
     isCheckboxClick,
+    isDropdownChevronClick,
     israngeseleciton,
     rangeHightlightselected,
     rangeSetValue,
@@ -111,25 +112,27 @@ export function handleCellAreaMouseDown(
         return;
     }
 
+    // The cell's text area, the space both data-verification affordances are
+    // laid out in — the same box the canvas painter hands their geometry.
+    const cellTextBox = { left: col_pre, top: row_pre, width: col - col_pre - 2, height: row - row_pre - 2 };
+
     // Data verification: a tick box toggles only when the click lands on the box
     // itself; anywhere else in the cell selects the cell like any other. The box
     // rect comes from the same checkboxRect the painter uses.
-    if (
-        e.button !== 2 &&
-        isCheckboxClick(
-            ctx,
-            row_index,
-            col_index,
-            { left: col_pre, top: row_pre, width: col - col_pre - 2, height: row - row_pre - 2 },
-            x,
-            y,
-        )
-    ) {
+    if (e.button !== 2 && isCheckboxClick(ctx, row_index, col_index, cellTextBox, x, y)) {
         checkboxChange(ctx, row_index, col_index);
     }
 
     // Data verification: cell focus
     cellFocus(ctx, row_index, col_index);
+
+    // A click on the painted list chevron opens the dropdown in one go, the way
+    // the canvas filter button opens its menu. cellFocus has just positioned the
+    // hidden Radix anchor on this cell — and skips that when editing is not
+    // allowed, so a read-only viewer sees the chevron but gets no list.
+    if (e.button !== 2 && isAllowEdit(ctx) && isDropdownChevronClick(ctx, row_index, col_index, cellTextBox, x, y)) {
+        ctx.dataVerificationDropDownList = true;
+    }
 
     // If clicked cell is not in viewport, request a programmatic scroll to reveal
     // it (one request for both axes); the read compares against the live mirror.

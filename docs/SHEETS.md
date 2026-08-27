@@ -30,7 +30,7 @@ state/render/
 ├── geometry.ts     # Pure viewport math (visible ranges, cell edges, HALF_PIXEL/BORDER_FIX) — unit-tested
 ├── headers.ts      # Row/column header strips
 ├── phases.ts       # collectVisibleCells → renderCells → renderMergedCells
-├── cells.ts        # nullCellRender/cellRender (background, indicators, checkbox, text, grid lines)
+├── cells.ts        # nullCellRender/cellRender (background, indicators, tick box, list chevron, text, grid lines)
 ├── cell-text.ts    # Text painter + overflow-span variant (layout stays in modules/text.ts)
 ├── data-bar.ts     # Conditional-format data bar
 ├── overflow.ts     # Text-spill map + trace + the shared per-row cache (cleared via the facade's idle timer)
@@ -164,6 +164,28 @@ in `packages/sheet/src/state/modules/data-verification.ts`.
   (`nullCellRender`), so the range reads as one column.
 - Applying to a whole column is deliberately not offered — a column-wide rule would write ~1M keys
   into the snapshot.
+
+## List chevrons (dropdown data verification)
+
+A `dropdown` rule paints a chevron on **every** cell it covers, always — the same deal every other cell
+affordance offers. It used to be a single hidden DOM div that `cellFocus` un-hid on mousedown, so a
+keyboard user who arrowed onto a validated cell saw nothing, and a read-only viewer never saw it at all.
+
+- **The glyph is canvas paint** (`renderDropdownChevron` in `state/render/cells.ts`), called from both
+  `cellRender` and `nullCellRender` — in a real workbook most list-validated cells are empty, and a blank
+  validated cell is otherwise indistinguishable from a blank free-text one.
+- **One geometry, painter and hit-test.** `dropdownChevronRect` (`state/modules/data-verification.ts`)
+  right-aligns the 10px glyph and centres it vertically; `isDropdownChevronClick` builds its click target
+  from the same rect, and both drop out below `DROPDOWN_CHEVRON_MIN_WIDTH`. Same split as
+  `checkboxRect` and `FILTER_BUTTON_WIDTH`/`HEIGHT`.
+- **It overlays the cell text** rather than reserving width, the way Google's does — reserving would
+  reflow every validated column.
+- **Colour is the cell's own `fc` at 55% alpha**, not a flat grey: real workbooks put list rules on
+  dark-filled cells a fixed grey would vanish into.
+- **Clicking it opens the list**; a click anywhere else in the cell just selects. Read-only viewers still
+  see the chevron but get no list — `cellFocus` never positions the anchor when editing is disallowed.
+- The DOM element that remains (`#luckysheet-dataVerification-dropdown-btn`) is an invisible,
+  non-clickable anchor for the Radix portal, nothing more.
 
 ## Headless Formula Engine
 

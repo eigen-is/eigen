@@ -5,9 +5,10 @@
 import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/condition-format';
 import {
+    type CellGlyphRect,
     CHECKBOX_LABEL_GAP,
-    type CheckboxRect,
     checkboxRect,
+    dropdownChevronRect,
     isCheckboxChecked,
     isDefaultCheckboxRule,
     validateCellData,
@@ -31,7 +32,7 @@ function coercesToNumber(val: unknown) {
 // § Theming) — and grey rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
 
-function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CheckboxRect, checked: boolean) {
+function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, checked: boolean) {
     renderCtx.lineWidth = 1;
     renderCtx.strokeStyle = CHECKBOX_STROKE;
     renderCtx.strokeRect(rect.x + HALF_PIXEL, rect.y + HALF_PIXEL, rect.size, rect.size);
@@ -43,6 +44,49 @@ function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CheckboxRect, ch
     renderCtx.lineTo(rect.x + rect.size - 2, rect.y + 2);
     renderCtx.stroke();
     renderCtx.closePath();
+}
+
+// Data-validation list chevron, painted on every cell a list rule covers —
+// empty ones included, which is where it earns its keep: a blank validated cell
+// is otherwise indistinguishable from a blank free-text one. It overlays the
+// cell text rather than reserving width, the way Google's does, and takes the
+// cell's OWN text colour at low alpha instead of a flat grey: validated cells
+// sit on dark fills a fixed grey would vanish into.
+const DROPDOWN_CHEVRON_ALPHA = 0.55;
+
+function renderDropdownChevron(
+    pass: RenderPass,
+    r: number,
+    c: number,
+    startY: number,
+    startX: number,
+    endY: number,
+    endX: number,
+) {
+    const { renderCtx, flowdata, offsetLeft, offsetTop } = pass;
+    const rect = dropdownChevronRect({
+        left: startX + offsetLeft,
+        top: startY + offsetTop + 1,
+        width: endX - startX - 2,
+        height: endY - startY - 2,
+    });
+    // Too narrow a column drops the glyph rather than filling the cell with it.
+    if (!rect) return;
+
+    renderCtx.save();
+    renderCtx.globalAlpha = DROPDOWN_CHEVRON_ALPHA;
+    // An empty cell has no fc of its own; black is what its text would take.
+    renderCtx.strokeStyle = normalizedAttr(flowdata, r, c, 'fc') ?? '#000000';
+    renderCtx.lineWidth = 1.5;
+    renderCtx.lineCap = 'round';
+    renderCtx.lineJoin = 'round';
+    renderCtx.beginPath();
+    // Lucide chevron-down proportions inside the box: full width, middle fifth.
+    renderCtx.moveTo(rect.x + 1, rect.y + rect.size * 0.3);
+    renderCtx.lineTo(rect.x + rect.size / 2, rect.y + rect.size * 0.7);
+    renderCtx.lineTo(rect.x + rect.size - 1, rect.y + rect.size * 0.3);
+    renderCtx.stroke();
+    renderCtx.restore();
 }
 
 // The right/bottom cell grid lines all share the same 1px default-color stroke.
@@ -79,6 +123,9 @@ export function nullCellRender(
         flowdata,
         drawGridLines,
     } = pass;
+    // One lookup for every validation affordance this cell may draw; sheets with
+    // no rules at all short-circuit on the optional chain, key never built.
+    const rule = dataVerification?.[`${r}_${c}`];
     const checksCF = checkCF(r, c, cfCompute);
 
     // Background color
@@ -135,7 +182,7 @@ export function nullCellRender(
 
     // An empty cell inside a tick-box range still shows an unchecked box, so the
     // range reads as one uniform column.
-    if (dataVerification?.[`${r}_${c}`]?.type === 'checkbox') {
+    if (rule?.type === 'checkbox') {
         const box = {
             left: startX + offsetLeft,
             top: startY + offsetTop + 1,
@@ -144,6 +191,10 @@ export function nullCellRender(
         };
         const align = [normalizedAttr(flowdata, r, c, 'ht'), normalizedAttr(flowdata, r, c, 'vt')];
         drawTickBox(renderCtx, checkboxRect(box, Number(align[0]), Number(align[1])), false);
+    } else if (rule?.type === 'dropdown') {
+        // Most list-validated cells in a real workbook are empty ones waiting to
+        // be filled — this branch is the one that marks them.
+        renderDropdownChevron(pass, r, c, startY, startX, endY, endX);
     }
 
     // Check overflow cell relationship
@@ -224,6 +275,7 @@ export function cellRender(
         drawGridLines,
     } = pass;
     const cell = flowdata[r][c];
+    const rule = dataVerification?.[`${r}_${c}`];
     const cellWidth = endX - startX - 2;
     const cellHeight = endY - startY - 2;
     const space_width = 2;
@@ -272,7 +324,7 @@ export function cellRender(
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
-    if (dataVerification?.[`${r}_${c}`] && !validateCellData(sheetCtx, dataVerification[`${r}_${c}`], value)) {
+    if (rule && !validateCellData(sheetCtx, rule, value)) {
         // Data validation error indicator (red triangle top-left)
         renderCtx.beginPath();
         renderCtx.moveTo(startX + offsetLeft, startY + offsetTop);
@@ -325,8 +377,7 @@ export function cellRender(
         }
     }
     // Data validation tick box
-    else if (dataVerification?.[`${r}_${c}`]?.type === 'checkbox') {
-        const rule = dataVerification[`${r}_${c}`];
+    else if (rule?.type === 'checkbox') {
         const pos_x = startX + offsetLeft;
         const pos_y = startY + offsetTop + 1;
 
@@ -402,6 +453,10 @@ export function cellRender(
         });
 
         renderCtx.restore();
+    }
+
+    if (rule?.type === 'dropdown') {
+        renderDropdownChevron(pass, r, c, startY, startX, endY, endX);
     }
 
     if (drawRightGridLine && drawGridLines) {

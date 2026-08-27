@@ -10,10 +10,13 @@ import {
     applyDataVerification,
     checkboxChange,
     checkboxRect,
+    DROPDOWN_CHEVRON_HIT_WIDTH,
+    dropdownChevronRect,
     getDropdownList,
     isCheckboxChecked,
     isCheckboxClick,
     isDefaultCheckboxRule,
+    isDropdownChevronClick,
     validateCellData,
 } from '../../../state/modules/data-verification';
 import type { DataVerificationRule } from '../../../state/types';
@@ -196,5 +199,68 @@ describe('isCheckboxClick', () => {
             [null, null, null, null],
         ]);
         expect(isCheckboxClick(ctx, 3, 3, box, 7, 9)).toBe(false);
+    });
+});
+
+// The always-on list chevron. The painter and the mousedown hit-test share one
+// geometry (dropdownChevronRect), the same split the tick box and the filter
+// button use — these pin them together, threshold included.
+const LIST_RULE: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
+
+function listContext() {
+    const ctx = contextFactory() as Context;
+    ctx.sheets[0].dataVerification = {
+        '0_0': LIST_RULE,
+        '1_0': TICK_BOX,
+        '2_0': { type: 'number', type2: 'moreThanThe', value1: '3', value2: '' },
+    };
+    return ctx;
+}
+
+describe('dropdownChevronRect', () => {
+    // Cell A1 spans x 0..74, y 0..20 (contextFactory's visibledata*), so its
+    // text box is 72×18 and the 10px glyph lands at x 60..70, y 4..14.
+    const box = { left: 0, top: 0, width: 72, height: 18 };
+
+    test('right-aligns the glyph and centres it vertically, whatever the cell alignment', () => {
+        expect(dropdownChevronRect(box)).toEqual({ x: 60, y: 4, size: 10 });
+        expect(dropdownChevronRect({ left: 100, top: 40, width: 40, height: 30 })).toEqual({ x: 128, y: 50, size: 10 });
+    });
+
+    test('drops the glyph in a column too narrow to carry it', () => {
+        expect(dropdownChevronRect({ ...box, width: 22 })).toEqual({ x: 10, y: 4, size: 10 });
+        expect(dropdownChevronRect({ ...box, width: 21 })).toBeUndefined();
+        expect(dropdownChevronRect({ ...box, width: 0 })).toBeUndefined();
+    });
+});
+
+describe('isDropdownChevronClick', () => {
+    // Glyph at x 60..70 ⇒ the finger-sized hit box spans x 50..70, full height.
+    const box = { left: 0, top: 0, width: 72, height: 18 };
+    const RIGHT = 70;
+
+    test('only a click on the chevron counts', () => {
+        const ctx = listContext();
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, 9)).toBe(true);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - DROPDOWN_CHEVRON_HIT_WIDTH, 0)).toBe(true);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT, box.height)).toBe(true);
+        // One pixel outside each edge.
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - DROPDOWN_CHEVRON_HIT_WIDTH - 1, 9)).toBe(false);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT + 1, 9)).toBe(false);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, -1)).toBe(false);
+        expect(isDropdownChevronClick(ctx, 0, 0, box, RIGHT - 1, box.height + 1)).toBe(false);
+    });
+
+    test('ignores every rule type that draws no chevron, and cells with no rule', () => {
+        const ctx = listContext();
+        expect(isDropdownChevronClick(ctx, 1, 0, box, RIGHT - 1, 9)).toBe(false);
+        expect(isDropdownChevronClick(ctx, 2, 0, box, RIGHT - 1, 9)).toBe(false);
+        expect(isDropdownChevronClick(ctx, 3, 3, box, RIGHT - 1, 9)).toBe(false);
+    });
+
+    test('a column too narrow to paint the chevron has nothing to click either', () => {
+        const ctx = listContext();
+        const narrow = { ...box, width: 21 };
+        expect(isDropdownChevronClick(ctx, 0, 0, narrow, narrow.width, 9)).toBe(false);
     });
 });

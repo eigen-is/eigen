@@ -293,8 +293,9 @@ const CHECKBOX_PADDING = 2;
 // The cell's own text area: origin plus the width/height the painter lays text
 // out in. Callers work in canvas space (painter) or freeze-corrected sheet
 // space (hit test) — the box sits at the same offset either way.
-export type CheckboxCellBox = { left: number; top: number; width: number; height: number };
-export type CheckboxRect = { x: number; y: number; size: number };
+export type CellTextBox = { left: number; top: number; width: number; height: number };
+// A square glyph placed inside that box: the tick box, the list chevron.
+export type CellGlyphRect = { x: number; y: number; size: number };
 
 export function isDefaultCheckboxRule(item: DataVerificationRule) {
     return item.value1 === CHECKBOX_CHECKED_VALUE && item.value2 === CHECKBOX_UNCHECKED_VALUE;
@@ -308,7 +309,7 @@ export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellVal
 // `horizonAlign`/`verticalAlign` are the normalized ht/vt attrs
 // (ht 0 centre / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
 // cell yields NaN, which lands on the same left/middle default the painter uses.
-export function checkboxRect(box: CheckboxCellBox, horizonAlign: number, verticalAlign: number): CheckboxRect {
+export function checkboxRect(box: CellTextBox, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
     if (horizonAlign === 0) {
         x = box.left + (box.width - CHECKBOX_SIZE) / 2;
@@ -329,7 +330,7 @@ export function checkboxRect(box: CheckboxCellBox, horizonAlign: number, vertica
 // Only a click on the box toggles — anywhere else in the cell selects it like
 // any other, so a tick box can be copied, extended through and read in the fx
 // bar without flipping.
-export function isCheckboxClick(ctx: Context, r: number, c: number, box: CheckboxCellBox, x: number, y: number) {
+export function isCheckboxClick(ctx: Context, r: number, c: number, box: CellTextBox, x: number, y: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     if (ctx.sheets[index].dataVerification?.[`${r}_${c}`]?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
@@ -356,6 +357,46 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     // selection here yet, so name the toggled cell explicitly.
     jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
     return true;
+}
+
+// --- List chevrons ---------------------------------------------------------
+// A list rule paints its chevron on every cell it covers, always — the same
+// deal every other affordance in this engine offers (comment triangle, tick
+// box, filter button). Selection-gating it, as the DOM overlay it replaced did,
+// left keyboard users and read-only viewers with no indicator at all.
+
+// Glyph side in px, and its gap from the cell's right edge.
+export const DROPDOWN_CHEVRON_SIZE = 10;
+const DROPDOWN_CHEVRON_PADDING = 2;
+// Click target around the 10px glyph, finger-sized the way the filter button's
+// 20×15 rect is around a 12px strainer.
+export const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
+// The narrowest text box that still gets a chevron: the glyph, its padding, and
+// as much again clear to its left. Any narrower and the glyph reads as the
+// cell's content rather than a hint about it, so it is dropped — Google's rule.
+const DROPDOWN_CHEVRON_MIN_WIDTH = DROPDOWN_CHEVRON_SIZE * 2 + DROPDOWN_CHEVRON_PADDING;
+
+// The one geometry the painter (render/cells.ts) and the mousedown hit-test
+// share. Right-aligned and vertically centred whatever the cell's alignment —
+// the chevron marks the cell, it is not part of its content.
+export function dropdownChevronRect(box: CellTextBox): CellGlyphRect | undefined {
+    if (box.width < DROPDOWN_CHEVRON_MIN_WIDTH) return undefined;
+    return {
+        x: box.left + box.width - DROPDOWN_CHEVRON_PADDING - DROPDOWN_CHEVRON_SIZE,
+        y: box.top + (box.height - DROPDOWN_CHEVRON_SIZE) / 2,
+        size: DROPDOWN_CHEVRON_SIZE,
+    };
+}
+
+// Clicking the chevron opens the list, like the canvas filter button opens its
+// menu; a click anywhere else in the cell just selects it.
+export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: CellTextBox, x: number, y: number) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    if (ctx.sheets[index].dataVerification?.[`${r}_${c}`]?.type !== 'dropdown') return false;
+    const rect = dropdownChevronRect(box);
+    if (!rect) return false;
+    const right = rect.x + rect.size;
+    return x >= right - DROPDOWN_CHEVRON_HIT_WIDTH && x <= right && y >= box.top && y <= box.top + box.height;
 }
 
 // Apply one rule across a range. Tick boxes seed their unchecked value into
