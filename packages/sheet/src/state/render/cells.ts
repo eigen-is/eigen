@@ -11,7 +11,7 @@ import {
     checkboxRect,
     dropdownChevronRect,
     isCheckboxChecked,
-    isDefaultCheckboxRule,
+    showsCheckboxLabel,
     validateCellData,
 } from '../modules/data-verification';
 import { getCellTextInfo } from '../modules/text';
@@ -396,10 +396,7 @@ export function cellRender(
         const rect = checkboxRect(box, horizonAlign, verticalAlign);
         drawTickBox(renderCtx, rect, isCheckboxChecked(rule, value));
 
-        // A default TRUE/FALSE rule draws the box alone, the way Google does.
-        // Custom selected/not-selected values keep their label — it is the only
-        // way to tell "Yes" from "No".
-        if (!isDefaultCheckboxRule(rule)) {
+        if (showsCheckboxLabel(rule, value)) {
             renderCtx.textBaseline = 'middle';
             renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
             renderCtx.fillText(String(value ?? ''), rect.x + rect.size + CHECKBOX_LABEL_GAP, rect.y + rect.size / 2);

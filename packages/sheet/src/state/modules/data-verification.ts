@@ -306,8 +306,21 @@ export function cellTextBox(left: number, top: number, right: number, bottom: nu
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
 }
 
-export function isDefaultCheckboxRule(item: DataVerificationRule) {
+function isDefaultCheckboxRule(item: DataVerificationRule) {
     return item.value1 === CHECKBOX_CHECKED_VALUE && item.value2 === CHECKBOX_UNCHECKED_VALUE;
+}
+
+// Whether a tick-box cell draws its value beside the box. A default TRUE/FALSE
+// rule draws the box alone, the way Google does, and an empty cell in the range
+// draws it alone too so the column reads as one. Anything else keeps its label:
+// a custom rule, where it is the only way to tell "Yes" from "No", and any value
+// the rule does not name — applying a tick box over a column of prose must not
+// paint the prose out of existence.
+export function showsCheckboxLabel(item: DataVerificationRule, cellValue: CellValueForValidation) {
+    if (!isDefaultCheckboxRule(item)) return true;
+    if (isRealNull(cellValue)) return false;
+    const value = String(cellValue).toUpperCase();
+    return value !== item.value1.toUpperCase() && value !== item.value2.toUpperCase();
 }
 
 export function isCheckboxChecked(item: DataVerificationRule, cellValue: CellValueForValidation) {

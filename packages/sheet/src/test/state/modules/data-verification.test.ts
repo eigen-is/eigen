@@ -19,8 +19,8 @@ import {
     getValidationHint,
     isCheckboxChecked,
     isCheckboxClick,
-    isDefaultCheckboxRule,
     isDropdownChevronClick,
+    showsCheckboxLabel,
     validateCellData,
 } from '../../../state/modules/data-verification';
 import type { Cell, DataRegulationProps, DataVerificationRule } from '../../../state/types';
@@ -88,8 +88,38 @@ describe('isCheckboxChecked', () => {
         const rule: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
         expect(isCheckboxChecked(rule, 'Yes')).toBe(true);
         expect(isCheckboxChecked(rule, 'No')).toBe(false);
-        expect(isDefaultCheckboxRule(rule)).toBe(false);
-        expect(isDefaultCheckboxRule(TICK_BOX)).toBe(true);
+    });
+});
+
+describe('showsCheckboxLabel', () => {
+    test('a default rule draws the box alone over the values it names', () => {
+        expect(showsCheckboxLabel(TICK_BOX, 'TRUE')).toBe(false);
+        expect(showsCheckboxLabel(TICK_BOX, 'false')).toBe(false);
+        expect(showsCheckboxLabel(TICK_BOX, true)).toBe(false);
+        expect(showsCheckboxLabel(TICK_BOX, false)).toBe(false);
+    });
+
+    test('an empty cell in the range keeps the plain box, so the column reads as one', () => {
+        expect(showsCheckboxLabel(TICK_BOX, null)).toBe(false);
+        expect(showsCheckboxLabel(TICK_BOX, undefined)).toBe(false);
+        expect(showsCheckboxLabel(TICK_BOX, '')).toBe(false);
+    });
+
+    test('a value the rule does not name keeps its label', () => {
+        // Insert -> Tick box over a column of Yes / Maybe / n/a used to paint an
+        // unchecked box over every one of them with the text suppressed: the data
+        // was still there, unreadable, and validateCellData flags nothing either.
+        expect(showsCheckboxLabel(TICK_BOX, 'Yes')).toBe(true);
+        expect(showsCheckboxLabel(TICK_BOX, 'Maybe')).toBe(true);
+        expect(showsCheckboxLabel(TICK_BOX, 'n/a')).toBe(true);
+        expect(showsCheckboxLabel(TICK_BOX, 0)).toBe(true);
+    });
+
+    test('a custom rule always keeps its label — it is the only way to tell Yes from No', () => {
+        const rule: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'Yes', value2: 'No' };
+        expect(showsCheckboxLabel(rule, 'Yes')).toBe(true);
+        expect(showsCheckboxLabel(rule, 'No')).toBe(true);
+        expect(showsCheckboxLabel(rule, 'Maybe')).toBe(true);
     });
 });
 

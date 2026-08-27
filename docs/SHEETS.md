@@ -169,8 +169,10 @@ Everything lives in `packages/sheet/src/state/modules/data-verification.ts`.
   kick a recalc behind the half-typed formula. Same gate on the list chevron, which would otherwise
   open a dropdown over the formula, and the keyboard path bails on the same condition.
 - **Default rules draw the box alone**, the way Google does; a rule with custom values also draws its
-  label, the only way to tell "Yes" from "No". Empty cells inside a range still draw an unchecked box
-  (`nullCellRender`), so the range reads as one column.
+  label, the only way to tell "Yes" from "No". So does a cell holding a value the rule names neither
+  of: `showsCheckboxLabel` is what keeps `Insert → Tick box` over a column of `Yes` / `Maybe` / `n/a`
+  from painting the data out of existence (applying a rule never rewrites it). Empty cells inside a
+  range still draw the plain unchecked box (`nullCellRender`), so the range reads as one column.
 - Applying to a whole column is deliberately not offered — a column-wide rule would write ~1M keys
   into the snapshot.
 
