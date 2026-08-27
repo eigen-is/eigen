@@ -9589,17 +9589,29 @@ export const en = {
             invalidLabel: 'Invalid:',
             listInvalid: 'Input must be an item on the specified list.',
             listPrompt: 'Pick an item from the list.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             numberInvalid: 'Input must be ${type} ${condition}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             numberPrompt: 'Enter ${type} ${condition}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             textIncludeInvalid: 'Text must include ${value}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             textIncludePrompt: 'Enter text that includes ${value}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             textExcludeInvalid: 'Text must not include ${value}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             textExcludePrompt: 'Enter text that does not include ${value}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             textEqualInvalid: 'Text must be ${value}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             textEqualPrompt: 'Enter ${value}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             lengthInvalid: 'Text length must be ${condition}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             lengthPrompt: 'Enter text of length ${condition}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             dateInvalid: 'Date must be ${condition}.',
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
             datePrompt: 'Enter a date ${condition}.',
         },
     },
