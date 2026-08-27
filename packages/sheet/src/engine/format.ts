@@ -41,6 +41,13 @@ function parseDate(str: string | Date, fixdate?: number) {
     return out;
 }
 
+// Canonical display for a boolean cell — Excel's uppercase TRUE/FALSE. The xlsx
+// importer shares it so literal booleans read the same as the formula-produced
+// ones recalc pushes back through `update()`.
+export function booleanDisplay(value: boolean): string {
+    return value ? 'TRUE' : 'FALSE';
+}
+
 export function genarate(value: string | number | boolean): [string, CellType, string | number | boolean] {
     let m = '';
     let ct: CellType = {};
@@ -63,11 +70,11 @@ export function genarate(value: string | number | boolean): [string, CellType, s
         m = value.toString().substring(1);
         ct = { fa: '@', t: 's' };
     } else if (value.toString().toUpperCase() === 'TRUE') {
-        m = 'TRUE';
+        m = booleanDisplay(true);
         ct = { fa: 'General', t: 'b' };
         v = true;
     } else if (value.toString().toUpperCase() === 'FALSE') {
-        m = 'FALSE';
+        m = booleanDisplay(false);
         ct = { fa: 'General', t: 'b' };
         v = false;
     } else if (valueIsError(value.toString())) {
