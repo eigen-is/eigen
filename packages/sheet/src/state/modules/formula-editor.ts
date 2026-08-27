@@ -1,4 +1,4 @@
-import { escapeHtml } from '@workspace/lib/html';
+import { escapeHtml, unescapeHtml } from '@workspace/lib/html';
 import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
 import { iscelldata, operatorjson } from '../../engine/formula-utils';
 import type { Context } from '../context';
@@ -495,10 +495,19 @@ function functionRange(ctx: Context, obj: HTMLDivElement, v: string, vp: string)
     }
 }
 
+// Caret restore reads these segments as the text the browser renders: their lengths become
+// text-node offsets, and they are probed for quotes and braces. Tokens are escaped on the way
+// into the markup, so `&` is five characters here and one on screen — decode before measuring.
+function toRenderedSegments(html: string): string[] {
+    return html
+        .replace(/<span.*?>/g, '')
+        .split('</span>')
+        .map(unescapeHtml);
+}
+
 function findrangeindex(ctx: Context, v: string, vp: string) {
-    const re = /<span.*?>/g;
-    const v_a = v.replace(re, '').split('</span>');
-    const vp_a = vp.replace(re, '').split('</span>');
+    const v_a = toRenderedSegments(v);
+    const vp_a = toRenderedSegments(vp);
     v_a.pop();
     if (vp_a[vp_a.length - 1] === '') vp_a.pop();
 
@@ -753,7 +762,7 @@ export function handleFormulaInput(
             rangeHightlightselected(ctx, $editor);
         }
     } else if (startsWith(value1txt, '=') && !startsWith(value, '=')) {
-        if ($copyTo) $copyTo.innerHTML = value;
+        if ($copyTo) $copyTo.innerHTML = escapeHtml(value);
         $editor.innerHTML = escapeHtml(value);
     } else if (!startsWith(value1txt, '=')) {
         if (!$copyTo) return;

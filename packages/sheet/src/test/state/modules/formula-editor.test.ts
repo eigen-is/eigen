@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { unescapeHtml } from '@workspace/lib/html';
 import { functionHTMLGenerate } from '../../../state/modules/formula-editor';
 
 // The formula bar and the in-cell editor render this output through innerHTML, and a
@@ -32,4 +33,21 @@ describe('state/formula-editor — functionHTMLGenerate', () => {
     test('passes a non-formula through untouched', () => {
         expect(functionHTMLGenerate('plain text')).toBe('plain text');
     });
+});
+
+// The formula editor restores the caret by stripping the spans off this HTML, splitting on
+// `</span>`, and using the segment lengths as offsets into the rendered text nodes. Escaped
+// tokens are longer as markup than on screen, so the decoded segments — not the raw ones —
+// have to add back up to the formula.
+describe('state/formula-editor — generated HTML measures like its rendered text', () => {
+    for (const formula of ['=A1&B1', '=A1<B1', '=IF(A1<>2,1,0)', '=A1>=5', '=CONCAT("a&b")']) {
+        test(`${formula} decodes back to itself`, () => {
+            const html = functionHTMLGenerate(formula);
+            const segments = html
+                .replace(/<span.*?>/g, '')
+                .split('</span>')
+                .map(unescapeHtml);
+            expect(segments.join('')).toBe(formula);
+        });
+    }
 });
