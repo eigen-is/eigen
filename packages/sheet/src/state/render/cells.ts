@@ -32,6 +32,43 @@ function coercesToNumber(val: unknown) {
 // § Theming) — and grey rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
 
+// Corner indicators: a comment top-right, an invalid value or a forced string
+// top-left. One size for all three so they read as one family of marks — they
+// used to be 11px, 5px and 6px. No hit test anywhere reads these, so unlike
+// the tick box and the list chevron the geometry stays here with the painter.
+export const CELL_INDICATOR_SIZE = 11;
+// One red for both attention marks: the invalid-value triangle, and the comment
+// triangle's fallback when its card carries no colour of its own.
+const INDICATOR_RED = '#FC6666';
+const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
+
+// A right-angled triangle in the cell's top-left or top-right corner, anchored
+// on the corner itself: one leg along the top edge, one down the side.
+export function drawCellIndicator(
+    renderCtx: CanvasRenderingContext2D,
+    corner: 'left' | 'right',
+    x: number,
+    y: number,
+    color: string,
+) {
+    renderCtx.beginPath();
+    renderCtx.moveTo(x, y);
+    renderCtx.lineTo(corner === 'left' ? x + CELL_INDICATOR_SIZE : x - CELL_INDICATOR_SIZE, y);
+    renderCtx.lineTo(x, y + CELL_INDICATOR_SIZE);
+    renderCtx.fillStyle = color;
+    renderCtx.fill();
+    renderCtx.closePath();
+}
+
+// Drawn identically by both render paths — most commented cells in a workbook
+// hold a value, plenty do not.
+function drawCommentIndicator(pass: RenderPass, r: number, c: number, startY: number, endX: number) {
+    const { renderCtx, sheetCtx, offsetLeft, offsetTop } = pass;
+    const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
+    const color = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? INDICATOR_RED;
+    drawCellIndicator(renderCtx, 'right', endX + offsetLeft - 1, startY + offsetTop, color);
+}
+
 function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, checked: boolean) {
     renderCtx.lineWidth = 1;
     renderCtx.strokeStyle = CHECKBOX_STROKE;
@@ -170,14 +207,7 @@ export function nullCellRender(
 
     // Comment indicator triangle
     if (flowdata?.[r]?.[c]?.commentCardIds?.length) {
-        const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
-        renderCtx.beginPath();
-        renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-        renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? '#FC6666';
-        renderCtx.fill();
-        renderCtx.closePath();
+        drawCommentIndicator(pass, r, c, startY, endX);
     }
 
     // An empty cell inside a tick-box range still shows an unchecked box, so the
@@ -324,38 +354,25 @@ export function cellRender(
 
     renderCtx.fillRect(cellsize[0], cellsize[1], cellsize[2], cellsize[3]);
 
+    // Invalid-value indicator (red triangle top-left)
     if (rule && !validateCellData(sheetCtx, rule, value)) {
-        // Data validation error indicator (red triangle top-left)
-        renderCtx.beginPath();
-        renderCtx.moveTo(startX + offsetLeft, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft + 5, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft, startY + offsetTop + 5);
-        renderCtx.fillStyle = '#FC6666';
-        renderCtx.fill();
-        renderCtx.closePath();
+        drawCellIndicator(renderCtx, 'left', startX + offsetLeft - 1, startY + offsetTop, INDICATOR_RED);
     }
 
     // Comment indicator triangle
     if (cell?.commentCardIds?.length) {
-        const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
-        renderCtx.beginPath();
-        renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-        renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? '#FC6666';
-        renderCtx.fill();
-        renderCtx.closePath();
+        drawCommentIndicator(pass, r, c, startY, endX);
     }
 
     // Forced-string indicator (green triangle top-left)
     if (cell?.qp === 1 && coercesToNumber(cell?.v)) {
-        renderCtx.beginPath();
-        renderCtx.moveTo(startX + offsetLeft + 5, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft - 1, startY + offsetTop);
-        renderCtx.lineTo(startX + offsetLeft - 1, startY + offsetTop + 6);
-        renderCtx.fillStyle = '#487f1e';
-        renderCtx.fill();
-        renderCtx.closePath();
+        drawCellIndicator(
+            renderCtx,
+            'left',
+            startX + offsetLeft - 1,
+            startY + offsetTop,
+            FORCED_STRING_INDICATOR_COLOR,
+        );
     }
 
     // Overflow cell handling
