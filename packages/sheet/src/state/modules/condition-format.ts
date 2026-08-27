@@ -197,13 +197,19 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
 }
 
 // Cache for getComputeMap — avoids recomputing the entire CF map on every
-// canvas paint / getStyleByCell call. Invalidates when sheet, rules or data change.
-let _cfCache: {
-    sheetId: string | undefined;
-    rules: ConditionalFormatRule[] | undefined;
-    data: CellMatrix;
-    result: ComputeMap;
-} | null = null;
+// canvas paint / getStyleByCell call. Keyed per sheet: a single slot made every
+// A→B→A tab switch a guaranteed miss, and on a sheet carrying formula rules that
+// recompute costs seconds. Entries invalidate themselves — immer replaces `rules`
+// and `data` by reference on any edit, rule change or row/col op, so both must
+// stay in the key.
+const _cfCache = new Map<
+    string,
+    {
+        rules: ConditionalFormatRule[] | undefined;
+        data: CellMatrix;
+        result: ComputeMap;
+    }
+>();
 
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
@@ -213,8 +219,9 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     if (isNil(data)) return null;
 
     // Return cached result if inputs haven't changed (reference equality)
-    if (_cfCache && _cfCache.sheetId === ctx.currentSheetId && _cfCache.rules === ruleArr && _cfCache.data === data) {
-        return _cfCache.result;
+    const cached = _cfCache.get(ctx.currentSheetId);
+    if (cached && cached.rules === ruleArr && cached.data === data) {
+        return cached.result;
     }
 
     // Evaluate CF formulas through the engine directly (same shape as the HTML export's
@@ -236,12 +243,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
             return ctx.formulaCache.engine.evaluate(shifted, ctx.currentSheetId, targetRow, targetCol, resolver).value;
         },
     });
-    _cfCache = {
-        sheetId: ctx.currentSheetId,
-        rules: ruleArr,
-        data,
-        result: computeMap,
-    };
+    _cfCache.set(ctx.currentSheetId, { rules: ruleArr, data, result: computeMap });
     return computeMap;
 }
 
