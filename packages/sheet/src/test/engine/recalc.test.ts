@@ -8,6 +8,10 @@ function num(v: number): Cell {
     return { v, m: String(v), ct: { fa: 'General', t: 'n' } };
 }
 
+function str(v: string): Cell {
+    return { v, m: v, ct: { fa: 'General', t: 's' } };
+}
+
 function formula(f: string, cached?: Partial<Cell>): Cell {
     return { f, ...cached };
 }
@@ -116,6 +120,27 @@ describe('engine/recalc — recalcSheets', () => {
         const out = recalcSheets(sheets);
         expect(out[0].data![0][1]?.v).toBe(7);
         expect(out[0].data![0][2]?.v).toBe(8);
+    });
+
+    test('imported VLOOKUP with a lower-case FALSE resolves against the looked-up sheet', () => {
+        // The real shape of a converted-xlsx formula: Excel writes bare booleans lower-cased,
+        // and `false` used to resolve as an unknown variable → #NAME?. Neither cell carries a
+        // cached value, so a regression lands the sentinel rather than passing silently — and
+        // the hit case stops the miss case passing merely by erroring into the fallback.
+        const lookup = (ref: string) => `=IFERROR(VLOOKUP(${ref},'MASTER DATA'!A1:B2,2,false),"No input yet")`;
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [str('Production'), formula(lookup('A1'))],
+                [str('Nothing'), formula(lookup('A2'))],
+            ]),
+            sheet('s2', 'MASTER DATA', [
+                [str('Production'), num(42)],
+                [str('Design'), num(7)],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        expect(out[0].data![0][1]?.v).toBe(42);
+        expect(out[0].data![1][1]?.v).toBe('No input yet');
     });
 
     test('engine error with no cached value still writes the #NAME? sentinel', () => {
