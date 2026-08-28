@@ -1345,7 +1345,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             ctx.copyState.copyRange.length > 0 &&
             isEqual
         ) {
-            // clipboard content matches what was copied from luckysheet itself
+            // clipboard content matches what was copied from this sheet itself
             if (ctx.pasteIsCut) {
                 ctx.pasteIsCut = false;
                 pasteHandlerOfCutPaste(ctx, ctx.copyState);
