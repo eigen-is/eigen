@@ -23,7 +23,7 @@ import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
 import { syncablePaths } from './factories/collab';
 import { contextFactory } from './factories/context';
-import { GRID_GEOMETRY, mouseUpAt, withGridGeometry } from './factories/grid-dom';
+import { mouseUpAt, withGridGeometry } from './factories/grid-dom';
 
 // A sheet that has never had a config written — the case where seeding is itself a patch.
 function bareSheet(): Context {
@@ -59,19 +59,19 @@ const NO_OP_ON_A_FRESH_SHEET: [name: string, recipe: (ctx: Context) => void][] =
 
 const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
     [
-        'a sub-3px column mis-click',
+        'a column click released where it was pressed',
         (ctx) => {
             ctx.colsResizing = true;
             ctx.colsResizeStart = [200, 2];
-            mouseUpAt(200 + GRID_GEOMETRY.rowHeaderWidth - 3, 150)(ctx);
+            mouseUpAt(200, 150)(ctx);
         },
     ],
     [
-        'a sub-3px row mis-click',
+        'a row click released where it was pressed',
         (ctx) => {
             ctx.rowsResizing = true;
             ctx.rowsResizeStart = [100, 2];
-            mouseUpAt(296, 100 + GRID_GEOMETRY.columnHeaderHeight - 3)(ctx);
+            mouseUpAt(296, 100)(ctx);
         },
     ],
     ['the format painter with no copy state', (ctx) => pasteHandlerOfPaintModel(ctx, undefined)],
@@ -92,7 +92,7 @@ describe('a rejected operation writes nothing', () => {
         const paths = syncablePaths(bareSheet(), (ctx: Context) => {
             ctx.colsResizing = true;
             ctx.colsResizeStart = [200, 2];
-            mouseUpAt(296, 150)(ctx);
+            mouseUpAt(253, 150)(ctx);
         });
         expect(paths.length).toBeGreaterThan(0);
     });

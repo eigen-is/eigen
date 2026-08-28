@@ -25,7 +25,9 @@ function undo(ctx: Context, recipe: (draft: Context) => void): Context {
     return applyPatches(next, filterPatch(inversePatches));
 }
 
-const dragResize = mouseUpAt(296, 150);
+// Start positions are page coordinates now, so movement is just the difference:
+// rows start at 100 and move +33 (20 -> 53), columns start at 200 and move +53 (100 -> 153).
+const dragResize = mouseUpAt(253, 133);
 
 describe('a resize round-trips through undo', () => {
     test('column drag', () => {

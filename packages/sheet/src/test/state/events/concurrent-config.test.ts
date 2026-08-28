@@ -43,7 +43,7 @@ function mergeTwoCells(ctx: Context) {
 function dragRowTaller(ctx: Context) {
     ctx.rowsResizing = true;
     ctx.rowsResizeStart = [100, 2];
-    mouseUpAt(296, 150)(ctx);
+    mouseUpAt(253, 133)(ctx);
 }
 
 describe('two clients editing different keys of one config', () => {
@@ -90,7 +90,7 @@ describe('two clients writing a config key for the first time', () => {
     const dragRow = (rowIndex: number) => (ctx: Context) => {
         ctx.rowsResizing = true;
         ctx.rowsResizeStart = [100, rowIndex];
-        mouseUpAt(296, 150)(ctx);
+        mouseUpAt(253, 133)(ctx);
     };
 
     test('each client patches one key, not the whole rowlen map', () => {

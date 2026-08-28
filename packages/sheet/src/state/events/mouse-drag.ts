@@ -455,44 +455,40 @@ export function handleOverlayMouseUp(
         const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
         const winH = rect.height;
 
-        let delta = y + 3 - ctx.rowsResizeStart[0];
+        // Movement is the difference of two page coordinates, so it needs no element, no
+        // scroll and no offset — mousedown and mouseup measure from different elements.
+        let delta = e.pageY - ctx.rowsResizeStart[0];
 
-        if (y >= winH - 20 + scrollTop) {
-            delta = winH - 20 - ctx.rowsResizeStart[0] + scrollTop;
-        }
+        // Don't let the row boundary be dragged past the bottom of the view.
+        const maxY = winH - 20 + scrollTop;
+        if (y > maxY) delta -= y - maxY;
+
+        // No movement is a click, not a resize: bail before writing, or every stray click on
+        // a boundary ships an op to peers and takes a step of the user's undo history.
+        if (delta === 0) return;
 
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
 
-        let size = ctx.defaultrowlen;
-
-        if (ctx.visibledatarow[ctx.rowsResizeStart[1]] != null) {
-            size = ctx.visibledatarow[ctx.rowsResizeStart[1]] - (ctx.visibledatarow[ctx.rowsResizeStart[1] - 1] || 0);
-        }
-
-        // Sub-3px is a mis-click, not a resize — bail before seeding the maps below, or every
-        // stray click would ship an empty rowlen/customHeight op. Mirrors the column path.
-        if (Math.abs(delta) < 3) {
-            return;
-        }
-        size = Math.max(size + delta, 10);
+        const row = ctx.rowsResizeStart[1];
+        const current = ctx.visibledatarow[row] - (ctx.visibledatarow[row - 1] || 0);
+        const size = Math.max((current || ctx.defaultrowlen) + delta, 10);
 
         const cfg = (ctx.sheets[idx].config ??= {});
         cfg.rowlen ??= {};
         cfg.customHeight ??= {};
-        cfg.customHeight[ctx.rowsResizeStart[1]] = 1;
+        cfg.customHeight[row] = 1;
 
         // Dragging one boundary resizes every selected row, not just the one grabbed.
-        const changeRowIndex = ctx.rowsResizeStart[1];
         const rowSelects = ctx.selections?.filter((select) => select.row_select) ?? [];
-        if (rowSelects.some((s) => changeRowIndex >= s.row[0] && changeRowIndex <= s.row[1])) {
+        if (rowSelects.some((s) => row >= s.row[0] && row <= s.row[1])) {
             for (const select of rowSelects) {
                 for (let r = select.row[0]; r <= select.row[1]; r += 1) {
                     cfg.rowlen[r] = Math.ceil(size);
                 }
             }
         } else {
-            cfg.rowlen[changeRowIndex] = Math.ceil(size);
+            cfg.rowlen[row] = Math.ceil(size);
         }
     }
 
@@ -504,31 +500,21 @@ export function handleOverlayMouseUp(
         const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
         const winW = rect.width;
 
-        let delta = x + 3 - ctx.colsResizeStart[0];
+        // Same as the row axis: page coordinates, so no element or offset is involved.
+        let delta = e.pageX - ctx.colsResizeStart[0];
 
-        if (x >= winW - 100 + scrollLeft) {
-            delta = winW - 100 - ctx.colsResizeStart[0] + scrollLeft;
-        }
+        // Don't let the column boundary be dragged past the right edge of the view.
+        const maxX = winW - 100 + scrollLeft;
+        if (x > maxX) delta -= x - maxX;
+
+        // No movement is a click, not a resize — see the row axis above.
+        if (delta === 0) return;
 
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
         const columnlen = ctx.sheets[idx].config?.columnlen;
 
-        let firstcolumnlen = ctx.defaultcollen;
-        if (columnlen?.[ctx.colsResizeStart[1]] != null) {
-            firstcolumnlen = columnlen[ctx.colsResizeStart[1]];
-        }
-
-        let size = (columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta;
-
-        // Sub-3px is a mis-click, not a resize — bail before seeding the maps below, or
-        // every stray click would ship an empty columnlen/customWidth op.
-        if (Math.abs(size - firstcolumnlen) < 3) {
-            return;
-        }
-        if (size < 10) {
-            size = 10;
-        }
+        const size = Math.max((columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta, 10);
 
         const cfg = (ctx.sheets[idx].config ??= {});
         cfg.columnlen ??= {};
