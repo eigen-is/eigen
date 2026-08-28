@@ -66,12 +66,11 @@ function pasteHtml(ctx: Context, html: string) {
     handlePaste(ctx, fakeClipboardEvent(html));
 }
 
-// Real Excel clipboards indent every property line of the <style> block with a TAB;
-// the branch's class-block parser (nameReg = /^[^\t].*/gm) depends on that so the
-// selector lines are the only non-tab lines. The committed Excel/WPS fixtures are
-// space-indented, so their class block does NOT parse (allStyleList = {}); this
-// hand-written table reproduces the tab-indented pattern to exercise the working
-// class-block path. See the fidelity note in task-A-report.md.
+// Real Excel clipboards indent every property line of the <style> block, leaving the
+// selector lines as the only unindented ones — which is what the branch's class-block
+// parser (nameReg = /^\S.*/gm) keys on. Windows Excel indents with a TAB, Excel for Mac
+// with spaces: this hand-written table pins the tab-indented shape, the committed Excel
+// fixture the space-indented one.
 const excelClassBlockHtml = `<html><head><style>
 <!--table
 \t{color:black;}
@@ -167,7 +166,19 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[2][0]?.it).toBe(1); // .xl69 font-style:italic
     });
 
-    it('reads bold / font-color / background / italic from inline td.style (WPS fixture)', () => {
+    it('reads the same class block when the properties are space-indented (Excel for Mac fixture)', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, pastedHtmlFactory('Excel'));
+
+        const d = ctx.sheets[0].data!;
+        expect(d[0][1]?.bl).toBe(1); // .xl65 font-weight:700
+        expect(d[0][2]?.fc).toBe('#ED7D31'); // .xl66 color
+        expect(d[1][0]?.bg).toBe('#ED7D31'); // .xl67 background
+        expect(d[2][0]?.un).toBe(1); // .xl68 text-decoration:underline
+        expect(d[3][0]?.it).toBe(1); // .xl69 font-style:italic
+    });
+
+    it('reads bold / font-color / background / underline / italic from inline td.style (WPS fixture)', () => {
         const ctx = makeCtx();
         pasteHtml(ctx, pastedHtmlFactory('WPS'));
 
@@ -177,12 +188,8 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[0][2]?.fc).toBe('#ED7D31'); // color
         expect(d[1][0]?.bg).toBe('#ED7D31'); // background
         expect(d[3][0]?.it).toBe(1); // font-style:italic
-
-        // Characterized gap: inline `text-decoration:underline` is NOT read from
-        // td.style — the branch only picks up underline from the <style> class block
-        // (see the class-block test above). A WPS-underlined cell therefore loses its
-        // underline. Pinned so a refactor that changes this is a conscious decision.
-        expect(d[2][0]?.un).toBeUndefined();
+        expect(d[2][0]?.un).toBe(1); // text-decoration:underline
+        expect(d[0][0]?.un).toBeUndefined(); // text-decoration:none stays un-set
     });
 
     it('sets cl=1 for a <s> strikethrough inside the td', () => {
@@ -295,6 +302,18 @@ describe('HTML-table paste — merges, borders, row height', () => {
 
         expect(ctx.sheets[0].config!.rowlen![2]).toBe(30);
         expect(ctx.sheets[0].data![2][1]?.v).toBe('a');
+    });
+
+    it('leaves cfg.rowlen untouched for a tr with no height attribute', () => {
+        const ctx = makeCtx();
+        ctx.selections = single(2, 1);
+        ctx.sheets[0].config = { rowlen: { 2: 42 } };
+        pasteHtml(ctx, '<table><tr><td>a</td></tr><tr><td>b</td></tr></table>');
+
+        const rowlen = ctx.sheets[0].config!.rowlen!;
+        expect(rowlen[2]).toBe(42); // a height the user set survives the paste
+        expect(rowlen[3]).toBeUndefined(); // and no entry is invented for a row with none
+        expect(ctx.sheets[0].data![3][1]?.v).toBe('b');
     });
 
     it('refuses a paste that would partially cover an existing merge (hasPartMC guard)', () => {

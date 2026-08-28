@@ -1384,7 +1384,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 const styleInner = ele.querySelectorAll('style')[0]?.innerHTML || '';
                 const patternReg = /{([^}]*)}/g;
                 const patternStyle = styleInner.match(patternReg);
-                const nameReg = /^[^\t].*/gm;
+                const nameReg = /^\S.*/gm;
                 const patternName = initial(styleInner.match(nameReg));
                 const allStyleList: Record<string, string> =
                     patternName.length === patternStyle?.length && typeof patternName === typeof patternStyle
@@ -1404,16 +1404,17 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         let c = 0;
                         const targetR = ctx.selections![0].row[0] + r;
 
-                        const targetRowHeight = !isNil(tr.getAttribute('height'))
-                            ? parseInt(tr.getAttribute('height') as string, 10)
-                            : null;
-                        if (
-                            (has(ctx.sheets[index].config!.rowlen, targetR) &&
-                                ctx.sheets[index].config!.rowlen![targetR] !== targetRowHeight) ||
-                            (!has(ctx.sheets[index].config!.rowlen, targetR) &&
-                                ctx.sheets[index].defaultRowHeight !== targetRowHeight)
-                        ) {
-                            rowHeightList[targetR] = targetRowHeight as number;
+                        const heightAttr = tr.getAttribute('height');
+                        if (!isNil(heightAttr)) {
+                            const targetRowHeight = parseInt(heightAttr, 10);
+                            if (
+                                (has(ctx.sheets[index].config!.rowlen, targetR) &&
+                                    ctx.sheets[index].config!.rowlen![targetR] !== targetRowHeight) ||
+                                (!has(ctx.sheets[index].config!.rowlen, targetR) &&
+                                    ctx.sheets[index].defaultRowHeight !== targetRowHeight)
+                            ) {
+                                rowHeightList[targetR] = targetRowHeight;
+                            }
                         }
 
                         forEach(tr.querySelectorAll('td'), (td) => {
@@ -1432,7 +1433,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                 typeof allStyleList[`.${className}`] === 'string'
                                     ? allStyleList[`.${className}`]
                                           .substring(1, allStyleList[`.${className}`].length - 1)
-                                          .split('\n\t')
+                                          .split(/\n\s*/)
                                     : [];
                             const styles: Record<string, string> = {};
                             forEach(styleString, (s) => {
@@ -1461,7 +1462,11 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                     ? 0
                                     : 1;
 
-                            cell.un = !includes(styles['text-decoration'], 'underline') ? undefined : 1;
+                            cell.un =
+                                !includes(td.style.textDecoration, 'underline') &&
+                                !includes(styles['text-decoration'], 'underline')
+                                    ? undefined
+                                    : 1;
 
                             cell.cl = !includes(td.innerHTML, '<s>') ? undefined : 1;
 
