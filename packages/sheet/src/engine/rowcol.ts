@@ -1,6 +1,6 @@
-import type { MergeCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
+import type { MergeCell, Sheet } from '@workspace/lib/sheets';
 import { functionStrChange } from './formula-shift';
-import type { EditorSheetConfigExtras } from './types';
+import type { ExtendedSheetConfig } from './types';
 
 export type InsertRowColOp = {
     type: 'row' | 'column';
@@ -36,7 +36,6 @@ export class RowColError extends Error {
 // lib's `SheetConfig` types only the fields the BE serializes. The engine's
 // row/col shifter also touches editor-runtime fields that live alongside but
 // aren't lib-typed — see `EditorSheetConfigExtras` in `./types`.
-type ExtendedSheetConfig = SheetConfig & EditorSheetConfigExtras;
 
 // Generic over S so the state-side state.Sheet[] passes through with its extras
 // (filter / frozen / dataVerification / ...) typed end-to-end. The engine only

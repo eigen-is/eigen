@@ -385,3 +385,35 @@ describe('replaySheetsOps', () => {
         expect(result[0].data!.length).toBe(3);
     });
 });
+
+// A granular config patch (`['config','rowlen','2']`) only resolves if the collection already
+// exists. Every document written before the editor started materializing them — and every
+// fresh doc before its first snapshot flush — stores `config: {}`, so the replay base must
+// materialize them too. Without this, replaySheetsOps throws "path doesn't resolve" and rolls
+// back the WHOLE batch: the edit is lost, not degraded, on every reader (a second client
+// opening the doc, the preview renderer, and every xlsx/HTML/PDF export).
+describe('config ops from a normalizing editor apply to an un-normalized stored sheet', () => {
+    const storedBeforeThisBranch = (): Sheet[] => [{ name: 'Sheet1', id: 'id_1', order: 0, celldata: [], config: {} }];
+
+    test('a granular row-height op resolves and is kept', () => {
+        const out = replaySheetsOps(storedBeforeThisBranch(), [
+            [{ op: 'add', id: 'id_1', path: ['config', 'rowlen', '2'], value: 53 }],
+        ]);
+        expect(out[0].config?.rowlen).toEqual({ 2: 53 });
+    });
+
+    test('a granular border op resolves and is kept', () => {
+        const out = replaySheetsOps(storedBeforeThisBranch(), [
+            [{ op: 'add', id: 'id_1', path: ['config', 'borderInfo', 0], value: { rangeType: 'cell' } }],
+        ]);
+        expect(out[0].config?.borderInfo).toHaveLength(1);
+    });
+
+    test('a sheet added mid-session takes ops on its config too', () => {
+        const out = replaySheetsOps(storedBeforeThisBranch(), [
+            [{ op: 'addSheet', id: 'id_2', path: [], value: { name: 'S2', id: 'id_2', order: 1, celldata: [] } }],
+            [{ op: 'add', id: 'id_2', path: ['config', 'merge', '0_0'], value: { r: 0, c: 0, rs: 2, cs: 2 } }],
+        ]);
+        expect(out[1].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
+    });
+});

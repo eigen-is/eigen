@@ -4,6 +4,7 @@ import { applyPatches, enablePatches } from 'immer';
 import { celldataToData, dataToCelldata } from './celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from './rowcol';
+import type { ExtendedSheetConfig } from './types';
 
 // immer's patch plugin is a global, idempotent enable. Calling here means any
 // consumer of replaySheetsOps gets it transitively without a separate bootstrap.
@@ -47,6 +48,41 @@ function asSheet(v: unknown): Sheet | null {
 // usable row/column to the default grid, so replay must materialize the same
 // grid — ops were recorded against it, and a smaller base makes patches
 // beyond the celldata extent fail to resolve.
+// immer records the creation of a key as one `add` carrying the WHOLE new value, so a config
+// collection that does not exist yet turns the first write to it into a whole-collection op —
+// two clients each making their first row resize overwrite each other. Writers therefore emit
+// granular `['config','rowlen','2']` patches against collections that already exist, and a base
+// missing them makes those patches fail to resolve, which drops the entire batch. Exactly the
+// reasoning in defaults.ts for the row/column grid: the replay base must be materialized the
+// same way the editor materializes it.
+//
+// One list — a collection missing from it silently reintroduces the clobber for its own first
+// write. `satisfies` ties it to the type, so a new collection on SheetConfig fails the build.
+const SHEET_CONFIG_COLLECTIONS = [
+    'merge',
+    'rowlen',
+    'columnlen',
+    'rowhidden',
+    'colhidden',
+    'customHeight',
+    'customWidth',
+    'rowReadOnly',
+    'colReadOnly',
+] as const satisfies readonly (keyof ExtendedSheetConfig)[];
+
+export function normalizeSheetConfig(sheet: Sheet) {
+    // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
+    const cfg = (sheet.config ??= {}) as ExtendedSheetConfig;
+    for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
+    cfg.borderInfo ??= [];
+}
+
+function withNormalizedConfig(s: Sheet): Sheet {
+    const next = { ...s, config: { ...s.config } };
+    normalizeSheetConfig(next);
+    return next;
+}
+
 export function withMaterializedData(s: Sheet): Sheet {
     if (s.data) return s;
     const row = s.row != null && s.row > 0 ? s.row : DEFAULT_SHEET_ROW_COUNT;
@@ -86,7 +122,9 @@ function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
 }
 
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
-    let result = sheets;
+    // Every base sheet carries its config collections before a single op is applied, so the
+    // granular config patches the editor emits resolve here as well as they do in the editor.
+    let result = sheets.map(withNormalizedConfig);
     for (const batch of opBatches) {
         // One poisoned batch must never make the whole doc unreadable: on an
         // unexpected failure, roll back to the pre-batch state, warn, and keep
@@ -107,7 +145,7 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                         console.warn('[sheets] addSheet op has malformed value', op.value);
                         continue;
                     }
-                    result = [...result, newSheet];
+                    result = [...result, withNormalizedConfig(newSheet)];
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = result.filter((s) => s.id !== op.id);
                 } else if (op.op === 'insertRowCol' && op.id) {

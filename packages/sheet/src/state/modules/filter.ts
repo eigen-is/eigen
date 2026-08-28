@@ -717,6 +717,12 @@ export function saveFilter(
     if (sheetIndex == null) {
         return;
     }
-    const cfg = (ctx.sheets[sheetIndex].config ??= {});
-    cfg.rowhidden = rowHiddenAll;
+    // Reconcile in place rather than assigning `rowHiddenAll`: a fresh object replaces the
+    // whole rowhidden map on the wire, so applying a filter would clobber a peer's manual
+    // row hide. Same reasoning as clearFilter above.
+    const rowhidden = ((ctx.sheets[sheetIndex].config ??= {}).rowhidden ??= {});
+    for (const r of Object.keys(rowhidden)) {
+        if (!(r in rowHiddenAll)) delete rowhidden[r];
+    }
+    Object.assign(rowhidden, rowHiddenAll);
 }

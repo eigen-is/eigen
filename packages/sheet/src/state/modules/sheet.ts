@@ -1,5 +1,6 @@
 import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { normalizeSheetConfig } from '../../engine/replay-ops';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
 import type { Context } from '../context';
@@ -74,6 +75,7 @@ export function addSheet(
               isPivotTable: !!isPivotTable,
           }
         : sheetData;
+    normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
     if (sheetconfig.id === undefined) sheetconfig.id = uuidv4();
     if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {

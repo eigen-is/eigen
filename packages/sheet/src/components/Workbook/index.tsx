@@ -15,6 +15,7 @@ import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } 
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
+import { normalizeSheetConfig } from '../../engine/replay-ops';
 import type { CellMatrix } from '../../engine/types';
 import {
     api,
@@ -433,6 +434,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             const sheet = draftCtx.sheets[index];
                             if (!sheet.data || sheet.data.length === 0) {
                                 api.initSheetData(draftCtx, index, sheet);
+                            } else {
+                                // The replay materializes `data` for any sheet an op touched, so
+                                // initSheetData is skipped here — but the config collections it
+                                // also guarantees must still exist, or this client's own first
+                                // config write goes out as a whole collection.
+                                normalizeSheetConfig(sheet);
                             }
                         }
                         // Just seed calcChain (the list of formula cells) — don't
@@ -464,6 +471,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                     if (!sheet.data || sheet.data.length === 0) {
                         api.initSheetData(draftCtx, sheetIdx, sheet);
+                    } else {
+                        normalizeSheetConfig(sheet);
                     }
 
                     if (

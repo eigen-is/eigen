@@ -8,6 +8,7 @@
 import { describe, expect, test } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { replaySheetsOps } from '../../../engine';
+import { normalizeSheetConfig } from '../../../engine/replay-ops';
 import type { Context } from '../../../state/context';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op, Sheet } from '../../../state/types';
@@ -21,7 +22,7 @@ const DELETE_OP = { type: 'row', start: 1, end: 2, id: 'id_1' } as const;
 
 function richContext(): Context {
     const cell = (v: number) => ({ v, m: String(v) });
-    return contextFactory({
+    const ctx = contextFactory({
         sheets: [
             {
                 name: 'sheet',
@@ -60,6 +61,12 @@ function richContext(): Context {
             },
         ],
     }) as Context;
+    // The editor materializes every config collection when a sheet enters the context
+    // (initSheetData → normalizeSheetConfig), and the replay base does the same. A fixture
+    // that skips it would compare a normalized replay against an un-normalized editor and
+    // report a divergence that cannot happen in the app.
+    for (const sheet of ctx.sheets) normalizeSheetConfig(sheet);
+    return ctx;
 }
 
 function emittedOps(recipe: (ctx: Context) => void, options: Parameters<typeof patchToOp>[2]): [Op[], Context] {

@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { encodeSheetsSnapshot, type Op, type Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { sheetsNeedRecalc } from '@workspace/sheet/engine';
+import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import ExcelJS from 'exceljs';
 import * as Y from 'yjs';
 import { readSheetsFromDoc, writeSheetsSnapshotToYjs, writeSheetsToYjs } from '../../lib/document/sheets';
@@ -24,6 +24,17 @@ async function readSheets(mount: Mount, path: DrivePath): Promise<{ sheets: Shee
 // renderers read it); equality pins here compare the persisted shape, so strip it.
 function withoutData(sheets: Sheet[]): Sheet[] {
     return sheets.map(({ data: _data, ...sheet }) => sheet);
+}
+
+// The replay materializes every config collection so the editor's granular config ops
+// (`['config','rowlen','2']`) resolve against a stored sheet that predates them. Expectations
+// built from raw fixtures have to carry the same shape.
+function normalized(sheets: Sheet[]): Sheet[] {
+    return sheets.map((sheet) => {
+        const next = { ...sheet, config: { ...sheet.config } };
+        normalizeSheetConfig(next);
+        return next;
+    });
 }
 
 describe('document/sheets', () => {
@@ -92,7 +103,7 @@ describe('document/sheets', () => {
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(withoutData(result)).toEqual(sheets);
+        expect(withoutData(result)).toEqual(normalized(sheets));
     });
 
     test('every read sheet carries a materialized dense data matrix', async () => {
@@ -149,7 +160,7 @@ describe('document/sheets', () => {
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(withoutData(result)).toEqual(sheets);
+        expect(withoutData(result)).toEqual(normalized(sheets));
     });
 
     test('writeSheetsSnapshotToYjs commits pre-serialized JSON and clears the ops array', async () => {
@@ -176,7 +187,7 @@ describe('document/sheets', () => {
 
         expect(collab.doc.getArray('ops').length).toBe(0);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-        expect(withoutData((await readSheets(mount, path)).sheets)).toEqual(sheets);
+        expect(withoutData((await readSheets(mount, path)).sheets)).toEqual(normalized(sheets));
 
         const viaSheets = new Y.Doc();
         writeSheetsToYjs(viaSheets, sheets, { computed: false });
@@ -331,7 +342,7 @@ describe('document/sheets — patch op replay', () => {
         const { sheets: result, recalcError } = await readSheets(mount, path);
 
         expect(result).toHaveLength(2);
-        expect(withoutData(result)[1]).toEqual(newSheet);
+        expect(withoutData(result)[1]).toEqual(normalized([newSheet])[0]);
         expect(recalcError).toBeNull();
     });
 
@@ -684,6 +695,6 @@ describe('document/sheets — patch op replay', () => {
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
         const { sheets: result } = await readSheets(mount, path);
 
-        expect(withoutData(result)).toEqual(sheets);
+        expect(withoutData(result)).toEqual(normalized(sheets));
     });
 });

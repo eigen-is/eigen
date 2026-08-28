@@ -5,6 +5,7 @@
 // and defaultContext derive from these; never re-list the numbers inline.
 
 import type { Sheet } from '@workspace/lib/sheets';
+import { normalizeSheetConfig } from './replay-ops';
 
 export const DEFAULT_SHEET_ROW_COUNT = 100;
 export const DEFAULT_SHEET_COLUMN_COUNT = 26;
@@ -14,5 +15,7 @@ export const DEFAULT_SHEET_COLUMN_COUNT = 26;
 // constant would be aliased and mutated across mounts. The id must stay
 // 'sheet-1' — pending op batches in existing docs reference it.
 export function createDefaultSheets(): Sheet[] {
-    return [{ name: 'Sheet1', id: 'sheet-1', order: 0, celldata: [], config: {} }];
+    const sheet: Sheet = { name: 'Sheet1', id: 'sheet-1', order: 0, celldata: [] };
+    normalizeSheetConfig(sheet);
+    return [sheet];
 }

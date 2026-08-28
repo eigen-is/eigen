@@ -1,3 +1,4 @@
+import type { SheetConfig } from '@workspace/lib/sheets';
 import type { DependencyIndex } from './dependency-index';
 import type { CellCoordinate } from './parser/helper/cell';
 
@@ -36,6 +37,10 @@ export type EditorSheetConfigExtras = {
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
 };
+
+// The config shape the editor and the op replay actually operate on: the wire shape plus the
+// editor-only per-row/col flags above.
+export type ExtendedSheetConfig = SheetConfig & EditorSheetConfigExtras;
 
 // Single cell reference resolved from a label like `A1` or `Sheet1!$A$1`.
 export type CellInfo = {
