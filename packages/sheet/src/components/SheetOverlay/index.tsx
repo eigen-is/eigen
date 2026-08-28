@@ -569,7 +569,7 @@ export const SheetOverlay: React.FC = () => {
             <div id="sr-sheetFocus" className="sr-only" role="alert">
                 {context.sheetFocused
                     ? `${lastRangeText} ${lastCellValue ? `${lastCellValue}.` : ''} ${info.sheetIsFocused}`
-                    : `Toolbar. ${info.sheetNotFocused}`}
+                    : info.sheetNotFocused}
             </div>
         </main>
     );

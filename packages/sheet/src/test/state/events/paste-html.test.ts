@@ -199,6 +199,28 @@ describe('HTML-table paste — style extraction', () => {
         expect(ctx.sheets[0].data![0][0]?.cl).toBe(1);
     });
 
+    // Our own HTML export writes the strikethrough as a text-decoration, never an <s> —
+    // export a sheet and paste the table back and the marking has to survive.
+    it('sets cl=1 for text-decoration:line-through, inline or from the class block', () => {
+        const ctx = makeCtx();
+        pasteHtml(
+            ctx,
+            '<html><head><style>\n<!--td\n\t{color:black;}\n.xl70\n\t{text-decoration:line-through;}\n-->\n</style></head><body><table><tr>' +
+                '<td style="text-decoration:line-through">x</td>' +
+                '<td style="text-decoration:underline line-through">y</td>' +
+                '<td class=xl70>z</td>' +
+                '<td>plain</td>' +
+                '</tr></table></body></html>',
+        );
+
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.cl).toBe(1);
+        expect(d[0][1]?.cl).toBe(1);
+        expect(d[0][1]?.un).toBe(1);
+        expect(d[0][2]?.cl).toBe(1);
+        expect(d[0][3]?.cl).toBeUndefined();
+    });
+
     it('maps text-align to ht (right=2/center=0/left=1) and vertical-align to vt (middle=0/top=1/bottom=2)', () => {
         const ctx = makeCtx();
         pasteHtml(

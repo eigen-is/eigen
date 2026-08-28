@@ -8898,8 +8898,7 @@ export const en = {
 
         sheetIsFocused: 'Sheet focus lock enabled.',
         sheetNotFocused: 'Sheet focus lock disabled.',
-        sheetSrIntro:
-            'To toggle sheet focus to assist with toolbar and other non-sheet navigation, use Shift, Control, F.',
+        sheetSrIntro: 'To release the sheet focus lock and let keys reach the rest of the app, use Shift, Control, F.',
         currentCellInput: 'Current cell input',
         newSheet: 'New sheet',
         sheetOptions: 'Sheet options',

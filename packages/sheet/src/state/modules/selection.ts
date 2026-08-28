@@ -1492,8 +1492,14 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         cpdata += '</tr>';
     }
 
-    return `<table data-type="sheet-copy-action-table">${colgroup}${cpdata}</table>`;
+    return `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${cpdata}</table>`;
 }
+
+// The marker that says "this clipboard HTML came from a sheet". Readers match
+// COPY_ACTION_TABLE_SUFFIX, not the full string: a clipboard written before the 2026-08-28
+// `fortune-` → `sheet-` rename spells the prefix differently and is still ours.
+export const COPY_ACTION_TABLE_SUFFIX = 'copy-action-table';
+export const COPY_ACTION_TABLE_MARKER = `sheet-${COPY_ACTION_TABLE_SUFFIX}`;
 
 export function copy(ctx: Context) {
     const flowdata = getFlowdata(ctx);

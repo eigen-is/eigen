@@ -117,15 +117,9 @@ export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     const options = ctx.filterOptions;
     if (options == null) return undefined;
     if (y < options.top || y >= options.top + FILTER_BUTTON_HEIGHT) return undefined;
-    // Backwards: a column narrower than the button (the resize floor is 10px, the button is 20)
-    // overlaps its neighbour, and the draw loop leaves the later item on top.
-    for (let i = options.items.length - 1; i >= 0; i -= 1) {
-        const item = options.items[i];
-        if (x >= item.left && x < item.left + FILTER_BUTTON_WIDTH) {
-            return item;
-        }
-    }
-    return undefined;
+    // Last match, not first: a column narrower than the button (the resize floor is 10px, the
+    // button is 20) overlaps its neighbour, and the draw loop leaves the later one on top.
+    return options.items.findLast((item) => x >= item.left && x < item.left + FILTER_BUTTON_WIDTH);
 }
 
 // Create filter options
@@ -183,8 +177,8 @@ export function createFilterOptions(
     };
 
     for (let c = c1; c <= c2; c += 1) {
-        // A hidden column is zero-width, so its button rect coincides with the previous
-        // visible column's — the draw loop and the hit-test then disagree about the owner.
+        // A hidden column is zero-width, so its button rect coincides with the previous visible
+        // column's — and the last-match hit-test would hand it every click on that shared rect.
         if (ctx.config?.colhidden?.[c] != null) {
             continue;
         }

@@ -41,6 +41,7 @@ import {
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
+import { COPY_ACTION_TABLE_SUFFIX } from '../../state/modules/selection';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
 import { FxEditor } from '../FxEditor';
 import { MenuBar } from '../MenuBar';
@@ -629,8 +630,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)
                     // but only if this is NOT an internal sheet→sheet copy (which uses HTML with sheet-copy-action-table)
                     const htmlData = clipboardData.getData('text/html');
-                    // Suffix, not the full marker: a clipboard written before the rename says `fortune-copy-action-table`.
-                    const isInternalCopy = htmlData?.includes('copy-action-table');
+                    const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_SUFFIX);
 
                     if (!isInternalCopy) {
                         const eigenData = readEigenClipboard(clipboardData);

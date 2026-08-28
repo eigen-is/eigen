@@ -30,7 +30,7 @@ import { getdatabyselection, getQKBorder } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { normalizeSelection, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_SUFFIX, normalizeSelection, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetParamALL } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
@@ -1248,7 +1248,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         // if the content is marked as copied from this sheet, check whether the clipboard matches what was copied from the current page
         let isEqual = true;
         if (
-            txtdata.indexOf('copy-action-table') > -1 &&
+            txtdata.indexOf(COPY_ACTION_TABLE_SUFFIX) > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0
         ) {
@@ -1340,7 +1340,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         }
 
         if (
-            txtdata.indexOf('copy-action-table') > -1 &&
+            txtdata.indexOf(COPY_ACTION_TABLE_SUFFIX) > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0 &&
             isEqual
@@ -1399,7 +1399,10 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     if (isNil(ctx.sheets[index].config!.rowlen)) {
                         ctx.sheets[index].config!.rowlen = {};
                     }
-                    const rowHeightList = ctx.sheets[index].config!.rowlen!;
+                    // Collect only the rows the paste changes and let setRowHeight write them: it
+                    // owns the `>= 0` guard, and writing through the sheet's live rowlen bypassed it.
+                    const currentRowlen = ctx.sheets[index].config!.rowlen!;
+                    const rowHeightList: Record<number, number> = {};
                     forEach(trList, (tr) => {
                         let c = 0;
                         const targetR = ctx.selections![0].row[0] + r;
@@ -1407,12 +1410,10 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         const heightAttr = tr.getAttribute('height');
                         if (!isNil(heightAttr)) {
                             const targetRowHeight = parseInt(heightAttr, 10);
-                            if (
-                                (has(ctx.sheets[index].config!.rowlen, targetR) &&
-                                    ctx.sheets[index].config!.rowlen![targetR] !== targetRowHeight) ||
-                                (!has(ctx.sheets[index].config!.rowlen, targetR) &&
-                                    ctx.sheets[index].defaultRowHeight !== targetRowHeight)
-                            ) {
+                            const current = has(currentRowlen, targetR)
+                                ? currentRowlen[targetR]
+                                : ctx.sheets[index].defaultRowHeight;
+                            if (current !== targetRowHeight) {
                                 rowHeightList[targetR] = targetRowHeight;
                             }
                         }
@@ -1464,12 +1465,17 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                     : 1;
 
                             cell.un =
-                                !includes(td.style.textDecoration, 'underline') &&
-                                !includes(styles['text-decoration'], 'underline')
-                                    ? undefined
-                                    : 1;
+                                includes(td.style.textDecoration, 'underline') ||
+                                includes(styles['text-decoration'], 'underline')
+                                    ? 1
+                                    : undefined;
 
-                            cell.cl = !includes(td.innerHTML, '<s>') ? undefined : 1;
+                            cell.cl =
+                                includes(td.innerHTML, '<s>') ||
+                                includes(td.style.textDecoration, 'line-through') ||
+                                includes(styles['text-decoration'], 'line-through')
+                                    ? 1
+                                    : undefined;
 
                             const ff = td.style.fontFamily || styles['font-family'] || '';
                             const ffs = ff.split(',');

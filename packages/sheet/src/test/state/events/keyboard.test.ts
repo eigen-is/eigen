@@ -34,21 +34,23 @@ function listContext(rule: DataVerificationRule | null = LIST) {
     return ctx;
 }
 
-function keyDown(ctx: Context, key: string, altKey: boolean) {
+type KeyOptions = { altKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; cellInput?: HTMLDivElement };
+
+function keyDown(ctx: Context, key: string, { altKey, ctrlKey, shiftKey, cellInput }: KeyOptions = {}) {
     let prevented = false;
     const e = {
         key,
-        keyCode: key === 'ArrowDown' ? 40 : 0,
-        altKey,
-        ctrlKey: false,
+        keyCode: key === 'ArrowDown' ? 40 : 70,
+        altKey: altKey ?? false,
+        ctrlKey: ctrlKey ?? false,
         metaKey: false,
-        shiftKey: false,
+        shiftKey: shiftKey ?? false,
         preventDefault() {
             prevented = true;
         },
         stopPropagation() {},
     } as unknown as KeyboardEvent;
-    const input = win.document.createElement('div') as unknown as HTMLDivElement;
+    const input = cellInput ?? (win.document.createElement('div') as unknown as HTMLDivElement);
     handleGlobalKeyDown(
         ctx,
         input,
@@ -64,13 +66,13 @@ function keyDown(ctx: Context, key: string, altKey: boolean) {
 describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
     test('opens the list', () => {
         const ctx = listContext();
-        expect(keyDown(ctx, 'ArrowDown', true)).toBe(true);
+        expect(keyDown(ctx, 'ArrowDown', { altKey: true })).toBe(true);
         expect(ctx.dataVerificationDropDownList).toBe(true);
     });
 
     test('positions the anchor on the cell', () => {
         const ctx = listContext();
-        keyDown(ctx, 'ArrowDown', true);
+        keyDown(ctx, 'ArrowDown', { altKey: true });
         // B2 spans x 74..148, y 20..40 in contextFactory's visibledata*.
         expect(anchor.style.display).toBe('block');
         expect(anchor.style.left).toBe('128px');
@@ -78,13 +80,13 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
 
     test('a plain Down still moves the selection', () => {
         const ctx = listContext();
-        keyDown(ctx, 'ArrowDown', false);
+        keyDown(ctx, 'ArrowDown');
         expect(ctx.dataVerificationDropDownList).toBeFalsy();
     });
 
     test('a cell with no list rule falls through to the normal arrow handling', () => {
         const ctx = listContext(null);
-        keyDown(ctx, 'ArrowDown', true);
+        keyDown(ctx, 'ArrowDown', { altKey: true });
         expect(ctx.dataVerificationDropDownList).toBeFalsy();
     });
 
@@ -92,7 +94,7 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
         // Same as the mousedown path, which also refuses: cellFocus itself bails.
         const ctx = listContext();
         ctx.allowEdit = false;
-        keyDown(ctx, 'ArrowDown', true);
+        keyDown(ctx, 'ArrowDown', { altKey: true });
         expect(ctx.dataVerificationDropDownList).toBeFalsy();
     });
 });
@@ -108,35 +110,13 @@ describe('handleGlobalKeyDown — Ctrl+Shift+F focus toggle', () => {
         return el;
     }
 
-    function ctrlShiftF(ctx: Context, cellInput: HTMLDivElement) {
-        const e = {
-            key: 'F',
-            keyCode: 70,
-            altKey: false,
-            ctrlKey: true,
-            metaKey: false,
-            shiftKey: true,
-            preventDefault() {},
-            stopPropagation() {},
-        } as unknown as KeyboardEvent;
-        handleGlobalKeyDown(
-            ctx,
-            cellInput,
-            null,
-            e,
-            {} as GlobalCache,
-            () => {},
-            () => {},
-        );
-    }
-
     test('focuses the workbook it was handed, not the first one in the document', () => {
         const first = addCellInput();
         const second = addCellInput();
         const ctx = listContext();
         ctx.sheetFocused = false;
 
-        ctrlShiftF(ctx, second as unknown as HTMLDivElement);
+        keyDown(ctx, 'F', { ctrlKey: true, shiftKey: true, cellInput: second as unknown as HTMLDivElement });
 
         expect(ctx.sheetFocused).toBe(true);
         expect(win.document.activeElement).toBe(second);
