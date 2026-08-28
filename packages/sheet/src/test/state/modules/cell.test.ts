@@ -7,8 +7,25 @@
 
 import { describe, expect, test } from 'bun:test';
 import { unescapeHtml } from '@workspace/lib/html';
-import { getCellValue, getFormulaHtml, getInlineStringHTML } from '../../../state/modules/cell';
-import type { CellMatrix } from '../../../state/types';
+import { Window } from 'happy-dom';
+import { applyPatches, enablePatches, produceWithPatches } from 'immer';
+import type { Context } from '../../../state/context';
+import { getCellValue, getFormulaHtml, getInlineStringHTML, updateCell } from '../../../state/modules/cell';
+import { clearMeasureTextCache } from '../../../state/modules/text';
+import type { CellMatrix, SheetConfig } from '../../../state/types';
+import { filterPatch } from '../../../state/utils/patch';
+import { contextFactory } from '../factories/context';
+
+enablePatches();
+
+// The auto-height tests below commit through a real editor element, and getTextSize falls
+// back to a DOM span when a canvas reports no bounding box, so happy-dom is installed at
+// module scope the way events/mouse-cell.test.ts does.
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+const win = new Window();
+g.window = win;
+g.document = win.document;
 
 describe('state/modules/cell — getInlineStringHTML', () => {
     function inlineCell(runs: { v: string; fc?: string }[]): CellMatrix {
@@ -68,5 +85,73 @@ describe('state/modules/cell — getCellValue / getFormulaHtml', () => {
             (getFormulaHtml(0, 0, data) as string).replace(/<span.*?>/g, '').replace(/<\/span>/g, ''),
         );
         expect(rendered).toBe(formula);
+    });
+});
+
+// Committing multi-line text into a cell grows the row to fit it. The grown height has to
+// land on both halves of the config mirror: updateCell wrote `sheets[i].config.rowlen` only,
+// so the height synced and undid fine, but calcRowColSize measures from `ctx.config` — the
+// row kept its old height and the text stayed clipped until a sheet switch or a reload.
+// Driving updateCell through produceWithPatches is what exposes it: outside a recipe the two
+// halves are the same object, so any write appears to reach both.
+describe('state/modules/cell — updateCell auto-height', () => {
+    // Only `font` and `measureText` are read on the auto-height path.
+    function measuringCanvas(): CanvasRenderingContext2D {
+        const canvas = {
+            font: '11px Arial',
+            textAlign: 'start',
+            textBaseline: 'top',
+            measureText: (text: string) => ({
+                width: text.length * 7,
+                actualBoundingBoxAscent: 8,
+                actualBoundingBoxDescent: 3,
+            }),
+        };
+        return canvas as unknown as CanvasRenderingContext2D;
+    }
+
+    // The commit path handleGlobalEnter takes: the editor's text, newlines and all.
+    function multilineInput(): HTMLDivElement {
+        const input = win.document.createElement('div');
+        input.innerHTML = 'line one\nline two\nline three';
+        return input as unknown as HTMLDivElement;
+    }
+
+    // The Workbook seeding effect assigns `draftCtx.config = sheet.config`, so the mirror and
+    // the sheet's config start as the same object — reproduce that, not two clones.
+    function editContext(): Context {
+        const config: SheetConfig = { columnlen: { 0: 40 } };
+        const ctx = contextFactory({ config }) as Context;
+        ctx.sheets[0].config = config;
+        ctx.sheets[0].data = [
+            [{ v: 'x', m: 'x', ct: { fa: 'General', t: 'g' } }, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+            [null, null, null, null],
+        ];
+        ctx.defaultrowlen = 19;
+        ctx.defaultcollen = 73;
+        return ctx;
+    }
+
+    test('the grown row height reaches the config mirror the grid measures from', () => {
+        clearMeasureTextCache();
+        const [grown] = produceWithPatches(editContext(), (ctx: Context) => {
+            updateCell(ctx, 0, 0, multilineInput(), undefined, measuringCanvas());
+        });
+
+        expect(grown.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(19);
+        expect(grown.config.rowlen?.[0]).toBe(grown.sheets[0].config?.rowlen?.[0]);
+    });
+
+    test('and still syncs, because the patch that survives filterPatch carries it', () => {
+        clearMeasureTextCache();
+        const base = editContext();
+        const [grown, patches] = produceWithPatches(base, (ctx: Context) => {
+            updateCell(ctx, 0, 0, multilineInput(), undefined, measuringCanvas());
+        });
+
+        const synced = applyPatches(base, filterPatch(patches));
+        expect(synced.sheets[0].config?.rowlen?.[0]).toBe(grown.sheets[0].config?.rowlen?.[0]);
     });
 });

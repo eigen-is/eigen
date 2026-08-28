@@ -1009,7 +1009,7 @@ export function handleClearFormat(ctx: Context) {
         if (index == null) return false;
         // If there are no border styles, skip table operations
         if (ctx.config.borderInfo == null) return false;
-        const cfg = ctx.config || {};
+        const cfg = ctx.config;
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const source_borderInfo: BorderInfo[] = [];
 
@@ -1052,7 +1052,9 @@ export function handleClearFormat(ctx: Context) {
                 }
             }
 
-            ctx.sheets[index].config!.borderInfo = source_borderInfo;
+            // Both halves: the renderer reads the mirror, only the sheets[*] half syncs.
+            cfg.borderInfo = source_borderInfo;
+            ctx.sheets[index].config = cfg;
         }
         return true;
     });

@@ -1895,10 +1895,9 @@ export function updateDropCell(ctx: Context) {
     // filled formula cell.
     const resolver = createContextResolver(ctx);
 
-    const cfg = cloneDeep(ctx.config);
-    if (cfg.borderInfo == null) {
-        cfg.borderInfo = [];
-    }
+    // Mirror first — the renderer paints borders from ctx.config; the sheet half is
+    // flushed once the fill is laid out, so the carried borders sync and undo too.
+    const cfg = ctx.config;
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
     const dataVerification = cloneDeep(file.dataVerification);
 
@@ -2018,7 +2017,7 @@ export function updateDropCell(ctx: Context) {
                     },
                 };
 
-                cfg.borderInfo.push(bd_obj);
+                (cfg.borderInfo ??= []).push(bd_obj);
             } else if (borderInfoCompute[`${row}_${col}`]) {
                 const bd_obj: CellBorderInfo = {
                     rangeType: 'cell',
@@ -2032,7 +2031,7 @@ export function updateDropCell(ctx: Context) {
                     },
                 };
 
-                cfg.borderInfo.push(bd_obj);
+                (cfg.borderInfo ??= []).push(bd_obj);
             }
 
             // data validation
@@ -2041,6 +2040,9 @@ export function updateDropCell(ctx: Context) {
             }
         }
     }
+
+    // Both halves — immer emits nothing here when the fill carried no border.
+    ctx.sheets[index].config = cfg;
 
     // conditional format
     const cdformat = file.conditionalFormatRules;
