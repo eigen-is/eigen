@@ -159,6 +159,35 @@ Verified, user-visible, bounded. Each remaining entry needs a decision first —
 
 A manual pass over the DOM chrome after the `sheet-` rename. Recorded so it isn't re-tested: freeze panes (line, handles, frozen scrolling), row/column resize itself, the fill handle, the data-validation dropdown (already a shadcn `DropdownMenu` — `components/DataVerification/DropdownList.tsx:53`), and the link editor (a shadcn `Dialog`, centred and deliberately not draggable). The fill handle (the square at the bottom-right of the selection) extends along one axis at a time, matching Excel and Google Sheets — not a defect. Confirmed against the running app and the real products by Reinder on 2026-08-28, after an assistant wrongly cast doubt on it. `Ctrl`+arrow does nothing **on macOS** because Mission Control takes all four before the browser sees them; `Cmd`+arrow is the Mac binding and is handled (`handleControlPlusArrowKey`), with `preventDefault` so the browser's back/forward doesn't fire.
 
+## Next up — kill the config-mirror bug class
+
+Scheduled work, not opportunistic. These two are the largest remaining structural items in `packages/sheet` and they are the direct outcome of the 2026-08-28 branch, which found **seven** separate user-visible bugs that were all one root cause. **Backwards compatibility is explicitly NOT required** (Reinder, 2026-08-28): the stored sheet JSON, the op wire shape and the in-memory shape are all free to change, so take the direct route rather than a migration path.
+
+### N1 — Delete `ctx.config`, the mirror **M**
+
+**The hazard, measured.** One `SheetConfig` object is reachable by two paths: `ctx.sheets[i].config` and the top-level shortcut `ctx.config`, seeded only on sheet switch (`components/Workbook/index.tsx:479`). Inside an immer recipe the two are independent drafts, and **immer attributes a shared child's patches to whichever root key it reaches first**. `sheets` precedes `config` in `Context` (`state/context.ts:217`), so:
+
+- mutate via `sheet.config` → `['sheets', i, 'config', 'rowlen', '42']` — granular, ~70 bytes, merges with a peer's concurrent config edit
+- mutate via `ctx.config` → `['sheets', i, 'config']` — the **whole config object**, last-writer-wins on the wire and in undo
+
+Nothing in the code signals which path you are on. That is why this produced seven bugs, why `editableConfig` initially shipped the wrong order, and why every test agreed with the wrong order — the test factory listed `config` before `sheets`, reproducing an immer behaviour the app never has. **Any probe must live inside `packages/sheet`**: one written elsewhere resolves a different immer (11.x) whose behaviour differs, which is what caused two contradictory reviews.
+
+**The fix.** Remove `ctx.config` entirely; every reader takes the current sheet's config directly. One path means granularity is structural rather than a convention, `editableConfig` and `updateContextWithSheetConfig` both disappear, and so does `src/test/state/config-writers.test.ts`.
+
+**Cost.** 113 read/write sites across 26 files (measured 2026-08-28), mostly mechanical. The perf objection recorded earlier is weaker than it was stated: `calcRowColSize` (`state/context.ts:385`) reads the mirror inside per-row and per-column loops, but the lookup hoists once to the top of the function — it is not a per-iteration cost.
+
+**Do this before N2.** It is the one that closes the class permanently; N2 is an improvement on top.
+
+**Verify first, then build.** No one has yet watched two clients clobber each other. Ten-minute check before investing: two browser windows, two users, one sheet — merge cells in A while dragging a row taller in B, and see whether A's merge survives. If it does, the model is wrong somewhere and N1 should wait until we know why. Still un-fixed writers that emit whole-config ops today, and therefore the ones to test with: drag resize (`state/events/mouse-drag.ts`, `mouse-resize.ts`), `hideRowOrColumn`/`showRowOrColumn` and `hideSelected`/`showSelected` (`state/api/rowcol.ts`, `state/modules/rowcol.ts`), `state/events/paste.ts`, `storeSheetParam*` (`state/modules/sheet.ts`), and `clearFilter` / `move-cells` — the last two `cloneDeep` the config, which also **de-aliases the mirror from the sheet**.
+
+### N2 — Re-shape `borderInfo` from a list to a keyed map **L**
+
+`config.borderInfo` is an array (`BorderInfo[]`), so it patches by index: inserting an entry renumbers every later one, and edits tend to go out as a whole-array replace. `config.merge` is already the right shape — a map keyed `"r_c"` — and patches cleanly one entry at a time.
+
+**The fix.** Key borders the same way. Granular patches per border, cheap per-cell lookup instead of scanning, and `handleClearFormat` (`state/modules/toolbar.ts`), the fill-handle carry-over (`state/modules/drop-cell.ts`) and `getBorderInfoCompute` all get simpler — each currently filters or scans the array.
+
+**Cost.** ~266 `borderInfo` references (measured 2026-08-28), and it changes what is stored in existing documents. No BC needed, but the xlsx import (`apps/api/src/lib/import/sheets/from-xlsx.ts`, which writes one entry per bordered cell), the HTML/xlsx export renderers and the BE replay all read this shape — sweep them together with the FE. Land N1 first so the write path is already single.
+
 ## Clipboard — put sheets on the shared system
 
 Goal: a sheets → sheets copy-paste must work **between browser tabs and between different user logins**, which means the complete payload has to live in the clipboard itself. The shared writer already produces exactly the right shape — real table HTML plus an Eigen metadata span in one `text/html` payload — and sheets already writes both. The gaps are on the read side and in the type model. See [CLIPBOARD.md](CLIPBOARD.md) and [PROPOSAL_COPY_PASTE.md](proposals/PROPOSAL_COPY_PASTE.md).
