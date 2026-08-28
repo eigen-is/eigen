@@ -205,21 +205,25 @@ Program history and measurements: gitignored `docs/superpowers/sheet-perf/PHASE0
 
 - [ ] **Re-time the xlsx convert on a quiet machine.** `PHASE0-MEASUREMENTS.md` records import at 4.7 s
       post-P2; a 2026-08-28 re-run of the same 2.3 MB reference workbook took **7.64 s**. The machine was
-      heavily loaded (load average 9.7–12.8 on 10 cores), which could account for all of it, so this is a
-      flag rather than a finding — but nobody should quote 4.7 s until it has been re-confirmed. **S**
-- [ ] **The 68-second cold open.** Re-measured 2026-08-28 on current code and a fresh production build:
-      a freshly converted workbook opened in **68.0 s**, four-run median **~69 s** (range 55.6–81.8 s),
-      with `domReady` at 4.2–5.6 s — so ~64 s is client-side after the DOM is ready. The number is
-      current, not stale. The workbook that has been opened repeatedly since 2026-08-05 is slower
-      still at **80 s** (`data.db` 2.59 MB vs 1.72 MB). Server-side is not the problem: T10 logged the
-      collab document loading in 357 ms. **Depends on Q10.** Start with attribution — no profile has
-      ever been taken across the cold open. Evidence: gitignored `docs/superpowers/sheets-tickets/T12-remeasure-2026-08-28.md`. **M** to measure, unknown to fix
-      - Note: the old entry fused two independent numbers. The 16.5 s figure is the *first tab switch*
-        to Incurred, measured after the canvas already exists. It is not a component of the 68 s.
-      - The re-run also showed the spread is far wider than P4 implied — 55.6–81.8 s across four runs of
-        the same file on the same build, on a loaded developer machine. Any future optimisation claiming
-        less than ~15 s cannot be demonstrated here without many more replicates, so **fix the bench
-        before trusting a result**: a quiet machine, or many more runs.
+      heavily loaded (load average 9.7–12.8 on 10 cores) and every other timing from that session proved
+      unreliable, so this is a flag rather than a finding — but nobody should quote 4.7 s until it has been re-confirmed. **S**
+- [ ] **Re-measure the cold open on a quiet machine — the 68 s figure is not trustworthy.** Seven runs
+      of the *same* workbook on the *same* production build on 2026-08-28 gave **55.6 · 68.0 · 68.6 ·
+      70.1 · 81.8 · 104.5 · 123.9 s** — a 2.2x spread, drifting upward as the host loaded up (load
+      average 9.7-12.8 on 10 cores, WebStorm at 91 % CPU). The harness was measuring machine load, not
+      the app. Reinder reports the same workbook opening in **about 3 seconds** in a normal foreground
+      Chrome, which is 20x faster than anything the harness produced and is the better evidence.
+      **Treat "68 s" as unverified.** T10's original figure came from the same headless-Playwright
+      harness on the same working machine, so it carries the same doubt — this may not be a real
+      user-facing problem at all. Establish a trustworthy number first: an idle machine, a real
+      browser, several replicates, and a small/medium workbook alongside the 340k-cell one (**Q10**).
+      Evidence: gitignored `docs/superpowers/sheets-tickets/T12-remeasure-2026-08-28.md`. **S** to measure properly
+      - The one shape worth keeping from the traced run, pending confirmation: the cost sits *after* the
+        document arrives. WebSocket first frame at 28.8 s, canvas at 123.9 s — so the dominant term is
+        client-side decode + workbook init + first render, not network or server. T10 independently
+        logged the collab document loading in 357 ms, which agrees.
+      - The old entry also fused two unrelated numbers: 16.5 s was the *first tab switch* to Incurred,
+        measured after the canvas already exists. It is not a component of the cold open.
 - [ ] **Persist the live text-measure cache.** `measureTextCache` (`state/modules/text.ts:111`) is content-addressed — keyed by string plus full font string — and safe to persist past the 100ms render-cache idle timer (`state/canvas.ts:156`) with a size cap. Worth ~5.7% of a tab switch. **S**
 - [ ] **`measureTextCellInfoCache` has never worked.** Declared at `state/modules/text.ts:112`, cleared, read at `:362`, and **never written anywhere in the tree** since the fork — so `getCellTextInfo` (1.9%) recomputes on every call, even inside a single draw burst. Either delete the dead field so nobody assumes caching is handled, or make it work — which needs a sheet-id in the key (it's keyed `r_c` today, so persisting it across sheets returns sheet A's layout for sheet B) plus invalidation on every edit, paste, style change, resize and incoming Yjs op, none of which exists. `state/render/overflow.ts:16` has the same missing-sheet-id key. Deleting is recommended unless the cold-open work turns out to need it. **S** to delete, **M** to build
 - [ ] **Open one of our xlsx exports in real Excel or Google Sheets.** **See Q12.** **S**, human-only
