@@ -19,7 +19,7 @@ import {
     getRangetxt,
     getSheetIndex,
 } from '../../state';
-import { RangeDialog } from './RangeDialog';
+import { CellRangeDialog } from '../CellRangeDialog';
 
 const VERIFICATION_TYPES = [
     'dropdown',
@@ -61,6 +61,20 @@ export function DataVerification() {
     const { showDialog, showNonModalDialog, hideDialog } = useDialog();
     const { dataVerification, toolbar, button, generalDialog } = en;
 
+    // Re-show this dialog when the picker closes; its mount effect reads rangeDialog back.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: DataVerification is this module's own component — a stable binding, not reactive state
+    const closeRangePicker = useCallback(
+        (rangeTxt?: string) => {
+            setContext((ctx) => {
+                if (rangeTxt != null) ctx.rangeDialog!.rangeTxt = rangeTxt;
+                ctx.rangeDialog!.show = false;
+                ctx.rangeDialog!.singleSelect = false;
+            });
+            showDialog(<DataVerification />);
+        },
+        [setContext, showDialog],
+    );
+
     // Enable mouse selection
     const dataSelectRange = useCallback(
         (type: string, value: string) => {
@@ -69,9 +83,15 @@ export function DataVerification() {
                 ctx.rangeDialog!.type = type;
                 ctx.rangeDialog!.rangeTxt = value;
             });
-            showNonModalDialog(<RangeDialog />);
+            showNonModalDialog(
+                <CellRangeDialog
+                    value={value}
+                    onConfirm={(rangeTxt) => closeRangePicker(rangeTxt)}
+                    onCancel={() => closeRangePicker()}
+                />,
+            );
         },
-        [setContext, showNonModalDialog],
+        [closeRangePicker, setContext, showNonModalDialog],
     );
 
     // Confirm and cancel buttons
@@ -221,7 +241,7 @@ export function DataVerification() {
                             className="rounded-none"
                             onClick={() => {
                                 hideDialog();
-                                dataSelectRange('rangeTxt', context.dataVerification!.dataRegulation!.value1);
+                                dataSelectRange('rangeTxt', context.dataVerification!.dataRegulation!.rangeTxt);
                             }}
                         >
                             <Table />

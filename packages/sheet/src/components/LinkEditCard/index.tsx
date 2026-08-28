@@ -5,22 +5,22 @@ import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
-import { Copy, Grid3x3, Pencil, Unlink, X } from 'lucide-react';
+import { Copy, Grid3x3, Pencil, Unlink } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
 import {
     en,
-    getRangetxt,
     goToLink,
     isLinkValid,
     type LinkCardProps,
     normalizeSelection,
-    onRangeSelectionModalMoveStart,
     removeHyperlink,
     replaceHtml,
     saveHyperlink,
 } from '../../state';
+import { CellRangeDialog } from '../CellRangeDialog';
 
 // pointer-events-auto: the overlay pane-region wrapper is pointer-events none.
 // eigen-paper-chrome: the card is app chrome inside the light-pinned workbook
@@ -40,12 +40,12 @@ export function LinkEditCard({
     selectingCellRange,
 }: LinkCardProps) {
     const { context, setContext, refs } = useContext(WorkbookContext);
+    const { showNonModalDialog, hideDialog } = useDialog();
     const [linkText, setLinkText] = useState<string>(originText);
     const [linkAddress, setLinkAddress] = useState<string>(originAddress);
     const [linkType, setLinkType] = useState<string>(originType);
     const { insertLink, linkTypeList, button } = en;
     const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
-    const skipCellRangeSet = useRef(true);
     const isLinkAddressValid = isLinkValid(linkType, linkAddress);
     const invalidBorder = linkAddress && !isLinkAddressValid.isValid && 'border-destructive';
 
@@ -58,6 +58,7 @@ export function LinkEditCard({
         });
     }, [refs.globalCache, setContext]);
 
+    // The picker is a non-modal dialog over the grid, so this editor steps aside while it is open.
     const setRangeModalVisible = useCallback(
         (visible: boolean) =>
             setContext((draftCtx) => {
@@ -65,6 +66,27 @@ export function LinkEditCard({
                 if (draftCtx.linkCard != null) draftCtx.linkCard.selectingCellRange = visible;
             }),
         [setContext],
+    );
+
+    const openRangePicker = useCallback(
+        (seed: string) => {
+            const close = (rangeTxt?: string) => {
+                if (rangeTxt != null) setLinkAddress(rangeTxt);
+                setRangeModalVisible(false);
+                hideDialog();
+            };
+            setRangeModalVisible(true);
+            showNonModalDialog(
+                <CellRangeDialog
+                    value={seed}
+                    editable
+                    includeSheetName
+                    onConfirm={(rangeTxt) => close(rangeTxt)}
+                    onCancel={() => close()}
+                />,
+            );
+        },
+        [hideDialog, setRangeModalVisible, showNonModalDialog],
     );
 
     const containerEvent = useMemo(
@@ -99,25 +121,6 @@ export function LinkEditCard({
         setLinkText(originText);
         setLinkType(originType);
     }, [rc, originAddress, originText, originType]);
-
-    useLayoutEffect(() => {
-        if (selectingCellRange) {
-            skipCellRangeSet.current = true;
-        }
-    }, [selectingCellRange]);
-
-    useLayoutEffect(() => {
-        if (skipCellRangeSet.current) {
-            skipCellRangeSet.current = false;
-            return;
-        }
-        if (selectingCellRange) {
-            const len = context.selections?.length ?? 0;
-            if (len > 0) {
-                setLinkAddress(getRangetxt(context, context.currentSheetId, context.selections![len - 1], ''));
-            }
-        }
-    }, [context, selectingCellRange]);
 
     // Hover preview for an existing link: open / copy / edit / unlink. Anchored to the cell.
     if (!isEditing) {
@@ -166,66 +169,8 @@ export function LinkEditCard({
         );
     }
 
-    // Cell-range picker: a non-modal, draggable card so the user can click cells in the grid.
-    if (selectingCellRange) {
-        return (
-            <div
-                className={cn(
-                    modalBase,
-                    'sheet-link-modify-modal range-selection-modal w-[380px] p-[22px] select-auto',
-                )}
-                style={{ left: position.cellLeft, top: position.cellBottom + 5 }}
-                // Of containerEvent, only the hover + keyboard handlers: mousemove/up
-                // must reach the overlay so the card's drag-to-move keeps working.
-                onMouseEnter={containerEvent.onMouseEnter}
-                onMouseLeave={containerEvent.onMouseLeave}
-                onKeyDown={containerEvent.onKeyDown}
-                onDoubleClick={containerEvent.onDoubleClick}
-                onMouseDown={(e) => {
-                    const { nativeEvent } = e;
-                    onRangeSelectionModalMoveStart(context, refs.globalCache, nativeEvent);
-                    e.stopPropagation();
-                }}
-            >
-                <button
-                    type="button"
-                    className="absolute right-[22px] top-[22px] cursor-pointer"
-                    onClick={() => setRangeModalVisible(false)}
-                >
-                    <X aria-hidden="true" />
-                </button>
-                <div className="mb-3 text-base font-medium leading-6 text-foreground">{insertLink.selectCellRange}</div>
-                <Input
-                    {...containerEvent}
-                    className={cn('h-8 w-full', invalidBorder)}
-                    placeholder={insertLink.cellRangePlaceholder}
-                    onChange={(e) => setLinkAddress(e.target.value)}
-                    value={linkAddress}
-                />
-                {tooltip}
-                <div className="flex justify-end gap-2">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            setLinkAddress(originAddress);
-                            setRangeModalVisible(false);
-                        }}
-                    >
-                        {button.cancel}
-                    </Button>
-                    <Button
-                        size="sm"
-                        onClick={() => {
-                            if (isLinkAddressValid.isValid) setRangeModalVisible(false);
-                        }}
-                    >
-                        {button.confirm}
-                    </Button>
-                </div>
-            </div>
-        );
-    }
+    // The cell-range picker takes over as a non-modal dialog; this editor reappears on close.
+    if (selectingCellRange) return null;
 
     // Link editor: a centered dialog, consistent with the other sheet dialogs.
     return (
@@ -271,7 +216,7 @@ export function LinkEditCard({
                                 } else {
                                     setLinkAddress('');
                                 }
-                                if (value === 'cellrange') setRangeModalVisible(true);
+                                if (value === 'cellrange') openRangePicker('');
                                 setLinkType(value);
                             }}
                         >
@@ -314,7 +259,7 @@ export function LinkEditCard({
                                 <button
                                     type="button"
                                     className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-                                    onClick={() => setRangeModalVisible(true)}
+                                    onClick={() => openRangePicker(linkAddress)}
                                 >
                                     <Grid3x3 className="size-4" aria-hidden="true" />
                                 </button>

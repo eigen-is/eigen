@@ -15,7 +15,6 @@ import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
-import { onRangeSelectionModalMove, onRangeSelectionModalMoveEnd } from '../modules/hyperlink';
 import { colLocation, rowLocation } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
@@ -380,7 +379,6 @@ export function handleOverlayMouseMove(
 ) {
     if (onImageMove(ctx, globalCache, e)) return;
     onCellsMove(ctx, globalCache, e, scrollEl, container);
-    onRangeSelectionModalMove(globalCache, e);
 
     if (!ctx.selectionActive && !ctx.scrolling) {
         updateFilterButtonHover(ctx, globalCache, e, scrollEl);
@@ -413,7 +411,6 @@ export function handleOverlayMouseUp(
     const rect = container.getBoundingClientRect();
     onImageMoveEnd(ctx, globalCache);
     onFormulaRangeDragEnd(ctx);
-    onRangeSelectionModalMoveEnd(globalCache);
     onCellsMoveEnd(ctx, globalCache, e, scrollEl, container);
     if (
         ctx.formulaCache.rangestart ||

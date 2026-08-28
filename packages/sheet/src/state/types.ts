@@ -337,10 +337,6 @@ export type GlobalCache = {
     };
     linkCard?: {
         mouseEnter?: boolean;
-        rangeSelectionModal?: {
-            initialPosition: Rect | undefined;
-            cursorMoveStartPosition: { x: number; y: number } | undefined;
-        };
     };
     dragCellStartPos?: {
         x: number;
