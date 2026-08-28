@@ -24,7 +24,6 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
             { t: 0, n: formulaMore.Math },
             { t: 1, n: formulaMore.Statistical },
             { t: 2, n: formulaMore.Lookup },
-            { t: 3, n: formulaMore.luckysheet },
             { t: 4, n: formulaMore.dataMining },
             { t: 5, n: formulaMore.Database },
             { t: 6, n: formulaMore.Date },

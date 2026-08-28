@@ -172,7 +172,7 @@ Rich payload (`EigenClipboardData`):
 
 **In-app sheets → sheets copy-paste does not use this system.** Sheets writes the eigen payload on every copy, but
 `packages/sheet/src/components/Workbook/index.tsx:632` skips `readEigenClipboard` whenever the clipboard HTML
-contains `sheet-copy-action-table` — which the sheet's own copy always emits
+contains `copy-action-table` — matched as a suffix so a clipboard written before the 2026-08-28 `fortune-` → `sheet-` rename is still recognised, and which the sheet's own copy always emits
 (`packages/sheet/src/state/modules/selection.ts:1495`). Paste is instead served from `ctx.copyState`
 (`packages/sheet/src/state/context.ts:136`), which holds **coordinates only**; the fidelity comes from re-reading
 the live cells, which is why formulas, number formats, conditional-format rules, data validation and hyperlinks all

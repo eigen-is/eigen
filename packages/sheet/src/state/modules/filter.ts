@@ -117,7 +117,10 @@ export function getFilterButtonAtPosition(ctx: Context, x: number, y: number) {
     const options = ctx.filterOptions;
     if (options == null) return undefined;
     if (y < options.top || y >= options.top + FILTER_BUTTON_HEIGHT) return undefined;
-    for (const item of options.items) {
+    // Backwards: a column narrower than the button (the resize floor is 10px, the button is 20)
+    // overlaps its neighbour, and the draw loop leaves the later item on top.
+    for (let i = options.items.length - 1; i >= 0; i -= 1) {
+        const item = options.items[i];
         if (x >= item.left && x < item.left + FILTER_BUTTON_WIDTH) {
             return item;
         }

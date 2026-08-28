@@ -629,7 +629,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)
                     // but only if this is NOT an internal sheet→sheet copy (which uses HTML with sheet-copy-action-table)
                     const htmlData = clipboardData.getData('text/html');
-                    const isInternalCopy = htmlData?.includes('sheet-copy-action-table');
+                    // Suffix, not the full marker: a clipboard written before the rename says `fortune-copy-action-table`.
+                    const isInternalCopy = htmlData?.includes('copy-action-table');
 
                     if (!isInternalCopy) {
                         const eigenData = readEigenClipboard(clipboardData);

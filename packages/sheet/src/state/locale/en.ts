@@ -9664,7 +9664,6 @@ export const en = {
         Engineering: 'Engineering',
         Filter: 'Filter',
         Financial: 'Financial',
-        luckysheet: 'Luckysheet',
         other: 'Other',
         Logical: 'Logical',
         Lookup: 'Lookup',

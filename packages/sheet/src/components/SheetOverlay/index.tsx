@@ -504,9 +504,9 @@ export const SheetOverlay: React.FC = () => {
                         </OverlayRegion>
                     </div>
                     {cellMenuAnchor}
-                    <div id="sheet-cell-flow_0" className="sheet-cell-flow luckysheetsheetchange">
+                    <div id="sheet-cell-flow_0" className="sheet-cell-flow">
                         <div className="sheet-cell-flow-clip">
-                            <div id="luckysheetcoltable_0" className="sheet-cell-flow-col">
+                            <div className="sheet-cell-flow-col">
                                 <div
                                     id="sheet-table_0"
                                     className="sheet-cell-table"
