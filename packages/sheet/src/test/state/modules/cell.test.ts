@@ -117,12 +117,9 @@ describe('state/modules/cell — updateCell auto-height', () => {
         return input as unknown as HTMLDivElement;
     }
 
-    // The Workbook seeding effect assigns `draftCtx.config = sheet.config`, so the mirror and
-    // the sheet's config start as the same object — reproduce that, not two clones.
     function editContext(): Context {
         const config: SheetConfig = { columnlen: { 0: 40 } };
         const ctx = contextFactory({ config }) as Context;
-        ctx.sheets[0].config = config;
         ctx.sheets[0].data = [
             [{ v: 'x', m: 'x', ct: { fa: 'General', t: 'g' } }, null, null, null],
             [null, null, null, null],

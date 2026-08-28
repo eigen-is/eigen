@@ -1,15 +1,18 @@
 // Pins the selection's invisible hit targets, which are pure CSS geometry and
 // therefore impossible to see in a screenshot and easy to shrink by accident.
-// Everything here is read off index.css and reduced to one number per edge: how
-// far the grab area reaches outside the selection (over a neighbouring cell) and
-// how far it reaches inside it (over the selection's own interior, which is what
-// a plain click uses to start a new selection).
+// The two sizes are named once on .sheet-overlay and every offset derives from
+// them with calc(), so this reads the named values rather than re-deriving a
+// private model of the box model that could be wrong in the same way the CSS is.
 
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const css = readFileSync(fileURLToPath(new URL('../../../components/SheetOverlay/index.css', import.meta.url)), 'utf8');
+// Comments stripped first: a `:` inside one would otherwise be read as a declaration.
+const css = readFileSync(
+    fileURLToPath(new URL('../../../components/SheetOverlay/index.css', import.meta.url)),
+    'utf8',
+).replace(/\/\*[\s\S]*?\*\//g, '');
 
 function declarations(selector: string): Map<string, string> {
     const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -30,39 +33,31 @@ function px(selector: string, property: string): number {
     return Number.parseFloat(value);
 }
 
-// Selection padding-box edge = 0, outside positive. `offset` is the CSS offset on
-// that edge (top/right/bottom/left), `size` the box's extent across it.
-function reach(offset: number, size: number) {
-    return { outside: -offset, inside: offset + size };
-}
-
-// The four strips, each read on the edge it hugs.
-const strips = [
-    { selector: '.sheet-cs-draghandle-top', offset: 'top', size: 'height' },
-    { selector: '.sheet-cs-draghandle-bottom', offset: 'bottom', size: 'height' },
-    { selector: '.sheet-cs-draghandle-left', offset: 'left', size: 'width' },
-    { selector: '.sheet-cs-draghandle-right', offset: 'right', size: 'width' },
-] as const;
+const GRAB_BAND = px('.sheet-overlay', '--sheet-grab-band');
+const FILL_GRAB = px('.sheet-overlay', '--sheet-fill-grab');
 
 describe('drag-to-move band', () => {
-    test('is 8px centred on the selection border, on all four edges', () => {
-        for (const { selector, offset, size } of strips) {
-            expect(reach(px(selector, offset), px(selector, size))).toEqual({ outside: 4, inside: 4 });
+    test('is 8px, centred on the selection border by a calc off the named value', () => {
+        expect(GRAB_BAND).toBe(8);
+        expect(declarations('.sheet-cs-draghandle').get('--sheet-grab-band-offset')).toBe(
+            'calc(var(--sheet-grab-band) / -2)',
+        );
+        for (const selector of ['top', 'bottom', 'left', 'right'].map((edge) => `.sheet-cs-draghandle-${edge}`)) {
+            for (const [, value] of declarations(selector)) {
+                expect(value).toMatch(/var\(--sheet-grab-band(-offset)?\)/);
+            }
         }
     });
 
     test('never reaches more than 4px over a neighbouring cell', () => {
         // 4px is the fork's original outward offset. Growing it is what starts
         // swallowing clicks meant for the cell next to the selection.
-        for (const { selector, offset } of strips) {
-            expect(-px(selector, offset)).toBeLessThanOrEqual(4);
-        }
+        expect(GRAB_BAND / 2).toBeLessThanOrEqual(4);
     });
 
     test('leaves the middle of a default 19px row free to start a new selection', () => {
-        const top = reach(px('.sheet-cs-draghandle-top', 'top'), px('.sheet-cs-draghandle-top', 'height'));
-        const bottom = reach(px('.sheet-cs-draghandle-bottom', 'bottom'), px('.sheet-cs-draghandle-bottom', 'height'));
-        expect(19 - top.inside - bottom.inside).toBeGreaterThan(8);
+        // Both the top and the bottom band eat half their width from the row's interior.
+        expect(19 - GRAB_BAND).toBeGreaterThan(8);
     });
 
     test('paints nothing — it is hit area only', () => {
@@ -83,26 +78,13 @@ describe('fill handle', () => {
         }
     });
 
-    test('the hit target is 14px and centred on the selection corner, not on the square', () => {
-        const inset = declarations('.sheet-cs-fillhandle::after').get('inset');
-        if (inset == null) throw new Error('no inset on .sheet-cs-fillhandle::after');
-        const [insetTop, insetRight, insetBottom, insetLeft] = inset.split(/\s+/).map(Number.parseFloat);
-        // Axis points outward from the selection's corner. The pseudo-element's
-        // insets are measured from the handle's padding box, so the handle's own
-        // border sits between them and the square the user sees.
-        const border = Number.parseFloat(
-            /(-?[\d.]+)px/.exec(declarations('.sheet-cs-fillhandle').get('border') ?? '')?.[1] ?? '',
-        );
-        const squareOuterEdge = -px('.sheet-cs-fillhandle', 'bottom');
-        const squareInnerEdge = squareOuterEdge - px('.sheet-cs-fillhandle', 'height');
-
-        const outside = squareOuterEdge - border - insetBottom;
-        const inside = -(squareInnerEdge + border + insetTop);
-        expect({ outside, inside }).toEqual({ outside: 6, inside: 8 });
-        expect(outside + inside).toBe(14);
-        // Same geometry on the horizontal axis.
-        expect(insetLeft).toBe(insetTop);
-        expect(insetRight).toBe(insetBottom);
+    test('the grab area is 14px, spent off the named value on both axes', () => {
+        expect(FILL_GRAB).toBe(14);
+        const decls = declarations('.sheet-cs-fillhandle::after');
+        expect(decls.get('--sheet-fill-grab-inner')).toBe('calc(6px - var(--sheet-fill-grab))');
+        // The inward inset carries the calc on both axes; the outward pair is the 2px
+        // that puts the grab 1px past the square, which the rule's comment explains.
+        expect(decls.get('inset')).toBe('var(--sheet-fill-grab-inner) -2px -2px var(--sheet-fill-grab-inner)');
     });
 
     test('beats the move band at the bottom-right corner', () => {

@@ -27,12 +27,9 @@ const win = new Window();
 g.window = win;
 g.document = win.document;
 
-// The seeding effect assigns `draftCtx.config = sheet.config`, so the mirror and the
-// sheet's config start as the same object — reproduce that, not two clones.
 function resizeContext(): Context {
     const config = { rowlen: { 2: 40 }, columnlen: { 2: 100 } };
     const ctx = contextFactory({ config }) as Context;
-    ctx.sheets[0].config = config;
     ctx.rowHeaderWidth = 46;
     ctx.columnHeaderHeight = 20;
     ctx.defaultrowlen = 19;

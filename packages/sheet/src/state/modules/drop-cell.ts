@@ -5,7 +5,7 @@ import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, editableConfig, getFlowdata } from '../context';
 import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getBorderInfoCompute } from './border';
@@ -1895,9 +1895,7 @@ export function updateDropCell(ctx: Context) {
     // filled formula cell.
     const resolver = createContextResolver(ctx);
 
-    // Mirror first — the renderer paints borders from ctx.config; the sheet half is
-    // flushed once the fill is laid out, so the carried borders sync and undo too.
-    const cfg = ctx.config;
+    const cfg = editableConfig(ctx, file);
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
     // Live map, not a clone: the copy and apply ranges are disjoint, so reading a source
     // rule while writing the filled ones is safe — and the write has to land on the sheet
@@ -2043,9 +2041,6 @@ export function updateDropCell(ctx: Context) {
             }
         }
     }
-
-    // Both halves — immer emits nothing here when the fill carried no border.
-    ctx.sheets[index].config = cfg;
 
     // conditional format
     const cdformat = file.conditionalFormatRules;

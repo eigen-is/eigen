@@ -42,8 +42,6 @@ function measuringCanvas(): CanvasRenderingContext2D {
     return canvas as unknown as CanvasRenderingContext2D;
 }
 
-// The Workbook seeding effect assigns `draftCtx.config = sheet.config`, so the mirror and
-// the sheet's config start as the same object — reproduce that, not two clones.
 function sizedContext(): Context {
     const config: SheetConfig = { columnlen: { 0: 73 } };
     const ctx = contextFactory({
@@ -52,7 +50,6 @@ function sizedContext(): Context {
         editingCellPosition: [],
         selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
     }) as Context;
-    ctx.sheets[0].config = config;
     ctx.sheets[0].data = [
         [
             { v: 'a much longer cell text', m: 'a much longer cell text', ct: { fa: 'General', t: 'g' } },

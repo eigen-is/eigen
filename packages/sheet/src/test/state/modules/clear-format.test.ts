@@ -39,12 +39,9 @@ const spanningRange: BorderInfo = {
 
 const styled = (): Cell => ({ v: 1, m: '1', ct: { fa: 'General', t: 'n' }, bg: '#ff0000', bl: 1 });
 
-// The Workbook seeding effect assigns `draftCtx.config = sheet.config`, so the mirror and
-// the sheet's config start as the same object — reproduce that, not two clones.
 function clearFormatContext(): Context {
     const config: SheetConfig = { borderInfo: [insideCell, outsideCell, spanningRange] };
     const ctx = contextFactory({ config, selections: [CLEAR_RECT] }) as Context;
-    ctx.sheets[0].config = config;
     ctx.sheets[0].data = [
         [styled(), styled(), null, null],
         [styled(), styled(), null, null],

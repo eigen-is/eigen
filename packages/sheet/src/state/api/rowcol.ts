@@ -1,5 +1,5 @@
 import { forEach, isNumber, isPlainObject, isUndefined } from 'es-toolkit/compat';
-import type { Context } from '../context';
+import { type Context, editableConfig } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules';
 import { getSheetIndex } from '../utils';
 import { type CommonOptions, getSheet } from './common';
@@ -116,12 +116,7 @@ export function setRowHeight(
 
     const sheet = getSheet(ctx, options);
 
-    // Write through ctx.config for the current sheet, the way hideRowOrColumn and the
-    // drag handlers do: mutating the sheet's own config and then re-pointing the mirror
-    // collapses immer's patches into one top-level ['config'] patch, which filterPatch
-    // drops — the resize would neither sync to peers nor undo.
-    const isCurrent = ctx.currentSheetId === sheet.id;
-    const cfg = (isCurrent ? ctx.config : sheet.config) || {};
+    const cfg = editableConfig(ctx, sheet);
     if (cfg.rowlen == null) {
         cfg.rowlen = {};
     }
@@ -138,12 +133,6 @@ export function setRowHeight(
             }
         }
     });
-
-    sheet.config = cfg;
-
-    if (isCurrent) {
-        ctx.config = cfg;
-    }
 }
 
 export function setColumnWidth(
@@ -158,9 +147,7 @@ export function setColumnWidth(
 
     const sheet = getSheet(ctx, options);
 
-    // Mirror-first for the current sheet — see setRowHeight.
-    const isCurrent = ctx.currentSheetId === sheet.id;
-    const cfg = (isCurrent ? ctx.config : sheet.config) || {};
+    const cfg = editableConfig(ctx, sheet);
     if (cfg.columnlen == null) {
         cfg.columnlen = {};
     }
@@ -177,12 +164,6 @@ export function setColumnWidth(
             }
         }
     });
-
-    sheet.config = cfg;
-
-    if (isCurrent) {
-        ctx.config = cfg;
-    }
 }
 
 export function getRowHeight(ctx: Context, rows: number[], options: CommonOptions = {}) {

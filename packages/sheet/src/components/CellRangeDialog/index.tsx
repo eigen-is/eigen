@@ -8,20 +8,22 @@ import { en, getRangetxt, isLinkValid } from '../../state';
 
 type CellRangeDialogProps = {
     value: string;
-    editable?: boolean;
-    // Cell-range links are followed from any sheet, so their text carries the sheet name.
-    includeSheetName?: boolean;
+    // 'link' is followed from any sheet, so it is typeable and its text carries the sheet
+    // name; 'validation' is pick-only and always relative to the current sheet.
+    variant: 'link' | 'validation';
     onConfirm: (rangeTxt: string) => void;
     onCancel: () => void;
 };
 
-export function CellRangeDialog({ value, editable, includeSheetName, onConfirm, onCancel }: CellRangeDialogProps) {
+export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRangeDialogProps) {
     const { context } = useContext(WorkbookContext);
     const { insertLink, dataVerification, button } = en;
     const [rangeTxt, setRangeTxt] = useState<string>(value);
+    const isLink = variant === 'link';
 
     // Only a typed range can be malformed — one picked on the grid never is.
-    const validity = editable ? isLinkValid('cellrange', rangeTxt) : { isValid: true, tooltip: '' };
+    const validity = isLinkValid('cellrange', rangeTxt);
+    const invalid = isLink && !validity.isValid;
 
     // The picker opens seeded from the stored range (an existing cell-range link, the
     // data-validation range), so the mount pass has to be skipped — it would overwrite
@@ -37,7 +39,7 @@ export function CellRangeDialog({ value, editable, includeSheetName, onConfirm, 
         }
         if (!context.selections) return;
         const range = context.selections[context.selections.length - 1];
-        const currentId = includeSheetName ? '' : context.currentSheetId;
+        const currentId = isLink ? '' : context.currentSheetId;
         setRangeTxt(getRangetxt(context, context.currentSheetId, range, currentId));
     }, [context.selections]);
 
@@ -46,29 +48,34 @@ export function CellRangeDialog({ value, editable, includeSheetName, onConfirm, 
             <DialogHeader>
                 <DialogTitle>{insertLink.selectCellRange}</DialogTitle>
             </DialogHeader>
-            {editable ? (
+            {isLink ? (
                 <div className="space-y-1.5">
                     <Input
-                        className={cn('h-8', !validity.isValid && rangeTxt && 'border-destructive')}
+                        className={cn('h-8', invalid && rangeTxt && 'border-destructive')}
                         spellCheck={false}
                         placeholder={insertLink.cellRangePlaceholder}
                         value={rangeTxt}
                         onChange={(e) => setRangeTxt(e.target.value)}
                     />
-                    {!validity.isValid && rangeTxt && <p className="text-xs text-destructive">{validity.tooltip}</p>}
+                    {invalid && rangeTxt && <p className="text-xs text-destructive">{validity.tooltip}</p>}
                 </div>
             ) : (
-                // A value display, not a text box: an input would take the dialog's opening
-                // focus and render focus-ringed with its value selected.
-                <div className="flex h-8 items-center rounded-md border border-input px-3 text-sm">
-                    {rangeTxt || <span className="text-muted-foreground">{dataVerification.selectCellRange2}</span>}
-                </div>
+                // A value display, not a text box: tabIndex -1 keeps it out of Radix
+                // FocusScope's tabbable candidates, which would otherwise take the dialog's
+                // opening focus and render it focus-ringed with its value selected.
+                <Input
+                    className="h-8"
+                    readOnly
+                    tabIndex={-1}
+                    placeholder={dataVerification.selectCellRange2}
+                    value={rangeTxt}
+                />
             )}
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={onCancel}>
                     {button.cancel}
                 </Button>
-                <Button size="sm" disabled={!validity.isValid} onClick={() => onConfirm(rangeTxt)}>
+                <Button size="sm" disabled={invalid} onClick={() => onConfirm(rangeTxt)}>
                     {button.confirm}
                 </Button>
             </DialogFooter>

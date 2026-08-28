@@ -1,7 +1,7 @@
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { clampToViewport, type ViewportPoint } from '../state';
+import type { ViewportPoint } from '../state';
 
 export type ModalOptions = {
     // When false, no backdrop and the rest of the page stays interactive (e.g. range picker).
@@ -12,12 +12,32 @@ export type ModalOptions = {
     anchor?: ViewportPoint;
     // Runs on every close route — a Cancel button, Escape, anything Radix adds later — so
     // callers holding state for an open dialog (the range picker's grid-select flag) can
-    // reset it from one place. Replacing the content via showModal drops it unrun: the
-    // caller that replaced it is already in control.
+    // reset it from one place. Replacing the content via showModal drops it unrun, by
+    // design: DataVerification's confirm path commits the picked range and immediately
+    // re-shows its own dialog, and a late onClose would run that teardown a second time
+    // over the dialog it just opened. Cancel and Escape go through hideModal instead, so
+    // they get exactly one run.
     onClose?: () => void;
 };
 
 const DEFAULT_WIDTH = 500;
+
+// Distance a clamped dialog keeps from the viewport edges.
+export const VIEWPORT_MARGIN = 8;
+
+// Shift a dialog of this size back on screen. Math.max last: one larger than the
+// viewport pins to the top-left margin rather than off the opposite edge.
+export function clampToViewport(
+    point: ViewportPoint,
+    size: { width: number; height: number },
+    viewport: { width: number; height: number },
+    margin: number = VIEWPORT_MARGIN,
+): ViewportPoint {
+    return {
+        left: Math.max(margin, Math.min(point.left, viewport.width - size.width - margin)),
+        top: Math.max(margin, Math.min(point.top, viewport.height - size.height - margin)),
+    };
+}
 
 type ModalState = {
     content: React.ReactNode;

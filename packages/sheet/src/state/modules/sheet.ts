@@ -2,7 +2,7 @@ import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
-import type { Context } from '../context';
+import { type Context, updateContextWithSheetConfig } from '../context';
 import { en } from '../locale/en';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
@@ -177,10 +177,7 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             }
         }
     }
-    const currentIdx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (currentIdx != null) {
-        ctx.config = ctx.sheets[currentIdx].config ?? {};
-    }
+    updateContextWithSheetConfig(ctx);
 }
 
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {

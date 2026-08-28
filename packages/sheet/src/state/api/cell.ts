@@ -2,7 +2,7 @@ import type { RangeBorderInfo } from '@workspace/lib/sheets';
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import type { Cell, CellStyle } from '../../engine/types';
-import type { Context } from '../context';
+import { type Context, editableConfig } from '../context';
 import {
     delFunctionGroup,
     dropCellCache,
@@ -183,11 +183,7 @@ export function setCellFormat(
 
     const cellData = targetSheetData?.[row]?.[column] || {};
 
-    // Mirror-first for the current sheet — see setRowHeight in api/rowcol. Reading the
-    // sheet half here dropped anything written to the mirror since, and the unconditional
-    // `ctx.config = cfg` below pointed the mirror at another sheet's config entirely.
-    const isCurrent = ctx.currentSheetId === sheet.id;
-    const cfg = (isCurrent ? ctx.config : sheet.config) || {};
+    const cfg = editableConfig(ctx, sheet);
     const ctValue = value as { fa?: string; t?: string } | null | undefined;
 
     // special format
@@ -222,12 +218,6 @@ export function setCellFormat(
     }
 
     targetSheetData[row][column] = cellData;
-
-    sheet.config = cfg;
-
-    if (isCurrent) {
-        ctx.config = cfg;
-    }
 }
 
 export function autoFillCell(

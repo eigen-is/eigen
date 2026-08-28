@@ -1,9 +1,9 @@
 import type { BorderInfo, BorderType, RangeBorderInfo } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set } from 'es-toolkit/compat';
+import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, is_date, update } from '../../engine/format';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, editableConfig, getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
@@ -44,9 +44,14 @@ export function updateFormatCell(
     if (isNil(d) || isNil(attr)) {
         return;
     }
+    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (sheetIndex == null) {
+        return;
+    }
+    const cfg = editableConfig(ctx, ctx.sheets[sheetIndex]);
     if (attr === 'ct') {
         for (let r = row_st; r <= row_ed; r += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
             }
 
@@ -132,13 +137,6 @@ export function updateFormatCell(
             }
         }
 
-        const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-        if (sheetIndex == null) {
-            return;
-        }
-        // Mirror first — calcRowColSize measures the grid from ctx.config, not the sheet,
-        // and the next mirror-first writer would otherwise assign the stale mirror back.
-        const cfg = ctx.config;
         for (let r = row_st; r <= row_ed; r += 1) {
             if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
@@ -161,8 +159,7 @@ export function updateFormatCell(
                         const rowHeight = round(textInfo.textHeightAll);
                         const currentRowHeight = cfg.rowlen?.[r] || ctx.sheets[sheetIndex].defaultRowHeight || 19;
                         if (rowHeight > currentRowHeight && cfg.customHeight?.[r] !== 1) {
-                            if (cfg.rowlen === undefined) cfg.rowlen = {};
-                            set(cfg, `rowlen.${r}`, rowHeight);
+                            (cfg.rowlen ??= {})[r] = rowHeight;
                         }
                     }
                 } else {
@@ -172,9 +169,6 @@ export function updateFormatCell(
                 }
             }
         }
-
-        // The sheet half too — immer emits nothing here when no row grew.
-        ctx.sheets[sheetIndex].config = cfg;
     }
 }
 
@@ -985,16 +979,18 @@ export function handleFormatPainter(ctx: Context) {
     ctx.formatPainterOnce = true;
 }
 
-// 2022-10-10 Replaced the forEach loop in handleClearFormat with an every loop that can break early, to prevent a selection from being processed multiple times
 export function handleClearFormat(ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    ctx.selections?.every((selection) => {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    const cfg = editableConfig(ctx, ctx.sheets[index]);
+    for (const selection of ctx.selections ?? []) {
         const [rowSt, rowEd] = selection.row;
         const [colSt, colEd] = selection.column;
         for (let r = rowSt; r <= rowEd; r += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
             }
             for (let c = colSt; c <= colEd; c += 1) {
@@ -1004,11 +1000,6 @@ export function handleClearFormat(ctx: Context) {
             }
         }
         // When clearing table styles, also clear border styles
-        const index = getSheetIndex(ctx, ctx.currentSheetId);
-        if (index == null) return false;
-        // If there are no border styles, skip table operations
-        if (ctx.config.borderInfo == null) return false;
-        const cfg = ctx.config;
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const source_borderInfo: BorderInfo[] = [];
 
@@ -1051,12 +1042,9 @@ export function handleClearFormat(ctx: Context) {
                 }
             }
 
-            // Both halves: the renderer reads the mirror, only the sheets[*] half syncs.
             cfg.borderInfo = source_borderInfo;
-            ctx.sheets[index].config = cfg;
         }
-        return true;
-    });
+    }
 }
 
 export function handleTextColor(ctx: Context, cellInput: HTMLDivElement, color: string) {

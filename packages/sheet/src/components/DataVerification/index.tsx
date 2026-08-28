@@ -86,15 +86,16 @@ export function DataVerification() {
             showNonModalDialog(
                 <CellRangeDialog
                     value={value}
+                    variant="validation"
                     onConfirm={(rangeTxt) => closeRangePicker(rangeTxt)}
-                    onCancel={() => closeRangePicker()}
+                    onCancel={hideDialog}
                 />,
                 // Every close route, Escape included: leaving `show` set parks the cell
                 // editor off-screen for good, so typing in any cell shows nothing.
                 { onClose: () => closeRangePicker() },
             );
         },
-        [closeRangePicker, setContext, showNonModalDialog],
+        [closeRangePicker, hideDialog, setContext, showNonModalDialog],
     );
 
     // Confirm and cancel buttons

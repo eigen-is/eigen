@@ -87,32 +87,30 @@ export function LinkEditCard({
         const freeze = refs.globalCache.freezen?.[context.currentSheetId];
         const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
         const { fixedLeft, fixedTop } = overlayRegionForCell(regions, freeze, r, c);
-        return overlayAnchorToViewport({
-            contentLeft: position.cellLeft,
-            contentTop: position.cellBottom + RANGE_PICKER_GAP,
+        return overlayAnchorToViewport(
+            position.cellLeft,
+            position.cellBottom + RANGE_PICKER_GAP,
             areaLeft,
             areaTop,
             fixedLeft,
             fixedTop,
-            scrollLeft: refs.globalCache.scrollLeft,
-            scrollTop: refs.globalCache.scrollTop,
-        });
+            refs.globalCache.scrollLeft,
+            refs.globalCache.scrollTop,
+        );
     }, [c, context.cellmainHeight, context.cellmainWidth, context.currentSheetId, position, r, refs]);
 
     const openRangePicker = useCallback(
         (seed: string) => {
-            const close = (rangeTxt?: string) => {
-                if (rangeTxt != null) setLinkAddress(rangeTxt);
-                hideDialog();
-            };
             setRangeModalVisible(true);
             showNonModalDialog(
                 <CellRangeDialog
                     value={seed}
-                    editable
-                    includeSheetName
-                    onConfirm={(rangeTxt) => close(rangeTxt)}
-                    onCancel={() => close()}
+                    variant="link"
+                    onConfirm={(rangeTxt) => {
+                        setLinkAddress(rangeTxt);
+                        hideDialog();
+                    }}
+                    onCancel={hideDialog}
                 />,
                 {
                     width: RANGE_PICKER_WIDTH,

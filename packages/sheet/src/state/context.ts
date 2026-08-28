@@ -82,6 +82,7 @@ export type Context = {
 
     currentSheetId: string;
     calculateSheetId: string;
+    // Derived mirror of the current sheet's config — never write one half alone; use editableConfig.
     config: SheetConfig;
 
     visibledatarow: number[];
@@ -498,6 +499,16 @@ export function updateContextWithSheetConfig(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
     ctx.config = ctx.sheets[index].config ?? {};
+}
+
+// The one way to write a sheet's config. Mirror first, sheet last: the reverse order collapses
+// immer's patches into a top-level ['config'] one that filterPatch drops, and the change never syncs.
+export function editableConfig(ctx: Context, sheet: Sheet): SheetConfig {
+    const isCurrent = sheet.id === ctx.currentSheetId;
+    const cfg = (isCurrent ? ctx.config : sheet.config) ?? {};
+    if (isCurrent) ctx.config = cfg;
+    sheet.config = cfg;
+    return cfg;
 }
 
 export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {

@@ -125,7 +125,7 @@ export function rangeSetValue(
 
             // handle case when user autocompletes the formula
             if (leftPar?.parentElement?.classList.contains('sheet-formula-text-color')) {
-                document.getElementsByClassName('sheet-formula-text-lpar')?.[0].parentNode?.appendChild(newEle);
+                leftPar.parentNode?.appendChild(newEle);
             } else {
                 refEle.parentNode.insertBefore(newEle, refEle.nextSibling);
             }

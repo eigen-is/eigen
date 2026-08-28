@@ -8,7 +8,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
-import type { Context } from '../context';
+import { type Context, updateContextWithSheetConfig } from '../context';
 import type { FilterEntry, FormulaCell, Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
@@ -886,10 +886,7 @@ export function insertRowCol(
     const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
 
-    if (id === ctx.currentSheetId) {
-        const i = getSheetIndex(ctx, id);
-        if (typeof i === 'number') ctx.config = ctx.sheets[i].config!;
-    }
+    if (id === ctx.currentSheetId) updateContextWithSheetConfig(ctx);
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
@@ -1139,10 +1136,7 @@ export function deleteRowCol(
     const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
 
-    if (id === ctx.currentSheetId) {
-        const i = getSheetIndex(ctx, id);
-        if (typeof i === 'number') ctx.config = ctx.sheets[i].config!;
-    }
+    if (id === ctx.currentSheetId) updateContextWithSheetConfig(ctx);
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 

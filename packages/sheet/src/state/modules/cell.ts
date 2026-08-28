@@ -6,7 +6,7 @@ import { booleanDisplay, genarate, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, editableConfig, getFlowdata } from '../context';
 import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
 import { getSheetIndex, indexToColumnChar, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
@@ -798,8 +798,7 @@ export function updateCell(
         // Word wrap
         const { defaultrowlen } = ctx;
 
-        // Mirror first — calcRowColSize measures the grid from ctx.config, not the sheet.
-        const cfg = ctx.config;
+        const cfg = editableConfig(ctx, ctx.sheets[index]);
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
@@ -819,8 +818,6 @@ export function updateCell(
             if (currentRowLen > defaultrowlen && !cfg.customHeight?.[r]) {
                 if (isNil(cfg.rowlen)) cfg.rowlen = {};
                 cfg.rowlen[r] = currentRowLen;
-                // The sheet half too — that is the one that syncs and undoes.
-                ctx.sheets[index].config = cfg;
             }
         }
     }

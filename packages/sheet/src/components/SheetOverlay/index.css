@@ -21,6 +21,11 @@
     width: 100%;
     height: 100%;
     outline-style: none;
+    /* Invisible grab geometry, named once so the rules below derive from it rather than
+       from hand-typed offsets: the total width of the drag-to-move band, and the total
+       side of the fill handle's grab square. src/test/components/SheetOverlay pins both. */
+    --sheet-grab-band: 8px;
+    --sheet-fill-grab: 14px;
 }
 
 .sheet-cell-area {
@@ -296,14 +301,16 @@
     pointer-events: auto;
 }
 
-/* 14x14 invisible grab area, centred on the selection corner rather than on the
-   square — the square is offset outward, so centring takes the extra reach back
-   over the selection (8px in) instead of over the cell below and right (6px out,
-   1px more than the square already reaches). */
+/* Invisible grab area, --sheet-fill-grab on a side, centred on the selection corner
+   rather than on the square. Insets run from the handle's padding box, which spans
+   0-4px outward from that corner (a 6px border-box square offset 5px out, 1px border):
+   -2px puts 6px of the grab outside, 1px more than the square already reaches, and the
+   calc spends the rest inside the selection, where a mis-hit is cheap. */
 .sheet-cs-fillhandle::after {
     content: "";
     position: absolute;
-    inset: -8px -2px -2px -8px;
+    --sheet-fill-grab-inner: calc(6px - var(--sheet-fill-grab));
+    inset: var(--sheet-fill-grab-inner) -2px -2px var(--sheet-fill-grab-inner);
 }
 
 /* Invisible grab band for drag-to-move; the selection's own 1px border is the
@@ -313,39 +320,40 @@
     cursor: move;
     z-index: 15;
     pointer-events: auto;
+    --sheet-grab-band-offset: calc(var(--sheet-grab-band) / -2);
 }
 
-/* 8px wide, centred on the selection border: 4px outside, 4px inside. Outward
-   reach is unchanged from the old 4px offset, so no click on a neighbouring cell
-   is newly swallowed — the extra grab is taken from the selection's own interior,
-   where a mis-hit is cheap (a press that never travels 8px leaves the selection
-   untouched, see dragCellThreshold in state/modules/move-cells.ts). */
+/* --sheet-grab-band wide, centred on the selection border, so half of it reaches
+   outside. The outward half must stay at 4px — the fork's original offset — or clicks
+   on a neighbouring cell start being swallowed; the extra grab is taken from the
+   selection's own interior, where a mis-hit is cheap (a press that never travels 8px
+   leaves the selection untouched, see dragCellThreshold in state/modules/move-cells.ts). */
 .sheet-cs-draghandle-top {
-    top: -4px;
-    left: -4px;
-    right: -4px;
-    height: 8px;
+    top: var(--sheet-grab-band-offset);
+    left: var(--sheet-grab-band-offset);
+    right: var(--sheet-grab-band-offset);
+    height: var(--sheet-grab-band);
 }
 
 .sheet-cs-draghandle-bottom {
-    bottom: -4px;
-    left: -4px;
-    right: -4px;
-    height: 8px;
+    bottom: var(--sheet-grab-band-offset);
+    left: var(--sheet-grab-band-offset);
+    right: var(--sheet-grab-band-offset);
+    height: var(--sheet-grab-band);
 }
 
 .sheet-cs-draghandle-left {
-    top: -4px;
-    bottom: -4px;
-    left: -4px;
-    width: 8px;
+    top: var(--sheet-grab-band-offset);
+    bottom: var(--sheet-grab-band-offset);
+    left: var(--sheet-grab-band-offset);
+    width: var(--sheet-grab-band);
 }
 
 .sheet-cs-draghandle-right {
-    top: -4px;
-    bottom: -4px;
-    right: -4px;
-    width: 8px;
+    top: var(--sheet-grab-band-offset);
+    bottom: var(--sheet-grab-band-offset);
+    right: var(--sheet-grab-band-offset);
+    width: var(--sheet-grab-band);
 }
 
 .sheet-input-box {
@@ -506,132 +514,6 @@
     cursor: ew-resize;
 }
 
-/* Comment dialog: move and resize handles */
-.sheet-postil-dialog-move {
-    position: absolute;
-    margin: 0px;
-    padding: 0px;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    right: 0;
-    pointer-events: none;
-}
-
-.sheet-postil-dialog-move .sheet-postil-dialog-move-item {
-    /*background: #000;*/
-    position: absolute;
-    pointer-events: all;
-    cursor: move;
-}
-
-.sheet-postil-dialog-move .sheet-postil-dialog-move-item-t {
-    width: 100%;
-    height: 3px;
-    /* border-bottom: 1px solid #000; */
-    left: 0;
-    top: -4px;
-}
-
-.sheet-postil-dialog-move .sheet-postil-dialog-move-item-r {
-    width: 3px;
-    height: 100%;
-    /* border-left: 1px solid #000; */
-    right: -4px;
-    top: 0;
-}
-
-.sheet-postil-dialog-move .sheet-postil-dialog-move-item-b {
-    width: 100%;
-    height: 3px;
-    /* border-top: 1px solid #000; */
-    left: 0;
-    bottom: -4px;
-}
-
-.sheet-postil-dialog-move .sheet-postil-dialog-move-item-l {
-    width: 3px;
-    height: 100%;
-    /* border-right: 1px solid #000; */
-    left: -4px;
-    top: 0;
-}
-
-.sheet-postil-show-active .sheet-postil-dialog-move .sheet-postil-dialog-move-item {
-    border-color: var(--selection-handle);
-}
-
-.sheet-postil-dialog-resize {
-    position: absolute;
-    margin: 0px;
-    padding: 0px;
-    top: -2px;
-    left: -2px;
-    bottom: -2px;
-    right: -2px;
-    pointer-events: none;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item {
-    position: absolute;
-    height: 6px;
-    width: 6px;
-    border: 1px solid var(--selection-handle);
-    pointer-events: all;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-lt {
-    left: -6px;
-    top: -6px;
-    cursor: nw-resize;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-mt {
-    left: 50%;
-    top: -6px;
-    margin-left: -4px;
-    cursor: n-resize;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-lm {
-    top: 50%;
-    left: -6px;
-    margin-top: -4px;
-    cursor: w-resize;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-rm {
-    top: 50%;
-    right: -6px;
-    margin-top: -4px;
-    cursor: e-resize;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-rt {
-    right: -6px;
-    top: -6px;
-    cursor: ne-resize;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-lb {
-    left: -6px;
-    bottom: -6px;
-    cursor: sw-resize;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-mb {
-    left: 50%;
-    bottom: -6px;
-    margin-left: -4px;
-    cursor: s-resize;
-}
-
-.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-rb {
-    right: -6px;
-    bottom: -6px;
-    cursor: se-resize;
-}
-
 .sheet-selection-copy-top {
     left: 0;
     right: 0;
@@ -664,16 +546,6 @@
     left: 0;
     background-position: right;
     /* background-image: url("EwaAntV.gif"); */
-}
-
-.sheet-selection-copy-hc {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    border: 2px dashed var(--selection-handle);
-    z-index: 8;
 }
 
 .sheet-formula-functionrange-highlight .sheet-copy {
