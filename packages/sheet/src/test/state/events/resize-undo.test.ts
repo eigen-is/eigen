@@ -122,3 +122,45 @@ describe("a peer's resize reaches the config mirror", () => {
         expect(applied.config.columnlen?.[2]).toBe(153);
     });
 });
+
+// The granularity of the surviving patch is itself load-bearing, and it is invisible to every
+// value assertion above — both shapes round-trip. immer attributes a shared child draft's patches
+// to whichever root key it reaches first; because `sheets` precedes `config` in the Context,
+// editableConfig has to hand back the draft reached through `sheets[i]`. Handing back the mirror
+// instead still syncs, but as one `['sheets', i, 'config']` replace of the whole object, which is
+// last-writer-wins: a peer's concurrent edit to an unrelated config key is silently clobbered,
+// and undo reverts the whole config rather than the one key. These pin the path, not just the value.
+describe('a config write syncs as a granular patch, not a whole-config replace', () => {
+    function configPatchPaths(recipe: (draft: Context) => void) {
+        const [, patches] = produceWithPatches(resizeContext(), recipe);
+        return filterPatch(patches).map((p) => p.path);
+    }
+
+    test('setRowHeight patches the rowlen key, not the config object', () => {
+        const paths = configPatchPaths((ctx: Context) => setRowHeight(ctx, { 2: 53 }));
+        expect(paths).toEqual([['sheets', 0, 'config', 'rowlen', '2']]);
+    });
+
+    test('setColumnWidth patches the columnlen key, not the config object', () => {
+        const paths = configPatchPaths((ctx: Context) => setColumnWidth(ctx, { 2: 153 }));
+        expect(paths).toEqual([['sheets', 0, 'config', 'columnlen', '2']]);
+    });
+
+    test('two writers to different config keys produce non-overlapping patches', () => {
+        const paths = configPatchPaths((ctx: Context) => {
+            setRowHeight(ctx, { 2: 53 });
+            setColumnWidth(ctx, { 2: 153 });
+        });
+        expect(paths).toEqual([
+            ['sheets', 0, 'config', 'rowlen', '2'],
+            ['sheets', 0, 'config', 'columnlen', '2'],
+        ]);
+    });
+
+    test('the inverse patch is granular too, so undo reverts one key', () => {
+        const [, , inversePatches] = produceWithPatches(resizeContext(), (ctx: Context) =>
+            setRowHeight(ctx, { 2: 53 }),
+        );
+        expect(filterPatch(inversePatches).map((p) => p.path)).toEqual([['sheets', 0, 'config', 'rowlen', '2']]);
+    });
+});

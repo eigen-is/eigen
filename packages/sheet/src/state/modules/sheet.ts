@@ -42,6 +42,7 @@ export function changeSheet(ctx: Context, id: string) {
 
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
+    updateContextWithSheetConfig(ctx); // the mirror follows the switch, not the next reseed
 
     if (ctx.hooks.afterActivateSheet) {
         setTimeout(() => {
@@ -132,6 +133,7 @@ export function deleteSheet(ctx: Context, id: string) {
         );
         const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
         ctx.currentSheetId = orderSheets?.[0]?.id as string;
+        updateContextWithSheetConfig(ctx); // else the mirror keeps the deleted sheet's config
     }
 
     if (ctx.hooks.afterDeleteSheet) {

@@ -501,13 +501,16 @@ export function updateContextWithSheetConfig(ctx: Context) {
     ctx.config = ctx.sheets[index].config ?? {};
 }
 
-// The one way to write a sheet's config. Mirror first, sheet last: the reverse order collapses
-// immer's patches into a top-level ['config'] one that filterPatch drops, and the change never syncs.
+// The one way to write a sheet's config. The returned draft must be the one reached through
+// `sheets[i]`: immer attributes a shared child's patches to whichever root key it reaches first,
+// and `sheets` precedes `config` in Context, so writing through the mirror instead emits one
+// `['sheets', i, 'config']` replace of the whole object — last-writer-wins on the wire and in undo,
+// where the granular paths would have merged. The mirror is re-pointed at the same draft so the
+// renderer, which reads `ctx.config`, sees the writes.
 export function editableConfig(ctx: Context, sheet: Sheet): SheetConfig {
-    const isCurrent = sheet.id === ctx.currentSheetId;
-    const cfg = (isCurrent ? ctx.config : sheet.config) ?? {};
-    if (isCurrent) ctx.config = cfg;
+    const cfg = sheet.config ?? {};
     sheet.config = cfg;
+    if (sheet.id === ctx.currentSheetId) ctx.config = cfg;
     return cfg;
 }
 

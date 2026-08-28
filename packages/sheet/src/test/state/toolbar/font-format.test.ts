@@ -1,9 +1,9 @@
 // Raising a range's font size auto-grows the rows it no longer fits. The grown height has
 // to land on both halves of the config mirror: updateFormatCell wrote
 // `sheets[i].config.rowlen` sheet-only and never re-pointed `ctx.config`, so calcRowColSize
-// kept measuring the old height AND the next mirror-first writer (setColumnWidth, the
-// resize drag) assigned the stale mirror back over the sheet — discarding the grown rows,
-// now persisted and broadcast because that path emits a whole-object config replace.
+// kept measuring the old height AND the next writer that hand-rolls the pair mirror-first —
+// the resize drag still does — assigned the stale mirror back over the sheet as a
+// whole-object config replace, discarding the grown rows, persisted and broadcast.
 // Driving the handlers through produceWithPatches is what exposes this: outside a recipe
 // the two halves are the same object, so any write appears to reach both.
 

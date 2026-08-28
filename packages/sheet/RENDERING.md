@@ -1,6 +1,6 @@
 # Sheet Rendering Architecture
 
-The fork's `fortune-` / `luckysheet-` class and id prefixes became `sheet-` on 2026-08-28. Two engine-private classes predate that convention and keep bare names — `range-selection-modal` (`LinkEditCard`, a `querySelector` target) and `header-arrow` (`ColumnHeader`) — and so do the engine's bare ids: `link-text`/`-type`/`-address`/`-cell`/`-sheet`, `searchFormulaListInput`, `checkTextColor`, `checkCellColor`, and the screen-reader nodes `sr-selection`, `sr-sheetFocus`, `shortcut-list`, `shortcuts-heading`. Grepping `sheet-` therefore does not enumerate the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
+The fork's `fortune-` / `luckysheet-` class and id prefixes became `sheet-` on 2026-08-28. One engine-private class predates that convention and keeps its bare name — `header-arrow` (`ColumnHeader`) — and so do the engine's bare ids: `link-text`/`-type`/`-address`/`-cell`/`-sheet`, `searchFormulaListInput`, `checkTextColor`, `checkCellColor`, and the screen-reader nodes `sr-selection`, `sr-sheetFocus`, `shortcut-list`, `shortcuts-heading`. Grepping `sheet-` therefore does not enumerate the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
 
 ## Component Tree
 
@@ -194,12 +194,15 @@ and [`docs/COMMENTS.md`](../../docs/COMMENTS.md).
 **File**: `LinkEditCard/index.tsx`
 
 Three modes:
-1. **Read-only toolbar**: shows link text + copy/edit/delete buttons, positioned near cell
-2. **Edit form**: text input + type select + address input + OK/Cancel
-3. **Range selection modal**: cell range input for internal links
+1. **Read-only toolbar**: link text + copy/edit/unlink buttons. The only absolutely-positioned one,
+   anchored near the active cell
+2. **Edit form**: text input + type select + address input, in a centred shared `Dialog`
+   (`@workspace/ui/components/dialog`)
+3. **Range picker**: `CellRangeDialog`, opened through `useDialog().showNonModalDialog` so the grid
+   stays clickable while a range is picked
 
-Positioned absolutely near the active cell. Class: `.sheet-link-modify-modal` (queried by
-`state/modules/hyperlink.ts`).
+Modes 2 and 3 are portaled shared dialogs, not positioned cards, so there is no class for the grid
+to query — the card's state lives in `ctx.linkCard` and is driven from `state/modules/hyperlink.ts`.
 
 ### 10. Data Verification Dropdown (Canvas glyph + React DOM menu)
 
