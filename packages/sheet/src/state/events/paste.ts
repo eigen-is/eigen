@@ -31,7 +31,7 @@ import { createContextResolver, setFormulaCellInfo } from '../modules/formula-ca
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
 import { COPY_ACTION_TABLE_MARKER, normalizeSelection, selectionCache } from '../modules/selection';
-import { expandRowsAndColumns, storeSheetParamALL } from '../modules/sheet';
+import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -79,17 +79,10 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
         }
     }
 
-    // config — both sides are spliced, and the current sheet is one of them.
-    let rowHeight = 0;
-    if (ctx.currentSheetId === source.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].config = source.curConfig;
-        rowHeight = source.curData.length;
-        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].config = target.curConfig;
-    } else if (ctx.currentSheetId === target.sheetId) {
-        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].config = target.curConfig;
-        rowHeight = target.curData.length;
-        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].config = source.curConfig;
-    }
+    // Both sides are spliced; only the row count of the sheet on screen drives the reflow.
+    ctx.sheets[getSheetIndex(ctx, source.sheetId)!].config = source.curConfig;
+    ctx.sheets[getSheetIndex(ctx, target.sheetId)!].config = target.curConfig;
+    const rowHeight = ctx.currentSheetId === source.sheetId ? source.curData.length : target.curData.length;
 
     if (RowlChange) {
         const cfg = getSheetConfig(ctx);
@@ -139,7 +132,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
     execFunctionGroup(ctx, null, null, null, null, target.curData);
     ctx.formulaCache.execFunctionGlobalData = null;
 
-    storeSheetParamALL(ctx);
+    storeSheetSelections(ctx);
 }
 
 // Per-cell border map produced by the HTML paste path before being attached to

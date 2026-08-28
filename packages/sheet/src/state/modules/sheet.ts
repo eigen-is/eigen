@@ -9,7 +9,7 @@ import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
 import { setFormulaCellInfo } from './formula-cache';
 
-export function storeSheetParamALL(ctx: Context) {
+export function storeSheetSelections(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
     const file = ctx.sheets[index];
@@ -30,7 +30,7 @@ export function changeSheet(ctx: Context, id: string) {
         return;
     }
 
-    storeSheetParamALL(ctx);
+    storeSheetSelections(ctx);
 
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;

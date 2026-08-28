@@ -183,7 +183,6 @@ export function setCellFormat(
 
     const cellData = targetSheetData?.[row]?.[column] || {};
 
-    const cfg = (sheet.config ??= {});
     const ctValue = value as { fa?: string; t?: string } | null | undefined;
 
     // special format
@@ -199,9 +198,8 @@ export function setCellFormat(
     // RangeBorderInfo override (color/style/range/borderType); the spread is trusted
     // at this API boundary.
     if ((attr as string) === 'bd') {
-        if (cfg.borderInfo == null) {
-            cfg.borderInfo = [];
-        }
+        const cfg = (sheet.config ??= {});
+        cfg.borderInfo ??= [];
 
         const borderInfo: RangeBorderInfo = {
             rangeType: 'range',

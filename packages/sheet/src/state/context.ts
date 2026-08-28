@@ -424,19 +424,11 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
 
         if (cfg?.columnlen?.[c]) {
             firstcolumnlen = cfg.columnlen[c];
-        } else {
-            if (flowdata?.[0]?.[c]) {
-                if (firstcolumnlen > 300) {
-                    firstcolumnlen = 300;
-                } else if (firstcolumnlen < ctx.defaultcollen) {
-                    firstcolumnlen = ctx.defaultcollen;
-                }
-
-                if (cfg != null && firstcolumnlen !== ctx.defaultcollen) {
-                    cfg.columnlen ??= {};
-                    cfg.columnlen[c] = firstcolumnlen;
-                }
-            }
+        } else if (flowdata?.[0]?.[c] && firstcolumnlen > 300) {
+            // Clamp a very wide imported default column width for layout only. This is a
+            // geometry recompute — persisting the clamp would ship an op and take an undo
+            // entry from a render pass, on every client independently.
+            firstcolumnlen = 300;
         }
 
         if (cfg?.colhidden?.[c] != null) {

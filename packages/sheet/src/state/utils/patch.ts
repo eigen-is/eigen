@@ -166,11 +166,16 @@ function sheetMetadataOps(ctx: Context, id: string, includeCalcChain: boolean): 
     return metaOps;
 }
 
+// A few `Sheet` fields are per-client UI state that is stored on the sheet only so a tab
+// switch can restore it — the local cursor and the formula-bar range highlight. They must
+// never reach a peer. Kept as one list so adding a per-client field to `Sheet` is a single
+// decision rather than a silent leak.
+const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set(['selections', 'formulaRangeSelections']);
+
 // Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
-// (scroll position, hover, dialogs) that patchToOp could not give a sheet id anyway. Per-client
-// cursors live under `sheets[i].selections`, so those are dropped too.
+// (scroll position, hover, dialogs) that patchToOp could not give a sheet id anyway.
 export function filterPatch(patches: Patch[]) {
-    return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'selections');
+    return patches.filter((p) => p.path[0] === 'sheets' && !PER_CLIENT_SHEET_FIELDS.has(p.path[2]));
 }
 
 export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions, undo: boolean = false): Op[] {

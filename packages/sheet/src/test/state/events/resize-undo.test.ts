@@ -7,33 +7,17 @@
 // module scope the way events/mouse-cell.test.ts does.
 
 import { describe, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
-import { applyPatches, enablePatches, produce, produceWithPatches } from 'immer';
+import { applyPatches, produce, produceWithPatches } from 'immer';
 import { setColumnWidth, setRowHeight } from '../../../state/api/rowcol';
 import type { Context } from '../../../state/context';
-import { handleOverlayMouseUp } from '../../../state/events/mouse-drag';
-import type { Settings } from '../../../state/settings';
-import type { GlobalCache, Op } from '../../../state/types';
+import type { Op } from '../../../state/types';
 import { filterPatch, opToPatch } from '../../../state/utils/patch';
+import { syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
+import { mouseUpAt, withGridGeometry } from '../factories/grid-dom';
 
-enablePatches();
-
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const win = new Window();
-g.window = win;
-g.document = win.document;
-
-function resizeContext(): Context {
-    const config = { rowlen: { 2: 40 }, columnlen: { 2: 100 } };
-    const ctx = contextFactory({ config }) as Context;
-    ctx.rowHeaderWidth = 46;
-    ctx.columnHeaderHeight = 20;
-    ctx.defaultrowlen = 19;
-    ctx.defaultcollen = 73;
-    return ctx;
-}
+const resizeContext = () =>
+    withGridGeometry(contextFactory({ config: { rowlen: { 2: 40 }, columnlen: { 2: 100 } } }) as Context);
 
 // Mirrors Workbook handleUndo: apply the filtered inverse patches.
 function undo(ctx: Context, recipe: (draft: Context) => void): Context {
@@ -41,13 +25,7 @@ function undo(ctx: Context, recipe: (draft: Context) => void): Context {
     return applyPatches(next, filterPatch(inversePatches));
 }
 
-function dragResize(ctx: Context) {
-    const container = win.document.createElement('div') as unknown as HTMLDivElement;
-    container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
-    const scrollEl = win.document.createElement('div') as unknown as HTMLDivElement;
-    const event = { button: 0, pageX: 296, pageY: 150 } as unknown as MouseEvent;
-    handleOverlayMouseUp(ctx, {} as GlobalCache, {} as Settings, event, scrollEl, container, null, null);
-}
+const dragResize = mouseUpAt(296, 150);
 
 describe('a resize round-trips through undo', () => {
     test('column drag', () => {
@@ -113,10 +91,7 @@ describe("a peer's resize reaches the sheet", () => {
 // last-writer-wins: a peer's concurrent edit to an unrelated config key is silently
 // clobbered, and undo reverts the whole config rather than the one key.
 describe('a config write syncs as a granular patch, not a whole-config replace', () => {
-    function configPatchPaths(recipe: (draft: Context) => void) {
-        const [, patches] = produceWithPatches(resizeContext(), recipe);
-        return filterPatch(patches).map((p) => p.path);
-    }
+    const configPatchPaths = (recipe: (draft: Context) => void) => syncablePaths(resizeContext(), recipe);
 
     test('setRowHeight patches the rowlen key, not the config object', () => {
         const paths = configPatchPaths((ctx: Context) => setRowHeight(ctx, { 2: 53 }));

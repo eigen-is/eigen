@@ -267,10 +267,6 @@ export function selectTitlesRange(map: Record<string, number>) {
 export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
-    const cfg = (ctx.sheets[sheetIndex].config ??= {});
-    if (cfg.merge == null) {
-        cfg.merge = {};
-    }
 
     if (!copyRange) return;
     // Copy range
@@ -299,12 +295,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
 
     if (minh === maxh && minc === maxc) {
         // Apply range is a single cell; automatically expand to the copy range size (if the expanded range partially overlaps a merged cell, show a warning)
-        let has_PartMC = false;
-        if (cfg.merge != null) {
-            has_PartMC = hasPartMC(ctx, minh, minh + copyh - 1, minc, minc + copyc - 1);
-        }
-
-        if (has_PartMC) {
+        if (hasPartMC(ctx, minh, minh + copyh - 1, minc, minc + copyc - 1)) {
             return;
         }
 
@@ -319,6 +310,11 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     if (flowdata == null) return;
     const cellMaxLength = flowdata[0].length;
     const rowMaxLength = flowdata.length;
+
+    // Seeded only once the paste is certain — a syncable write above the bail-outs would
+    // ship a no-op op to peers and take the user's next undo.
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
+    cfg.merge ??= {};
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
     const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};

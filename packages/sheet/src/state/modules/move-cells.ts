@@ -245,7 +245,6 @@ export function onCellsMoveEnd(
     // for a move the user was told could not happen.
     const cfg = (ctx.sheets[sheetIndex].config ??= {});
     cfg.merge ??= {};
-    cfg.rowlen ??= {};
 
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
 

@@ -9,7 +9,7 @@ import type {
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import { type Context, getSheetConfig } from '../context';
-import type { FilterEntry, FormulaCell, Sheet, SheetConfig } from '../types';
+import type { FilterEntry, FormulaCell, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 
 type FilterObj = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
@@ -1138,32 +1138,6 @@ export function deleteRowCol(
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
-// Compute cumulative row height array
-export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: SheetConfig) {
-    const rowlenArr = [];
-    let rh_height = 0;
-
-    for (let i = 0; i < rowHeight; i += 1) {
-        let rowlen = ctx.defaultrowlen;
-
-        if (cfg.rowlen != null && cfg.rowlen[i] != null) {
-            rowlen = cfg.rowlen[i];
-        }
-
-        if (cfg.rowhidden != null && cfg.rowhidden[i] != null) {
-            rowlen = cfg.rowhidden[i];
-            rowlenArr.push(rh_height);
-            continue;
-        } else {
-            rh_height += rowlen + 1;
-        }
-
-        rowlenArr.push(rh_height); // Cumulative row height distribution
-    }
-
-    return rowlenArr;
-}
-
 // Hide selected rows/columns
 export function hideSelected(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
@@ -1177,25 +1151,12 @@ export function hideSelected(ctx: Context, type: string) {
         ) {
           return ;
         } */
-        const rowhidden = cfg.rowhidden ?? {};
-        const r1 = ctx.selections[0].row[0];
-        const r2 = ctx.selections[0].row[1];
+        const rowhidden = (cfg.rowhidden ??= {});
+        const [r1, r2] = ctx.selections[0].row;
         const rowhiddenNumber = r2;
         for (let r = r1; r <= r2; r += 1) {
             rowhidden[r] = 0;
         }
-        /* Undo/redo save. In Luckysheet this was done as follows, but in this project no extra handling is needed.
-          if(Store.clearjfundo){
-            let redo = {};
-            redo["type"] = "showHidRows";
-            redo["sheetIndex"] = Store.currentSheetIndex;
-            redo["config"] = $.extend(true, {}, Store.config);
-            redo["curconfig"] = cfg;
-
-            Store.jfundo.length  = 0;
-            Store.jfredo.push(redo);
-        } */
-        cfg.rowhidden = rowhidden;
         const rowLen = ctx.sheets[index].data!.length;
         const isEndRow =
             rowLen - 1 === rowhiddenNumber ||
@@ -1209,14 +1170,13 @@ export function hideSelected(ctx: Context, type: string) {
         }
     } else if (type === 'column') {
         // Hide columns
-        const colhidden = cfg.colhidden ?? {};
+        const colhidden = (cfg.colhidden ??= {});
         const c1 = ctx.selections[0].column[0];
         const c2 = ctx.selections[0].column[1];
         const colhiddenNumber = c2;
         for (let c = c1; c <= c2; c += 1) {
             colhidden[c] = 0;
         }
-        cfg.colhidden = colhidden;
         const columnLen = ctx.sheets[index].data![0].length;
         // Check if the column to hide is the last column
         const isEndColumn =
@@ -1236,26 +1196,19 @@ export function hideSelected(ctx: Context, type: string) {
 // Show (unhide) selected rows/columns
 export function showSelected(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const cfg = (ctx.sheets[index].config ??= {});
-    // Unhide rows
-    if (type === 'row') {
-        const rowhidden = cfg.rowhidden ?? {};
-        const r1 = ctx.selections[0].row[0];
-        const r2 = ctx.selections[0].row[1];
+    // Unhiding cannot create hidden state, so it must not seed the map: on a sheet with
+    // nothing hidden that would ship an op to peers and take an undo entry for a no-op.
+    const cfg = getSheetConfig(ctx);
+    if (type === 'row' && cfg?.rowhidden) {
+        const [r1, r2] = ctx.selections[0].row;
         for (let r = r1; r <= r2; r += 1) {
-            delete rowhidden[r];
+            delete cfg.rowhidden[r];
         }
-        cfg.rowhidden = rowhidden;
-    } else if (type === 'column') {
-        // Unhide columns
-        const colhidden = cfg.colhidden ?? {};
-        const c1 = ctx.selections[0].column[0];
-        const c2 = ctx.selections[0].column[1];
+    } else if (type === 'column' && cfg?.colhidden) {
+        const [c1, c2] = ctx.selections[0].column;
         for (let c = c1; c <= c2; c += 1) {
-            delete colhidden[c];
+            delete cfg.colhidden[c];
         }
-        cfg.colhidden = colhidden;
     }
     return '';
 }
