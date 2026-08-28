@@ -97,7 +97,6 @@ export function OverlayVisuals({ containerRef }: Props) {
                           })()
                         : {}
                 }
-                onMouseDown={(e) => e.preventDefault()}
             />
             {(context.formulaRangeSelections?.length ?? 0) > 0 && (
                 <div>
@@ -166,14 +165,14 @@ export function OverlayVisuals({ containerRef }: Props) {
                             <div
                                 className="sheet-cs-fillhandle"
                                 onMouseDown={(e) => {
+                                    // Keeps the parent's move-start off: at the corner the fill wins.
+                                    e.stopPropagation();
                                     const { nativeEvent } = e;
                                     setContext((draftContext) => {
                                         createDropCellRange(draftContext, nativeEvent, containerRef.current!);
                                     });
-                                    e.stopPropagation();
                                 }}
                             />
-                            <div className="sheet-cs-inner-border" />
                             <div
                                 className="sheet-cs-draghandle-top sheet-cs-draghandle"
                                 onMouseDown={(e) => e.preventDefault()}
@@ -190,12 +189,6 @@ export function OverlayVisuals({ containerRef }: Props) {
                                 className="sheet-cs-draghandle-right sheet-cs-draghandle"
                                 onMouseDown={(e) => e.preventDefault()}
                             />
-                            <div className="sheet-cs-touchhandle sheet-cs-touchhandle-lt">
-                                <div className="sheet-cs-touchhandle-btn" />
-                            </div>
-                            <div className="sheet-cs-touchhandle sheet-cs-touchhandle-rb">
-                                <div className="sheet-cs-touchhandle-btn" />
-                            </div>
                         </div>
                     ))}
                 </div>

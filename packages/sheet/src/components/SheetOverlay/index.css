@@ -14,9 +14,6 @@
     --sheet-input-shadow: rgb(0 0 0 / 40%);
     --sheet-freeze-handle: #ddd;
     --sheet-freeze-line: #ccc;
-    --sheet-touch-knob-bg: #ffffff;
-    --sheet-touch-knob-border: rgba(0, 0, 0, 0.15);
-    --sheet-touch-btn: #018ffb;
 }
 
 .sheet-overlay {
@@ -229,11 +226,9 @@
 
 .sheet-selection-highlight {
     position: absolute;
-    /*pointer-events: none;*/
     z-index: 14;
     border: none;
     margin: 0px 0 0 0px;
-    /* display: none; */
 }
 
 /* In-document search highlight: positioning only. The amber wash + active ring come from the
@@ -257,7 +252,6 @@
 .sheet-cell-selected-move {
     cursor: move;
     position: absolute;
-    /* pointer-events: none; */
     z-index: 16;
     border: 2px solid var(--selection-handle);
     margin: -1px 0 0 -1px;
@@ -275,6 +269,7 @@
     box-sizing: content-box;
 }
 
+/* Halo just inside the selection border, so it stays readable over a dark cell. */
 .sheet-cs-inner-border {
     pointer-events: none;
     border: 1px solid var(--background);
@@ -285,110 +280,72 @@
     right: 0;
 }
 
+/* The visible square, 6px, sitting 5px past the selection's bottom-right corner.
+   Its hit target is the ::after below, not this box. z 16 keeps it above
+   .sheet-cs-draghandle (15), so the corner fills rather than moves. */
 .sheet-cs-fillhandle {
     position: absolute;
     width: 6px;
     height: 6px;
     bottom: -5px;
+    right: -5px;
     cursor: crosshair;
     background-color: var(--selection-handle);
     border: solid 1px var(--background);
     z-index: 16;
     pointer-events: auto;
-    right: -5px;
 }
 
+/* 14x14 invisible grab area, centred on the selection corner rather than on the
+   square — the square is offset outward, so centring takes the extra reach back
+   over the selection (8px in) instead of over the cell below and right (6px out,
+   1px more than the square already reaches). */
+.sheet-cs-fillhandle::after {
+    content: "";
+    position: absolute;
+    inset: -8px -2px -2px -8px;
+}
+
+/* Invisible grab band for drag-to-move; the selection's own 1px border is the
+   visual. Nothing is painted here, an empty box hit-tests all the same. */
 .sheet-cs-draghandle {
     position: absolute;
     cursor: move;
-    background-color: var(--background);
-    opacity: 0.01;
     z-index: 15;
     pointer-events: auto;
-    border: 2px solid var(--background);
 }
 
+/* 8px wide, centred on the selection border: 4px outside, 4px inside. Outward
+   reach is unchanged from the old 4px offset, so no click on a neighbouring cell
+   is newly swallowed — the extra grab is taken from the selection's own interior,
+   where a mis-hit is cheap (a press that never travels 8px leaves the selection
+   untouched, see dragCellThreshold in state/modules/move-cells.ts). */
 .sheet-cs-draghandle-top {
     top: -4px;
-    left: -2px;
-    right: -2px;
-    height: 2px;
+    left: -4px;
+    right: -4px;
+    height: 8px;
 }
 
 .sheet-cs-draghandle-bottom {
-    right: 0;
-    left: -2px;
     bottom: -4px;
-    height: 2px;
+    left: -4px;
+    right: -4px;
+    height: 8px;
 }
 
 .sheet-cs-draghandle-left {
-    top: 0;
+    top: -4px;
+    bottom: -4px;
     left: -4px;
-    bottom: 0;
-    width: 2px;
+    width: 8px;
 }
 
 .sheet-cs-draghandle-right {
-    top: 0;
+    top: -4px;
+    bottom: -4px;
     right: -4px;
-    bottom: 0;
-    width: 2px;
-}
-
-.sheet-cs-touchhandle {
-    display: none;
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    padding: 5px;
-    z-index: 25;
-    pointer-events: auto;
-    touch-action: auto;
-}
-
-.sheet-cs-touchhandle:before {
-    content: "";
-    display: block;
-    width: 16px;
-    height: 16px;
-    border: 0.5px solid var(--sheet-touch-knob-border);
-    background-color: var(--sheet-touch-knob-bg);
-    box-sizing: border-box;
-    border-radius: 50%;
-}
-
-.sheet-cs-touchhandle-lt {
-    left: -13px;
-    top: -13px;
-}
-
-.sheet-cs-touchhandle-lb {
-    left: -13px;
-    bottom: -13px;
-}
-
-.sheet-cs-touchhandle-rt {
-    right: -13px;
-    top: -13px;
-}
-
-.sheet-cs-touchhandle-rb {
-    right: -13px;
-    bottom: -13px;
-}
-
-.sheet-cs-touchhandle .sheet-cs-touchhandle-btn {
-    position: absolute;
-    width: 10px;
-    height: 10px;
-    left: 8px;
-    top: 8px;
-    background-color: var(--sheet-touch-btn);
-    background-position: center;
-    box-sizing: border-box;
-    border-radius: 50%;
-    z-index: 11;
+    width: 8px;
 }
 
 .sheet-input-box {
