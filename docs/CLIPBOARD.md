@@ -1,22 +1,47 @@
 # Clipboard System
 
-> **TLDR**: Custom clipboard for rich copy-paste between Eigen apps. JSON payload encoded in `text/html` via hidden
-> span (`data-eigen-clipboard` attribute) to survive browser clipboard stripping. Handles cross-document media
-> re-upload.
+> **TLDR**: Custom clipboard for rich copy-paste between Eigen apps. JSON payload written to a custom
+> `application/eigen-clipboard` MIME type, with a copy encoded in `text/html` via a hidden span
+> (`data-eigen-clipboard` attribute) so it survives clipboards that strip custom types. Handles
+> cross-document media re-upload.
 
 ## How It Works
 
-1. Serialize `EigenClipboardData` to JSON, URI-encode
-2. Wrap in `<span data-eigen-clipboard="..."></span>`
-3. Write as `text/html` to clipboard (optionally prepend additional HTML)
-4. On paste: look for `data-eigen-clipboard`, decode rich data
-5. Falls back to reading the custom `application/eigen-clipboard` MIME type if the HTML marker is missing
+**Write** (`writeEigenClipboard`, during a `copy` event):
+
+1. Serialize `EigenClipboardData` to JSON and set it on the `application/eigen-clipboard` MIME type
+2. URI-encode the same JSON, wrap it in `<span data-eigen-clipboard="..."></span>`
+3. Write that span as `text/html`, with the caller's own HTML appended after it
+4. Write the caller's plain-text fallback as `text/plain`
+
+**Read** (`readEigenClipboard`, during a `paste` event):
+
+5. Read `application/eigen-clipboard` first — lossless, and what you get pasting inside the same tab
+6. Fall back to matching `data-eigen-clipboard` out of `text/html` — this is what survives a
+   cross-tab or cross-browser-session paste, where the custom MIME type does not
+
+The order matters: the custom MIME is the primary channel and the HTML marker is the fallback, not
+the other way round.
 
 ## Data Model
 
 **File**: `packages/lib/src/types/clipboard.ts`
 
 ```typescript
+type EigenClipboardTypography = {
+    fontFamily?: string; // the EIGEN_FONTS name, NOT a CSS font stack
+    fontSize?: number;
+    textAlign?: string;
+    fontWeight?: string;
+    fontStyle?: string;
+    textDecoration?: string;
+    verticalAlign?: string;
+    color?: string;
+    letterSpacing?: number;
+    lineHeight?: number;
+    highlightColor?: string;
+};
+
 type EigenClipboardTextItem = {
     type: 'text';
     text: string; // PLAIN text, never HTML
@@ -69,8 +94,20 @@ follows: **after a copy/upload mutation returns a `DrivePath`, build the URL fro
 (`resolveMediaUrlByPath` on the media resolver) — by-name resolution is for render, where the listing has caught up
 and self-heals.
 
-The wire is forgeable by any web page, so `parseEigenJson` drops any item whose `width`/`height` aren't finite
-numbers before a consumer ever sees it (the same threat model that makes rich HTML get re-sanitized on paste).
+The wire is forgeable by any web page, so the read seam (`readEigenClipboard`) drops any item whose `width`/`height`
+aren't finite numbers before a consumer ever sees it (the same threat model that makes rich HTML get re-sanitized on
+paste).
+
+### Empty text carriers
+
+Vector shapes ride the wire as text items with `text: ''` — the item exists to carry geometry, not words. Consumers
+MUST filter with `clipboardTextItemHasContent` so a foreign shape never lands as a blank paragraph or a blank cell.
+
+### Copy flavors
+
+A pure-image copy writes no `text/plain`; a copy that writes `text/plain` writes no PNG. This avoids the
+double-paste where a consumer accepts both flavors. It is a clipboard-protocol rule — the worked example lives in
+[CANVAS.md](CANVAS.md) § D6.
 
 ## Cross-Document Media
 
@@ -78,21 +115,87 @@ When pasting images between documents, `needsReUpload()` compares `sourceParentI
 If different, `reUploadImage()` downloads via the source pathId and uploads to the target's `media/` folder. The new
 file's **name** is stored in Yjs (may differ from original due to `getUniqueFileName()` conflict resolution).
 
+That download runs **as the pasting user**, with `credentials: 'include'`. When someone pastes a payload whose
+source file they cannot read, the fetch fails, `reUploadImage` returns `null`, and the consumer drops the
+placeholder — the image silently disappears. This is correct: the clipboard carries a reference, not the bytes, and
+a reference confers no access. It also means an image payload is **not** self-contained across logins.
+
 ## API
 
 ```typescript
-import {writeEigenClipboard, readEigenClipboard, writeEigenClipboardAsync} from '@workspace/lib/clipboard';
+import {
+    writeEigenClipboard, writeEigenClipboardAsync,
+    readEigenClipboard, readEigenClipboardAsync,
+    hasRichHtmlBeyondMarker, clipboardTextItemHasContent,
+    buildTextClipboardItem, buildImageClipboardItem, readClipboardBox,
+    copyToClipboard, needsReUpload, reUploadImage,
+} from '@workspace/lib/clipboard';
 
-// Sync (during copy event) — optional html param appended after the marker
+// Sync write (during a copy event) — optional html is appended after the marker
 writeEigenClipboard(e, data, "plain text fallback", "<p>optional html</p>");
 
-// Async (button click)
+// Async write (button click, no ClipboardEvent to hang off)
 await writeEigenClipboardAsync(data, "plain text fallback");
 
-// Read (during paste event)
+// Read (during a paste event)
 const eigenData = readEigenClipboard(e.clipboardData);
+
+// Async read (a context-menu Paste row, no ClipboardEvent)
+const eigenData = await readEigenClipboardAsync();
+
+// Is there real HTML besides our marker span? Docs uses this to decide whether to let ProseMirror
+// parse the foreign markup instead of consuming our flat text item.
+if (hasRichHtmlBeyondMarker(e.clipboardData)) { /* ... */ }
 ```
 
-Used by: eigendoc editor, eigenslides editor, eigensheets (sheet), eigenvector canvas.
+`copyToClipboard(text, message?)` is the plain "copy this string and toast" helper from the same barrel — unrelated
+to the rich payload, and used far more widely (calendar, index, drive menus, command palette).
+
+**Asymmetry (open):** `writeEigenClipboardAsync` does not write the `application/eigen-clipboard` MIME —
+`navigator.clipboard.write` cannot set arbitrary custom types — so an async-written payload always round-trips
+through the HTML marker. Tracked as Copy-Paste Phase 0 in [ROADMAP.md](ROADMAP.md).
 
 **Files**: `packages/lib/src/core/clipboard/`
+
+## Used by
+
+Rich payload (`EigenClipboardData`):
+
+| Surface | Entry point |
+|---|---|
+| eigendoc editor | `apps/docs/src/components/docs/editor.tsx` |
+| eigenslides editor | `apps/slides/src/components/slides/editor.tsx` |
+| eigensheets | `packages/sheet/src/components/Workbook/index.tsx` (media re-upload in `apps/sheets/src/components/sheets/editor.tsx`) |
+| eigenvector canvas | `packages/ui/src/components/vector/vector-canvas.tsx` (lives in `packages/ui`, not an app) |
+
+### Sheets caveat
+
+**In-app sheets → sheets copy-paste does not use this system.** Sheets writes the eigen payload on every copy, but
+`packages/sheet/src/components/Workbook/index.tsx:632` skips `readEigenClipboard` whenever the clipboard HTML
+contains `fortune-copy-action-table` — which the sheet's own copy always emits
+(`packages/sheet/src/state/modules/selection.ts:1495`). Paste is instead served from `ctx.copyState`
+(`packages/sheet/src/state/context.ts:136`), which holds **coordinates only**; the fidelity comes from re-reading
+the live cells, which is why formulas, number formats, conditional-format rules, data validation and hyperlinks all
+survive a same-tab paste and none of them exist on the eigen wire.
+
+Consequences worth knowing:
+
+- The cell-range payload sheets does write is a single flat text item — the `innerText` of its HTML table. No
+  structure, no formulas.
+- An incoming text item is downgraded to a synthetic `text/plain` paste, so even a structured payload could not be
+  received today.
+- **Cross-tab sheets → sheets is already lossy**: the receiving tab has no `ctx.copyState`, the marker still
+  suppresses the eigen read, and the paste falls through to the foreign-HTML parser.
+
+Converting sheets onto this system is scoped in [SHEETS-TODO.md](SHEETS-TODO.md) § Clipboard.
+
+### How sheets writes a menu-triggered copy
+
+A copy from a menu row has no native `copy` event, and `navigator.clipboard.write` cannot set the custom MIME type.
+Sheets therefore stages its HTML in a module-level buffer and re-enters a synthetic event:
+`setPendingCopy` → `flushPendingCopy` (which calls `document.execCommand('copy')`) → the Workbook's `copy` listener
+drains it with `consumePendingCopy`. The plain text is mirrored into `sessionStorage.localClipboard` so a
+menu-triggered *paste* has something to read. See `packages/sheet/src/state/modules/clipboard.ts`.
+
+The package↔app seam is three hooks in `packages/sheet/src/state/settings.ts`: `resolveImagePath`,
+`onPasteEigenImage`, `onPasteImageFile`.

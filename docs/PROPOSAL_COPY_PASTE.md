@@ -35,9 +35,12 @@ The four arguments the v2 shape rests on:
 
 ## Known constraints
 
-- **The sheet engine has its own internal clipboard.** `luckysheet_copy_save` in the context object
-  handles internal copy/paste (formulas, formatting, merge info) separately from the system
-  clipboard. The eigen clipboard integration sits **on top of** it, not inside it. Consequences: the
+- **The sheet engine has its own internal clipboard.** `ctx.copyState` (upstream's
+  `luckysheet_copy_save`, renamed) handles internal copy/paste separately from the system clipboard.
+  It holds **coordinates only** — a sheet id and the copied rectangles; formulas, formatting and
+  merge info survive because the paste re-reads the live cells at those coordinates, which is
+  exactly why it cannot cross a tab or a login boundary. The eigen clipboard integration sits
+  **on top of** it, not inside it. Consequences: the
   `cells` content type carries display values, formatting, merge info and dimensions -- not the
   internal `Cell` state (calculation results, dependency graphs), which is neither serializable nor
   meaningful in another sheet. Formulas travel as strings, with references that will be wrong in a
