@@ -136,8 +136,11 @@ export function updateFormatCell(
         if (sheetIndex == null) {
             return;
         }
+        // Mirror first — calcRowColSize measures the grid from ctx.config, not the sheet,
+        // and the next mirror-first writer would otherwise assign the stale mirror back.
+        const cfg = ctx.config;
         for (let r = row_st; r <= row_ed; r += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
             }
 
@@ -147,8 +150,6 @@ export function updateFormatCell(
                 if (value && isPlainObject(value)) {
                     updateInlineStringFormatOutside(value, attr, foucsStatus);
                     (value as Record<string, unknown>)[attr as string] = foucsStatus;
-                    ctx.sheets[sheetIndex].config ||= {};
-                    const cfg = ctx.sheets[sheetIndex].config!;
                     const cellWidth = cfg.columnlen?.[c] || ctx.sheets[sheetIndex].defaultColWidth;
                     if (attr === 'fs' && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
@@ -171,6 +172,9 @@ export function updateFormatCell(
                 }
             }
         }
+
+        // The sheet half too — immer emits nothing here when no row grew.
+        ctx.sheets[sheetIndex].config = cfg;
     }
 }
 
@@ -196,11 +200,6 @@ export function updateFormat(
                 return;
             }
         }
-    }
-
-    const cfg = cloneDeep(ctx.config);
-    if (isNil(cfg.rowlen)) {
-        cfg.rowlen = {};
     }
 
     forEach(ctx.selections, (selection) => {

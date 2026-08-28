@@ -1899,7 +1899,10 @@ export function updateDropCell(ctx: Context) {
     // flushed once the fill is laid out, so the carried borders sync and undo too.
     const cfg = ctx.config;
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
-    const dataVerification = cloneDeep(file.dataVerification);
+    // Live map, not a clone: the copy and apply ranges are disjoint, so reading a source
+    // rule while writing the filled ones is safe — and the write has to land on the sheet
+    // to sync and undo (Excel and Google both carry validation on a fill).
+    const { dataVerification } = file;
 
     // direction is seeded by onDropCellSelectEnd / autoFillCell before they call
     // updateDropCell; the null fallback only matters for module-init safety.

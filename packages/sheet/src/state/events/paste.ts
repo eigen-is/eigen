@@ -1392,15 +1392,10 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                 const index = getSheetIndex(ctx, ctx.currentSheetId);
                 if (!isNil(index)) {
-                    if (isNil(ctx.sheets[index].config)) {
-                        ctx.sheets[index].config = {};
-                    }
-                    if (isNil(ctx.sheets[index].config!.rowlen)) {
-                        ctx.sheets[index].config!.rowlen = {};
-                    }
                     // Collect only the rows the paste changes and let setRowHeight write them: it
                     // owns the `>= 0` guard, and writing through the sheet's live rowlen bypassed it.
-                    const currentRowlen = ctx.sheets[index].config!.rowlen!;
+                    // Read the mirror, the half setRowHeight writes — the sheet half can be behind.
+                    const currentRowlen = ctx.config.rowlen ?? {};
                     const rowHeightList: Record<number, number> = {};
                     forEach(trList, (tr) => {
                         let c = 0;

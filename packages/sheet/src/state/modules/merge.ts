@@ -43,7 +43,9 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
 
     const sheet = ctx.sheets[idx];
 
-    const cfg = sheet.config || {};
+    // Mirror-first for the current sheet — see setRowHeight in api/rowcol.
+    const isCurrent = sheet.id === ctx.currentSheetId;
+    const cfg = (isCurrent ? ctx.config : sheet.config) || {};
     if (cfg.merge == null) {
         cfg.merge = {};
     }
@@ -206,7 +208,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
         }
     }
     sheet.config = cfg;
-    if (sheet.id === ctx.currentSheetId) {
+    if (isCurrent) {
         ctx.config = cfg;
     }
 }

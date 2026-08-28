@@ -182,7 +182,12 @@ export function setCellFormat(
     const targetSheetData = sheet.data!;
 
     const cellData = targetSheetData?.[row]?.[column] || {};
-    const cfg = sheet.config || {};
+
+    // Mirror-first for the current sheet — see setRowHeight in api/rowcol. Reading the
+    // sheet half here dropped anything written to the mirror since, and the unconditional
+    // `ctx.config = cfg` below pointed the mirror at another sheet's config entirely.
+    const isCurrent = ctx.currentSheetId === sheet.id;
+    const cfg = (isCurrent ? ctx.config : sheet.config) || {};
     const ctValue = value as { fa?: string; t?: string } | null | undefined;
 
     // special format
@@ -219,7 +224,10 @@ export function setCellFormat(
     targetSheetData[row][column] = cellData;
 
     sheet.config = cfg;
-    ctx.config = cfg;
+
+    if (isCurrent) {
+        ctx.config = cfg;
+    }
 }
 
 export function autoFillCell(

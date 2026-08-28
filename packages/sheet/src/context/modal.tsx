@@ -10,6 +10,11 @@ export type ModalOptions = {
     width?: number;
     // Viewport point the dialog's top-left opens at, clamped on screen. Centred when absent.
     anchor?: ViewportPoint;
+    // Runs on every close route — a Cancel button, Escape, anything Radix adds later — so
+    // callers holding state for an open dialog (the range picker's grid-select flag) can
+    // reset it from one place. Replacing the content via showModal drops it unrun: the
+    // caller that replaced it is already in control.
+    onClose?: () => void;
 };
 
 const DEFAULT_WIDTH = 500;
@@ -37,10 +42,20 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
     const isModal = state?.options.modal !== false;
     const anchor = state?.options.anchor;
 
+    // A ref, not `state`: hideModal must stay identity-stable for its consumers, and it
+    // has to see the options of whatever is open right now.
+    const onCloseRef = useRef<ModalOptions['onClose']>(undefined);
+
     const showModal = useCallback((c: React.ReactNode, options: ModalOptions = {}) => {
+        onCloseRef.current = options.onClose;
         setState({ content: c, options });
     }, []);
-    const hideModal = useCallback(() => setState(null), []);
+    const hideModal = useCallback(() => {
+        const { current: onClose } = onCloseRef;
+        onCloseRef.current = undefined;
+        setState(null);
+        onClose?.();
+    }, []);
 
     // useLayoutEffect, not useEffect: the clamp needs the dialog's rendered height, so it
     // renders once at the raw anchor and is corrected before the browser paints either frame.

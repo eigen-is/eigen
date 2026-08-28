@@ -8,10 +8,11 @@
 // updateDropCell; results land in ctx.sheets[0].data (getFlowdata identity).
 
 import { describe, expect, it } from 'bun:test';
-import { enablePatches, produceWithPatches } from 'immer';
+import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { autoFillCell } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
-import type { BorderInfo, Cell, SheetConfig, SingleRange } from '../../../state/types';
+import type { BorderInfo, Cell, DataVerificationRule, SheetConfig, SingleRange } from '../../../state/types';
+import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
@@ -141,5 +142,53 @@ describe('drag-fill carries the source cell borders', () => {
 
         expect(borderedCells(filled.sheets[0].config)).toEqual(['0_0', '1_0']);
         expect(borderedCells(filled.config)).toEqual(['0_0', '1_0']);
+    });
+});
+
+// Validation rules ride along with the fill in Excel and Google Sheets. updateDropCell
+// carried them on a cloneDeep of the sheet's dataVerification and never wrote the clone
+// back, so a dragged cell arrived with no rule — the same dead-clone shape the borders
+// above had. Source and apply ranges are disjoint by construction (onDropCellSelectEnd
+// starts the apply range one row/column past the copy block), so writing the live map
+// while reading it cannot re-read a just-filled entry.
+describe('drag-fill carries the source cell data validation', () => {
+    const rule: DataVerificationRule = {
+        type: 'dropdown',
+        type2: '',
+        value1: 'yes,no',
+        value2: '',
+        validity: '',
+        remote: false,
+        prohibitInput: false,
+        hintShow: false,
+        hintValue: '',
+    };
+
+    function verifiedContext(): Context {
+        const src: SingleRange = { row: [0, 0], column: [0, 0] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = { v: 'yes', m: 'yes', ct: { fa: 'General', t: 'g' } };
+        }, src);
+        ctx.sheets[0].dataVerification = { '0_0': rule };
+        return ctx;
+    }
+
+    it('lands the rule on every filled cell', () => {
+        const [filled] = produceWithPatches(verifiedContext(), (ctx: Context) => {
+            autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 2], column: [0, 0] }, 'down');
+        });
+
+        expect(filled.sheets[0].dataVerification?.['1_0']).toEqual(rule);
+        expect(filled.sheets[0].dataVerification?.['2_0']).toEqual(rule);
+    });
+
+    it('and the patch that survives filterPatch carries it, so peers and undo see it', () => {
+        const base = verifiedContext();
+        const [, patches] = produceWithPatches(base, (ctx: Context) => {
+            autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+        });
+
+        const synced = applyPatches(base, filterPatch(patches));
+        expect(synced.sheets[0].dataVerification?.['1_0']).toEqual(rule);
     });
 });

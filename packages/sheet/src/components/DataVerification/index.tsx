@@ -89,6 +89,9 @@ export function DataVerification() {
                     onConfirm={(rangeTxt) => closeRangePicker(rangeTxt)}
                     onCancel={() => closeRangePicker()}
                 />,
+                // Every close route, Escape included: leaving `show` set parks the cell
+                // editor off-screen for good, so typing in any cell shows nothing.
+                { onClose: () => closeRangePicker() },
             );
         },
         [closeRangePicker, setContext, showNonModalDialog],

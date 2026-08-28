@@ -103,7 +103,6 @@ export function LinkEditCard({
         (seed: string) => {
             const close = (rangeTxt?: string) => {
                 if (rangeTxt != null) setLinkAddress(rangeTxt);
-                setRangeModalVisible(false);
                 hideDialog();
             };
             setRangeModalVisible(true);
@@ -115,7 +114,13 @@ export function LinkEditCard({
                     onConfirm={(rangeTxt) => close(rangeTxt)}
                     onCancel={() => close()}
                 />,
-                { width: RANGE_PICKER_WIDTH, anchor: rangePickerAnchor() },
+                {
+                    width: RANGE_PICKER_WIDTH,
+                    anchor: rangePickerAnchor(),
+                    // Every close route, Escape included: leaving the flag set hides the link
+                    // card for good — showLinkCard early-returns on it.
+                    onClose: () => setRangeModalVisible(false),
+                },
             );
         },
         [hideDialog, rangePickerAnchor, setRangeModalVisible, showNonModalDialog],

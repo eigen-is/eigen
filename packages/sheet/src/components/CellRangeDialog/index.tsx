@@ -2,7 +2,7 @@ import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { en, getRangetxt, isLinkValid } from '../../state';
 
@@ -23,9 +23,18 @@ export function CellRangeDialog({ value, editable, includeSheetName, onConfirm, 
     // Only a typed range can be malformed — one picked on the grid never is.
     const validity = editable ? isLinkValid('cellrange', rangeTxt) : { isValid: true, tooltip: '' };
 
+    // The picker opens seeded from the stored range (an existing cell-range link, the
+    // data-validation range), so the mount pass has to be skipped — it would overwrite
+    // that with the grid's current selection before the user picks anything.
+    const skipFirstSync = useRef(true);
+
     // Keep the field in sync with the user's selection in the spreadsheet.
     // biome-ignore lint/correctness/useExhaustiveDependencies: only re-syncs when the selection changes; getRangetxt reads `context` directly
     useEffect(() => {
+        if (skipFirstSync.current) {
+            skipFirstSync.current = false;
+            return;
+        }
         if (!context.selections) return;
         const range = context.selections[context.selections.length - 1];
         const currentId = includeSheetName ? '' : context.currentSheetId;
