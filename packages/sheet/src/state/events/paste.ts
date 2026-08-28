@@ -1248,7 +1248,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         // if the content is marked as copied from this sheet, check whether the clipboard matches what was copied from the current page
         let isEqual = true;
         if (
-            txtdata.indexOf('fortune-copy-action-table') > -1 &&
+            txtdata.indexOf('sheet-copy-action-table') > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0
         ) {
@@ -1340,7 +1340,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         }
 
         if (
-            txtdata.indexOf('fortune-copy-action-table') > -1 &&
+            txtdata.indexOf('sheet-copy-action-table') > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0 &&
             isEqual
@@ -1353,7 +1353,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             } else {
                 pasteHandlerOfCopyPaste(ctx, ctx.copyState);
             }
-        } else if (txtdata.indexOf('fortune-copy-action-image') > -1) {
+        } else if (txtdata.indexOf('sheet-copy-action-image') > -1) {
         } else {
             if (txtdata.indexOf('table') > -1) {
                 const ele = document.createElement('div');

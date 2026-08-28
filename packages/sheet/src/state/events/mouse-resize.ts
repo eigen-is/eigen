@@ -62,7 +62,7 @@ export function handleColSizeHandleMouseDown(
 
     ctx.colsResizing = true;
     ctx.scrolling = true;
-    const changeSizeLine = workbookContainer.querySelector('.fortune-change-size-line');
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
     if (changeSizeLine) {
         const ele = changeSizeLine as HTMLDivElement;
         ele.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
@@ -108,7 +108,7 @@ export function handleRowSizeHandleMouseDown(
 
     ctx.rowsResizing = true;
     ctx.scrolling = true;
-    const changeSizeLine = workbookContainer.querySelector('.fortune-change-size-line');
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
     if (changeSizeLine) {
         const ele = changeSizeLine as HTMLDivElement;
         ele.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
@@ -143,7 +143,7 @@ export function handleColFreezeHandleMouseDown(
 
     ctx.colsFreezeDragging = true;
     ctx.scrolling = true;
-    const freezeDragLine = workbookContainer.querySelector('.fortune-freeze-drag-line');
+    const freezeDragLine = workbookContainer.querySelector('.sheet-freeze-drag-line');
     if (freezeDragLine) {
         const ele = freezeDragLine as HTMLDivElement;
         ele.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
@@ -153,7 +153,7 @@ export function handleColFreezeHandleMouseDown(
         ele.style.width = '1px';
     }
     // Reuse change-size-line to show a thin resize indicator alongside the freeze line
-    const changeSizeLine = workbookContainer.querySelector('.fortune-change-size-line');
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
     if (changeSizeLine) {
         const ele = changeSizeLine as HTMLDivElement;
         ele.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
@@ -187,7 +187,7 @@ export function handleRowFreezeHandleMouseDown(
 
     ctx.rowsFreezeDragging = true;
     ctx.scrolling = true;
-    const freezeDragLine = workbookContainer.querySelector('.fortune-freeze-drag-line');
+    const freezeDragLine = workbookContainer.querySelector('.sheet-freeze-drag-line');
     if (freezeDragLine) {
         const ele = freezeDragLine as HTMLDivElement;
         ele.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
@@ -197,7 +197,7 @@ export function handleRowFreezeHandleMouseDown(
         ele.style.height = '1px';
     }
     // Reuse change-size-line to show a thin resize indicator alongside the freeze line
-    const changeSizeLine = workbookContainer.querySelector('.fortune-change-size-line');
+    const changeSizeLine = workbookContainer.querySelector('.sheet-change-size-line');
     if (changeSizeLine) {
         const ele = changeSizeLine as HTMLDivElement;
         ele.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;

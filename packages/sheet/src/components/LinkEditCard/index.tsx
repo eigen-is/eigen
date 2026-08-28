@@ -172,7 +172,7 @@ export function LinkEditCard({
             <div
                 className={cn(
                     modalBase,
-                    'fortune-link-modify-modal range-selection-modal w-[380px] p-[22px] select-auto',
+                    'sheet-link-modify-modal range-selection-modal w-[380px] p-[22px] select-auto',
                 )}
                 style={{ left: position.cellLeft, top: position.cellBottom + 5 }}
                 // Of containerEvent, only the hover + keyboard handlers: mousemove/up

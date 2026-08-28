@@ -19,7 +19,7 @@ describe('state/formula-editor — functionHTMLGenerate', () => {
 
     test('still colours a plain formula', () => {
         const html = functionHTMLGenerate('=SUM(A1:A3)');
-        expect(html).toContain('luckysheet-formula-text-func');
+        expect(html).toContain('sheet-formula-text-func');
         expect(html).toContain('SUM');
     });
 

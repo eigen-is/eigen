@@ -62,7 +62,7 @@ export const SheetOverlay: React.FC = () => {
             const { nativeEvent } = e;
             // Skip cell-selection logic when the click originated inside a floating UI
             // (validation dropdown, hint box, etc.) that should not move the selection.
-            if ((e.target as HTMLElement).closest?.('.luckysheet-mousedown-cancel')) return;
+            if ((e.target as HTMLElement).closest?.('.sheet-mousedown-cancel')) return;
             if (e.button !== 2) {
                 // onContextMenu event will not call onMouseDown
                 setContext((draftCtx) => {
@@ -395,7 +395,7 @@ export const SheetOverlay: React.FC = () => {
 
     return (
         <main
-            className="fortune-sheet-overlay"
+            className="sheet-overlay"
             ref={containerRef}
             tabIndex={-1}
             style={{
@@ -403,9 +403,9 @@ export const SheetOverlay: React.FC = () => {
                 height: context.tableContentSize[1],
             }}
         >
-            <div className="fortune-col-header-wrap">
+            <div className="sheet-col-header-wrap">
                 <div
-                    className="fortune-left-top"
+                    className="sheet-left-top"
                     onClick={onLeftTopClick}
                     tabIndex={0}
                     style={{
@@ -415,11 +415,11 @@ export const SheetOverlay: React.FC = () => {
                 />
                 <ColumnHeader />
             </div>
-            <div className="fortune-row-body">
+            <div className="sheet-row-body">
                 <RowHeader />
                 <div
                     ref={refs.cellArea}
-                    className="fortune-cell-area"
+                    className="sheet-cell-area"
                     onMouseDown={cellAreaMouseDown}
                     onDoubleClick={cellAreaDoubleClick}
                     onContextMenu={cellAreaContextMenu}
@@ -435,7 +435,7 @@ export const SheetOverlay: React.FC = () => {
                               : 'default',
                     }}
                 >
-                    <div className="fortune-cell-overlay-layer">
+                    <div className="sheet-cell-overlay-layer">
                         {/* Validation dropdown trigger: its own pane wrapper before the
                             passive regions, so it keeps painting under the selection
                             tints (old z-10 vs z-14/15). */}
@@ -489,7 +489,7 @@ export const SheetOverlay: React.FC = () => {
                             fixedTop={null}
                         >
                             <div
-                                className="fortune-change-size-line"
+                                className="sheet-change-size-line"
                                 hidden={
                                     !context.colsResizing &&
                                     !context.rowsResizing &&
@@ -498,18 +498,18 @@ export const SheetOverlay: React.FC = () => {
                                 }
                             />
                             <div
-                                className="fortune-freeze-drag-line"
+                                className="sheet-freeze-drag-line"
                                 hidden={!context.colsFreezeDragging && !context.rowsFreezeDragging}
                             />
                         </OverlayRegion>
                     </div>
                     {cellMenuAnchor}
-                    <div id="luckysheet-cell-flow_0" className="luckysheet-cell-flow luckysheetsheetchange">
-                        <div className="luckysheet-cell-flow-clip">
-                            <div id="luckysheetcoltable_0" className="luckysheet-cell-flow-col">
+                    <div id="sheet-cell-flow_0" className="sheet-cell-flow luckysheetsheetchange">
+                        <div className="sheet-cell-flow-clip">
+                            <div id="luckysheetcoltable_0" className="sheet-cell-flow-col">
                                 <div
-                                    id="luckysheet-sheettable_0"
-                                    className="luckysheet-cell-sheettable"
+                                    id="sheet-table_0"
+                                    className="sheet-cell-table"
                                     style={{
                                         height: context.rh_height,
                                         width: context.ch_width,
@@ -520,8 +520,8 @@ export const SheetOverlay: React.FC = () => {
                                     behind it), so it renders light in both themes —
                                     dark-themed controls would be illegible here. */}
                                 <div
-                                    id="luckysheet-bottom-controll-row"
-                                    className="luckysheet-bottom-controll-row flex items-center gap-2"
+                                    id="sheet-bottom-controll-row"
+                                    className="sheet-bottom-controll-row flex items-center gap-2"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onMouseUp={(e) => e.stopPropagation()}
                                     onKeyDown={(e) => e.stopPropagation()}

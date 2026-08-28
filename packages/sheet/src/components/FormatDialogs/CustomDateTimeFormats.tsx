@@ -56,7 +56,7 @@ function TokenChip({
                     <ChevronDown className="size-3 opacity-50" />
                 </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuContent className="sheet-mousedown-cancel">
                 {token.variants.map((v) => (
                     <DropdownMenuItem key={v.pattern} onClick={() => onVariantChange(v.pattern)}>
                         <span className="flex w-4 shrink-0 items-center justify-center">
@@ -139,7 +139,7 @@ export function CustomDateTimeFormats() {
                                 <ChevronDown className="size-4" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="luckysheet-mousedown-cancel" align="end">
+                        <DropdownMenuContent className="sheet-mousedown-cancel" align="end">
                             {TOKEN_GROUPS.map(({ label, group }) => (
                                 <div key={group}>
                                     <DropdownMenuLabel className="text-xs text-muted-foreground">

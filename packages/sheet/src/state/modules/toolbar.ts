@@ -316,7 +316,7 @@ function activeFormulaInput(
     ctx.editingCellPosition = [row_index, col_index];
     cache.doNotUpdateCell = true;
     if (isnull) {
-        const formulaTxt = `<span dir="auto" class="luckysheet-formula-text-color">=</span><span dir="auto" class="luckysheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="luckysheet-formula-text-color">(</span><span dir="auto" class="luckysheet-formula-text-color">)</span>`;
+        const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
 
         cellInput.innerHTML = formulaTxt;
 
@@ -333,14 +333,14 @@ function activeFormulaInput(
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
     const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
 
-    const formulaTxt = `<span dir="auto" class="luckysheet-formula-text-color">=</span><span dir="auto" class="luckysheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="luckysheet-formula-text-color">(</span><span class="fortune-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${
+    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${
         colors[0]
     };">${getRangetxt(
         ctx,
         ctx.currentSheetId,
         { row: rowh, column: columnh },
         ctx.currentSheetId,
-    )}</span><span dir="auto" class="luckysheet-formula-text-color">)</span>`;
+    )}</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
     cellInput.innerHTML = formulaTxt;
 
     israngeseleciton(ctx);

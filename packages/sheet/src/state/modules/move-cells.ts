@@ -65,7 +65,7 @@ export function onCellsMoveStart(
 
     // The move preview renders once per overlay pane region; write every copy —
     // each region's clip shows exactly its portion.
-    const eles = container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move');
+    const eles = container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move');
     if (eles.length === 0) return;
     for (const ele of eles) {
         ele.style.left = `${col_pre}px`;
@@ -140,7 +140,7 @@ export function onCellsMove(
     row_pre = row_s - 1 === -1 ? 0 : ctx.visibledatarow[row_s - 1];
     row = ctx.visibledatarow[row_e];
 
-    for (const ele of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+    for (const ele of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move')) {
         ele.style.left = `${col_pre}px`;
         ele.style.top = `${row_pre}px`;
         ele.style.width = `${col - col_pre - 2}px`;
@@ -159,7 +159,7 @@ export function onCellsMoveEnd(
     // Change selection box position and replace target cells
     if (!ctx.cellSelectMoving) return;
     ctx.cellSelectMoving = false;
-    for (const ele of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+    for (const ele of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move')) {
         ele.style.display = 'none';
     }
     if (globalCache.dragCellStartPos != null) {

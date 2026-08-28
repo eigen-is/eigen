@@ -53,7 +53,7 @@ function ActiveImage({ img }: { img: Image }) {
         // around this box's centre, so they overlap exactly. Sits inside the 'main' pane region, so it
         // inherits the same scroll offset + freeze clipping as every image.
         <div
-            id="luckysheet-modal-dialog-activeImage"
+            id="sheet-modal-dialog-activeImage"
             // pointer-events-auto: the pane-region wrapper is pointer-events none
             className="absolute pointer-events-auto"
             style={{
@@ -66,7 +66,7 @@ function ActiveImage({ img }: { img: Image }) {
         >
             {/* Class kept for DOM querySelector idioms; move drag lives here. */}
             <div
-                className="luckysheet-modal-dialog-content cursor-move"
+                className="sheet-modal-dialog-content cursor-move"
                 style={{
                     width: box.width,
                     height: box.height,
@@ -184,7 +184,7 @@ export function ImgBoxs() {
     }, [context.activeImg, context.insertedImgs]);
 
     return (
-        <div id="luckysheet-image-showBoxs">
+        <div id="sheet-image-showBoxs">
             {/* key: reset the resize/rotate preview when the active image changes. */}
             {activeImg && <ActiveImage key={activeImg.id} img={activeImg} />}
             {context.insertedImgs?.map((img) => {

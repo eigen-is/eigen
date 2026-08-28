@@ -20,7 +20,7 @@ g.window = win;
 g.document = win.document;
 
 const anchor = win.document.createElement('div');
-anchor.id = 'luckysheet-dataVerification-dropdown-btn';
+anchor.id = 'sheet-dataVerification-dropdown-btn';
 win.document.body.appendChild(anchor);
 
 const LIST: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
@@ -103,7 +103,7 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
 describe('handleGlobalKeyDown — Ctrl+Shift+F focus toggle', () => {
     function addCellInput() {
         const el = win.document.createElement('div');
-        el.className = 'luckysheet-cell-input';
+        el.className = 'sheet-cell-input';
         win.document.body.appendChild(el);
         return el;
     }

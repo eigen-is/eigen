@@ -49,7 +49,7 @@ The four arguments the v2 shape rests on:
   implementation, not design.
 - **Sheets-to-Docs table paste is lossy.** Tiptap has `@tiptap/extension-table` configured with
   `resizable: true`, so a pasted sheet table does become a Tiptap table node. But the engine emits
-  `<table data-type="fortune-copy-action-table">` with pixel-valued inline styles, which Tiptap's
+  `<table data-type="sheet-copy-action-table">` with pixel-valued inline styles, which Tiptap's
   resizable column model may not respect; background colours, borders and font formatting survive
   only partially through `transformPastedHTML`; and formula content flattens to display values.
   Acceptable for Phase 2, but document it as lossy rather than promising fidelity.

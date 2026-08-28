@@ -99,7 +99,7 @@ export function FormatToolbar() {
                 value={textColor}
                 resetLabel="Default"
                 showSwatch
-                popoverClassName="luckysheet-mousedown-cancel"
+                popoverClassName="sheet-mousedown-cancel"
                 onChange={(color) => {
                     setContext((ctx) => {
                         handleTextColor(ctx, refs.cellInput.current!, color);
@@ -113,7 +113,7 @@ export function FormatToolbar() {
                 value={fillColor}
                 resetLabel="Default"
                 showSwatch
-                popoverClassName="luckysheet-mousedown-cancel"
+                popoverClassName="sheet-mousedown-cancel"
                 onChange={(color) => {
                     setContext((ctx) => {
                         handleTextBackground(ctx, refs.cellInput.current!, color);

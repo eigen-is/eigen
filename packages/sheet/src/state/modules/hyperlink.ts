@@ -170,7 +170,7 @@ export function isLinkValid(linkType: string, linkAddress: string) {
 }
 
 export function onRangeSelectionModalMoveStart(_ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
-    const box = document.querySelector('div.fortune-link-modify-modal.range-selection-modal') as HTMLDivElement;
+    const box = document.querySelector('div.sheet-link-modify-modal.range-selection-modal') as HTMLDivElement;
     if (!box) return;
     const { width, height } = box.getBoundingClientRect();
     const left = box.offsetLeft;
@@ -188,7 +188,7 @@ export function onRangeSelectionModalMoveStart(_ctx: Context, globalCache: Globa
 export function onRangeSelectionModalMove(globalCache: GlobalCache, e: MouseEvent) {
     const moveProps = globalCache.linkCard?.rangeSelectionModal;
     if (moveProps == null) return;
-    const modal = document.querySelector('div.fortune-link-modify-modal.range-selection-modal');
+    const modal = document.querySelector('div.sheet-link-modify-modal.range-selection-modal');
     const { x: startX, y: startY } = moveProps.cursorMoveStartPosition!;
     let { top, left } = moveProps.initialPosition!;
     left += e.pageX - startX;

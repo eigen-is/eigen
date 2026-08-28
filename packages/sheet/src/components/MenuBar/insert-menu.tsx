@@ -62,7 +62,7 @@ export function InsertMenu() {
         <>
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Row</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem disabled={rowFocus == null} onClick={() => insertHandler('row', 'lefttop')}>
                         Insert 1 row above
                     </DropdownMenuItem>
@@ -74,7 +74,7 @@ export function InsertMenu() {
 
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Column</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem disabled={columnFocus == null} onClick={() => insertHandler('column', 'lefttop')}>
                         Insert 1 column left
                     </DropdownMenuItem>
@@ -115,7 +115,7 @@ export function InsertMenu() {
 
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>{toolbar.autoSum}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem
                         onClick={() => {
                             setContext((ctx) => {

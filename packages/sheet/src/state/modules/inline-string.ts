@@ -423,7 +423,7 @@ export function updateInlineStringFormat(
                 if (left !== '') {
                     let { cssText } = span.style;
                     if (inherit) {
-                        const box = span.closest('#luckysheet-input-box') as HTMLElement | null;
+                        const box = span.closest('#sheet-input-box') as HTMLElement | null;
                         if (box != null) {
                             cssText = extendCssText(box.style.cssText, cssText);
                         }
@@ -435,7 +435,7 @@ export function updateInlineStringFormat(
                     let cssText = getCssText(span.style.cssText, attr, value);
 
                     if (inherit) {
-                        const box = span.closest('#luckysheet-input-box') as HTMLElement | null;
+                        const box = span.closest('#sheet-input-box') as HTMLElement | null;
                         if (box != null) {
                             cssText = extendCssText(box.style.cssText, cssText);
                         }
@@ -447,7 +447,7 @@ export function updateInlineStringFormat(
                 if (right !== '') {
                     let { cssText } = span.style;
                     if (inherit) {
-                        const box = span.closest('#luckysheet-input-box') as HTMLElement | null;
+                        const box = span.closest('#sheet-input-box') as HTMLElement | null;
                         if (box != null) {
                             cssText = extendCssText(box.style.cssText, cssText);
                         }

@@ -197,7 +197,7 @@ keyboard user who arrowed onto a validated cell saw nothing, and a read-only vie
   dark-filled cells a fixed grey would vanish into.
 - **Clicking it opens the list**; a click anywhere else in the cell just selects. Read-only viewers still
   see the chevron but get no list — `cellFocus` never positions the anchor when editing is disallowed.
-- The DOM element that remains (`#luckysheet-dataVerification-dropdown-btn`) is an invisible,
+- The DOM element that remains (`#sheet-dataVerification-dropdown-btn`) is an invisible,
   non-clickable anchor for the Radix portal, nothing more.
 
 ## The validation card (prompt / rejection)

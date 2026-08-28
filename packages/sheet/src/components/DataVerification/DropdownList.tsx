@@ -57,7 +57,7 @@ export function DropDownList() {
                 this box so Radix has a rect to portal against. */}
             <DropdownMenuTrigger asChild>
                 <div
-                    id="luckysheet-dataVerification-dropdown-btn"
+                    id="sheet-dataVerification-dropdown-btn"
                     style={{ display: 'none' }}
                     tabIndex={-1}
                     aria-hidden="true"
@@ -67,7 +67,7 @@ export function DropDownList() {
                 the React tree across portals — without this class, cellAreaMouseDown's DOM-level
                 closest() guard at SheetOverlay/index.tsx misses the menu items and selection
                 jumps to the cell underneath the popup. */}
-            <DropdownMenuContent align="start" className="luckysheet-mousedown-cancel text-xs">
+            <DropdownMenuContent align="start" className="sheet-mousedown-cancel text-xs">
                 {cellInfo?.list.map((v, i) => {
                     const vStr = String(v);
                     if (cellInfo.isMul) {

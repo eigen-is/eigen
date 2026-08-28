@@ -57,7 +57,7 @@ describe('rangeSetValue — inserting a new reference', () => {
 
         expect($editor.querySelector('img')).toBeNull();
         expect($editor.innerHTML).toContain('&lt;img');
-        expect($editor.querySelector('span.fortune-formula-functionrange-cell')?.textContent).toBe(MARKUP_REF);
+        expect($editor.querySelector('span.sheet-formula-functionrange-cell')?.textContent).toBe(MARKUP_REF);
     });
 
     test('the caret lands at the end of the rendered reference, not past it', () => {
@@ -73,7 +73,7 @@ describe('rangeSetValue — inserting a new reference', () => {
         const $editor = editor();
         rangeSetValue(editorContext('MASTER DATA'), $editor, { row: [1, 1], column: [1, 1] });
 
-        expect($editor.querySelector('span.fortune-formula-functionrange-cell')?.textContent).toBe("'MASTER DATA'!B2");
+        expect($editor.querySelector('span.sheet-formula-functionrange-cell')?.textContent).toBe("'MASTER DATA'!B2");
     });
 });
 
@@ -87,7 +87,7 @@ describe('rangeSetValue — rewriting the span being dragged', () => {
     }
 
     test('writes markup in a sheet name as text, not as an element', () => {
-        const $editor = editor(`<span class="fortune-formula-functionrange-cell" rangeindex="0">A1</span>`);
+        const $editor = editor(`<span class="sheet-formula-functionrange-cell" rangeindex="0">A1</span>`);
         rangeSetValue(dragContext(MARKUP_NAME), $editor, { row: [1, 1], column: [1, 1] });
 
         expect($editor.querySelector('img')).toBeNull();
@@ -95,7 +95,7 @@ describe('rangeSetValue — rewriting the span being dragged', () => {
     });
 
     test('the caret lands at the end of the rendered reference, not past it', () => {
-        const $editor = editor(`<span class="fortune-formula-functionrange-cell" rangeindex="0">A1</span>`);
+        const $editor = editor(`<span class="sheet-formula-functionrange-cell" rangeindex="0">A1</span>`);
         rangeSetValue(dragContext(MARKUP_NAME), $editor, { row: [1, 1], column: [1, 1] });
 
         expect(win.getSelection()?.anchorOffset).toBe(MARKUP_REF.length);

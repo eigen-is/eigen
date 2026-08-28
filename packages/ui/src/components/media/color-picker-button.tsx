@@ -17,7 +17,7 @@ type ColorPickerButtonProps = {
     showSwatch?: boolean;
     // Render the trigger in the active (secondary) variant, e.g. when a highlight is set.
     active?: boolean;
-    // Extra class for the popover content — sheets pass `luckysheet-mousedown-cancel`.
+    // Extra class for the popover content — sheets pass `sheet-mousedown-cancel`.
     popoverClassName?: string;
 };
 

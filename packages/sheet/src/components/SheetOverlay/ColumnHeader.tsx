@@ -213,7 +213,7 @@ export const ColumnHeader: React.FC = () => {
     return (
         <div
             ref={containerRef}
-            className="fortune-col-header"
+            className="sheet-col-header"
             style={{
                 height: headerHeight,
             }}
@@ -229,7 +229,7 @@ export const ColumnHeader: React.FC = () => {
                 <OverlayRegion key={pane} {...rect}>
                     {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
                         <div
-                            className="fortune-col-header-selected"
+                            className="sheet-col-header-selected"
                             key={`${c1}-${c2}`}
                             style={{
                                 left: col_pre,
@@ -245,9 +245,9 @@ export const ColumnHeader: React.FC = () => {
                 region containing the hovered column. */}
             <OverlayRegion {...hoverRegion}>
                 <div
-                    className="fortune-cols-change-size"
+                    className="sheet-cols-change-size"
                     ref={colChangeSizeRef}
-                    id="fortune-cols-change-size"
+                    id="sheet-cols-change-size"
                     onMouseDown={onColSizeHandleMouseDown}
                     onDoubleClick={onColSizeHandleDoubleClick}
                     style={{
@@ -258,7 +258,7 @@ export const ColumnHeader: React.FC = () => {
                 />
                 {!context.colsResizing && hoverLocation.col_index >= 0 ? (
                     <div
-                        className="fortune-col-header-hover"
+                        className="sheet-col-header-hover"
                         style={{
                             left: hoverLocation.col_pre,
                             width: hoverLocation.col - hoverLocation.col_pre - 1,
@@ -297,7 +297,7 @@ export const ColumnHeader: React.FC = () => {
                 pane-spanning drag lines. */}
             <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                 <div
-                    className="fortune-cols-freeze-handle"
+                    className="sheet-cols-freeze-handle"
                     onMouseDown={onColFreezeHandleMouseDown}
                     style={{
                         left: freezeHandleLeft || 0,

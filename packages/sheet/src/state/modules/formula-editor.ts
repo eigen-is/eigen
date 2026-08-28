@@ -39,15 +39,15 @@ function functionHTML(txt: string) {
             matchConfig.bracket += 1;
 
             if (str.length > 0) {
-                function_str += `<span dir="auto" class="luckysheet-formula-text-func">${escapeHtml(str)}</span><span dir="auto" class="luckysheet-formula-text-lpar">(</span>`;
+                function_str += `<span dir="auto" class="sheet-formula-text-func">${escapeHtml(str)}</span><span dir="auto" class="sheet-formula-text-lpar">(</span>`;
             } else {
-                function_str += '<span dir="auto" class="luckysheet-formula-text-lpar">(</span>';
+                function_str += '<span dir="auto" class="sheet-formula-text-lpar">(</span>';
             }
 
             str = '';
         } else if (s === ')' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             matchConfig.bracket -= 1;
-            function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-rpar">)</span>`;
+            function_str += `${functionHTML(str)}<span dir="auto" class="sheet-formula-text-rpar">)</span>`;
             str = '';
         } else if (s === '{' && matchConfig.squote === 0 && matchConfig.dquote === 0) {
             str += '{';
@@ -69,28 +69,28 @@ function functionHTML(txt: string) {
                 matchConfig.dquote += 1;
 
                 if (str.length > 0) {
-                    function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-string">"`;
+                    function_str += `${functionHTML(str)}<span dir="auto" class="sheet-formula-text-string">"`;
                 } else {
-                    function_str += '<span dir="auto" class="luckysheet-formula-text-string">"';
+                    function_str += '<span dir="auto" class="sheet-formula-text-string">"';
                 }
 
                 str = '';
             }
         }
-        // Fix the issue where entering a formula like ='1-2'!A1 causes only 2'!A1 to be colored as fortune-formula-functionrange-cell, while '1- remains black.
+        // Fix the issue where entering a formula like ='1-2'!A1 causes only 2'!A1 to be colored as sheet-formula-functionrange-cell, while '1- remains black.
         else if (s === "'" && matchConfig.dquote === 0) {
             str += "'";
             matchConfig.squote = matchConfig.squote === 0 ? 1 : 0;
         } else if (s === ',' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             // matchConfig.comma += 1;
-            function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-comma">,</span>`;
+            function_str += `${functionHTML(str)}<span dir="auto" class="sheet-formula-text-comma">,</span>`;
             str = '';
         } else if (s === '&' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             if (str.length > 0) {
-                function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-calc">&amp;</span>`;
+                function_str += `${functionHTML(str)}<span dir="auto" class="sheet-formula-text-calc">&amp;</span>`;
                 str = '';
             } else {
-                function_str += '<span dir="auto" class="luckysheet-formula-text-calc">&amp;</span>';
+                function_str += '<span dir="auto" class="sheet-formula-text-calc">&amp;</span>';
             }
         } else if (
             s in operatorjson &&
@@ -116,10 +116,10 @@ function functionHTML(txt: string) {
                 if (str.length > 0) {
                     function_str += `${functionHTML(
                         str,
-                    )}<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s + s_next)}</span>`;
+                    )}<span dir="auto" class="sheet-formula-text-calc">${escapeHtml(s + s_next)}</span>`;
                     str = '';
                 } else {
-                    function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s + s_next)}</span>`;
+                    function_str += `<span dir="auto" class="sheet-formula-text-calc">${escapeHtml(s + s_next)}</span>`;
                 }
 
                 i += 1;
@@ -133,10 +133,10 @@ function functionHTML(txt: string) {
                 if (str.length > 0) {
                     function_str += `${functionHTML(
                         str,
-                    )}<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s)}</span>`;
+                    )}<span dir="auto" class="sheet-formula-text-calc">${escapeHtml(s)}</span>`;
                     str = '';
                 } else {
-                    function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${escapeHtml(s)}</span>`;
+                    function_str += `<span dir="auto" class="sheet-formula-text-calc">${escapeHtml(s)}</span>`;
                 }
             }
         } else {
@@ -150,7 +150,7 @@ function functionHTML(txt: string) {
                     formulaUIState.rangeIndexes.length > formulaUIState.functionHTMLIndex
                         ? formulaUIState.rangeIndexes[formulaUIState.functionHTMLIndex]
                         : formulaUIState.functionHTMLIndex;
-                function_str += `<span class="fortune-formula-functionrange-cell" rangeindex="${rangeIndex}" dir="auto" style="color:${colors[rangeIndex]};">${escapeHtml(str)}</span>`;
+                function_str += `<span class="sheet-formula-functionrange-cell" rangeindex="${rangeIndex}" dir="auto" style="color:${colors[rangeIndex]};">${escapeHtml(str)}</span>`;
                 setFunctionHTMLIndex(formulaUIState.functionHTMLIndex + 1);
             } else if (matchConfig.dquote > 0) {
                 function_str += `${escapeHtml(str)}</span>`;
@@ -163,18 +163,18 @@ function functionHTML(txt: string) {
                     let alltxt = '';
 
                     if (arraystart > 0) {
-                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${escapeHtml(str.slice(0, arraystart))}</span>`;
+                        alltxt += `<span dir="auto" class="sheet-formula-text-color">${escapeHtml(str.slice(0, arraystart))}</span>`;
                     }
 
-                    alltxt += `<span dir="auto" style="color:#959a05" class="luckysheet-formula-text-array">${escapeHtml(arraytxt)}</span>`;
+                    alltxt += `<span dir="auto" style="color:#959a05" class="sheet-formula-text-array">${escapeHtml(arraytxt)}</span>`;
 
                     if (arraystart + arraytxt.length < str.length) {
-                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${escapeHtml(str.slice(arraystart + arraytxt.length))}</span>`;
+                        alltxt += `<span dir="auto" class="sheet-formula-text-color">${escapeHtml(str.slice(arraystart + arraytxt.length))}</span>`;
                     }
 
                     function_str += alltxt;
                 } else {
-                    function_str += `<span dir="auto" class="luckysheet-formula-text-color">${escapeHtml(str)}</span>`;
+                    function_str += `<span dir="auto" class="sheet-formula-text-color">${escapeHtml(str)}</span>`;
                 }
             }
         }
@@ -192,12 +192,12 @@ export function functionHTMLGenerate(txt: string) {
 
     resetFunctionHTMLIndex();
 
-    return `<span dir="auto" class="luckysheet-formula-text-color">=</span>${functionHTML(txt)}`;
+    return `<span dir="auto" class="sheet-formula-text-color">=</span>${functionHTML(txt)}`;
 }
 
 function getRangeIndexes($editor: HTMLDivElement) {
     const res: number[] = [];
-    for (const ele of $editor.querySelectorAll('span.fortune-formula-functionrange-cell')) {
+    for (const ele of $editor.querySelectorAll('span.sheet-formula-functionrange-cell')) {
         const indexStr = ele.getAttribute('rangeindex');
         if (indexStr) {
             const rangeIndex = parseInt(indexStr, 10);
@@ -274,8 +274,8 @@ export function insertFormulaFunctionDom(target: HTMLElement, formulaName: strin
         range.deleteContents();
     }
 
-    const functionStr = `<span dir="auto" class="luckysheet-formula-text-func">${formulaName}</span>`;
-    const lParStr = `<span dir="auto" class="luckysheet-formula-text-lpar">(</span>`;
+    const functionStr = `<span dir="auto" class="sheet-formula-text-func">${formulaName}</span>`;
+    const lParStr = `<span dir="auto" class="sheet-formula-text-lpar">(</span>`;
     const functionNode = new DOMParser().parseFromString(functionStr, 'text/html').body.childNodes[0];
     const lParNode = new DOMParser().parseFromString(lParStr, 'text/html').body.childNodes[0];
 
@@ -307,7 +307,7 @@ export function getrangeseleciton() {
         return anchorNode.parentNode;
     }
     const anchorElement = anchorNode as HTMLElement;
-    if (anchorElement.id === 'luckysheet-rich-text-editor' || anchorElement.id === 'luckysheet-functionbox-cell') {
+    if (anchorElement.id === 'sheet-rich-text-editor' || anchorElement.id === 'sheet-functionbox-cell') {
         let txt = trim(last(anchorElement.querySelectorAll('span'))?.innerText);
 
         if (txt.length === 0 && anchorElement.querySelectorAll('span').length > 1) {
@@ -318,8 +318,8 @@ export function getrangeseleciton() {
         return last(anchorElement.querySelectorAll('span'));
     }
     if (
-        anchorNode?.parentElement?.id === 'luckysheet-rich-text-editor' ||
-        anchorNode?.parentElement?.id === 'luckysheet-functionbox-cell' ||
+        anchorNode?.parentElement?.id === 'sheet-rich-text-editor' ||
+        anchorNode?.parentElement?.id === 'sheet-functionbox-cell' ||
         anchorOffset === 0
     ) {
         const newAnchorNode = anchorOffset === 0 ? anchorNode?.parentNode : anchorNode;
@@ -344,7 +344,7 @@ function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Cont
     const currentIndex = indexOf(currSelection.parentNode?.childNodes, currSelection);
     if (currentIndex < 0 || !$span[currentIndex]) return null;
 
-    if ($span[currentIndex].classList.contains('luckysheet-formula-text-func')) {
+    if ($span[currentIndex].classList.contains('sheet-formula-text-func')) {
         return $span[currentIndex].textContent;
     }
 
@@ -352,7 +352,7 @@ function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Cont
     for (let i = currentIndex - 1; i > 0; i -= 1) {
         const $cur = $span[i];
         if (
-            !$cur.classList.contains('luckysheet-formula-text-func') &&
+            !$cur.classList.contains('sheet-formula-text-func') &&
             !(trim($cur.textContent || '').toUpperCase() in ctx.formulaCache.functionlistMap)
         ) {
             continue;
@@ -365,7 +365,7 @@ function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Cont
         let closedAt = -1;
         for (let a = i; a <= currentIndex; a += 1) {
             if (a >= exceptIndex[0] && a <= exceptIndex[1]) continue;
-            if ($span[a].classList.contains('luckysheet-formula-text-rpar')) {
+            if ($span[a].classList.contains('sheet-formula-text-rpar')) {
                 closedAt = a;
                 break;
             }
@@ -425,10 +425,7 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         ) {
             return true;
         }
-    } else if (
-        anchorElement.id === 'luckysheet-rich-text-editor' ||
-        anchorElement.id === 'luckysheet-functionbox-cell'
-    ) {
+    } else if (anchorElement.id === 'sheet-rich-text-editor' || anchorElement.id === 'sheet-functionbox-cell') {
         let txt = trim(last(anchorElement.querySelectorAll('span'))?.innerText);
 
         ctx.formulaCache.rangeSetValueTo = last(anchorElement.querySelectorAll('span'));
@@ -450,8 +447,8 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
             return true;
         }
     } else if (
-        parentElement.id === 'luckysheet-rich-text-editor' ||
-        parentElement.id === 'luckysheet-functionbox-cell' ||
+        parentElement.id === 'sheet-rich-text-editor' ||
+        parentElement.id === 'sheet-functionbox-cell' ||
         anchorOffset === 0
     ) {
         if (anchorOffset === 0) {
@@ -766,7 +763,7 @@ export function handleFormulaInput(
         $editor.innerHTML = escapeHtml(value);
     } else if (!startsWith(value1txt, '=')) {
         if (!$copyTo) return;
-        if ($copyTo.id === 'luckysheet-rich-text-editor') {
+        if ($copyTo.id === 'sheet-rich-text-editor') {
             if (!startsWith($copyTo.innerHTML, '<span')) {
                 $copyTo.innerHTML = escapeHtml(value);
             }

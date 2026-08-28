@@ -1492,7 +1492,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         cpdata += '</tr>';
     }
 
-    return `<table data-type="fortune-copy-action-table">${colgroup}${cpdata}</table>`;
+    return `<table data-type="sheet-copy-action-table">${colgroup}${cpdata}</table>`;
 }
 
 export function copy(ctx: Context) {

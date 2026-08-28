@@ -56,7 +56,7 @@ describe('state/modules/cell — getCellValue / getFormulaHtml', () => {
     test('getFormulaHtml renders the formula as coloured spans', () => {
         const html = getFormulaHtml(0, 0, data);
         expect(html).toStartWith('<span');
-        expect(html).toContain('luckysheet-formula-text-func');
+        expect(html).toContain('sheet-formula-text-func');
     });
 
     test('getFormulaHtml is null on a cell with no formula', () => {

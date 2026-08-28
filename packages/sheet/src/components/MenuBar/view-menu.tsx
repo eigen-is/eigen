@@ -23,7 +23,7 @@ export function ViewMenu() {
         <>
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>{freezen.default}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem onClick={dispatch((ctx) => handleFreeze(ctx, 'freeze-cancel'))}>
                         {freezen.freezenCancel}
                     </DropdownMenuItem>
@@ -45,7 +45,7 @@ export function ViewMenu() {
                     <DropdownMenuSeparator />
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>Hidden sheets</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                        <DropdownMenuSubContent className="sheet-mousedown-cancel">
                             {hidden.map((sheet) => (
                                 <DropdownMenuItem
                                     key={sheet.id}

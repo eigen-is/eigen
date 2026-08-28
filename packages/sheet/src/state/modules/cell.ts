@@ -1132,7 +1132,7 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
                 // parser decodes entities inside an attribute before CSS sees it, so a
                 // quoted font family survives escaping intact.
                 const styleStr = escapeHtml(styleObjectToCss(getFontStyleByCell(strObj)));
-                value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${escapeHtml(strObj.v)}</span>`;
+                value += `<span class="sheet-input-span" index='${i}' style='${styleStr}'>${escapeHtml(strObj.v)}</span>`;
             }
         }
         return value;

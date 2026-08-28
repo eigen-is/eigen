@@ -27,7 +27,7 @@ export function DataMenu() {
         <>
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>{sort.sortTitle}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, true))}>
                         {sort.asc}
                     </DropdownMenuItem>

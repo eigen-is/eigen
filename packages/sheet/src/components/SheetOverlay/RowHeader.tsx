@@ -190,7 +190,7 @@ export const RowHeader: React.FC = () => {
     return (
         <div
             ref={containerRef}
-            className="fortune-row-header"
+            className="sheet-row-header"
             style={{
                 width: headerWidth,
                 height: context.cellmainHeight,
@@ -213,7 +213,7 @@ export const RowHeader: React.FC = () => {
                     <OverlayRegion key={pane} {...rect}>
                         {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
                             <div
-                                className="fortune-row-header-selected"
+                                className="sheet-row-header-selected"
                                 key={`${r1}-${r2}`}
                                 style={{
                                     top: row_pre,
@@ -229,7 +229,7 @@ export const RowHeader: React.FC = () => {
                     region containing the hovered row. */}
                 <OverlayRegion {...hoverRegion}>
                     <div
-                        className="fortune-rows-change-size"
+                        className="sheet-rows-change-size"
                         ref={rowChangeSizeRef}
                         onMouseDown={onRowSizeHandleMouseDown}
                         style={{
@@ -240,7 +240,7 @@ export const RowHeader: React.FC = () => {
                     />
                     {!context.rowsResizing && hoverLocation.row_index >= 0 ? (
                         <div
-                            className="fortune-row-header-hover"
+                            className="sheet-row-header-hover"
                             style={{
                                 top: hoverLocation.row_pre,
                                 height: hoverLocation.row - hoverLocation.row_pre - 1,
@@ -257,7 +257,7 @@ export const RowHeader: React.FC = () => {
                 pane-spanning drag lines. */}
             <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                 <div
-                    className="fortune-rows-freeze-handle"
+                    className="sheet-rows-freeze-handle"
                     onMouseDown={onRowFreezeHandleMouseDown}
                     style={{
                         top: freezeHandleTop || 0,

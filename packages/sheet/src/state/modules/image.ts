@@ -99,7 +99,7 @@ export function updateImage(
 }
 
 function getImagePosition() {
-    const box = document.getElementById('luckysheet-modal-dialog-activeImage');
+    const box = document.getElementById('sheet-modal-dialog-activeImage');
     if (!box) return undefined;
     const { width, height } = box.getBoundingClientRect();
     const left = box.offsetLeft;
@@ -126,7 +126,7 @@ export function onImageMoveStart(_ctx: Context, globalCache: GlobalCache, e: Mou
 export function onImageMove(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
     if (ctx.allowEdit === false) return false;
     const image = globalCache?.image;
-    const img = document.getElementById('luckysheet-modal-dialog-activeImage');
+    const img = document.getElementById('sheet-modal-dialog-activeImage');
     if (img && image) {
         const { x: startX, y: startY } = image.cursorMoveStartPosition!;
         let { top, left } = image.imgInitialPosition!;

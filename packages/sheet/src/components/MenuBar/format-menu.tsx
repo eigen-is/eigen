@@ -61,7 +61,7 @@ function NumberFormatSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Number</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {defaultFormat.map(({ text, value, example }, ii) => {
                     if (value === 'split') {
                         // biome-ignore lint/suspicious/noArrayIndexKey: separator in static defaultFormat list
@@ -104,7 +104,7 @@ function TextSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Text</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
@@ -146,7 +146,7 @@ function TextSubmenu() {
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Font</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel max-h-[50vh] overflow-y-auto">
+                    <DropdownMenuSubContent className="sheet-mousedown-cancel max-h-[50vh] overflow-y-auto">
                         {fontarray.map((o) => (
                             <DropdownMenuItem
                                 key={o}
@@ -184,7 +184,7 @@ function AlignmentSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Alignment</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
@@ -265,7 +265,7 @@ function RotationSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>{toolbar.textRotate}</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {presets.map(({ label, value }) => (
                     <DropdownMenuItem
                         key={label}
@@ -292,7 +292,7 @@ function WrappingSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Wrapping</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 <DropdownMenuItem
                     onClick={() => {
                         setContext((ctx) => {
@@ -337,7 +337,7 @@ function FontSizeSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Font size</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {[9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72].map((num) => (
                     <DropdownMenuItem
                         key={num}
@@ -398,7 +398,7 @@ function BordersSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Borders</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {borderItems.map(({ text, value }, ii) =>
                     value === 'divider' ? (
                         // biome-ignore lint/suspicious/noArrayIndexKey: separator in static border-items list
@@ -419,7 +419,7 @@ function BordersSubmenu() {
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Custom border…</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         <CustomBorder
                             onPick={(color?: string, style?: string) => {
                                 if (color) setCustomColor(color);
@@ -447,7 +447,7 @@ function MergeCellsSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Merge cells</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {mergeItems.map(({ text, value }) => (
                     <DropdownMenuItem
                         key={value}
@@ -509,10 +509,10 @@ function ConditionalFormattingSubmenu() {
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Conditional formatting</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>{conditionformat.highlightCellRules}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         {[
                             { text: 'greaterThan', value: '>' },
                             { text: 'lessThan', value: '<' },
@@ -539,7 +539,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>{conditionformat.itemSelectionRules}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         {[
                             { text: 'top10', value: conditionformat.top10 },
                             { text: 'top10_percent', value: conditionformat.top10_percent },
@@ -565,7 +565,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>{conditionformat.colorGradation}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         {COLOR_SCALE_PRESETS.map((preset) => (
                             <DropdownMenuItem
                                 key={preset}
@@ -580,7 +580,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>{conditionformat.dataBar}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         {DATA_BAR_PRESETS.map((preset) => (
                             <DropdownMenuItem
                                 key={preset}
@@ -601,7 +601,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>{conditionformat.deleteRule}</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         <DropdownMenuItem
                             onClick={() => {
                                 setContext((ctx) => {

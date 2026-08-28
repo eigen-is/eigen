@@ -19,14 +19,14 @@
     --sheet-touch-btn: #018ffb;
 }
 
-.fortune-sheet-overlay {
+.sheet-overlay {
     position: absolute;
     width: 100%;
     height: 100%;
     outline-style: none;
 }
 
-.fortune-cell-area {
+.sheet-cell-area {
     border-collapse: collapse;
     position: relative;
     overflow: auto;
@@ -39,22 +39,22 @@
     scrollbar-color: var(--sheet-scrollbar-thumb) transparent;
 }
 
-.fortune-cell-area::-webkit-scrollbar {
+.sheet-cell-area::-webkit-scrollbar {
     width: 8px;
     height: 8px;
     background-color: transparent;
 }
 
-.fortune-cell-area::-webkit-scrollbar-track {
+.sheet-cell-area::-webkit-scrollbar-track {
     background-color: transparent;
 }
 
-.fortune-cell-area::-webkit-scrollbar-thumb {
+.sheet-cell-area::-webkit-scrollbar-thumb {
     background-color: var(--sheet-scrollbar-thumb);
     border-radius: 16px;
 }
 
-.fortune-cell-area::-webkit-scrollbar-button {
+.sheet-cell-area::-webkit-scrollbar-button {
     display: none;
 }
 
@@ -65,8 +65,8 @@
    scrolling natively (which drifts a frame) and clip below frozen panes. The
    anchor is 0×0 with overflow visible and the regions are pointer-events none,
    so the grid is never covered — empty-grid clicks fall through to
-   .fortune-cell-area. */
-.fortune-cell-overlay-layer {
+   .sheet-cell-area. */
+.sheet-cell-overlay-layer {
     position: sticky;
     top: 0;
     left: 0;
@@ -85,25 +85,25 @@
 /* The pane-region wrappers are pointer-events none (full-size hit rects that
    must not shadow the grid); interactive overlay elements that relied on the
    default value re-enable themselves here. */
-.fortune-cell-selected-move,
-.fortune-change-size-line,
-.fortune-freeze-drag-line,
-.fortune-cols-change-size,
-.fortune-rows-change-size,
-.fortune-cols-freeze-handle,
-.fortune-rows-freeze-handle,
-.fortune-col-header-hover .header-arrow,
-.fortune-formula-functionrange-highlight .fortune-copy,
-.fortune-formula-functionrange-highlight .luckysheet-highlight {
+.sheet-cell-selected-move,
+.sheet-change-size-line,
+.sheet-freeze-drag-line,
+.sheet-cols-change-size,
+.sheet-rows-change-size,
+.sheet-cols-freeze-handle,
+.sheet-rows-freeze-handle,
+.sheet-col-header-hover .header-arrow,
+.sheet-formula-functionrange-highlight .sheet-copy,
+.sheet-formula-functionrange-highlight .sheet-highlight {
     pointer-events: auto;
 }
 
-.fortune-row-body {
+.sheet-row-body {
     display: flex;
     flex-direction: row;
 }
 
-.fortune-row-header {
+.sheet-row-header {
     position: relative;
     flex-shrink: 0;
     outline-style: none;
@@ -118,7 +118,7 @@
 
 /* Header hover/selected highlights live inside 0x0 pane-region content divs
    (grid coordinates), so their cross-axis size is inline, not %-based. */
-.fortune-row-header-hover {
+.sheet-row-header-hover {
     position: absolute;
     z-index: 11;
     border: 0 none;
@@ -127,7 +127,7 @@
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
-.fortune-row-header-selected {
+.sheet-row-header-selected {
     position: absolute;
     z-index: 10;
     border-right: 1px solid var(--selection-handle);
@@ -136,12 +136,12 @@
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
-.fortune-col-header-wrap {
+.sheet-col-header-wrap {
     display: flex;
     flex-direction: row;
 }
 
-.fortune-col-header {
+.sheet-col-header {
     color: var(--sheet-header-text);
     overflow: hidden;
     padding: 0;
@@ -152,7 +152,7 @@
     position: relative;
 }
 
-.fortune-col-header-hover {
+.sheet-col-header-hover {
     color: var(--sheet-header-text);
     cursor: default;
     position: absolute;
@@ -163,14 +163,14 @@
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
-.fortune-col-header-hover .header-arrow {
+.sheet-col-header-hover .header-arrow {
     position: absolute;
     right: 6px;
     top: 50%;
     transform: translate(0%, -44%);
 }
 
-.fortune-col-header-selected {
+.sheet-col-header-selected {
     color: var(--sheet-header-text);
     cursor: default;
     position: absolute;
@@ -181,7 +181,7 @@
     background-color: color-mix(in oklab, var(--app-current-color) 14%, transparent);
 }
 
-.fortune-left-top {
+.sheet-left-top {
     width: 44.5px;
     height: 18.5px;
     border: solid 0 var(--sheet-grid-border);
@@ -193,7 +193,7 @@
     background-color: var(--background);
 }
 
-.luckysheet-cell-selected-focus {
+.sheet-cell-selected-focus {
     position: absolute;
     pointer-events: none;
     z-index: 14;
@@ -203,7 +203,7 @@
     display: none;
 }
 
-.fortune-selection-copy {
+.sheet-selection-copy {
     position: absolute;
     pointer-events: none;
     z-index: 18;
@@ -211,13 +211,13 @@
     margin: 0px 0 0 0px;
 }
 
-.fortune-selection-copy .fortune-copy {
+.sheet-selection-copy .sheet-copy {
     position: absolute;
     z-index: 18;
     background-color: transparent;
 }
 
-.fortune-selection-copy-hc {
+.sheet-selection-copy-hc {
     position: absolute;
     top: 0;
     right: 0;
@@ -227,7 +227,7 @@
     z-index: 8;
 }
 
-.fortune-selection-highlight {
+.sheet-selection-highlight {
     position: absolute;
     /*pointer-events: none;*/
     z-index: 14;
@@ -238,14 +238,14 @@
 
 /* In-document search highlight: positioning only. The amber wash + active ring come from the
    shared .eigen-search-match / -active classes (single source, packages/ui globals.css). */
-.fortune-search-highlight {
+.sheet-search-highlight {
     position: absolute;
     pointer-events: none;
     z-index: 13;
     box-sizing: border-box;
 }
 
-.fortune-cell-selected-extend {
+.sheet-cell-selected-extend {
     position: absolute;
     pointer-events: none;
     z-index: 16;
@@ -254,7 +254,7 @@
     display: none;
 }
 
-.fortune-cell-selected-move {
+.sheet-cell-selected-move {
     cursor: move;
     position: absolute;
     /* pointer-events: none; */
@@ -264,7 +264,7 @@
     display: none;
 }
 
-.luckysheet-cell-selected {
+.sheet-cell-selected {
     position: absolute;
     pointer-events: none;
     z-index: 15;
@@ -275,7 +275,7 @@
     box-sizing: content-box;
 }
 
-.luckysheet-cs-inner-border {
+.sheet-cs-inner-border {
     pointer-events: none;
     border: 1px solid var(--background);
     position: absolute;
@@ -285,7 +285,7 @@
     right: 0;
 }
 
-.luckysheet-cs-fillhandle {
+.sheet-cs-fillhandle {
     position: absolute;
     width: 6px;
     height: 6px;
@@ -298,7 +298,7 @@
     right: -5px;
 }
 
-.luckysheet-cs-draghandle {
+.sheet-cs-draghandle {
     position: absolute;
     cursor: move;
     background-color: var(--background);
@@ -308,35 +308,35 @@
     border: 2px solid var(--background);
 }
 
-.luckysheet-cs-draghandle-top {
+.sheet-cs-draghandle-top {
     top: -4px;
     left: -2px;
     right: -2px;
     height: 2px;
 }
 
-.luckysheet-cs-draghandle-bottom {
+.sheet-cs-draghandle-bottom {
     right: 0;
     left: -2px;
     bottom: -4px;
     height: 2px;
 }
 
-.luckysheet-cs-draghandle-left {
+.sheet-cs-draghandle-left {
     top: 0;
     left: -4px;
     bottom: 0;
     width: 2px;
 }
 
-.luckysheet-cs-draghandle-right {
+.sheet-cs-draghandle-right {
     top: 0;
     right: -4px;
     bottom: 0;
     width: 2px;
 }
 
-.luckysheet-cs-touchhandle {
+.sheet-cs-touchhandle {
     display: none;
     position: absolute;
     width: 16px;
@@ -347,7 +347,7 @@
     touch-action: auto;
 }
 
-.luckysheet-cs-touchhandle:before {
+.sheet-cs-touchhandle:before {
     content: "";
     display: block;
     width: 16px;
@@ -358,27 +358,27 @@
     border-radius: 50%;
 }
 
-.luckysheet-cs-touchhandle-lt {
+.sheet-cs-touchhandle-lt {
     left: -13px;
     top: -13px;
 }
 
-.luckysheet-cs-touchhandle-lb {
+.sheet-cs-touchhandle-lb {
     left: -13px;
     bottom: -13px;
 }
 
-.luckysheet-cs-touchhandle-rt {
+.sheet-cs-touchhandle-rt {
     right: -13px;
     top: -13px;
 }
 
-.luckysheet-cs-touchhandle-rb {
+.sheet-cs-touchhandle-rb {
     right: -13px;
     bottom: -13px;
 }
 
-.luckysheet-cs-touchhandle .luckysheet-cs-touchhandle-btn {
+.sheet-cs-touchhandle .sheet-cs-touchhandle-btn {
     position: absolute;
     width: 10px;
     height: 10px;
@@ -391,7 +391,7 @@
     z-index: 11;
 }
 
-.luckysheet-input-box {
+.sheet-input-box {
     position: absolute;
     font: inherit;
     font-size: 13px;
@@ -400,7 +400,7 @@
     flex-direction: column;
 }
 
-.luckysheet-input-box-inner {
+.sheet-input-box-inner {
     font: inherit;
     font-size: 13px;
     text-align: left;
@@ -423,7 +423,7 @@
     box-sizing: border-box;
 }
 
-.luckysheet-cell-input {
+.sheet-cell-input {
     width: 100%;
     margin: 0;
     outline: none;
@@ -431,15 +431,15 @@
     white-space: pre-wrap;
 }
 
-.luckysheet-formula-text-color {
+.sheet-formula-text-color {
     color: var(--sheet-cell-text);
 }
 
-.luckysheet-formula-text-string {
+.sheet-formula-text-string {
     color: var(--sheet-formula-string);
 }
 
-.luckysheet-cell-flow {
+.sheet-cell-flow {
     margin: 0;
     padding: 0;
     border: none 0;
@@ -447,7 +447,7 @@
     touch-action: manipulation;
 }
 
-.luckysheet-cell-flow-clip {
+.sheet-cell-flow-clip {
     border-collapse: collapse;
     cursor: default;
     /* Shrink-wrap the content (the sheettable spacer) instead of a fixed 5,000,000px, which
@@ -457,7 +457,7 @@
     overflow: hidden;
 }
 
-.luckysheet-cell-flow-col {
+.sheet-cell-flow-col {
     margin: 0;
     padding: 0;
     border: none 0;
@@ -468,7 +468,7 @@
     direction: ltr;
 }
 
-.luckysheet-cell-sheettable {
+.sheet-cell-table {
     position: relative;
     /*background-color: #fff;*/
     text-align: left;
@@ -477,19 +477,19 @@
     text-decoration: none;
 }
 
-.luckysheet-bottom-controll-row {
+.sheet-bottom-controll-row {
     position: absolute;
     bottom: 38px;
     left: 0px;
     z-index: 20;
 }
 
-.fortune-cols-change-size,
-.fortune-rows-change-size,
-.fortune-change-size-line,
-.fortune-cols-freeze-handle,
-.fortune-rows-freeze-handle,
-.fortune-freeze-drag-line {
+.sheet-cols-change-size,
+.sheet-rows-change-size,
+.sheet-change-size-line,
+.sheet-cols-freeze-handle,
+.sheet-rows-freeze-handle,
+.sheet-freeze-drag-line {
     /*display: none;*/
     -webkit-user-drag: none;
     user-select: none;
@@ -499,7 +499,7 @@
 
 /* Cross-axis size is inline (the handles live inside 0x0 pane-region content
    divs, where % height/width resolves to 0). */
-.fortune-cols-change-size {
+.sheet-cols-change-size {
     width: 5px;
     top: 0;
     background: var(--selection-handle);
@@ -507,7 +507,7 @@
     opacity: 0;
 }
 
-.fortune-rows-change-size {
+.sheet-rows-change-size {
     left: 0;
     height: 5px;
     background: var(--selection-handle);
@@ -515,14 +515,14 @@
     opacity: 0;
 }
 
-.fortune-change-size-line {
+.sheet-change-size-line {
     border-color: var(--selection-handle);
     border-style: solid;
     z-index: 15;
     cursor: ew-resize;
 }
 
-.fortune-cols-freeze-handle {
+.sheet-cols-freeze-handle {
     position: absolute;
     left: 0;
     width: 3px;
@@ -532,7 +532,7 @@
     z-index: 20;
 }
 
-.fortune-rows-freeze-handle {
+.sheet-rows-freeze-handle {
     position: absolute;
     top: 0;
     height: 3px;
@@ -542,7 +542,7 @@
     z-index: 20;
 }
 
-.fortune-freeze-drag-line {
+.sheet-freeze-drag-line {
     border-color: var(--sheet-freeze-line);
     border-style: solid;
     z-index: 15;
@@ -550,7 +550,7 @@
 }
 
 /* Comment dialog: move and resize handles */
-.luckysheet-postil-dialog-move {
+.sheet-postil-dialog-move {
     position: absolute;
     margin: 0px;
     padding: 0px;
@@ -561,14 +561,14 @@
     pointer-events: none;
 }
 
-.luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item {
+.sheet-postil-dialog-move .sheet-postil-dialog-move-item {
     /*background: #000;*/
     position: absolute;
     pointer-events: all;
     cursor: move;
 }
 
-.luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item-t {
+.sheet-postil-dialog-move .sheet-postil-dialog-move-item-t {
     width: 100%;
     height: 3px;
     /* border-bottom: 1px solid #000; */
@@ -576,7 +576,7 @@
     top: -4px;
 }
 
-.luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item-r {
+.sheet-postil-dialog-move .sheet-postil-dialog-move-item-r {
     width: 3px;
     height: 100%;
     /* border-left: 1px solid #000; */
@@ -584,7 +584,7 @@
     top: 0;
 }
 
-.luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item-b {
+.sheet-postil-dialog-move .sheet-postil-dialog-move-item-b {
     width: 100%;
     height: 3px;
     /* border-top: 1px solid #000; */
@@ -592,7 +592,7 @@
     bottom: -4px;
 }
 
-.luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item-l {
+.sheet-postil-dialog-move .sheet-postil-dialog-move-item-l {
     width: 3px;
     height: 100%;
     /* border-right: 1px solid #000; */
@@ -600,11 +600,11 @@
     top: 0;
 }
 
-.luckysheet-postil-show-active .luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item {
+.sheet-postil-show-active .sheet-postil-dialog-move .sheet-postil-dialog-move-item {
     border-color: var(--selection-handle);
 }
 
-.luckysheet-postil-dialog-resize {
+.sheet-postil-dialog-resize {
     position: absolute;
     margin: 0px;
     padding: 0px;
@@ -615,7 +615,7 @@
     pointer-events: none;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item {
     position: absolute;
     height: 6px;
     width: 6px;
@@ -623,59 +623,59 @@
     pointer-events: all;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-lt {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-lt {
     left: -6px;
     top: -6px;
     cursor: nw-resize;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-mt {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-mt {
     left: 50%;
     top: -6px;
     margin-left: -4px;
     cursor: n-resize;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-lm {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-lm {
     top: 50%;
     left: -6px;
     margin-top: -4px;
     cursor: w-resize;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-rm {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-rm {
     top: 50%;
     right: -6px;
     margin-top: -4px;
     cursor: e-resize;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-rt {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-rt {
     right: -6px;
     top: -6px;
     cursor: ne-resize;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-lb {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-lb {
     left: -6px;
     bottom: -6px;
     cursor: sw-resize;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-mb {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-mb {
     left: 50%;
     bottom: -6px;
     margin-left: -4px;
     cursor: s-resize;
 }
 
-.luckysheet-postil-dialog-resize .luckysheet-postil-dialog-resize-item-rb {
+.sheet-postil-dialog-resize .sheet-postil-dialog-resize-item-rb {
     right: -6px;
     bottom: -6px;
     cursor: se-resize;
 }
 
-.fortune-selection-copy-top {
+.sheet-selection-copy-top {
     left: 0;
     right: 0;
     height: 2px;
@@ -684,7 +684,7 @@
     /* background-image: url("EwaAntH.gif"); */
 }
 
-.fortune-selection-copy-right {
+.sheet-selection-copy-right {
     top: 0;
     bottom: 0;
     width: 2px;
@@ -692,7 +692,7 @@
     /* background-image: url("EwaAntV.gif"); */
 }
 
-.fortune-selection-copy-bottom {
+.sheet-selection-copy-bottom {
     left: 0;
     right: 0;
     height: 2px;
@@ -700,7 +700,7 @@
     /* background-image: url("EwaAntH.gif"); */
 }
 
-.fortune-selection-copy-left {
+.sheet-selection-copy-left {
     top: 0;
     bottom: 0;
     width: 2px;
@@ -709,7 +709,7 @@
     /* background-image: url("EwaAntV.gif"); */
 }
 
-.fortune-selection-copy-hc {
+.sheet-selection-copy-hc {
     position: absolute;
     top: 0;
     right: 0;
@@ -719,7 +719,7 @@
     z-index: 8;
 }
 
-.fortune-formula-functionrange-highlight .fortune-copy {
+.sheet-formula-functionrange-highlight .sheet-copy {
     background-image: none;
     background-color: var(--selection-handle);
     position: absolute;
@@ -730,61 +730,61 @@
     /*border: 1px solid #fff;*/
 }
 
-.fortune-formula-functionrange-highlight .fortune-selection-copy-top {
+.sheet-formula-functionrange-highlight .sheet-selection-copy-top {
     top: -2px;
     border-top: 2px solid var(--background);
     border-bottom: 2px solid var(--background);
 }
 
-.fortune-formula-functionrange-highlight .fortune-selection-copy-right {
+.sheet-formula-functionrange-highlight .sheet-selection-copy-right {
     right: -2px;
     border-left: 2px solid var(--background);
     border-right: 2px solid var(--background);
 }
 
-.fortune-formula-functionrange-highlight .fortune-selection-copy-bottom {
+.sheet-formula-functionrange-highlight .sheet-selection-copy-bottom {
     bottom: -2px;
     border-top: 2px solid var(--background);
     border-bottom: 2px solid var(--background);
 }
 
-.fortune-formula-functionrange-highlight .fortune-selection-copy-left {
+.sheet-formula-functionrange-highlight .sheet-selection-copy-left {
     left: -2px;
     border-left: 2px solid var(--background);
     border-right: 2px solid var(--background);
 }
 
-.fortune-formula-functionrange-highlight .fortune-selection-copy-hc {
+.sheet-formula-functionrange-highlight .sheet-selection-copy-hc {
     border: 2px solid var(--sheet-funcrange-border);
     opacity: 0.03;
     z-index: initial;
 }
 
-.fortune-selection-highlight-lt {
+.sheet-selection-highlight-lt {
     left: -3px;
     top: -3px;
     cursor: se-resize;
 }
 
-.fortune-selection-highlight-rt {
+.sheet-selection-highlight-rt {
     right: -3px;
     top: -3px;
     cursor: ne-resize;
 }
 
-.fortune-selection-highlight-lb {
+.sheet-selection-highlight-lb {
     left: -3px;
     bottom: -3px;
     cursor: ne-resize;
 }
 
-.fortune-selection-highlight-rb {
+.sheet-selection-highlight-rb {
     right: -3px;
     bottom: -3px;
     cursor: se-resize;
 }
 
-.fortune-formula-functionrange-highlight .luckysheet-highlight {
+.sheet-formula-functionrange-highlight .sheet-highlight {
     position: absolute;
     z-index: 19;
     border: 1px solid var(--background);
@@ -796,21 +796,21 @@
 /* A peer's focused-cell box carries the shared remote-ring treatment — 1px solid, peer-coloured via
    --peer-color — from @workspace/ui globals (.eigen-selection-ring / .eigen-selection-ring-peer),
    one CSS source with vector/slides/stickies. Only the geometry (below) is sheets-specific. */
-.fortune-presence-selection {
+.sheet-presence-selection {
     position: absolute;
 }
 
 /* Cells abut, so the shared ring's 4px outline-offset would bleed the outline into neighbouring
    cells; hug the cell instead (the Google Sheets idiom). The two-class selector outranks
    .eigen-selection-ring's own offset regardless of stylesheet order. */
-.fortune-presence-selection.eigen-selection-ring {
+.sheet-presence-selection.eigen-selection-ring {
     outline-offset: 0;
 }
 
 /* The presence name chip renders via @workspace/ui PresenceLabel (.collaboration-cursor__label),
    shared with the docs caret. The shared class is position-neutral (the D10 label split), so re-add
    the above-the-box placement here — without it the chip falls inside the cell outline. */
-.fortune-presence-selection .collaboration-cursor__label {
+.sheet-presence-selection .collaboration-cursor__label {
     position: absolute;
     top: -1.4em;
     left: -1px;
@@ -819,7 +819,7 @@
 /* Invisible anchor for the validation dropdown's Radix portal — the chevron a
    list-validated cell shows is canvas paint, and the canvas hit-test opens the
    menu, so this box wants no ink and no clicks of its own. */
-#luckysheet-dataVerification-dropdown-btn {
+#sheet-dataVerification-dropdown-btn {
     display: none;
     width: 20px;
     height: 20px;

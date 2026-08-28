@@ -24,14 +24,14 @@ export function ValidationHintCard() {
 
     return (
         <div
-            // luckysheet-mousedown-cancel: clicking the card must not reselect the
+            // sheet-mousedown-cancel: clicking the card must not reselect the
             // cell underneath it. eigen-paper-chrome: popup chrome re-themes with
             // the app inside the light-pinned workbook surface (RENDERING.md
             // § Theming). pointer-events-auto: the pane region wrapper has none.
             // w-max: the pane region this renders into is a 0x0 anchor, so an
             // auto-width absolute box would wrap at min-content.
             className={cn(
-                'luckysheet-mousedown-cancel eigen-paper-chrome pointer-events-auto absolute z-30 w-max max-w-64',
+                'sheet-mousedown-cancel eigen-paper-chrome pointer-events-auto absolute z-30 w-max max-w-64',
                 'cursor-default select-none rounded-md border bg-popover px-2.5 py-1.5',
                 'text-xs leading-relaxed text-popover-foreground shadow-md',
                 hint.kind === 'invalid' && 'border-destructive/50',
