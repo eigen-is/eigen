@@ -1,10 +1,18 @@
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
-import React, { useCallback, useMemo, useState } from 'react';
+import { cn } from '@workspace/ui/lib/utils';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { clampToViewport, type ViewportPoint } from '../state';
 
 export type ModalOptions = {
     // When false, no backdrop and the rest of the page stays interactive (e.g. range picker).
     modal?: boolean;
+    // Dialog width in px — forms want the default, a small picker overrides it.
+    width?: number;
+    // Viewport point the dialog's top-left opens at, clamped on screen. Centred when absent.
+    anchor?: ViewportPoint;
 };
+
+const DEFAULT_WIDTH = 500;
 
 type ModalState = {
     content: React.ReactNode;
@@ -23,15 +31,36 @@ const ModalContext = React.createContext<ModalContextType>({
 
 function ModalProvider({ children }: { children?: React.ReactNode }) {
     const [state, setState] = useState<ModalState | null>(null);
+    const [placement, setPlacement] = useState<ViewportPoint | null>(null);
+    const contentRef = useRef<HTMLDivElement>(null);
     const open = state !== null;
     const isModal = state?.options.modal !== false;
+    const anchor = state?.options.anchor;
 
     const showModal = useCallback((c: React.ReactNode, options: ModalOptions = {}) => {
         setState({ content: c, options });
     }, []);
     const hideModal = useCallback(() => setState(null), []);
 
+    // useLayoutEffect, not useEffect: the clamp needs the dialog's rendered height, so it
+    // renders once at the raw anchor and is corrected before the browser paints either frame.
+    useLayoutEffect(() => {
+        const el = contentRef.current;
+        if (!anchor || !el) {
+            setPlacement(null);
+            return;
+        }
+        setPlacement(
+            clampToViewport(
+                anchor,
+                { width: el.offsetWidth, height: el.offsetHeight },
+                { width: window.innerWidth, height: window.innerHeight },
+            ),
+        );
+    }, [anchor]);
+
     const providerValue = useMemo(() => ({ showModal, hideModal }), [hideModal, showModal]);
+    const position = anchor && (placement ?? anchor);
 
     return (
         <ModalContext.Provider value={providerValue}>
@@ -44,16 +73,20 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
                 }}
             >
                 <DialogContent
+                    ref={contentRef}
                     showCloseButton={false}
                     onPointerDownOutside={(e) => e.preventDefault()}
                     onInteractOutside={(e) => e.preventDefault()}
-                    className="max-w-[90vw]"
+                    // An anchored dialog drops DialogContent's centring translate; the pair of
+                    // left/top below places it instead.
+                    className={cn('max-w-[90vw]', position && 'translate-x-0 translate-y-0')}
                     style={{
                         display: 'flex',
                         flexDirection: 'column',
                         maxHeight: '75vh',
                         overflow: 'hidden',
-                        width: 500,
+                        width: state?.options.width ?? DEFAULT_WIDTH,
+                        ...(position && { left: position.left, top: position.top }),
                     }}
                 >
                     <div

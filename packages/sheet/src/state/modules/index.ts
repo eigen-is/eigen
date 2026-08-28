@@ -20,6 +20,7 @@ export * from './inline-string';
 export * from './location';
 export * from './merge';
 export * from './move-cells';
+export * from './overlay-anchor';
 export * from './protection';
 export * from './refresh';
 export * from './rowcol';

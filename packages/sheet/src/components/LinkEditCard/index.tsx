@@ -11,14 +11,18 @@ import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } f
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
+    computeOverlayRegions,
     en,
     goToLink,
     isLinkValid,
     type LinkCardProps,
     normalizeSelection,
+    overlayAnchorToViewport,
+    overlayRegionForCell,
     removeHyperlink,
     replaceHtml,
     saveHyperlink,
+    type ViewportPoint,
 } from '../../state';
 import { CellRangeDialog } from '../CellRangeDialog';
 
@@ -27,6 +31,11 @@ import { CellRangeDialog } from '../CellRangeDialog';
 // surface — it re-themes with the app.
 const modalBase =
     'eigen-paper-chrome absolute overflow-hidden bg-popover z-30 rounded-md border border-border shadow-md px-5 pt-1.5 pb-2.5 pointer-events-auto';
+
+// The range picker keeps the narrow card size and the 5px gap under the cell it had
+// when it rendered inside the grid overlay.
+const RANGE_PICKER_WIDTH = 380;
+const RANGE_PICKER_GAP = 5;
 
 export function LinkEditCard({
     r,
@@ -68,6 +77,28 @@ export function LinkEditCard({
         [setContext],
     );
 
+    // position is in sheet-content coordinates: the card used to render inside this cell's
+    // OverlayRegion, which applied the pane's scroll transform. The picker is portaled and
+    // fixed, so convert here — off the same pane the region would have used.
+    const rangePickerAnchor = useCallback((): ViewportPoint | undefined => {
+        const area = refs.cellArea.current;
+        if (!area) return undefined;
+        const { left: areaLeft, top: areaTop } = area.getBoundingClientRect();
+        const freeze = refs.globalCache.freezen?.[context.currentSheetId];
+        const regions = computeOverlayRegions(freeze, context.cellmainWidth, context.cellmainHeight);
+        const { fixedLeft, fixedTop } = overlayRegionForCell(regions, freeze, r, c);
+        return overlayAnchorToViewport({
+            contentLeft: position.cellLeft,
+            contentTop: position.cellBottom + RANGE_PICKER_GAP,
+            areaLeft,
+            areaTop,
+            fixedLeft,
+            fixedTop,
+            scrollLeft: refs.globalCache.scrollLeft,
+            scrollTop: refs.globalCache.scrollTop,
+        });
+    }, [c, context.cellmainHeight, context.cellmainWidth, context.currentSheetId, position, r, refs]);
+
     const openRangePicker = useCallback(
         (seed: string) => {
             const close = (rangeTxt?: string) => {
@@ -84,9 +115,10 @@ export function LinkEditCard({
                     onConfirm={(rangeTxt) => close(rangeTxt)}
                     onCancel={() => close()}
                 />,
+                { width: RANGE_PICKER_WIDTH, anchor: rangePickerAnchor() },
             );
         },
-        [hideDialog, setRangeModalVisible, showNonModalDialog],
+        [hideDialog, rangePickerAnchor, setRangeModalVisible, showNonModalDialog],
     );
 
     const containerEvent = useMemo(
