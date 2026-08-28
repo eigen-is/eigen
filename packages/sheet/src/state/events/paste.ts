@@ -30,7 +30,7 @@ import { getdatabyselection, getQKBorder } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_SUFFIX, normalizeSelection, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, normalizeSelection, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetParamALL } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
@@ -1248,7 +1248,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         // if the content is marked as copied from this sheet, check whether the clipboard matches what was copied from the current page
         let isEqual = true;
         if (
-            txtdata.indexOf(COPY_ACTION_TABLE_SUFFIX) > -1 &&
+            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0
         ) {
@@ -1340,7 +1340,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         }
 
         if (
-            txtdata.indexOf(COPY_ACTION_TABLE_SUFFIX) > -1 &&
+            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0 &&
             isEqual
@@ -1353,7 +1353,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             } else {
                 pasteHandlerOfCopyPaste(ctx, ctx.copyState);
             }
-        } else if (txtdata.indexOf('copy-action-image') > -1) {
         } else {
             if (txtdata.indexOf('table') > -1) {
                 const ele = document.createElement('div');
@@ -1440,7 +1439,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                             forEach(styleString, (s) => {
                                 const styleList = s.split(':');
                                 if (styleList.length < 2) return;
-                                styles[styleList[0]] = styleList[1].replace(';', '');
+                                styles[styleList[0].trim()] = styleList[1].replace(';', '').trim();
                             });
                             if (!isNil(styles.border)) td.style.border = styles.border;
                             let bg: string | undefined = td.style.backgroundColor || styles.background;

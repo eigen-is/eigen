@@ -122,4 +122,18 @@ describe('handleGlobalKeyDown — Ctrl+Shift+F focus toggle', () => {
         expect(win.document.activeElement).toBe(second);
         expect(first.getAttribute('tabindex')).toBe(null);
     });
+
+    test('releasing the lock moves no focus, and the lock can be taken back', () => {
+        const input = addCellInput();
+        const ctx = listContext();
+        ctx.sheetFocused = true;
+
+        keyDown(ctx, 'F', { ctrlKey: true, shiftKey: true, cellInput: input as unknown as HTMLDivElement });
+        expect(ctx.sheetFocused).toBe(false);
+        expect(win.document.activeElement).not.toBe(input);
+
+        keyDown(ctx, 'F', { ctrlKey: true, shiftKey: true, cellInput: input as unknown as HTMLDivElement });
+        expect(ctx.sheetFocused).toBe(true);
+        expect(win.document.activeElement).toBe(input);
+    });
 });

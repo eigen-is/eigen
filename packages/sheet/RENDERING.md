@@ -1,6 +1,6 @@
 # Sheet Rendering Architecture
 
-Every class and id the engine renders or queries is prefixed `sheet-` (renamed from the fork's `fortune-` / `luckysheet-` prefixes on 2026-08-28). `sheet-copy-action-table` is the exception in kind rather than spelling: it is a clipboard wire format, not a style hook.
+The fork's `fortune-` / `luckysheet-` class and id prefixes became `sheet-` on 2026-08-28. Two engine-private classes predate that convention and keep bare names — `range-selection-modal` (`LinkEditCard`, a `querySelector` target) and `header-arrow` (`ColumnHeader`) — so grepping `sheet-` does not enumerate the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
 
 ## Component Tree
 

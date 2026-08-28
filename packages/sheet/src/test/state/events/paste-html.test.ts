@@ -221,6 +221,19 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[0][3]?.cl).toBeUndefined();
     });
 
+    it('reads a class block whose properties carry spaces around the colon and the brace', () => {
+        const ctx = makeCtx();
+        pasteHtml(
+            ctx,
+            '<html><head><style>\n<!--td\n\t{color:black;}\n.xl71\n   { font-weight: 700;\n     color: #ED7D31; }\n-->\n</style></head>' +
+                '<body><table><tr><td class=xl71>v</td></tr></table></body></html>',
+        );
+
+        const d = ctx.sheets[0].data!;
+        expect(d[0][0]?.bl).toBe(1);
+        expect(d[0][0]?.fc).toBe('#ED7D31');
+    });
+
     it('maps text-align to ht (right=2/center=0/left=1) and vertical-align to vt (middle=0/top=1/bottom=2)', () => {
         const ctx = makeCtx();
         pasteHtml(

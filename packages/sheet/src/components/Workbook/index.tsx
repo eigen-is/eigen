@@ -41,7 +41,7 @@ import {
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
-import { COPY_ACTION_TABLE_SUFFIX } from '../../state/modules/selection';
+import { COPY_ACTION_TABLE_MARKER } from '../../state/modules/selection';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
 import { FxEditor } from '../FxEditor';
 import { MenuBar } from '../MenuBar';
@@ -630,7 +630,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)
                     // but only if this is NOT an internal sheet→sheet copy (which uses HTML with sheet-copy-action-table)
                     const htmlData = clipboardData.getData('text/html');
-                    const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_SUFFIX);
+                    const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_MARKER);
 
                     if (!isInternalCopy) {
                         const eigenData = readEigenClipboard(clipboardData);
