@@ -201,13 +201,6 @@ export function onCellsMoveEnd(
 
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
-    const cfg = (ctx.sheets[sheetIndex].config ??= {});
-    if (cfg.merge == null) {
-        cfg.merge = {};
-    }
-    if (cfg.rowlen == null) {
-        cfg.rowlen = {};
-    }
     const { drag: locale_drag } = en;
 
     // Selection contains partial cells
@@ -246,6 +239,13 @@ export function onCellsMoveEnd(
         ctx.warnDialog = locale_drag.noMerge;
         return;
     }
+
+    // Seeded only once the move is certain: every config write is syncable now that the
+    // mirror is gone, so seeding above the guards would ship an op and burn an undo entry
+    // for a move the user was told could not happen.
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
+    cfg.merge ??= {};
+    cfg.rowlen ??= {};
 
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
 

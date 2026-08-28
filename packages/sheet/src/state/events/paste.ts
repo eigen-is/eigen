@@ -160,15 +160,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
             return;
         }
 
-        const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
-        if (cfg.merge == null) {
-            cfg.merge = {};
-        }
-
-        if (JSON.stringify(borderInfo).length > 2 && cfg.borderInfo == null) {
-            cfg.borderInfo = [];
-        }
-
         const copyh = data.length;
         const copyc = data[0].length;
 
@@ -178,13 +169,16 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         const maxc = minc + copyc - 1;
 
         // return with a warning if the apply range contains partially merged cells
-        let has_PartMC = false;
-        if (cfg.merge != null) {
-            has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
+        if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
+            return;
         }
 
-        if (has_PartMC) {
-            return;
+        // Seeded only once the paste is certain: every config write is syncable now that the
+        // mirror is gone, so seeding above the guard would ship an op for a paste that never ran.
+        const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
+        cfg.merge ??= {};
+        if (JSON.stringify(borderInfo).length > 2) {
+            cfg.borderInfo ??= [];
         }
 
         const d = getFlowdata(ctx); // fetch data
@@ -387,11 +381,6 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
 
     if (!copyRange) return;
 
-    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
-    if (cfg.merge == null) {
-        cfg.merge = {};
-    }
-
     // copy range
     const copyHasMC = copyRange.HasMC;
     const copyRowlChange = copyRange.RowlChange;
@@ -417,14 +406,13 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const maxc = minc + copyc - 1; // first and last column of apply range
 
     // warn if the apply range contains partially merged cells
-    let has_PartMC = false;
-    if (cfg.merge != null) {
-        has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
-    }
-
-    if (has_PartMC) {
+    if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
         return;
     }
+
+    // Seeded only once the cut-paste is certain — see pasteHandler above.
+    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
+    cfg.merge ??= {};
 
     const d = getFlowdata(ctx); // fetch data
     if (!d) return;

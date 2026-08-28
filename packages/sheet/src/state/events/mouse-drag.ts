@@ -463,14 +463,6 @@ export function handleOverlayMouseUp(
 
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
-        const cfg = (ctx.sheets[idx].config ??= {});
-        if (cfg.rowlen == null) {
-            cfg.rowlen = {};
-        }
-
-        if (cfg.customHeight == null) {
-            cfg.customHeight = {};
-        }
 
         let size = ctx.defaultrowlen;
 
@@ -478,12 +470,22 @@ export function handleOverlayMouseUp(
             size = ctx.visibledatarow[ctx.rowsResizeStart[1]] - (ctx.visibledatarow[ctx.rowsResizeStart[1] - 1] || 0);
         }
 
+        const firstrowlen = size;
+
         size += delta;
 
+        // Sub-3px is a mis-click, not a resize — bail before seeding the maps below, or every
+        // stray click would ship an empty rowlen/customHeight op. Mirrors the column path.
+        if (Math.abs(size - firstrowlen) < 3) {
+            return;
+        }
         if (size < 10) {
             size = 10;
         }
 
+        const cfg = (ctx.sheets[idx].config ??= {});
+        cfg.rowlen ??= {};
+        cfg.customHeight ??= {};
         cfg.customHeight[ctx.rowsResizeStart[1]] = 1;
 
         const changeRowIndex = ctx.rowsResizeStart[1];
@@ -526,14 +528,14 @@ export function handleOverlayMouseUp(
 
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
-        const cfg = (ctx.sheets[idx].config ??= {});
+        const columnlen = ctx.sheets[idx].config?.columnlen;
 
         let firstcolumnlen = ctx.defaultcollen;
-        if (cfg.columnlen?.[ctx.colsResizeStart[1]] != null) {
-            firstcolumnlen = cfg.columnlen[ctx.colsResizeStart[1]];
+        if (columnlen?.[ctx.colsResizeStart[1]] != null) {
+            firstcolumnlen = columnlen[ctx.colsResizeStart[1]];
         }
 
-        let size = (cfg.columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta;
+        let size = (columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta;
 
         // Sub-3px is a mis-click, not a resize — bail before seeding the maps below, or
         // every stray click would ship an empty columnlen/customWidth op.
@@ -544,6 +546,7 @@ export function handleOverlayMouseUp(
             size = 10;
         }
 
+        const cfg = (ctx.sheets[idx].config ??= {});
         cfg.columnlen ??= {};
         cfg.customWidth ??= {};
         cfg.customWidth[ctx.colsResizeStart[1]] = 1;
