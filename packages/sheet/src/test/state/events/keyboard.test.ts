@@ -96,3 +96,50 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
         expect(ctx.dataVerificationDropDownList).toBeFalsy();
     });
 });
+
+// Ctrl+Shift+F toggles focus into the sheet. The handler is already handed the
+// cell input of the workbook that owns the keydown, so a document-wide lookup
+// picked the first workbook on the page instead of the one being typed in.
+describe('handleGlobalKeyDown — Ctrl+Shift+F focus toggle', () => {
+    function addCellInput() {
+        const el = win.document.createElement('div');
+        el.className = 'luckysheet-cell-input';
+        win.document.body.appendChild(el);
+        return el;
+    }
+
+    function ctrlShiftF(ctx: Context, cellInput: HTMLDivElement) {
+        const e = {
+            key: 'F',
+            keyCode: 70,
+            altKey: false,
+            ctrlKey: true,
+            metaKey: false,
+            shiftKey: true,
+            preventDefault() {},
+            stopPropagation() {},
+        } as unknown as KeyboardEvent;
+        handleGlobalKeyDown(
+            ctx,
+            cellInput,
+            null,
+            e,
+            {} as GlobalCache,
+            () => {},
+            () => {},
+        );
+    }
+
+    test('focuses the workbook it was handed, not the first one in the document', () => {
+        const first = addCellInput();
+        const second = addCellInput();
+        const ctx = listContext();
+        ctx.sheetFocused = false;
+
+        ctrlShiftF(ctx, second as unknown as HTMLDivElement);
+
+        expect(ctx.sheetFocused).toBe(true);
+        expect(win.document.activeElement).toBe(second);
+        expect(first.getAttribute('tabindex')).toBe(null);
+    });
+});

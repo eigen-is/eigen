@@ -419,24 +419,16 @@ export function handleGlobalKeyDown(
         return;
     }
 
-    // Ctrl + Shift + F toggles focus between the sheet (cell input) and the host app toolbar.
-    // Runs independently of sheetFocused so the user can grab focus back from the toolbar.
+    // Ctrl + Shift + F toggles the sheet's focus lock: released, keys fall through to the host
+    // app so a keyboard user can tab out of the grid. Runs independently of sheetFocused so the
+    // lock can be taken back from wherever focus went.
     if (e.ctrlKey && e.shiftKey && kstr === 'F') {
         ctx.sheetFocused = !ctx.sheetFocused;
         e.preventDefault();
 
         if (ctx.sheetFocused) {
-            const selectedCell = document.querySelector<HTMLElement>('.luckysheet-cell-input');
-            if (selectedCell) {
-                selectedCell.setAttribute('tabindex', '-1');
-                selectedCell.focus();
-            }
-        } else {
-            const toolbar = document.querySelector<HTMLElement>('.fortune-toolbar');
-            if (toolbar) {
-                toolbar.setAttribute('tabindex', '-1');
-                toolbar.focus();
-            }
+            cellInput.setAttribute('tabindex', '-1');
+            cellInput.focus();
         }
 
         return;
