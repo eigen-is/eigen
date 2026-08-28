@@ -180,6 +180,12 @@ export function createFilterOptions(
     };
 
     for (let c = c1; c <= c2; c += 1) {
+        // A hidden column is zero-width, so its button rect coincides with the previous
+        // visible column's — the draw loop and the hit-test then disagree about the owner.
+        if (ctx.config?.colhidden?.[c] != null) {
+            continue;
+        }
+
         let left = 0;
         if (ctx.visibledatacolumn[c]) {
             left = ctx.visibledatacolumn[c] - FILTER_BUTTON_WIDTH;

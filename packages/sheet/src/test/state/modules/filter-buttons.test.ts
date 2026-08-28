@@ -110,3 +110,32 @@ describe('createFilterOptions range clamp', () => {
         expect(getFilterButtonAtPosition(ctx, 130, 22)).toBeUndefined();
     });
 });
+
+describe('createFilterOptions hidden columns', () => {
+    // A hidden column has zero width, so its button rect coincides exactly with
+    // the previous visible column's. Emitting a button for it made the draw loop
+    // (paints the last item) and the hit-test (returns the first item) disagree,
+    // so state, hover and the click target belonged to different columns.
+    function ctxWithHiddenColumn2(): Context {
+        const ctx = contextFactory() as Context;
+        ctx.config.colhidden = { 2: 0 };
+        // column 2 hidden: its right edge is the same as column 1's
+        ctx.visibledatacolumn = [74, 148, 148, 222, 296];
+        return ctx;
+    }
+
+    test('a hidden column between two visible ones gets no button', () => {
+        const ctx = ctxWithHiddenColumn2();
+        createFilterOptions(ctx, { row: [1, 3], column: [1, 3] }, undefined);
+        expect(ctx.filterOptions?.items.map((item) => item.col)).toEqual([1, 3]);
+    });
+
+    test('the button on the shared edge belongs to the column the hit-test returns', () => {
+        const ctx = ctxWithHiddenColumn2();
+        createFilterOptions(ctx, { row: [1, 3], column: [1, 3] }, undefined);
+        const items = ctx.filterOptions?.items ?? [];
+        const onSharedEdge = items.filter((item) => item.left === 148 - FILTER_BUTTON_WIDTH);
+        expect(onSharedEdge).toHaveLength(1);
+        expect(getFilterButtonAtPosition(ctx, 148 - FILTER_BUTTON_WIDTH, HEADER_TOP)).toBe(onSharedEdge[0]);
+    });
+});

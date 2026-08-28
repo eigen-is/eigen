@@ -4,7 +4,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
-import { concat, debounce, omit, union, without, xor } from 'es-toolkit/compat';
+import { concat, debounce, omit, union, xor } from 'es-toolkit/compat';
 import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -544,13 +544,17 @@ export const FilterMenu: React.FC = () => {
                                         initialExpand={initialExpand}
                                         isChecked={(key) => datesUncheck.find((v) => v.match(key) != null) == null}
                                         onChange={(item, checked) => {
+                                            // Set difference, not without(rows, ...item.rows): one bucket
+                                            // can hold every blank row, past V8's argument limit.
                                             const rows = hiddenRows.current;
+                                            const uncheckedRows = new Set(item.rows);
+                                            const uncheckedDates = new Set(item.dateValues);
                                             hiddenRows.current = checked
-                                                ? without(rows, ...item.rows)
+                                                ? rows.filter((r) => !uncheckedRows.has(r))
                                                 : union(rows, item.rows);
                                             setDatesUncheck((prev) =>
                                                 checked
-                                                    ? without(prev, ...item.dateValues)
+                                                    ? prev.filter((v) => !uncheckedDates.has(v))
                                                     : union(prev, item.dateValues),
                                             );
                                         }}
@@ -567,8 +571,9 @@ export const FilterMenu: React.FC = () => {
                                             isChecked={(key) => !valuesUncheckSet.has(key)}
                                             onChange={(item, checked) => {
                                                 const rows = hiddenRows.current;
+                                                const uncheckedRows = new Set(item.rows);
                                                 hiddenRows.current = checked
-                                                    ? without(rows, ...item.rows)
+                                                    ? rows.filter((r) => !uncheckedRows.has(r))
                                                     : concat(rows, item.rows);
                                                 setValuesUncheck((prev) =>
                                                     checked ? prev.filter((v) => v !== item.key) : [...prev, item.key],
