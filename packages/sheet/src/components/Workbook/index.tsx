@@ -19,6 +19,7 @@ import type { CellMatrix } from '../../engine/types';
 import {
     api,
     type CellWithRowAndCol,
+    COPY_ACTION_TABLE_MARKER,
     type Context,
     defaultContext,
     defaultSettings,
@@ -41,7 +42,6 @@ import {
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
-import { COPY_ACTION_TABLE_MARKER } from '../../state/modules/selection';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
 import { FxEditor } from '../FxEditor';
 import { MenuBar } from '../MenuBar';

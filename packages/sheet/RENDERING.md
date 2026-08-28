@@ -1,6 +1,6 @@
 # Sheet Rendering Architecture
 
-The fork's `fortune-` / `luckysheet-` class and id prefixes became `sheet-` on 2026-08-28. Two engine-private classes predate that convention and keep bare names — `range-selection-modal` (`LinkEditCard`, a `querySelector` target) and `header-arrow` (`ColumnHeader`) — so grepping `sheet-` does not enumerate the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
+The fork's `fortune-` / `luckysheet-` class and id prefixes became `sheet-` on 2026-08-28. Two engine-private classes predate that convention and keep bare names — `range-selection-modal` (`LinkEditCard`, a `querySelector` target) and `header-arrow` (`ColumnHeader`) — and so do the engine's bare ids: `link-text`/`-type`/`-address`/`-cell`/`-sheet`, `searchFormulaListInput`, `checkTextColor`, `checkCellColor`, and the screen-reader nodes `sr-selection`, `sr-sheetFocus`, `shortcut-list`, `shortcuts-heading`. Grepping `sheet-` therefore does not enumerate the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
 
 ## Component Tree
 

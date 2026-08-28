@@ -421,7 +421,8 @@ export function handleGlobalKeyDown(
 
     // Ctrl + Shift + F toggles the sheet's focus lock: released, keys fall through to the host
     // app so a keyboard user can tab out of the grid. Runs independently of sheetFocused so the
-    // lock can be taken back from wherever focus went.
+    // lock can be re-taken from anywhere inside the workbook — the keydown listener is on the
+    // workbook container, so focus that has left it can't come back this way.
     if (e.ctrlKey && e.shiftKey && kstr === 'F') {
         ctx.sheetFocused = !ctx.sheetFocused;
         e.preventDefault();

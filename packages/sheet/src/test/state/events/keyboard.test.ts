@@ -105,7 +105,6 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
 describe('handleGlobalKeyDown — Ctrl+Shift+F focus toggle', () => {
     function addCellInput() {
         const el = win.document.createElement('div');
-        el.className = 'sheet-cell-input';
         win.document.body.appendChild(el);
         return el;
     }

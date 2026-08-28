@@ -1284,6 +1284,10 @@ function getHtmlBorderStyle(type: string | number, color: string) {
     return `${style + color};`;
 }
 
+// The marker that says "this clipboard HTML came from a sheet": written by the copy path,
+// matched by every paste reader.
+export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
+
 export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) {
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return '';
@@ -1494,10 +1498,6 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 
     return `<table data-type="${COPY_ACTION_TABLE_MARKER}">${colgroup}${cpdata}</table>`;
 }
-
-// The marker that says "this clipboard HTML came from a sheet": written by the copy path,
-// matched by every paste reader.
-export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 
 export function copy(ctx: Context) {
     const flowdata = getFlowdata(ctx);
