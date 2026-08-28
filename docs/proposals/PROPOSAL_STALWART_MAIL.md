@@ -16,9 +16,9 @@
 
 1. **Eigen users can opt-in to Stalwart** as their mail backend per-deployment (single global
    toggle in server config). Default stays Maildir/Dovecot.
-2. **No FE changes.** The `/mail/*` REST surface in `apps/api/src/routes/mail.ts` is preserved
+2. **No FE changes.** The `/mail/*` REST surface in `../../apps/api/src/routes/mail.ts` is preserved
    byte-for-byte; the `useEmails`, `useEmail`, `useMailboxes`, `useDraft` hooks under
-   `packages/lib/src/core/mail/` keep their current types and call paths.
+   `../../packages/lib/src/core/mail` keep their current types and call paths.
 3. **External IMAP/SMTP "just work"** on the Stalwart side: native iOS Mail, Thunderbird, mutt,
    Apple Mail can speak IMAP4 or JMAP directly to Stalwart, with no Eigen-in-the-loop. (Today
    they go through Dovecot reading the Maildir.)
@@ -27,7 +27,7 @@
    app-password we provision behind the scenes.
 5. **Same Home boundary.** Mail data lives under
    `data/home/{userId}/eigen.mail-stalwart/` (per-user, sharding-friendly), matching the
-   existing per-Home storage convention from [STORAGE.md](STORAGE.md).
+   existing per-Home storage convention from [STORAGE.md](../STORAGE.md).
 
 ## Non-goals
 
@@ -58,11 +58,11 @@ Three things make this a sensible option to evaluate, not a vanity feature:
    binary or one Docker image, supports SQLite/RocksDB/Postgres/S3 storage backends, has
    built-in DKIM/DMARC/SPF/ARC verification + signing, Sieve, anti-spam, and full-text search
    across 17 languages. We already do outbound DKIM signing via OpenDKIM in
-   `docker/postfix/`; what Stalwart adds on top is the *inbound* verification chain (DMARC
+   `../../docker/postfix`; what Stalwart adds on top is the *inbound* verification chain (DMARC
    policy enforcement, SPF check, ARC), Sieve scripting, and a spam pipeline — none of which
    exist in the current stack. See [stalwartlabs/stalwart](https://github.com/stalwartlabs/stalwart).
-3. **Our seams are clean.** `apps/api/src/lib/mail/mail.ts` is already a thin facade
-   (`getMailClient(user)` → `home.mail`); the routes in `apps/api/src/routes/mail.ts` never
+3. **Our seams are clean.** `../../apps/api/src/lib/mail/mail.ts` is already a thin facade
+   (`getMailClient(user)` → `home.mail`); the routes in `../../apps/api/src/routes/mail.ts` never
    touch the Maildir filesystem directly. Swapping the implementation is a localised change.
 
 This is exploratory. The goal of this proposal is to decide whether to **prototype** a Stalwart
@@ -88,7 +88,7 @@ arrangement.
 
 ## Current state (recap)
 
-Full architecture in [IMAP.md](IMAP.md); summary here for context.
+Full architecture in [IMAP.md](../IMAP.md); summary here for context.
 
 ```
                    Postfix MTA
@@ -126,12 +126,12 @@ Key facts that constrain any swap:
 - **SSE is internal.** `home.broadcast(buildMailEvent(...))` is fired by the `Maildir` class
   itself. Whatever new implementation we add needs to fire the same events through the same
   `home.broadcast` channel so FE invalidation in
-  `packages/lib/src/core/mail/sse-handlers.ts` keeps working.
+  `../../packages/lib/src/core/mail/sse-handlers.ts` keeps working.
 - **iMIP processing is wired to delivery.** `mailboxDeliver` in
   `apps/api/src/lib/mail/mail.ts:37-58` re-parses the message after delivery to feed
   `processInboundImip(home, parsed)`. That coupling has to move when delivery moves out of the
   API process.
-- **Outbound is nodemailer.** `apps/api/src/lib/core/mailer.ts` uses nodemailer with either
+- **Outbound is nodemailer.** `../../apps/api/src/lib/core/mailer.ts` uses nodemailer with either
   `SMTP_HOST` or local `/usr/sbin/sendmail`. Stalwart would simply *be* the SMTP host.
 - **Mail is per-user only.** `home.mail` is a singleton per `UserHome`. No `TeamHome` or
   `OrgHome` mail exists. The proposal preserves that.
@@ -195,7 +195,7 @@ not an external Maildir. **Not viable.**
 
 ## The seam
 
-Today, `apps/api/src/lib/mail/mail.ts` does `home.mail.<method>(...)` for every operation.
+Today, `../../apps/api/src/lib/mail/mail.ts` does `home.mail.<method>(...)` for every operation.
 `home.mail` is typed as `Maildir`. Make `home.mail` typed as an interface:
 
 ```typescript
@@ -244,10 +244,10 @@ await this.mail.init();
 ```
 
 Per-deployment global setting via `serverSettings.defaults.mail.backend`, matching the
-pattern used by `defaults.mount.storageType` in `apps/api/src/lib/config/server-settings.ts`.
+pattern used by `defaults.mount.storageType` in `../../apps/api/src/lib/config/server-settings.ts`.
 Per-user opt-in could come later; the v1 toggle is global.
 
-This is the *only* code change outside `apps/api/src/lib/mail/`.
+This is the *only* code change outside `../../apps/api/src/lib/mail`.
 
 ## The new file: `apps/api/src/lib/mail/stalwart.ts`
 
@@ -267,7 +267,7 @@ the co-deployed Stalwart instance. Dependencies and shape:
   app-password fetched from `auth.db` (see *§ Authentication*).
 - **Type adaptation**: JMAP types and Eigen types diverge in shape (JMAP `Email` is much
   richer). The adapter projects JMAP responses into `EmailSummary` / `Email` / `MaildirMailbox`
-  shapes from `packages/lib/src/types/mail.ts` so the FE contract is unchanged.
+  shapes from `../../packages/lib/src/types/mail.ts` so the FE contract is unchanged.
 
 ### JMAP method mapping
 
@@ -301,8 +301,8 @@ the co-deployed Stalwart instance. Dependencies and shape:
 - **The Postfix→`/mail/deliver` bridge** — Stalwart receives mail itself.
 - **The Dovecot container** — Stalwart serves IMAP.
 
-What stays: everything in `packages/lib/src/core/mail/` (hooks, SSE handlers, types), every
-route in `apps/api/src/routes/mail.ts`, every `/mail/*` HTTP contract.
+What stays: everything in `../../packages/lib/src/core/mail` (hooks, SSE handlers, types), every
+route in `../../apps/api/src/routes/mail.ts`, every `/mail/*` HTTP contract.
 
 ## Authentication
 
@@ -417,7 +417,7 @@ during the EventSource handler. Acceptable for v1.
 
 ## Outbound mail
 
-Today: `apps/api/src/lib/core/mailer.ts` uses nodemailer with `SMTP_HOST` or
+Today: `../../apps/api/src/lib/core/mailer.ts` uses nodemailer with `SMTP_HOST` or
 `/usr/sbin/sendmail`. The same path is used for *both* the welcome mail
 (`Maildir.welcomeMail`), system emails (shares, password resets in `mail-composers.ts`), and
 user-composed mail (`Maildir.messageSend`).
@@ -440,7 +440,7 @@ backend-conditional code is all inside `StalwartMail.messageSend`.
 The current Maildir backend emits `MAIL_RECEIVED`, `MAIL_DELETED`, `MAIL_MOVED`,
 `MAIL_FLAGS_CHANGED`, `MAIL_READ_CHANGED`, `MAIL_DRAFT_UPDATED`, `MAIL_SENT` via
 `home.broadcast(buildMailEvent(...))`. The FE handler in
-`packages/lib/src/core/mail/sse-handlers.ts` invalidates query keys on these.
+`../../packages/lib/src/core/mail/sse-handlers.ts` invalidates query keys on these.
 
 `StalwartMail` does the *same emission*. The trigger source changes (JMAP EventSource state
 changes → fan-out to Eigen SSE), the emission pattern doesn't. FE is unaware.
@@ -453,7 +453,7 @@ event per affected id with the right type. Routine bookkeeping, ~80 LOC.
 ## Search (incidental win)
 
 Today: mail full-text search has shipped — an `emails_fts` FTS5 table in `mail.db`, kept in sync
-by triggers and queried through `MailDB.searchMail` (see [SEARCH.md](SEARCH.md)). But it indexes
+by triggers and queried through `MailDB.searchMail` (see [SEARCH.md](../SEARCH.md)). But it indexes
 only what `mail.db` stores: `subject`, `fromShort`/`fromAddress`, `toShort`/`toAddress`,
 `recipientsAll`, `textShort` — the trimmed summaries, not full message bodies.
 
@@ -470,7 +470,7 @@ the option attractive beyond protocol modernity.
 ### Single-binary mode (recommended for self-hosted Eigen)
 
 Stalwart ships as a single ~25 MB static binary. Eigen's deployment already runs as a Docker
-Compose stack (`docker/`). Add one service:
+Compose stack (`../../docker`). Add one service:
 
 ```yaml
 # docker-compose.yml (sketch — Stalwart mode)
@@ -499,7 +499,7 @@ supported but Stalwart documents it as preferring RocksDB for production. Pick R
 matches upstream defaults and we get LSM-level compression.
 
 Data layout under the Home root no longer applies: Stalwart owns one big RocksDB per Stalwart
-instance, *not* per-user. For sharding (per `docs/SCALABILITY.md`), this is a regression —
+instance, *not* per-user. For sharding (per `../SCALABILITY.md`), this is a regression —
 Stalwart's account isolation is logical, not filesystem-physical. Acceptable for v1 because
 sharding mail homes wasn't a 2026 priority anyway, but worth flagging.
 
@@ -541,7 +541,7 @@ Each phase is independently shippable / abandonable.
 
 Phase 0 takes 1–2 days. Phase 2 is the riskiest (auth, type adaptation, EventSource). If phases
 2–4 each take a week, we're looking at ~6 weeks total for someone going at it focused, plus
-test coverage in `apps/api/src/test/mail/mail.test.ts` running against an ephemeral Stalwart Docker.
+test coverage in `../../apps/api/src/test/mail/mail.test.ts` running against an ephemeral Stalwart Docker.
 
 ## Risks and reasons not to do this
 
@@ -557,7 +557,7 @@ test coverage in `apps/api/src/test/mail/mail.test.ts` running against an epheme
   not to MIT code that talks to it over a network protocol. The boundary is clean: our `fetch`
   calls to `:8080/jmap` are no different in license terms from a user's iOS Mail client
   talking IMAP to Stalwart. If we ever *fork* Stalwart and modify it, that fork must be
-  AGPL'd; Eigen proper stays MIT. Worth documenting clearly in `CONTRIBUTING.md` and the
+  AGPL'd; Eigen proper stays MIT. Worth documenting clearly in `../CONTRIBUTING.md` and the
   Stalwart-mode setup guide so contributors don't mix the codebases by accident.
 - **One more daemon to operate**. Dovecot+Postfix are well-understood. Stalwart is younger;
   fewer docs/SO answers. Self-hosters debugging mail issues will have a steeper learning
@@ -599,7 +599,7 @@ test coverage in `apps/api/src/test/mail/mail.test.ts` running against an epheme
    "app passwords" list across mail / WebDAV / CalDAV / IMAP — the existing model.
 6. **Multi-instance scaling**: with Maildir, each Eigen Home could in principle live on a
    different filesystem. With Stalwart, all homes share one Stalwart cluster. Is that OK at our
-   scale targets in [SCALABILITY.md](SCALABILITY.md)? Probably yes — Stalwart's FoundationDB
+   scale targets in [SCALABILITY.md](../SCALABILITY.md)? Probably yes — Stalwart's FoundationDB
    backend is built for horizontal scale — but worth re-reading SCALABILITY.md against this.
 
 ## Cheaper alternative — `rspamd` sidecar on the existing stack
@@ -635,7 +635,7 @@ What we don't get:
 - Sieve scripting (deferred)
 - The "all in one server" operational simplicity (we'd have *more* daemons, not fewer)
 
-Cost: ~1 day to wire up. One new container. No code changes in `apps/api`.
+Cost: ~1 day to wire up. One new container. No code changes in `../../apps/api`.
 
 **The two paths are not mutually exclusive.** Adding rspamd now does not preclude adding the
 Stalwart backend later. If the question is *"how do we make Eigen mail better in 2026Q3"*,
@@ -663,9 +663,9 @@ Recommendation, in order:
 
 ## Reference
 
-- Existing mail architecture: [IMAP.md](IMAP.md)
-- Storage layout: [STORAGE.md](STORAGE.md)
-- Scaling considerations: [SCALABILITY.md](SCALABILITY.md)
+- Existing mail architecture: [IMAP.md](../IMAP.md)
+- Storage layout: [STORAGE.md](../STORAGE.md)
+- Scaling considerations: [SCALABILITY.md](../SCALABILITY.md)
 - Stalwart Mail Server: [stalw.art](https://stalw.art/) / [github.com/stalwartlabs/stalwart](https://github.com/stalwartlabs/stalwart)
 - JMAP Core: [RFC 8620](https://datatracker.ietf.org/doc/html/rfc8620)
 - JMAP Mail: [RFC 8621](https://datatracker.ietf.org/doc/html/rfc8621)

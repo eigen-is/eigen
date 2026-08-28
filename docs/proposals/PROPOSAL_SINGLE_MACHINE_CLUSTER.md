@@ -3,7 +3,7 @@
 > **TLDR**: **Not implemented.** A concrete plan for running several API processes on one multi-CPU box,
 > sharing `./data`, with Caddy hashing `ownerId` as the only router. None of it exists today: no
 > `cluster.ts`, no `docker-compose.cluster.yml`, no Caddy `map`/`lb_policy header` block, no internal
-> relay endpoints. Extends [SCALABILITY.md](SCALABILITY.md) with load balancing and a cross-process home relay.
+> relay endpoints. Extends [SCALABILITY.md](../SCALABILITY.md) with load balancing and a cross-process home relay.
 
 ## Architecture Overview
 
@@ -144,7 +144,7 @@ Environment variables:
 When `CLUSTER_PEERS` is not set, `isClusterMode()` returns false and all code takes the original
 single-process path.
 
-### Modified: `apps/api/src/lib/home/home-relay.ts`
+### Modified: `../../apps/api/src/lib/home/home-relay.ts`
 
 The existing `sendToHome()` switch statement is extracted into `dispatchToLocalHome()` (exported,
 used by internal endpoints). `sendToHome()` wraps it with the cluster routing:
@@ -195,7 +195,7 @@ export async function pullSharedPaths(ownerUserId: string, user: User): Promise<
 }
 ```
 
-### Modified: `apps/api/src/routes/internal.ts`
+### Modified: `../../apps/api/src/routes/internal.ts`
 
 New endpoints with `:ownerId` in the path (so Caddy can extract it for routing):
 
@@ -216,7 +216,7 @@ Docker-internal traffic (Caddy's IP is in `TRUSTED_NETWORKS: 172.16.0.0/12`). Ex
 is blocked by Caddy's `handle /eigen/internal/* { respond 403 }` rule, and port 8080 is not
 published.
 
-### Modified: `apps/api/src/index.ts`
+### Modified: `../../apps/api/src/index.ts`
 
 - Read port from `PORT` env var (default 8000)
 - Log cluster mode and `CLUSTER_SELF` on startup
@@ -251,7 +251,7 @@ process inherits the Docker default and hits the fd wall described below. See
   15 seconds, preventing idle timeout while connected.
 - **Collab WebSocket**: URL includes document owner's ownerId (`/ws/collab/:ownerId/:mountId/:pathId`).
   All editors of the same document connect to the same process.
-- **Auth DB**: Shared `data/server/users3.db` — SQLite WAL mode handles concurrent access from
+- **Auth DB**: Shared `../../data/server/users3.db` — SQLite WAL mode handles concurrent access from
   multiple processes.
 - **Rate limiting**: Per-process (300 req/min/IP each). Total capacity = N x 300. Acceptable for
   a small deployment.
@@ -280,10 +280,10 @@ proposed startup check are in [PROPOSAL_FD_BUDGET.md](PROPOSAL_FD_BUDGET.md).
 ## Implementation Checklist
 
 1. Create `apps/api/src/lib/config/cluster.ts` — `isClusterMode()`, `getRelayUrl()`
-2. Add internal relay/pull endpoints to `apps/api/src/routes/internal.ts` (with `:ownerId` in path)
-3. Refactor `apps/api/src/lib/home/home-relay.ts` — extract `dispatchToLocalHome()`, add Caddy
+2. Add internal relay/pull endpoints to `../../apps/api/src/routes/internal.ts` (with `:ownerId` in path)
+3. Refactor `../../apps/api/src/lib/home/home-relay.ts` — extract `dispatchToLocalHome()`, add Caddy
    relay for cluster mode
-4. Update `apps/api/src/index.ts` — configurable port, cluster logging
+4. Update `../../apps/api/src/index.ts` — configurable port, cluster logging
 5. Update `Caddyfile` — `map` + `request_header` + `lb_policy header`, internal `:8080` listener
 6. Create `docker-compose.cluster.yml` — 3 API instances with cluster env vars and a `ulimits: nofile:`
    block on each

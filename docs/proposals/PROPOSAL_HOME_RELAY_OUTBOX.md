@@ -5,13 +5,13 @@
 > activity merge changed notification *rendering* — `details` payloads, `formatChatPreview` — not
 > the relay seams; the tag/coalesce facts below still hold) and confirmed no outbox code has
 > landed. Expands the P1 roadmap row
-> "Durable home-relay outbox" ([ROADMAP.md](ROADMAP.md)) into a full design. Follow-on to the
-> 2026-07-04 async ACL fan-out (`apps/api/src/lib/drive/acl-propagation.ts`): that made one seam
+> "Durable home-relay outbox" ([ROADMAP.md](../ROADMAP.md)) into a full design. Follow-on to the
+> 2026-07-04 async ACL fan-out (`../../apps/api/src/lib/drive/acl-propagation.ts`): that made one seam
 > non-blocking but in-memory; this makes every cross-home push durable, ordered, and bounded.
 > Deliberately the **third instance** of the house "durable rows + self-scheduled drain" pattern,
 > after `lib/mount/upload-queue.ts` and `lib/mount/content-reindex-queue.ts`.
 
-> **TLDR**: Cross-home pushes (`sendToHome` in `apps/api/src/lib/home/home-relay.ts`) currently
+> **TLDR**: Cross-home pushes (`sendToHome` in `../../apps/api/src/lib/home/home-relay.ts`) currently
 > deliver by opening the recipient's Home inline. Five independent fan-out sites re-invented the
 > same loop with different (mostly wrong) semantics: awaited-sequential, unbounded-concurrent, or
 > fire-and-forget — and none survives a crash. The outbox is one server-level SQLite table
@@ -22,7 +22,7 @@
 > plain serializable data and the `switch` in `sendToHome` is already the flat verb registry — no
 > new dispatch machinery is needed. In the sharded future the outbox **is** the message transport:
 > the drain's deliver step is the only place that learns about remote shards
-> (see [SCALABILITY.md](SCALABILITY.md)).
+> (see [SCALABILITY.md](../SCALABILITY.md)).
 
 ## Problem
 
@@ -314,7 +314,7 @@ not a redesign.
 
 ### Shutdown and boot
 
-- **Graceful shutdown** — `gracefulShutdown` in `apps/api/src/index.ts` currently calls
+- **Graceful shutdown** — `gracefulShutdown` in `../../apps/api/src/index.ts` currently calls
   `drainACLFanOuts()` before `shutdownAllHomes()` because deliveries reopen recipient homes. The
   outbox slots into the same position: `outbox.drain({ flushNow, deadline })` (UploadQueue's
   flush signature) bounded by the existing `SHUTDOWN_DRAIN_BUDGET_MS` discipline; whatever misses
@@ -349,7 +349,7 @@ proposal narrows that future; most of it exists to serve it.
 
 ### Module layout and the getHome lint rule
 
-`scripts/check-home-imports.ts` blocks new `getHome` imports in `lib/` — deliberately. The outbox
+`../../scripts/check-home-imports.ts` blocks new `getHome` imports in `lib/` — deliberately. The outbox
 respects it by construction: `lib/home/outbox.ts` holds the queue mechanics (table access, drain
 loop, semaphore, timers) and takes `deliver: (targetOwnerId, message) => Promise<void>` as a
 constructor dep — precisely how `ContentReindexQueue` takes its injected `extract`. `home-relay.ts`

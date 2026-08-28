@@ -2,7 +2,7 @@
 
 > **Status — Proposal, written 2026-07-05, re-verified against code 2026-07-06 (post storage-audit
 > landings), not started.** Flagship P0 item from
-> [ROADMAP.md](ROADMAP.md) § Data-trust foundation. Eigen is live and its Yjs document formats
+> [ROADMAP.md](../ROADMAP.md) § Data-trust foundation. Eigen is live and its Yjs document formats
 > (the root names and value shapes each app reads) are frozen. The day one of the four editors
 > needs to restructure its data — stickies grows swimlanes, sheets replaces its op log, docs
 > changes an attribute encoding — there is currently **no way to ship it**. This proposal designs
@@ -54,10 +54,10 @@ speak the old format.
 ## Non-goals
 
 - **Chat containers.** Chat's `data.db` is plain SQLite rows (`CHAT_ROOM_DB_CONFIG` in
-  `apps/api/src/lib/chat/db-config.ts`), not Yjs; its shape already evolves through
+  `../../apps/api/src/lib/chat/db-config.ts`), not Yjs; its shape already evolves through
   `ManagedDatabase` migrations, and it has no live CRDT clients to fence (messages go through
   REST + SSE). Same for `comments.db` (`COMMENT_INDEX_DB_CONFIG`). This proposal covers the four
-  Yjs types only (`DriveCollabType` in `packages/lib/src/types/drive.ts`).
+  Yjs types only (`DriveCollabType` in `../../packages/lib/src/types/drive.ts`).
 - **Rewriting update history.** Squash-to-snapshot is the mechanic; fine-grained intra-`data.db`
   history is compacted (it already is — see Current state).
 - **Client-side offline persistence.** Eigen clients hold Yjs state in memory only (no
@@ -69,8 +69,8 @@ speak the old format.
 
 **Storage.** Each collab container is an `.eigen*` drive folder holding `data.db` (plus
 `comments.db`, `media/`, `chat/` — see `CollabDocument.create` in
-`apps/api/src/lib/collab/collabDocument.ts`). `data.db` is a `ManagedDatabase` opened with
-`COLLAB_DB_CONFIG` (`apps/api/src/lib/collab/db-config.ts`, currently schema v1): two tables,
+`../../apps/api/src/lib/collab/collabDocument.ts`). `data.db` is a `ManagedDatabase` opened with
+`COLLAB_DB_CONFIG` (`../../apps/api/src/lib/collab/db-config.ts`, currently schema v1): two tables,
 `doc_updates` (one BLOB per Yjs update) and `doc_snapshots` (consolidated state BLOBs). BLOBs are
 zstd-compressed at the storage seam by `blob-codec.ts`, which is the in-repo precedent for format
 evolution at this layer: **new readers sniff the 4-byte zstd magic and pass legacy raw blobs
@@ -81,32 +81,32 @@ format 1.
 **Compaction already happens.** `DbProvider.createSnapshot` (in `collabDocument.ts`) squashes the
 doc into a fresh snapshot every 100 updates or 1 MB, deletes the covered `doc_updates`, and keeps
 only `MAX_DOC_SNAPSHOTS = 1` snapshot. Long-term history lives *outside* `data.db`, as whole-file
-copies under the container's `versions/` folder (`apps/api/src/lib/versioning/`). So
+copies under the container's `versions/` folder (`../../apps/api/src/lib/versioning`). So
 "migration compacts in-file update history" is not a new loss — it is the steady state.
 
 **Lifecycle.** `Drive.getCollabDocument` delegates to `CollabRegistry`
-(`apps/api/src/lib/drive/collab-registry.ts`), which keys one `createAsyncSingleton` per
+(`../../apps/api/src/lib/drive/collab-registry.ts`), which keys one `createAsyncSingleton` per
 `owner.mount.path` — **concurrent opens of the same doc coalesce into a single `init()`**; a second
 opener awaits the first. `CollabDocument.init` opens `data.db` via `Drive.openDatabase` →
-`Mount.openDatabase` (`apps/api/src/lib/mount/document-db.ts`, which runs `ManagedDatabase` SQLite
+`Mount.openDatabase` (`../../apps/api/src/lib/mount/document-db.ts`, which runs `ManagedDatabase` SQLite
 migrations; open and close are serialized per pathId via `closingDocumentDbs` — a 2026-07
 storage-audit change), then `DbProvider` hydrates a `Y.Doc` via `loadYjsState`
-(`apps/api/src/lib/collab/yjs-loader.ts`: latest snapshot + tail updates, corrupted rows skipped).
+(`../../apps/api/src/lib/collab/yjs-loader.ts`: latest snapshot + tail updates, corrupted rows skipped).
 
 **Sync protocol.** `routes/collab.ts` exposes `/ws/collab/:ownerId/:mountId/:pathId`. Auth +
 `canRead` at open, `canWrite` re-checked per message. Wire format is standard y-protocols: message
 type 0 = sync (steps 1/2/update), 1 = awareness, plus a string `ping`/`pong` keepalive. There is
 **no version negotiation of any kind**. Clients use stock `y-websocket`'s `WebsocketProvider`
-against a URL from `getCollabWebSocketUrl` (`packages/lib/src/core/api.ts`) — see
-`apps/docs/src/components/docs/editor.tsx` and
-`apps/stickies/src/components/stickies/hooks/use-board.ts`. Each editor mount creates a fresh
+against a URL from `getCollabWebSocketUrl` (`../../packages/lib/src/core/api.ts`) — see
+`../../apps/docs/src/components/docs/editor.tsx` and
+`../../apps/stickies/src/components/stickies/hooks/use-board.ts`. Each editor mount creates a fresh
 in-memory `Y.Doc`; unsent edits live only in the tab.
 
-**The restore primitive.** `restoreYjsDoc` (`packages/lib/src/core/collab/yjs-utils.ts`) replaces a
+**The restore primitive.** `restoreYjsDoc` (`../../packages/lib/src/core/collab/yjs-utils.ts`) replaces a
 live `Y.Doc`'s declared roots with the contents of a state update, inside one transaction, so
 connected editors converge through the normal update broadcast. It is driven by the per-type root
-schema `EIGEN_DOC_TYPE_INFO[type].yjsRoots` (`packages/lib/src/types/drive.ts`) and used by
-`CollabDocument.applySnapshotState` during version restore (`apps/api/src/lib/versioning/restore.ts`).
+schema `EIGEN_DOC_TYPE_INFO[type].yjsRoots` (`../../packages/lib/src/types/drive.ts`) and used by
+`CollabDocument.applySnapshotState` during version restore (`../../apps/api/src/lib/versioning/restore.ts`).
 Its limits matter here: it **cannot remove a root** (Yjs roots are permanent once created in a doc)
 and it only touches roots the schema declares.
 
@@ -114,7 +114,7 @@ and it only touches roots the schema declares.
 `AbstractType` — `instanceof Y.Map` etc. fails on them. The codebase idiom is **force-typing roots
 through the typed getters before use**: `forceTypeRoot` in `yjs-utils.ts` calls
 `doc.getMap(name)`/`getArray`/`getText`/`getXmlFragment` per the declared `yjsRoots` schema, and
-server-side readers like `readEigendocContent` (`apps/api/src/lib/document/doc.ts`) do the same by
+server-side readers like `readEigendocContent` (`../../apps/api/src/lib/document/doc.ts`) do the same by
 calling `ydoc.getXmlFragment('default')` directly. (Earlier code sniffed internals like `_start`;
 that idiom is gone — the declared-schema + force-typing approach superseded it.) Nested shared
 types decode concretely; only roots need this. The migration runner below does it once, centrally.
@@ -129,7 +129,7 @@ types decode concretely; only roots need this. The migration runner below does i
 | `sheets` | `{ state: 'map', ops: 'array' }` |
 | `chat` | — (no Yjs; out of scope) |
 
-**Versioning mechanics.** `snapshotContainerDataDb` (`apps/api/src/lib/versioning/snapshot.ts`)
+**Versioning mechanics.** `snapshotContainerDataDb` (`../../apps/api/src/lib/versioning/snapshot.ts`)
 copies `data.db` to `versions/<iso-ts>.db`, **self-locked on the container** via
 `mount.withPathLock` — manual save and a restore's pre-restore snapshot block on that lock, while
 the periodic timer/close path goes through the twin `trySnapshotContainerDataDb` (skip-if-contended
@@ -141,8 +141,8 @@ dir first, takes a pre-restore snapshot, then does Yjs surgery via
 `SNAPSHOT_NAME_FORMAT` are invisible to both `listVersions` and the pruner** (relevant for the
 rollback question below).
 
-**Background-work precedents.** `scheduleInterval` + `jobs.ts` (`apps/api/src/lib/scheduler/`) for
-in-process periodic jobs; `ContentReindexQueue` (`apps/api/src/lib/mount/content-reindex-queue.ts`)
+**Background-work precedents.** `scheduleInterval` + `jobs.ts` (`../../apps/api/src/lib/scheduler`) for
+in-process periodic jobs; `ContentReindexQueue` (`../../apps/api/src/lib/mount/content-reindex-queue.ts`)
 for per-mount paced drains where **the durable queue is a column on `paths`** (`contentDirty`,
 added in metadata.db v6 with an open-time backfill) rather than a separate table. The sweep below
 copies both patterns.
@@ -166,7 +166,7 @@ Three candidate homes, weighed:
 
 | Option | Survives byte-copy of the container? | Survives version-restore? | Survives export/import? | Cost |
 |---|---|---|---|---|
-| **A. Row in the container's `data.db`** | Yes — containers copy as byte copies and reference children by name ([AGENTS.md](../AGENTS.md) § Copy/move), so `data.db` travels whole | Yes — `versions/<ts>.db` is a full copy of `data.db`, so every archive self-describes its format | Yes — exports carry the container's files | One additive `COLLAB_DB_CONFIG` migration |
+| **A. Row in the container's `data.db`** | Yes — containers copy as byte copies and reference children by name ([AGENTS.md](../../AGENTS.md) § Copy/move), so `data.db` travels whole | Yes — `versions/<ts>.db` is a full copy of `data.db`, so every archive self-describes its format | Yes — exports carry the container's files | One additive `COLLAB_DB_CONFIG` migration |
 | B. A meta root inside the `Y.Doc` | Yes | Only if restore surgery special-cases it | Yes | Is itself a frozen-format change to every doc; requires hydrating the doc just to read the version; `restoreYjsDoc` would need to exclude it from surgery |
 | C. Column in the mount's `metadata.db` | **No** — cross-mount copy/export rebuilds rows; the stamp detaches from the bytes it describes | No — restore doesn't touch metadata | No | Cheap to query |
 
@@ -370,11 +370,11 @@ read tolerance* (the in-memory chain in the reader helper, plus the permanent `v
 path) — never FE rendering of old shapes.
 
 **Client UX.** `WebsocketProvider` retries forever by default; a small shared helper in
-`packages/lib/src/core/collab/` listens for `connection-close` with codes 4426 and 4503, calls
+`../../packages/lib/src/core/collab` listens for `connection-close` with codes 4426 and 4503, calls
 `provider.destroy()` to stop the retry loop, and surfaces a blocking state in the four editor
 shells (docs/stickies/slides/sheets — the same four call sites that build providers today): "This
 document was upgraded. Reload to continue." for 4426, "temporarily unavailable" for 4503. Additionally `CollabDocumentInfo`
-(`packages/lib/src/types/collab.ts`, served by `/collab/:ownerId/:mountId/:pathId/info`) gains
+(`../../packages/lib/src/types/collab.ts`, served by `/collab/:ownerId/:mountId/:pathId/info`) gains
 `formatVersion` so routes can gate *before* mounting an editor — advisory UX; the close code
 remains the enforcement.
 
@@ -534,7 +534,7 @@ Each phase ships independently; nothing user-visible changes until a real migrat
 
 ## Testing
 
-Integration tests extend `apps/api/src/test/collab/collab.test.ts` patterns (`getTestContext`, real WS
+Integration tests extend `../../apps/api/src/test/collab/collab.test.ts` patterns (`getTestContext`, real WS
 connections against the test server); migration-runner units live beside the registry.
 
 - **Runner:** synthetic v1→v2 entry per root kind (map/array/text/xmlfragment) on fixture docs —

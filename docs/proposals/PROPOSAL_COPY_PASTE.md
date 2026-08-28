@@ -10,7 +10,7 @@ a rewrite.
 
 **As built (v1):** the shipped clipboard -- `EigenClipboardData`, the `data-eigen-clipboard` HTML
 marker, the `application/eigen-clipboard` MIME, and the cross-document media re-upload path -- is
-documented in [CLIPBOARD.md](CLIPBOARD.md). Read that first; this proposal only covers what v2 adds
+documented in [CLIPBOARD.md](../CLIPBOARD.md). Read that first; this proposal only covers what v2 adds
 on top, plus the one v1 residual in Phase 0.
 
 ## Design rationale
@@ -72,17 +72,17 @@ transaction and the CRDT merge resolves it, exactly as it already does for typin
 ### Phase 0: Add the custom MIME to the async write (S)
 
 Phase 0 as originally written -- make the **sync** path write the HTML-embedded marker -- **shipped**:
-`writeEigenClipboard` in `packages/lib/src/core/clipboard/clipboard.ts` already writes
+`writeEigenClipboard` in `../../packages/lib/src/core/clipboard/clipboard.ts` already writes
 `application/eigen-clipboard`, the `data-eigen-clipboard` HTML marker and the plain-text fallback.
 
 What is left is the mirror-image residual on the **async** path (the ROADMAP P2 row):
 
 | File | Change |
 |---|---|
-| `packages/lib/src/core/clipboard/clipboard.ts` | `writeEigenClipboardAsync` writes only `text/html` + `text/plain`. Add an `application/eigen-clipboard` blob to the `ClipboardItem`, matching the sync path. |
+| `../../packages/lib/src/core/clipboard/clipboard.ts` | `writeEigenClipboardAsync` writes only `text/html` + `text/plain`. Add an `application/eigen-clipboard` blob to the `ClipboardItem`, matching the sync path. |
 
 The async path is used by Slides' context-menu / button copy
-(`apps/slides/src/components/slides/editor.tsx`). Without the custom MIME, a same-tab paste has to
+(`../../apps/slides/src/components/slides/editor.tsx`). Without the custom MIME, a same-tab paste has to
 fall back to parsing the HTML marker, which is the lossy route -- adding the MIME makes Slides
 button-copy lossless. One caveat to check while implementing: browsers reject unrecognised MIME types
 in `ClipboardItem` on the async API, so if `application/eigen-clipboard` is refused, keep the write in
@@ -98,7 +98,7 @@ a `try`/`catch` and let the existing HTML marker carry the payload.
 
 #### 1a. Data Format
 
-**File:** `packages/lib/src/types/clipboard.ts`
+**File:** `../../packages/lib/src/types/clipboard.ts`
 
 Add the v2 types alongside v1 (v1 stays for backward-compatible reading):
 
@@ -180,7 +180,7 @@ These are added when the corresponding app integration is built (Phase 3+).
 
 #### 1b. Transport Layer
 
-**File:** `packages/lib/src/core/clipboard/clipboard.ts`
+**File:** `../../packages/lib/src/core/clipboard/clipboard.ts`
 
 Add v2 write/read functions. Keep v1 functions for backward compatibility during migration.
 
@@ -276,20 +276,20 @@ Expose as a singleton via a React context or module-level instance. The bus is i
 
 #### 1d. Migrate Apps to v2
 
-**Docs** (`apps/docs/src/components/docs/editor.tsx`):
+**Docs** (`../../apps/docs/src/components/docs/editor.tsx`):
 - Copy handler: Extract Tiptap JSON fragment via `editor.state.doc.slice(from, to).toJSON()` for the selection.
   Wrap in `EigenClipboardRichText` content with the existing image extraction. Produce `htmlPreview` via
   `editor.getHTML()` (scoped to selection). Produce `plainText` via `editor.state.doc.textBetween(from, to)`.
 - Paste handler: Check for v2 payload first. If `content` contains `richtext`, use `editor.commands.insertContent(tiptapJson)` for lossless paste. If `content` contains `cells`, let Tiptap's built-in
   HTML paste handle it via the `html` field (produces a table node). Fall back to v1 compat, then native paste.
 
-**Slides** (`apps/slides/src/components/slides/editor.tsx`):
+**Slides** (`../../apps/slides/src/components/slides/editor.tsx`):
 - Copy handler: Wrap slide objects in `EigenClipboardSlideObjects`. Already serializes full object data in
   `meta` -- restructure into the v2 content type.
 - Paste handler: Prefer `slideobjects` content for lossless paste. Accept `richtext` to create a text box.
   Accept `image` for image objects.
 
-**Sheets** (`packages/sheet/src/components/Workbook/index.tsx`):
+**Sheets** (`../../packages/sheet/src/components/Workbook/index.tsx`):
 - Copy handler: Wrap the existing sheet HTML table and plain text in `EigenClipboardCells`. Include
   cell data for the selected range (display values + formatting, extracted from the sheet context).
 - Paste handler: Prefer `cells` content for lossless paste (feed back into sheet's paste handler).
@@ -299,13 +299,13 @@ Expose as a singleton via a React context or module-level instance. The bus is i
 
 | File | Action |
 |---|---|
-| `packages/lib/src/types/clipboard.ts` | Add v2 types |
-| `packages/lib/src/core/clipboard/clipboard.ts` | Add v2 write/read, v1->v2 upgrade, keep v1 functions |
+| `../../packages/lib/src/types/clipboard.ts` | Add v2 types |
+| `../../packages/lib/src/core/clipboard/clipboard.ts` | Add v2 write/read, v1->v2 upgrade, keep v1 functions |
 | `packages/lib/src/core/clipboard/bus.ts` | New: BroadcastChannel bus |
-| `packages/lib/src/core/clipboard/index.ts` | Re-export new functions and bus |
-| `apps/docs/src/components/docs/editor.tsx` | Migrate copy/paste to v2 |
-| `apps/slides/src/components/slides/editor.tsx` | Migrate copy/paste to v2 |
-| `packages/sheet/src/components/Workbook/index.tsx` | Migrate copy/paste to v2 |
+| `../../packages/lib/src/core/clipboard/index.ts` | Re-export new functions and bus |
+| `../../apps/docs/src/components/docs/editor.tsx` | Migrate copy/paste to v2 |
+| `../../apps/slides/src/components/slides/editor.tsx` | Migrate copy/paste to v2 |
+| `../../packages/sheet/src/components/Workbook/index.tsx` | Migrate copy/paste to v2 |
 
 ---
 
@@ -363,7 +363,7 @@ can be added iteratively.
 
 #### 3a. Stickies Clipboard
 
-**File:** `apps/stickies/src/components/stickies/board.tsx` (or wherever the board-level keyboard handler lives)
+**File:** `../../apps/stickies/src/components/stickies/board.tsx` (or wherever the board-level keyboard handler lives)
 
 - Copy: Serialize selected cards as `EigenClipboardCard`. Plain text = card titles. HTML = card visual.
 - Paste: Accept `card` for lossless paste. Accept `richtext` to create a card with description. Accept `cells`

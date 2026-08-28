@@ -288,4 +288,4 @@ CardDAV address card next to CalDAV/IMAP/WebDAV, carrying the address-book URL.
   `packages/lib/src/types/contact.ts`.
 
 Storage layout: [STORAGE.md](STORAGE.md). Database inventory: [DATABASE.md](DATABASE.md). Full design history
-and the folded review passes: [PROPOSAL_CARDDAV.md](PROPOSAL_CARDDAV.md).
+and the folded review passes: [PROPOSAL_CARDDAV.md](proposals/PROPOSAL_CARDDAV.md).

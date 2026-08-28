@@ -47,22 +47,22 @@
 
 The auth foundation already fits; all of the following was re-verified against source:
 
-- `apps/api/src/lib/auth/auth.ts` runs better-auth with the `organization` (teams enabled),
+- `../../apps/api/src/lib/auth/auth.ts` runs better-auth with the `organization` (teams enabled),
   `admin`, `twoFactor` and `apiKey` plugins, and a `databaseHooks.user.create.after` hook that
   adds any newly-created non-guest user to the default org (`authAddUserToDefaultOrg`, role
   `member`) and reconciles pending shares (`reconcileSharesForNewUser` in
-  `apps/api/src/lib/share/reconciliation.ts`). A JIT-created SSO user goes through the same
+  `../../apps/api/src/lib/share/reconciliation.ts`). A JIT-created SSO user goes through the same
   create path, so org membership and share reconciliation come for free.
 - **Home provisioning is lazy, not waitlist-driven.** The waitlist
-  (`apps/api/src/lib/waitlist/waitlist.ts`, `registerFromInvite`) only calls
+  (`../../apps/api/src/lib/waitlist/waitlist.ts`, `registerFromInvite`) only calls
   `auth.api.createUser` and signs the user in — it creates *no* Home. The Home, maildir, default
   mount and quota all materialise on the first `getHome(userId)`
-  (`apps/api/src/lib/home/get-home.ts` → `UserHome.init()` in `user-home.ts`, which seeds the
+  (`../../apps/api/src/lib/home/get-home.ts` → `UserHome.init()` in `user-home.ts`, which seeds the
   default mount from server settings and runs `Drive.init(autoCreateDefaultMount)` +
   `Mail.init()` etc.; quotas are resolved at read time by `resolveUserQuotas`). `getHome` is
   idempotent and concurrent-safe (`createAsyncSingleton` + install-race retry loop). An SSO user
   is therefore provisioned exactly like a waitlist user: on their first authenticated request.
-- `verifyProtocolAuth` (`apps/api/src/lib/auth/protocol-auth.ts`) already checks the **app
+- `verifyProtocolAuth` (`../../apps/api/src/lib/auth/protocol-auth.ts`) already checks the **app
   password (API key) first** and only then falls back to `signInEmail` — so IMAP/CalDAV/WebDAV
   already work for passwordless accounts that hold an app password.
 - `@better-auth/sso` (checked against current better-auth docs): providers are stored in the auth
@@ -82,7 +82,7 @@ an earlier draft of this proposal assumed the waitlist bootstrapped Homes; it do
 
 ### Plugin
 
-Add to the `plugins: [...]` array in `apps/api/src/lib/auth/auth.ts`:
+Add to the `plugins: [...]` array in `../../apps/api/src/lib/auth/auth.ts`:
 
 ```typescript
 import { sso } from '@better-auth/sso';
@@ -113,7 +113,7 @@ deferred (see § What's deferred) — the admin page covers the need.
 
 **Gate the plugin's own endpoint.** better-auth mounts `POST /auth/sso/register` itself. Verify
 its access-control in the pinned version; unless it already requires an admin, deny it at the
-Elysia layer (the auth router in `apps/api/src`) so provider registration only happens through the
+Elysia layer (the auth router in `../../apps/api/src`) so provider registration only happens through the
 admin-gated routes. Registration must never be reachable by a regular member (better-auth also
 422s on `providerId` collisions with social providers / reserved ids — surface that error in the
 admin UI).
@@ -153,7 +153,7 @@ Two small items:
 - **Make app-password creation prominent** for passwordless users (settings page + the "connect a
   mail/calendar client" help) — it's their only path to protocol clients.
 - Optional hardening: skip the doomed `signInEmail` fallback when the account has no `credential`
-  row in the `account` table (`apps/api/auth-schema.ts`). One extra read per failed protocol auth
+  row in the `account` table (`../../apps/api/auth-schema.ts`). One extra read per failed protocol auth
   saved; do it only if it stays a two-line check.
 
 ### Account linking, sessions, mixed mode
@@ -177,12 +177,12 @@ Two small items:
 The `sso` plugin adds a provider table to the auth database (`users3.db`). This is **additive**,
 but Eigen is live, so treat it as a production schema change:
 
-1. Regenerate the Drizzle schema file — which lives at **`apps/api/auth-schema.ts`** (repo path;
-   not under `src/`) — with better-auth's CLI (`bunx @better-auth/cli generate`) after adding the
+1. Regenerate the Drizzle schema file — which lives at **`../../apps/api/auth-schema.ts`** (repo path;
+   not under `../../src`) — with better-auth's CLI (`bunx @better-auth/cli generate`) after adding the
    plugin, and diff it: only new tables, no changes to existing columns.
 2. Register the new table(s) in **both** schema maps in `auth.ts` — the `drizzleAdapter(...)`
    schema and `getAuthDrizzleDb()` — they are intentionally separate instances.
-3. Apply with `drizzle-kit push` using the existing configs (`apps/api/drizzle.config.ts` for dev,
+3. Apply with `drizzle-kit push` using the existing configs (`../../apps/api/drizzle.config.ts` for dev,
    `drizzle.config-prod.ts` for prod) — there is no migrations folder for `users3.db`; push is the
    established mechanism. Back up `users3.db` first (standing rule for destructive/schema ops).
 
@@ -192,13 +192,13 @@ No Yjs or drive-format impact.
 
 | Layer | File | Change |
 |---|---|---|
-| Dependency | `apps/api/package.json` | Add `@better-auth/sso@1.5.6` (lockstep with `better-auth`). |
-| Auth config | `apps/api/src/lib/auth/auth.ts` | Add `sso({ organizationProvisioning: { disabled: true } })` to `plugins`; add new tables to both Drizzle schema maps. |
-| Auth schema | `apps/api/auth-schema.ts` (+ `drizzle-kit push`) | Additive SSO provider table(s), CLI-generated. |
-| Endpoint gate | auth router in `apps/api/src` | Deny better-auth's built-in `POST /auth/sso/register` unless it's verified admin-gated in 1.5.6. |
-| Admin routes | `apps/api/src/routes/settings.ts` (or sibling, `requireAdmin`-gated, no `:ownerId` — server-wide carve-out) | List/create/delete SSO providers via `auth.api.registerSSOProvider` + provider-table reads; client secrets write-only in responses. |
-| Admin UI | `apps/admin` (new Authentication → SSO page) | Provider list + add/remove form (OIDC fields: providerId, issuer, domain, clientId, clientSecret). |
-| Login UI | `apps/space/src/routes/login.tsx` | "Sign in with {provider}" — either an explicit button per provider or domain-detection from the typed email; calls the plugin's SSO sign-in endpoint. |
+| Dependency | `../../apps/api/package.json` | Add `@better-auth/sso@1.5.6` (lockstep with `better-auth`). |
+| Auth config | `../../apps/api/src/lib/auth/auth.ts` | Add `sso({ organizationProvisioning: { disabled: true } })` to `plugins`; add new tables to both Drizzle schema maps. |
+| Auth schema | `../../apps/api/auth-schema.ts` (+ `drizzle-kit push`) | Additive SSO provider table(s), CLI-generated. |
+| Endpoint gate | auth router in `../../apps/api/src` | Deny better-auth's built-in `POST /auth/sso/register` unless it's verified admin-gated in 1.5.6. |
+| Admin routes | `../../apps/api/src/routes/settings.ts` (or sibling, `requireAdmin`-gated, no `:ownerId` — server-wide carve-out) | List/create/delete SSO providers via `auth.api.registerSSOProvider` + provider-table reads; client secrets write-only in responses. |
+| Admin UI | `../../apps/admin` (new Authentication → SSO page) | Provider list + add/remove form (OIDC fields: providerId, issuer, domain, clientId, clientSecret). |
+| Login UI | `../../apps/space/src/routes/login.tsx` | "Sign in with {provider}" — either an explicit button per provider or domain-detection from the typed email; calls the plugin's SSO sign-in endpoint. |
 | Settings UI | account settings (app-passwords section) | Surface app-password creation prominently for passwordless users; link from the connect-a-client help. |
 
 ## Phases
@@ -225,7 +225,7 @@ No Yjs or drive-format impact.
 
 ## Testing
 
-Extend `apps/api/src/test/` with an in-process OIDC stub (`Bun.serve` serving a discovery
+Extend `../../apps/api/src/test` with an in-process OIDC stub (`Bun.serve` serving a discovery
 document, JWKS, token + userinfo endpoints) acting as the IdP:
 
 - A registered provider + a sign-in through the stub creates a user with org membership, and the
@@ -238,4 +238,4 @@ document, JWKS, token + userinfo endpoints) acting as the IdP:
 - Registering a provider requires admin: a regular member gets `403` from the admin routes **and**
   from better-auth's built-in `/auth/sso/register`.
 
-Use `getTestContext()` / `authedRequest()` from `apps/api/src/test/setup.ts`.
+Use `getTestContext()` / `authedRequest()` from `../../apps/api/src/test/setup.ts`.

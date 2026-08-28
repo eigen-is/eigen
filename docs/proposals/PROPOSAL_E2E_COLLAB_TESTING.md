@@ -1,9 +1,9 @@
 # Proposal: E2E multi-user collab test suite
 
 > **Status — Proposal, written 2026-07-05, not started.** Design for the P0 roadmap row
-> "E2E multi-user collab test suite" ([ROADMAP.md](ROADMAP.md)): *"Playwright, multiple concurrent
+> "E2E multi-user collab test suite" ([ROADMAP.md](../ROADMAP.md)): *"Playwright, multiple concurrent
 > clients, CI. Must be reliable from the start — flaky suites get abandoned."*
-> **TLDR**: industrialize the ad-hoc browser-verification recipe in [VERIFICATION.md](VERIFICATION.md)
+> **TLDR**: industrialize the ad-hoc browser-verification recipe in [VERIFICATION.md](../VERIFICATION.md)
 > into a committed Playwright suite that boots a throwaway Eigen instance, signs in two users as two
 > isolated browser contexts in one test, and asserts real-time convergence through the DOM. One shared
 > convergence primitive, API-level arrange steps, zero tolerated flakes, retries=0. Phase 1 is four
@@ -12,7 +12,7 @@
 ## Problem
 
 Eigen's core promise is multi-user real-time collaboration on Yjs documents, and it is the one thing
-no committed test exercises end-to-end. The API integration tests (`apps/api/src/test/`) drive
+no committed test exercises end-to-end. The API integration tests (`../../apps/api/src/test`) drive
 `app.handle()` in-process (serially: `bun test --preload ./src/test/preload.ts`) — no
 real WebSocket, no browser, no second concurrent client. `collab.test.ts` covers storage operations and
 read-revocation enforcement via in-process spy connections — its own header notes the HTTP→WS upgrade
@@ -20,7 +20,7 @@ never completes under `app.handle()` — never two real editors converging. The 
 2026-05-30 chat wipe, the "doc went empty" forensics work) were all failures of exactly this seam:
 client ↔ WS ↔ `CollabDocument` ↔ persistence, under concurrency, reconnects, and restores.
 
-Browser verification exists but is disposable: [VERIFICATION.md](VERIFICATION.md) documents how an
+Browser verification exists but is disposable: [VERIFICATION.md](../VERIFICATION.md) documents how an
 agent drives the dev app headless (test users, cookie injection, upload/convert API), and it has
 caught real bugs — but every run is hand-built in `/tmp`, single-user, and thrown away. Nothing
 regresses-tests the multi-client behavior that is the product.
@@ -54,33 +54,33 @@ Reliability is the first-class requirement, not a follow-up.
   design verification; this suite asserts content, not pixels.
 - Presence/awareness cursors, load testing, mail/calendar/contacts UI flows (their logic is covered
   by the API integration tests).
-- Replacing `apps/api/src/test/` — API-level behavior stays tested at the API level. This suite only
+- Replacing `../../apps/api/src/test` — API-level behavior stays tested at the API level. This suite only
   tests what *needs* a browser: real WS, real editors, real concurrency.
 
 ## Current state (grounded)
 
-- **CI exists**: `.github/workflows/check.yml` runs on push/PR to `main` (`ubuntu-latest`,
+- **CI exists**: `../../.github/workflows/check.yml` runs on push/PR to `main` (`ubuntu-latest`,
   15-minute timeout): `bun install --frozen-lockfile`, lint, typecheck, `primitives:check`,
   `bun --filter '*' test`. No E2E job, no browser step.
 - **Playwright is not a dependency anywhere.** No `playwright` in the root or any workspace
-  `package.json`, no `playwright.config.*` in the repo. VERIFICATION.md's recipe installs it ad-hoc
+  `../../package.json`, no `playwright.config.*` in the repo. VERIFICATION.md's recipe installs it ad-hoc
   (`bun add playwright` in a `/tmp` work dir, `chromium.launch({ channel: 'chrome' })`).
 - **Dev stack**: `bun run serve` = `bun --filter '*' dev` — every app's vite server plus the API.
-  Ports in `vite.shared.config.ts` (`APP_PORTS`: index 3000 … sheets 3013); each app serves under
+  Ports in `../../vite.shared.config.ts` (`APP_PORTS`: index 3000 … sheets 3013); each app serves under
   its name as base path and builds to `dist/<app>`. The API listens on a **hardcoded port 8000**
-  (`apps/api/src/index.ts`).
-- **API host resolution**: `resolveApiHost()` in `packages/lib/src/core/api.ts` — `VITE_API_HOST`
+  (`../../apps/api/src/index.ts`).
+- **API host resolution**: `resolveApiHost()` in `../../packages/lib/src/core/api.ts` — `VITE_API_HOST`
   absolute in dev (`http://localhost:8000`), relative in prod (`/eigen`, spliced onto
   `window.location.origin`). In production Caddy serves `./dist` statically and proxies the API
-  (`docker-compose.yml`). CORS/auth origins are the hardcoded `trustedOrigins` list in
-  `apps/api/src/lib/auth/auth.ts` (localhost:3000…3013).
+  (`../../docker-compose.yml`). CORS/auth origins are the hardcoded `trustedOrigins` list in
+  `../../apps/api/src/lib/auth/auth.ts` (localhost:3000…3013).
 - **First-run state**: `server-config.ts` persists `setupCompleted`; `POST /setup/complete`
   (`routes/setup.ts`) completes the wizard. `EIGEN_DATA_ROOT` relocates all data.
-  `apps/api/src/test/setup.ts` already does the full throwaway boot: fresh
+  `../../apps/api/src/test/setup.ts` already does the full throwaway boot: fresh
   `data-test/test-<timestamp>` dir, `POST /setup/complete` with `storageType: 'local-id'`, then
   creates alice/bob/charlie via `auth.api.signUpEmail` and extracts `better-auth.session_token`.
 - **Collab WS**: `.ws('/ws/collab/:ownerId/:mountId/:pathId', { auth: true })` in
-  `apps/api/src/routes/collab.ts`. Auth is the better-auth session cookie on the upgrade request;
+  `../../apps/api/src/routes/collab.ts`. Auth is the better-auth session cookie on the upgrade request;
   read access gates `open()` (`getSharedDrive` → `canRead`), write permission is re-checked per
   message; `keepWebSocketAlive` pings. Clients use `y-websocket`'s `WebsocketProvider`
   (`resyncInterval: 5000`) — created in `apps/docs/.../editor.tsx`, `apps/sheets/.../use-sheet.ts`,
@@ -89,7 +89,7 @@ Reliability is the first-class requirement, not a follow-up.
   edits live in the client `Y.Doc` and merge on the reconnect sync handshake.
 - **Chat is not Yjs** — messages go over REST + SSE (versioning treats chat `data.db` as byte-overwrite,
   not Yjs surgery). One chat scenario still belongs in the matrix; it just asserts SSE delivery.
-- **Version restore is live**: `restoreYjsDoc` (`packages/lib/src/core/collab/yjs-utils.ts`) does
+- **Version restore is live**: `restoreYjsDoc` (`../../packages/lib/src/core/collab/yjs-utils.ts`) does
   single-transaction root replacement via `CollabDocument.applySnapshotState` — connected editors
   are supposed to converge on a restore **without reload**. Routes:
   `/drive/:o/:m/file/:p/versions[/save | /:name/restore]`. Nothing tests that promise today.
@@ -141,7 +141,7 @@ Weighed against a top-level non-workspace `e2e/` (separate install, unpinned dep
 `apps/e2e` entry (swept into `build:prod`'s `--filter './apps/*'` glob): the top-level workspace is
 the only shape that gets one lockfile *and* stays out of every existing sweep. The sweeps go by
 script presence — `serve` (`bun --filter '*' dev`), `test` (`bun --filter '*' test`), `build`
-(`bun --workspaces build`) each skip workspaces lacking the script (`packages/ui` ships no
+(`bun --workspaces build`) each skip workspaces lacking the script (`../../packages/ui` ships no
 `test`/`build` today) — so the e2e workspace ships exactly two scripts: `typecheck` (deliberately
 swept by `bun run typecheck`) and `e2e` (targeted only by the root `test:e2e`). No `test`, `dev`,
 or `build` script, ever.
@@ -149,14 +149,14 @@ or `build` script, ever.
 ### Product touches
 
 Everything else lives under `e2e/`; app/API code changes in exactly three places, each one or a few
-guarded lines: (1) `apps/api/src/index.ts` reads `process.env.PORT ?? 8000`; (2) the static server's
-origin (`http://localhost:8101`) joins `trustedOrigins` in `apps/api/src/lib/auth/auth.ts`;
+guarded lines: (1) `../../apps/api/src/index.ts` reads `process.env.PORT ?? 8000`; (2) the static server's
+origin (`http://localhost:8101`) joins `trustedOrigins` in `../../apps/api/src/lib/auth/auth.ts`;
 (3) a `VITE_E2E`-gated `window` handle on the `WebsocketProvider` at the four creation sites
 (§ Offline / reconnect). Nothing else in product code may know the suite exists.
 
 ### Server lifecycle
 
-`global-setup.ts` owns the instance, mirroring `apps/api/src/test/setup.ts`'s flow over real HTTP:
+`global-setup.ts` owns the instance, mirroring `../../apps/api/src/test/setup.ts`'s flow over real HTTP:
 
 1. **Throwaway data dir** — `EIGEN_DATA_ROOT=data-test/e2e-<timestamp>` (same gitignored root the
    API tests use, previous runs cleared the same way).
@@ -165,7 +165,7 @@ origin (`http://localhost:8101`) joins `trustedOrigins` in `apps/api/src/lib/aut
    explicit env, not `--env-file` (which would read the gitignored dev `.env`): `EIGEN_DATA_ROOT`,
    `PORT=8100`, `API_URL=http://localhost:8100` (better-auth `baseURL`), `COOKIE_DOMAIN=localhost`.
    The fixed dedicated port (8100) lets the suite run next to a dev stack on 8000, and needs product
-   touch 1 of 3 (see § Product touches): `apps/api/src/index.ts` reads `process.env.PORT ?? 8000`.
+   touch 1 of 3 (see § Product touches): `../../apps/api/src/index.ts` reads `process.env.PORT ?? 8000`.
 3. **Complete the wizard via API** — `POST /setup/complete` with `storageType: 'local-id'`
    (LocalStorage; **no S3 anywhere in the suite**), same body the API tests use. No UI clicking
    through the setup wizard — that's a scenario for an admin-app test someday, not an arrange step.
@@ -175,7 +175,7 @@ origin (`http://localhost:8101`) joins `trustedOrigins` in `apps/api/src/lib/aut
    cookie injection is the proven `{ name, value, domain: 'localhost', path: '/' }` from
    VERIFICATION.md — host-scoped, valid on every port.
 5. **Frontends: built assets, not vite dev.** `vite build --mode e2e` the apps under test and
-   serve `dist/` from a ~20-line Bun static file server with SPA fallback per app base path. The
+   serve `../../dist` from a ~20-line Bun static file server with SPA fallback per app base path. The
    mode is load-bearing: a plain production build reads root `.env`/`.env.production` — both
    gitignored — so a naive CI build ships every `VITE_APP_*_URL` undefined and `joinAppUrl` throws
    wherever a cross-app URL renders (the known "new frontend env vars break updates" class). A
@@ -189,7 +189,7 @@ origin (`http://localhost:8101`) joins `trustedOrigins` in `apps/api/src/lib/aut
    production serves; direct-to-API absolute host is the same topology the dev apps use, so no
    WS-proxy machinery is needed. The static server runs on its own fixed port (8101 — reusing a
    3000-range dev port would collide with a running dev stack), so its origin gets one line in
-   `trustedOrigins` (`apps/api/src/lib/auth/auth.ts`) — product touch 2 of 3.
+   `trustedOrigins` (`../../apps/api/src/lib/auth/auth.ts`) — product touch 2 of 3.
 6. **Teardown** — SIGTERM the API (its graceful shutdown drains queues), delete the data dir on
    success, keep it on failure next to the traces.
 
@@ -308,7 +308,7 @@ suite answering it.
 
 ### CI integration
 
-A separate job in `.github/workflows/` (new `e2e.yml` or a second job in `check.yml` — separate
+A separate job in `../../.github/workflows` (new `e2e.yml` or a second job in `check.yml` — separate
 job either way, so lint/typecheck feedback speed is untouched), on the same triggers: push/PR to
 `main`. With a phase-1 suite of four tests there is no PR-vs-nightly split yet — everything runs on
 PR. The split gets introduced only when the full matrix pushes past the budget: PR keeps the docs
@@ -353,7 +353,7 @@ not by default.
 - **What's reused vs new**: from the existing infrastructure the suite reuses *conventions and
   endpoints* — the `setup.ts` boot sequence (data dir → `/setup/complete` → sign-up → cookie), the
   user naming, the drive fixture routes, VERIFICATION.md's cookie injection and probe techniques.
-  It imports no code from `apps/api/src/test/` — that code is built around in-process
+  It imports no code from `../../apps/api/src/test` — that code is built around in-process
   `app.handle()` and Eden Treaty; E2E talks real HTTP/WS from a browser. The duplication is ~60
   lines of setup and is the honest cost of a real server boundary.
 
@@ -375,7 +375,7 @@ not by default.
 - **D5 — Workers.** Parallel workers from day one vs serial. *Recommendation:* `workers: 1` until
   the suite has a multi-week green history, then raise deliberately and watch.
 - **D6 — API port.** Hardcode 8100 in the e2e config with the `process.env.PORT ?? 8000` change to
-  `apps/api/src/index.ts`, vs keeping 8000 and forbidding a concurrent dev stack.
+  `../../apps/api/src/index.ts`, vs keeping 8000 and forbidding a concurrent dev stack.
   *Recommendation:* the env override — two lines, and the suite must never require killing a
   running dev server (standing rule).
 

@@ -42,20 +42,20 @@
 
 ## Current state (recap)
 
-Full architecture in [IMAP.md](IMAP.md). The facts that drive this design:
+Full architecture in [IMAP.md](../IMAP.md). The facts that drive this design:
 
 - **Inbound**: internet → Postfix (:25) → pipe transport `eigen-deliver`
-  (`docker/postfix/eigen-deliver`) → `POST /mail/deliver/:to` (`apps/api/src/routes/mail.ts:47`)
+  (`../../docker/postfix/eigen-deliver`) → `POST /mail/deliver/:to` (`apps/api/src/routes/mail.ts:47`)
   → `Mail.mailboxDeliver` (`apps/api/src/lib/mail/mail-domain.ts:134`), which **always** does
   `store.append('', message)` — INBOX.
 - **Outbound from the API uses the same listener.** `sendMail` relays via `SMTP_HOST=postfix`
   port 25 (`apps/api/src/lib/core/mailer.ts:39-45`, `docker-compose.yml:53-54`) — so port 25
   carries both internet mail and Eigen's own outbound, and the design must exempt the latter.
 - **Submission listeners inherit milters.** `submission` (587) and `smtps` (465) are separate
-  `smtpd` services in `docker/postfix/master.cf.template` with no `-o smtpd_milters` override —
+  `smtpd` services in `../../docker/postfix/master.cf.template` with no `-o smtpd_milters` override —
   a global milter change would silently start filtering authenticated clients.
 - **"Report Spam" is a pure folder move** with no semantics attached: `handleReportSpamByIds`
-  (`apps/mail/src/components/mail/hooks/use-mail-actions.ts`) → `PUT /mail/:ownerId/message/move`
+  (`../../apps/mail/src/components/mail/hooks/use-mail-actions.ts`) → `PUT /mail/:ownerId/message/move`
   → `Mail.messageMove` → Maildir rename + DB update. The button is shown in **every** non-Junk
   mailbox, including Trash and Sent (`apps/mail/src/components/mail/email-detail.tsx:47`), and
   the folder-picker move to Junk already toasts "Reported as spam" (`use-mail-actions.ts:272`).
@@ -125,7 +125,7 @@ throttling/reputation modules; both are small.
 `docker/rspamd/` holds a small Dockerfile pinned to **`rspamd/rspamd:4.1.4`** — the current
 stable release. A `:stable` tag does **not** exist on Docker Hub (the registry 404s on it), and
 `:latest` is a moving target; pin the version tag and bump it deliberately. The image ships
-`local.d/` config templated by an entrypoint, following the `docker/postfix/` envsubst pattern:
+`local.d/` config templated by an entrypoint, following the `../../docker/postfix` envsubst pattern:
 
 - `worker-proxy.inc` — milter mode on `:11332` (milter support lives in the `rspamd_proxy`
   worker; the `normal` worker on `:11333` does the actual scanning).
@@ -165,7 +165,7 @@ stable release. A `:stable` tag does **not** exist on Docker Hub (the registry 4
 
 ### 2 — Postfix wiring
 
-Three coordinated changes in `docker/postfix/`, not one line:
+Three coordinated changes in `../../docker/postfix`, not one line:
 
 **a) Scope: rspamd scans port 25 only.** The `submission` and `smtps` services in
 `master.cf.template` each get `-o smtpd_milters=inet:127.0.0.1:8891` — authenticated clients
@@ -304,11 +304,11 @@ request header — and must survive every path that writes `.env.production`:
 
 | Touchpoint | Change |
 |---|---|
-| `scripts/update.sh` | `add_var_if_missing RSPAMD_URL http://rspamd:11334` + `add_var_if_missing RSPAMD_PASSWORD "$(openssl rand -hex 24)"` — existing deployments migrate without a stale-`.env` break (the gotcha that bit the frontend build vars). |
-| `scripts/setup.ts` | Include both vars in the written template; **preserve an existing `RSPAMD_PASSWORD` on rerun** (like `SMTP_RELAY_*`), generate when absent. Today a setup rerun would silently erase a migrated variable it doesn't know. |
-| `scripts/generate-env.sh` | Same: add to the preserve-whitelist, generate when absent. |
+| `../../scripts/update.sh` | `add_var_if_missing RSPAMD_URL http://rspamd:11334` + `add_var_if_missing RSPAMD_PASSWORD "$(openssl rand -hex 24)"` — existing deployments migrate without a stale-`.env` break (the gotcha that bit the frontend build vars). |
+| `../../scripts/setup.ts` | Include both vars in the written template; **preserve an existing `RSPAMD_PASSWORD` on rerun** (like `SMTP_RELAY_*`), generate when absent. Today a setup rerun would silently erase a migrated variable it doesn't know. |
+| `../../scripts/generate-env.sh` | Same: add to the preserve-whitelist, generate when absent. |
 | `.env.example` | Document both (commented, like the relay block). |
-| `docker-compose.yml` | `eigen-api` gets `RSPAMD_URL` + `RSPAMD_PASSWORD`; `rspamd` gets `RSPAMD_PASSWORD` + `EIGEN_SUBNET`. |
+| `../../docker-compose.yml` | `eigen-api` gets `RSPAMD_URL` + `RSPAMD_PASSWORD`; `rspamd` gets `RSPAMD_PASSWORD` + `EIGEN_SUBNET`. |
 | rspamd entrypoint | Hash → `worker-controller.inc`; refuse to start on empty (§1). |
 
 **Frozen-format impact: none.** The added headers live in the per-message EML like any other
@@ -385,7 +385,7 @@ scripts. Each phase lands with its slice of:
 
 ## Reference
 
-- Existing mail architecture: [IMAP.md](IMAP.md)
+- Existing mail architecture: [IMAP.md](../IMAP.md)
 - Stalwart proposal (the expensive path this replaces for spam): [PROPOSAL_STALWART_MAIL.md](PROPOSAL_STALWART_MAIL.md)
 - rspamd: [rspamd.com](https://rspamd.com/) — [proxy/milter worker](https://rspamd.com/doc/workers/rspamd_proxy.html), [controller learn API](https://rspamd.com/doc/architecture/protocol.html), [Bayes statistics](https://rspamd.com/doc/configuration/statistic.html), [settings module](https://docs.rspamd.com/configuration/settings) (`want_spam`), [milter_headers](https://docs.rspamd.com/modules/milter_headers)
 - Postfix: [MILTER_README](https://www.postfix.org/MILTER_README.html) (per-milter timeouts, `default_action`), [cleanup(8)](https://www.postfix.org/cleanup.8.html) (header_checks-before-milter ordering)

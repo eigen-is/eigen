@@ -17,11 +17,11 @@
 During the 2026-07-04 slow-share investigation, sharing a path to a 26-member team fanned out
 `drive:acl-change` to 26 recipient Homes. On a dev machine with macOS's default `ulimit -n 256`,
 the fan-out crashed with `SQLITE_IOERR_VNODE` mid-delivery and **silently skipped recipients** —
-the per-recipient `catch` in `queueACLFanOut` (`apps/api/src/lib/drive/acl-propagation.ts`) logs
+the per-recipient `catch` in `queueACLFanOut` (`../../apps/api/src/lib/drive/acl-propagation.ts`) logs
 and moves on. Nothing told the operator the process was out of file descriptors.
 
 The fan-out is bounded now (`FAN_OUT_CONCURRENCY = 8` semaphore in `acl-propagation.ts`), and
-`docker-compose.yml` pins the limit for the `eigen-api` service:
+`../../docker-compose.yml` pins the limit for the `eigen-api` service:
 
 ```yaml
 ulimits:
@@ -32,8 +32,8 @@ ulimits:
 
 But the semaphore bounds *concurrent opens*, not *resident* Homes — each delivered Home stays
 open for its idle window, which is per-type since 2026-07-14: `UserHome` 5 minutes
-(`idleMs` in `apps/api/src/lib/home/home.ts`), `TeamHome` 30 minutes
-(`TEAM_HOME_IDLE_MS`, `apps/api/src/lib/home/team-home.ts`). The longer team window is a
+(`idleMs` in `../../apps/api/src/lib/home/home.ts`), `TeamHome` 30 minutes
+(`TEAM_HOME_IDLE_MS`, `../../apps/api/src/lib/home/team-home.ts`). The longer team window is a
 deliberate trade — team homes have no SSE keep-alive pin — and it **raises** resident-home fd
 pressure: a team home touched once holds its descriptors six times longer than a user home
 (fewer than a warm `UserHome`'s 30 — no mailbox watchers — but held six times as long).
@@ -44,7 +44,7 @@ to open the next file.
 
 ## fd accounting (measured from code)
 
-A fully warm `UserHome` (`apps/api/src/lib/home/user-home.ts`) holds:
+A fully warm `UserHome` (`../../apps/api/src/lib/home/user-home.ts`) holds:
 
 | Held by | Files | fds |
 |---|---|---|
@@ -62,8 +62,8 @@ unconditionally); the watcher count is **12** — `STANDARD_MAILBOXES` is
 `['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']`, each watched on both `cur/` and `new/`
 (`MaildirStore.watch`). So 30 fds is the warm ceiling, not the top of a 25–30 range — and it
 is paid at open time, which is exactly the crash arithmetic: 26 fan-out opens ≈ 780 fds
-against a 256 limit. The `ROADMAP.md` row already carries these measured figures; the
-`docker-compose.yml` comment above the `ulimits` pin still says "~25-30 fds … ~10 maildir
+against a 256 limit. The `../ROADMAP.md` row already carries these measured figures; the
+`../../docker-compose.yml` comment above the `ulimits` pin still says "~25-30 fds … ~10 maildir
 fs.watch handles … ~35 homes" and updates in phase 1.
 
 Per-home cost is **variable**:
@@ -89,8 +89,8 @@ is exactly why 26 homes crashed — and a non-issue at the pinned 1,048,576.
 
 ### Reading the soft limit
 
-A small `checkFdBudget()` in `apps/api/src/lib/config/` (same shape as `env.ts` helpers), called
-from `apps/api/src/index.ts` before `app.listen`:
+A small `checkFdBudget()` in `../../apps/api/src/lib/config` (same shape as `env.ts` helpers), called
+from `../../apps/api/src/index.ts` before `app.listen`:
 
 - **Primary, cross-platform**: `process.report.getReport().userLimits.open_files` — the Node
   diagnostic report (since v12) that Bun implements too; verified on this repo's runtime
@@ -109,7 +109,7 @@ a loud multi-line `console.error` at startup naming the limit, the ~30 fds/home 
 exact remedy per environment:
 
 - systemd: `LimitNOFILE=1048576` in the unit
-- compose: the `ulimits: nofile:` block (already pinned in `docker-compose.yml`)
+- compose: the `ulimits: nofile:` block (already pinned in `../../docker-compose.yml`)
 - macOS dev: `launchctl limit maxfiles`
 
 No admin notification: the audience is the operator reading logs at deploy time, and a
@@ -117,16 +117,16 @@ notification would re-fire on every boot with no in-app action to take. Log only
 
 ### Deploy documentation
 
-- **`docker/SETUP-GUIDE.md`** — the install doc. Add a short note under *Alternative
+- **`../../docker/SETUP-GUIDE.md`** — the install doc. Add a short note under *Alternative
   deployments*: anyone running the API outside the bundled compose (host process behind their
   own proxy, future systemd unit) must raise `nofile`, with the `LimitNOFILE=1048576` line.
   The Quick Start path needs nothing — compose pins it.
-- **`docs/PROPOSAL_SINGLE_MACHINE_CLUSTER.md`** — both capacity-story corrections (fds, not
+- **`PROPOSAL_SINGLE_MACHINE_CLUSTER.md`** — both capacity-story corrections (fds, not
   memory, are the binding resource; each `eigen-api-1..3` service needs the `ulimits` block)
   are folded into that doc as of 2026-08-04. Nothing left to do here.
-- **Propagate the corrected figures** (one source per fact): the `docker-compose.yml` comment
+- **Propagate the corrected figures** (one source per fact): the `../../docker-compose.yml` comment
   block above the `ulimits` pin ("~25-30 fds … ~10 maildir fs.watch handles … ~35 homes")
-  updates to the measured 30-fd warm ceiling and 12 watchers. (`ROADMAP.md` already carries
+  updates to the measured 30-fd warm ceiling and 12 watchers. (`../ROADMAP.md` already carries
   the corrected figures.)
 
 Also fix a broken window found while reading: `MaildirStore.watch` swallows *all* `fs.watch`
@@ -141,7 +141,7 @@ agreed.
 
 ### Seam
 
-`getHome` (`apps/api/src/lib/home/get-home.ts`) owns the `homeFactories` map;
+`getHome` (`../../apps/api/src/lib/home/get-home.ts`) owns the `homeFactories` map;
 `Home.touch()` already fires on every subsystem access and arms the per-type idle destruct
 (5 min user, 30 min team). The cap adds: a last-touch timestamp per owner (expose `lastTouched`
 on `Home`, set in `touch()`), and after installing a new factory, if `homeFactories.size > N`,
@@ -161,7 +161,7 @@ Never evict a home that:
 - hosts a live collab session — a **positive** open-connections check over the collab registry's
   `CollabDocument` connections. The "stale `lastTouched`" half of this argument is outdated: since
   2026-07-14 the collab keepalive tick calls `touchHomeIfLoaded(ownerId)`
-  (`apps/api/src/lib/home/get-home.ts`, wired from `apps/api/src/routes/collab.ts`), so an open
+  (`../../apps/api/src/lib/home/get-home.ts`, wired from `../../apps/api/src/routes/collab.ts`), so an open
   editor keeps the *hosting* home's `lastTouched` live even when the editor's own SSE stream is on
   a different home — the alternative once floated in this bullet is the thing that shipped, and it
   closed the >5-minute cross-owner-editing-session hole in the idle destruct too. What `lastTouched`
@@ -200,7 +200,7 @@ throws still releases its fds — which is the whole point of a pressure valve.
 ### Retry-once emergency valve
 
 When the cap is still too high for the actual limit, `ManagedDatabase.open`
-(`apps/api/src/lib/core/managed-database.ts`) is where exhaustion lands: `openCold`'s
+(`../../apps/api/src/lib/core/managed-database.ts`) is where exhaustion lands: `openCold`'s
 `new BunDatabase(...)` or the WAL pragmas throw `SQLITE_IOERR*` (`SQLITE_IOERR_VNODE` on macOS,
 `SQLITE_CANTOPEN`/`EMFILE` shapes on Linux). Wrap the `openCold` call: on a first
 exhaustion-shaped error, evict one LRU home and retry `openCold` once, logging at error level
@@ -208,7 +208,7 @@ either way. One retry, no loop. One care point: the hook is wired by **module-le
 registration** — `setFdExhaustionHandler(fn)` in `managed-database.ts`, registered from
 `get-home.ts` at boot, mirroring `ContentReindexQueue`'s injected extract dep — because a
 direct core→home import would be an upward import plus a module cycle, and
-`scripts/check-home-imports.ts` only greps the literal `getHome`, so the inversion would ship
+`../../scripts/check-home-imports.ts` only greps the literal `getHome`, so the inversion would ship
 silently past the lint.
 
 Two storage-audit fixes (merged 2026-07-06) simplify and de-risk this valve; do not re-add
@@ -252,7 +252,7 @@ log line whenever LRU eviction or the retry-once valve fires (`[Home] LRU evicte
 (resident=N)` / `[ManagedDatabase] <name>: SQLITE_IOERR, evicted LRU home, retrying`), and the
 un-swallowed watcher errors. The log lines are the counters — grep-able, alertable from the
 compose log driver; a metrics endpoint is out of scope. Periodic fd-pressure logging via
-`scheduleInterval` (`apps/api/src/lib/scheduler/`) was considered and dropped: `/proc/self/fd`
+`scheduleInterval` (`../../apps/api/src/lib/scheduler`) was considered and dropped: `/proc/self/fd`
 counting is Linux-only and the three points above cover the honest signal (D3).
 
 ## Testing
@@ -287,9 +287,9 @@ counting is Linux-only and the three points above cover the honest signal (D3).
 
 ## Phasing
 
-1. **S — ships immediately:** `checkFdBudget()` at boot + loud warning; `docker/SETUP-GUIDE.md`
+1. **S — ships immediately:** `checkFdBudget()` at boot + loud warning; `../../docker/SETUP-GUIDE.md`
    note for non-compose deploys; the corrected
-   fd figures in the `docker-compose.yml` comment (`ROADMAP.md` is already corrected); log
+   fd figures in the `../../docker-compose.yml` comment (`../ROADMAP.md` is already corrected); log
    non-ENOENT `fs.watch` failures in `MaildirStore.watch`.
 2. **M — optional, gated on need:** LRU cap over `homeFactories`/`touch()` with the safety
    predicate, derived N, and the `ManagedDatabase.open` retry-once valve.

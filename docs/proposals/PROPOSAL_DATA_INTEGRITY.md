@@ -7,13 +7,13 @@
 > **Shipped 2026-07-13** (`16faf466`, Yjs deep-dive P3 tail): **seam F** — `replayYjsState` returns
 > `blobsSkipped` and `readYjsStateFromFile` throws `ApiError(422, 'Snapshot is corrupted…')`, so a
 > restore from a snapshot with unreadable Yjs blobs aborts instead of silently degrading
-> (`apps/api/src/lib/collab/yjs-loader.ts`); plus the Phase-1 regression test "restore from a corrupt
-> snapshot fails 422 and leaves the live doc untouched" (`apps/api/src/test/storage/versioning.test.ts`).
+> (`../../apps/api/src/lib/collab/yjs-loader.ts`); plus the Phase-1 regression test "restore from a corrupt
+> snapshot fails 422 and leaves the live doc untouched" (`../../apps/api/src/test/storage/versioning.test.ts`).
 > That skip-count return is also Phase 3's prerequisite, so §3's semantic verification now builds on
 > an existing signal.
 >
 > **Still to build:** there is no `lib/integrity/`, the scheduler still registers only
-> `guest-cleanup`, and `scripts/backup.sh` still tars the live `data/` tree. Phase 1 is reduced to
+> `guest-cleanup`, and `../../scripts/backup.sh` still tars the live `../../data` tree. Phase 1 is reduced to
 > seams A/C/E/G, the post-ack size verify (B), and moving `isSqliteFile` into `lib/integrity/`.
 > Phases 2–5 are untouched — every one remains to build. The 2026-07-06 storage-audit fixes overlap
 > only as *reactive* guards (notably audit item 9, which closed the failed-read half of seam E —
@@ -26,7 +26,7 @@
 > bytes replace good bytes, (2) a paced background sweep that finds corruption and metadata↔storage
 > drift before a user does, (3) semantic verification of backups — CRDT bytes aren't
 > byte-comparable, so "the backup works" means "it decodes into a Y.Doc with the declared roots
-> populated" — applied to version snapshots and to a made-safe `scripts/backup.sh` (today it tars
+> populated" — applied to version snapshots and to a made-safe `../../scripts/backup.sh` (today it tars
 > live WAL databases), and (4) boring alerting through the existing notification center. No new
 > subsystem; every piece extends a named existing pattern.
 
@@ -36,7 +36,7 @@ Three production incidents define the threat model:
 
 - **2026-05-30 (chat data loss).** A temp `data.db` surviving an unclean shutdown looked clean to the
   fresh connection (`total_changes()` resets), so its unsynced bytes were silently dropped at close.
-  Fixed by `ManagedDatabase.markDirty` (Phase 1a, [SYNC.md](SYNC.md)).
+  Fixed by `ManagedDatabase.markDirty` (Phase 1a, [SYNC.md](../SYNC.md)).
 - **2026-06-08 (stickies wipe).** The Phase 1a fix itself: a failed/empty S3 GET left a 0-byte temp —
   itself a *valid empty SQLite* — which `openCold` opened as a fresh doc and `markDirty` then
   re-uploaded **over the good stored object**. Two live docs wiped, re-wiped on every redeploy. Fixed
@@ -80,7 +80,7 @@ see § Frozen-format: the sweep's resumable cursor wants one additive `metadata.
   pre-migration snapshots want exactly the semantic verification built here — the shared primitive
   is called out below so the two don't diverge.
 - **WAL-frame shipping (Litestream model).** The strategic replacement for whole-file re-PUT;
-  orthogonal and out of scope ([SYNC.md](SYNC.md) § Residual limitations).
+  orthogonal and out of scope ([SYNC.md](../SYNC.md) § Residual limitations).
 - **Create/open resilience under degraded storage.** The 2026-07-03 UX + atomicity follow-ups are
   [PROPOSAL_CREATE_RESILIENCE.md](PROPOSAL_CREATE_RESILIENCE.md); the scan of record it cites is
   this proposal's sweep check 2.
@@ -128,9 +128,9 @@ What already exists, so the design extends rather than reinvents:
   tag-upsert dedup + coalesce; `sendToHome(userId, { type: 'notification', ... })` in
   `home-relay.ts` delivers cross-home; `getOrgOwner()` / `getOrgRole()` (`lib/user/user.ts`)
   identify admins.
-- **Semantic layer** (`packages/lib/src/core/collab/yjs-utils.ts`, `lib/collab/yjs-loader.ts`):
+- **Semantic layer** (`../../packages/lib/src/core/collab/yjs-utils.ts`, `lib/collab/yjs-loader.ts`):
   `readYjsStateFromFile` opens a snapshot `data.db` raw (no migrations) and replays it into a
-  Y.Doc; `EIGEN_DOC_TYPE_INFO[type].yjsRoots` (`packages/lib/src/types/drive.ts`) declares each
+  Y.Doc; `EIGEN_DOC_TYPE_INFO[type].yjsRoots` (`../../packages/lib/src/types/drive.ts`) declares each
   container type's root schema. Server-side gotcha, already documented in `restoreYjsDoc`: roots
   hydrated via `Y.applyUpdate` are `AbstractType` — `instanceof` fails; force-type via
   `doc.getMap/getArray/getText/getXmlFragment` (or the `_start != null` idiom) before reading.
@@ -198,7 +198,7 @@ A new job in `scheduler/jobs.ts` — `scheduleInterval('integrity-sweep', SIX_HO
 
 **Enumeration** follows guest-cleanup: owners come from the auth DB (users) + the org's teams, then
 each home's data is read **from disk** (`data/home/{id}`, `data/team/{id}` — layout per
-[STORAGE.md](STORAGE.md)), *not* via `getHome()` — spinning up every Home's services six times a day
+[STORAGE.md](../STORAGE.md)), *not* via `getHome()` — spinning up every Home's services six times a day
 would defeat idle eviction and keep every mailbox watcher warm. The "never `getHome()` for another
 user's data" rule is a request-path sharding seam; a per-server maintenance job over the local data
 dir is on the right side of it — when homes shard across servers, each server sweeps its own disk.
@@ -237,7 +237,7 @@ check 1 rotates under a per-pass budget):
    sane floor for managed `data.db` rows (their row size tracks the *live temp*, not the vacuumed
    object — an exact match is wrong by design).
 5. **Maildir presence** — mail bodies are maildir files indexed by `mail.db`
-   (`eigen.mail/Maildir/`, [STORAGE.md](STORAGE.md)); nothing checks the index against them today.
+   (`eigen.mail/Maildir/`, [STORAGE.md](../STORAGE.md)); nothing checks the index against them today.
    A vanished or 0-byte message file is silent until the user opens it — or is silently reconciled
    out of the index by the next mailbox sync — and mail has no version snapshots. Cross-check
    `mail.db` message rows against a maildir readdir; flag missing/empty message files. All local,
@@ -365,7 +365,7 @@ scoped, and regenerable from a full sweep.
   the last phase; local mounts get the readdir version in the cheap tier for free, S3 listing lands
   with the optional interface method when the loss-direction checks are proven.
 - **D7 — Safe whole-server backup: keep `backup.sh` a shell script, or drive it from the API?**
-  Today it tars the live `data/` tree — no checkpoint, no `-wal`/`-shm` handling — so a tar taken
+  Today it tars the live `../../data` tree — no checkpoint, no `-wal`/`-shm` handling — so a tar taken
   mid-write captures torn SQLite files, and per §3 the home DBs have no other backup artifact. In
   scope (Phase 5): this proposal builds exactly the primitives that make owning it nearly free.
   *Recommendation:* keep it a script, but copy-then-tar: per-DB `VACUUM INTO` a staging dir
@@ -403,7 +403,7 @@ Each phase ships independently; the cheapest highest-value check goes first.
 
 ## Testing
 
-How the checks are themselves tested (`apps/api/src/test/`, temp-mount pattern from `mount.test.ts`,
+How the checks are themselves tested (`../../apps/api/src/test`, temp-mount pattern from `mount.test.ts`,
 fault injection from `sync-resilience.test.ts`):
 
 - **Corruption fixtures, detected at every seam**: take a real container `data.db`, then (a)

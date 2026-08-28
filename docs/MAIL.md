@@ -238,7 +238,7 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
 - Fast-saved drafts leave the on-disk `.eml` stale until a full save — external IMAP clients see old content.
 - Primary-password protocol auth fails when 2FA is enabled (use an app password).
 - A second `MailStore` backend (JMAP/Stalwart) is proposed only — see
-  [PROPOSAL_STALWART_MAIL.md](PROPOSAL_STALWART_MAIL.md).
+  [PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md).
 
 ## Where the code lives
 

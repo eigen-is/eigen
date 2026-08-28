@@ -6,7 +6,7 @@
 
 ## Why
 
-Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". Today the only backup is `scripts/backup.sh`, which tars the **live** `data/` tree — no checkpoint, no `-wal`/`-shm` handling — so a tar taken mid-write captures torn SQLite files. eigen.is runs on those torn-capture backups right now.
+Eigen's stated core weakness is "I would not yet trust it with data you cannot afford to lose". Today the only backup is `../../scripts/backup.sh`, which tars the **live** `../../data` tree — no checkpoint, no `-wal`/`-shm` handling — so a tar taken mid-write captures torn SQLite files. eigen.is runs on those torn-capture backups right now.
 
 We also know from three production incidents ([PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md)) that a backup nobody has verified is not a backup: a faithful copy of a corrupt database is a faithful backup of garbage, discovered at restore time, which is the worst possible time.
 
@@ -81,15 +81,15 @@ The `entries` list carries a size and sha256 per file, so a verify pass can prov
 
 ### auth.json
 
-A user's identity does not live in their home directory — it lives in `data/server/users3.db` (better-auth). Without it, a restored home is an orphan. So the archive carries the user's own auth rows: the user row, credential accounts, app passwords / API keys, 2FA secrets, and org/team memberships. Sessions are deliberately excluded (they are ephemeral and a restore should not resurrect logins).
+A user's identity does not live in their home directory — it lives in `../../data/server/users3.db` (better-auth). Without it, a restored home is an orphan. So the archive carries the user's own auth rows: the user row, credential accounts, app passwords / API keys, 2FA secrets, and org/team memberships. Sessions are deliberately excluded (they are ephemeral and a restore should not resurrect logins).
 
 ### shares.json
 
-Share-registry rows (`data/server/eigen.db`) where this user is the sharer, so that pending shares to not-yet-registered emails survive a restore. Shares *received* need nothing extra: the home's own `shared.db` is in the archive, and the existing reconciliation pull (`shared-with-me`) refreshes anything stale after a restore.
+Share-registry rows (`../../data/server/eigen.db`) where this user is the sharer, so that pending shares to not-yet-registered emails survive a restore. Shares *received* need nothing extra: the home's own `shared.db` is in the archive, and the existing reconciliation pull (`shared-with-me`) refreshes anything stale after a restore.
 
 ### A warning about credentials
 
-`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `data/` (default `./backups`, next to where `backup.sh` already writes), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
+`home/settings.json` contains mount configs, and for S3 mounts that includes the access key and secret. An archive is therefore a secret: it holds every file, every mail, and live storage credentials. Artifacts live in a server-side directory outside `../../data` (default `./backups`, next to where `backup.sh` already writes), are admin-only to download, and should be treated like the `.env` file. We do not strip credentials from archives — a backup that cannot restore the mount config is not a complete backup — but the admin UI should say this plainly.
 
 ## Verification
 
@@ -140,13 +140,13 @@ UI lives where phase ① prepared for it: the admin Users page detail pane gets 
 With the primitive in place, whole-server backup is a loop plus scheduling:
 
 1. Snapshot every home — all users (including guests), all teams, the org home — with `snapshotHome` into one staging directory.
-2. Add the server-level data: `users3.db` and `eigen.db` via `VACUUM INTO`, plus `data/server/`'s config and settings JSON files.
+2. Add the server-level data: `users3.db` and `eigen.db` via `VACUUM INTO`, plus `../../data/server`'s config and settings JSON files.
 3. Tar the staging directory into one artifact, verify it (same three checks, sampled semantics), apply retention (keep the last N, prune oldest), alert on failure.
 4. Register it as a scheduled job — `scheduleInterval('server-backup', …)` in the existing scheduler — with the schedule and retention count in server settings, and a "Back up now" button in an admin Settings § Backups section.
 
-Two operational notes. The backups directory must live **outside** `data/` (it does — `./backups`) so a server backup can never recursively include itself. And a backup on the same disk as the data only protects against software failure — the real disaster-recovery story is shipping the artifact off the machine, so the settings should optionally take an S3 destination (endpoint, bucket, credentials — the existing `S3Config` type) to upload finished artifacts to. That destination should be a different bucket/provider than the one the data lives on.
+Two operational notes. The backups directory must live **outside** `../../data` (it does — `./backups`) so a server backup can never recursively include itself. And a backup on the same disk as the data only protects against software failure — the real disaster-recovery story is shipping the artifact off the machine, so the settings should optionally take an S3 destination (endpoint, bucket, credentials — the existing `S3Config` type) to upload finished artifacts to. That destination should be a different bucket/provider than the one the data lives on.
 
-This phase retires `scripts/backup.sh`. It also supersedes PROPOSAL_DATA_INTEGRITY's open question D7 (which sketched keeping backup.sh as a copy-then-tar script): the agreed direction is API-driven, scheduled, verified, with an admin UI. The ROADMAP note stands: eigen.is currently lives on torn-capture backups, so phase ③ must not slip far behind phase ②.
+This phase retires `../../scripts/backup.sh`. It also supersedes PROPOSAL_DATA_INTEGRITY's open question D7 (which sketched keeping backup.sh as a copy-then-tar script): the agreed direction is API-driven, scheduled, verified, with an admin UI. The ROADMAP note stands: eigen.is currently lives on torn-capture backups, so phase ③ must not slip far behind phase ②.
 
 Per-user restore from a server artifact falls out for free: a whole-server artifact contains one `snapshotHome` directory per home, so "restore just Alice from last night's server backup" is the phase-② restore fed from a different source.
 
@@ -174,7 +174,7 @@ The per-destination upload semaphores already exist precisely so that one user's
 ## Open questions
 
 - **B1 — Quiesce the home during backup?** We could block writes for the duration to get a globally atomic snapshot. *Recommendation: no.* Per-database consistency is the honest, standard guarantee; blocking a user's whole account for a gigabytes-long S3 download is far worse than a mail landing mid-backup.
-- **B2 — Encrypt artifacts at rest?** They contain credentials and everything else. *Recommendation: not in phase ②* — the artifact directory has the same exposure as `data/` itself on the same disk. Revisit when the off-server upload ships (phase ③): an artifact leaving the machine should support age/GPG-style encryption with a key stored in server config.
+- **B2 — Encrypt artifacts at rest?** They contain credentials and everything else. *Recommendation: not in phase ②* — the artifact directory has the same exposure as `../../data` itself on the same disk. Revisit when the off-server upload ships (phase ③): an artifact leaving the machine should support age/GPG-style encryption with a key stored in server config.
 - **B3 — Restore into a different ownerId?** "Duplicate Alice's home into Bob's account" enables account-splitting tricks but complicates identity (every `ownerId` embedded in metadata rows must be rewritten). *Recommendation: defer;* single-user migration to another server (where the id keeps its meaning) covers the real need.
 - **B4 — Incremental backups?** Whole-archive every time is simple and matches the whole-file re-PUT philosophy of the sync pipeline, but nightly server backups of a large instance will hurt eventually. *Recommendation: ship full archives first;* the manifest's per-entry hashes are exactly what a later incremental mode needs (skip unchanged files against the previous manifest), so nothing here paints us into a corner.
 

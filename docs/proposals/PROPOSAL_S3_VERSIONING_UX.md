@@ -3,10 +3,10 @@
 > **Status — Proposed, not implemented.** Design for review; reconciled against code 2026-07-06
 > (post storage-audit: `s3-minio.test.ts` live suite and the `S3Storage.size()` fix shipped, neither
 > overlaps this work — detection is still versioning-only, the one-click fix is still 0%).
-> Follow-on to the async S3 sync work (see [SYNC.md](SYNC.md)): that made the upload pipeline safe
+> Follow-on to the async S3 sync work (see [SYNC.md](../SYNC.md)): that made the upload pipeline safe
 > *given* a sane bucket; this makes the bucket sane **from inside the admin app** instead of a warning
 > telling the operator to go click around their S3 provider. Surface: the shared `S3ConfigCard`
-> (`packages/ui/src/components/mount/s3-config-card.tsx`), already rendered everywhere S3 is
+> (`../../packages/ui/src/components/mount/s3-config-card.tsx`), already rendered everywhere S3 is
 > configured — server-default storage, team mounts, and the first-run setup wizard.
 
 ## Problem
@@ -51,22 +51,22 @@ warning at all today.
 
 ## Current state (grounded, 2026-07-06)
 
-- **Selection + check.** `MountForm` (`packages/ui/src/components/mount/mount-form.tsx`) renders
+- **Selection + check.** `MountForm` (`../../packages/ui/src/components/mount/mount-form.tsx`) renders
   `S3ConfigCard` when `storageType === 's3'`; "Test Connection" calls the card's injected `onCheck`.
   There are exactly **two** check routes, both stateless (S3 config in the body):
   `POST /settings/s3check` (`routes/settings.ts`, `requireAdmin`) and `POST /setup/s3check`
   (`routes/setup.ts`, gated by `isSetupRequired()` — first run only). There is **no team-scoped
   s3check route**: the team-mount UI (`admin/team-detail.tsx`) calls the admin-gated one via
-  `useCheckS3Connection` (`packages/lib/src/core/settings/hooks/use-s3-check.ts`).
+  `useCheckS3Connection` (`../../packages/lib/src/core/settings/hooks/use-s3-check.ts`).
   Both routes run `checkS3Connection` → `S3CheckResult` incl.
-  `versioning: 'enabled' | 'suspended' | 'disabled' | 'unknown'` (`packages/lib/src/types/settings.ts`).
+  `versioning: 'enabled' | 'suspended' | 'disabled' | 'unknown'` (`../../packages/lib/src/types/settings.ts`).
 - **All S3 surfaces live in the admin app and share the card.** `admin/storage-type-picker.tsx`
   (server-default storage; also reused by `admin/setup-wizard.tsx`, wired to `/setup/s3check`) and
   `MountForm` via `admin/mount-dialog.tsx` + `admin/team-detail.tsx` (team mounts). So there is no
   "where should this live" question — we're making the card's existing warning actionable, and every
   surface inherits it.
 - **The read path already does signed bucket-API calls.** `checkS3Versioning`
-  (`apps/api/src/lib/storage/s3-storage.ts`, module-private, called by `checkS3Connection`) hand-rolls
+  (`../../apps/api/src/lib/storage/s3-storage.ts`, module-private, called by `checkS3Connection`) hand-rolls
   an **AWS SigV4-signed GET** to `?versioning` (path-style, 5 s timeout; any non-2xx or thrown error →
   `'unknown'`, so `'unknown'` conflates "no permission to read" with "API not implemented"). The signing
   machinery (canonical request, `kSigning`, endpoint normalisation) already exists — *writing* config is
@@ -74,7 +74,7 @@ warning at all today.
   same GET with `?lifecycle`. No new infrastructure, just a generalisation of code that already ships.
 - **Lifecycle state is not detected.** `S3CheckResult` has no lifecycle field; the card never warns
   about unbounded version growth. Detection of the cleanup half is **new work in this proposal**.
-- **The manual rule is documented.** [SYNC.md](SYNC.md) § Ops has the exact `aws s3api` lifecycle
+- **The manual rule is documented.** [SYNC.md](../SYNC.md) § Ops has the exact `aws s3api` lifecycle
   snippet (rule ID `expire-noncurrent-versions`, `NoncurrentDays: 30`,
   `AbortIncompleteMultipartUpload: 7 days`) — the in-app rule below is the same rule, applied and
   verified from the UI.
@@ -146,7 +146,7 @@ all (see Provider behaviour). So:
 
 ## Backend design
 
-Small, reuses the existing signing. All in `apps/api/src/lib/storage/s3-storage.ts` next to
+Small, reuses the existing signing. All in `../../apps/api/src/lib/storage/s3-storage.ts` next to
 `checkS3Versioning`:
 
 1. **Extract `signedS3Request(config, { method, query, body? })`** from `checkS3Versioning` —
@@ -166,14 +166,14 @@ Small, reuses the existing signing. All in `apps/api/src/lib/storage/s3-storage.
 4. **`setS3LifecycleRule(config, noncurrentDays)`** → `PUT ?lifecycle` with a single rule, ID
    `eigen-expire-noncurrent`: `NoncurrentVersionExpiration.NoncurrentDays` +
    `AbortIncompleteMultipartUpload.DaysAfterInitiation: 7`, `Filter` = the mount's `prefix` (with
-   trailing `/`) when set, empty otherwise. Same rule as [SYNC.md](SYNC.md) § Ops.
+   trailing `/`) when set, empty otherwise. Same rule as [SYNC.md](../SYNC.md) § Ops.
    **Precondition enforced by the route, never inside this function:** only PUT when the current
    lifecycle state is `'none'` or already ours — `PutBucketLifecycleConfiguration` **replaces the whole
    configuration**, so a `'foreign'` state must short-circuit to the manual fallback.
 5. **`hardenS3Bucket(config, noncurrentDays)`** orchestrates: read state → versioning PUT if needed →
    lifecycle PUT if `'none'`/ours → **re-read both** → return
    `{ ok, versioning, lifecycle, applied: { versioning: boolean, lifecycle: boolean }, reason?: 'access-denied' | 'not-supported' | 'foreign-lifecycle' | 'error' }`
-   (a superset of `S3CheckResult`, shared type in `packages/lib/src/types/settings.ts`). Versioning
+   (a superset of `S3CheckResult`, shared type in `../../packages/lib/src/types/settings.ts`). Versioning
    first, lifecycle second: if lifecycle fails the bucket is at worst safer-but-growing (surfaced as
    partial), whereas some backends reject noncurrent-version rules on an unversioned bucket.
 6. **Routes**, exactly mirroring the two existing check routes (stateless, S3 config in body — this is
@@ -186,7 +186,7 @@ Small, reuses the existing signing. All in `apps/api/src/lib/storage/s3-storage.
      the bucket is first configured is the same trust level and the best moment to do it.
    Both return the typed harden result so the UI picks success / partial / denied deterministically.
 7. **Frontend**: `useHardenS3Bucket` mutation next to `useCheckS3Connection`
-   (`packages/lib/src/core/settings/hooks/use-s3-check.ts`); `S3ConfigCard` grows an `onHarden` prop
+   (`../../packages/lib/src/core/settings/hooks/use-s3-check.ts`); `S3ConfigCard` grows an `onHarden` prop
    injected per surface exactly like `onCheck` (settings route in admin surfaces, setup route in the
    wizard).
 
@@ -207,7 +207,7 @@ invent one. If a team-owner-facing mount UI ever appears outside the admin app, 
 - **AWS S3 / Hetzner Object Storage (Ceph RGW) / other Ceph-based**: both APIs supported;
   versioning can be enabled on an existing bucket. This is the eigen-drive prod case (nbg1).
 - **MinIO**: `PutBucketVersioning` on an existing bucket works on erasure-coded backends (incl.
-  modern single-node single-drive, which `scripts/s3-local` runs); **legacy filesystem-mode servers
+  modern single-node single-drive, which `../../scripts/s3-local` runs); **legacy filesystem-mode servers
   return `NotImplemented`** → `not-supported` fallback.
 - **Cloudflare R2, GCS S3-interop**: no S3 bucket-versioning API (unverified for changes after
   2026-01) → the existing `GET ?versioning` already yields `'unknown'` there, the button never shows.
@@ -240,8 +240,8 @@ The design never keys on provider names — it keys on the **measured responses*
 
 ## Testing
 
-Extend the existing MinIO-gated live suite (`apps/api/src/test/storage/s3-minio.test.ts`, opt-in via
-`S3_TEST_ENDPOINT`, harness in `scripts/s3-local/`):
+Extend the existing MinIO-gated live suite (`../../apps/api/src/test/storage/s3-minio.test.ts`, opt-in via
+`S3_TEST_ENDPOINT`, harness in `../../scripts/s3-local`):
 
 - Happy path: harden a fresh bucket → versioning `enabled`, lifecycle `{ noncurrentDays: 30 }` read
   back; panel state derivable from the returned result.

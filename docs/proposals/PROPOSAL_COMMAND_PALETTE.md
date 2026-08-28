@@ -1,12 +1,12 @@
 # Command Palette (⌘K) — remaining work
 
-> **Status — v1 shipped on `main`.** Code in `packages/lib/src/core/command-palette/` +
-> `packages/ui/src/components/layout/app/command-palette/`, mounted by `AppShell.PaletteRunner`;
+> **Status — v1 shipped on `main`.** Code in `../../packages/lib/src/core/command-palette` +
+> `../../packages/ui/src/components/layout/app/command-palette`, mounted by `AppShell.PaletteRunner`;
 > the shipped design is documented in AGENTS.md § Command palette and in the code itself.
 > The palette does jumps, creates, contacts, smart parses (email / URL), selection-aware
 > actions, mail / file / in-document / comment / help search, prefix scopes
 > (`mail:` / `file:` / `doc:` / `>` / `@` / `?`) and the Tab scope chip. Search depth grows on
-> its own as [SEARCH.md](SEARCH.md) indexes more content — document **body**
+> its own as [SEARCH.md](../SEARCH.md) indexes more content — document **body**
 > hits already flow in through the file provider since the drive content index
 > shipped, with zero palette changes.
 >
@@ -22,7 +22,7 @@
 | 6 | Pinned commands, per-command hotkeys, aliases | L    | 5 (telemetry)                                 |
 
 AI assist ("ask Eigen anything") stays out of palette scope — see
-[SEARCH.md](SEARCH.md).
+[SEARCH.md](../SEARCH.md).
 
 ## 1. Sub-action sheet (`→`)
 
@@ -55,7 +55,7 @@ follow.
 
 ## 2. `event:` / `chat:` result kinds + prefixes
 
-Blocked: calendar and chat indexing sit in [SEARCH.md](SEARCH.md) § Remaining (calendar
+Blocked: calendar and chat indexing sit in [SEARCH.md](../SEARCH.md) § Remaining (calendar
 `events_fts`, per-room `messages_fts`), still deferred there — there is no backend to consume.
 Once either lands, the palette work mirrors the file kind:
 
@@ -95,7 +95,7 @@ file-action mode (the file shown as a chip), and suggests:
 - "Send by mail" → when an email address is also in the input, compose a mail with the file attached
 
 The paste/drop wiring should reuse the shared `useFilePasteTarget` / `useFileDropTarget` hooks
-in `packages/ui` — the same OS-file attach primitives already used by the mail composer, chat,
+in `../../packages/ui` — the same OS-file attach primitives already used by the mail composer, chat,
 cards, and the drive list.
 
 ### Two seams these need

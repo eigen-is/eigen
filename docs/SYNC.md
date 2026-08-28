@@ -144,7 +144,7 @@ temp-copy backend.
     --bucket eigen-drive --lifecycle-configuration file:///tmp/lifecycle.json
   ```
   `NoncurrentDays` trades recovery window against storage cost. See
-  [PROPOSAL_S3_VERSIONING_UX.md](PROPOSAL_S3_VERSIONING_UX.md) for doing this from the admin UI.
+  [PROPOSAL_S3_VERSIONING_UX.md](proposals/PROPOSAL_S3_VERSIONING_UX.md) for doing this from the admin UI.
 
 ## Residual limitations
 

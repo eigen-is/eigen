@@ -1,12 +1,12 @@
 # Proposal: eigen|vector> — an Eigen-native drawing & diagramming app
 
-> **TLDR**: Build a collaborative drawing app with Excalidraw's look and tool set — hand-drawn roughjs rendering, our existing Excalifont hand font, the same shapes/arrows/freedraw/text — as an **Eigen-native engine written from scratch**, not by embedding `@excalidraw/excalidraw` and not by forking it. The scene model, geometry, fractional-index z-order, and a pure `sceneToSvg()` renderer live in a React-free `packages/lib/src/vector/` subpath (the `packages/lib/src/sheets/` precedent), shared verbatim by the frontend, previews, and the server transform Worker. The interactive editor lives in `packages/ui/src/components/vector/` built entirely from Eigen's shadcn toolbars, dialogs, and properties panels, and a **new shared `ObjectTransform` selection/resize/rotate primitive** extracted from slides — a standing goal of ours, one component across docs/slides/sheets/vector. Collab is Eigen's Yjs `CollabDocument` backend with a per-element `Y.Map` for field-level merge. Storage is a `.eigenvector` container; drawings embed in docs/slides/sheets as **nested `.eigenvector` sub-resources** under a `drawings/` folder, exactly like comment threads nest `.eigenchat` containers today. We adopt Excalidraw's proven internals — element field shape, fractional indexing, roughjs, perfect-freehand, their binding/hit-testing math — as studied reference and small vendored MIT pieces, not as a dependency graph. This is a multi-month program; the phase estimates below are honest, not optimistic.
+> **TLDR**: Build a collaborative drawing app with Excalidraw's look and tool set — hand-drawn roughjs rendering, our existing Excalifont hand font, the same shapes/arrows/freedraw/text — as an **Eigen-native engine written from scratch**, not by embedding `@excalidraw/excalidraw` and not by forking it. The scene model, geometry, fractional-index z-order, and a pure `sceneToSvg()` renderer live in a React-free `../../packages/lib/src/vector` subpath (the `../../packages/lib/src/sheets` precedent), shared verbatim by the frontend, previews, and the server transform Worker. The interactive editor lives in `../../packages/ui/src/components/vector` built entirely from Eigen's shadcn toolbars, dialogs, and properties panels, and a **new shared `ObjectTransform` selection/resize/rotate primitive** extracted from slides — a standing goal of ours, one component across docs/slides/sheets/vector. Collab is Eigen's Yjs `CollabDocument` backend with a per-element `Y.Map` for field-level merge. Storage is a `.eigenvector` container; drawings embed in docs/slides/sheets as **nested `.eigenvector` sub-resources** under a `drawings/` folder, exactly like comment threads nest `.eigenchat` containers today. We adopt Excalidraw's proven internals — element field shape, fractional indexing, roughjs, perfect-freehand, their binding/hit-testing math — as studied reference and small vendored MIT pieces, not as a dependency graph. This is a multi-month program; the phase estimates below are honest, not optimistic.
 
 ## Goals
 
 1. **A real drawing app in the suite.** Shapes (rectangle, diamond, ellipse), lines, arrows, freehand, text, and images on an infinite canvas, collaboratively editable — the Google Drawings / Excalidraw whiteboarding gap in Eigen today.
 2. **Excalidraw's aesthetic and feel, on our engine.** The sketchy roughjs stroke, a handwriting font, the same tool palette and shortcuts — achieved with Eigen's chrome (shadcn toolbars, dialogs, properties panels), not Excalidraw's fixed UI.
-3. **One shared transform primitive.** Extract the selection/resize/rotate interaction and chrome into `packages/ui` so vector, slides, docs, and sheets stop each carrying their own. This is a pre-existing objective, not a side effect.
+3. **One shared transform primitive.** Extract the selection/resize/rotate interaction and chrome into `../../packages/ui` so vector, slides, docs, and sheets stop each carrying their own. This is a pre-existing objective, not a side effect.
 4. **Embeddable everywhere collab lives.** A drawing dropped into a doc, slide, or sheet is a first-class collaborative sub-resource of that host, sharing its ACL, copied when the host is duplicated, and hidden from Drive as a standalone file.
 5. **Full pipeline parity.** Drive previews, HTML/PNG/PDF/SVG export, and search extraction, all through Eigen's existing worker pipeline — no browser runtime, no headless canvas.
 
@@ -15,20 +15,20 @@
 - **Embedding or forking Excalidraw.** Decided below (§ Decision). We study and vendor small pieces; we do not take the package or the repo.
 - **Frames, embeddable iframes, and mermaid-to-diagram import.** Excalidraw ships these (`element/src/types.ts:206` — `frame`, `magicframe`, `iframe`, `embeddable`); they are out of scope for v1. Mermaid pulls in the full CodeMirror 6 stack in Excalidraw's own build — not a dependency we take on.
 - **Re-rendering slides on the vector engine.** The old proposal's "Phase 7" astronautics. Slides works on DOM rendering; users want shapes *in* slides, delivered by embedding drawings, not by rewriting a working renderer. Marked **maybe-never**, as before. Sharing only the *renderer* is a different and much cheaper proposition — see § Native shape objects in slides.
-- **A new top-level workspace package.** The engine is a `packages/lib` subpath and the editor is a `packages/ui` component. `packages/sheet` is a fork special-case, not a precedent (AGENTS.md); the lib+ui split is the norm and lets docs/slides/sheets consume the editor with no new workspace dependency.
+- **A new top-level workspace package.** The engine is a `../../packages/lib` subpath and the editor is a `../../packages/ui` component. `../../packages/sheet` is a fork special-case, not a precedent (AGENTS.md); the lib+ui split is the norm and lets docs/slides/sheets consume the editor with no new workspace dependency.
 - **Point-level collaborative editing of freehand strokes.** Strokes commit once; their points are a serialized payload, not per-point CRDT state (§ Yjs data model).
 
 ## Current state — what the codebase already gives us
 
 The evidence below is why an own engine is *feasible here*, not a rewrite of Figma. Eigen already carries the hard scaffolding; the drawing surface is the new part.
 
-- **Registering a new collaborative document type is a well-worn path.** Two source-of-truth registries — `EIGEN_DOC_TYPE_INFO` and `EIGEN_DOC_ICONS` in `packages/lib/src/types/drive.ts` + `packages/lib/src/core/eigendoc-icons.ts` — are `satisfies Record<EigenDocType, …>`, so TypeScript *forces* the new entry and auto-propagates it to the New menu, command palette, drive icons/colors, and validation schema. The remaining touchpoints are hardcoded but enumerable (§ `.eigenvector` registration). Creation itself is already generic: `Drive.create(mountId, parentId, name, type, user)` (`apps/api/src/lib/drive/drive.ts:274`) derives the extension from `DRIVE_EXTENSIONS[type]` and the mime from `EIGEN_DOC_TYPE_INFO[type].mime`, then calls `CollabDocument.create(...)`. No new create route is needed.
-- **The collab backend is depth- and type-agnostic.** `CollabRegistry` (`apps/api/src/lib/drive/collab-registry.ts`) keys open docs on `${ownerId}.${mountId}.${pathId}` and throws 404 only when `!isCollabType(path.type)`. A `.eigenvector` container is addressable at `/ws/collab/:ownerId/:mountId/:pathId` exactly like any doc, at any nesting depth. `CollabDocument.create` (`apps/api/src/lib/collab/collabDocument.ts:166`) provisions `data.db` + `comments.db` + `media/` + `chat/` for every collab container.
-- **Nested collab containers already ship in production.** A comment thread is a full `.eigenchat` container living at `mydoc.eigendoc/chat/comment-1.eigenchat/` with its own `data.db` and `media/` (`docs/COMMENTS.md`; `packages/lib/src/core/comments/hooks/use-create-comment-card.ts:64`). `docContainerDescendantIds` (`apps/api/src/lib/mount/helpers.ts:38`) is a recursive CTE that hides every container descendant from Drive listings and search. So a nested drawing is invisible as a standalone file — exactly the embed behaviour we want — and its ACL is inherited because `canRead/canWrite` walk the full breadcrumb (`drive.ts:1038/1046`). Container copy is type-generic, so duplicating a host doc copies its drawings for free.
-- **The slides editor is the template.** `apps/slides/src/components/slides/hooks/use-deck.ts` is the pattern to imitate: three Yjs roots (`doc.getMap('slides')`, `doc.getMap('objects')`, `doc.getArray('slideOrder')`, matching `EIGEN_DOC_TYPE_INFO.slides.yjsRoots`), each object a nested `Y.Map` normalized through a fixed `OBJECT_FIELDS` allow-list (`use-deck.ts:11`), `new Y.UndoManager([...roots])` (line 110), every edit wrapped in `doc.transact(...)`, and a `WebsocketProvider(wsUrl, '', doc, { resyncInterval: 5000 })` (lines 112–117). This is 60–70% of a drawing app's plumbing, already debugged.
+- **Registering a new collaborative document type is a well-worn path.** Two source-of-truth registries — `EIGEN_DOC_TYPE_INFO` and `EIGEN_DOC_ICONS` in `../../packages/lib/src/types/drive.ts` + `../../packages/lib/src/core/eigendoc-icons.ts` — are `satisfies Record<EigenDocType, …>`, so TypeScript *forces* the new entry and auto-propagates it to the New menu, command palette, drive icons/colors, and validation schema. The remaining touchpoints are hardcoded but enumerable (§ `.eigenvector` registration). Creation itself is already generic: `Drive.create(mountId, parentId, name, type, user)` (`apps/api/src/lib/drive/drive.ts:274`) derives the extension from `DRIVE_EXTENSIONS[type]` and the mime from `EIGEN_DOC_TYPE_INFO[type].mime`, then calls `CollabDocument.create(...)`. No new create route is needed.
+- **The collab backend is depth- and type-agnostic.** `CollabRegistry` (`../../apps/api/src/lib/drive/collab-registry.ts`) keys open docs on `${ownerId}.${mountId}.${pathId}` and throws 404 only when `!isCollabType(path.type)`. A `.eigenvector` container is addressable at `/ws/collab/:ownerId/:mountId/:pathId` exactly like any doc, at any nesting depth. `CollabDocument.create` (`apps/api/src/lib/collab/collabDocument.ts:166`) provisions `data.db` + `comments.db` + `media/` + `chat/` for every collab container.
+- **Nested collab containers already ship in production.** A comment thread is a full `.eigenchat` container living at `mydoc.eigendoc/chat/comment-1.eigenchat/` with its own `data.db` and `media/` (`../COMMENTS.md`; `packages/lib/src/core/comments/hooks/use-create-comment-card.ts:64`). `docContainerDescendantIds` (`apps/api/src/lib/mount/helpers.ts:38`) is a recursive CTE that hides every container descendant from Drive listings and search. So a nested drawing is invisible as a standalone file — exactly the embed behaviour we want — and its ACL is inherited because `canRead/canWrite` walk the full breadcrumb (`drive.ts:1038/1046`). Container copy is type-generic, so duplicating a host doc copies its drawings for free.
+- **The slides editor is the template.** `../../apps/slides/src/components/slides/hooks/use-deck.ts` is the pattern to imitate: three Yjs roots (`doc.getMap('slides')`, `doc.getMap('objects')`, `doc.getArray('slideOrder')`, matching `EIGEN_DOC_TYPE_INFO.slides.yjsRoots`), each object a nested `Y.Map` normalized through a fixed `OBJECT_FIELDS` allow-list (`use-deck.ts:11`), `new Y.UndoManager([...roots])` (line 110), every edit wrapped in `doc.transact(...)`, and a `WebsocketProvider(wsUrl, '', doc, { resyncInterval: 5000 })` (lines 112–117). This is 60–70% of a drawing app's plumbing, already debugged.
 - **Selection chrome exists but is per-app.** `apps/slides/src/components/slides/slide-selection-chrome.tsx` is the richest implementation — an `.eigen-selection-ring` overlay (line 48) with `.eigen-selection-handle` resize grips (line 61) and a separate rotate grip. The shared classes live in `packages/ui/src/styles/globals.css:621`. `packages/ui/src/components/media/image-resize-handles.tsx` reuses the same classes for docs images. Nobody owns the *interaction*; each app re-derives drag/resize math. This is the extraction opportunity in Goal 3.
-- **The transform pipeline is generic over document type.** `apps/api/src/lib/document/transform/` runs one Worker at a time behind a per-*kind* limits table (`TRANSFORM_LIMITS` in `runner.ts`: preview 30s kill / 15s admission, export 120s / 30s) — a new *type* adds no row, it plugs into existing kinds. eigenslides preview is proof of the shape we need: `readDeckFromDoc(doc)` → `renderDeckHtml()` → DOMPurify → `{ body }` HTML string, **no image, no browser** (`apps/api/src/lib/preview/eigenslides-render.ts`). jsdom already runs *inside* a Worker (`apps/api/src/lib/import/doc/from-docx.ts:51`), and `sharp` (main-thread) rasterizes SVG→PNG, WeasyPrint (main-thread subprocess) turns HTML→PDF.
-- **The `packages/lib/src/sheets/` subpath is the exact precedent for a React-free shared engine.** `packages/lib/package.json` exports `"./sheets": "./src/sheets/index.ts"` and `"./sheets/*"`, and `src/sheets/index.ts` re-exports pure snapshot codecs + types with no React import — importable by both the frontend and `apps/api` Workers. `packages/lib/src/vector/` gets the same treatment.
+- **The transform pipeline is generic over document type.** `../../apps/api/src/lib/document/transform` runs one Worker at a time behind a per-*kind* limits table (`TRANSFORM_LIMITS` in `runner.ts`: preview 30s kill / 15s admission, export 120s / 30s) — a new *type* adds no row, it plugs into existing kinds. eigenslides preview is proof of the shape we need: `readDeckFromDoc(doc)` → `renderDeckHtml()` → DOMPurify → `{ body }` HTML string, **no image, no browser** (`../../apps/api/src/lib/preview/eigenslides-render.ts`). jsdom already runs *inside* a Worker (`apps/api/src/lib/import/doc/from-docx.ts:51`), and `sharp` (main-thread) rasterizes SVG→PNG, WeasyPrint (main-thread subprocess) turns HTML→PDF.
+- **The `../../packages/lib/src/sheets` subpath is the exact precedent for a React-free shared engine.** `../../packages/lib/package.json` exports `"./sheets": "./src/sheets/index.ts"` and `"./sheets/*"`, and `src/sheets/index.ts` re-exports pure snapshot codecs + types with no React import — importable by both the frontend and `../../apps/api` Workers. `../../packages/lib/src/vector` gets the same treatment.
 
 ## Decision — build from scratch, adopt the internals
 
@@ -94,15 +94,15 @@ apps/vector/                          # thin app shell — mirrors apps/slides
   src/main.tsx  src/routes/…  (VECTOR_CONFIG, port 3014, Caddy, env URLs)
 ```
 
-The critical piece is `packages/lib/src/vector/scene-to-svg.ts`: **one pure `sceneToSvg(scene, opts): string` function used by both the frontend (previews, embeds, thumbnails, export) and the API transform Worker.** roughjs's generator yields path `d` strings without any DOM; text elements carry client-measured `width`/`height` (Excalidraw's trick — `restoreElements` runs without `refreshDimensions` on the SVG path, so stored dimensions are trusted), so the renderer never measures text and needs no canvas. This is the design decision that makes server-side rendering trivial where Excalidraw's is fragile.
+The critical piece is `../../packages/lib/src/vector/scene-to-svg.ts`: **one pure `sceneToSvg(scene, opts): string` function used by both the frontend (previews, embeds, thumbnails, export) and the API transform Worker.** roughjs's generator yields path `d` strings without any DOM; text elements carry client-measured `width`/`height` (Excalidraw's trick — `restoreElements` runs without `refreshDimensions` on the SVG path, so stored dimensions are trusted), so the renderer never measures text and needs no canvas. This is the design decision that makes server-side rendering trivial where Excalidraw's is fragile.
 
-`packages/lib/package.json` gains `"./vector": "./src/vector/index.ts"` and `"./vector/*": "./src/vector/*.ts"`, mirroring the `sheets` entries. The Worker imports `@workspace/lib/vector/scene-to-svg` and `@workspace/lib/vector/read-vector` directly — React-free leaves, never a `core/` barrel.
+`../../packages/lib/package.json` gains `"./vector": "./src/vector/index.ts"` and `"./vector/*": "./src/vector/*.ts"`, mirroring the `sheets` entries. The Worker imports `@workspace/lib/vector/scene-to-svg` and `@workspace/lib/vector/read-vector` directly — React-free leaves, never a `core/` barrel.
 
-**No new workspace package.** The editor is a `packages/ui` component so docs/slides/sheets embed it without adding a dependency, and the standalone app consumes it like any other UI. This is a deliberate correction of the old proposal, which put everything in a `packages/vector/` workspace — that conflicts with the ui/lib split the codebase actually uses and would have forced React into a package the BE imports.
+**No new workspace package.** The editor is a `../../packages/ui` component so docs/slides/sheets embed it without adding a dependency, and the standalone app consumes it like any other UI. This is a deliberate correction of the old proposal, which put everything in a `packages/vector/` workspace — that conflicts with the ui/lib split the codebase actually uses and would have forced React into a package the BE imports.
 
 ### The shared `ObjectTransform` primitive (explicit deliverable)
 
-We extract the selection/resize/rotate *interaction and chrome* into `packages/ui/src/components/transform/object-transform.tsx`, seeded from `slide-selection-chrome.tsx` (the richest — 8 grips + rotate handle over `.eigen-selection-ring`/`.eigen-selection-handle`). It owns: the selection ring, eight resize grips with aspect-lock (Shift), the rotate handle with angle snapping (15°), and the pointer math that today each app re-derives. Vector and slides adopt it in this program; docs' `ImageResizeHandles` and sheets' image grips migrate afterward.
+We extract the selection/resize/rotate *interaction and chrome* into `../../packages/ui/src/components/transform/object-transform.tsx`, seeded from `slide-selection-chrome.tsx` (the richest — 8 grips + rotate handle over `.eigen-selection-ring`/`.eigen-selection-handle`). It owns: the selection ring, eight resize grips with aspect-lock (Shift), the rotate handle with angle snapping (15°), and the pointer math that today each app re-derives. Vector and slides adopt it in this program; docs' `ImageResizeHandles` and sheets' image grips migrate afterward.
 
 **Known pitfall to design around:** slides' rotate grip is a bespoke element — `rounded-full bg-background border border-selection-handle cursor-grab` (`slide-selection-chrome.tsx:72`) — deliberately *not* using the square `.eigen-selection-handle` resize-grip style. An unlayered shared handle class that forces the square style onto every grip would break the rotate handle's round shape. The shared component must **own its chrome classes properly** — resize grips and rotate grip are distinct, and the component ships both rather than leaning on a single global class. This fulfils our standing goal of one scale/rotate/position component across docs/slides/sheets/vector.
 
@@ -144,21 +144,21 @@ Text elements store client-measured `width`/`height` and `fontSize` so `sceneToS
 
 The registration touchpoints. The two `satisfies Record<EigenDocType, …>` registries are compile-enforced (TypeScript blocks the build until they are filled); the rest are hardcoded and silent.
 
-**Compile-enforced (TS forces them):** `EIGEN_DOC_TYPE_INFO` + `DRIVE_EXTENSIONS` (`packages/lib/src/types/drive.ts`), `EIGEN_DOC_ICONS` (`packages/lib/src/core/eigendoc-icons.ts`, e.g. `PenTool`/`Shapes`), `EIGENDOC_MIME` (`writes.ts`), `LABELS` (`drive-create-eigendoc.tsx`), `OPEN_LABELS` (`file-menu.tsx`). Adding `'vector'` to the `EIGEN_DOC_TYPES` tuple lights all of these up.
+**Compile-enforced (TS forces them):** `EIGEN_DOC_TYPE_INFO` + `DRIVE_EXTENSIONS` (`../../packages/lib/src/types/drive.ts`), `EIGEN_DOC_ICONS` (`../../packages/lib/src/core/eigendoc-icons.ts`, e.g. `PenTool`/`Shapes`), `EIGENDOC_MIME` (`writes.ts`), `LABELS` (`drive-create-eigendoc.tsx`), `OPEN_LABELS` (`file-menu.tsx`). Adding `'vector'` to the `EIGEN_DOC_TYPES` tuple lights all of these up.
 
 **Hardcoded (enumerate and check each):**
 - `isCollabType()` + `DriveCollabType` (`drive.ts`) — the WS gate; miss it and the route 404s.
-- `packages/lib/src/core/api.ts` — `VECTOR_APP_URL` + `getVectorAppUrl`, `getVectorUrl`, and the central `getDocumentUrl()` dispatch (adds `if (path.type === DRIVE_TYPE_VECTOR)`).
-- `packages/lib/src/core/apps.ts` launcher grid + `app-sidebar.tsx` `FilterApp`/`FILTER_ENTRIES`/`isFilterApp`/`SHARING_NOUN`.
-- `apps/api/src/routes/shared-schemas.ts` — `eigenDocTypeSchema` and `attachmentReferenceSchema.driveType` are manual `t.Literal` unions (kept BE-side deliberately so Elysia stays out of `packages/lib`), but both carry compile-time guards that fail `tsc` the moment `'vector'` joins `EIGEN_DOC_TYPES`, so they can't be silently missed.
-- `apps/api/src/lib/document/collab-types.ts` `COLLAB_DOCUMENT_TYPES` — `[DRIVE_MIME_VECTOR, 'eigenvector']`.
+- `../../packages/lib/src/core/api.ts` — `VECTOR_APP_URL` + `getVectorAppUrl`, `getVectorUrl`, and the central `getDocumentUrl()` dispatch (adds `if (path.type === DRIVE_TYPE_VECTOR)`).
+- `../../packages/lib/src/core/apps.ts` launcher grid + `app-sidebar.tsx` `FilterApp`/`FILTER_ENTRIES`/`isFilterApp`/`SHARING_NOUN`.
+- `../../apps/api/src/routes/shared-schemas.ts` — `eigenDocTypeSchema` and `attachmentReferenceSchema.driveType` are manual `t.Literal` unions (kept BE-side deliberately so Elysia stays out of `../../packages/lib`), but both carry compile-time guards that fail `tsc` the moment `'vector'` joins `EIGEN_DOC_TYPES`, so they can't be silently missed.
+- `../../apps/api/src/lib/document/collab-types.ts` `COLLAB_DOCUMENT_TYPES` — `[DRIVE_MIME_VECTOR, 'eigenvector']`.
 - Transform protocol unions + Worker switches + preview-cache gate + export if-chain + extract switches (§ Server pipeline).
-- `packages/lib/src/constants/preview.ts` `TextPreviewMode` + `getTextPreviewMode()`.
-- `apps/api/src/lib/core/mail-template.ts` share-notification deep-link case.
-- `packages/ui/src/styles/globals.css` — `--app-vector-color` + `--app-vector-color-soft`, light and dark.
-- `Caddyfile` + `docker/static/Caddyfile` (`import app vector`), `vite.shared.config.ts` `APP_PORTS` (`vector: 3014`), `.env.development`, `scripts/generate-env.sh`.
+- `../../packages/lib/src/constants/preview.ts` `TextPreviewMode` + `getTextPreviewMode()`.
+- `../../apps/api/src/lib/core/mail-template.ts` share-notification deep-link case.
+- `../../packages/ui/src/styles/globals.css` — `--app-vector-color` + `--app-vector-color-soft`, light and dark.
+- `Caddyfile` + `../../docker/static/Caddyfile` (`import app vector`), `../../vite.shared.config.ts` `APP_PORTS` (`vector: 3014`), `.env.development`, `../../scripts/generate-env.sh`.
 
-**Do not touch:** the v6 migration backfill in `apps/api/src/lib/mount/db-config.ts` lists the historical eigen types as frozen literals on purpose — the one-time migration must never shift. New `vector` rows get their dirty bits through the normal write path, not that backfill.
+**Do not touch:** the v6 migration backfill in `../../apps/api/src/lib/mount/db-config.ts` lists the historical eigen types as frozen literals on purpose — the one-time migration must never shift. New `vector` rows get their dirty bits through the normal write path, not that backfill.
 
 Creation stays generic via `Drive.create(..., 'vector', user)` and the existing `POST /drive/:ownerId/:mountId/folder/:pathId/create/:type` route. No new create endpoint.
 
@@ -174,7 +174,7 @@ Creation stays generic via `Drive.create(..., 'vector', user)` and the existing 
 **Display mode is static SVG.** The host renders the drawing from a fetched snapshot (or the server text-preview body) through the shared `sceneToSvg` — **no live WebSocket per embed.** N drawings in a doc do not open N sockets.
 
 **Edit mode holds the one live connection.** Double-click opens a dialog / full-screen `VectorEditor` that opens a single `WebsocketProvider` to the nested drawing's `pathId`, edits collaboratively, and closes on dismiss. The host stores only a reference:
-- **Docs:** a Tiptap atom node stores the drawing's folder-name/`pathId`, exactly as the `figure` node stores `mediaName` (`apps/docs/src/components/docs/extensions/figure.tsx`). The read-only view renders `VectorRenderer`; double-click opens the editor dialog.
+- **Docs:** a Tiptap atom node stores the drawing's folder-name/`pathId`, exactly as the `figure` node stores `mediaName` (`../../apps/docs/src/components/docs/extensions/figure.tsx`). The read-only view renders `VectorRenderer`; double-click opens the editor dialog.
 - **Slides:** a new `drawing` slide-object type storing the drawing `pathId`, rendered as an SVG image, transformed by the shared `ObjectTransform`.
 - **Sheets:** embedded like a floating image, referencing the drawing `pathId`.
 
@@ -199,7 +199,7 @@ Two decisions to get right:
 
 ### Gradient fills in vector
 
-**Idea, not scheduled.** Slides fills take the shared `BackgroundFill` union (`solid | gradient | image`, `packages/lib/src/types/background.ts`) through the shared `BackgroundFillBlock` picker, which already has an `allowedTypes` prop (slides passes `['solid', 'gradient']`). Vector's `backgroundColor` is a bare color string, so unifying is mostly adopting the type and the picker. `meta.background` can take the same treatment, making the vector canvas background symmetric with a slide background.
+**Idea, not scheduled.** Slides fills take the shared `BackgroundFill` union (`solid | gradient | image`, `../../packages/lib/src/types/background.ts`) through the shared `BackgroundFillBlock` picker, which already has an `allowedTypes` prop (slides passes `['solid', 'gradient']`). Vector's `backgroundColor` is a bare color string, so unifying is mostly adopting the type and the picker. `meta.background` can take the same treatment, making the vector canvas background symmetric with a slide background.
 
 Rendering is small: fill reaches SVG at exactly two presentation attributes in `drawableToSvg` (`fill=` for `fillPath`, `stroke=` for `fillSketch`'s hatch lines), and because we serialize roughjs ourselves rather than using `RoughSVG`, its `Options.fill` string is never parsed — pass `url(#id)` straight through and emit the `<defs><linearGradient>` inside the element's own `<g>` so the fragment stays self-contained. Hachure fills get gradient-tinted hatching for free.
 
@@ -241,7 +241,7 @@ Mirror the eigenslides worker modules. All Worker-imported modules stay pure (no
 - `apps/api/src/lib/document/vector.ts` — `readVectorFromDoc(doc)` materializer (mirrors `document/slides.ts`), or reuse `@workspace/lib/vector/read-vector`.
 - `apps/api/src/lib/preview/eigenvector-render.ts` — `renderEigenvectorPreviewBody(doc)` returns an HTML body embedding the `sceneToSvg` output (mirrors `eigenslides-render.ts`); FE renders it in the `eigen-prose` container. No image produced — the eigen-native preview convention.
 - `apps/api/src/lib/export/vector/{render,transform}.ts` — the Worker emits the **SVG string** as the base artifact.
-- `apps/api/src/lib/search/extract-render.ts` — `case 'eigenvector'` concatenates the text of all text elements (empty string is valid for a drawing with no text).
+- `../../apps/api/src/lib/search/extract-render.ts` — `case 'eigenvector'` concatenates the text of all text elements (empty string is valid for a drawing with no text).
 
 **Export envelopes** derive all formats from the one Worker-produced SVG, mirroring how sheets/slides derive PDF from Worker HTML:
 | Format | How |
@@ -252,11 +252,11 @@ Mirror the eigenslides worker modules. All Worker-imported modules stay pure (no
 
 **Limits:** `sceneToSvg` is string building — comfortably inside the `preview` kind's 30s kill deadline, unlike a rasterization step that could be killed on large scenes (the bug that once stopped sheets recalc in previews). The export-menu format branch goes in `drive-item-menu.tsx` (`vector → ['svg','png','pdf']`).
 
-**Verification item:** the deployed Docker libvips must be built with librsvg for `sharp` SVG input — confirmed on dev, unconfirmed against `docker/api/Dockerfile`.
+**Verification item:** the deployed Docker libvips must be built with librsvg for `sharp` SVG input — confirmed on dev, unconfirmed against `../../docker/api/Dockerfile`.
 
 ### Fonts
 
-Already solved — no new assets. The four Eigen fonts (`EIGEN_FONTS` in `packages/lib/src/constants/fonts.ts`: Inter, Source Serif 4, JetBrains Mono, and **Excalifont** as the `hand-drawn` category) ship in `packages/ui/src/assets/fonts/` with `@font-face` declarations in `packages/ui/src/styles/fonts.css` and the `--font-hand` token in `globals.css`. Text elements carry a font field constrained to `EIGEN_FONTS`, with Excalifont as the drawing default — the same picker model docs and sheets use. Export is covered by existing machinery too: `getFontCSS()` (`apps/api/src/lib/export/fonts.ts`) inlines all four faces as base64 `data:` URIs, so the SVG/PDF export wraps its output in that CSS and renders correctly in external viewers. Excalidraw's fetch + wasm font-subsetting pipeline is unnecessary — our four-font set is small enough to inline whole, and that is already what every other export does.
+Already solved — no new assets. The four Eigen fonts (`EIGEN_FONTS` in `../../packages/lib/src/constants/fonts.ts`: Inter, Source Serif 4, JetBrains Mono, and **Excalifont** as the `hand-drawn` category) ship in `../../packages/ui/src/assets/fonts` with `@font-face` declarations in `../../packages/ui/src/styles/fonts.css` and the `--font-hand` token in `globals.css`. Text elements carry a font field constrained to `EIGEN_FONTS`, with Excalifont as the drawing default — the same picker model docs and sheets use. Export is covered by existing machinery too: `getFontCSS()` (`../../apps/api/src/lib/export/fonts.ts`) inlines all four faces as base64 `data:` URIs, so the SVG/PDF export wraps its output in that CSS and renders correctly in external viewers. Excalidraw's fetch + wasm font-subsetting pipeline is unnecessary — our four-font set is small enough to inline whole, and that is already what every other export does.
 
 ## New and modified files
 
@@ -264,21 +264,21 @@ Already solved — no new assets. The four Eigen fonts (`EIGEN_FONTS` in `packag
 
 | File | Purpose |
 |---|---|
-| `packages/lib/src/vector/index.ts` | barrel (types, defaults, geometry, `sceneToSvg`) |
-| `packages/lib/src/vector/types.ts` | `VectorElement` union, `ELEMENT_FIELDS`, defaults |
-| `packages/lib/src/vector/geometry.ts` | point math, bounds, hit-testing |
-| `packages/lib/src/vector/fractional-index.ts` | vendored fractional indexing + repair helpers |
-| `packages/lib/src/vector/scene-to-svg.ts` | pure `sceneToSvg(scene, opts) -> string` |
-| `packages/lib/src/vector/read-vector.ts` | `readVectorFromDoc(Y.Doc)` (Worker-safe) |
-| `packages/ui/src/components/transform/object-transform.tsx` | **shared** selection/resize/rotate primitive |
+| `../../packages/lib/src/vector/index.ts` | barrel (types, defaults, geometry, `sceneToSvg`) |
+| `../../packages/lib/src/vector/types.ts` | `VectorElement` union, `ELEMENT_FIELDS`, defaults |
+| `../../packages/lib/src/vector/geometry.ts` | point math, bounds, hit-testing |
+| `../../packages/lib/src/vector/fractional-index.ts` | vendored fractional indexing + repair helpers |
+| `../../packages/lib/src/vector/scene-to-svg.ts` | pure `sceneToSvg(scene, opts) -> string` |
+| `../../packages/lib/src/vector/read-vector.ts` | `readVectorFromDoc(Y.Doc)` (Worker-safe) |
+| `../../packages/ui/src/components/transform/object-transform.tsx` | **shared** selection/resize/rotate primitive |
 | `packages/ui/src/components/vector/vector-editor.tsx` | full editor layout |
-| `packages/ui/src/components/vector/vector-canvas.tsx` | interactive SVG surface + overlays |
+| `../../packages/ui/src/components/vector/vector-canvas.tsx` | interactive SVG surface + overlays |
 | `packages/ui/src/components/vector/vector-renderer.tsx` | read-only SVG (embeds/thumbnails) |
-| `packages/ui/src/components/vector/text-overlay.tsx` | HTML text-editing overlay |
+| `../../packages/ui/src/components/vector/text-overlay.tsx` | HTML text-editing overlay |
 | `packages/ui/src/components/vector/tools/*.ts` | select/shape/draw/line/arrow/text/eraser/pan |
-| `packages/ui/src/components/vector/hooks/use-vector-doc.ts` | Yjs doc (mirrors `use-deck.ts`) |
+| `../../packages/ui/src/components/vector/hooks/use-vector-doc.ts` | Yjs doc (mirrors `use-deck.ts`) |
 | `packages/ui/src/components/vector/hooks/{use-viewport,use-selection,use-tool,use-snap}.ts` | interaction state |
-| `apps/vector/…` | standalone app shell (mirrors `apps/slides`) |
+| `apps/vector/…` | standalone app shell (mirrors `../../apps/slides`) |
 | `apps/api/src/lib/document/vector.ts` | doc materializer |
 | `apps/api/src/lib/preview/eigenvector-render.ts` | preview body renderer |
 | `apps/api/src/lib/export/vector/{render,transform}.ts` | export renderer |
@@ -288,25 +288,25 @@ Already solved — no new assets. The four Eigen fonts (`EIGEN_FONTS` in `packag
 
 | File | Change |
 |---|---|
-| `packages/lib/package.json` | add `"./vector"` + `"./vector/*"` exports |
-| `packages/lib/src/types/drive.ts` | `DRIVE_TYPE_VECTOR`, `DRIVE_MIME_VECTOR`, unions, `EIGEN_DOC_TYPE_INFO.vector` (+ `yjsRoots`), `DRIVE_EXTENSIONS`, `isCollabType` |
-| `packages/lib/src/core/eigendoc-icons.ts` | `vector:` icon |
-| `packages/lib/src/core/api.ts` | app-URL plumbing + `getDocumentUrl()` dispatch |
-| `packages/lib/src/core/apps.ts` | launcher entry |
-| `packages/lib/src/constants/preview.ts` | `TextPreviewMode` + `getTextPreviewMode()` |
-| `packages/ui/src/components/layout/sidebar/app-sidebar.tsx` | `FilterApp`/`FILTER_ENTRIES`/`isFilterApp`/`SHARING_NOUN` |
+| `../../packages/lib/package.json` | add `"./vector"` + `"./vector/*"` exports |
+| `../../packages/lib/src/types/drive.ts` | `DRIVE_TYPE_VECTOR`, `DRIVE_MIME_VECTOR`, unions, `EIGEN_DOC_TYPE_INFO.vector` (+ `yjsRoots`), `DRIVE_EXTENSIONS`, `isCollabType` |
+| `../../packages/lib/src/core/eigendoc-icons.ts` | `vector:` icon |
+| `../../packages/lib/src/core/api.ts` | app-URL plumbing + `getDocumentUrl()` dispatch |
+| `../../packages/lib/src/core/apps.ts` | launcher entry |
+| `../../packages/lib/src/constants/preview.ts` | `TextPreviewMode` + `getTextPreviewMode()` |
+| `../../packages/ui/src/components/layout/sidebar/app-sidebar.tsx` | `FilterApp`/`FILTER_ENTRIES`/`isFilterApp`/`SHARING_NOUN` |
 | `packages/ui/src/components/drive/{drive-create-eigendoc,eigendoc-config}.tsx/.ts` | `LABELS`, `VECTOR_CONFIG` |
-| `packages/ui/src/components/drive/drive-item-menu.tsx` | export-format branch |
-| `packages/ui/src/styles/globals.css` | `--app-vector-color(-soft)` light + dark |
+| `../../packages/ui/src/components/drive/drive-item-menu.tsx` | export-format branch |
+| `../../packages/ui/src/styles/globals.css` | `--app-vector-color(-soft)` light + dark |
 | `apps/slides/src/components/slides/slide-selection-chrome.tsx` | adopt shared `ObjectTransform` |
-| `apps/api/src/lib/document/collab-types.ts` | `COLLAB_DOCUMENT_TYPES` entry |
-| `apps/api/src/lib/document/transform/protocol.ts` | `'eigenvector'` union arms |
-| `apps/api/src/lib/document/transform/worker.ts` | `case 'eigenvector'` in preview/export |
-| `apps/api/src/lib/preview/preview-cache.ts` | include `vector`; bump `TEXT_FORMAT` |
-| `apps/api/src/lib/export/export-document.ts` | `DRIVE_MIME_VECTOR` branch + `svg`/`png` envelopes |
+| `../../apps/api/src/lib/document/collab-types.ts` | `COLLAB_DOCUMENT_TYPES` entry |
+| `../../apps/api/src/lib/document/transform/protocol.ts` | `'eigenvector'` union arms |
+| `../../apps/api/src/lib/document/transform/worker.ts` | `case 'eigenvector'` in preview/export |
+| `../../apps/api/src/lib/preview/preview-cache.ts` | include `vector`; bump `TEXT_FORMAT` |
+| `../../apps/api/src/lib/export/export-document.ts` | `DRIVE_MIME_VECTOR` branch + `svg`/`png` envelopes |
 | `apps/api/src/lib/search/{extract-text,extract-render}.ts` | mime case + Worker arm |
-| `apps/api/src/lib/core/mail-template.ts` | share deep-link case |
-| `vite.shared.config.ts`, `Caddyfile`, `docker/static/Caddyfile`, `.env.development`, `scripts/generate-env.sh` | port 3014, `import app vector`, env URLs |
+| `../../apps/api/src/lib/core/mail-template.ts` | share deep-link case |
+| `../../vite.shared.config.ts`, `Caddyfile`, `../../docker/static/Caddyfile`, `.env.development`, `../../scripts/generate-env.sh` | port 3014, `import app vector`, env URLs |
 
 ## Phased plan
 
@@ -314,8 +314,8 @@ Honest estimates — this is a multi-month program. The first 80% (model, shapes
 
 | Phase | Scope | Ships |
 |---|---|---|
-| **0 — Core model + renderer** (2–3 wk) | `packages/lib/src/vector/` subpath: `VectorElement` union, defaults, geometry/bounds/hit-testing, fractional-index helpers, and `sceneToSvg()` with roughjs. Unit tests (geometry, index repair, SVG snapshot). Read-only `VectorRenderer`. | A drawing can be rendered from data, FE and BE, with tests. |
-| **1 — Standalone app + core interaction** (3–4 wk) | `apps/vector/` + full `.eigenvector` registration. `VectorCanvas`, pan/zoom viewport, select/move/**resize/rotate via the new shared `ObjectTransform`**, shape + text tools (HTML overlay editing), `use-vector-doc` Yjs, properties panel, snap lines, `Y.UndoManager`, rubber-band multi-select, shortcuts. | Usable single-user + collab drawing of shapes and text. |
+| **0 — Core model + renderer** (2–3 wk) | `../../packages/lib/src/vector` subpath: `VectorElement` union, defaults, geometry/bounds/hit-testing, fractional-index helpers, and `sceneToSvg()` with roughjs. Unit tests (geometry, index repair, SVG snapshot). Read-only `VectorRenderer`. | A drawing can be rendered from data, FE and BE, with tests. |
+| **1 — Standalone app + core interaction** (3–4 wk) | `../../apps/vector` + full `.eigenvector` registration. `VectorCanvas`, pan/zoom viewport, select/move/**resize/rotate via the new shared `ObjectTransform`**, shape + text tools (HTML overlay editing), `use-vector-doc` Yjs, properties panel, snap lines, `Y.UndoManager`, rubber-band multi-select, shortcuts. | Usable single-user + collab drawing of shapes and text. |
 | **2 — Freehand + styles + awareness** (2–3 wk) | perfect-freehand draw tool (canvas overlay input, RDP simplify before commit), line + eraser tools, stroke/fill styles, remote awareness cursors/selections. | Whiteboarding feel; multi-user cursors. |
 | **3 — Arrows + bindings** (3–4 wk) | Arrow tool, snap-to-element connection points, reactive endpoint recalculation on bound-element move/resize/delete, arrow labels. **Straight arrows only.** | Diagramming. Flagged rabbit-hole (see Risks). |
 | **4 — Pipeline** (2 wk) | Preview (`eigenvector-render`), export (svg/png/pdf), search extraction — the full server checklist. | Drive previews, export, search parity. |
@@ -332,7 +332,7 @@ Honest estimates — this is a multi-month program. The first 80% (model, shapes
 - **Text editing is an HTML overlay, not `foreignObject`.** `<textarea>` in `<foreignObject>` behaves differently for focus/blur, key propagation, and cursor position across Chrome/Firefox/Safari. Render text as SVG `<text>` for display; edit via an absolutely-positioned HTML overlay aligned in JS (the Excalidraw/tldraw approach; the slides app sidesteps SVG entirely with DOM text).
 - **The jsdom-free rendering assumption must be pressure-tested.** Everything in `sceneToSvg` must render from *stored* dimensions — the moment a code path measures text at render time, the server breaks. Text width/height are client-measured and stored; the Worker never measures. Verify with a golden-SVG test that runs under the Worker environment.
 - **roughjs determinism.** Sketchiness must be reproducible across renders and peers or an embed's static SVG won't match the live editor. Pin the roughjs version; store `seed` + `roughness` per element (their exact mechanism). A version bump that changes roughjs output invalidates cached previews — bump `TEXT_FORMAT` when it happens.
-- **Docker libvips SVG support.** `sharp` PNG rasterization needs librsvg-built libvips in production; confirmed on dev only. Verify against `docker/api/Dockerfile` before relying on PNG export.
+- **Docker libvips SVG support.** `sharp` PNG rasterization needs librsvg-built libvips in production; confirmed on dev only. Verify against `../../docker/api/Dockerfile` before relying on PNG export.
 - **Freehand payload size.** A complex stroke is hundreds of points; multiple users drawing grows the doc fast. Ramer–Douglas–Peucker simplify to ~20–50 points before the Yjs commit (the old proposal's correct call).
 - **Embed snapshot staleness.** A static SVG embed must learn when its drawing changed. Proposed: the host re-renders an embed when the `drawings/` child's `updatedAt` bumps, driven off a drive SSE — but the exact signal (does editing a nested collab doc emit a drive file-update event the host is subscribed to?) is unverified. Marked open.
 - **Bundle size.** The engine is our own code plus perfect-freehand (~3KB) and roughjs (small). `vector-renderer` (read-only) is tree-shakeable from the interaction code, so doc embeds don't pull in tools.
@@ -348,4 +348,4 @@ Honest estimates — this is a multi-month program. The first 80% (model, shapes
 
 - Old proposal (superseded by this document): the prior `PROPOSAL_VECTOR.md` — its honest risk framing and element sketches are carried forward; its `packages/vector/` workspace layout and embed recommendation are replaced.
 - Excalidraw source study — element model, versioning fields, reconciliation, export internals, customization limits: `excalidraw/excalidraw` at `master@e160ff7` (2026-08-16, well ahead of npm `0.18.0`); file paths cited inline above are relative to that repo.
-- In-repo precedents: `apps/slides/src/components/slides/hooks/use-deck.ts` (Yjs editor), `apps/slides/src/components/slides/slide-selection-chrome.tsx` (transform chrome to extract), `packages/lib/src/sheets/` (React-free shared subpath), `docs/COMMENTS.md` (nested `.eigenchat` sub-resource precedent), `docs/DOCUMENT-TRANSFORMS.md` + `docs/PREVIEWS.md` + `docs/EXPORT.md` (the pipeline).
+- In-repo precedents: `../../apps/slides/src/components/slides/hooks/use-deck.ts` (Yjs editor), `apps/slides/src/components/slides/slide-selection-chrome.tsx` (transform chrome to extract), `../../packages/lib/src/sheets` (React-free shared subpath), `../COMMENTS.md` (nested `.eigenchat` sub-resource precedent), `../DOCUMENT-TRANSFORMS.md` + `../PREVIEWS.md` + `../EXPORT.md` (the pipeline).

@@ -11,7 +11,7 @@
 > [PROPOSAL_DATA_INTEGRITY.md](PROPOSAL_DATA_INTEGRITY.md) (written concurrently): that one finds and
 > repairs damage in the background; this one stops the damage-shaped UX at the two request paths the
 > 2026-07-03 incident actually hit — create and open. Uploads needed neither: they were already made
-> safe by the write-behind queue ([SYNC.md](SYNC.md)). No frozen-format impact anywhere in this design.
+> safe by the write-behind queue ([SYNC.md](../SYNC.md)). No frozen-format impact anywhere in this design.
 
 ## Problem
 
@@ -26,14 +26,14 @@
 A read-only orphan scan of the affected home afterwards found **0 orphaned containers** — nothing was
 lost, so this is UX/resilience work plus latent hardening, not recovery. The asymmetry is the story:
 *edits* to existing documents rode out the outage invisibly, because every `data.db` sync goes through
-the durable per-mount `UploadQueue` (staged copy + retry/backoff, [SYNC.md](SYNC.md)). *Create* and
+the durable per-mount `UploadQueue` (staged copy + retry/backoff, [SYNC.md](../SYNC.md)). *Create* and
 *open* still call storage synchronously on the request path, so the same 25-minute blip that uploads
 absorbed silently became user-visible 500s, duplicates, and minute-long spinners.
 
 ## What actually happens (grounded trace)
 
-**Create.** `POST /drive/:ownerId/:mountId/folder/:pathId/create/:type` (`apps/api/src/routes/drive.ts`)
-→ `Drive.create` (`apps/api/src/lib/drive/drive.ts`), which runs in this order:
+**Create.** `POST /drive/:ownerId/:mountId/folder/:pathId/create/:type` (`../../apps/api/src/routes/drive.ts`)
+→ `Drive.create` (`../../apps/api/src/lib/drive/drive.ts`), which runs in this order:
 
 1. `mount.createFolder` — **commits the container `paths` row** (metadata-only; S3 mounts have no
    `mkdir`, so this step cannot fail from storage).
@@ -49,9 +49,9 @@ absorbed silently became user-visible 500s, duplicates, and minute-long spinners
    request path, *after* the chat container is fully provisioned.
 4. `this.emit(SSEventType.DRIVE_FILE_CREATED, created)` — **only reached on full success.**
 
-Any throw in steps 2–3 hits Elysia's `onError` fallback (`apps/api/src/app.ts`): a non-`ApiError`
+Any throw in steps 2–3 hits Elysia's `onError` fallback (`../../apps/api/src/app.ts`): a non-`ApiError`
 becomes status 500 with body `'Internal server error'` — via `AppError`/`onMutationError`
-(`packages/lib/src/core/api-error.ts`) that renders as the exact toast the testers quoted,
+(`../../packages/lib/src/core/api-error.ts`) that renders as the exact toast the testers quoted,
 `Internal server error (500)`. Because the emit is step 4, these failed-after-commit creates
 broadcast no container event: the committed row is invisible to every listing until a manual refetch. That is
 the incident, mechanically: doc creates that threw in step 2 left a visible-after-refresh container
@@ -60,29 +60,29 @@ card references** (§4 below) — which is also why the orphan scan found 0: tho
 `data.db`.
 
 **Open.** The editor routes (shared scaffold `useEigenDocEditorRoute`,
-`packages/ui/src/hooks/use-eigen-doc-editor-route.ts`) fetch `GET /collab/:o/:m/:p/info` — metadata +
+`../../packages/ui/src/hooks/use-eigen-doc-editor-route.ts`) fetch `GET /collab/:o/:m/:p/info` — metadata +
 ACL only, fast even mid-outage — then connect the collab WebSocket. The WS `open` handler
-(`apps/api/src/routes/collab.ts`) calls `drive.getCollabDocument` → `CollabDocument.init` →
+(`../../apps/api/src/routes/collab.ts`) calls `drive.getCollabDocument` → `CollabDocument.init` →
 `openDatabase`, whose `onOpen` does the cold S3 GET of `data.db`. That GET is the ~1-minute open. The
-client (`apps/docs/src/components/docs/editor.tsx` and its three siblings) renders `LoadingState`
+client (`../../apps/docs/src/components/docs/editor.tsx` and its three siblings) renders `LoadingState`
 until y-websocket's `sync` event; on server failure the WS closes `1008 'Failed to open document'`
 and y-websocket silently reconnects forever — slow storage, erroring storage, and a genuinely broken
 doc all look like the same infinite spinner. Worse, `useCollabDocumentInfo`
-(`packages/lib/src/core/collab/hooks/use-collab.ts`) deliberately maps *every* error — 503s included —
+(`../../packages/lib/src/core/collab/hooks/use-collab.ts`) deliberately maps *every* error — 503s included —
 to `{ canRead: false }`, so an infrastructure failure on the info call renders `RequestAccessView`:
 "request access" for a doc the user owns.
 
-**Timeouts.** There is no client-side timeout: the Eden Treaty client (`packages/lib/src/core/api.ts`)
+**Timeouts.** There is no client-side timeout: the Eden Treaty client (`../../packages/lib/src/core/api.ts`)
 sets only `credentials: 'include'`. The Caddyfile defines no `reverse_proxy` timeouts (Caddy defaults
 to none). The one candidate in the chain is Bun's serve `idleTimeout` (not set in
-`apps/api/src/index.ts`, Bun's default is ~10 s) — but a severed socket surfaces as a fetch rejection
+`../../apps/api/src/index.ts`, Bun's default is ~10 s) — but a severed socket surfaces as a fetch rejection
 ("Failed to fetch"), not the `Internal server error (500)` the testers quoted, so the incident's 500s
 were real API responses, per the trace above. Whether `idleTimeout` bites genuinely slow (>10 s)
 requests is **unverified** — flagged in Open Questions.
 
 ### Corrections to the roadmap's dated section
 
-Reading the source contradicts the 2026-07-03 section of [ROADMAP.md](ROADMAP.md) on three points
+Reading the source contradicts the 2026-07-03 section of [ROADMAP.md](../ROADMAP.md) on three points
 (its line-number pointers have also drifted; this proposal supersedes them with symbols):
 
 1. **"Slow-but-successful creates the client/proxy timed out on"** — no client or proxy timeout
@@ -128,8 +128,8 @@ Reading the source contradicts the 2026-07-03 section of [ROADMAP.md](ROADMAP.md
 
 All "new doc/board/sheet/chat" entry points (drive New menu, palette `create.*` commands, the four
 eigendoc sidebars, chat sidebar) funnel into the shared `DriveCreateEigenDoc` dialog
-(`packages/ui/src/components/drive/drive-create-eigendoc.tsx`) → `useCreateDriveItem`
-(`packages/lib/src/core/drive/hooks/writes.ts`). One dialog, one hook — one place to fix.
+(`../../packages/ui/src/components/drive/drive-create-eigendoc.tsx`) → `useCreateDriveItem`
+(`../../packages/lib/src/core/drive/hooks/writes.ts`). One dialog, one hook — one place to fix.
 
 **Pending state.** Today `DriveLocationPicker.handleSubmit` calls `onConfirm(...)` and
 `onOpenChange(false)` synchronously: the dialog closes before the request resolves, so the user has
@@ -164,7 +164,7 @@ try {
 - Only when reconcile comes up empty does the mutation reject → `onMutationError` toasts. The toast
   copy is honest about the remaining ambiguity: *"Storage is responding slowly — creation may still
   complete; it will appear in the list automatically."* (True: on late success the server emits
-  `DRIVE_FILE_CREATED`, and the existing handler in `packages/lib/src/core/drive/sse-handlers.ts`
+  `DRIVE_FILE_CREATED`, and the existing handler in `../../packages/lib/src/core/drive/sse-handlers.ts`
   invalidates both the folder listing and the per-mime listing the eigendoc sidebars use.)
 - On the reconciled-success path, skip `window.open` (the user gesture is long gone; popup blockers
   would eat it anyway) — the row appearing in the listing plus the dialog closing is the feedback.
@@ -215,7 +215,7 @@ try {
   the row is brand-new and never announced, so trash semantics, ACL side effects, and delete-SSE
   don't apply. `Mount.deletePath` recursively removes any children the failed attempt did create
   (`media`/`chat` subfolders, a surviving managed-db row), cancels queued uploads for them
-  (invariant 7 in [SYNC.md](SYNC.md)), and is SSE-silent.
+  (invariant 7 in [SYNC.md](../SYNC.md)), and is SSE-silent.
 - **`seedCommentRow` inside the guard** (Q6, decided): if seeding fails, the client sees a failed
   create and never writes the card — a fully provisioned chat would be exactly the §4 litter.
   Rolling the chat back converts "dangling container" into "clean retry".
@@ -261,11 +261,11 @@ Three minimal changes, no new machinery:
 
 Explicitly out: retry/backoff loops in the open hook (y-websocket and TanStack Query already retry),
 and any loosening of the strict-open 503 — `mustExist` refuses silent empty-db materialisation
-([SYNC.md](SYNC.md) § Recovery integrity) and stays untouched.
+([SYNC.md](../SYNC.md) § Recovery integrity) and stays untouched.
 
 ## 4 — Dangling card-chats (optional phase)
 
-`useCreateCommentCard` (`packages/lib/src/core/comments/hooks/use-create-comment-card.ts`) awaits the
+`useCreateCommentCard` (`../../packages/lib/src/core/comments/hooks/use-create-comment-card.ts`) awaits the
 HTTP `create/chat` and writes the card (with `chatName`) into the board's Yjs only after it resolves.
 A create that succeeded but errored past the client (the step-3 500s) leaves a valid, invisible chat
 container in the board's `chat/` subfolder. Cosmetic litter; nothing breaks.
@@ -278,9 +278,9 @@ name and proceed to write the card if found; a retry of the same intent reuses t
 *before* the HTTP create was considered and rejected: it inverts the litter into cards pointing at
 chats that never materialised, which is user-visible breakage rather than invisible litter.
 
-**Cleanup (Q4, decided): one-off maintenance script, not a sweep check.** A `scripts/` script that,
+**Cleanup (Q4, decided): one-off maintenance script, not a sweep check.** A `../../scripts` script that,
 per board container, loads `data.db` server-side and collects `chatName` from the `tasks`/`comments`
-Y maps (the extract-text loaders in `apps/api/src/lib/document/stickies.ts` already read exactly
+Y maps (the extract-text loaders in `../../apps/api/src/lib/document/stickies.ts` already read exactly
 these maps server-side — extend that reader to surface `chatName`), lists the `chat/` subfolder, and
 reports unreferenced chat containers older than a 24 h grace window (never race an in-flight create).
 Report-only by default; `--trash` moves them via `Drive.deletePath` — the normal app delete, which
@@ -320,7 +320,7 @@ pending state and the doc appears exactly once even if the request is slow or er
 - **Q3 — Does Bun's default `idleTimeout` sever slow requests?** Unverified; if it does (~10 s), slow
   creates/exports die at the socket regardless of client patience. *Recommendation:* measure with a
   delayed `exists` on a local run; if confirmed, set an explicit `idleTimeout` in `app.listen`
-  (`apps/api/src/index.ts`) as part of Phase 2 — a deliberate number, not Bun's default.
+  (`../../apps/api/src/index.ts`) as part of Phase 2 — a deliberate number, not Bun's default.
 - **Q4 — Dangling-chat cleanup placement.** Decided above: one-off script now, sweep only on
   recurrence. *Recommendation:* script, report-only default.
 - **Q5 — WS close-code vocabulary.** `1013` for storage-unavailable is the standards-shaped choice;
@@ -343,7 +343,7 @@ pending state and the doc appears exactly once even if the request is slow or er
 ## Testing
 
 **Unit (backend, §2).** Extract the existing `FaultStorage` test double
-(`apps/api/src/test/storage/sync-resilience.test.ts` — a `StorageBackend` wrapper over `LocalStorage` with
+(`../../apps/api/src/test/storage/sync-resilience.test.ts` — a `StorageBackend` wrapper over `LocalStorage` with
 injectable write delays/failures) into a shared test helper — `mount-mutation-sync.test.ts` already
 carries a sibling `S3LikeStorage`, so this is the third copy — and extend it with `failNextExists` /
 `existsDelayMs`. Then, in a `create-resilience.test.ts` using the established
@@ -363,7 +363,7 @@ tests use, promoted behind a flag so the full HTTP stack can be exercised.
 **Frontend (§1).** The pending/reconcile behaviour is hook logic; its deterministic branch (POST
 aborts → listing refetch finds the row → mutation resolves) is assertable with a mocked treaty call +
 mocked listing response where FE test scaffolding exists. The real gate is the manual
-[VERIFICATION.md](VERIFICATION.md) recipe against the dev app with the fault flag set: create a doc
+[VERIFICATION.md](../VERIFICATION.md) recipe against the dev app with the fault flag set: create a doc
 under `exists-delay` and read the screenshots — confirm button pends, dialog closes once, exactly one
 row in the listing (and in the sidebar's per-mime listing); under `exists-throw`, the honest toast,
 no phantom row, and a clean successful retry. For §3, open an existing doc under delay and confirm

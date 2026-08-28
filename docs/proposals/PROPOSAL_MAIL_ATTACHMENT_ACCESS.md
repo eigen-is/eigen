@@ -20,7 +20,7 @@
 > `openSignup: false` servers. Revised 2026-08-14 after two independent review passes; all
 > findings are folded in below.
 
-> **Shipped 2026-08-14.** As-built with two deviations from this design, which stays the design record: (1) the send payload carries `grantAccessRefIds: string[]` (the reference ids to share) rather than `grantReadAccess: boolean`, since an array lets one send grant some references and not others; (2) the pinned Message-ID and threading headers apply to *every* `messageSend`, not only split sends, because a copy-count-conditional Message-ID would be two behaviours for one fact. Both surfaces are documented in [MAIL.md § Send path](MAIL.md#send-path) and [§ Send-time access grants](MAIL.md#send-time-access-grants).
+> **Shipped 2026-08-14.** As-built with two deviations from this design, which stays the design record: (1) the send payload carries `grantAccessRefIds: string[]` (the reference ids to share) rather than `grantReadAccess: boolean`, since an array lets one send grant some references and not others; (2) the pinned Message-ID and threading headers apply to *every* `messageSend`, not only split sends, because a copy-count-conditional Message-ID would be two behaviours for one fact. Both surfaces are documented in [MAIL.md § Send path](../MAIL.md#send-path) and [§ Send-time access grants](../MAIL.md#send-time-access-grants).
 
 ## Goals
 
@@ -105,7 +105,7 @@ On send (`Mail.messageSend`, `apps/api/src/lib/mail/mail-domain.ts:538-575`):
   nodemailer-generated ID — a pre-existing Sent-vs-wire mismatch.
 - **No ACL change happens anywhere on the mail send path.**
 
-The link machinery that already exists (`apps/api/src/lib/core/mail-template.ts`):
+The link machinery that already exists (`../../apps/api/src/lib/core/mail-template.ts`):
 
 - `buildReferenceUrl(ref)` (`:49-68`) — per-type URLs
   (`{DOCS}/doc/{ownerId}/{mountId}/{id}`, `{DRIVE}/fs/…` for folders, …), absolutised
@@ -141,7 +141,7 @@ Access semantics this proposal must respect:
   propagation options, unlike `Drive.updateACLDelta` (`drive.ts:781-789`); the sole caller
   passing options today does so on raw Drive (`apps/api/src/routes/chat.ts:99-106`).
 
-The guest/registry flow this proposal leans on ([GUEST-ACCESS.md](GUEST-ACCESS.md)):
+The guest/registry flow this proposal leans on ([GUEST-ACCESS.md](../GUEST-ACCESS.md)):
 
 - Sharing with an unknown email creates a share-registry entry
   (`acl-propagation.ts:17-39` → `apps/api/src/lib/share/registry.ts:5-11` —
@@ -279,7 +279,7 @@ New route `POST /drive/:ownerId/:mountId/path/:pathId/access-check`, body
 - `canShare: false` (with 200) when the sender can read but lacks the share capability — the
   dialog renders those references as non-actionable notes. **403 only for paths the caller
   cannot read.** Treating "can't share" as data rather than an error keeps it off the
-  `onMutationError` toast path ([NOTIFICATIONS.md](NOTIFICATIONS.md)) — it's a routine
+  `onMutationError` toast path ([NOTIFICATIONS.md](../NOTIFICATIONS.md)) — it's a routine
   outcome, not a failure.
 - A stale reference (target deleted or moved since attach) 404s; the FE treats it as
   non-checkable — no prompt for it, mail sends as-is (the link may be dead, exactly as
@@ -311,8 +311,8 @@ recipients needing a grant; otherwise send exactly as today with no dialog.
   share ("You can't share *Budget* — recipients can request access"), chat references
   ("Chat invitations aren't granted from mail"), and — whenever needing Bcc recipients
   exist — "Bcc recipients are not granted access".
-- The check + dialog are compose-side UI in `apps/mail`; the mutations stay in hooks per
-  [NOTIFICATIONS.md](NOTIFICATIONS.md).
+- The check + dialog are compose-side UI in `../../apps/mail`; the mutations stay in hooks per
+  [NOTIFICATIONS.md](../NOTIFICATIONS.md).
 
 ### 4 — Grant at send + notification suppression (Phase 2)
 
@@ -367,7 +367,7 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
 - **Sender can't share** (read-only access to someone else's doc): the reference shows as a
   non-actionable note if a dialog opens at all; links go out with `?email=` (Phase 1
   behaviour); externals land on guest login → doc → `RequestAccessView`, the existing,
-  working fallback ([GUEST-ACCESS.md](GUEST-ACCESS.md) § access requests).
+  working fallback ([GUEST-ACCESS.md](../GUEST-ACCESS.md) § access requests).
 - **Bcc'd externals**: their copy is personalised (Phase 1) but never granted (decided). On
   `openSignup: false` servers they cannot log in — the accepted trade-off; use To/Cc or the
   share dialog for someone who must have access.
@@ -405,7 +405,7 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
 
 - **Canonicaliser unit tests**: group flattening, cross-field dedupe with to > cc > bcc
   precedence, case-insensitive internal/external classification, caps → 400.
-- **Send tests** (extend `apps/api/src/test/mail/mail-drive-attachments.test.ts`, send-bake test
+- **Send tests** (extend `../../apps/api/src/test/mail/mail-drive-attachments.test.ts`, send-bake test
   at `:403-455`): mixed internal/external recipients produce one internal + N external
   copies; external copies carry `?email=<that recipient>` in **both** HTML and text;
   assertions run against the final nodemailer options (envelope `{ from, to }` per copy,
@@ -426,7 +426,7 @@ SMTP copy so every registry entry exists the moment a recipient clicks.
   aborted, earlier grants persist; team-owned doc on a closed-signup server → OTP login
   works, doc opens, shared-with-me mirror and notification row present (after the
   reconciliation fix).
-- Manual end-to-end (per [VERIFICATION.md](VERIFICATION.md)): `openSignup: false` server,
+- Manual end-to-end (per [VERIFICATION.md](../VERIFICATION.md)): `openSignup: false` server,
   mail an eigendoc to an external address, click the link, OTP login with prefilled email,
   document opens.
 - `bun run check`.

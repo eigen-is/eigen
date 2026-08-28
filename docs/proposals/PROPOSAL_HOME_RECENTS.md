@@ -8,7 +8,7 @@
 > collab-doc open), cross-home via `home-relay` — the FE only reads. No SSE, no
 > settings toggles in v1 (per-kind *Clear* instead). Auto-pruned from the per-Home
 > lifecycle. Viewer-side sibling of the owner-side activity timeline in
-> [FILE-HISTORY.md](FILE-HISTORY.md).
+> [FILE-HISTORY.md](../FILE-HISTORY.md).
 >
 > *Revised 2026-06-12 after code verification + adversarial review: corrected the
 > derive-vs-store argument (`emails.recipientsAll` exists) and the method names
@@ -34,8 +34,8 @@
 - **Cross-user recents.** Each user has their own. Team-context writes touch the
   *typing user's* recents via the relay, never the team's.
 - **Audit logging.** Recents is best-effort, lossy, prunable. The audit-shaped
-  timeline is `file_events` ([FILE-HISTORY.md](FILE-HISTORY.md)).
-- **Full-text search across recents.** See `SEARCH.md`.
+  timeline is `file_events` ([FILE-HISTORY.md](../FILE-HISTORY.md)).
+- **Full-text search across recents.** See `../SEARCH.md`.
 - **Settings toggles in v1.** Per-kind *Clear* covers the privacy story; an
   `UserSettings.recents` enable flag is an additive JSON field on the existing
   per-user `settings.json` store later, if asked — no migration.
@@ -48,10 +48,10 @@ Derivation at query time was investigated. One earlier claim here was wrong and 
 corrected:
 
 - **Mail**: `emails.recipientsAll` **does** exist (mail.db v3,
-  `apps/api/src/lib/mail/schema.ts`, FTS-indexed) — recent mail recipients *are*
+  `../../apps/api/src/lib/mail/schema.ts`, FTS-indexed) — recent mail recipients *are*
   derivable today.
 - **Drive ACL**: a JSON array in the single `shared_paths.acl` column
-  (`apps/api/src/lib/drive/sharedschema.ts`). No index on grantees — JSON1
+  (`../../apps/api/src/lib/drive/sharedschema.ts`). No index on grantees — JSON1
   extraction is a full table scan per autosuggest keystroke.
 - **Chat mentions**: `comment_mentions(chatName, email)` exists but has **no
   timestamp** — you can't order by recency.
@@ -117,8 +117,8 @@ The FE never writes recents. Each touch happens on the canonical commit path:
 
 | Source | Where | Path to the actor's home |
 |---|---|---|
-| Mail send | `Mail.messageSend()` (`apps/api/src/lib/mail/mail-domain.ts`), after sendmail succeeds (failed sends don't pollute) | direct — own home |
-| ACL grant | `Drive.updateACL()` added-entries diff | **relay** — runs in the owner's (possibly team) home. The actor is available as a full `User`: `Drive.updateACL` takes `actor?: User \| null` (`apps/api/src/lib/drive/drive.ts`) and `file_events` carries `actorUserId` / `actorEmail` (`apps/api/src/lib/mount/schema.ts`), so recents reads `actorUserId` directly to address the actor's home. No prerequisite left |
+| Mail send | `Mail.messageSend()` (`../../apps/api/src/lib/mail/mail-domain.ts`), after sendmail succeeds (failed sends don't pollute) | direct — own home |
+| ACL grant | `Drive.updateACL()` added-entries diff | **relay** — runs in the owner's (possibly team) home. The actor is available as a full `User`: `Drive.updateACL` takes `actor?: User \| null` (`../../apps/api/src/lib/drive/drive.ts`) and `file_events` carries `actorUserId` / `actorEmail` (`../../apps/api/src/lib/mount/schema.ts`), so recents reads `actorUserId` directly to address the actor's home. No prerequisite left |
 | Chat mention commit | `ChatRoom.postMessage` mention extraction (`chat.ts`); the actor's user id arrives from the chat route | **relay** |
 | Collab doc open | the `GET /collab/:ownerId/:mountId/:pathId/info` handler, after its `canRead` check — the one seam all four eigendoc editors share (`useEigenDocEditorRoute` → `useCollabDocumentInfo`; its 60 s `staleTime` gives open-debouncing for free) | **relay** (`sendToHome(user.id, …)`) — zero FE code; future eigendoc apps are covered automatically |
 
@@ -167,7 +167,7 @@ the event together with that view, not before.
 
 From the per-Home lifecycle — homes idle-evict on a per-type window (`UserHome`
 5 minutes, `TeamHome` 30 minutes via `TEAM_HOME_IDLE_MS`,
-`apps/api/src/lib/home/team-home.ts`) and there is no global home registry, so no
+`../../apps/api/src/lib/home/team-home.ts`) and there is no global home registry, so no
 scheduler tick. Recents lives on `UserHome` only, so the 5-minute window is the
 one that paces pruning:
 
@@ -213,14 +213,14 @@ as-is.
 | `packages/lib/src/types/recents.ts`                               | `EmailRecent`, `FileRecent` shared types                       |
 | `apps/api/src/lib/recents/recents.ts`                             | `Recents` domain class (touch, list, clear, prune)             |
 | `apps/api/src/lib/recents/schema.ts` + `db-config.ts`             | Tables + v1 config                                             |
-| `apps/api/src/lib/home/home.ts` / `user-home.ts`                  | `hasRecents` flag; UserHome wiring                             |
-| `apps/api/src/lib/home/home-relay.ts`                             | `recents:touch` `HomeMessage` variant, guarded by `hasRecents` |
-| `apps/api/src/lib/mail/mail-domain.ts`                            | Touch recipients after `messageSend` success                   |
-| `apps/api/src/lib/drive/drive.ts`                                 | `updateACL` added-entries diff → relay touch (reuses the landed `actor: User` threading) |
-| `apps/api/src/lib/chat/chat.ts`                                   | Mention commit → relay touch                                   |
-| `apps/api/src/routes/collab.ts`                                   | `info` handler → relay touch after `canRead`                   |
+| `../../apps/api/src/lib/home/home.ts` / `user-home.ts`                  | `hasRecents` flag; UserHome wiring                             |
+| `../../apps/api/src/lib/home/home-relay.ts`                             | `recents:touch` `HomeMessage` variant, guarded by `hasRecents` |
+| `../../apps/api/src/lib/mail/mail-domain.ts`                            | Touch recipients after `messageSend` success                   |
+| `../../apps/api/src/lib/drive/drive.ts`                                 | `updateACL` added-entries diff → relay touch (reuses the landed `actor: User` threading) |
+| `../../apps/api/src/lib/chat/chat.ts`                                   | Mention commit → relay touch                                   |
+| `../../apps/api/src/routes/collab.ts`                                   | `info` handler → relay touch after `canRead`                   |
 | `apps/api/src/routes/recents.ts`                                  | GET/DELETE per kind, `requireSelf` + `requireNonGuest`         |
 | `packages/lib/src/core/recents/hooks/use-recents.ts`              | `useRecentEmails`, `useRecentFiles`, `recentsKeys`, invalidations |
-| `packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts` | Recents as third suggestion source                             |
-| `packages/lib/src/core/command-palette/`                          | *Recent files* section in the empty state                      |
+| `../../packages/lib/src/core/contacts/hooks/use-contact-suggestions.ts` | Recents as third suggestion source                             |
+| `../../packages/lib/src/core/command-palette`                          | *Recent files* section in the empty state                      |
 | Space settings                                                     | Two *Clear my recents* actions                                 |

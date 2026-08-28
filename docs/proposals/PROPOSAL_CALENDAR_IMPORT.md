@@ -5,7 +5,7 @@
 > calendars, etc.). Treat a subscription as a flavour of `Calendar`, not a separate entity: a row in
 > the `calendars` table is either *owned* (writable, current behaviour) or *subscribed* (read-only,
 > refreshed from a URL) based on a nullable `subscription` JSON column. Reuse `parseIcs()`
-> (`apps/api/src/lib/caldav/ical-parse.ts`, already running for iMIP and CalDAV PUT) and the
+> (`../../apps/api/src/lib/caldav/ical-parse.ts`, already running for iMIP and CalDAV PUT) and the
 > calendar DB's existing etag/ctag/tombstone conventions — but apply feed snapshots through one new
 > bulk transaction, **not** by looping the public `createEvent`/`deleteEvent` (which would fire
 > per-event SSE, per-event ctag bumps, and — dangerously — iMIP cancellation propagation for feed
@@ -18,7 +18,7 @@
 > multi-tenant deployments. HTTP Basic auth and two-way CalDAV write-back are explicit non-goals.
 
 Status: **not started** (verified against code 2026-07-06 — no subscription/import code exists
-anywhere in `apps/api/src/lib/calendar/` or `apps/api/src/routes/calendar.ts`).
+anywhere in `../../apps/api/src/lib/calendar` or `../../apps/api/src/routes/calendar.ts`).
 
 ## Goals
 
@@ -31,7 +31,7 @@ anywhere in `apps/api/src/lib/calendar/` or `apps/api/src/routes/calendar.ts`).
 4. CalDAV clients (Apple Calendar, Thunderbird, etc.) see subscribed calendars and their events,
    marked read-only.
 5. Reuse the existing iCal pipeline where reuse is *safe*: `parseIcs()` (parsing, RRULE DoS guards,
-   TZID normalisation, EXDATE synthesis), `computeEtag` (`apps/api/src/lib/calendar/mappers.ts`),
+   TZID normalisation, EXDATE synthesis), `computeEtag` (`../../apps/api/src/lib/calendar/mappers.ts`),
    the ctag/eventCtag/tombstone sync conventions, and the existing SSE event types. Do not
    introduce a parallel "imported event" *data model* — imported events are ordinary `events` rows.
 
@@ -48,7 +48,7 @@ anywhere in `apps/api/src/lib/calendar/` or `apps/api/src/routes/calendar.ts`).
 - **Subscription-level discovery** (CalDAV `PROPFIND` on a remote root to enumerate calendars). A
   subscription is a single feed URL.
 - **Server-side background refresh for calendars nobody is reading.** Reminders are delivered
-  client-side in Eigen (there is no server-side reminder job in `apps/api/src/lib/scheduler/jobs.ts`),
+  client-side in Eigen (there is no server-side reminder job in `../../apps/api/src/lib/scheduler/jobs.ts`),
   so freshness only matters at read time — and every reader triggers a refresh (see § Refresh
   mechanism).
 
@@ -71,7 +71,7 @@ feed event.
 ## Architecture
 
 A subscription is **a flavour of calendar, not a separate entity**. The `calendars` table
-(`apps/api/src/lib/calendar/schema.ts`) gains one nullable JSON column:
+(`../../apps/api/src/lib/calendar/schema.ts`) gains one nullable JSON column:
 
 ```typescript
 // CalendarSubscription in packages/lib/src/types/calendar.ts
@@ -103,7 +103,7 @@ existing owned calendar.
 
 ### Migration
 
-`CALENDAR_DB_CONFIG` (`apps/api/src/lib/calendar/db-config.ts`) is a versioned `DatabaseConfig`
+`CALENDAR_DB_CONFIG` (`../../apps/api/src/lib/calendar/db-config.ts`) is a versioned `DatabaseConfig`
 currently at `currentVersion: 1`; `ManagedDatabase` runs pending migrations on open. Bump to
 `currentVersion: 2` and add:
 
@@ -123,21 +123,21 @@ Refresh is **on-access only**. Three triggers, all funnelling into one
 `subscription IS NOT NULL AND lastFetchedAt + refreshIntervalMs < now`:
 
 1. **Web read.** In the `GET /calendar/:ownerId/event-range/:from/:to` handler
-   (`apps/api/src/routes/calendar.ts`), after the events query returns, fire-and-forget
+   (`../../apps/api/src/routes/calendar.ts`), after the events query returns, fire-and-forget
    `cal.refreshDueSubscriptions().catch(...)`. The current request returns potentially-stale data;
    when the refresh lands it broadcasts the existing `CALENDAR_EVENT_UPDATED` /`CALENDAR_UPDATED`
-   SSE events, which the existing handler in `packages/lib/src/core/calendar/sse-handlers.ts`
+   SSE events, which the existing handler in `../../packages/lib/src/core/calendar/sse-handlers.ts`
    already routes to query invalidation — the UI updates within seconds.
 2. **CalDAV read.** Same fire-and-forget hook where the CalDAV layer serves a calendar collection
    (calendar-collection PROPFIND / calendar-query & sync REPORT paths in
-   `apps/api/src/lib/caldav/caldav-router.ts`). A Mac with Apple Calendar polling every 5–15
+   `../../apps/api/src/lib/caldav/caldav-router.ts`). A Mac with Apple Calendar polling every 5–15
    minutes therefore keeps the feed fresh with no browser tab open — the poll itself opens the
    Home and triggers the refresh, and the *next* poll picks up the new ctag.
 3. **Manual.** `POST /calendar/:ownerId/subscriptions/:calId/refresh` — the sidebar's
    "Refresh now", which ignores `refreshIntervalMs`.
 
 **Deliberately rejected: timers.** The codebase *does* have scheduler infrastructure —
-`scheduleInterval(name, ms, fn)` in `apps/api/src/lib/scheduler/scheduler.ts`, registered in
+`scheduleInterval(name, ms, fn)` in `../../apps/api/src/lib/scheduler/scheduler.ts`, registered in
 `jobs.ts` — but a server-wide sweep would have to enumerate and open every Home that might hold a
 subscription (~30 fds per open Home, see `PROPOSAL_FD_BUDGET.md`) to refresh feeds nobody is
 looking at. A per-Home `setInterval` has the same "refresh what nobody reads" property plus a
@@ -270,7 +270,7 @@ hand-created ones.
 
 ## Frontend UX
 
-The "+" button in `apps/calendar/src/components/calendar-sidebar.tsx` becomes a small dropdown:
+The "+" button in `../../apps/calendar/src/components/calendar-sidebar.tsx` becomes a small dropdown:
 
 - **New calendar** (existing flow)
 - **Subscribe to URL…** (new dialog)
@@ -296,7 +296,7 @@ The "+" button in `apps/calendar/src/components/calendar-sidebar.tsx` becomes a 
 - Submit → `POST /calendar/:ownerId/imports` (multipart).
 
 Both dialogs follow the shared Dialog components used by
-`apps/calendar/src/components/calendar-config-dialog.tsx`.
+`../../apps/calendar/src/components/calendar-config-dialog.tsx`.
 
 ### Sidebar treatment of subscribed calendars
 
@@ -306,7 +306,7 @@ A small `Globe` icon (lucide-react) renders next to the calendar name. Context m
 - **Edit subscription** → the Subscribe dialog pre-filled (URL and interval editable, preview
   re-runs).
 - **Unsubscribe** → standard delete via `DeleteDialog` from
-  `packages/ui/src/components/delete/`. No special unsubscribe path — `deleteCalendar(id)`
+  `../../packages/ui/src/components/delete`. No special unsubscribe path — `deleteCalendar(id)`
   cascades events as today (its share-revocation propagation included).
 
 Error state from `subscription.lastError` shows as a small red dot next to the Globe icon, with
@@ -315,7 +315,7 @@ the message in a tooltip.
 ### Event detail for subscribed events
 
 When an event in a subscribed calendar is opened
-(`apps/calendar/src/components/event-detail-dialog.tsx` / `edit-event-dialog.tsx`), render title,
+(`../../apps/calendar/src/components/event-detail-dialog.tsx` / `edit-event-dialog.tsx`), render title,
 time, location, attendees, recurrence as read-only text. Colour and reminder fields stay editable —
 the local overrides that survive refresh.
 
@@ -380,7 +380,7 @@ Two pieces:
    `<write/>`/`<write-content/>`) in calendar-collection PROPFIND responses for subscribed
    calendars, so Apple Calendar / Thunderbird grey out editing. Note this property is **not
    emitted at all today** — this is a new property in the PROPFIND generation for calendar
-   collections (`apps/api/src/lib/caldav/caldav-router.ts` + the props builders it uses), added
+   collections (`../../apps/api/src/lib/caldav/caldav-router.ts` + the props builders it uses), added
    only for subscribed collections (owned collections keep today's behaviour; clients assume
    writable in the property's absence).
 
@@ -426,19 +426,19 @@ Thunderbird. Users coming from any of those products will have correct expectati
 
 | Layer | File | Change |
 |---|---|---|
-| Schema | `apps/api/src/lib/calendar/schema.ts` | Nullable `subscription` JSON column on `calendars`. |
-| Migration | `apps/api/src/lib/calendar/db-config.ts` | `currentVersion` 1 → 2; `ALTER TABLE calendars ADD COLUMN subscription TEXT`. |
-| Domain | `apps/api/src/lib/calendar/calendar.ts` | `assertWritableCalendar` + calls in `createEvent`/`updateEvent`/`deleteEvent` (with the local-override carve-out in `updateEvent`); `checkPermission` clamp; `refreshDueSubscriptions` entry point + in-flight `Set`. |
+| Schema | `../../apps/api/src/lib/calendar/schema.ts` | Nullable `subscription` JSON column on `calendars`. |
+| Migration | `../../apps/api/src/lib/calendar/db-config.ts` | `currentVersion` 1 → 2; `ALTER TABLE calendars ADD COLUMN subscription TEXT`. |
+| Domain | `../../apps/api/src/lib/calendar/calendar.ts` | `assertWritableCalendar` + calls in `createEvent`/`updateEvent`/`deleteEvent` (with the local-override carve-out in `updateEvent`); `checkPermission` clamp; `refreshDueSubscriptions` entry point + in-flight `Set`. |
 | Subscription core | `apps/api/src/lib/calendar/subscription.ts` *(new)* | Fetch policy (SSRF §), conditional-header fetch, redirect loop, `applyFeedSnapshot` diff (single transaction, one ctag bump, tombstones), preview, import bulk insert. Plain functions over `Calendar`, like `share-propagation.ts`. |
-| Routes | `apps/api/src/routes/calendar.ts` | `POST /calendar/:ownerId/subscriptions`, `…/subscriptions/preview`, `…/subscriptions/:calId/refresh`, `POST /calendar/:ownerId/imports`; fire-and-forget refresh hook in the event-range GET. |
-| CalDAV | `apps/api/src/lib/caldav/caldav-router.ts` | `current-user-privilege-set` on subscribed collections; fire-and-forget refresh hook on calendar-collection reads. |
-| Server settings | `apps/api/src/lib/config/server-settings.ts` | `calendar.allowPrivateFeedUrls` (default `true`). |
-| Types | `packages/lib/src/types/calendar.ts` | `CalendarSubscription`; `subscription?` on `CalendarItem`. |
-| Hooks | `packages/lib/src/core/calendar/hooks/use-calendar.ts` | `useCreateSubscription`, `usePreviewSubscription`, `useRefreshSubscription`, `useImportIcs`; errors via `onMutationError`. |
+| Routes | `../../apps/api/src/routes/calendar.ts` | `POST /calendar/:ownerId/subscriptions`, `…/subscriptions/preview`, `…/subscriptions/:calId/refresh`, `POST /calendar/:ownerId/imports`; fire-and-forget refresh hook in the event-range GET. |
+| CalDAV | `../../apps/api/src/lib/caldav/caldav-router.ts` | `current-user-privilege-set` on subscribed collections; fire-and-forget refresh hook on calendar-collection reads. |
+| Server settings | `../../apps/api/src/lib/config/server-settings.ts` | `calendar.allowPrivateFeedUrls` (default `true`). |
+| Types | `../../packages/lib/src/types/calendar.ts` | `CalendarSubscription`; `subscription?` on `CalendarItem`. |
+| Hooks | `../../packages/lib/src/core/calendar/hooks/use-calendar.ts` | `useCreateSubscription`, `usePreviewSubscription`, `useRefreshSubscription`, `useImportIcs`; errors via `onMutationError`. |
 | SSE | — | **No new event type**; existing `CALENDAR_*` events + handlers suffice. |
-| Sidebar UI | `apps/calendar/src/components/calendar-sidebar.tsx` | "+" dropdown; Globe icon + error dot; context-menu items. |
+| Sidebar UI | `../../apps/calendar/src/components/calendar-sidebar.tsx` | "+" dropdown; Globe icon + error dot; context-menu items. |
 | Dialogs | `apps/calendar/src/components/subscribe-dialog.tsx`, `import-dialog.tsx` *(new)* | Shared Dialog system, modelled on `calendar-config-dialog.tsx`. |
-| Event detail | `apps/calendar/src/components/event-detail-dialog.tsx`, `edit-event-dialog.tsx` | Read-only rendering for subscribed events; colour/reminders stay editable. |
+| Event detail | `../../apps/calendar/src/components/event-detail-dialog.tsx`, `edit-event-dialog.tsx` | Read-only rendering for subscribed events; colour/reminders stay editable. |
 
 ## What's deferred
 
@@ -453,7 +453,7 @@ Thunderbird. Users coming from any of those products will have correct expectati
 
 ## Testing
 
-Extend `apps/api/src/test/calendar/calendar.test.ts` using `getTestContext()` / `authedRequest()` from
+Extend `../../apps/api/src/test/calendar/calendar.test.ts` using `getTestContext()` / `authedRequest()` from
 `setup.ts`, serving fixture feeds from an in-process `Bun.serve`:
 
 - Subscribe → events appear; feed change + refresh → adds/updates/deletes apply; tombstones exist

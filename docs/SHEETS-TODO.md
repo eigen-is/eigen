@@ -141,7 +141,7 @@ Verified, user-visible, bounded. None needs a decision first.
 
 ## Clipboard — put sheets on the shared system
 
-Goal: a sheets → sheets copy-paste must work **between browser tabs and between different user logins**, which means the complete payload has to live in the clipboard itself. The shared writer already produces exactly the right shape — real table HTML plus an Eigen metadata span in one `text/html` payload — and sheets already writes both. The gaps are on the read side and in the type model. See [CLIPBOARD.md](CLIPBOARD.md) and [PROPOSAL_COPY_PASTE.md](PROPOSAL_COPY_PASTE.md).
+Goal: a sheets → sheets copy-paste must work **between browser tabs and between different user logins**, which means the complete payload has to live in the clipboard itself. The shared writer already produces exactly the right shape — real table HTML plus an Eigen metadata span in one `text/html` payload — and sheets already writes both. The gaps are on the read side and in the type model. See [CLIPBOARD.md](CLIPBOARD.md) and [PROPOSAL_COPY_PASTE.md](proposals/PROPOSAL_COPY_PASTE.md).
 
 **Today, in one line:** sheets writes the eigen payload on every copy but can never read it back, because `components/Workbook/index.tsx:632` skips `readEigenClipboard` whenever the HTML contains `fortune-copy-action-table` — which sheets' own copy always emits (`state/modules/selection.ts:1495`). Same-tab paste is served from `ctx.copyState` in memory, so it looks perfect. **Cross-tab paste is already broken**: the receiving tab has no `copyState`, the marker still suppresses the eigen read, and it falls through to the foreign-HTML parser, losing formulas, number formats, CF rules, data validation and hyperlinks.
 

@@ -733,12 +733,12 @@ so a script's view of resources is identical to a hand-crafted API call from the
 
 | Domain | Resolver | Where routes use it today |
 |---|---|---|
-| Drive (incl. doc/sheets/slides readers) | `getSharedDrive(ownerId, user)` | `apps/api/src/routes/drive.ts`, `apps/api/src/routes/editor.ts` |
-| Calendar | `resolveCalendar(user, ownerId)` | `apps/api/src/routes/calendar.ts` |
-| Personal-only domains (notifications, settings, scripts itself) | `requireOwnerAccess(user.id, ownerId)` then `getHome(ownerId)` | A new helper in `apps/api/src/lib/core/access.ts` that dispatches via `parseOwnerId`: user → `requireSelf`, team → `requireTeamAccess`, org → org-membership check |
+| Drive (incl. doc/sheets/slides readers) | `getSharedDrive(ownerId, user)` | `../../apps/api/src/routes/drive.ts`, `../../apps/api/src/routes/editor.ts` |
+| Calendar | `resolveCalendar(user, ownerId)` | `../../apps/api/src/routes/calendar.ts` |
+| Personal-only domains (notifications, settings, scripts itself) | `requireOwnerAccess(user.id, ownerId)` then `getHome(ownerId)` | A new helper in `../../apps/api/src/lib/core/access.ts` that dispatches via `parseOwnerId`: user → `requireSelf`, team → `requireTeamAccess`, org → org-membership check |
 
 `requireOwnerAccess(userId, ownerId)` is the only **new** code, and it's a thin dispatcher over the existing
-`requireSelf` / `requireTeamAccess` / `requireAdmin` helpers in `apps/api/src/lib/core/access.ts`. It's
+`requireSelf` / `requireTeamAccess` / `requireAdmin` helpers in `../../apps/api/src/lib/core/access.ts`. It's
 useful both inside the SDK (for personal-only domains) and outside it (any future route that's owner-scoped
 across multiple home types).
 
@@ -955,7 +955,7 @@ New `apps/scripts/` app following standard eigen app patterns (`AppShell` + side
 
 ### Script Editor
 
-- Code editor panel (CodeMirror 6, already used in `apps/drive`) with JS syntax highlighting
+- Code editor panel (CodeMirror 6, already used in `../../apps/drive`) with JS syntax highlighting
 - Right `PropertiesPanel`: name, description, permission checkboxes, extensions editor, config key-value editor
 - "Run" button with output panel below the editor (console log + result JSON)
 - Future: trigger management (cron, event)
@@ -968,7 +968,7 @@ New `apps/scripts/` app following standard eigen app patterns (`AppShell` + side
 
 ## Frontend — Scripts Sidebar (`ScriptsPanel`)
 
-A shared component in `packages/ui`, following the same `PropertiesPanel` pattern as `CommentPanel`. Each app
+A shared component in `../../packages/ui`, following the same `PropertiesPanel` pattern as `CommentPanel`. Each app
 opts in via a toolbar toggle button.
 
 ### ScriptsPanel Component
@@ -1415,11 +1415,11 @@ event.
 
 `drive.readFile()` returns raw file data — useless for Yjs-backed documents. A scripting SDK that can only
 read binary Yjs blobs is not a real API. The consolidation this section originally proposed has since been
-built by the document-transform-workers program: `apps/api/src/lib/document/` holds one per-type module
+built by the document-transform-workers program: `../../apps/api/src/lib/document` holds one per-type module
 (`readEigendocFromDoc`, `readSheetsFromDoc`, `readDeckFromDoc`, plus the doc/sheets writers), and export,
 preview, import round-trips and search extraction all read through it inside the document-transform Worker —
 callers capture compressed blobs (`captureCollabSource`) and the Worker materializes them
-([DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)). What scripting still needs is the SDK-facing
+([DOCUMENT-CONTENT-LAYER.md](../DOCUMENT-CONTENT-LAYER.md)). What scripting still needs is the SDK-facing
 surface on top: `(user, ownerId, mountId, pathId)` addressing with ACL, and shaping into the content types
 below.
 
@@ -1525,7 +1525,7 @@ caller passes the author's `User` object, fetched via the auth layer at trigger 
 reader and writer always has a `User` in scope; there is no "headless" code path with a different ACL.
 
 **Sheets formula recalculation**: already wired — `readSheetsFromDoc` recalcs server-side when a doc needs it
-(gated on `sheetsNeedRecalc`, falling back to replayed values on failure; see [SHEETS.md](SHEETS.md)
+(gated on `sheetsNeedRecalc`, falling back to replayed values on failure; see [SHEETS.md](../SHEETS.md)
 § Server-side recalc). Script reads inherit it for free.
 
 **Sheets A1 notation**: parsed by `a1-notation.ts` with a real lexer (not a regex). Handles sheet names with
@@ -1537,7 +1537,7 @@ Fortune-sheet's Yjs document has two structures:
 - `state.snapshot` (Y.Map entry): JSON-serialized `Sheet[]` representing the last-flushed full state
 - `ops` (Y.Array): array of `Op[]` batches representing edits since the last snapshot
 
-The frontend (`apps/sheets/src/components/sheets/hooks/use-sheet.ts`) writes ops by pushing `[ops]` onto the
+The frontend (`../../apps/sheets/src/components/sheets/hooks/use-sheet.ts`) writes ops by pushing `[ops]` onto the
 Y.Array; remote clients observe the array and replay ops via `workbookRef.current.applyOp(ops)`. On
 `beforeunload` the leaving client flushes a fresh snapshot and clears the ops array.
 
@@ -1546,8 +1546,8 @@ Backend writes from the script SDK must use the **same ops mechanism**, not a sn
 - The sheet client's pending ops are wiped server-side
 - Live observers don't see the script's edit as a discrete change
 
-The read half of this module exists as built: `opToPatchOnSheets()` (`packages/lib/src/sheets/yjs-ops.ts`)
-is the pure replay step, and `replaySheetsOps()` (`packages/sheet/src/engine/replay-ops.ts`) drives it for
+The read half of this module exists as built: `opToPatchOnSheets()` (`../../packages/lib/src/sheets/yjs-ops.ts`)
+is the pure replay step, and `replaySheetsOps()` (`../../packages/sheet/src/engine/replay-ops.ts`) drives it for
 both the FE's initial load and the backend's `readSheetsFromDoc`. Phase 2 adds the write half next to it:
 
 ```typescript
@@ -1601,7 +1601,7 @@ This means:
 
 The same shared-ops pattern applies to docs (TipTap/y-prosemirror has `prosemirrorJSONToYDoc` for full-doc
 operations and `Y.applyUpdate(doc, update)` for incremental — both already used by `writeEigendocToYjs` /
-`writeEigendocUpdateToYjs` in `apps/api/src/lib/document/doc.ts`) and slides (Y.Map mutations on
+`writeEigendocUpdateToYjs` in `../../apps/api/src/lib/document/doc.ts`) and slides (Y.Map mutations on
 `slides`/`objects`/`slideOrder` — straightforward Yjs ops, no separate ops array).
 
 ### Document Writers (Phase 2)
@@ -1609,7 +1609,7 @@ operations and `Y.applyUpdate(doc, update)` for incremental — both already use
 Import-grade writers exist as built (`writeEigendocToYjs` / `writeEigendocUpdateToYjs` in
 `lib/document/doc.ts`, `writeSheetsToYjs` / `writeSheetsSnapshotToYjs` in `lib/document/sheets.ts`), but they
 snapshot-replace and wipe pending ops — unsafe while editors are connected
-([DOCUMENT-CONTENT-LAYER.md § Writers are unsafe against live editors](DOCUMENT-CONTENT-LAYER.md#writers-are-unsafe-against-live-editors)).
+([DOCUMENT-CONTENT-LAYER.md § Writers are unsafe against live editors](../DOCUMENT-CONTENT-LAYER.md#writers-are-unsafe-against-live-editors)).
 The SDK writers are the live-safe layer the scripting platform adds:
 
 ```typescript
@@ -1709,7 +1709,7 @@ The minimum that proves the full pipeline end-to-end, with read-only SDK and a w
   Content-Length JSON-RPC framing, frozen `eigen` global, capped log buffer)
 - `sdk-handler.ts` (typed `SDK_METHODS` registry with Zod schemas, handler-side ACL via existing
   `getSharedDrive` / `resolveCalendar` / new `requireOwnerAccess` helper, split error codes)
-- `requireOwnerAccess(userId, ownerId)` added to `apps/api/src/lib/core/access.ts` — thin dispatcher over
+- `requireOwnerAccess(userId, ownerId)` added to `../../apps/api/src/lib/core/access.ts` — thin dispatcher over
   existing `requireSelf` / `requireTeamAccess` / org-membership primitives
 - `proxy-fetch.ts` (manifest domain allowlist enforcement)
 - SSE events for execution lifecycle (including progress)
@@ -1717,13 +1717,13 @@ The minimum that proves the full pipeline end-to-end, with read-only SDK and a w
 - Personal scope only
 
 **Document content access** (the content layer itself exists as built — see
-[DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md)):
+[DOCUMENT-CONTENT-LAYER.md](../DOCUMENT-CONTENT-LAYER.md)):
 - `sdk-readers.ts` — `readDocContent` / `readSheetContent` / `readSlidesContent`: ACL via `getSharedDrive`,
   then `captureCollabSource` + a transform-Worker read over the as-built `*FromDoc` readers
 - `a1-notation.ts` — A1 notation parser (real lexer, not regex)
 - Shared types: `DocContent`, `SheetContent`, `SlidesContent`, `CellData` in `packages/lib/src/types/document.ts`
 
-**Shared Sheets Yjs Ops Module (`packages/lib/src/sheets/yjs-ops.ts`)** (the read/replay half exists as
+**Shared Sheets Yjs Ops Module (`../../packages/lib/src/sheets/yjs-ops.ts`)** (the read/replay half exists as
 built — `opToPatchOnSheets` + `replaySheetsOps`):
 - `pushOpsToYDoc(doc, ops)` — push an op batch, used by both FE and BE (Phase 2 BE writes)
 - `buildSetCellValueOp`, `buildSetCellRangeOp` — high-level op builders (used in Phase 2 BE writes; defined
@@ -1747,7 +1747,7 @@ built — `opToPatchOnSheets` + `replaySheetsOps`):
 
 **Frontend:**
 - Scripts app: list view + CodeMirror editor + "Run" button + output panel
-- `ScriptsPanel` in `packages/ui` (PropertiesPanel-based sidebar)
+- `ScriptsPanel` in `../../packages/ui` (PropertiesPanel-based sidebar)
 - `ScriptContextProvider` interface (selection state only, no document content)
 - Context providers for **Docs** (`selection` + `replaceSelection`, `insertText`, `insertContent`)
   and **Drive** (`selectedFiles` + `notify`)

@@ -268,7 +268,7 @@ overlaps with changed cells. If so, re-extract data via `extractChartData` and u
 Yjs map.
 
 **Toolbar:** Add an "Insert Chart" button to `ToolbarRightItems` in
-`apps/sheets/src/components/sheets/toolbar.tsx`. It reads the current selection from `workbookRef.current.getSelection()`,
+`../../apps/sheets/src/components/sheets/toolbar.tsx`. It reads the current selection from `workbookRef.current.getSelection()`,
 extracts data, opens the chart wizard dialog, and on confirm creates an entry in `Y.Map("charts")`.
 
 ### Integration: Docs (Tiptap)
@@ -282,7 +282,7 @@ Follow the `ResizableImage` extension pattern exactly:
 - `ReactNodeViewRenderer(ChartNodeView)` wraps `<EigenChart>` inside `<ImageResizeHandles>`
 - Editor command: `insertChart(definition: ChartDefinition)` -- inserts the node with serialized definition
 
-**Registration:** Add `ChartNode` to the extensions array in `apps/docs/src/components/docs/editor.tsx`, alongside
+**Registration:** Add `ChartNode` to the extensions array in `../../apps/docs/src/components/docs/editor.tsx`, alongside
 `ResizableImage` and `CommentMark`.
 
 **Data source:** In Phase 1-4, docs charts use `dataSource.kind: 'inline'` only. The chart wizard provides a table
@@ -290,7 +290,7 @@ input for manual data entry. In Phase 5, `sheet-range` sources are supported via
 
 ### Integration: Slides
 
-**Type extension in `apps/slides/src/components/slides/types.ts`:**
+**Type extension in `../../apps/slides/src/components/slides/types.ts`:**
 
 ```typescript
 type ChartObject = BaseObject & {
@@ -335,7 +335,7 @@ export const DEFAULT_CHART_OBJECT: Omit<ChartObject, 'id' | 'slideId' | 'definit
 
 ### Integration: Clipboard
 
-Extend `packages/lib/src/types/clipboard.ts`:
+Extend `../../packages/lib/src/types/clipboard.ts`:
 
 ```typescript
 type EigenClipboardChartItem = {
@@ -391,16 +391,16 @@ overlay and resize handles.
 
 | File | Change |
 |------|--------|
-| `packages/ui/package.json` | Add `recharts` dependency |
-| `packages/lib/src/types/clipboard.ts` | Add `EigenClipboardChartItem` to union |
-| `apps/slides/src/components/slides/types.ts` | Add `ChartObject` to `SlideObject` union |
-| `apps/slides/src/components/slides/hooks/use-deck.ts` | Add `'definition'` to `OBJECT_FIELDS` |
-| `apps/slides/src/components/slides/slide-object.tsx` | Add chart rendering branch |
-| `apps/docs/src/components/docs/editor.tsx` | Register `ChartNode` extension |
-| `apps/docs/src/components/docs/editor-toolbar.tsx` | Add "Insert Chart" button |
-| `apps/sheets/src/components/sheets/editor.tsx` | Render `<ChartOverlay>`, pass workbook ref |
-| `apps/sheets/src/components/sheets/toolbar.tsx` | Add "Insert Chart" button |
-| `apps/sheets/src/components/sheets/hooks/use-sheet.ts` | Initialize `Y.Map("charts")` in Yjs doc |
+| `../../packages/ui/package.json` | Add `recharts` dependency |
+| `../../packages/lib/src/types/clipboard.ts` | Add `EigenClipboardChartItem` to union |
+| `../../apps/slides/src/components/slides/types.ts` | Add `ChartObject` to `SlideObject` union |
+| `../../apps/slides/src/components/slides/hooks/use-deck.ts` | Add `'definition'` to `OBJECT_FIELDS` |
+| `../../apps/slides/src/components/slides/slide-object.tsx` | Add chart rendering branch |
+| `../../apps/docs/src/components/docs/editor.tsx` | Register `ChartNode` extension |
+| `../../apps/docs/src/components/docs/editor-toolbar.tsx` | Add "Insert Chart" button |
+| `../../apps/sheets/src/components/sheets/editor.tsx` | Render `<ChartOverlay>`, pass workbook ref |
+| `../../apps/sheets/src/components/sheets/toolbar.tsx` | Add "Insert Chart" button |
+| `../../apps/sheets/src/components/sheets/hooks/use-sheet.ts` | Initialize `Y.Map("charts")` in Yjs doc |
 
 ## Chart Type Priority
 
@@ -423,7 +423,7 @@ Horizontal bar charts are a `layout="vertical"` prop on `<BarChart>` in Recharts
 | Fortune-sheet API instability | Medium | Access data only via `getCellsByRange`. Write integration tests that exercise the extraction path. |
 | Chart overlay z-index conflicts with sheet UI | Low | Use z-index 250 (between inactive images at 200 and active images at 300). |
 | Large chart definitions bloating Yjs documents | Low | JSON stringified definitions are typically 500-2000 bytes. Negligible compared to cell data. |
-| Recharts bundle size impacting non-chart apps | Low | Charts are in `packages/ui` but tree-shaking ensures only apps that import chart components pay the cost. |
+| Recharts bundle size impacting non-chart apps | Low | Charts are in `../../packages/ui` but tree-shaking ensures only apps that import chart components pay the cost. |
 | Cross-app live linking complexity (Phase 5) | High | Defer entirely until charts are stable in single-app mode. Ship inline-data-only for Phases 1-4. |
 | Stale `cachedData` in docs/slides after sheet changes | Medium | Always update cache on successful fetch. Show "last updated" timestamp. Manual refresh button. |
 
@@ -431,7 +431,7 @@ Horizontal bar charts are a `layout="vertical"` prop on `<BarChart>` in Recharts
 
 ### Phase 1: Core Chart Component
 
-- Install `recharts` in `packages/ui`
+- Install `recharts` in `../../packages/ui`
 - Create `packages/lib/src/types/chart.ts`
 - Create `packages/ui/src/components/charts/` with `eigen-chart.tsx`, individual chart wrappers, and `chart-theme.ts`
 - Handle empty data, null values, negative values
@@ -482,7 +482,7 @@ Horizontal bar charts are a `layout="vertical"` prop on `<BarChart>` in Recharts
 
 - API endpoint: `GET /api/drive/:ownerId/:mountId/sheets/:pathId/range`
 - SSE event for sheet data changes
-- `useChartData()` hook in `packages/lib/` (resolves sheet-range, subscribes to SSE, caches)
+- `useChartData()` hook in `../../packages/lib` (resolves sheet-range, subscribes to SSE, caches)
 - "Update from sheet" and "Unlink" actions in docs and slides chart toolbars
 - Clipboard preserves sheet links with inline fallback
 
