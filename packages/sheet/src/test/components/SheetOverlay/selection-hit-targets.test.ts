@@ -34,13 +34,16 @@ function px(selector: string, property: string): number {
 }
 
 const GRAB_BAND = px('.sheet-overlay', '--sheet-grab-band');
+const GRAB_OUT = px('.sheet-overlay', '--sheet-grab-band-out');
 const FILL_GRAB = px('.sheet-overlay', '--sheet-fill-grab');
 
 describe('drag-to-move band', () => {
-    test('is 8px, centred on the selection border by a calc off the named value', () => {
-        expect(GRAB_BAND).toBe(8);
+    test('is 6px straddling the border, 4 out and 2 in, by a calc off the named values', () => {
+        expect(GRAB_BAND).toBe(6);
+        expect(GRAB_OUT).toBe(4);
+        expect(GRAB_BAND - GRAB_OUT).toBe(2);
         expect(declarations('.sheet-cs-draghandle').get('--sheet-grab-band-offset')).toBe(
-            'calc(var(--sheet-grab-band) / -2)',
+            'calc(var(--sheet-grab-band-out) * -1)',
         );
         for (const selector of ['top', 'bottom', 'left', 'right'].map((edge) => `.sheet-cs-draghandle-${edge}`)) {
             for (const [, value] of declarations(selector)) {
@@ -52,12 +55,12 @@ describe('drag-to-move band', () => {
     test('never reaches more than 4px over a neighbouring cell', () => {
         // 4px is the fork's original outward offset. Growing it is what starts
         // swallowing clicks meant for the cell next to the selection.
-        expect(GRAB_BAND / 2).toBeLessThanOrEqual(4);
+        expect(GRAB_OUT).toBeLessThanOrEqual(4);
     });
 
     test('leaves the middle of a default 19px row free to start a new selection', () => {
-        // Both the top and the bottom band eat half their width from the row's interior.
-        expect(19 - GRAB_BAND).toBeGreaterThan(8);
+        // The top and bottom bands each eat (band - out) from the row's interior.
+        expect(19 - 2 * (GRAB_BAND - GRAB_OUT)).toBeGreaterThan(8);
     });
 
     test('paints nothing — it is hit area only', () => {

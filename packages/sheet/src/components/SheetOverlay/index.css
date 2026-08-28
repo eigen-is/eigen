@@ -24,7 +24,8 @@
     /* Invisible grab geometry, named once so the rules below derive from it rather than
        from hand-typed offsets: the total width of the drag-to-move band, and the total
        side of the fill handle's grab square. src/test/components/SheetOverlay pins both. */
-    --sheet-grab-band: 8px;
+    --sheet-grab-band: 6px;
+    --sheet-grab-band-out: 4px;
     --sheet-fill-grab: 14px;
 }
 
@@ -320,14 +321,15 @@
     cursor: move;
     z-index: 15;
     pointer-events: auto;
-    --sheet-grab-band-offset: calc(var(--sheet-grab-band) / -2);
+    --sheet-grab-band-offset: calc(var(--sheet-grab-band-out) * -1);
 }
 
-/* --sheet-grab-band wide, centred on the selection border, so half of it reaches
-   outside. The outward half must stay at 4px — the fork's original offset — or clicks
-   on a neighbouring cell start being swallowed; the extra grab is taken from the
-   selection's own interior, where a mis-hit is cheap (a press that never travels 8px
-   leaves the selection untouched, see dragCellThreshold in state/modules/move-cells.ts). */
+/* --sheet-grab-band thick, straddling the selection border: --sheet-grab-band-out
+   reaches outside, the remainder inside. Outward must stay at 4px — the fork's original
+   offset — or clicks on a neighbouring cell start being swallowed. Inward is the cheaper
+   side (a press that never travels dragCellThreshold leaves the selection untouched, see
+   state/modules/move-cells.ts) but it is not free: a click landing there no longer
+   collapses a multi-cell selection to that cell, so keep it small. */
 .sheet-cs-draghandle-top {
     top: var(--sheet-grab-band-offset);
     left: var(--sheet-grab-band-offset);

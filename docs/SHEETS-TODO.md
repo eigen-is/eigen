@@ -150,6 +150,11 @@ Verified, user-visible, bounded. Each remaining entry needs a decision first —
 
 - [ ] **Filter date conditions accept anything and silently match nothing** — both operand fields are an untyped `Input` shared by every condition (`FilterMenu.tsx:474-494`); an unparseable date filters nothing rather than reporting an error (`filter.ts:346-358`). A date picker is one possible fix, but Google Sheets itself uses a free-text field with relative-date presets, so the real defect is the silent failure. **S** for the error, **M** for a picker
 
+### Decided, not defects
+
+- **The cell-range picker stays put when the grid scrolls.** It is a portaled `position: fixed` dialog placed once at its cell, so scrolling moves the grid underneath it. Confirmed as the wanted behaviour by Reinder on 2026-08-28 — the card it replaced scrolled with the grid and could ride off-screen entirely. Do not "fix" this into a scroll-tracking popup without asking.
+- **The drag-to-move band reaches 2px inside the selection**, so a click in that 2px no longer collapses a multi-cell selection to that cell. Deliberate: outward reach stays at the fork's original 4px because that side steals clicks from the neighbouring cell, so the grab has to come from the interior. 4/2 chosen by Reinder on 2026-08-28 after trying 4/4.
+
 ### Verified working in a real browser, 2026-08-28
 
 A manual pass over the DOM chrome after the `sheet-` rename. Recorded so it isn't re-tested: freeze panes (line, handles, frozen scrolling), row/column resize itself, the fill handle, the data-validation dropdown (already a shadcn `DropdownMenu` — `components/DataVerification/DropdownList.tsx:53`), and the link editor (a shadcn `Dialog`, centred and deliberately not draggable). The fill handle (the square at the bottom-right of the selection) extends along one axis at a time, matching Excel and Google Sheets — not a defect. Confirmed against the running app and the real products by Reinder on 2026-08-28, after an assistant wrongly cast doubt on it. `Ctrl`+arrow does nothing **on macOS** because Mission Control takes all four before the browser sees them; `Cmd`+arrow is the Mac binding and is handled (`handleControlPlusArrowKey`), with `preventDefault` so the browser's back/forward doesn't fire.
