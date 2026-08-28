@@ -34,7 +34,6 @@ export function iscelldata(txt: string) {
     }
 
     const reg_cell = /^(([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+))$/g;
-    let reg_cellRange = /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+))))$/g;
 
     if (rangetxt.indexOf(':') === -1) {
         const row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10) - 1;
@@ -53,8 +52,8 @@ export function iscelldata(txt: string) {
         return false;
     }
 
-    reg_cellRange =
-        /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+)))|((([0-9]+)|([$][0-9]+s))))$/g;
+    const reg_cellRange =
+        /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+)))|((([0-9]+)|([$][0-9]+))))$/g;
 
     const rangetxtArr = rangetxt.split(':');
 

@@ -37,7 +37,7 @@ export function ColorPickerMenuItem({ label, value, onChange, resetLabel, showRe
                 <span>{label}</span>
                 <span className="ml-auto h-3 w-6 rounded border" style={{ backgroundColor: value || 'transparent' }} />
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="luckysheet-mousedown-cancel flex flex-col gap-2 p-3">
+            <DropdownMenuSubContent className="sheet-mousedown-cancel flex flex-col gap-2 p-3">
                 {showReset && (
                     <DropdownMenuItem className="-mx-1" onSelect={keepOpen} onClick={() => onChange('')}>
                         <RotateCcw className="size-4" />

@@ -600,7 +600,7 @@ export function cellFocus(ctx: Context, r: number, c: number) {
     // change would otherwise be stuck with whatever the last edit session left.
     ctx.dataVerificationDropDownList = false;
     if (!isAllowEdit(ctx)) return;
-    const dropDownBtn = document.getElementById('luckysheet-dataVerification-dropdown-btn');
+    const dropDownBtn = document.getElementById('sheet-dataVerification-dropdown-btn');
     if (!dropDownBtn) return;
     dropDownBtn.style.display = 'none';
     if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return;

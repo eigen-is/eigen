@@ -30,7 +30,7 @@ import { getdatabyselection, getQKBorder } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { normalizeSelection, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, normalizeSelection, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetParamALL } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
@@ -1248,7 +1248,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         // if the content is marked as copied from this sheet, check whether the clipboard matches what was copied from the current page
         let isEqual = true;
         if (
-            txtdata.indexOf('fortune-copy-action-table') > -1 &&
+            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0
         ) {
@@ -1340,12 +1340,12 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         }
 
         if (
-            txtdata.indexOf('fortune-copy-action-table') > -1 &&
+            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
             ctx.copyState?.copyRange != null &&
             ctx.copyState.copyRange.length > 0 &&
             isEqual
         ) {
-            // clipboard content matches what was copied from luckysheet itself
+            // clipboard content matches what was copied from this sheet itself
             if (ctx.pasteIsCut) {
                 ctx.pasteIsCut = false;
                 pasteHandlerOfCutPaste(ctx, ctx.copyState);
@@ -1353,7 +1353,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             } else {
                 pasteHandlerOfCopyPaste(ctx, ctx.copyState);
             }
-        } else if (txtdata.indexOf('fortune-copy-action-image') > -1) {
         } else {
             if (txtdata.indexOf('table') > -1) {
                 const ele = document.createElement('div');
@@ -1384,7 +1383,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 const styleInner = ele.querySelectorAll('style')[0]?.innerHTML || '';
                 const patternReg = /{([^}]*)}/g;
                 const patternStyle = styleInner.match(patternReg);
-                const nameReg = /^[^\t].*/gm;
+                const nameReg = /^\S.*/gm;
                 const patternName = initial(styleInner.match(nameReg));
                 const allStyleList: Record<string, string> =
                     patternName.length === patternStyle?.length && typeof patternName === typeof patternStyle
@@ -1393,27 +1392,24 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                 const index = getSheetIndex(ctx, ctx.currentSheetId);
                 if (!isNil(index)) {
-                    if (isNil(ctx.sheets[index].config)) {
-                        ctx.sheets[index].config = {};
-                    }
-                    if (isNil(ctx.sheets[index].config!.rowlen)) {
-                        ctx.sheets[index].config!.rowlen = {};
-                    }
-                    const rowHeightList = ctx.sheets[index].config!.rowlen!;
+                    // Collect only the rows the paste changes and let setRowHeight write them: it
+                    // owns the `>= 0` guard, and writing through the sheet's live rowlen bypassed it.
+                    // Read the mirror, the half setRowHeight writes — the sheet half can be behind.
+                    const currentRowlen = ctx.config.rowlen ?? {};
+                    const rowHeightList: Record<number, number> = {};
                     forEach(trList, (tr) => {
                         let c = 0;
                         const targetR = ctx.selections![0].row[0] + r;
 
-                        const targetRowHeight = !isNil(tr.getAttribute('height'))
-                            ? parseInt(tr.getAttribute('height') as string, 10)
-                            : null;
-                        if (
-                            (has(ctx.sheets[index].config!.rowlen, targetR) &&
-                                ctx.sheets[index].config!.rowlen![targetR] !== targetRowHeight) ||
-                            (!has(ctx.sheets[index].config!.rowlen, targetR) &&
-                                ctx.sheets[index].defaultRowHeight !== targetRowHeight)
-                        ) {
-                            rowHeightList[targetR] = targetRowHeight as number;
+                        const heightAttr = tr.getAttribute('height');
+                        if (!isNil(heightAttr)) {
+                            const targetRowHeight = parseInt(heightAttr, 10);
+                            const current = has(currentRowlen, targetR)
+                                ? currentRowlen[targetR]
+                                : ctx.sheets[index].defaultRowHeight;
+                            if (current !== targetRowHeight) {
+                                rowHeightList[targetR] = targetRowHeight;
+                            }
                         }
 
                         forEach(tr.querySelectorAll('td'), (td) => {
@@ -1432,12 +1428,13 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                 typeof allStyleList[`.${className}`] === 'string'
                                     ? allStyleList[`.${className}`]
                                           .substring(1, allStyleList[`.${className}`].length - 1)
-                                          .split('\n\t')
+                                          .split(/\n\s*/)
                                     : [];
                             const styles: Record<string, string> = {};
                             forEach(styleString, (s) => {
                                 const styleList = s.split(':');
-                                styles[styleList[0]] = styleList?.[1].replace(';', '');
+                                if (styleList.length < 2) return;
+                                styles[styleList[0].trim()] = styleList[1].replace(';', '').trim();
                             });
                             if (!isNil(styles.border)) td.style.border = styles.border;
                             let bg: string | undefined = td.style.backgroundColor || styles.background;
@@ -1461,9 +1458,18 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                     ? 0
                                     : 1;
 
-                            cell.un = !includes(styles['text-decoration'], 'underline') ? undefined : 1;
+                            cell.un =
+                                includes(td.style.textDecoration, 'underline') ||
+                                includes(styles['text-decoration'], 'underline')
+                                    ? 1
+                                    : undefined;
 
-                            cell.cl = !includes(td.innerHTML, '<s>') ? undefined : 1;
+                            cell.cl =
+                                includes(td.innerHTML, '<s>') ||
+                                includes(td.style.textDecoration, 'line-through') ||
+                                includes(styles['text-decoration'], 'line-through')
+                                    ? 1
+                                    : undefined;
 
                             const ff = td.style.fontFamily || styles['font-family'] || '';
                             const ffs = ff.split(',');

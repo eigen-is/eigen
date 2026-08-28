@@ -28,7 +28,7 @@ export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string, i
         height: number;
         backgroundColor: string;
     }[] = [];
-    for (const ele of $span.querySelectorAll('span.fortune-formula-functionrange-cell')) {
+    for (const ele of $span.querySelectorAll('span.sheet-formula-functionrange-cell')) {
         const rangeIndex = parseInt(ele.getAttribute('rangeindex') || '0', 10);
         if (rangeIndex === ignoreRangeIndex) continue;
         const cellrange = getcellrange(ctx, ele.textContent || '');
@@ -80,7 +80,7 @@ export function rangeSetValue(
 ) {
     let $editor = cellInput;
     let $copyTo = fxInput;
-    if (document.activeElement?.id === 'luckysheet-functionbox-cell') {
+    if (document.activeElement?.id === 'sheet-functionbox-cell') {
         $editor = fxInput!;
         $copyTo = cellInput;
     }
@@ -117,15 +117,15 @@ export function rangeSetValue(
             setCaretPosition(ctx, span, 0, range.length);
         }
     } else {
-        const function_str = `<span class="fortune-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${colors[formulaUIState.functionHTMLIndex]};">${escapeHtml(range)}</span>`;
+        const function_str = `<span class="sheet-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${colors[formulaUIState.functionHTMLIndex]};">${escapeHtml(range)}</span>`;
         const newEle = parseElement(function_str);
         const refEle = ctx.formulaCache.rangeSetValueTo;
         if (refEle?.parentNode) {
-            const leftPar = document.getElementsByClassName('luckysheet-formula-text-lpar')?.[0];
+            const leftPar = document.getElementsByClassName('sheet-formula-text-lpar')?.[0];
 
             // handle case when user autocompletes the formula
-            if (leftPar?.parentElement?.classList.contains('luckysheet-formula-text-color')) {
-                document.getElementsByClassName('luckysheet-formula-text-lpar')?.[0].parentNode?.appendChild(newEle);
+            if (leftPar?.parentElement?.classList.contains('sheet-formula-text-color')) {
+                leftPar.parentNode?.appendChild(newEle);
             } else {
                 refEle.parentNode.insertBefore(newEle, refEle.nextSibling);
             }
@@ -175,7 +175,7 @@ export function onFormulaRangeDragEnd(ctx: Context) {
 // The formula range select renders once per overlay pane region; write every
 // copy — each region's clip shows exactly its portion.
 function setRangeSelect(container: HTMLDivElement, left: number, top: number, height: number, width: number) {
-    for (const rangeElement of container.querySelectorAll<HTMLDivElement>('.fortune-formula-functionrange-select')) {
+    for (const rangeElement of container.querySelectorAll<HTMLDivElement>('.sheet-formula-functionrange-select')) {
         rangeElement.style.left = `${left}px`;
         rangeElement.style.top = `${top}px`;
         rangeElement.style.height = `${height}px`;

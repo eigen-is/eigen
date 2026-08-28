@@ -20,7 +20,7 @@ g.window = win;
 g.document = win.document;
 
 const anchor = win.document.createElement('div');
-anchor.id = 'luckysheet-dataVerification-dropdown-btn';
+anchor.id = 'sheet-dataVerification-dropdown-btn';
 win.document.body.appendChild(anchor);
 
 const LIST: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
@@ -34,21 +34,23 @@ function listContext(rule: DataVerificationRule | null = LIST) {
     return ctx;
 }
 
-function keyDown(ctx: Context, key: string, altKey: boolean) {
+type KeyOptions = { altKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean; cellInput?: HTMLDivElement };
+
+function keyDown(ctx: Context, key: string, { altKey, ctrlKey, shiftKey, cellInput }: KeyOptions = {}) {
     let prevented = false;
     const e = {
         key,
-        keyCode: key === 'ArrowDown' ? 40 : 0,
-        altKey,
-        ctrlKey: false,
+        keyCode: key === 'ArrowDown' ? 40 : 70,
+        altKey: altKey ?? false,
+        ctrlKey: ctrlKey ?? false,
         metaKey: false,
-        shiftKey: false,
+        shiftKey: shiftKey ?? false,
         preventDefault() {
             prevented = true;
         },
         stopPropagation() {},
     } as unknown as KeyboardEvent;
-    const input = win.document.createElement('div') as unknown as HTMLDivElement;
+    const input = cellInput ?? (win.document.createElement('div') as unknown as HTMLDivElement);
     handleGlobalKeyDown(
         ctx,
         input,
@@ -64,13 +66,13 @@ function keyDown(ctx: Context, key: string, altKey: boolean) {
 describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
     test('opens the list', () => {
         const ctx = listContext();
-        expect(keyDown(ctx, 'ArrowDown', true)).toBe(true);
+        expect(keyDown(ctx, 'ArrowDown', { altKey: true })).toBe(true);
         expect(ctx.dataVerificationDropDownList).toBe(true);
     });
 
     test('positions the anchor on the cell', () => {
         const ctx = listContext();
-        keyDown(ctx, 'ArrowDown', true);
+        keyDown(ctx, 'ArrowDown', { altKey: true });
         // B2 spans x 74..148, y 20..40 in contextFactory's visibledata*.
         expect(anchor.style.display).toBe('block');
         expect(anchor.style.left).toBe('128px');
@@ -78,13 +80,13 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
 
     test('a plain Down still moves the selection', () => {
         const ctx = listContext();
-        keyDown(ctx, 'ArrowDown', false);
+        keyDown(ctx, 'ArrowDown');
         expect(ctx.dataVerificationDropDownList).toBeFalsy();
     });
 
     test('a cell with no list rule falls through to the normal arrow handling', () => {
         const ctx = listContext(null);
-        keyDown(ctx, 'ArrowDown', true);
+        keyDown(ctx, 'ArrowDown', { altKey: true });
         expect(ctx.dataVerificationDropDownList).toBeFalsy();
     });
 
@@ -92,7 +94,45 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
         // Same as the mousedown path, which also refuses: cellFocus itself bails.
         const ctx = listContext();
         ctx.allowEdit = false;
-        keyDown(ctx, 'ArrowDown', true);
+        keyDown(ctx, 'ArrowDown', { altKey: true });
         expect(ctx.dataVerificationDropDownList).toBeFalsy();
+    });
+});
+
+// Ctrl+Shift+F toggles focus into the sheet. The handler is already handed the
+// cell input of the workbook that owns the keydown, so a document-wide lookup
+// picked the first workbook on the page instead of the one being typed in.
+describe('handleGlobalKeyDown — Ctrl+Shift+F focus toggle', () => {
+    function addCellInput() {
+        const el = win.document.createElement('div');
+        win.document.body.appendChild(el);
+        return el;
+    }
+
+    test('focuses the workbook it was handed, not the first one in the document', () => {
+        const first = addCellInput();
+        const second = addCellInput();
+        const ctx = listContext();
+        ctx.sheetFocused = false;
+
+        keyDown(ctx, 'F', { ctrlKey: true, shiftKey: true, cellInput: second as unknown as HTMLDivElement });
+
+        expect(ctx.sheetFocused).toBe(true);
+        expect(win.document.activeElement).toBe(second);
+        expect(first.getAttribute('tabindex')).toBe(null);
+    });
+
+    test('releasing the lock moves no focus, and the lock can be taken back', () => {
+        const input = addCellInput();
+        const ctx = listContext();
+        ctx.sheetFocused = true;
+
+        keyDown(ctx, 'F', { ctrlKey: true, shiftKey: true, cellInput: input as unknown as HTMLDivElement });
+        expect(ctx.sheetFocused).toBe(false);
+        expect(win.document.activeElement).not.toBe(input);
+
+        keyDown(ctx, 'F', { ctrlKey: true, shiftKey: true, cellInput: input as unknown as HTMLDivElement });
+        expect(ctx.sheetFocused).toBe(true);
+        expect(win.document.activeElement).toBe(input);
     });
 });

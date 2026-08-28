@@ -4,7 +4,10 @@ import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
-import { concat, debounce, omit, union, without, xor } from 'es-toolkit/compat';
+// `difference` from the bare entry, not /compat: the compat one spreads the second array
+// into call arguments, which is the V8 argument-limit crash a blanks bucket used to trip.
+import { difference } from 'es-toolkit';
+import { concat, debounce, omit, union, xor } from 'es-toolkit/compat';
 import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -546,11 +549,11 @@ export const FilterMenu: React.FC = () => {
                                         onChange={(item, checked) => {
                                             const rows = hiddenRows.current;
                                             hiddenRows.current = checked
-                                                ? without(rows, ...item.rows)
+                                                ? difference(rows, item.rows)
                                                 : union(rows, item.rows);
                                             setDatesUncheck((prev) =>
                                                 checked
-                                                    ? without(prev, ...item.dateValues)
+                                                    ? difference(prev, item.dateValues)
                                                     : union(prev, item.dateValues),
                                             );
                                         }}
@@ -568,7 +571,7 @@ export const FilterMenu: React.FC = () => {
                                             onChange={(item, checked) => {
                                                 const rows = hiddenRows.current;
                                                 hiddenRows.current = checked
-                                                    ? without(rows, ...item.rows)
+                                                    ? difference(rows, item.rows)
                                                     : concat(rows, item.rows);
                                                 setValuesUncheck((prev) =>
                                                     checked ? prev.filter((v) => v !== item.key) : [...prev, item.key],

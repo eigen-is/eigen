@@ -22,14 +22,14 @@ export function OverlayVisuals({ containerRef }: Props) {
         <>
             {context.formulaRangeSelect && (
                 <div
-                    className="fortune-selection-copy fortune-formula-functionrange-select"
+                    className="sheet-selection-copy sheet-formula-functionrange-select"
                     style={context.formulaRangeSelect}
                 >
-                    <div className="fortune-selection-copy-top fortune-copy" />
-                    <div className="fortune-selection-copy-right fortune-copy" />
-                    <div className="fortune-selection-copy-bottom fortune-copy" />
-                    <div className="fortune-selection-copy-left fortune-copy" />
-                    <div className="fortune-selection-copy-hc" />
+                    <div className="sheet-selection-copy-top sheet-copy" />
+                    <div className="sheet-selection-copy-right sheet-copy" />
+                    <div className="sheet-selection-copy-bottom sheet-copy" />
+                    <div className="sheet-selection-copy-left sheet-copy" />
+                    <div className="sheet-selection-copy-hc" />
                 </div>
             )}
             {context.formulaRangeHighlight.map((v) => {
@@ -37,7 +37,7 @@ export function OverlayVisuals({ containerRef }: Props) {
                 return (
                     <div
                         key={rangeIndex}
-                        className="fortune-selection-highlight fortune-formula-functionrange-highlight"
+                        className="sheet-selection-highlight sheet-formula-functionrange-highlight"
                         style={(() => {
                             const { backgroundColor: _, ...rest } = v;
                             return rest;
@@ -47,16 +47,16 @@ export function OverlayVisuals({ containerRef }: Props) {
                             <div
                                 key={d}
                                 data-type={d}
-                                className={`fortune-selection-copy-${d} fortune-copy`}
+                                className={`sheet-selection-copy-${d} sheet-copy`}
                                 style={{ backgroundColor }}
                             />
                         ))}
-                        <div className="fortune-selection-copy-hc" style={{ backgroundColor }} />
+                        <div className="sheet-selection-copy-hc" style={{ backgroundColor }} />
                         {['lt', 'rt', 'lb', 'rb'].map((d) => (
                             <div
                                 key={d}
                                 data-type={d}
-                                className={`fortune-selection-highlight-${d} luckysheet-highlight`}
+                                className={`sheet-selection-highlight-${d} sheet-highlight`}
                                 style={{ backgroundColor }}
                             />
                         ))}
@@ -76,13 +76,13 @@ export function OverlayVisuals({ containerRef }: Props) {
                     return (
                         <div
                             key={`${h.r}_${h.c}`}
-                            className={`fortune-search-highlight eigen-search-match${active ? ' eigen-search-match-active' : ''}`}
+                            className={`sheet-search-highlight eigen-search-match${active ? ' eigen-search-match-active' : ''}`}
                             style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}
                         />
                     );
                 })}
             <div
-                className="luckysheet-cell-selected-focus"
+                className="sheet-cell-selected-focus"
                 style={
                     (context.selections?.length ?? 0) > 0
                         ? (() => {
@@ -97,7 +97,6 @@ export function OverlayVisuals({ containerRef }: Props) {
                           })()
                         : {}
                 }
-                onMouseDown={(e) => e.preventDefault()}
             />
             {(context.formulaRangeSelections?.length ?? 0) > 0 && (
                 <div>
@@ -114,7 +113,7 @@ export function OverlayVisuals({ containerRef }: Props) {
 
                         return (
                             <div
-                                className="fortune-selection-copy"
+                                className="sheet-selection-copy"
                                 key={`${r1}-${r2}-${c1}-${c2}`}
                                 style={{
                                     left: col_pre,
@@ -123,24 +122,24 @@ export function OverlayVisuals({ containerRef }: Props) {
                                     height: row - row_pre - 1,
                                 }}
                             >
-                                <div className="fortune-selection-copy-top fortune-copy" />
-                                <div className="fortune-selection-copy-right fortune-copy" />
-                                <div className="fortune-selection-copy-bottom fortune-copy" />
-                                <div className="fortune-selection-copy-left fortune-copy" />
-                                <div className="fortune-selection-copy-hc" />
+                                <div className="sheet-selection-copy-top sheet-copy" />
+                                <div className="sheet-selection-copy-right sheet-copy" />
+                                <div className="sheet-selection-copy-bottom sheet-copy" />
+                                <div className="sheet-selection-copy-left sheet-copy" />
+                                <div className="sheet-selection-copy-hc" />
                             </div>
                         );
                     })}
                 </div>
             )}
-            <div className="fortune-cell-selected-extend" />
-            <div className="fortune-cell-selected-move" onMouseDown={(e) => e.preventDefault()} />
+            <div className="sheet-cell-selected-extend" />
+            <div className="sheet-cell-selected-move" onMouseDown={(e) => e.preventDefault()} />
             {(context.selections?.length ?? 0) > 0 && (
                 <div>
                     {context.selections!.map((selection) => (
                         <div
                             key={`${selection.row[0]}-${selection.row[1]}-${selection.column[0]}-${selection.column[1]}`}
-                            className="luckysheet-cell-selected"
+                            className="sheet-cell-selected"
                             style={{
                                 left: selection.left_move,
                                 top: selection.top_move,
@@ -162,40 +161,34 @@ export function OverlayVisuals({ containerRef }: Props) {
                                 });
                             }}
                         >
-                            <div className="luckysheet-cs-inner-border" />
+                            <div className="sheet-cs-inner-border" />
                             <div
-                                className="luckysheet-cs-fillhandle"
+                                className="sheet-cs-fillhandle"
                                 onMouseDown={(e) => {
+                                    // Keeps the parent's move-start off: at the corner the fill wins.
+                                    e.stopPropagation();
                                     const { nativeEvent } = e;
                                     setContext((draftContext) => {
                                         createDropCellRange(draftContext, nativeEvent, containerRef.current!);
                                     });
-                                    e.stopPropagation();
                                 }}
                             />
-                            <div className="luckysheet-cs-inner-border" />
                             <div
-                                className="luckysheet-cs-draghandle-top luckysheet-cs-draghandle"
+                                className="sheet-cs-draghandle-top sheet-cs-draghandle"
                                 onMouseDown={(e) => e.preventDefault()}
                             />
                             <div
-                                className="luckysheet-cs-draghandle-bottom luckysheet-cs-draghandle"
+                                className="sheet-cs-draghandle-bottom sheet-cs-draghandle"
                                 onMouseDown={(e) => e.preventDefault()}
                             />
                             <div
-                                className="luckysheet-cs-draghandle-left luckysheet-cs-draghandle"
+                                className="sheet-cs-draghandle-left sheet-cs-draghandle"
                                 onMouseDown={(e) => e.preventDefault()}
                             />
                             <div
-                                className="luckysheet-cs-draghandle-right luckysheet-cs-draghandle"
+                                className="sheet-cs-draghandle-right sheet-cs-draghandle"
                                 onMouseDown={(e) => e.preventDefault()}
                             />
-                            <div className="luckysheet-cs-touchhandle luckysheet-cs-touchhandle-lt">
-                                <div className="luckysheet-cs-touchhandle-btn" />
-                            </div>
-                            <div className="luckysheet-cs-touchhandle luckysheet-cs-touchhandle-rb">
-                                <div className="luckysheet-cs-touchhandle-btn" />
-                            </div>
                         </div>
                     ))}
                 </div>
@@ -230,7 +223,7 @@ export function OverlayVisuals({ containerRef }: Props) {
                     return (
                         <div
                             key={presence?.userId || index}
-                            className="fortune-presence-selection eigen-selection-ring eigen-selection-ring-peer"
+                            className="sheet-presence-selection eigen-selection-ring eigen-selection-ring-peer"
                             style={
                                 {
                                     left: col_pre,

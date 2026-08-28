@@ -75,14 +75,8 @@ describe('engine/formula-reference-cycle — whole-column / whole-row refs', () 
         expect(cycleChain('=A:C', 2, 3)).toEqual(['=$A:$C', '=A:C', '=$A:$C']);
     });
 
-    test('row-only range toggles the row $ once, then sticks', () => {
-        // First press anchors the whole row: 1:3 → $1:$3.
-        expect(cycle('=1:3', 2)!.text).toBe('=$1:$3');
-        // Pinning a pre-existing limitation: `iscelldata`'s range regex has a stray
-        // `s` in its absolute-row alternative (`[$][0-9]+s`), so it rejects `$1:$3`.
-        // F4 on an already-absolute whole-row range is therefore a no-op. (Whole-column
-        // refs are unaffected — their absolute alternative `[$][a-zA-Z]+` is correct.)
-        expect(cycle('=$1:$3', 3)).toBeNull();
+    test('row-only range toggles the row $ only (2-state cycle)', () => {
+        expect(cycleChain('=1:3', 2, 3)).toEqual(['=$1:$3', '=1:3', '=$1:$3']);
     });
 });
 

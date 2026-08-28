@@ -5,7 +5,7 @@ import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, editableConfig, getFlowdata } from '../context';
 import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getBorderInfoCompute } from './border';
@@ -380,7 +380,7 @@ function judgeDate(data: (Cell | null | undefined)[]) {
 // The extend preview renders once per overlay pane region; write every copy —
 // each region's clip shows exactly its portion.
 export function showDropCellSelection({ width, height, top, left }: Rect, container: HTMLDivElement) {
-    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-extend')) {
+    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-extend')) {
         selectedExtend.style.left = toPx(left);
         selectedExtend.style.width = toPx(width);
         selectedExtend.style.top = toPx(top);
@@ -390,7 +390,7 @@ export function showDropCellSelection({ width, height, top, left }: Rect, contai
 }
 
 export function hideDropCellSelection(container: HTMLDivElement) {
-    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-extend')) {
+    for (const selectedExtend of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-extend')) {
         selectedExtend.style.display = 'none';
     }
 }
@@ -1895,12 +1895,12 @@ export function updateDropCell(ctx: Context) {
     // filled formula cell.
     const resolver = createContextResolver(ctx);
 
-    const cfg = cloneDeep(ctx.config);
-    if (cfg.borderInfo == null) {
-        cfg.borderInfo = [];
-    }
+    const cfg = editableConfig(ctx, file);
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
-    const dataVerification = cloneDeep(file.dataVerification);
+    // Live map, not a clone: the copy and apply ranges are disjoint, so reading a source
+    // rule while writing the filled ones is safe — and the write has to land on the sheet
+    // to sync and undo (Excel and Google both carry validation on a fill).
+    const { dataVerification } = file;
 
     // direction is seeded by onDropCellSelectEnd / autoFillCell before they call
     // updateDropCell; the null fallback only matters for module-init safety.
@@ -2018,7 +2018,7 @@ export function updateDropCell(ctx: Context) {
                     },
                 };
 
-                cfg.borderInfo.push(bd_obj);
+                (cfg.borderInfo ??= []).push(bd_obj);
             } else if (borderInfoCompute[`${row}_${col}`]) {
                 const bd_obj: CellBorderInfo = {
                     rangeType: 'cell',
@@ -2032,7 +2032,7 @@ export function updateDropCell(ctx: Context) {
                     },
                 };
 
-                cfg.borderInfo.push(bd_obj);
+                (cfg.borderInfo ??= []).push(bd_obj);
             }
 
             // data validation
@@ -2235,7 +2235,7 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
 
         updateDropCell(ctx);
 
-        for (const selectedMoveEle of container.querySelectorAll<HTMLDivElement>('.fortune-cell-selected-move')) {
+        for (const selectedMoveEle of container.querySelectorAll<HTMLDivElement>('.sheet-cell-selected-move')) {
             selectedMoveEle.style.display = 'none';
         }
     }

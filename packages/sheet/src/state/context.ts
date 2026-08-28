@@ -82,6 +82,7 @@ export type Context = {
 
     currentSheetId: string;
     calculateSheetId: string;
+    // Derived mirror of the current sheet's config — never write one half alone; use editableConfig.
     config: SheetConfig;
 
     visibledatarow: number[];
@@ -488,6 +489,29 @@ export function initSheetIndex(ctx: Context) {
             break;
         }
     }
+}
+
+// ctx.config mirrors the current sheet's config, and every geometry read goes through
+// the mirror (calcRowColSize above, the Sheet recompute effect). Patches applied from
+// outside the Workbook seeding effect — undo, redo, a peer's op — only write the sheet,
+// so re-point the mirror at it or the grid keeps painting the old sizes.
+export function updateContextWithSheetConfig(ctx: Context) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    ctx.config = ctx.sheets[index].config ?? {};
+}
+
+// The one way to write a sheet's config. The returned draft must be the one reached through
+// `sheets[i]`: immer attributes a shared child's patches to whichever root key it reaches first,
+// and `sheets` precedes `config` in Context, so writing through the mirror instead emits one
+// `['sheets', i, 'config']` replace of the whole object — last-writer-wins on the wire and in undo,
+// where the granular paths would have merged. The mirror is re-pointed at the same draft so the
+// renderer, which reads `ctx.config`, sees the writes.
+export function editableConfig(ctx: Context, sheet: Sheet): SheetConfig {
+    const cfg = sheet.config ?? {};
+    sheet.config = cfg;
+    if (sheet.id === ctx.currentSheetId) ctx.config = cfg;
+    return cfg;
 }
 
 export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {

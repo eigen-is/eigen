@@ -19,6 +19,7 @@ import type { CellMatrix } from '../../engine/types';
 import {
     api,
     type CellWithRowAndCol,
+    COPY_ACTION_TABLE_MARKER,
     type Context,
     defaultContext,
     defaultSettings,
@@ -38,6 +39,7 @@ import {
     patchToOp,
     type Settings,
     type Sheet as SheetType,
+    updateContextWithSheetConfig,
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -315,8 +317,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     let newContext = applyPatches(ctx_, history.inversePatches);
                     const si = getSheetIndex(newContext, newContext.currentSheetId);
                     if (si != null) {
-                        newContext = produce(newContext, (draft) => {
+                        newContext = produce(newContext, (draft: Context) => {
                             draft.insertedImgs = draft.sheets[si].images;
+                            updateContextWithSheetConfig(draft);
                         });
                     }
                     globalCache.current.redoList.push(history);
@@ -357,8 +360,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     let newContext = applyPatches(ctx_, history.patches);
                     const si = getSheetIndex(newContext, newContext.currentSheetId);
                     if (si != null) {
-                        newContext = produce(newContext, (draft) => {
+                        newContext = produce(newContext, (draft: Context) => {
                             draft.insertedImgs = draft.sheets[si].images;
+                            updateContextWithSheetConfig(draft);
                         });
                     }
                     globalCache.current.undoList.push(history);
@@ -621,15 +625,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // deal with multi instance case, only the focused sheet handles the paste
                 if (
                     cellInput.current === document.activeElement ||
-                    document.activeElement?.className === 'fortune-sheet-overlay'
+                    document.activeElement?.className === 'sheet-overlay'
                 ) {
                     const { clipboardData } = e;
                     if (!clipboardData) return;
 
                     // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)
-                    // but only if this is NOT an internal sheet→sheet copy (which uses HTML with fortune-copy-action-table)
+                    // but only if this is NOT an internal sheet→sheet copy (which uses HTML with sheet-copy-action-table)
                     const htmlData = clipboardData.getData('text/html');
-                    const isInternalCopy = htmlData?.includes('fortune-copy-action-table');
+                    const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_MARKER);
 
                     if (!isInternalCopy) {
                         const eigenData = readEigenClipboard(clipboardData);

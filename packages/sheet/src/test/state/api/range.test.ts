@@ -89,7 +89,7 @@ describe('sheet/core/api/range', () => {
     test('getHtmlByRange', async () => {
         const ctx = getContext();
         expect(getHtmlByRange(ctx, [{ row: [0, 0], column: [0, 0] }])).toBe(
-            '<table data-type="fortune-copy-action-table"><colgroup width="72px"></colgroup><tr><td  style="height:19px;"></td></tr></table>',
+            '<table data-type="sheet-copy-action-table"><colgroup width="72px"></colgroup><tr><td  style="height:19px;"></td></tr></table>',
         );
     });
 

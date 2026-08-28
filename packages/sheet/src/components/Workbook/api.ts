@@ -30,6 +30,7 @@ import {
     type SearchResult,
     type Settings,
     setSearchHighlights,
+    updateContextWithSheetConfig,
     updateImage,
 } from '../../state';
 
@@ -91,12 +92,16 @@ export function generateAPIs(
                         }
                     }
                     createFilterOptions(ctx_, ctx_.filterRange, ops[0]?.id);
+                    // Before the early return: a remote deleteSheet clears `patches` but moves
+                    // currentSheetId, so bailing first would leave the mirror on the deleted sheet.
+                    updateContextWithSheetConfig(ctx_);
                     if (patches.length === 0) return;
                     try {
                         applyPatches(ctx_, patches);
                     } catch (e) {
                         console.error(e);
                     }
+                    updateContextWithSheetConfig(ctx_);
                 },
                 { noHistory: true },
             );

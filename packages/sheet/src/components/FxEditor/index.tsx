@@ -226,7 +226,7 @@ export function FxEditor() {
                         }}
                         className="flex-1 max-h-full overflow-y-auto pl-0.5 text-xs m-0 outline-none cursor-text whitespace-pre-wrap break-words box-border text-foreground text-left"
                         role="textbox"
-                        id="luckysheet-functionbox-cell"
+                        id="sheet-functionbox-cell"
                         aria-label={info.currentCellInput}
                         onFocus={onFocus}
                         onKeyDown={onKeyDown}

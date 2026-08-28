@@ -97,7 +97,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
 
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>{button.delete}</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                        <DropdownMenuSubContent className="sheet-mousedown-cancel">
                             <DropdownMenuItem
                                 onClick={() => {
                                     setContext((draftCtx) => {

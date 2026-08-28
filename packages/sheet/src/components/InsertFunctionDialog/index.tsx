@@ -24,7 +24,6 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
             { t: 0, n: formulaMore.Math },
             { t: 1, n: formulaMore.Statistical },
             { t: 2, n: formulaMore.Lookup },
-            { t: 3, n: formulaMore.luckysheet },
             { t: 4, n: formulaMore.dataMining },
             { t: 5, n: formulaMore.Database },
             { t: 6, n: formulaMore.Date },
@@ -65,9 +64,9 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
                 [col_index] = last.column;
             }
         }
-        const formulaTxt = `<span dir="auto" class="luckysheet-formula-text-color">=</span><span dir="auto" class="luckysheet-formula-text-color">${filteredFunctionList[
+        const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${filteredFunctionList[
             selectedFuncIndex
-        ].n.toUpperCase()}</span><span dir="auto" class="luckysheet-formula-text-color">(</span>`;
+        ].n.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
         setContext((ctx) => {
             if (cellInput.current != null) {
                 ctx.editingCellPosition = [row_index, col_index];

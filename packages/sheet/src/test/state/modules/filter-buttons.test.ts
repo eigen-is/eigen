@@ -62,16 +62,28 @@ describe('getFilterButtonAtPosition', () => {
         expect(getFilterButtonAtPosition(ctx, 74 - FILTER_BUTTON_WIDTH, FILTER_BUTTON_HEIGHT)).toBeUndefined();
     });
 
-    test('resized and hidden columns shift the rects with visibledatacolumn', () => {
+    test('resized columns shift the rects with visibledatacolumn', () => {
         const ctx = contextFactory() as Context;
-        // column 1 resized narrower, column 2 hidden (zero width: same edge as
-        // column 1, so the rects coincide and the earlier column wins the hit)
+        // Column 2 is zero-width here (not colhidden, so it keeps its button): its rect
+        // coincides with column 1's, and the click goes to the button actually painted on
+        // top — the later one — the way the draw loop leaves it.
         ctx.visibledatacolumn = [74, 100, 100, 296, 370];
         createFilterOptions(ctx, { row: [1, 3], column: [1, 2] }, undefined);
-        expect(getFilterButtonAtPosition(ctx, 100 - FILTER_BUTTON_WIDTH, 22)?.col).toBe(1);
-        expect(getFilterButtonAtPosition(ctx, 99, 22)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 100 - FILTER_BUTTON_WIDTH, 22)?.col).toBe(2);
+        expect(getFilterButtonAtPosition(ctx, 99, 22)?.col).toBe(2);
         expect(getFilterButtonAtPosition(ctx, 100 - FILTER_BUTTON_WIDTH - 1, 22)).toBeUndefined();
         expect(getFilterButtonAtPosition(ctx, 100, 22)).toBeUndefined();
+    });
+
+    test('a column narrower than the button gives the click to the button drawn on top', () => {
+        const ctx = contextFactory() as Context;
+        // Column 2 is 10px wide — the resize floor — while the button is 20, so the two
+        // rects overlap. The user sees column 2's button there.
+        ctx.visibledatacolumn = [74, 148, 158, 296, 370];
+        createFilterOptions(ctx, { row: [1, 3], column: [1, 2] }, undefined);
+        expect(getFilterButtonAtPosition(ctx, 145, 22)?.col).toBe(2);
+        expect(getFilterButtonAtPosition(ctx, 157, 22)?.col).toBe(2);
+        expect(getFilterButtonAtPosition(ctx, 137, 22)?.col).toBe(1);
     });
 
     test('no filter range never hits', () => {
@@ -108,5 +120,30 @@ describe('createFilterOptions range clamp', () => {
         createFilterOptions(ctx, { row: [5000, 6000], column: [1, 2] }, undefined);
         expect(ctx.filterOptions).toBeUndefined();
         expect(getFilterButtonAtPosition(ctx, 130, 22)).toBeUndefined();
+    });
+});
+
+describe('createFilterOptions hidden columns', () => {
+    // A hidden column has zero width, so its button rect coincides exactly with the previous
+    // visible column's. Emitting a button for it handed the hidden column every click on that
+    // shared rect — the hit-test returns the last match, which is what the draw loop paints on top.
+    function ctxWithHiddenColumn2(): Context {
+        const ctx = contextFactory() as Context;
+        ctx.config.colhidden = { 2: 0 };
+        // column 2 hidden: its right edge is the same as column 1's
+        ctx.visibledatacolumn = [74, 148, 148, 222, 296];
+        return ctx;
+    }
+
+    test('a hidden column between two visible ones gets no button', () => {
+        const ctx = ctxWithHiddenColumn2();
+        createFilterOptions(ctx, { row: [1, 3], column: [1, 3] }, undefined);
+        expect(ctx.filterOptions?.items.map((item) => item.col)).toEqual([1, 3]);
+    });
+
+    test('the shared edge opens the visible column, not the hidden one', () => {
+        const ctx = ctxWithHiddenColumn2();
+        createFilterOptions(ctx, { row: [1, 3], column: [1, 3] }, undefined);
+        expect(getFilterButtonAtPosition(ctx, 148 - FILTER_BUTTON_WIDTH, HEADER_TOP)?.col).toBe(1);
     });
 });

@@ -52,7 +52,7 @@ export function FormulaPopup({ anchorRef, open, children }: FormulaPopupProps) {
                 side="bottom"
                 align="start"
                 sideOffset={4}
-                className="luckysheet-mousedown-cancel w-80 max-h-[300px] overflow-y-auto p-0"
+                className="sheet-mousedown-cancel w-80 max-h-[300px] overflow-y-auto p-0"
                 onOpenAutoFocus={(e) => e.preventDefault()}
                 onCloseAutoFocus={(e) => e.preventDefault()}
             >

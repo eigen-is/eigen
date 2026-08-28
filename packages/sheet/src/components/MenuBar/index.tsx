@@ -38,7 +38,7 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                     <DropdownMenuTrigger className={triggerClass}>Edit</DropdownMenuTrigger>
                     <DropdownMenuContent
                         align="start"
-                        className="w-56 luckysheet-mousedown-cancel"
+                        className="w-56 sheet-mousedown-cancel"
                         onCloseAutoFocus={onCloseAutoFocus}
                     >
                         <SheetEditMenu focusFindBarRef={focusFindBarRef} />
@@ -52,28 +52,28 @@ export function MenuBar({ leftItems, rightItems }: Props) {
                     <>
                         <DropdownMenu>
                             <DropdownMenuTrigger className={triggerClass}>View</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
+                            <DropdownMenuContent align="start" className="w-56 sheet-mousedown-cancel">
                                 <ViewMenu />
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger className={triggerClass}>Insert</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
+                            <DropdownMenuContent align="start" className="w-56 sheet-mousedown-cancel">
                                 <InsertMenu />
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger className={triggerClass}>Format</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-64 luckysheet-mousedown-cancel">
+                            <DropdownMenuContent align="start" className="w-64 sheet-mousedown-cancel">
                                 <FormatMenu />
                             </DropdownMenuContent>
                         </DropdownMenu>
 
                         <DropdownMenu>
                             <DropdownMenuTrigger className={triggerClass}>Data</DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="w-56 luckysheet-mousedown-cancel">
+                            <DropdownMenuContent align="start" className="w-56 sheet-mousedown-cancel">
                                 <DataMenu />
                             </DropdownMenuContent>
                         </DropdownMenu>

@@ -1,5 +1,7 @@
 # Sheet Rendering Architecture
 
+The fork's `fortune-` / `luckysheet-` class and id prefixes became `sheet-` on 2026-08-28. One engine-private class predates that convention and keeps its bare name — `header-arrow` (`ColumnHeader`) — and so do the engine's bare ids: `link-text`/`-type`/`-address`/`-cell`/`-sheet`, `searchFormulaListInput`, `checkTextColor`, `checkCellColor`, and the screen-reader nodes `sr-selection`, `sr-sheetFocus`, `shortcut-list`, `shortcuts-heading`. Grepping `sheet-` therefore does not enumerate the whole DOM contract. `sheet-copy-action-table` is a different kind of exception: a clipboard wire format rather than a style hook, and it lives in one constant (`COPY_ACTION_TABLE_MARKER`).
+
 ## Component Tree
 
 ```
@@ -95,7 +97,7 @@ React divs, NOT canvas. They render:
 - Header labels (A, B, C... / 1, 2, 3...)
 - Hover highlight (semi-transparent overlay, `z-index: 11`)
 - Selected column/row highlight (light blue, `z-index: 10`)
-- Resize cursor handle (`.fortune-cols-change-size` / `.fortune-rows-change-size`)
+- Resize cursor handle (`.sheet-cols-change-size` / `.sheet-rows-change-size`)
 - Freeze drag handle at the freeze boundary
 - Column-header hover dropdown arrow (ColumnHeader only, lucide `ChevronDown` in a `.header-arrow`
   span; opens the column context menu). The autofilter buttons are NOT here — they're canvas-painted
@@ -119,12 +121,12 @@ content coordinates. The hit-test reads the live offset from `globalCache`.
 
 The selection box is a React div overlay, not drawn on canvas.
 
-- **Focus cell**: `.luckysheet-cell-selected-focus` — `z-index: 14`, light blue bg + blue border
-- **Selection range(s)**: `.luckysheet-cell-selected` — one div per range in
+- **Focus cell**: `.sheet-cell-selected-focus` — `z-index: 14`, light blue bg + blue border
+- **Selection range(s)**: `.sheet-cell-selected` — one div per range in
   `context.selections`, `z-index: 15`, with 4 border divs + center handle
 - **Copy indicator**: dashed blue border, `z-index: 18`
-- **Move indicator**: `.fortune-cell-selected-move`, `z-index: 16`
-- **Extend indicator**: `.fortune-cell-selected-extend`, `z-index: 16`
+- **Move indicator**: `.sheet-cell-selected-move`, `z-index: 16`
+- **Extend indicator**: `.sheet-cell-selected-extend`, `z-index: 16`
 
 Each selection div has 8 resize handles (corners + midpoints) for drag-resizing the selection.
 
@@ -178,7 +180,7 @@ pass, so freeze-region pinning and clipping match the cells underneath (not Reac
 
 - Active image: `z-index: 20`, an 8-point resize-handle frame with a `selection-handle` outline
 - Inactive images: `z-index: 19`, an `<img>` in an `overflow-hidden` div
-- ID: `luckysheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`)
+- ID: `sheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`)
 
 ### 8. Comments
 
@@ -192,12 +194,15 @@ and [`docs/COMMENTS.md`](../../docs/COMMENTS.md).
 **File**: `LinkEditCard/index.tsx`
 
 Three modes:
-1. **Read-only toolbar**: shows link text + copy/edit/delete buttons, positioned near cell
-2. **Edit form**: text input + type select + address input + OK/Cancel
-3. **Range selection modal**: cell range input for internal links
+1. **Read-only toolbar**: link text + copy/edit/unlink buttons. The only absolutely-positioned one,
+   anchored near the active cell
+2. **Edit form**: text input + type select + address input, in a centred shared `Dialog`
+   (`@workspace/ui/components/dialog`)
+3. **Range picker**: `CellRangeDialog`, opened through `useDialog().showNonModalDialog` so the grid
+   stays clickable while a range is picked
 
-Positioned absolutely near the active cell. Class: `.fortune-link-modify-modal` (queried by
-`state/modules/hyperlink.ts`).
+Modes 2 and 3 are portaled shared dialogs, not positioned cards, so there is no class for the grid
+to query — the card's state lives in `ctx.linkCard` and is driven from `state/modules/hyperlink.ts`.
 
 ### 10. Data Verification Dropdown (Canvas glyph + React DOM menu)
 
@@ -241,7 +246,7 @@ Pure React UI — no overlays. Google-Sheets-style menu bar (Edit / View / Inser
 - shadcn `DropdownMenu` for each top-level menu
 - shadcn `Popover` for `CustomBorder` (border style picker)
 - Tailwind styling
-- `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` rendered inside
+- `sheet-mousedown-cancel` must be on any `DropdownMenuSubContent` rendered inside
   `cellArea`. Radix portals the submenu out of the DOM, but React synthetic events still
   bubble across the portal — without the class, `cellArea`'s mousedown guard misses the
   menu items and selection jumps to the cell underneath the popup.
@@ -257,7 +262,7 @@ Bottom bar:
 
 ## Scrolling
 
-**File**: `SheetOverlay/index.tsx` — the `.fortune-cell-area` element
+**File**: `SheetOverlay/index.tsx` — the `.sheet-cell-area` element
 
 Native browser scroll. `cellArea` (`overflow:auto`, holding a full-size `ch_width × rh_height`
 spacer) is the single scroll surface — the browser handles wheel, trackpad (momentum),
@@ -279,7 +284,7 @@ or touch handler.
 
 **Body overlay layer**: the body overlays (selection box, cell editor, presence, fill handle,
 formula-range visuals, search highlights, images, link/validation cards) do NOT scroll
-natively. They live in a `position: sticky` layer (`.fortune-cell-overlay-layer`) that is the
+natively. They live in a `position: sticky` layer (`.sheet-cell-overlay-layer`) that is the
 first child of `cellArea` — a 0×0 anchor pinned to the scrollport origin at compositor speed —
 holding up to four **pane region viewports** (`OverlayRegion`) that mirror how the canvas
 draws frozen panes: main, frozen-rows band, frozen-cols band, corner. Each region is a
@@ -308,7 +313,7 @@ work).
   LinkEditCard) pins with its anchor's pane but never clips; the pane-spanning resize/freeze
   drag lines live in an unclipped wrapper on the main transform. With no freeze configured
   there is exactly one unclipped main region.
-- The `luckysheet-cell-flow` spacer (which defines the scroll range and holds the bottom
+- The `sheet-cell-flow` spacer (which defines the scroll range and holds the bottom
   add-row control, pinned via `left: scrollLeft`) and the cell context-menu anchor stay direct
   children of `cellArea`.
 
@@ -339,7 +344,7 @@ over the grid or swallowing focus-cell clicks.
 | 20 | Active image (with resize handles) | ImgBoxs |
 | 50 | Data verification dropdown (portaled shadcn) | DataVerification/DropdownList |
 
-The SheetOverlay / InputBox / ImgBoxs values live inside `.fortune-cell-overlay-layer`
+The SheetOverlay / InputBox / ImgBoxs values live inside `.sheet-cell-overlay-layer`
 (`z-index: 1`) in per-pane region viewports whose translated content divs are atomic stacking
 contexts (see § Scrolling), so they order those elements only among themselves within a pane;
 across panes the region clip rects are disjoint. The layer as a whole sits above the canvas

@@ -1,5 +1,5 @@
 import { forEach, isNumber, isPlainObject, isUndefined } from 'es-toolkit/compat';
-import type { Context } from '../context';
+import { type Context, editableConfig } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules';
 import { getSheetIndex } from '../utils';
 import { type CommonOptions, getSheet } from './common';
@@ -116,7 +116,7 @@ export function setRowHeight(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = sheet.config || {};
+    const cfg = editableConfig(ctx, sheet);
     if (cfg.rowlen == null) {
         cfg.rowlen = {};
     }
@@ -133,12 +133,6 @@ export function setRowHeight(
             }
         }
     });
-
-    sheet.config = cfg;
-
-    if (ctx.currentSheetId === sheet.id) {
-        ctx.config = cfg;
-    }
 }
 
 export function setColumnWidth(
@@ -153,7 +147,7 @@ export function setColumnWidth(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = sheet.config || {};
+    const cfg = editableConfig(ctx, sheet);
     if (cfg.columnlen == null) {
         cfg.columnlen = {};
     }
@@ -170,12 +164,6 @@ export function setColumnWidth(
             }
         }
     });
-
-    sheet.config = cfg;
-
-    if (ctx.currentSheetId === sheet.id) {
-        ctx.config = cfg;
-    }
 }
 
 export function getRowHeight(ctx: Context, rows: number[], options: CommonOptions = {}) {

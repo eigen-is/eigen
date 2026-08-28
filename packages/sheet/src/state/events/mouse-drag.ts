@@ -15,7 +15,6 @@ import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { rangeDragColumn, rangeDragRow } from '../modules/formula-range';
 import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
-import { onRangeSelectionModalMove, onRangeSelectionModalMoveEnd } from '../modules/hyperlink';
 import { colLocation, rowLocation } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
@@ -165,7 +164,7 @@ function renderColResize(
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollEl.scrollLeft - window.scrollX;
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const changeSizeLine = container.querySelector('.fortune-change-size-line');
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
         }
@@ -175,7 +174,7 @@ function renderColResize(
         const vData = globalCache.freezen?.[ctx.currentSheetId]?.vertical?.freezenverticaldata;
         const inFreeze = vData != null && ctx.colsResizeStart[1] < vData.boundary;
         const handleX = inFreeze ? x - scrollEl.scrollLeft + vData.scroll : x;
-        const changeSizeCol = container.querySelector('.fortune-cols-change-size');
+        const changeSizeCol = container.querySelector('.sheet-cols-change-size');
         if (changeSizeCol) {
             (changeSizeCol as HTMLDivElement).style.left = `${handleX - 2}px`;
         }
@@ -192,7 +191,7 @@ function renderRowResize(
     const rect = container.getBoundingClientRect();
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollEl.scrollTop - window.scrollY;
     if (y < rect.height + ctx.scrollTop - 20) {
-        const changeSizeLine = container.querySelector('.fortune-change-size-line');
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
         }
@@ -202,7 +201,7 @@ function renderRowResize(
         const hData = globalCache.freezen?.[ctx.currentSheetId]?.horizontal?.freezenhorizontaldata;
         const inFreeze = hData != null && ctx.rowsResizeStart[1] < hData.boundary;
         const handleY = inFreeze ? y - scrollEl.scrollTop + hData.scroll : y;
-        const changeSizeRow = container.querySelector('.fortune-rows-change-size');
+        const changeSizeRow = container.querySelector('.sheet-rows-change-size');
         if (changeSizeRow) {
             (changeSizeRow as HTMLDivElement).style.top = `${handleY - 2}px`;
         }
@@ -217,16 +216,16 @@ function renderColFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElem
     const col = x > (col_pre + col_curr) / 2 ? col_curr : col_pre;
 
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const freezeLine = container.querySelector('.fortune-freeze-drag-line');
+        const freezeLine = container.querySelector('.sheet-freeze-drag-line');
         if (freezeLine) {
             (freezeLine as HTMLDivElement).style.left = `${Math.max(0, col - 2)}px`;
         }
-        const freezeHandle = container.querySelector('.fortune-cols-freeze-handle');
+        const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
         if (freezeHandle) {
             (freezeHandle as HTMLDivElement).style.left = `${x}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector('.fortune-change-size-line');
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
         }
@@ -241,16 +240,16 @@ function renderRowFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElem
     const row = y > (row_curr + row_pre) / 2 ? row_curr : row_pre;
 
     if (y < rect.height + ctx.scrollTop - 20) {
-        const freezeLine = container.querySelector('.fortune-freeze-drag-line');
+        const freezeLine = container.querySelector('.sheet-freeze-drag-line');
         if (freezeLine) {
             (freezeLine as HTMLDivElement).style.top = `${Math.max(0, row - 2)}px`;
         }
-        const freezeHandle = container.querySelector('.fortune-rows-freeze-handle');
+        const freezeHandle = container.querySelector('.sheet-rows-freeze-handle');
         if (freezeHandle) {
             (freezeHandle as HTMLDivElement).style.top = `${y}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector('.fortune-change-size-line');
+        const changeSizeLine = container.querySelector('.sheet-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
         }
@@ -380,7 +379,6 @@ export function handleOverlayMouseMove(
 ) {
     if (onImageMove(ctx, globalCache, e)) return;
     onCellsMove(ctx, globalCache, e, scrollEl, container);
-    onRangeSelectionModalMove(globalCache, e);
 
     if (!ctx.selectionActive && !ctx.scrolling) {
         updateFilterButtonHover(ctx, globalCache, e, scrollEl);
@@ -413,14 +411,13 @@ export function handleOverlayMouseUp(
     const rect = container.getBoundingClientRect();
     onImageMoveEnd(ctx, globalCache);
     onFormulaRangeDragEnd(ctx);
-    onRangeSelectionModalMoveEnd(globalCache);
     onCellsMoveEnd(ctx, globalCache, e, scrollEl, container);
     if (
         ctx.formulaCache.rangestart ||
         ctx.formulaCache.rangedrag_column_start ||
         ctx.formulaCache.rangedrag_row_start
     ) {
-        if (document.activeElement?.id === 'luckysheet-functionbox-cell') {
+        if (document.activeElement?.id === 'sheet-functionbox-cell') {
             handleFormulaInput(ctx, cellInput!, fxInput!, 0, undefined, false);
         } else {
             handleFormulaInput(ctx, fxInput, cellInput!, 0, undefined, false);
@@ -605,7 +602,7 @@ export function handleOverlayMouseUp(
                     delete ctx.sheets[idx].frozen;
                 }
             }
-            const freezeHandle = container.querySelector('.fortune-cols-freeze-handle') as HTMLDivElement;
+            const freezeHandle = container.querySelector('.sheet-cols-freeze-handle') as HTMLDivElement;
             if (freezeHandle) {
                 freezeHandle.style.left = `${ctx.scrollLeft}px`;
             }
@@ -625,7 +622,7 @@ export function handleOverlayMouseUp(
                 frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector('.fortune-cols-freeze-handle') as HTMLDivElement;
+        const freezeHandle = container.querySelector('.sheet-cols-freeze-handle') as HTMLDivElement;
         if (freezeHandle) {
             freezeHandle.style.left = `${getFrozenHandleLeft(ctx)}px`;
         }
@@ -666,7 +663,7 @@ export function handleOverlayMouseUp(
                 frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector('.fortune-rows-freeze-handle') as HTMLDivElement;
+        const freezeHandle = container.querySelector('.sheet-rows-freeze-handle') as HTMLDivElement;
         if (freezeHandle) {
             freezeHandle.style.top = `${getFrozenHandleTop(ctx)}px`;
         }

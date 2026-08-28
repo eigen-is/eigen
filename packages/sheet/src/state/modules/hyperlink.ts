@@ -3,7 +3,6 @@ import { cloneDeep, omit, set } from 'es-toolkit/compat';
 import { iscelldata } from '../../engine/formula-utils';
 import { type Context, getFlowdata } from '../context';
 import { en } from '../locale/en';
-import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
@@ -167,37 +166,4 @@ export function isLinkValid(linkType: string, linkAddress: string) {
         return { isValid: false, tooltip: insertLink.invalidCellRangeTip };
     }
     return { isValid: true, tooltip: '' };
-}
-
-export function onRangeSelectionModalMoveStart(_ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
-    const box = document.querySelector('div.fortune-link-modify-modal.range-selection-modal') as HTMLDivElement;
-    if (!box) return;
-    const { width, height } = box.getBoundingClientRect();
-    const left = box.offsetLeft;
-    const top = box.offsetTop;
-    const initialPosition = { left, top, width, height };
-    set(globalCache, 'linkCard.rangeSelectionModal', {
-        cursorMoveStartPosition: {
-            x: e.pageX,
-            y: e.pageY,
-        },
-        initialPosition,
-    });
-}
-
-export function onRangeSelectionModalMove(globalCache: GlobalCache, e: MouseEvent) {
-    const moveProps = globalCache.linkCard?.rangeSelectionModal;
-    if (moveProps == null) return;
-    const modal = document.querySelector('div.fortune-link-modify-modal.range-selection-modal');
-    const { x: startX, y: startY } = moveProps.cursorMoveStartPosition!;
-    let { top, left } = moveProps.initialPosition!;
-    left += e.pageX - startX;
-    top += e.pageY - startY;
-    if (top < 0) top = 0;
-    (modal as HTMLDivElement).style.left = `${left}px`;
-    (modal as HTMLDivElement).style.top = `${top}px`;
-}
-
-export function onRangeSelectionModalMoveEnd(globalCache: GlobalCache) {
-    set(globalCache, 'linkCard.rangeSelectionModal', undefined);
 }

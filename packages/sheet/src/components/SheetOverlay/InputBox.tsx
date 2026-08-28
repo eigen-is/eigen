@@ -223,7 +223,7 @@ export const InputBox: React.FC = () => {
 
     return (
         <div
-            className="luckysheet-input-box"
+            className="sheet-input-box"
             style={
                 firstSelection && !context.rangeDialog?.show
                     ? {
@@ -251,7 +251,7 @@ export const InputBox: React.FC = () => {
             onMouseUp={(e) => e.stopPropagation()}
         >
             <div
-                className="luckysheet-input-box-inner"
+                className="sheet-input-box-inner"
                 style={
                     firstSelection
                         ? {
@@ -267,8 +267,8 @@ export const InputBox: React.FC = () => {
                         inputRef.current = e;
                         refs.cellInput.current = e;
                     }}
-                    className="luckysheet-cell-input"
-                    id="luckysheet-rich-text-editor"
+                    className="sheet-cell-input"
+                    id="sheet-rich-text-editor"
                     onChange={onChange}
                     onKeyDown={onKeyDown}
                     onPaste={onPaste}

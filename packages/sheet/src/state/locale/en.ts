@@ -8898,8 +8898,7 @@ export const en = {
 
         sheetIsFocused: 'Sheet focus lock enabled.',
         sheetNotFocused: 'Sheet focus lock disabled.',
-        sheetSrIntro:
-            'To toggle sheet focus to assist with toolbar and other non-sheet navigation, use Shift, Control, F.',
+        sheetSrIntro: 'To release the sheet focus lock and let keys reach the rest of the app, use Shift, Control, F.',
         currentCellInput: 'Current cell input',
         newSheet: 'New sheet',
         sheetOptions: 'Sheet options',
@@ -9503,7 +9502,7 @@ export const en = {
         placeholder2: 'Please enter the cell to be quoted, example A1',
         placeholder3: 'Please enter the prompt content',
         tooltipInfo1: 'Please enter a valid link',
-        invalidCellRangeTip: 'Please enter the correct ell range, such as Sheet1!A1:C8',
+        invalidCellRangeTip: 'Please enter a valid cell range, such as Sheet1!A1:C8',
         openLink: 'Open link',
         // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
         goTo: 'Go to ${linkAddress}',
@@ -9515,7 +9514,6 @@ export const en = {
     ],
     dataVerification: {
         cellRange: 'Cell range',
-        selectCellRange: 'Click to select a cell range',
         selectCellRange2: 'Please select a range of cells',
         verificationCondition: 'Verification condition',
         allowMultiSelect: 'Allow multiple selection',
@@ -9664,7 +9662,6 @@ export const en = {
         Engineering: 'Engineering',
         Filter: 'Filter',
         Financial: 'Financial',
-        luckysheet: 'Luckysheet',
         other: 'Other',
         Logical: 'Logical',
         Lookup: 'Lookup',

@@ -1,9 +1,9 @@
 import type { BorderInfo, BorderType, RangeBorderInfo } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set } from 'es-toolkit/compat';
+import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, is_date, update } from '../../engine/format';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, editableConfig, getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
@@ -44,9 +44,14 @@ export function updateFormatCell(
     if (isNil(d) || isNil(attr)) {
         return;
     }
+    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (sheetIndex == null) {
+        return;
+    }
+    const cfg = editableConfig(ctx, ctx.sheets[sheetIndex]);
     if (attr === 'ct') {
         for (let r = row_st; r <= row_ed; r += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
             }
 
@@ -132,12 +137,8 @@ export function updateFormatCell(
             }
         }
 
-        const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-        if (sheetIndex == null) {
-            return;
-        }
         for (let r = row_st; r <= row_ed; r += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
             }
 
@@ -147,8 +148,6 @@ export function updateFormatCell(
                 if (value && isPlainObject(value)) {
                     updateInlineStringFormatOutside(value, attr, foucsStatus);
                     (value as Record<string, unknown>)[attr as string] = foucsStatus;
-                    ctx.sheets[sheetIndex].config ||= {};
-                    const cfg = ctx.sheets[sheetIndex].config!;
                     const cellWidth = cfg.columnlen?.[c] || ctx.sheets[sheetIndex].defaultColWidth;
                     if (attr === 'fs' && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
@@ -160,8 +159,7 @@ export function updateFormatCell(
                         const rowHeight = round(textInfo.textHeightAll);
                         const currentRowHeight = cfg.rowlen?.[r] || ctx.sheets[sheetIndex].defaultRowHeight || 19;
                         if (rowHeight > currentRowHeight && cfg.customHeight?.[r] !== 1) {
-                            if (cfg.rowlen === undefined) cfg.rowlen = {};
-                            set(cfg, `rowlen.${r}`, rowHeight);
+                            (cfg.rowlen ??= {})[r] = rowHeight;
                         }
                     }
                 } else {
@@ -196,11 +194,6 @@ export function updateFormat(
                 return;
             }
         }
-    }
-
-    const cfg = cloneDeep(ctx.config);
-    if (isNil(cfg.rowlen)) {
-        cfg.rowlen = {};
     }
 
     forEach(ctx.selections, (selection) => {
@@ -316,7 +309,7 @@ function activeFormulaInput(
     ctx.editingCellPosition = [row_index, col_index];
     cache.doNotUpdateCell = true;
     if (isnull) {
-        const formulaTxt = `<span dir="auto" class="luckysheet-formula-text-color">=</span><span dir="auto" class="luckysheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="luckysheet-formula-text-color">(</span><span dir="auto" class="luckysheet-formula-text-color">)</span>`;
+        const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
 
         cellInput.innerHTML = formulaTxt;
 
@@ -333,14 +326,14 @@ function activeFormulaInput(
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
     const col = colLocationByIndex(columnh[1], ctx.visibledatacolumn)[1];
 
-    const formulaTxt = `<span dir="auto" class="luckysheet-formula-text-color">=</span><span dir="auto" class="luckysheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="luckysheet-formula-text-color">(</span><span class="fortune-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${
+    const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${formula.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span><span class="sheet-formula-functionrange-cell" rangeindex="0" dir="auto" style="color:${
         colors[0]
     };">${getRangetxt(
         ctx,
         ctx.currentSheetId,
         { row: rowh, column: columnh },
         ctx.currentSheetId,
-    )}</span><span dir="auto" class="luckysheet-formula-text-color">)</span>`;
+    )}</span><span dir="auto" class="sheet-formula-text-color">)</span>`;
     cellInput.innerHTML = formulaTxt;
 
     israngeseleciton(ctx);
@@ -986,16 +979,18 @@ export function handleFormatPainter(ctx: Context) {
     ctx.formatPainterOnce = true;
 }
 
-// 2022-10-10 Replaced the forEach loop in handleClearFormat with an every loop that can break early, to prevent a selection from being processed multiple times
 export function handleClearFormat(ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    ctx.selections?.every((selection) => {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    const cfg = editableConfig(ctx, ctx.sheets[index]);
+    for (const selection of ctx.selections ?? []) {
         const [rowSt, rowEd] = selection.row;
         const [colSt, colEd] = selection.column;
         for (let r = rowSt; r <= rowEd; r += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
                 continue;
             }
             for (let c = colSt; c <= colEd; c += 1) {
@@ -1005,11 +1000,6 @@ export function handleClearFormat(ctx: Context) {
             }
         }
         // When clearing table styles, also clear border styles
-        const index = getSheetIndex(ctx, ctx.currentSheetId);
-        if (index == null) return false;
-        // If there are no border styles, skip table operations
-        if (ctx.config.borderInfo == null) return false;
-        const cfg = ctx.config || {};
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const source_borderInfo: BorderInfo[] = [];
 
@@ -1052,10 +1042,9 @@ export function handleClearFormat(ctx: Context) {
                 }
             }
 
-            ctx.sheets[index].config!.borderInfo = source_borderInfo;
+            cfg.borderInfo = source_borderInfo;
         }
-        return true;
-    });
+    }
 }
 
 export function handleTextColor(ctx: Context, cellInput: HTMLDivElement, color: string) {

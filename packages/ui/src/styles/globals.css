@@ -600,7 +600,7 @@
 
 /* Position-neutral chip look (shared everywhere the label renders: docs caret, sheet overlay,
    vector CollabPointer). Placement is scoped to each context — the caret rule below, and the sheet
-   overlay's `.fortune-presence-selection` descendant rule — so the chip's look is one source while
+   overlay's `.sheet-presence-selection` descendant rule — so the chip's look is one source while
    each editor positions its own chip. */
 .collaboration-cursor__label {
     font-size: 12px;

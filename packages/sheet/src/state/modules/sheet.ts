@@ -2,7 +2,7 @@ import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
-import type { Context } from '../context';
+import { type Context, updateContextWithSheetConfig } from '../context';
 import { en } from '../locale/en';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
@@ -42,6 +42,7 @@ export function changeSheet(ctx: Context, id: string) {
 
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
+    updateContextWithSheetConfig(ctx); // the mirror follows the switch, not the next reseed
 
     if (ctx.hooks.afterActivateSheet) {
         setTimeout(() => {
@@ -132,6 +133,7 @@ export function deleteSheet(ctx: Context, id: string) {
         );
         const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
         ctx.currentSheetId = orderSheets?.[0]?.id as string;
+        updateContextWithSheetConfig(ctx); // else the mirror keeps the deleted sheet's config
     }
 
     if (ctx.hooks.afterDeleteSheet) {
@@ -177,10 +179,7 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             }
         }
     }
-    const currentIdx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (currentIdx != null) {
-        ctx.config = ctx.sheets[currentIdx].config ?? {};
-    }
+    updateContextWithSheetConfig(ctx);
 }
 
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {

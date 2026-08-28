@@ -6,7 +6,7 @@ import { booleanDisplay, genarate, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, editableConfig, getFlowdata } from '../context';
 import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
 import { getSheetIndex, indexToColumnChar, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
@@ -798,7 +798,7 @@ export function updateCell(
         // Word wrap
         const { defaultrowlen } = ctx;
 
-        const cfg = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId as string) as number].config || {};
+        const cfg = editableConfig(ctx, ctx.sheets[index]);
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
@@ -1132,7 +1132,7 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
                 // parser decodes entities inside an attribute before CSS sees it, so a
                 // quoted font family survives escaping intact.
                 const styleStr = escapeHtml(styleObjectToCss(getFontStyleByCell(strObj)));
-                value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${escapeHtml(strObj.v)}</span>`;
+                value += `<span class="sheet-input-span" index='${i}' style='${styleStr}'>${escapeHtml(strObj.v)}</span>`;
             }
         }
         return value;

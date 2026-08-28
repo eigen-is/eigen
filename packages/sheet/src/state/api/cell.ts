@@ -2,7 +2,7 @@ import type { RangeBorderInfo } from '@workspace/lib/sheets';
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import type { Cell, CellStyle } from '../../engine/types';
-import type { Context } from '../context';
+import { type Context, editableConfig } from '../context';
 import {
     delFunctionGroup,
     dropCellCache,
@@ -182,7 +182,8 @@ export function setCellFormat(
     const targetSheetData = sheet.data!;
 
     const cellData = targetSheetData?.[row]?.[column] || {};
-    const cfg = sheet.config || {};
+
+    const cfg = editableConfig(ctx, sheet);
     const ctValue = value as { fa?: string; t?: string } | null | undefined;
 
     // special format
@@ -217,9 +218,6 @@ export function setCellFormat(
     }
 
     targetSheetData[row][column] = cellData;
-
-    sheet.config = cfg;
-    ctx.config = cfg;
 }
 
 export function autoFillCell(

@@ -94,6 +94,14 @@ describe('engine/formula-utils — iscelldata', () => {
         expect(iscelldata('$A$1:$B$3')).toBe(true);
     });
 
+    test('recognizes row-only range 1:3', () => {
+        expect(iscelldata('1:3')).toBe(true);
+    });
+
+    test('recognizes absolute row-only range $1:$3', () => {
+        expect(iscelldata('$1:$3')).toBe(true);
+    });
+
     test('recognizes sheet-qualified reference Sheet1!A1', () => {
         expect(iscelldata('Sheet1!A1')).toBe(true);
     });
