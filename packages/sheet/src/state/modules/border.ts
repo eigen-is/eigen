@@ -1,7 +1,7 @@
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
 import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
@@ -140,7 +140,7 @@ export function getBorderInfoComputeRange(
     let cfg: SheetConfig | undefined;
     let data: CellMatrix | null | undefined;
     if (!sheetId) {
-        cfg = ctx.config;
+        cfg = getSheetConfig(ctx);
         data = flowdata;
     } else {
         const index = getSheetIndex(ctx, sheetId);

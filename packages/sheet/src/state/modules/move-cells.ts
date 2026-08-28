@@ -199,7 +199,9 @@ export function onCellsMoveEnd(
 
     const data = cloneDeep(getdatabyselection(ctx, last, ctx.currentSheetId));
 
-    const cfg = ctx.config;
+    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (sheetIndex == null) return;
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
     if (cfg.merge == null) {
         cfg.merge = {};
     }
@@ -436,10 +438,6 @@ export function onCellsMoveEnd(
     last.row_focus = rf;
     last.column_focus = cf;
     ctx.selections = normalizeSelection(ctx, [last]);
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex != null) {
-        ctx.sheets[sheetIndex].config = cloneDeep(cfg);
-    }
 
     jfrefreshgrid(ctx, d, range);
 }

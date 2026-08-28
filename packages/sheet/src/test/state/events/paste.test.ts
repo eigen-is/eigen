@@ -209,7 +209,7 @@ describe('internal copy/paste — styles and merges', () => {
             d[2][1] = { mc: { r: 1, c: 1 } };
             d[2][2] = { mc: { r: 1, c: 1 } };
         });
-        ctx.config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
+        ctx.sheets[0].config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
 
         copyThenPaste(ctx, rangeSel(1, 2, 1, 2), single(4, 4));
 
@@ -230,7 +230,7 @@ describe('internal copy/paste — styles and merges', () => {
         const ctx = makeCtx(8, 8, (d) => {
             d[1][1] = { v: 'B', m: 'B' };
         });
-        ctx.config = {
+        ctx.sheets[0].config = {
             borderInfo: [
                 {
                     rangeType: 'cell',
@@ -238,9 +238,6 @@ describe('internal copy/paste — styles and merges', () => {
                 },
             ],
         };
-        // getBorderInfoCompute reads the source sheet's config, which in the live
-        // app aliases ctx.config for the current sheet (storeSheetParamALL)
-        ctx.sheets[0].config = ctx.config;
 
         copyThenPaste(ctx, single(1, 1), single(4, 4));
 
@@ -300,7 +297,7 @@ describe('cut/paste — cross-range move', () => {
             d[2][1] = { mc: { r: 1, c: 1 } };
             d[2][2] = { mc: { r: 1, c: 1 } };
         });
-        ctx.config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
+        ctx.sheets[0].config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
 
         copyThenPaste(ctx, rangeSel(1, 2, 1, 2), single(4, 4), {
             cut: true,
@@ -330,7 +327,6 @@ describe('cut/paste — cross-range move', () => {
         copy(ctx);
         ctx.pasteIsCut = true;
         ctx.currentSheetId = 'id_1';
-        ctx.config = {};
         ctx.selections = single(2, 2);
         handlePasteByClick(ctx, 'internal');
 
@@ -372,7 +368,7 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
 describe('partial-merge guard (hasPartMC)', () => {
     it('refuses a plain-text paste that would split a merged cell', () => {
         const ctx = makeCtx(6, 6);
-        ctx.config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
         // paste a 2x1 block starting inside the merge and crossing its bottom edge
         ctx.selections = single(1, 0);
         handlePasteByClick(ctx, '9\n8');

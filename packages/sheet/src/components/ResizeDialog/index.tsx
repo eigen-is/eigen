@@ -4,7 +4,7 @@ import { Input } from '@workspace/ui/components/input';
 import { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { api, type Context } from '../../state';
+import { api, type Context, getSheetConfig } from '../../state';
 
 // Engine limits, in pixels. The legacy inline item validated column width to 2038
 // but capped its <input> at 545 (copy-pasted from the row case) — fixed here.
@@ -27,7 +27,8 @@ export function ResizeDialog({ mode }: { mode: 'row' | 'column' }) {
 
     // Prefill with the current size when every selected row/column shares it, else blank.
     const [value, setValue] = useState(() => {
-        const lenMap = isRow ? context.config?.rowlen : context.config?.columnlen;
+        const cfg = getSheetConfig(context);
+        const lenMap = isRow ? cfg?.rowlen : cfg?.columnlen;
         const fallback = isRow ? context.defaultrowlen : context.defaultcollen;
         const sizes = selectedIndices.map((i) => lenMap?.[i] ?? fallback);
         const uniformSize = sizes.length > 0 && sizes.every((v) => v === sizes[0]) ? sizes[0] : null;

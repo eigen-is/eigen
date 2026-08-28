@@ -1,5 +1,5 @@
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
-import type { Context } from '../context';
+import { type Context, getSheetConfig } from '../context';
 import { en } from '../locale/en';
 import { checkCellIsLocked } from '../modules';
 import type { Sheet } from '../types';
@@ -159,17 +159,17 @@ export function replaceHtml(temp: string, dataarry: Record<string, string | numb
 }
 
 export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
-    const cfg = ctx.config;
+    const cfg = getSheetConfig(ctx);
     const judgeRange = isUndefined(range) ? ctx.selections : range;
     return (
         every(judgeRange, (selection) => {
             for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
-                if (cfg.rowReadOnly?.[r]) {
+                if (cfg?.rowReadOnly?.[r]) {
                     return false;
                 }
             }
             for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                if (cfg.colReadOnly?.[c]) {
+                if (cfg?.colReadOnly?.[c]) {
                     return false;
                 }
             }

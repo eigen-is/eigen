@@ -342,11 +342,7 @@ describe('HTML-table paste — merges, borders, row height', () => {
     it('leaves cfg.rowlen untouched for a tr with no height attribute', () => {
         const ctx = makeCtx();
         ctx.selections = single(2, 1);
-        // ctx.config aliases the current sheet's config in the live app (see the
-        // hasPartMC test below) and setRowHeight writes through that mirror, so a
-        // sheet-only config here would be a fixture the app never produces.
-        ctx.config = { rowlen: { 2: 42 } };
-        ctx.sheets[0].config = ctx.config;
+        ctx.sheets[0].config = { rowlen: { 2: 42 } };
         pasteHtml(ctx, '<table><tr><td>a</td></tr><tr><td>b</td></tr></table>');
 
         const rowlen = ctx.sheets[0].config!.rowlen!;
@@ -357,12 +353,7 @@ describe('HTML-table paste — merges, borders, row height', () => {
 
     it('refuses a paste that would partially cover an existing merge (hasPartMC guard)', () => {
         const ctx = makeCtx(6, 6);
-        ctx.config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
-        // In the live app ctx.config aliases the current sheet's config
-        // (storeSheetParamALL). Mirror that: the branch's setRowHeight reassigns
-        // ctx.config = sheet.config, so without the alias the merge would be orphaned
-        // before hasPartMC runs and the guard would spuriously pass.
-        ctx.sheets[0].config = ctx.config;
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
         // paste a 2x1 table starting inside the merge and crossing its bottom edge
         ctx.selections = single(1, 0);
         pasteHtml(ctx, '<table><tr><td>9</td></tr><tr><td>8</td></tr></table>');

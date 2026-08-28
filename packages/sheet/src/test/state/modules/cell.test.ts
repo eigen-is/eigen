@@ -89,11 +89,9 @@ describe('state/modules/cell — getCellValue / getFormulaHtml', () => {
 });
 
 // Committing multi-line text into a cell grows the row to fit it. The grown height has to
-// land on both halves of the config mirror: updateCell wrote `sheets[i].config.rowlen` only,
-// so the height synced and undid fine, but calcRowColSize measures from `ctx.config` — the
-// row kept its old height and the text stayed clipped until a sheet switch or a reload.
-// Driving updateCell through produceWithPatches is what exposes it: outside a recipe the two
-// halves are the same object, so any write appears to reach both.
+// land on the sheet's config — that is what calcRowColSize measures from and what syncs —
+// or the row keeps its old height and the text stays clipped. Driving updateCell through
+// produceWithPatches is what exposes a write that never lands.
 describe('state/modules/cell — updateCell auto-height', () => {
     // Only `font` and `measureText` are read on the auto-height path.
     function measuringCanvas(): CanvasRenderingContext2D {
@@ -131,14 +129,13 @@ describe('state/modules/cell — updateCell auto-height', () => {
         return ctx;
     }
 
-    test('the grown row height reaches the config mirror the grid measures from', () => {
+    test('the grown row height lands on the sheet the grid measures from', () => {
         clearMeasureTextCache();
         const [grown] = produceWithPatches(editContext(), (ctx: Context) => {
             updateCell(ctx, 0, 0, multilineInput(), undefined, measuringCanvas());
         });
 
         expect(grown.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(19);
-        expect(grown.config.rowlen?.[0]).toBe(grown.sheets[0].config?.rowlen?.[0]);
     });
 
     test('and still syncs, because the patch that survives filterPatch carries it', () => {

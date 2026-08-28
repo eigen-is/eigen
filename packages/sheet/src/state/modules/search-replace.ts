@@ -2,7 +2,7 @@ import { applyPreserveCase, buildSearchRegex } from '@workspace/lib/doc-search';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import { sortBy } from 'es-toolkit/compat';
 import { valueShowEs } from '../../engine/format';
-import { type Context, getFlowdata, updateContextWithSheetConfig, updateContextWithSheetData } from '../context';
+import { type Context, getFlowdata, updateContextWithSheetData } from '../context';
 import type { SearchHighlight, SearchResult } from '../types';
 import { getSheetIndex, indexToColumnChar } from '../utils';
 import { setCellValue as setCellValueInternal } from './cell';
@@ -90,7 +90,6 @@ export function revealSearchMatch(ctx: Context, cell: SearchHighlight) {
         const idx = getSheetIndex(ctx, cell.sheetId);
         const flowdata = getFlowdata(ctx, cell.sheetId);
         if (idx == null || flowdata == null) return;
-        updateContextWithSheetConfig(ctx);
         updateContextWithSheetData(ctx, flowdata);
     }
     ctx.selections = normalizeSelection(ctx, [{ row: [cell.r, cell.r], column: [cell.c, cell.c] }]);

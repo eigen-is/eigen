@@ -23,7 +23,7 @@ import { genarate, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
-import { type Context, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { en } from '../locale/en';
 import { getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder } from '../modules/cell';
@@ -79,31 +79,32 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
         }
     }
 
-    // config
+    // config — both sides are spliced, and the current sheet is one of them.
     let rowHeight = 0;
     if (ctx.currentSheetId === source.sheetId) {
-        ctx.config = source.curConfig;
+        ctx.sheets[getSheetIndex(ctx, source.sheetId)!].config = source.curConfig;
         rowHeight = source.curData.length;
         ctx.sheets[getSheetIndex(ctx, target.sheetId)!].config = target.curConfig;
     } else if (ctx.currentSheetId === target.sheetId) {
-        ctx.config = target.curConfig;
+        ctx.sheets[getSheetIndex(ctx, target.sheetId)!].config = target.curConfig;
         rowHeight = target.curData.length;
         ctx.sheets[getSheetIndex(ctx, source.sheetId)!].config = source.curConfig;
     }
 
     if (RowlChange) {
+        const cfg = getSheetConfig(ctx);
         ctx.visibledatarow = [];
         ctx.rh_height = 0;
 
         for (let i = 0; i < rowHeight; i += 1) {
             let rowlen = ctx.defaultrowlen;
 
-            if (ctx.config.rowlen != null && ctx.config.rowlen[i] != null) {
-                rowlen = ctx.config.rowlen[i];
+            if (cfg?.rowlen?.[i] != null) {
+                rowlen = cfg.rowlen[i];
             }
 
-            if (ctx.config.rowhidden != null && ctx.config.rowhidden[i] != null) {
-                rowlen = ctx.config.rowhidden[i];
+            if (cfg?.rowhidden?.[i] != null) {
+                rowlen = cfg.rowhidden[i];
                 ctx.visibledatarow.push(ctx.rh_height);
                 continue;
             } else {
@@ -159,7 +160,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
             return;
         }
 
-        const cfg = ctx.config || {};
+        const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
         if (cfg.merge == null) {
             cfg.merge = {};
         }
@@ -279,7 +280,6 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
 
         ctx.selections = [{ row: [minh, maxh], column: [minc, maxc] }];
 
-        ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config = cfg;
         jfrefreshgrid(ctx, null, undefined);
     } else {
         data = data.replace(/\r/g, '');
@@ -308,7 +308,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
 
         // return with a warning if the apply range contains partially merged cells
         let has_PartMC = false;
-        if (ctx.config.merge != null) {
+        if (getSheetConfig(ctx)?.merge != null) {
             has_PartMC = hasPartMC(ctx, curR, curR + rlen - 1, curC, curC + clen - 1);
         }
 
@@ -387,7 +387,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
 
     if (!copyRange) return;
 
-    const cfg = ctx.config || {};
+    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
     if (cfg.merge == null) {
         cfg.merge = {};
     }
@@ -767,7 +767,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             sheetId: ctx.currentSheetId,
             data: getFlowdata(ctx) ?? undefined,
             curData: d,
-            config: cloneDeep(ctx.config),
+            config: cloneDeep(getSheetConfig(ctx)),
             curConfig: cfg,
             cdformat: target_cdformat,
             curCdformat: target_curCdformat,
@@ -805,7 +805,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             sheetId: ctx.currentSheetId,
             data: getFlowdata(ctx) ?? undefined,
             curData: d,
-            config: cloneDeep(ctx.config),
+            config: cloneDeep(getSheetConfig(ctx)),
             curConfig: cfg,
             cdformat,
             curCdformat,
@@ -820,7 +820,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             sheetId: ctx.currentSheetId,
             data: getFlowdata(ctx) ?? undefined,
             curData: d,
-            config: cloneDeep(ctx.config),
+            config: cloneDeep(getSheetConfig(ctx)),
             curConfig: cfg,
             cdformat,
             curCdformat,
@@ -850,7 +850,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     // formula, and each evaluation sees the cells pasted before it.
     const resolver = createContextResolver(ctx);
 
-    const cfg = ctx.config;
+    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
     if (isNil(cfg.merge)) {
         cfg.merge = {};
     }
@@ -1184,7 +1184,6 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     last.row = [minh, maxh];
     last.column = [minc, maxc];
 
-    file.config = cfg;
     file.conditionalFormatRules = cdformat;
     file.dataVerification = cloneDeep({ ...file.dataVerification, ...dataVerification });
 
@@ -1394,8 +1393,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 if (!isNil(index)) {
                     // Collect only the rows the paste changes and let setRowHeight write them: it
                     // owns the `>= 0` guard, and writing through the sheet's live rowlen bypassed it.
-                    // Read the mirror, the half setRowHeight writes — the sheet half can be behind.
-                    const currentRowlen = ctx.config.rowlen ?? {};
+                    const currentRowlen = ctx.sheets[index].config?.rowlen ?? {};
                     const rowHeightList: Record<number, number> = {};
                     forEach(trList, (tr) => {
                         let c = 0;

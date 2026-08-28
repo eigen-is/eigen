@@ -247,14 +247,11 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
 
     maxWidth = Math.ceil(maxWidth);
 
-    const cfg = ctx.config;
+    const idx = getSheetIndex(ctx, ctx.currentSheetId);
+    if (idx == null) return;
+    const cfg = (ctx.sheets[idx].config ??= {});
     cfg.columnlen ||= {};
     cfg.customWidth ||= {};
     cfg.columnlen[colIndex] = maxWidth;
     cfg.customWidth[colIndex] = 1;
-    ctx.config = cfg;
-
-    const idx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (idx == null) return;
-    ctx.sheets[idx].config = ctx.config;
 }

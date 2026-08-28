@@ -1,17 +1,11 @@
-// `ctx.config` is a derived mirror of `ctx.sheets[current].config`, and inside an immer
-// recipe the two are independent drafts even when the base holds one shared object.
-// handleClearFormat trimmed the border entries on the mirror but wrote the filtered array
-// to the sheet only, so a cell-type border inside the cleared rect stayed in the mirror —
-// the renderer reads the mirror (border.ts getBorderInfoComputeRange), so it kept painting,
-// and the next mirror-authoritative flush (storeSheetParamALL after a cut/paste, the format
-// painter, clearFilter, changeSheet) wrote it back as real data and emitted it to peers.
-// Driving the handler through produceWithPatches is what exposes this: a plain non-draft
-// context keeps the alias, so both halves move together no matter what the code writes.
+// handleClearFormat has to drop the cell-type border entries inside the cleared rect from
+// the sheet's config — the renderer reads them back from there (border.ts
+// getBorderInfoComputeRange), and anything left behind is re-emitted to peers as real data.
+// Driving the handler through produceWithPatches is what exposes a write that never lands.
 
 import { describe, expect, test } from 'bun:test';
-import { enablePatches, produce, produceWithPatches } from 'immer';
+import { enablePatches, produceWithPatches } from 'immer';
 import type { Context } from '../../../state/context';
-import { storeSheetParamALL } from '../../../state/modules/sheet';
 import { handleClearFormat } from '../../../state/modules/toolbar';
 import type { BorderInfo, Cell, SheetConfig } from '../../../state/types';
 import { contextFactory } from '../factories/context';
@@ -58,28 +52,12 @@ function borderedCells(config: SheetConfig | undefined) {
         .map((entry) => `${entry.value.row_index}_${entry.value.col_index}`);
 }
 
-describe('handleClearFormat clears borders on both halves of the config mirror', () => {
-    test('drops the cell-type border inside the rect from the mirror as well as the sheet', () => {
+describe('handleClearFormat clears borders on the sheet config', () => {
+    test('drops the cell-type border inside the rect, keeps the one outside it', () => {
         const [cleared] = produceWithPatches(clearFormatContext(), (ctx: Context) => {
             handleClearFormat(ctx);
         });
 
         expect(borderedCells(cleared.sheets[0].config)).toEqual(['3_3']);
-        expect(borderedCells(cleared.config)).toEqual(['3_3']);
-        expect(cleared.config.borderInfo).toEqual(cleared.sheets[0].config?.borderInfo ?? []);
-    });
-
-    test('a later mirror-authoritative flush does not resurrect the cleared border', () => {
-        const [cleared] = produceWithPatches(clearFormatContext(), (ctx: Context) => {
-            handleClearFormat(ctx);
-        });
-
-        // storeSheetParamALL — reached after a cut/paste, the format painter, clearFilter
-        // and every sheet switch — writes the mirror back over the sheet authoritatively.
-        const flushed = produce(cleared, (ctx: Context) => {
-            storeSheetParamALL(ctx);
-        });
-
-        expect(borderedCells(flushed.sheets[0].config)).toEqual(['3_3']);
     });
 });

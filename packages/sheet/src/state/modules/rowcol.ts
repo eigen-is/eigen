@@ -8,7 +8,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
-import { type Context, updateContextWithSheetConfig } from '../context';
+import { type Context, getSheetConfig } from '../context';
 import type { FilterEntry, FormulaCell, Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
@@ -886,7 +886,6 @@ export function insertRowCol(
     const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
 
-    if (id === ctx.currentSheetId) updateContextWithSheetConfig(ctx);
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
@@ -1136,7 +1135,6 @@ export function deleteRowCol(
     const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
 
-    if (id === ctx.currentSheetId) updateContextWithSheetConfig(ctx);
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
@@ -1170,6 +1168,7 @@ export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: SheetConf
 export function hideSelected(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const cfg = (ctx.sheets[index].config ??= {});
     // Hide rows
     if (type === 'row') {
         /* TODO: Sheet protection check
@@ -1178,7 +1177,7 @@ export function hideSelected(ctx: Context, type: string) {
         ) {
           return ;
         } */
-        const rowhidden = ctx.config.rowhidden ?? {};
+        const rowhidden = cfg.rowhidden ?? {};
         const r1 = ctx.selections[0].row[0];
         const r2 = ctx.selections[0].row[1];
         const rowhiddenNumber = r2;
@@ -1196,7 +1195,7 @@ export function hideSelected(ctx: Context, type: string) {
             Store.jfundo.length  = 0;
             Store.jfredo.push(redo);
         } */
-        ctx.config.rowhidden = rowhidden;
+        cfg.rowhidden = rowhidden;
         const rowLen = ctx.sheets[index].data!.length;
         const isEndRow =
             rowLen - 1 === rowhiddenNumber ||
@@ -1210,14 +1209,14 @@ export function hideSelected(ctx: Context, type: string) {
         }
     } else if (type === 'column') {
         // Hide columns
-        const colhidden = ctx.config.colhidden ?? {};
+        const colhidden = cfg.colhidden ?? {};
         const c1 = ctx.selections[0].column[0];
         const c2 = ctx.selections[0].column[1];
         const colhiddenNumber = c2;
         for (let c = c1; c <= c2; c += 1) {
             colhidden[c] = 0;
         }
-        ctx.config.colhidden = colhidden;
+        cfg.colhidden = colhidden;
         const columnLen = ctx.sheets[index].data![0].length;
         // Check if the column to hide is the last column
         const isEndColumn =
@@ -1231,7 +1230,6 @@ export function hideSelected(ctx: Context, type: string) {
             ctx.selections[0].column[1] += 1;
         }
     }
-    ctx.sheets[index].config = ctx.config;
     return '';
 }
 
@@ -1239,47 +1237,48 @@ export function hideSelected(ctx: Context, type: string) {
 export function showSelected(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const cfg = (ctx.sheets[index].config ??= {});
     // Unhide rows
     if (type === 'row') {
-        const rowhidden = ctx.config.rowhidden ?? {};
+        const rowhidden = cfg.rowhidden ?? {};
         const r1 = ctx.selections[0].row[0];
         const r2 = ctx.selections[0].row[1];
         for (let r = r1; r <= r2; r += 1) {
             delete rowhidden[r];
         }
-        ctx.config.rowhidden = rowhidden;
+        cfg.rowhidden = rowhidden;
     } else if (type === 'column') {
         // Unhide columns
-        const colhidden = ctx.config.colhidden ?? {};
+        const colhidden = cfg.colhidden ?? {};
         const c1 = ctx.selections[0].column[0];
         const c2 = ctx.selections[0].column[1];
         for (let c = c1; c <= c2; c += 1) {
             delete colhidden[c];
         }
-        ctx.config.colhidden = colhidden;
+        cfg.colhidden = colhidden;
     }
-    ctx.sheets[index].config = ctx.config;
     return '';
 }
 
 // Check if the current selection is on a hidden row/column
 export function isShowHidenCR(ctx: Context): boolean {
-    if (!ctx.selections || (!ctx.config.colhidden && !ctx.config.rowhidden)) return false;
+    const cfg = getSheetConfig(ctx);
+    if (!ctx.selections || (!cfg?.colhidden && !cfg?.rowhidden)) return false;
     // If the current selection is on a hidden row/column, it is not editable
-    if (ctx.config.colhidden && size(ctx.config.colhidden) >= 1) {
+    if (cfg?.colhidden && size(cfg.colhidden) >= 1) {
         const ctxColumn = ctx.selections[0]?.column?.[0];
         const isHidenColumn =
-            Object.keys(ctx.config.colhidden).findIndex((o) => {
+            Object.keys(cfg.colhidden).findIndex((o) => {
                 return ctxColumn === parseInt(o, 10);
             }) >= 0;
         if (isHidenColumn) {
             return true;
         }
     }
-    if (ctx.config.rowhidden && size(ctx.config.rowhidden) >= 1) {
+    if (cfg?.rowhidden && size(cfg.rowhidden) >= 1) {
         const ctxRow = ctx.selections[0]?.row?.[0];
         const isHidenRow =
-            Object.keys(ctx.config.rowhidden).findIndex((o) => {
+            Object.keys(cfg.rowhidden).findIndex((o) => {
                 return ctxRow === parseInt(o, 10);
             }) >= 0;
         if (isHidenRow) {
@@ -1294,8 +1293,9 @@ export function hideCRCount(ctx: Context, type: string): number {
     let count = 1;
     if (!ctx.selections) return 0;
     const section = ctx.selections[0];
-    const rowhidden = ctx.config.rowhidden ?? {};
-    const colhidden = ctx.config.colhidden ?? {};
+    const cfg = getSheetConfig(ctx);
+    const rowhidden = cfg?.rowhidden ?? {};
+    const colhidden = cfg?.colhidden ?? {};
     if (type === 'ArrowUp' || type === 'ArrowDown') {
         const rowArr = Object.keys(rowhidden);
         if (type === 'ArrowUp') {

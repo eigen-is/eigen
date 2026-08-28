@@ -1,17 +1,18 @@
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
-import { getRangetxt } from '../../state';
+import { getRangetxt, getSheetConfig } from '../../state';
 
 export function NameBox() {
     const { context } = useContext(WorkbookContext);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: depending on the full context object would re-compute on every change; merge config is read but stable per sheet
+    // biome-ignore lint/correctness/useExhaustiveDependencies: depending on the full context object would re-compute on every change; the sheet's merge config is read but stable per sheet
     const rangeText = useMemo(() => {
         const lastSelection = context.selections?.[context.selections.length - 1];
         if (!(lastSelection && lastSelection.row_focus != null && lastSelection.column_focus != null)) return '';
         const rf = lastSelection.row_focus;
         const cf = lastSelection.column_focus;
-        if (context.config.merge != null && `${rf}_${cf}` in context.config.merge) {
+        const merge = getSheetConfig(context)?.merge;
+        if (merge != null && `${rf}_${cf}` in merge) {
             return getRangetxt(context, context.currentSheetId, {
                 column: [cf, cf],
                 row: [rf, rf],

@@ -1,6 +1,7 @@
 // The drawMain cell phases: collect the visible cells, render them, then
 // re-render merge anchors over their full span.
 
+import { getSheetConfig } from '../context';
 import { getRealCellValue } from '../modules/cell';
 import { cellRender, nullCellRender } from './cells';
 import { colEndX, colStartX, rowEndY, rowStartY } from './geometry';
@@ -14,12 +15,13 @@ export function collectVisibleCells(pass: RenderPass): CellRenderItem[] {
     const { sheetCtx, flowdata, rowStart, rowEnd, colStart, colEnd, scrollWidth, scrollHeight } = pass;
     const cells: CellRenderItem[] = [];
     const mergeCache: Record<string, number> = {};
+    const cfg = getSheetConfig(sheetCtx);
 
     for (let r = rowStart; r <= rowEnd; r += 1) {
         const startY = rowStartY(sheetCtx.visibledatarow, r, scrollHeight);
         const endY = rowEndY(sheetCtx.visibledatarow, r, scrollHeight);
 
-        if (sheetCtx.config?.rowhidden?.[r] != null) {
+        if (cfg?.rowhidden?.[r] != null) {
             continue;
         }
 
@@ -27,7 +29,7 @@ export function collectVisibleCells(pass: RenderPass): CellRenderItem[] {
             const startX = colStartX(sheetCtx.visibledatacolumn, c, scrollWidth);
             const endX = colEndX(sheetCtx.visibledatacolumn, c, scrollWidth);
 
-            if (sheetCtx.config?.colhidden?.[c] != null) {
+            if (cfg?.colhidden?.[c] != null) {
                 continue;
             }
 

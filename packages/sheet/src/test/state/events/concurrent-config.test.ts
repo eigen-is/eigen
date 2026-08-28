@@ -1,12 +1,10 @@
 // Two clients branch from the same document state, each edits a DIFFERENT key of the same
 // sheet config, and the ops are replayed in order. Both edits must survive.
 //
-// They don't today. `mergeCells` writes through `editableConfig`, so it emits the granular
-// `['config','merge','40_5']`. The row-height DRAG (events/mouse-drag.ts) instead assigns the
-// mirror draft into the sheet slot — `ctx.sheets[i].config = ctx.config` — and immer records
-// that as one `replace ['sheets',i,'config']` carrying the WHOLE config object. Replayed on a
-// peer, it overwrites every key, so whichever client's op lands second silently destroys the
-// other's work.
+// They did not, before `ctx.config` was deleted. The row-height drag assigned the config
+// mirror into the sheet slot, and immer records assigning a FOREIGN draft into a slot as one
+// `replace ['sheets',i,'config']` carrying the whole config object. Replayed on a peer that
+// overwrote every key, so whichever client's op landed second destroyed the other's work.
 //
 // These assert the CONTRACT (both edits survive the round trip), and separately pin the op
 // PATH, because the value assertions alone cannot see the difference on a single client — a
@@ -32,7 +30,9 @@ g.window = win;
 g.document = win.document;
 
 function sharedDocument(): Context {
-    const ctx = contextFactory({ config: { rowlen: { 2: 40 }, columnlen: { 2: 100 }, merge: {} } }) as Context;
+    const ctx = contextFactory({
+        config: { rowlen: { 2: 40 }, columnlen: { 2: 100 }, merge: {}, customHeight: {} },
+    }) as Context;
     ctx.rowHeaderWidth = 46;
     ctx.columnHeaderHeight = 20;
     ctx.defaultrowlen = 19;
@@ -56,7 +56,7 @@ function receive(ctx: Context, ops: Op[]): Context {
 }
 
 function mergeF41(ctx: Context) {
-    mergeCells(ctx, ctx.currentSheetId, [{ row: [1, 1], column: [1, 2], row_focus: 1, column_focus: 1 }], 'merge-all');
+    mergeCells(ctx, ctx.currentSheetId, [{ row: [1, 1], column: [1, 2] }], 'merge-all');
 }
 
 function dragRowTaller(ctx: Context) {
@@ -105,6 +105,9 @@ describe('every config writer emits a granular op, never a whole-config replace'
     });
 
     test('dragging a row taller patches the rowlen key', () => {
-        expect(opPaths(dragRowTaller)).toEqual([['config', 'rowlen', '2']]);
+        expect(opPaths(dragRowTaller)).toEqual([
+            ['config', 'rowlen', '2'],
+            ['config', 'customHeight', '2'],
+        ]);
     });
 });

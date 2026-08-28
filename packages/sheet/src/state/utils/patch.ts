@@ -166,14 +166,9 @@ function sheetMetadataOps(ctx: Context, id: string, includeCalcChain: boolean): 
     return metaOps;
 }
 
-// `ctx.config` is a derived mirror of the current sheet's config, so only the `sheets[*]` half
-// belongs on the wire: a top-level `['config', …]` patch would reach patchToOp with no sheet id
-// and poison the collab stream. Config writers go through editableConfig, which hands back the
-// draft reached through `sheets[i]` — immer attributes a shared child's patches to whichever root
-// key it reaches first, and `sheets` precedes `config` in the Context, so the granular
-// `['sheets', i, 'config', …]` patch this filter keeps is the one that gets emitted. The dropped
-// mirror patch is re-derived instead: handleUndo/handleRedo/applyOp call
-// updateContextWithSheetConfig after applying patches.
+// Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
+// (scroll position, hover, dialogs) that patchToOp could not give a sheet id anyway. Per-client
+// cursors live under `sheets[i].selections`, so those are dropped too.
 export function filterPatch(patches: Patch[]) {
     return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'selections');
 }

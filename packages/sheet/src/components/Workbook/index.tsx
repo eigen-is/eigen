@@ -39,7 +39,6 @@ import {
     patchToOp,
     type Settings,
     type Sheet as SheetType,
-    updateContextWithSheetConfig,
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -319,7 +318,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (si != null) {
                         newContext = produce(newContext, (draft: Context) => {
                             draft.insertedImgs = draft.sheets[si].images;
-                            updateContextWithSheetConfig(draft);
                         });
                     }
                     globalCache.current.redoList.push(history);
@@ -362,7 +360,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (si != null) {
                         newContext = produce(newContext, (draft: Context) => {
                             draft.insertedImgs = draft.sheets[si].images;
-                            updateContextWithSheetConfig(draft);
                         });
                     }
                     globalCache.current.undoList.push(history);
@@ -479,7 +476,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // A fresh sheet with no persisted selection is seeded once by the
                     // SheetOverlay mount effect (api.setSelection) — the single canonical seed.
 
-                    draftCtx.config = sheet.config ?? {};
                     draftCtx.insertedImgs = sheet.images;
                     draftCtx.currency = mergedSettings.currency || '€';
 

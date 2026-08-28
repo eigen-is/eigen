@@ -461,7 +461,9 @@ export function handleOverlayMouseUp(
             delta = winH - 20 - ctx.rowsResizeStart[0] + scrollTop;
         }
 
-        const cfg = ctx.config;
+        const idx = getSheetIndex(ctx, ctx.currentSheetId);
+        if (idx == null) return;
+        const cfg = (ctx.sheets[idx].config ??= {});
         if (cfg.rowlen == null) {
             cfg.rowlen = {};
         }
@@ -506,12 +508,6 @@ export function handleOverlayMouseUp(
         } else {
             cfg.rowlen[ctx.rowsResizeStart[1]] = Math.ceil(size);
         }
-
-        // config
-        ctx.config = cfg;
-        const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
-        ctx.sheets[idx].config = ctx.config;
     }
 
     // Change column width
@@ -528,22 +524,19 @@ export function handleOverlayMouseUp(
             delta = winW - 100 - ctx.colsResizeStart[0] + scrollLeft;
         }
 
-        const cfg = ctx.config;
-        if (cfg.columnlen == null) {
-            cfg.columnlen = {};
-        }
-
-        if (cfg.customWidth == null) {
-            cfg.customWidth = {};
-        }
+        const idx = getSheetIndex(ctx, ctx.currentSheetId);
+        if (idx == null) return;
+        const cfg = (ctx.sheets[idx].config ??= {});
 
         let firstcolumnlen = ctx.defaultcollen;
-        if (ctx.config.columnlen != null && ctx.config.columnlen[ctx.colsResizeStart[1]] != null) {
-            firstcolumnlen = ctx.config.columnlen[ctx.colsResizeStart[1]];
+        if (cfg.columnlen?.[ctx.colsResizeStart[1]] != null) {
+            firstcolumnlen = cfg.columnlen[ctx.colsResizeStart[1]];
         }
 
-        let size = (cfg.columnlen[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta;
+        let size = (cfg.columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta;
 
+        // Sub-3px is a mis-click, not a resize — bail before seeding the maps below, or
+        // every stray click would ship an empty columnlen/customWidth op.
         if (Math.abs(size - firstcolumnlen) < 3) {
             return;
         }
@@ -551,6 +544,8 @@ export function handleOverlayMouseUp(
             size = 10;
         }
 
+        cfg.columnlen ??= {};
+        cfg.customWidth ??= {};
         cfg.customWidth[ctx.colsResizeStart[1]] = 1;
 
         const changeColumnIndex = ctx.colsResizeStart[1];
@@ -566,21 +561,14 @@ export function handleOverlayMouseUp(
                 });
         }
         if (changeColumnSelected) {
-            cfg.columnlen ||= {};
             for (const select of ctx.selections?.filter((select) => select.column_select) ?? []) {
                 for (let r = select.column[0]; r <= select.column[1]; r += 1) {
-                    cfg.columnlen![r] = Math.ceil(size);
+                    cfg.columnlen[r] = Math.ceil(size);
                 }
             }
         } else {
             cfg.columnlen[ctx.colsResizeStart[1]] = Math.ceil(size);
         }
-
-        // config
-        ctx.config = cfg;
-        const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
-        ctx.sheets[idx].config = ctx.config;
     }
 
     // Column freeze drag end

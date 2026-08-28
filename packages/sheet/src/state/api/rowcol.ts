@@ -1,7 +1,6 @@
 import { forEach, isNumber, isPlainObject, isUndefined } from 'es-toolkit/compat';
-import { type Context, editableConfig } from '../context';
+import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules';
-import { getSheetIndex } from '../utils';
 import { type CommonOptions, getSheet } from './common';
 import { invalidParams } from './errors';
 
@@ -71,18 +70,15 @@ export function hideRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
         throw invalidParams();
     }
 
-    if (!ctx?.config) return;
-
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const cfg = (getSheet(ctx).config ??= {});
 
     if (type === 'row') {
-        const rowhidden = (ctx.config.rowhidden ??= {});
+        const rowhidden = (cfg.rowhidden ??= {});
         for (const r of rowColInfo) rowhidden[r] = 0;
     } else {
-        const colhidden = (ctx.config.colhidden ??= {});
+        const colhidden = (cfg.colhidden ??= {});
         for (const r of rowColInfo) colhidden[r] = 0;
     }
-    ctx.sheets[index].config = ctx.config;
 }
 
 export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' | 'column') {
@@ -90,18 +86,15 @@ export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
         throw invalidParams();
     }
 
-    if (!ctx?.config) return;
-
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const cfg = (getSheet(ctx).config ??= {});
 
     if (type === 'row') {
-        const rowhidden = (ctx.config.rowhidden ??= {});
+        const rowhidden = (cfg.rowhidden ??= {});
         for (const r of rowColInfo) delete rowhidden[r];
     } else {
-        const colhidden = (ctx.config.colhidden ??= {});
+        const colhidden = (cfg.colhidden ??= {});
         for (const r of rowColInfo) delete colhidden[r];
     }
-    ctx.sheets[index].config = ctx.config;
 }
 
 export function setRowHeight(
@@ -116,7 +109,7 @@ export function setRowHeight(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = editableConfig(ctx, sheet);
+    const cfg = (sheet.config ??= {});
     if (cfg.rowlen == null) {
         cfg.rowlen = {};
     }
@@ -147,7 +140,7 @@ export function setColumnWidth(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = editableConfig(ctx, sheet);
+    const cfg = (sheet.config ??= {});
     if (cfg.columnlen == null) {
         cfg.columnlen = {};
     }

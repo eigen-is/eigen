@@ -3,7 +3,7 @@ import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round } from 
 import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, is_date, update } from '../../engine/format';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
-import { type Context, editableConfig, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
@@ -48,7 +48,7 @@ export function updateFormatCell(
     if (sheetIndex == null) {
         return;
     }
-    const cfg = editableConfig(ctx, ctx.sheets[sheetIndex]);
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
     if (attr === 'ct') {
         for (let r = row_st; r <= row_ed; r += 1) {
             if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
@@ -945,12 +945,13 @@ export function handleFormatPainter(ctx: Context) {
     let RowlChange = false;
     let HasMC = false;
 
+    const cfg = getSheetConfig(ctx);
     for (let r = ctx.selections[0].row[0]; r <= ctx.selections[0].row[1]; r += 1) {
-        if (ctx.config.rowhidden != null && ctx.config.rowhidden[r] != null) {
+        if (cfg?.rowhidden?.[r] != null) {
             continue;
         }
 
-        if (ctx.config.rowlen != null && r in ctx.config.rowlen) {
+        if (cfg?.rowlen != null && r in cfg.rowlen) {
             RowlChange = true;
         }
 
@@ -985,7 +986,7 @@ export function handleClearFormat(ctx: Context) {
     if (!flowdata) return;
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const cfg = editableConfig(ctx, ctx.sheets[index]);
+    const cfg = (ctx.sheets[index].config ??= {});
     for (const selection of ctx.selections ?? []) {
         const [rowSt, rowEd] = selection.row;
         const [colSt, colEd] = selection.column;
@@ -1062,7 +1063,10 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
     const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
     const style = borderStyle == null || borderStyle === '' ? '1' : borderStyle;
 
-    const cfg = ctx.config;
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+
+    const cfg = (ctx.sheets[index].config ??= {});
     if (cfg.borderInfo == null) {
         cfg.borderInfo = [];
     }
@@ -1096,11 +1100,6 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
             }
         });
     }
-
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-
-    ctx.sheets[index].config = ctx.config;
 }
 
 export function handleMerge(ctx: Context, type: string) {
@@ -1111,7 +1110,8 @@ export function handleMerge(ctx: Context, type: string) {
         return;
     }
 
-    if (ctx.config.merge != null) {
+    const merge = getSheetConfig(ctx)?.merge;
+    if (merge != null) {
         let has_PartMC = false;
         if (!ctx.selections) return;
         for (let s = 0; s < ctx.selections.length; s += 1) {
@@ -1162,7 +1162,7 @@ export function handleFreeze(ctx: Context, type: string) {
     let { row_focus, column_focus } = firstSelection;
     if (row_focus == null || column_focus == null) return;
 
-    const m = ctx.config.merge?.[`${row_focus}_${column_focus}`];
+    const m = file.config?.merge?.[`${row_focus}_${column_focus}`];
     if (m) {
         row_focus = m.r + m.rs - 1;
         column_focus = m.c + m.cs - 1;

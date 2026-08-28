@@ -4,7 +4,7 @@ import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { update } from '../../engine/format';
-import { type Context, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
 import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
@@ -265,7 +265,9 @@ export function selectTitlesRange(map: Record<string, number>) {
 }
 
 export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
-    const cfg = ctx.config;
+    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (sheetIndex == null) return;
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
     if (cfg.merge == null) {
         cfg.merge = {};
     }
@@ -499,8 +501,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         }
     }
 
-    const currFile = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
-    currFile.config = cfg;
+    const currFile = ctx.sheets[sheetIndex];
     currFile.dataVerification = dataVerification;
 
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
@@ -546,9 +547,10 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return false;
+    const merge = getSheetConfig(ctx)?.merge;
     for (let r = r1; r <= r2; r += 1) {
         const cell = flowData[r]?.[c];
-        if (!isNil(ctx.config.merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
+        if (!isNil(merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
             hasMerged = true;
             break;
         }
@@ -560,14 +562,15 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
 export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return [null, null];
+    const merge = getSheetConfig(ctx)?.merge;
     const r2 = flowData.length - 1;
     let str = null;
     if (rIndex > 0) {
         for (let r = rIndex; r >= 0; r -= 1) {
             for (let c = c1; c <= c2; c += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(ctx.config.merge)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(merge)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(str) || mc.r < str) {
                         str = mc.r;
                     }
@@ -587,8 +590,8 @@ export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number
         for (let r = rIndex; r <= r2; r += 1) {
             for (let c = c1; c <= c2; c += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(ctx.config.merge)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(merge)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(end) || mc.r + mc.rs - 1 > end) {
                         end = mc.r + mc.rs - 1;
                     }
@@ -611,14 +614,15 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     if (isNil(flowData)) {
         return [null, null];
     }
+    const merge = getSheetConfig(ctx)?.merge;
     const c2 = flowData[0].length - 1;
     let str = null;
     if (cIndex > 0) {
         for (let c = cIndex; c >= 0; c -= 1) {
             for (let r = r1; r <= r2; r += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(ctx.config.merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(str) || mc.c < str) {
                         str = mc.c;
                     }
@@ -638,8 +642,8 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
         for (let c = cIndex; c <= c2; c += 1) {
             for (let r = r1; r <= r2; r += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(ctx.config.merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(end) || mc.c + mc.cs - 1 > end) {
                         end = mc.c + mc.cs - 1;
                     }
@@ -1501,6 +1505,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 
 export function copy(ctx: Context) {
     const flowdata = getFlowdata(ctx);
+    const cfg = getSheetConfig(ctx);
 
     ctx.formulaRangeSelections = [];
     // Copy range
@@ -1517,16 +1522,16 @@ export function copy(ctx: Context) {
         const c2 = range.column[1];
 
         for (let copyR = r1; copyR <= r2; copyR += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[copyR])) {
+            if (!isNil(cfg?.rowhidden) && !isNil(cfg.rowhidden[copyR])) {
                 continue;
             }
 
-            if (!isNil(ctx.config.rowlen) && copyR in ctx.config.rowlen) {
+            if (!isNil(cfg?.rowlen) && copyR in cfg.rowlen) {
                 RowlChange = true;
             }
 
             for (let copyC = c1; copyC <= c2; copyC += 1) {
-                if (!isNil(ctx.config.colhidden) && !isNil(ctx.config.colhidden[copyC])) {
+                if (!isNil(cfg?.colhidden) && !isNil(cfg.colhidden[copyC])) {
                     continue;
                 }
 

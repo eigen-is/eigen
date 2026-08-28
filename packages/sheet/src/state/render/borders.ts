@@ -1,5 +1,6 @@
 // Cell borders from config.borderInfo, drawn over the finished cells.
 
+import { getSheetConfig } from '../context';
 import { BORDER_STYLE_NAMES, getBorderInfoComputeRange } from '../modules/border';
 import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
@@ -55,7 +56,8 @@ function setLineDash(
 
 export function drawCellBorders(pass: RenderPass) {
     const { sheetCtx } = pass;
-    if ((sheetCtx.config?.borderInfo?.length ?? 0) === 0) {
+    const cfg = getSheetConfig(sheetCtx);
+    if ((cfg?.borderInfo?.length ?? 0) === 0) {
         return;
     }
 
@@ -99,7 +101,7 @@ export function drawCellBorders(pass: RenderPass) {
         // visible range (the compute already clamps to it) and not hidden —
         // hidden rows/columns never produced a cell rect.
         if (bdRow < rowStart || bdRow > rowEnd || bdCol < colStart || bdCol > colEnd) continue;
-        if (sheetCtx.config?.rowhidden?.[bdRow] != null || sheetCtx.config?.colhidden?.[bdCol] != null) continue;
+        if (cfg?.rowhidden?.[bdRow] != null || cfg?.colhidden?.[bdCol] != null) continue;
 
         const startY = rowStartY(sheetCtx.visibledatarow, bdRow, scrollHeight);
         const startX = colStartX(sheetCtx.visibledatacolumn, bdCol, scrollWidth);
@@ -116,7 +118,7 @@ export function drawCellBorders(pass: RenderPass) {
         const notOverflowOrFirst = !overflowInfo.colIn || overflowInfo.stc === bdCol;
 
         if (bdInfo.s && notOverflowOrFirst) {
-            const mergeMap = sheetCtx.config.merge;
+            const mergeMap = cfg?.merge;
             const mergeCell = mergeMap?.[x];
             let slashEndX = rightX;
             let slashEndY = bottomY;
