@@ -112,9 +112,15 @@ C is the honest one.
 
 B, with C possibly offered later as an explicit "paste as image".
 
-### Q10 — Is the 68-second first open a real user problem, or one monster test file?
+### Q10 — ~~Is the 68-second first open a real user problem?~~ ANSWERED: no
 
-Every cold-open number we have comes from a single document: the 340k-cell, 16-sheet workbook converted from a 2.3MB xlsx. Nobody has ever timed a normal-sized sheet opening. Measuring a small and a medium workbook is about an hour and decides whether 68s means "one enormous file" or "everything is slow" — and that answer governs whether any remaining performance work is worth funding. Do this before spending anything else on the open path.
+Closed 2026-08-28. A real Chrome opens the 340k-cell reference workbook in **2 seconds**, on a machine
+at load average 14. The 55–124 s figures came from headless Playwright on a saturated host and measured
+the host, not the app. Nothing further is owed here.
+
+The transferable lesson, which cost a day: **a browser timing that has never been checked against a real
+browser is not a measurement.** Before any future performance claim about sheets, open the thing in
+Chrome and look at it.
 
 ### Q11 — Is "the sheet-JSON format is free to change" still true?
 
@@ -203,28 +209,24 @@ One correction that applies across this section: **the raw-XML seam already exis
 
 Program history and measurements: gitignored `docs/superpowers/sheet-perf/PHASE0-MEASUREMENTS.md`. Shipped through P4 (snapshot v2 56.5→12.6MB; import 21.4→4.7s; html render 153s/82MB → 7.3s/10.4MB; production tab-switch benchmark).
 
+> **Every browser-side timing in T2/T9/T10 is unverified.** They all came from one harness —
+> headless Playwright driving Chrome on a working developer machine — and on 2026-08-28 that harness
+> failed a reality check by more than 20x: it measured a workbook opening in 55–124 s (drifting with
+> host load) that a real Chrome opens in **2 seconds**, on a *more* loaded machine. Treat every
+> absolute millisecond figure from that program as suspect until re-measured in a real browser.
+> The *shares* in the CPU profiles (React 9.9 %, canvas text measurement 8.9 %, CF 0.2 %) are ratios
+> and survive the load problem far better than the times do — prefer them.
+> Details: gitignored `docs/superpowers/sheets-tickets/T12-remeasure-2026-08-28.md`.
+
 - [ ] **Re-time the xlsx convert on a quiet machine.** `PHASE0-MEASUREMENTS.md` records import at 4.7 s
       post-P2; a 2026-08-28 re-run of the same 2.3 MB reference workbook took **7.64 s**. The machine was
       heavily loaded (load average 9.7–12.8 on 10 cores) and every other timing from that session proved
       unreliable, so this is a flag rather than a finding — but nobody should quote 4.7 s until it has been re-confirmed. **S**
-- [ ] **Re-measure the cold open on a quiet machine — the 68 s figure is not trustworthy.** Seven runs
-      of the *same* workbook on the *same* production build on 2026-08-28 gave **55.6 · 68.0 · 68.6 ·
-      70.1 · 81.8 · 104.5 · 123.9 s** — a 2.2x spread, drifting upward as the host loaded up (load
-      average 9.7-12.8 on 10 cores, WebStorm at 91 % CPU). The harness was measuring machine load, not
-      the app. Reinder reports the same workbook opening in **about 3 seconds** in a normal foreground
-      Chrome, which is 20x faster than anything the harness produced and is the better evidence.
-      **Treat "68 s" as unverified.** T10's original figure came from the same headless-Playwright
-      harness on the same working machine, so it carries the same doubt — this may not be a real
-      user-facing problem at all. Establish a trustworthy number first: an idle machine, a real
-      browser, several replicates, and a small/medium workbook alongside the 340k-cell one (**Q10**).
-      Evidence: gitignored `docs/superpowers/sheets-tickets/T12-remeasure-2026-08-28.md`. **S** to measure properly
-      - The one shape worth keeping from the traced run, pending confirmation: the cost sits *after* the
-        document arrives. WebSocket first frame at 28.8 s, canvas at 123.9 s — so the dominant term is
-        client-side decode + workbook init + first render, not network or server. T10 independently
-        logged the collab document loading in 357 ms, which agrees.
-      - The old entry also fused two unrelated numbers: 16.5 s was the *first tab switch* to Incurred,
-        measured after the canvas already exists. It is not a component of the cold open.
-- [ ] **Persist the live text-measure cache.** `measureTextCache` (`state/modules/text.ts:111`) is content-addressed — keyed by string plus full font string — and safe to persist past the 100ms render-cache idle timer (`state/canvas.ts:156`) with a size cap. Worth ~5.7% of a tab switch. **S**
+- [ ] **Persist the live text-measure cache.** `measureTextCache` (`state/modules/text.ts:111`) is
+      content-addressed — keyed by string plus full font string — and safe to persist past the 100ms
+      render-cache idle timer (`state/canvas.ts:156`) with a size cap. Worth ~5.7 % of a tab switch *by
+      profile share*. **Low priority now**: 5.7 % of a switch that a real browser completes quickly is
+      not something a user can perceive. Do it if you are in `canvas.ts` anyway; don't schedule it. **S**
 - [ ] **`measureTextCellInfoCache` has never worked.** Declared at `state/modules/text.ts:112`, cleared, read at `:362`, and **never written anywhere in the tree** since the fork — so `getCellTextInfo` (1.9%) recomputes on every call, even inside a single draw burst. Either delete the dead field so nobody assumes caching is handled, or make it work — which needs a sheet-id in the key (it's keyed `r_c` today, so persisting it across sheets returns sheet A's layout for sheet B) plus invalidation on every edit, paste, style change, resize and incoming Yjs op, none of which exists. `state/render/overflow.ts:16` has the same missing-sheet-id key. Deleting is recommended unless the cold-open work turns out to need it. **S** to delete, **M** to build
 - [ ] **Open one of our xlsx exports in real Excel or Google Sheets.** **See Q12.** **S**, human-only
 
@@ -261,4 +263,6 @@ Verified 2026-08-28 and removed from the list. Recorded so they don't come back.
 | `FormulaCache` `unknown` fields force `!`-casts | **Premise false.** The five fields are entirely dead, forcing zero casts. Re-filed under Code debt as a deletion |
 | `document.execCommand` replacement | **Dropped.** Four sites, not one (`InputBox.tsx:139,140`, `paste.ts:1660`, `clipboard.ts:37` — the last deliberately kept, with a comment explaining why). `execCommand` is deprecated but universally shipped, and there is no spec'd replacement preserving native undo in a contenteditable. Rewriting it by hand is how you break undo |
 | No-delay `setTimeout` sequencing | **Dropped.** Nine sites, not two, and they are deliberate "after React commits / after focus settles" yields — `InputBox.tsx:104-106` documents its own. Replacing them with `queueMicrotask` or effects is a behaviour change dressed as tidying |
+| The 68-second cold open | **Dropped — harness artifact.** A real Chrome opens the reference workbook in 2 s, on a machine at load average 14. The 55–124 s range came from headless Playwright on a saturated developer machine, drifting upward as load grew. T10's original 68 s came from the same harness and inherits the same fate |
+| Snapshot v2.1, second reason | Already dropped on decode cost; the "0.2 % of a 68 s open" argument that supported it was itself built on the bad number. The conclusion is unchanged — decode is 126 ms — but the reasoning should not be reused |
 | `checkboxChange` rule-aliasing hazard | **Fixed** in `67f08d41f`. A tick box stores no checked flag; the cell value answers that (`packages/lib/src/sheets/types.ts:133-134`). It was one of five motivations for range-keyed DV; the other four stand |
