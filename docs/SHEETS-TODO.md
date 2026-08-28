@@ -199,7 +199,9 @@ client A ends with: existing , B , A
 client B ends with: existing , A , B
 ```
 
-Because later-overrides-earlier is semantic, the two users then render **different borders on the same cell, permanently**. That is strictly worse than the whole-array replace the old entry was aiming at, and it is inherent to the array shape. A map keyed `"r_c"` converges by construction.
+Because later-overrides-earlier is semantic, the two users then disagree about the stored order permanently, and any two entries that overlap render differently on each client. That is inherent to the array shape, and a map keyed `"r_c"` fixes it **for disjoint cells** — different cells are different keys.
+
+**Scope limit, probed, do not overstate:** the map does NOT fix two clients editing the *same* cell. With `borderInfo` already a map, the shared cell still diverges (`A: blue, B: red`), because each client applies its own op optimistically and never replays in Yjs's total order. Only real Yjs structures close that; see the follow-up below.
 
 **The fix, in order.** Normalize the writers first — that is what makes the keying legal. (1) `handleBorder` expands its selection into per-cell entries at write time, as it already does for the `border-slash` branch. (2) `border-none` and the fill-handle tombstone *remove* the entry rather than appending an eraser. (3) With every entry idempotent-by-coordinate, order stops carrying meaning and finding 2 above dissolves. (4) `SheetConfig.borderInfo` then becomes `Record<string, CellBorderSides>` keyed `"r_c"`, and `RangeBorderInfo` leaves the stored shape entirely.
 
