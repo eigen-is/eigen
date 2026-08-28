@@ -38,7 +38,7 @@ export function CellRangeDialog({ value, editable, includeSheetName, onConfirm, 
                 <DialogTitle>{insertLink.selectCellRange}</DialogTitle>
             </DialogHeader>
             {editable ? (
-                <div>
+                <div className="space-y-1.5">
                     <Input
                         className={cn('h-8', !validity.isValid && rangeTxt && 'border-destructive')}
                         spellCheck={false}
@@ -46,7 +46,7 @@ export function CellRangeDialog({ value, editable, includeSheetName, onConfirm, 
                         value={rangeTxt}
                         onChange={(e) => setRangeTxt(e.target.value)}
                     />
-                    <div className="h-[17px] my-[3px] text-xs text-destructive">{validity.tooltip}</div>
+                    {!validity.isValid && rangeTxt && <p className="text-xs text-destructive">{validity.tooltip}</p>}
                 </div>
             ) : (
                 // A value display, not a text box: an input would take the dialog's opening

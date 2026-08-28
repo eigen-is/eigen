@@ -57,7 +57,9 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
                     }}
                 >
                     <div
-                        className="flex flex-col min-h-0 flex-1"
+                        // gap-4 reproduces DialogContent's own rhythm: the inline display:flex above
+                        // overrides its grid, and this wrapper is the real parent of header/body/footer.
+                        className="flex flex-col gap-4 min-h-0 flex-1"
                         onMouseDown={(e) => e.stopPropagation()}
                         onMouseMove={(e) => e.stopPropagation()}
                         onMouseUp={(e) => e.stopPropagation()}
