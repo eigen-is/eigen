@@ -128,6 +128,13 @@ function additionalCellOps(
     return cellOps;
 }
 
+// `Sheet` fields that are per-client UI state and must never reach a peer. Both places that
+// decide what goes on the wire — filterPatch and sheetMetadataOps — read this one list, so a
+// new per-client field is a single decision rather than a leak through whichever of the two
+// was not updated. Typed against `keyof Sheet` so a field that is renamed or deleted fails
+// the build instead of silently no longer matching.
+const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['selections']);
+
 // The row/col reducers replace the whole target sheet object, so immer hands us a
 // single sheet-sized replace patch instead of granular ones. Shipping that patch
 // copies the entire sheet (its `data` matrix above all) into every collab update —
@@ -159,18 +166,12 @@ function sheetMetadataOps(ctx: Context, id: string, includeCalcChain: boolean): 
     const sheet = ctx.sheets[index];
     const metaOps: Op[] = [];
     for (const field of Object.keys(sheet) as (keyof Sheet)[]) {
-        if (field === 'data' || field === 'selections') continue;
+        if (field === 'data' || PER_CLIENT_SHEET_FIELDS.has(field)) continue;
         if (field === 'calcChain' && !includeCalcChain) continue;
         metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
     }
     return metaOps;
 }
-
-// A few `Sheet` fields are per-client UI state that is stored on the sheet only so a tab
-// switch can restore it — the local cursor and the formula-bar range highlight. They must
-// never reach a peer. Kept as one list so adding a per-client field to `Sheet` is a single
-// decision rather than a silent leak.
-const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set(['selections', 'formulaRangeSelections']);
 
 // Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
 // (scroll position, hover, dialogs) that patchToOp could not give a sheet id anyway.

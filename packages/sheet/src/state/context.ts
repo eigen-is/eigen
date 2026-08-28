@@ -18,6 +18,7 @@ import type {
     SearchHighlight,
     Selection,
     Sheet,
+    SingleRange,
 } from './types';
 import { getSheetIndex } from './utils';
 
@@ -116,13 +117,13 @@ export type Context = {
             scrollTop: number;
             selectionActive: boolean;
             selections: Sheet['selections'];
-            formulaRangeSelections: Sheet['formulaRangeSelections'];
+            formulaRangeSelections: SingleRange[];
         }
     >;
 
     selectionActive: boolean;
     selections: Sheet['selections'];
-    formulaRangeSelections: Sheet['formulaRangeSelections'];
+    formulaRangeSelections: SingleRange[];
     formulaRangeHighlight: ({
         rangeIndex: number;
         backgroundColor: string;
@@ -485,6 +486,33 @@ export function initSheetIndex(ctx: Context) {
             break;
         }
     }
+}
+
+// immer records the creation of a key as one `add` carrying the WHOLE new value, so the
+// first write to a config collection ships the entire collection — two clients each making
+// their first row resize on a sheet without `rowlen` send `add ['config','rowlen']` and
+// overwrite one another. Granular patches only start from the second write. Materializing
+// every collection when a sheet enters the context removes that first-write case: every
+// writer's `??=` is then a no-op and every write is a single-key patch.
+//
+// One list, because a config collection that is missing from it silently reintroduces the
+// clobber for its own first write.
+const SHEET_CONFIG_COLLECTIONS = [
+    'merge',
+    'rowlen',
+    'columnlen',
+    'rowhidden',
+    'colhidden',
+    'customHeight',
+    'customWidth',
+    'rowReadOnly',
+    'colReadOnly',
+] as const;
+
+export function normalizeSheetConfig(sheet: Sheet) {
+    const cfg = (sheet.config ??= {});
+    for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
+    cfg.borderInfo ??= [];
 }
 
 export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {

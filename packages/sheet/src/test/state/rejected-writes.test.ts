@@ -14,10 +14,13 @@
 
 import { describe, expect, test } from 'bun:test';
 import { setCellFormat } from '../../state/api/cell';
-import { showRowOrColumn } from '../../state/api/rowcol';
+import { setColumnWidth, setRowHeight, showRowOrColumn } from '../../state/api/rowcol';
+import { initSheetData } from '../../state/api/sheet';
 import type { Context } from '../../state/context';
+import { clearFilter } from '../../state/modules/filter';
 import { showSelected } from '../../state/modules/rowcol';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
+import { handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
 import { syncablePaths } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { GRID_GEOMETRY, mouseUpAt, withGridGeometry } from './factories/grid-dom';
@@ -28,6 +31,31 @@ function bareSheet(): Context {
     ctx.sheets[0].config = undefined;
     return ctx;
 }
+
+// A sheet as it actually arrives in the editor: initSheetData materializes every config
+// collection, so no writer ever has to create one and no `??=` can emit a patch. That is the
+// mechanism that closes this class — the ordering of seeds against guards is a second line
+// of defence, checked above on a deliberately un-normalized sheet.
+function freshSheet(): Context {
+    const ctx = withGridGeometry(contextFactory() as Context);
+    ctx.sheets[0].config = undefined;
+    initSheetData(ctx, 0, ctx.sheets[0]);
+    return ctx;
+}
+
+// Operations that legitimately write nothing. On a normalized sheet none of them may touch
+// config — before the collections were materialized, each one created a map and shipped it.
+const NO_OP_ON_A_FRESH_SHEET: [name: string, recipe: (ctx: Context) => void][] = [
+    [
+        'a toolbar format change that triggers no auto-height',
+        (ctx) => updateFormatCell(ctx, ctx.sheets[0].data!, 'bg', '#fff', 0, 0, 0, 0),
+    ],
+    ['setRowHeight with an empty map', (ctx) => setRowHeight(ctx, {})],
+    ['setColumnWidth with an empty map', (ctx) => setColumnWidth(ctx, {})],
+    ['clearing formatting on already-plain cells', (ctx) => handleClearFormat(ctx)],
+    ['a merge of a single cell', (ctx) => handleMerge(ctx, 'merge-all')],
+    ['clearing a filter when nothing is hidden', (ctx) => clearFilter(ctx)],
+];
 
 const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
     [
@@ -68,6 +96,15 @@ describe('a rejected operation writes nothing', () => {
         });
         expect(paths.length).toBeGreaterThan(0);
     });
+});
+
+describe('an operation that writes nothing leaves config alone', () => {
+    for (const [name, recipe] of NO_OP_ON_A_FRESH_SHEET) {
+        test(`${name} emits no config patch`, () => {
+            const paths = syncablePaths(freshSheet(), recipe);
+            expect(paths.filter((path) => path[2] === 'config')).toEqual([]);
+        });
+    }
 });
 
 describe('a write that touches no config leaves config alone', () => {

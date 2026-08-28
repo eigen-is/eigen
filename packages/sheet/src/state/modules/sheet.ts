@@ -14,7 +14,6 @@ export function storeSheetSelections(ctx: Context) {
     if (index == null) return;
     const file = ctx.sheets[index];
     file.selections = ctx.selections;
-    file.formulaRangeSelections = ctx.formulaRangeSelections;
 }
 
 export function changeSheet(ctx: Context, id: string) {

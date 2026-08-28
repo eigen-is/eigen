@@ -686,13 +686,10 @@ export function autoSelectionFormula(
 
 export function cancelPaintModel(ctx: Context) {
     if (ctx.copyState === null) return;
+    // The painter's marching ants are drawn from ctx.formulaRangeSelections, which only ever
+    // shows the current sheet. A copy sourced from another sheet has nothing on screen here.
     if (ctx.copyState?.dataSheetId === ctx.currentSheetId) {
         ctx.formulaRangeSelections = [];
-    } else {
-        if (!ctx.copyState) return;
-        const index = getSheetIndex(ctx, ctx.copyState.dataSheetId);
-        if (!index) return;
-        ctx.sheets[index].formulaRangeSelections = [];
     }
 
     ctx.copyState = {

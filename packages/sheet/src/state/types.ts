@@ -193,7 +193,6 @@ export type Sheet = Omit<LibSheet, 'config'> & {
     status?: number;
     hide?: number;
     selections?: Selection[];
-    formulaRangeSelections?: SingleRange[];
     calcChain?: CalcChainEntry[];
     defaultRowHeight?: number;
     defaultColWidth?: number;

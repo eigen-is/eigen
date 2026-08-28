@@ -1,4 +1,4 @@
-import { cloneDeep, find, flatten, omit, reduce, size } from 'es-toolkit/compat';
+import { cloneDeep, find, flatten, reduce, size } from 'es-toolkit/compat';
 import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
@@ -212,8 +212,12 @@ export function clearFilter(ctx: Context) {
     ctx.filterContextMenu = undefined;
     ctx.filter = {};
     if (sheetIndex != null) {
-        const cfg = (ctx.sheets[sheetIndex].config ??= {});
-        cfg.rowhidden = omit(cfg.rowhidden, Object.keys(hiddenRows));
+        // Delete in place: `omit` returns a fresh object, so assigning it replaced the whole
+        // rowhidden map on the wire even when the filter had hidden nothing.
+        const rowhidden = ctx.sheets[sheetIndex].config?.rowhidden;
+        if (rowhidden) {
+            for (const r of Object.keys(hiddenRows)) delete rowhidden[r];
+        }
         ctx.sheets[sheetIndex].filter = undefined;
         ctx.sheets[sheetIndex].filterRange = undefined;
     }

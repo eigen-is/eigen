@@ -2,7 +2,7 @@ import { cloneDeep, isUndefined } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, en, execfunction, setCellValue as setCellValueInternal } from '..';
-import type { Context } from '../context';
+import { type Context, normalizeSheetConfig } from '../context';
 import type { FormulaCell, Sheet, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
 import { celldataToData, dataToCelldata, getSheet } from './common';
@@ -31,6 +31,7 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet):
             draftCtx.sheets[index].config = newData.config;
         }
     }
+    normalizeSheetConfig(draftCtx.sheets[index]);
     return expandedData;
 }
 

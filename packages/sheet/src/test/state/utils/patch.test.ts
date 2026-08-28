@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import type { Context } from '../../../state/context';
 import type { Op, Sheet } from '../../../state/types';
-import { opToPatch } from '../../../state/utils/patch';
+import { opToPatch, patchToOp } from '../../../state/utils/patch';
 import { syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
@@ -73,10 +73,11 @@ describe('per-client sheet state never reaches the wire', () => {
         expect(paths).toEqual([]);
     });
 
-    test('the formula-bar range highlight is dropped', () => {
-        const paths = syncablePaths(getContext(), (ctx: Context) => {
-            ctx.sheets[0].formulaRangeSelections = [{ row: [1, 1], column: [1, 1] }];
+    test('the row-insert metadata sweep drops it too, not just filterPatch', () => {
+        const ctx = getContext();
+        const ops = patchToOp(ctx, [], {
+            insertRowColOp: { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'sheet-1' },
         });
-        expect(paths).toEqual([]);
+        expect(ops.map((op) => op.path).filter((path) => path[0] === 'selections')).toEqual([]);
     });
 });
