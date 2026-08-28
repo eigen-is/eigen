@@ -180,7 +180,15 @@ The mirror-write failure mode was therefore *worse* than recorded: not a lost ra
 
 **One correction to the severity.** `applyOp` re-pointed the mirror after applying remote patches, so the clobber needed a genuine propagation race (B's mouseup reading config before A's op arrives), not merely "B edited later". Narrow on localhost, much wider over a real network.
 
-**Shipped.** 113 sites across 26 non-test files, all confined to `packages/sheet`. Every reader now goes through `getSheetConfig` (`state/context.ts`, next to `getFlowdata`); every writer reaches the config through the sheet. `editableConfig`, `updateContextWithSheetConfig` and `src/test/state/config-writers.test.ts` are gone. Net −204 lines.
+**Shipped**, on branch `sheets-kill-config-mirror`. 113 sites across 26 non-test files, all confined to `packages/sheet`. Every reader goes through `getSheetConfig` (`state/context.ts`, next to `getFlowdata`); every writer reaches the config through the sheet. `editableConfig`, `updateContextWithSheetConfig` and `src/test/state/config-writers.test.ts` are gone.
+
+Three things the review rounds added, each of which is now the load-bearing part — see [SHEETS.md § Yjs Sync](SHEETS.md#yjs-sync):
+
+- **Config collections are materialized wherever a sheet enters a consumer** (`normalizeSheetConfig`, `engine/replay-ops.ts`). Deleting the mirror alone was not enough: immer records key *creation* as one `add` carrying the whole collection, so the FIRST write to `rowlen` on a fresh sheet still shipped the entire map and clobbered a peer. Granularity began only at the second write, and both concurrency fixtures pre-seeded every key, so no test could see it. Normalizing only in the editor then caused a **worse** regression, caught by the second cold review: granular patches do not resolve against a base that lacks the collection, and `replaySheetsOps` rolls back the whole batch — every document written before this branch silently *lost* the edit on every reader (second client, preview, xlsx/HTML/PDF export). The invariant now holds on the replay side too.
+- **A write on a rejected path is a bug**, not a harmless no-op: it ships an op and takes an undo entry the user never earned. Nine sites were fixed; `src/test/state/rejected-writes.test.ts` is the table-driven gate. Add a row when you add a writer.
+- **`filterPatch` and `sheetMetadataOps` share one list of per-client `Sheet` fields**, typed `keyof Sheet`. They disagreed, so inserting a row broadcast state the ops path drops. `Sheet.formulaRangeSelections` turned out to be write-only and is deleted.
+
+Also removed the hand-tuned 3px offset in the row/column resize path; movement is now the difference of two page coordinates, and no movement is a click.
 
 ### N2 — Normalize `borderInfo`'s writers, then key it **L**
 

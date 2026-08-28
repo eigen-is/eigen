@@ -52,6 +52,27 @@ again — `apps/sheets` hides the workbook rather than unmounting it for the mob
 **Why op-based**: Full JSON snapshots cause overwrite conflicts. Ops are granular — concurrent edits on different cells
 merge cleanly.
 
+**One route to a sheet's config, and its collections always exist.** There is no `ctx.config` shortcut — read the
+current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, beside `getFlowdata`) and write through
+`ctx.sheets[i].config`. Two things depend on this and are easy to break:
+
+- immer records the **creation** of a key as one `add` carrying the whole new value, so a write to a config
+  collection that does not exist yet ships the entire collection and last-writer-wins over a peer. Every collection is
+  therefore materialized by `normalizeSheetConfig` (`engine/replay-ops.ts`) wherever a sheet enters any consumer —
+  `initSheetData`, the replay base, `addSheet` ops, `createDefaultSheets`, and the Workbook seeding effect. Its
+  `SHEET_CONFIG_COLLECTIONS` list `satisfies keyof ExtendedSheetConfig`, so a new collection fails the build rather
+  than silently reopening the hole. This mirrors the row/column grid materialization in `engine/defaults.ts`, and for
+  the same reason: **a base that is less materialized than the writer makes granular patches fail to resolve**, and
+  `replaySheetsOps` then rolls back the whole batch — the edit is lost, not degraded.
+- a write on a path that then rejects the operation still costs the user an undo entry and ships an op. Because the
+  collections already exist, no writer needs to create one, so this cannot happen by accident; `src/test/state/rejected-writes.test.ts`
+  is the table-driven gate that keeps it that way. Add a row to it when you add a writer.
+
+**Resize measures page coordinates.** Mousedown stores `e.pageX`/`e.pageY`; mouseup subtracts it. Mousedown and
+mouseup measure from different elements (the header vs the overlay container), so anything element-relative needs a
+fudge factor to bridge them — there used to be a hand-tuned `3` doing exactly that. No movement is a click, any
+movement is a resize.
+
 **Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render).
 
 **Snapshot**: Saved on `beforeunload` (flushes latest data to `state.snapshot` and clears the ops array). New joiners
