@@ -342,7 +342,11 @@ describe('HTML-table paste — merges, borders, row height', () => {
     it('leaves cfg.rowlen untouched for a tr with no height attribute', () => {
         const ctx = makeCtx();
         ctx.selections = single(2, 1);
-        ctx.sheets[0].config = { rowlen: { 2: 42 } };
+        // ctx.config aliases the current sheet's config in the live app (see the
+        // hasPartMC test below) and setRowHeight writes through that mirror, so a
+        // sheet-only config here would be a fixture the app never produces.
+        ctx.config = { rowlen: { 2: 42 } };
+        ctx.sheets[0].config = ctx.config;
         pasteHtml(ctx, '<table><tr><td>a</td></tr><tr><td>b</td></tr></table>');
 
         const rowlen = ctx.sheets[0].config!.rowlen!;

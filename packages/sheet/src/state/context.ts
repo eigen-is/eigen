@@ -490,6 +490,16 @@ export function initSheetIndex(ctx: Context) {
     }
 }
 
+// ctx.config mirrors the current sheet's config, and every geometry read goes through
+// the mirror (calcRowColSize above, the Sheet recompute effect). Patches applied from
+// outside the Workbook seeding effect — undo, redo, a peer's op — only write the sheet,
+// so re-point the mirror at it or the grid keeps painting the old sizes.
+export function updateContextWithSheetConfig(ctx: Context) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
+    ctx.config = ctx.sheets[index].config ?? {};
+}
+
 export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {
     const rowCount = data.length;
     const colCount = rowCount === 0 ? 0 : data[0].length;

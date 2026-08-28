@@ -30,6 +30,7 @@ import {
     type SearchResult,
     type Settings,
     setSearchHighlights,
+    updateContextWithSheetConfig,
     updateImage,
 } from '../../state';
 
@@ -97,6 +98,7 @@ export function generateAPIs(
                     } catch (e) {
                         console.error(e);
                     }
+                    updateContextWithSheetConfig(ctx_);
                 },
                 { noHistory: true },
             );

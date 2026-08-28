@@ -39,6 +39,7 @@ import {
     patchToOp,
     type Settings,
     type Sheet as SheetType,
+    updateContextWithSheetConfig,
     warmFormulaCellInfoMap,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -316,8 +317,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     let newContext = applyPatches(ctx_, history.inversePatches);
                     const si = getSheetIndex(newContext, newContext.currentSheetId);
                     if (si != null) {
-                        newContext = produce(newContext, (draft) => {
+                        newContext = produce(newContext, (draft: Context) => {
                             draft.insertedImgs = draft.sheets[si].images;
+                            updateContextWithSheetConfig(draft);
                         });
                     }
                     globalCache.current.redoList.push(history);
@@ -358,8 +360,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     let newContext = applyPatches(ctx_, history.patches);
                     const si = getSheetIndex(newContext, newContext.currentSheetId);
                     if (si != null) {
-                        newContext = produce(newContext, (draft) => {
+                        newContext = produce(newContext, (draft: Context) => {
                             draft.insertedImgs = draft.sheets[si].images;
+                            updateContextWithSheetConfig(draft);
                         });
                     }
                     globalCache.current.undoList.push(history);

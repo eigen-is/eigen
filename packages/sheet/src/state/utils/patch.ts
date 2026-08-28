@@ -166,11 +166,12 @@ function sheetMetadataOps(ctx: Context, id: string, includeCalcChain: boolean): 
     return metaOps;
 }
 
-// TODO(sizing-sync): row/column sizing writes to `config` (columnlen/rowlen) on both the sheet
-// and the live top-level `ctx.config`. This filter keeps only `sheets[*]` patches, so the change
-// doesn't round-trip through undo or Yjs sync — resizing (drag handles + the resize dialog) is
-// currently local-only and non-undoable. A proper fix routes config changes through the
-// patch → op → undo pipeline.
+// `ctx.config` is a derived mirror of the current sheet's config, so only the `sheets[*]` half
+// belongs on the wire: a top-level `['config', …]` patch would reach patchToOp with no sheet id
+// and poison the collab stream. Row/column sizing writes both halves (mirror first, then the
+// sheet — that order is what makes immer emit the `sheets[*]` patch this filter keeps), so it
+// round-trips through undo and Yjs sync. The dropped mirror patch is re-derived instead:
+// handleUndo/handleRedo/applyOp call updateContextWithSheetConfig after applying patches.
 export function filterPatch(patches: Patch[]) {
     return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'selections');
 }

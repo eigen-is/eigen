@@ -116,7 +116,12 @@ export function setRowHeight(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = sheet.config || {};
+    // Write through ctx.config for the current sheet, the way hideRowOrColumn and the
+    // drag handlers do: mutating the sheet's own config and then re-pointing the mirror
+    // collapses immer's patches into one top-level ['config'] patch, which filterPatch
+    // drops — the resize would neither sync to peers nor undo.
+    const isCurrent = ctx.currentSheetId === sheet.id;
+    const cfg = (isCurrent ? ctx.config : sheet.config) || {};
     if (cfg.rowlen == null) {
         cfg.rowlen = {};
     }
@@ -136,7 +141,7 @@ export function setRowHeight(
 
     sheet.config = cfg;
 
-    if (ctx.currentSheetId === sheet.id) {
+    if (isCurrent) {
         ctx.config = cfg;
     }
 }
@@ -153,7 +158,9 @@ export function setColumnWidth(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = sheet.config || {};
+    // Mirror-first for the current sheet — see setRowHeight.
+    const isCurrent = ctx.currentSheetId === sheet.id;
+    const cfg = (isCurrent ? ctx.config : sheet.config) || {};
     if (cfg.columnlen == null) {
         cfg.columnlen = {};
     }
@@ -173,7 +180,7 @@ export function setColumnWidth(
 
     sheet.config = cfg;
 
-    if (ctx.currentSheetId === sheet.id) {
+    if (isCurrent) {
         ctx.config = cfg;
     }
 }
