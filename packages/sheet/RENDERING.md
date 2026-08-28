@@ -1,5 +1,7 @@
 # Sheet Rendering Architecture
 
+Every class and id the engine renders or queries is prefixed `sheet-` (renamed from the fork's `fortune-` / `luckysheet-` prefixes on 2026-08-28). `sheet-copy-action-table` is the exception in kind rather than spelling: it is a clipboard wire format, not a style hook.
+
 ## Component Tree
 
 ```
