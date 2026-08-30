@@ -9,9 +9,13 @@
 import {
     type Box,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_FONT_SIZE,
     DEFAULT_LINEAR_ROUNDNESS,
+    linearLocalToScene,
     normalizeLinear,
     type Point,
+    type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
 } from '@workspace/lib/vector';
@@ -20,6 +24,7 @@ import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import type { VectorTool } from '../hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
+import { bindArrow, bindingCandidate } from './binding';
 import { markErase } from './eraser';
 import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from './freedraw';
 import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDraft } from './line';
@@ -46,19 +51,39 @@ function dist(a: Point, b: Point): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// A full VectorLinearElement for the live preview, built from the shared create defaults and the same
-// normalizeLinear pass as the commit, so it matches the element that will be written exactly (the
+// The shared geometry of a live preview element (draw draft), built from the create defaults and the
+// same normalizeLinear pass as the commit, so it matches the element that will be written exactly (the
 // renderer scales roughness by the box, so a 0×0 box would pop on release).
-function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[], seed: number): VectorLinearElement {
+function linearBase(origin: Point, points: Point[], seed: number) {
     return {
         id: PREVIEW_ID,
-        type,
         angle: 0,
         ...DEFAULT_ELEMENT_PROPS,
         roundness: DEFAULT_LINEAR_ROUNDNESS,
         seed,
         index: 'a0',
         ...normalizeLinear({ x: origin.x, y: origin.y, width: 0, height: 0, angle: 0 }, points),
+    };
+}
+
+function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[], seed: number): VectorLinearElement {
+    return { ...linearBase(origin, points, seed), type };
+}
+
+// An arrow preview/commit template — the line geometry plus the default heads and an empty binding/label
+// (a draft binds only at commit through bindArrow). Reused as the provisional element bindArrow snaps.
+function arrowElement(origin: Point, points: Point[], seed: number): VectorArrowElement {
+    return {
+        ...linearBase(origin, points, seed),
+        type: 'arrow',
+        startArrowhead: 'none',
+        endArrowhead: 'arrow',
+        startBinding: '',
+        endBinding: '',
+        text: '',
+        fontSize: DEFAULT_FONT_SIZE,
+        fontFamily: DEFAULT_FONT_FAMILY,
+        labelWidth: 0,
     };
 }
 
@@ -92,8 +117,10 @@ export type DrawingTools = {
     hiddenId: string | null;
     // Elements marked for erasure — the canvas dims them to 20% opacity.
     erasingIds: Set<string>;
-    // Screen-space vertex handles for a single selected line (null otherwise).
+    // Screen-space vertex handles for a single selected line/arrow (null otherwise).
     handles: ReactNode;
+    // A dashed ring over the bindable shape a dragged arrow endpoint would bind to (null otherwise).
+    bindingHighlight: ReactNode;
     onPointerDown: (e: React.PointerEvent, scene: Point) => boolean;
     onPointerMove: (e: React.PointerEvent) => boolean;
     onPointerUp: (e: React.PointerEvent) => boolean;
@@ -127,11 +154,30 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const eraserRef = useRef<{ marked: Set<string>; last: Point } | null>(null);
     const pointerIdRef = useRef<number | null>(null);
     const seedRef = useRef(0);
+    // Ctrl/Cmd held while dragging an arrow endpoint suppresses binding (R3.8). Tracked live off any key
+    // event so both the creation drag and a point-handle drag (its own listeners) read one source.
+    const suppressRef = useRef(false);
 
     const [activeKind, setActiveKind] = useState<'freedraw' | 'line' | 'eraser' | null>(null);
     const [previewEl, setPreviewEl] = useState<VectorElement | null>(null);
     const [erasing, setErasing] = useState<Set<string>>(EMPTY_IDS);
-    const [pointDraft, setPointDraft] = useState<{ id: string; el: VectorLinearElement } | null>(null);
+    const [pointDraft, setPointDraft] = useState<{ id: string; el: VectorLinearElement | VectorArrowElement } | null>(
+        null,
+    );
+    // The bindable shape a dragged arrow endpoint currently reaches — the canvas rings it (R3.8).
+    const [bindCandidate, setBindCandidate] = useState<string | null>(null);
+
+    useEffect(() => {
+        const track = (e: KeyboardEvent) => {
+            suppressRef.current = e.ctrlKey || e.metaKey;
+        };
+        document.addEventListener('keydown', track);
+        document.addEventListener('keyup', track);
+        return () => {
+            document.removeEventListener('keydown', track);
+            document.removeEventListener('keyup', track);
+        };
+    }, []);
 
     // --- Freehand -------------------------------------------------------------------------------
     const cancelFreedraw = () => {
@@ -160,9 +206,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         if (id) setSelectedIds([id]);
     };
 
-    // --- Line -----------------------------------------------------------------------------------
-    const linePreview = (draft: LineDraft) =>
-        setPreviewEl(previewElement(draft.type, draft.origin, previewPoints(draft), seedRef.current));
+    // --- Line / arrow ---------------------------------------------------------------------------
+    const linePreview = (draft: LineDraft) => {
+        const pts = previewPoints(draft);
+        setPreviewEl(
+            draft.type === 'arrow'
+                ? arrowElement(draft.origin, pts, seedRef.current)
+                : previewElement(draft.type, draft.origin, pts, seedRef.current),
+        );
+    };
 
     const clearLine = () => {
         lineRef.current = null;
@@ -171,19 +223,33 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         frozenRef.current = false;
         setActiveKind(null);
         setPreviewEl(null);
+        setBindCandidate(null);
     };
 
-    // Write the draft as one element. < 2 distinct points is not a line — write nothing.
+    // Write the draft as one element. < 2 distinct points is not a line — write nothing. An arrow also
+    // resolves both endpoints' bindings and snaps them to their shapes (bindArrow) in the same write.
     const commitLine = (points: Point[]) => {
         const draft = lineRef.current;
         clearLine();
         if (!draft || distinctCount(points) < 2) return;
         undoManager?.stopCapturing();
-        const id = addElement({
-            type: draft.type,
-            seed: seedRef.current,
-            ...normalizeLinear({ x: draft.origin.x, y: draft.origin.y, width: 0, height: 0, angle: 0 }, points),
-        });
+        let id: string | undefined;
+        if (draft.type === 'arrow') {
+            const bound = bindArrow(
+                arrowElement(draft.origin, points, seedRef.current),
+                { start: true, end: true },
+                ordered,
+                zoom,
+                suppressRef.current,
+            );
+            id = addElement({ type: 'arrow', seed: seedRef.current, ...bound });
+        } else {
+            id = addElement({
+                type: draft.type,
+                seed: seedRef.current,
+                ...normalizeLinear({ x: draft.origin.x, y: draft.origin.y, width: 0, height: 0, angle: 0 }, points),
+            });
+        }
         undoManager?.stopCapturing();
         if (id) setSelectedIds([id]);
     };
@@ -258,7 +324,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setActiveKind('eraser');
             return true;
         }
-        if (tool === 'line') {
+        if (tool === 'line' || tool === 'arrow') {
             if (lineRef.current) {
                 addLineClick(scene, e.shiftKey);
             } else {
@@ -269,7 +335,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 seedRef.current = randomSeed();
                 pointerIdRef.current = e.pointerId;
                 lineMovedRef.current = false;
-                lineRef.current = startLineDraft('line', scene);
+                lineRef.current = startLineDraft(tool, scene);
                 setActiveKind('line');
                 linePreview(lineRef.current);
             }
@@ -317,6 +383,11 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             draft.trailing = e.shiftKey ? snapSegment(last, rel) : rel;
             if (draft.mode === 'pending' && dist(scene, draft.origin) >= LINE_DRAG_SCREEN / zoom)
                 lineMovedRef.current = true;
+            // The moving endpoint (origin + trailing) drives the binding highlight for an arrow draft.
+            if (draft.type === 'arrow') {
+                const tip = { x: draft.origin.x + draft.trailing.x, y: draft.origin.y + draft.trailing.y };
+                setBindCandidate(bindingCandidate(ordered, tip, zoom, suppressRef.current));
+            }
             linePreview(draft);
             return true;
         }
@@ -353,25 +424,50 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         return false;
     };
 
-    // --- Point handles (a single selected line) -------------------------------------------------
+    // --- Point handles (a single selected line or arrow) ----------------------------------------
     const sole = selectedIds.length === 1 ? ordered.find((el) => el.id === selectedIds[0]) : undefined;
-    const selectedLine = !busy && !activeKind && canWrite && sole?.type === 'line' ? sole : undefined;
+    // Lines and arrows get vertex handles; freedraw never does (R2.13).
+    const selectedLine =
+        !busy && !activeKind && canWrite && (sole?.type === 'line' || sole?.type === 'arrow') ? sole : undefined;
+    const isEndpoint = (index: number, count: number) => index === 0 || index === count - 1;
 
-    const onPointPreview = (points: Point[] | null) => {
+    const onPointPreview = (points: Point[] | null, index: number) => {
         if (!points || !selectedLine) {
             setPointDraft(null);
+            setBindCandidate(null);
             return;
         }
         setPointDraft({ id: selectedLine.id, el: { ...selectedLine, ...normalizeLinear(selectedLine, points) } });
+        // Highlight the shape an arrow's dragged ENDPOINT would bind to (a middle vertex never binds).
+        setBindCandidate(
+            selectedLine.type === 'arrow' && isEndpoint(index, points.length)
+                ? bindingCandidate(ordered, linearLocalToScene(selectedLine, points[index]), zoom, suppressRef.current)
+                : null,
+        );
     };
 
-    const onPointCommit = (points: Point[]) => {
+    const onPointCommit = (points: Point[], index: number) => {
+        setBindCandidate(null);
         if (!selectedLine) {
             setPointDraft(null);
             return;
         }
         undoManager?.stopCapturing();
-        updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
+        if (selectedLine.type === 'arrow') {
+            // The dragged endpoint (re)binds/unbinds; the other end keeps its binding, and every bound end
+            // re-snaps to its shape through bindArrow (R3.10).
+            const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
+            const bound = bindArrow(
+                reshaped,
+                { start: index === 0, end: index === points.length - 1 },
+                ordered,
+                zoom,
+                suppressRef.current,
+            );
+            updateElement(selectedLine.id, bound);
+        } else {
+            updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
+        }
         undoManager?.stopCapturing();
         setPointDraft(null);
     };
@@ -384,6 +480,21 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
               frozenRef,
               onPreview: onPointPreview,
               onCommit: onPointCommit,
+          })
+        : null;
+
+    // The dashed ring over the shape a dragged arrow endpoint reaches (creation or a point-handle drag).
+    const candidate = bindCandidate ? ordered.find((el) => el.id === bindCandidate) : undefined;
+    const bindingHighlight = candidate
+        ? createElement('div', {
+              className: 'eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute',
+              style: boxToStyle({
+                  x: candidate.x,
+                  y: candidate.y,
+                  width: candidate.width,
+                  height: candidate.height,
+                  angle: candidate.angle,
+              }),
           })
         : null;
 
@@ -451,12 +562,14 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         };
     }, []);
 
-    // Switching tools abandons an in-progress stroke/erase, but commits a polyline's placed points
-    // (Excalidraw finalizes rather than strands it). Via a ref so the effect only depends on `tool`.
+    // Switching tools abandons an in-progress stroke/erase, but commits a polyline/arrow's placed points
+    // (Excalidraw finalizes rather than strands it). A draft is committed once the tool no longer matches
+    // its own type, so line↔arrow switches never leave a draft the other tool would keep appending to.
+    // Via a ref so the effect only depends on `tool`.
     const abandonRef = useRef<() => void>(() => {});
     abandonRef.current = () => {
         if (tool !== 'freedraw' && strokeRef.current) cancelFreedraw();
-        if (tool !== 'line' && lineRef.current) commitLine(lineRef.current.committed);
+        if (lineRef.current && lineRef.current.type !== tool) commitLine(lineRef.current.committed);
         if (tool !== 'eraser' && eraserRef.current) cancelEraser();
     };
     useEffect(() => {
@@ -469,6 +582,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         hiddenId: pointDraft?.id ?? null,
         erasingIds: erasing,
         handles,
+        bindingHighlight,
         onPointerDown,
         onPointerMove,
         onPointerUp,

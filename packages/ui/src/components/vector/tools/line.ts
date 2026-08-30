@@ -6,9 +6,9 @@
 
 import { type Point, snapAngle } from '@workspace/lib/vector';
 
-// U3b widens this to `'line' | 'arrow'` when it adds the arrow tool; the draft stays parameterized by
-// `type` so that stays a one-line change.
-export type LinearToolType = 'line';
+// The arrow tool reuses the whole line gesture, parameterized by `type` — no second implementation
+// (R3.8). The draft carries the type so a commit knows whether to write a line or a bindable arrow.
+export type LinearToolType = 'line' | 'arrow';
 
 // origin = the first scene point; committed/trailing are relative to it (first committed is [0,0]).
 // `mode` is 'pending' during the opening press (which becomes a drag-line or, on a no-move release,

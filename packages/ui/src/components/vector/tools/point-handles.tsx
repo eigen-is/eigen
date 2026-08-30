@@ -10,6 +10,7 @@ import {
     linearSceneToLocal,
     type Point,
     parsePoints,
+    type VectorArrowElement,
     type VectorLinearElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
@@ -19,14 +20,17 @@ import { useRef, useState } from 'react';
 const POINT_HANDLE_SCREEN_PX = 10;
 
 type LinePointHandlesProps = {
-    line: VectorLinearElement;
+    // A line or an arrow — both carry `points`; an arrow's endpoint drag additionally (re)binds (R3.10),
+    // which the host resolves from the dragged vertex index.
+    line: VectorLinearElement | VectorArrowElement;
     boxToStyle: (box: Box) => React.CSSProperties;
     clientToScene: (clientX: number, clientY: number) => Point;
     frozenRef: MutableRefObject<boolean>;
-    // Live points during a drag (null clears the preview); the host renders the reshaped line.
-    onPreview: (points: Point[] | null) => void;
-    // One sealed write of the reshaped points on release.
-    onCommit: (points: Point[]) => void;
+    // Live points during a drag (null clears the preview) and the vertex index being dragged; the host
+    // renders the reshaped element and highlights a binding candidate under an arrow's endpoint.
+    onPreview: (points: Point[] | null, index: number) => void;
+    // One sealed write of the reshaped points on release, with the dragged vertex index.
+    onCommit: (points: Point[], index: number) => void;
 };
 
 export function LinePointHandles({
@@ -59,7 +63,7 @@ export function LinePointHandles({
             const next = points.map((p, i) => (i === index ? local : p));
             latest = next;
             setDrag({ index, local });
-            onPreview(next);
+            onPreview(next, index);
         };
         const teardown = () => {
             setDrag(null);
@@ -73,15 +77,15 @@ export function LinePointHandles({
         const onUp = (pe: PointerEvent) => {
             if (pe.pointerId !== pointerId) return;
             teardown();
-            if (latest) onCommit(latest);
-            else onPreview(null);
+            if (latest) onCommit(latest, index);
+            else onPreview(null, index);
         };
         const onKey = (ke: KeyboardEvent) => {
             if (ke.key !== 'Escape') return;
             ke.preventDefault();
             ke.stopPropagation();
             teardown();
-            onPreview(null);
+            onPreview(null, index);
         };
         document.addEventListener('pointermove', onMove, { signal });
         document.addEventListener('pointerup', onUp, { signal });

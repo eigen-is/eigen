@@ -3,10 +3,30 @@
 // the toolbar and the canvas share one source (the toolbar reflects/sets it, the canvas reads it +
 // keyboard sets it).
 
-import { Circle, Diamond, Eraser, type LucideIcon, Minus, MousePointer2, Pencil, Square, Type } from 'lucide-react';
+import {
+    Circle,
+    Diamond,
+    Eraser,
+    type LucideIcon,
+    Minus,
+    MousePointer2,
+    MoveUpRight,
+    Pencil,
+    Square,
+    Type,
+} from 'lucide-react';
 import { useState } from 'react';
 
-export type VectorTool = 'select' | 'rectangle' | 'diamond' | 'ellipse' | 'line' | 'freedraw' | 'text' | 'eraser';
+export type VectorTool =
+    | 'select'
+    | 'rectangle'
+    | 'diamond'
+    | 'ellipse'
+    | 'arrow'
+    | 'line'
+    | 'freedraw'
+    | 'text'
+    | 'eraser';
 
 // Toolbar order (arrow slots between ellipse and line in Phase 3); letters are Excalidraw's.
 export const VECTOR_TOOLS: { tool: VectorTool; icon: LucideIcon; label: string; shortcut: string }[] = [
@@ -14,6 +34,7 @@ export const VECTOR_TOOLS: { tool: VectorTool; icon: LucideIcon; label: string; 
     { tool: 'rectangle', icon: Square, label: 'Rectangle', shortcut: 'R' },
     { tool: 'diamond', icon: Diamond, label: 'Diamond', shortcut: 'D' },
     { tool: 'ellipse', icon: Circle, label: 'Ellipse', shortcut: 'O' },
+    { tool: 'arrow', icon: MoveUpRight, label: 'Arrow', shortcut: 'A' },
     { tool: 'line', icon: Minus, label: 'Line', shortcut: 'L' },
     { tool: 'freedraw', icon: Pencil, label: 'Draw', shortcut: 'P' },
     { tool: 'text', icon: Type, label: 'Text', shortcut: 'T' },

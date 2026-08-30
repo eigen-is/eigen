@@ -8,6 +8,7 @@ import { buildImageClipboardItem, buildTextClipboardItem } from '@workspace/lib/
 import type { EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
+    type Arrowhead,
     type FillStyle,
     isLinearElement,
     type Roundness,
@@ -19,10 +20,13 @@ import {
 // Vector-private clipboard meta, carried under `item.meta.vector`. Absolute scene x/y ride here (NOT
 // the typed contract fields, which forbid x/y) so a vector→vector paste preserves the selection's
 // relative layout before it is re-anchored on the viewport. `type` present ⇒ restore a shape or a
-// linear element (which then also carries `points` + `roundness`), else a text element.
+// linear element (which then also carries `points` + `roundness`), else a text element. `id` is the
+// element's own id so a paste can remap arrow bindings across the pasted set (R3.11); an arrow also
+// carries its heads, bindings and label.
 export type VectorClipMeta = {
     x: number;
     y: number;
+    id?: string;
     type?: 'rectangle' | 'diamond' | 'ellipse' | 'freedraw' | 'line' | 'arrow';
     strokeColor?: string;
     backgroundColor?: string;
@@ -33,6 +37,14 @@ export type VectorClipMeta = {
     opacity?: number;
     roundness?: Roundness;
     points?: string;
+    startArrowhead?: Arrowhead;
+    endArrowhead?: Arrowhead;
+    startBinding?: string;
+    endBinding?: string;
+    text?: string;
+    fontSize?: number;
+    fontFamily?: string;
+    labelWidth?: number;
 };
 
 export function readVectorMeta(item: EigenClipboardItem): VectorClipMeta | null {
@@ -80,11 +92,13 @@ export function buildElementClipboardItem(
             },
         });
     }
-    // shape (rectangle/diamond/ellipse) or linear (freedraw/line) — both ride the text carrier; a linear
-    // element additionally carries its `points` so the exact geometry round-trips a vector→vector paste.
+    // shape (rectangle/diamond/ellipse) or linear (freedraw/line/arrow) — all ride the text carrier; a
+    // linear element additionally carries its `points` so the exact geometry round-trips a vector→vector
+    // paste, and its `id` so a paste can remap arrow bindings across the pasted set.
     const vector: VectorClipMeta = {
         x: el.x,
         y: el.y,
+        id: el.id,
         type: el.type,
         strokeColor: el.strokeColor,
         backgroundColor: el.backgroundColor,
@@ -96,6 +110,16 @@ export function buildElementClipboardItem(
         roundness: el.roundness,
     };
     if (isLinearElement(el)) vector.points = el.points;
+    if (el.type === 'arrow') {
+        vector.startArrowhead = el.startArrowhead;
+        vector.endArrowhead = el.endArrowhead;
+        vector.startBinding = el.startBinding;
+        vector.endBinding = el.endBinding;
+        vector.text = el.text;
+        vector.fontSize = el.fontSize;
+        vector.fontFamily = el.fontFamily;
+        vector.labelWidth = el.labelWidth;
+    }
     return buildTextClipboardItem({ text: '', box, meta: { vector } });
 }
 

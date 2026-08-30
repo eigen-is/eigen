@@ -19,7 +19,6 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
-    DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elementToSvg,
     fitImageSize,
@@ -63,17 +62,25 @@ import { useViewport } from './hooks/use-viewport';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import {
+    buildPreviewById,
+    followArrowPreview,
+    type PastedArrow,
+    remapPastedArrows,
+    unbindDraggedArrow,
+} from './tools/binding';
+import {
     buildSelectionItems,
     readVectorMeta,
     selectionPlainText,
     toVectorTextAlign,
     type VectorClipMeta,
 } from './tools/clipboard';
+import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
+import { SnapGuides } from './tools/snap-guides';
 import { useDrawingTools } from './tools/use-drawing-tools';
 import { VectorObjectMenu } from './vector-object-menu';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const CREATING_ID = '__creating__';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded (SCOUT §7).
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
@@ -86,8 +93,9 @@ const MAX_FONT_SIZE = 400;
 // Each subsequent image in a multi-file drop staggers by this many scene units so a stack of
 // natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
 const IMAGE_CASCADE_OFFSET = 20;
-// Half-length of a snap guide line in scene units — large enough to span the viewport at any pan/zoom.
-const SNAP_LINE_EXTENT = 1_000_000;
+// A bound arrow dragged alone unbinds only past this SCREEN distance, so a click-select never detaches it
+// (Excalidraw's DRAGGING_THRESHOLD, R3.10).
+const ARROW_UNBIND_SCREEN = 10;
 
 // An open text-editing session. A new element stays LOCAL (id never written) until its first
 // commit — an empty discard writes nothing; re-editing an existing element commits one update, or
@@ -144,42 +152,6 @@ function boxToBounds(b: Box): Bounds {
 
 function clampFontSize(size: number): number {
     return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
-}
-
-function normalizeRect(x0: number, y0: number, x1: number, y1: number): Box {
-    return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0), angle: 0 };
-}
-
-// Drag-create box: min-corner + extent, or centered on the start point when Alt is held.
-function newShapeBox(sx: number, sy: number, dx: number, dy: number, fromCenter: boolean): Box {
-    if (fromCenter) {
-        return {
-            x: sx - Math.abs(dx),
-            y: sy - Math.abs(dy),
-            width: Math.abs(dx) * 2,
-            height: Math.abs(dy) * 2,
-            angle: 0,
-        };
-    }
-    return normalizeRect(sx, sy, sx + dx, sy + dy);
-}
-
-type CreatingState = { type: 'rectangle' | 'diamond' | 'ellipse'; seed: number; box: Box };
-
-function creatingElement(c: CreatingState): VectorElement {
-    return {
-        id: CREATING_ID,
-        type: c.type,
-        x: c.box.x,
-        y: c.box.y,
-        width: c.box.width,
-        height: c.box.height,
-        angle: 0,
-        ...DEFAULT_ELEMENT_PROPS,
-        roundness: DEFAULT_SHAPE_ROUNDNESS,
-        seed: c.seed,
-        index: 'a0',
-    };
 }
 
 // pointerId gates move/up to the pointer that started the gesture — on touch, a second finger's
@@ -333,9 +305,15 @@ export function VectorCanvas({
         undoManager,
     });
 
+    // Elements with their live preview boxes applied — the map a bound arrow follows while its shape is
+    // mid-drag (R3.9). Rebuilt only when the scene or a preview changes.
+    const hasPreviews = Object.keys(previews).length > 0;
+    const previewById = useMemo(() => buildPreviewById(ordered, previews), [ordered, previews]);
+
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
     // no preview → same object identity, so the memo skips it. A linear element's resize/rotate derives
-    // scaled points per frame through resizeLinear (R2.6); an element marked for erasure dims to 20%.
+    // scaled points per frame through resizeLinear (R2.6); a bound arrow whose shape is being previewed
+    // follows it per frame; an element marked for erasure dims to 20%.
     const renderEl = (el: VectorElement): VectorElement => {
         const p = previews[el.id];
         let out = el;
@@ -347,6 +325,9 @@ export function VectorCanvas({
             } else {
                 out = { ...el, x: p.x, y: p.y, width: p.width, height: p.height, angle: p.angle };
             }
+        } else if (hasPreviews && el.type === 'arrow') {
+            const follow = followArrowPreview(el, previews, previewById);
+            if (follow) out = { ...el, ...follow };
         }
         if (drawing.erasingIds.has(el.id)) out = { ...out, opacity: out.opacity * 0.2 };
         return out;
@@ -790,6 +771,10 @@ export function VectorCanvas({
             const partials: NewVectorElement[] = [];
             const textHeals: { index: number; text: string; fontSize: number; fontFamily: string }[] = [];
             const crossMount: { index: number; item: EigenClipboardImageItem }[] = [];
+            // Each pasted element's partial index → its source id (for the remap map), and the arrows whose
+            // bindings are remapped across the pasted set once the clones have ids (R3.11).
+            const cloneIds = new Map<number, string>();
+            const arrowRemaps: PastedArrow[] = [];
             let cascade = 0;
             const placeAt = (meta: VectorClipMeta | null, w: number, h: number) => {
                 if (meta) return { x: meta.x + dx, y: meta.y + dy };
@@ -821,15 +806,19 @@ export function VectorCanvas({
                     }
                     continue;
                 }
-                // Shape or linear carrier (a text item whose meta.vector names a shape/freedraw/line
-                // type). A linear element additionally restores its `points` (undefined for shapes).
+                // Shape or linear carrier (a text item whose meta.vector names a shape/freedraw/line/arrow
+                // type). A linear element additionally restores its `points` (undefined for shapes); an
+                // arrow also restores its heads + label and is queued for the binding remap below.
                 if (meta?.type) {
                     // A linear carrier without points would read back as nothing (read-vector drops it).
-                    if ((meta.type === 'freedraw' || meta.type === 'line') && !meta.points) continue;
+                    if ((meta.type === 'freedraw' || meta.type === 'line' || meta.type === 'arrow') && !meta.points)
+                        continue;
                     const w = box.width;
                     const h = box.height;
                     const pos = placeAt(meta, w, h);
-                    partials.push({
+                    const index = partials.length;
+                    if (meta.id) cloneIds.set(index, meta.id);
+                    const partial: NewVectorElement = {
                         type: meta.type,
                         ...pos,
                         width: w,
@@ -844,7 +833,21 @@ export function VectorCanvas({
                         opacity: meta.opacity,
                         roundness: meta.roundness,
                         points: meta.points,
-                    });
+                    };
+                    if (meta.type === 'arrow') {
+                        partial.startArrowhead = meta.startArrowhead;
+                        partial.endArrowhead = meta.endArrowhead;
+                        partial.text = meta.text;
+                        partial.fontSize = meta.fontSize;
+                        partial.fontFamily = meta.fontFamily;
+                        partial.labelWidth = meta.labelWidth;
+                        arrowRemaps.push({
+                            index,
+                            startBinding: meta.startBinding ?? '',
+                            endBinding: meta.endBinding ?? '',
+                        });
+                    }
+                    partials.push(partial);
                     continue;
                 }
                 // Real text element — re-measure dims locally (never the wire size). An empty text
@@ -876,6 +879,10 @@ export function VectorCanvas({
             if (!partials.length) return;
             undoManager?.stopCapturing();
             const ids = addElements(partials); // ONE transact for all adds
+            // Remap each pasted arrow's bindings now that the clones have ids — no stopCapturing between the
+            // add and this update, so the whole paste stays ONE undo step (R3.11).
+            const remap = remapPastedArrows(arrowRemaps, cloneIds, ids);
+            if (remap.length) updateElements(remap);
             undoManager?.stopCapturing();
             if (!ids.length) return;
             setSelectedIds(ids);
@@ -916,6 +923,7 @@ export function VectorCanvas({
             viewportCenterScene,
             mediaFolderId,
             addElements,
+            updateElements,
             setSelectedIds,
             undoManager,
             healTextDims,
@@ -1335,9 +1343,19 @@ export function VectorCanvas({
                     undoManager?.stopCapturing(); // trailing seal (leading seal fired at pointerdown)
                     if (ids.length) setSelectedIds(ids);
                 } else {
+                    // Past the unbind threshold, a dragged arrow detaches from any bound shape left behind
+                    // (a shape dragged along stays bound — updateElements re-snaps it) (R3.10).
+                    const movedIds = new Set(g.ids);
+                    const farEnough = Math.hypot(dx, dy) * zoom >= ARROW_UNBIND_SCREEN;
                     const patches = g.ids
                         .filter((id) => previews[id])
-                        .map((id) => ({ id, fields: { x: previews[id].x, y: previews[id].y } }));
+                        .map((id) => {
+                            const el = elementsRef.current.find((e) => e.id === id);
+                            const fields: VectorElementPatch = { x: previews[id].x, y: previews[id].y };
+                            if (farEnough && el?.type === 'arrow')
+                                Object.assign(fields, unbindDraggedArrow(el, movedIds));
+                            return { id, fields };
+                        });
                     if (patches.length) updateElements(patches);
                     undoManager?.stopCapturing(); // trailing seal, same as create
                 }
@@ -1418,31 +1436,7 @@ export function VectorCanvas({
                     {drawing.previewElement && (
                         <ElementNode el={drawing.previewElement} resolveMedia={resolveMediaUrl} />
                     )}
-                    {snapLines.map((line, i) =>
-                        line.orientation === 'vertical' ? (
-                            <line
-                                key={i}
-                                className="stroke-selection-handle"
-                                x1={line.position}
-                                y1={-SNAP_LINE_EXTENT}
-                                x2={line.position}
-                                y2={SNAP_LINE_EXTENT}
-                                strokeWidth={1}
-                                vectorEffect="non-scaling-stroke"
-                            />
-                        ) : (
-                            <line
-                                key={i}
-                                className="stroke-selection-handle"
-                                x1={-SNAP_LINE_EXTENT}
-                                y1={line.position}
-                                x2={SNAP_LINE_EXTENT}
-                                y2={line.position}
-                                strokeWidth={1}
-                                vectorEffect="non-scaling-stroke"
-                            />
-                        ),
-                    )}
+                    <SnapGuides lines={snapLines} />
                 </g>
             </svg>
             <div className="pointer-events-none absolute inset-0">
@@ -1513,8 +1507,10 @@ export function VectorCanvas({
                         }}
                     />
                 )}
-                {/* Vertex handles for a single selected line, over the ObjectTransform ring (R2.13). */}
+                {/* Vertex handles for a single selected line/arrow, over the ObjectTransform ring (R2.13). */}
                 {drawing.handles}
+                {/* Dashed ring over the shape a dragged arrow endpoint would bind to (R3.8). */}
+                {drawing.bindingHighlight}
                 {showChrome && !showTransform && unionBox && (
                     <div
                         className="eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute"

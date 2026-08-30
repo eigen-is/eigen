@@ -8,6 +8,7 @@
 
 import {
     type ArrangeOp,
+    type Arrowhead,
     type Box,
     computeArrange,
     DEFAULT_FONT_FAMILY,
@@ -20,6 +21,7 @@ import {
     resizeLinear,
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
+    type VectorArrowElement,
     type VectorElement,
     type VectorElementType,
     type VectorTextElement,
@@ -80,6 +82,13 @@ const FILL_STYLE_OPTIONS: { value: FillStyle; label: string }[] = [
     { value: 'cross-hatch', label: 'Cross-hatch' },
     { value: 'zigzag', label: 'Zigzag' },
 ];
+const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
+    { value: 'none', label: 'None' },
+    { value: 'arrow', label: 'Arrow' },
+    { value: 'triangle', label: 'Triangle' },
+    { value: 'bar', label: 'Bar' },
+    { value: 'circle', label: 'Circle' },
+];
 
 type VectorPropertiesPanelProps = {
     // All elements — z-order reorders the selection relative to the rest (computeZOrder needs both).
@@ -117,6 +126,9 @@ export function VectorPropertiesPanel({
         has && selectedElements.every((el) => el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line');
     const textEls = selectedElements.filter((el): el is VectorTextElement => el.type === 'text');
     const allText = has && textEls.length === selectedElements.length;
+    // Arrowheads apply to arrows only (both ends selectable per selection).
+    const arrowEls = selectedElements.filter((el): el is VectorArrowElement => el.type === 'arrow');
+    const allArrow = has && arrowEls.length === selectedElements.length;
 
     // Same fields on every selected element — one transact, one undo step.
     const applyToAll = (fields: VectorElementPatch) => {
@@ -228,6 +240,8 @@ export function VectorPropertiesPanel({
     const fontFamily = getMergedValue(textEls, (el) => el.fontFamily);
     const fontSize = getMergedValue(textEls, (el) => el.fontSize);
     const textAlign = getMergedValue(textEls, (el) => el.textAlign);
+    const startArrowhead = getMergedValue(arrowEls, (el) => el.startArrowhead);
+    const endArrowhead = getMergedValue(arrowEls, (el) => el.endArrowhead);
 
     const title =
         selectedElements.length === 1 ? TYPE_LABELS[selectedElements[0].type] : `${selectedElements.length} elements`;
@@ -346,6 +360,25 @@ export function VectorPropertiesPanel({
                         )}
                     </PropertySection>
                 </>
+            )}
+
+            {allArrow && (
+                <PropertySection title="Arrowheads">
+                    <PropertyRow label="Start">
+                        <MergedSelect
+                            value={startArrowhead}
+                            onChange={(v) => applyToAll({ startArrowhead: v })}
+                            options={ARROWHEAD_OPTIONS}
+                        />
+                    </PropertyRow>
+                    <PropertyRow label="End">
+                        <MergedSelect
+                            value={endArrowhead}
+                            onChange={(v) => applyToAll({ endArrowhead: v })}
+                            options={ARROWHEAD_OPTIONS}
+                        />
+                    </PropertyRow>
+                </PropertySection>
             )}
 
             <PropertySection title="Appearance">

@@ -130,6 +130,7 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     useHotkey('3', () => setTool('diamond'), { enabled });
     useHotkey('O', () => setTool('ellipse'), { enabled });
     useHotkey('4', () => setTool('ellipse'), { enabled });
+    useHotkey('A', () => setTool('arrow'), { enabled });
     useHotkey('L', () => setTool('line'), { enabled });
     useHotkey('P', () => setTool('freedraw'), { enabled });
     useHotkey('T', () => setTool('text'), { enabled });
