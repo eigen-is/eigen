@@ -84,6 +84,10 @@ describe('readSvgClipboard', () => {
     test('returns null for non-svg text with no eigen payload', () => {
         expect(readSvgClipboard(stubClipboard({ 'text/plain': 'just some text' }))).toBeNull();
     });
+
+    test('an <svg snippet without the SVG namespace stays text', () => {
+        expect(readSvgClipboard(stubClipboard({ 'text/plain': '<svg width="10"><rect/></svg>' }))).toBeNull();
+    });
 });
 
 describe('svgToImageFile', () => {

@@ -109,6 +109,10 @@ A pure-image copy writes no `text/plain`; a copy that writes `text/plain` writes
 double-paste where a consumer accepts both flavors. It is a clipboard-protocol rule — the worked example lives in
 [CANVAS.md](CANVAS.md) § D6.
 
+### The SVG flavour (vector copies)
+
+A vector copy also sets `EigenClipboardData.svg`: a self-contained `sceneToSvg` render of the selection with the element JSON URI-encoded into a `<metadata>` block (`embedClipboardSvgMetadata`/`extractClipboardSvgMetadata`), Excalidraw's svg-source pattern. It rides the eigen payload because Chromium's async clipboard cannot carry an `image/svg+xml` flavour. Hosts that can't place vector's typed carriers (docs, sheets, slides) call `readSvgClipboard` BEFORE consuming the typed items and insert the SVG as one image via `svgToImageFile` + their existing image-upload path — that single consumption point is what keeps D6 (no double-paste). `readSvgClipboard` also accepts a whole SVG document on `text/plain` (root tag carrying the SVG xmlns — a pasted `<svg>` code snippet without it stays text), so foreign drawings paste as images too; vector itself restores native elements from the `<metadata>` block when present. **Image-bearing selections write no `svg`**: image bytes can't be inlined on the synchronous copy path, and live hrefs (owner-scoped preview URLs, tab-local `blob:` pendings) would render blank for every other viewer — those selections travel as typed items alone, where the re-upload seam keeps image fidelity.
+
 ## Cross-Document Media
 
 When pasting images between documents, `needsReUpload()` compares `sourceParentId` to the target's `mediaFolderId`.

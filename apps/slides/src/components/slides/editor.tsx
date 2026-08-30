@@ -661,7 +661,7 @@ function SlideEditorInner({
                 return;
             }
 
-            // A vector SVG payload (or any `<svg`-leading clipboard) becomes an image object through the
+            // A vector SVG payload (or a pasted SVG document) becomes an image object through the
             // exact image-file path — stored in media/, served as-is, rendered by <image> (R4.7). Ahead of
             // the eigen-items branch so a vector selection lands as one image, not its shape carriers.
             const svg = e.clipboardData ? readSvgClipboard(e.clipboardData) : null;

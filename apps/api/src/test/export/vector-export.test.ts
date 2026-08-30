@@ -100,6 +100,40 @@ describe('Eigenvector export — empty drawing', () => {
     }, 60_000);
 });
 
+describe('Eigenvector export — SVG media sanitization', () => {
+    test('a scriptable svg media embeds with scripts and external refs stripped', async () => {
+        // Media previews serve SVG bytes as-is, so a pasted/uploaded drawing is raw user content;
+        // prepareMedia (export/media.ts) must pass it through the export sanitizer before it rides
+        // into the document as a data: URI (nested <image href> is SSRF against WeasyPrint).
+        const created = await seedVector('Evil Media', false);
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        seedVectorDoc(collab.doc, buildGoldenVectorScene());
+        const resolved = await home.drive.resolveFile(mountId, created.id);
+        const evil =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" onload="alert(1)">' +
+            '<script>alert(2)</script><image href="http://169.254.169.254/latest"/><rect width="10" height="10"/></svg>';
+        await seedDocumentMedia(
+            resolved.mount,
+            resolved.path,
+            GOLDEN_MEDIA_NAME,
+            new TextEncoder().encode(evil),
+            'image/svg+xml',
+        );
+
+        const res = await exportRequest(created.id, 'svg');
+        expect(res.status).toBe(200);
+        const svg = await res.text();
+        const b64 = svg.match(/data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)/)?.[1];
+        expect(b64).toBeTruthy();
+        const embedded = Buffer.from(b64 ?? '', 'base64').toString('utf8');
+        expect(embedded).toContain('<rect');
+        expect(embedded).not.toContain('<script');
+        expect(embedded).not.toContain('onload');
+        expect(embedded).not.toContain('169.254.169.254');
+    }, 120_000);
+});
+
 const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
 
 suite('Eigenvector export route — PDF (WeasyPrint end-to-end)', () => {

@@ -11,7 +11,6 @@ import {
     type Arrowhead,
     type FillStyle,
     isLinearElement,
-    type MediaResolver,
     type Roundness,
     type StrokeStyle,
     sceneToSvg,
@@ -144,22 +143,22 @@ export function buildSelectionItems(
 
 // The full eigen payload for a selection: the typed items (vector→vector paste, unchanged) PLUS a
 // self-contained SVG of the same selection (R4.7) for hosts that can't place the typed carriers —
-// docs/sheets/slides render it as an image. The SVG is `sceneToSvg` of the selected elements with
-// media resolved to their live `<image href>` URLs, and carries the element JSON in a `<metadata>`
-// block so it round-trips back to native elements if pasted into vector without the eigen flavour.
+// docs/sheets/slides render it as an image. The SVG carries the element JSON in a `<metadata>` block so
+// it round-trips back to native elements if pasted into vector without the eigen flavour. An
+// image-bearing selection writes NO svg flavour: the sync copy path can't inline image bytes, and baking
+// the live hrefs would break for every other viewer (preview URLs are owner-scoped, pending uploads are
+// tab-local blob: URLs) — those selections ride the typed items alone, where the cross-mount re-upload
+// seam keeps image fidelity (see CLIPBOARD.md).
 export function buildSelectionData(
     ordered: VectorElement[],
     selectedIds: string[],
     meta: VectorMeta,
     resolveMediaPath: (name: string) => DrivePath | undefined,
-    resolveMedia: MediaResolver,
 ): EigenClipboardData {
     const items = buildSelectionItems(ordered, selectedIds, resolveMediaPath);
     const selected = ordered.filter((el) => selectedIds.includes(el.id));
-    const svg = embedClipboardSvgMetadata(sceneToSvg({ elements: selected, meta }, { resolveMedia }), {
-        version: 1,
-        items,
-    });
+    if (selected.some((el) => el.type === 'image')) return { version: 1, items };
+    const svg = embedClipboardSvgMetadata(sceneToSvg({ elements: selected, meta }), { version: 1, items });
     return { version: 1, items, svg };
 }
 

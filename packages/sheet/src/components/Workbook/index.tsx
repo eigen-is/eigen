@@ -638,7 +638,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_MARKER);
 
                     if (!isInternalCopy) {
-                        // A vector SVG payload (or any `<svg`-leading clipboard) becomes a floating image
+                        // A vector SVG payload (or a pasted SVG document) becomes a floating image
                         // through the app's exact image-file path — stored in media/, served as-is, rendered
                         // by <image> (R4.7). Ahead of the eigen-items split so a vector selection lands as one
                         // image, not as empty shape carriers.

@@ -445,7 +445,7 @@ const TiptapEditor = ({
                 handlePaste: (_view, event) => {
                     if (!event.clipboardData) return false;
 
-                    // A vector SVG payload (or any `<svg`-leading clipboard) lands as a figure through the
+                    // A vector SVG payload (or a pasted SVG document) lands as a figure through the
                     // exact image-upload path — stored in media/, served as-is, rendered by <image> (R4.7).
                     const svg = readSvgClipboard(event.clipboardData);
                     if (svg && mediaFolderIdRef.current) {

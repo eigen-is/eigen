@@ -125,14 +125,17 @@ export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
 }
 
 // The SVG a paste consumer should treat as an image: vector's copy flavour (the `svg` field on the
-// eigen payload) first, then a bare `<svg`-leading `text/plain` (a foreign SVG). Null when neither is
-// present. eigen-aware hosts call this BEFORE consuming the typed items so a vector selection lands as
-// one image, not N shape carriers — and consuming the paste there is what keeps D6 (no double-paste).
+// eigen payload) first, then a `text/plain` that is a whole SVG document (a foreign drawing). Null when
+// neither is present. eigen-aware hosts call this BEFORE consuming the typed items so a vector selection
+// lands as one image, not N shape carriers — and consuming the paste there is what keeps D6 (no
+// double-paste). The plain-text arm requires the SVG namespace on the root tag — every real SVG export
+// (ours, Excalidraw's, an .svg file's text) carries it, while a hand-pasted `<svg>` code snippet
+// usually doesn't and must stay text.
 export function readSvgClipboard(clipboardData: DataTransfer): string | null {
     const eigen = readEigenClipboard(clipboardData);
     if (eigen?.svg) return eigen.svg;
     const plain = clipboardData.getData('text/plain').trimStart();
-    return plain.startsWith('<svg') ? plain : null;
+    return /^<svg[^>]*\sxmlns="http:\/\/www\.w3\.org\/2000\/svg"/.test(plain) ? plain : null;
 }
 
 // True when the clipboard's `text/html` carries real content beyond the eigen marker span — i.e. a

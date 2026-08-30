@@ -361,10 +361,11 @@ export async function seedDocumentMedia(
     drivePath: DrivePath,
     name: string,
     bytes: Uint8Array,
+    mimeType = 'image/png',
 ): Promise<void> {
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
     if (!mediaFolder) throw new Error(`${drivePath.name}: media folder missing`);
-    await mount.createFile(mediaFolder.id, name, 'image/png', bytes.byteLength, bytes);
+    await mount.createFile(mediaFolder.id, name, mimeType, bytes.byteLength, bytes);
 }
 
 // Deterministic eigenvector fixture for the transform work (preview round-trip and

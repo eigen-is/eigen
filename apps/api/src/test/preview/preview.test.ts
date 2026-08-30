@@ -72,6 +72,22 @@ describe('Preview', () => {
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
         expect(res.status).toBe(200);
         expect(res.headers.get('content-type')).toBe('image/webp');
+        // Rasterised previews carry no sandbox CSP — it exists only for the scriptable SVG case.
+        expect(res.headers.get('content-security-policy')).toBeNull();
+    });
+
+    test('svg preview is served as-is under a sandbox CSP', async () => {
+        // Served raw (no rasterisation) and rendered inline on the API origin, so a scriptable
+        // upload must get the same sandbox CSP as /embed (serve-file.ts).
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(2)</script></svg>';
+        const file = new File([svg], 'evil.svg', { type: 'image/svg+xml' });
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe('image/svg+xml');
+        expect(res.headers.get('content-security-policy')).toBe("sandbox; default-src 'none'");
+        expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+        expect(await res.text()).toBe(svg);
     });
 
     test('video file redirects to embed', async () => {

@@ -276,7 +276,7 @@ function renderArrowLabel(el: VectorArrowElement, label: { center: Point; width:
     let out = '';
     for (let i = 0; i < lines.length; i++) {
         const y = round(top + i * lineHeightPx + verticalOffset);
-        out += `<text x="${cx}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="middle" style="white-space: pre;" dominant-baseline="alphabetic">${escapeXml(lines[i])}</text>`;
+        out += `<text x="${cx}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="middle" style="white-space: pre;">${escapeXml(lines[i])}</text>`;
     }
     return out;
 }
@@ -312,7 +312,7 @@ function renderText(el: VectorTextElement): string {
     let out = groupOpen(el);
     for (let i = 0; i < lines.length; i++) {
         const y = round(i * lineHeightPx + verticalOffset);
-        out += `<text x="${round(hx)}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="${anchor}" style="white-space: pre;" dominant-baseline="alphabetic">${escapeXml(lines[i])}</text>`;
+        out += `<text x="${round(hx)}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="${anchor}" style="white-space: pre;">${escapeXml(lines[i])}</text>`;
     }
     return `${out}</g>`;
 }

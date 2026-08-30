@@ -75,6 +75,8 @@ export type EigenClipboardData = {
     // JSON embedded in a `<metadata>` block. eigen-aware hosts that can't place the typed items (docs,
     // sheets, slides) render this as an image; vector reads the typed `items` instead and ignores it.
     // Chromium's async clipboard can't carry an `image/svg+xml` flavour, so the SVG rides here on the
-    // eigen payload rather than as a native flavour — invisible to non-eigen consumers (see CLIPBOARD.md).
+    // eigen payload rather than as a native flavour — invisible to non-eigen consumers. Image-bearing
+    // selections write no svg (their bytes can't be inlined at copy time) and travel as typed items
+    // only (see CLIPBOARD.md).
     svg?: string;
 };

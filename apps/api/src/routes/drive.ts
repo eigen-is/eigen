@@ -305,6 +305,13 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = result.contentType;
+            // SVG previews are served as-is (uploaded SVGs are user bytes), and this route renders
+            // inline on the API origin — the same sandbox CSP as /embed (serve-file.ts) keeps a
+            // scriptable payload from running with the viewer's session when opened directly.
+            if (result.contentType === 'image/svg+xml') {
+                set.headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
+                set.headers['X-Content-Type-Options'] = 'nosniff';
+            }
             return result.data;
         },
         { auth: true },

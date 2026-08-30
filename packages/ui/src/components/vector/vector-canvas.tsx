@@ -57,6 +57,7 @@ import { readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { ElementNode } from './element-node';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
+import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
 import { applyZOrder, deleteSelection, duplicateSelection, useVectorKeyboard } from './hooks/use-vector-keyboard';
@@ -223,7 +224,7 @@ export function VectorCanvas({
     // Active snap guide lines (scene coords) while a move/resize gesture is snapping (U7a). Rendered as
     // SVG lines in the scene group; cleared on gesture end.
     const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
-    const [spaceHeld, setSpaceHeld] = useState(false);
+    const spaceHeld = useSpaceHeld();
     const [panning, setPanning] = useState(false);
     // Select-mode hover affordance: true while the idle pointer is over a selectable element, so the
     // cursor signals draggability with `move` (the suite convention — slides/docs). Item E.
@@ -337,22 +338,6 @@ export function VectorCanvas({
             frozenRef.current = false;
         };
     }, [editing, frozenRef]);
-
-    // Space tracks the pan affordance (grab cursor + pan on pointerdown); ignore while typing.
-    useEffect(() => {
-        const down = (e: KeyboardEvent) => {
-            if (e.code === 'Space' && !e.repeat && !isTypingTarget()) setSpaceHeld(true);
-        };
-        const up = (e: KeyboardEvent) => {
-            if (e.code === 'Space') setSpaceHeld(false);
-        };
-        document.addEventListener('keydown', down);
-        document.addEventListener('keyup', up);
-        return () => {
-            document.removeEventListener('keydown', down);
-            document.removeEventListener('keyup', up);
-        };
-    }, []);
 
     // Safety net: any pointerup ends the freeze, clears the transform-start latch, and drops
     // leftover previews — ObjectTransform's Escape-cancel and no-move paths fire no onCommit, so
@@ -712,10 +697,10 @@ export function VectorCanvas({
     }, imagesEnabled);
 
     // The clipboard PRODUCER (typed items + the self-contained SVG flavour) + plain-text flavor live in
-    // ./tools/clipboard; the canvas calls them with the live z-order, selection, background and media resolvers.
+    // ./tools/clipboard; the canvas calls them with the live z-order, selection, background and path resolver.
     const buildData = useCallback(
-        (): EigenClipboardData => buildSelectionData(ordered, selectedIds, meta, resolveMediaPath, resolveMediaUrl),
-        [ordered, selectedIds, meta, resolveMediaPath, resolveMediaUrl],
+        (): EigenClipboardData => buildSelectionData(ordered, selectedIds, meta, resolveMediaPath),
+        [ordered, selectedIds, meta, resolveMediaPath],
     );
     const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
