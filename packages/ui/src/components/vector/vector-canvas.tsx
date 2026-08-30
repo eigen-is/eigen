@@ -24,6 +24,7 @@ import {
     elementToSvg,
     fitImageSize,
     getElementsBounds,
+    isLinearElement,
     isTransparent,
     type MarqueeMode,
     type MediaResolver,
@@ -339,9 +340,10 @@ export function VectorCanvas({
         const p = previews[el.id];
         let out = el;
         if (p) {
-            if (el.type === 'line' || el.type === 'freedraw') {
-                const r = resizeLinear(el, p);
-                out = { ...el, x: r.x, y: r.y, width: r.width, height: r.height, angle: p.angle, points: r.points };
+            // Only a size change needs the per-frame point rescale; a move/rotate-only preview applies
+            // x/y/angle straight through (resizeLinear would re-derive the same box and points).
+            if (isLinearElement(el) && (p.width !== el.width || p.height !== el.height)) {
+                out = { ...el, ...resizeLinear(el, p), angle: p.angle };
             } else {
                 out = { ...el, x: p.x, y: p.y, width: p.width, height: p.height, angle: p.angle };
             }
@@ -1486,12 +1488,12 @@ export function VectorCanvas({
                                     fields.height = height;
                                     healTextDims(single.id, single.text, size, single.fontFamily);
                                 }
-                            } else if (single.type === 'line' || single.type === 'freedraw') {
+                            } else if (isLinearElement(single)) {
                                 // A linear element rescales its points to the new box through resizeLinear
                                 // (R2.6), reading the COMMITTED element so the total scale is exact.
                                 if (next.width !== start.width || next.height !== start.height) {
                                     const base = elementsRef.current.find((b) => b.id === single.id);
-                                    if (base && (base.type === 'line' || base.type === 'freedraw')) {
+                                    if (base && isLinearElement(base)) {
                                         const r = resizeLinear(base, next);
                                         fields.width = r.width;
                                         fields.height = r.height;

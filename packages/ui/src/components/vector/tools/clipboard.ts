@@ -7,7 +7,14 @@
 import { buildImageClipboardItem, buildTextClipboardItem } from '@workspace/lib/clipboard';
 import type { EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { FillStyle, Roundness, StrokeStyle, TextAlign, VectorElement } from '@workspace/lib/vector';
+import {
+    type FillStyle,
+    isLinearElement,
+    type Roundness,
+    type StrokeStyle,
+    type TextAlign,
+    type VectorElement,
+} from '@workspace/lib/vector';
 
 // Vector-private clipboard meta, carried under `item.meta.vector`. Absolute scene x/y ride here (NOT
 // the typed contract fields, which forbid x/y) so a vector→vector paste preserves the selection's
@@ -88,7 +95,7 @@ export function buildElementClipboardItem(
         opacity: el.opacity,
         roundness: el.roundness,
     };
-    if (el.type === 'freedraw' || el.type === 'line') vector.points = el.points;
+    if (isLinearElement(el)) vector.points = el.points;
     return buildTextClipboardItem({ text: '', box, meta: { vector } });
 }
 

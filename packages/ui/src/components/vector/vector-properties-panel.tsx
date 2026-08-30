@@ -13,6 +13,7 @@ import {
     DEFAULT_FONT_FAMILY,
     type FillStyle,
     isClosedPath,
+    isLinearElement,
     isTransparent,
     parsePoints,
     type Roundness,
@@ -102,12 +103,10 @@ export function VectorPropertiesPanel({
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
     const isShape = (t: VectorElementType) => t === 'rectangle' || t === 'diamond' || t === 'ellipse';
-    const isLinear = (t: VectorElementType) => t === 'line' || t === 'freedraw';
     const has = selectedElements.length > 0;
-    const isClosedLinear = (el: VectorElement) =>
-        (el.type === 'line' || el.type === 'freedraw') && isClosedPath(parsePoints(el.points));
+    const isClosedLinear = (el: VectorElement) => isLinearElement(el) && isClosedPath(parsePoints(el.points));
     // Paint sections (Stroke / Fill / Sketch) apply to shapes and linear elements; images/text opt out.
-    const allPaintable = has && selectedElements.every((el) => isShape(el.type) || isLinear(el.type));
+    const allPaintable = has && selectedElements.every((el) => isShape(el.type) || isLinearElement(el));
     // Fill only makes sense for shapes and CLOSED linear elements (an open stroke has nothing to fill).
     const showFill = has && selectedElements.every((el) => isShape(el.type) || isClosedLinear(el));
     // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
@@ -135,7 +134,7 @@ export function VectorPropertiesPanel({
         updateElements(
             selectedIds.map((id) => {
                 const el = byId.get(id);
-                if (resizesLinear && el && (el.type === 'line' || el.type === 'freedraw')) {
+                if (resizesLinear && el && isLinearElement(el)) {
                     const box: Box = {
                         x: fields.x ?? el.x,
                         y: fields.y ?? el.y,
@@ -188,7 +187,7 @@ export function VectorPropertiesPanel({
         updateElements(
             patches.map((p) => {
                 const el = byId.get(p.id);
-                if (el && (el.type === 'line' || el.type === 'freedraw')) {
+                if (el && isLinearElement(el)) {
                     const box: Box = {
                         x: p.x ?? el.x,
                         y: p.y ?? el.y,

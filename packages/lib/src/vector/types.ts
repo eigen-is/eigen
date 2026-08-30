@@ -155,6 +155,12 @@ export function isVectorElementType(v: unknown): v is VectorElementType {
     );
 }
 
+// The linear family (freedraw / line, and Phase 3's arrow) — the elements carrying a `points` string.
+// One narrowing predicate so `.points`/`.roundness` access has a single owner as the family grows.
+export function isLinearElement(el: VectorElement): el is VectorLinearElement {
+    return el.type === 'freedraw' || el.type === 'line';
+}
+
 // A fill is absent when the color is empty or the 'transparent' sentinel (the slides
 // borderColor idiom). Kept simple — v1 colors come from the ColorPicker (solid hex +
 // a 'transparent' sentinel), not partial-alpha strings.

@@ -150,7 +150,10 @@ export function parsePoints(points: string): Point[] {
     for (const pair of raw) {
         if (!Array.isArray(pair)) return [];
         const [x, y] = pair;
-        if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+        if (typeof x !== 'number' || typeof y !== 'number') return [];
+        // A non-finite coord (e.g. 1e400 → Infinity via JSON overflow) drops just that point, not the
+        // whole stroke — read-vector then clamps the survivors per axis.
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
         out.push({ x, y });
     }
     return out;
@@ -250,15 +253,24 @@ export function hitTestElement(element: VectorElement, point: Point, threshold: 
     }
 }
 
-// Unrotate the probe into the element's local frame (about the box center, matching the renderer's
-// rotate pivot), then measure to the polyline. Tolerance is the screen threshold plus half the drawn
-// ink width; a closed, filled path is also hit anywhere inside.
+// A linear element's local frame ↔ scene mapping. The renderer places every vertex at
+// rotate(origin + local, boxCentre, angle), so hit-testing and the point-handles share this one
+// transform — the pivot convention lives here, not copied at each call site.
+export function linearSceneToLocal(box: Box, scene: Point): Point {
+    const un = rotatePoint(scene, boxCenter(box), -box.angle);
+    return { x: un.x - box.x, y: un.y - box.y };
+}
+
+export function linearLocalToScene(box: Box, local: Point): Point {
+    return rotatePoint({ x: box.x + local.x, y: box.y + local.y }, boxCenter(box), box.angle);
+}
+
+// Unrotate the probe into the element's local frame, then measure to the polyline. Tolerance is the
+// screen threshold plus half the drawn ink width; a closed, filled path is also hit anywhere inside.
 function hitTestLinear(element: VectorLinearElement, point: Point, threshold: number): boolean {
     const points = parsePoints(element.points);
     if (points.length === 0) return false;
-    const center = boxCenter(element);
-    const local = rotatePoint(point, center, -element.angle);
-    const p: Point = { x: local.x - element.x, y: local.y - element.y };
+    const p = linearSceneToLocal(element, point);
 
     const inkHalf =
         element.type === 'freedraw' ? (element.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2 : element.strokeWidth / 2;

@@ -6,10 +6,10 @@
 
 import {
     type Box,
-    boxCenter,
+    linearLocalToScene,
+    linearSceneToLocal,
     type Point,
     parsePoints,
-    rotatePoint,
     type VectorLinearElement,
 } from '@workspace/lib/vector';
 import type { MutableRefObject } from 'react';
@@ -28,20 +28,6 @@ type LinePointHandlesProps = {
     // One sealed write of the reshaped points on release.
     onCommit: (points: Point[]) => void;
 };
-
-// Map a point in the line's local frame to its scene position — the renderer rotates each element
-// about its box centre, so a vertex sits at rotate(origin + local, centre, angle).
-function vertexToScene(line: VectorLinearElement, local: Point): Point {
-    const center = boxCenter(line);
-    return rotatePoint({ x: line.x + local.x, y: line.y + local.y }, center, line.angle);
-}
-
-// The inverse: a scene point (the cursor) back into the line's local frame.
-function sceneToVertex(line: VectorLinearElement, scene: Point): Point {
-    const center = boxCenter(line);
-    const un = rotatePoint(scene, center, -line.angle);
-    return { x: un.x - line.x, y: un.y - line.y };
-}
 
 export function LinePointHandles({
     line,
@@ -69,7 +55,7 @@ export function LinePointHandles({
         let latest: Point[] | null = null;
 
         const update = (clientX: number, clientY: number) => {
-            const local = sceneToVertex(line, clientToScene(clientX, clientY));
+            const local = linearSceneToLocal(line, clientToScene(clientX, clientY));
             const next = points.map((p, i) => (i === index ? local : p));
             latest = next;
             setDrag({ index, local });
@@ -107,7 +93,7 @@ export function LinePointHandles({
         <>
             {points.map((p, i) => {
                 const local = drag?.index === i ? drag.local : p;
-                const scene = vertexToScene(line, local);
+                const scene = linearLocalToScene(line, local);
                 const style = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
                 return (
                     <div

@@ -5,9 +5,14 @@
 
 import { hitTestElement, type Point, type VectorElement } from '@workspace/lib/vector';
 
+// Cap the samples per move so a huge pointer jump (or a swipe at extreme zoom) can't fan a single
+// segment out into thousands of hit tests × every element; ≈4px spacing still holds for normal moves.
+const MAX_SAMPLES = 512;
+
 // Sample the segment `from → to` every `step` scene units (from = to on pointer down samples that one
 // point) and, for each element hit within `threshold`, add its id to `marked` — or remove it when
-// `alt` (Excalidraw's restore). `marked` is mutated in place.
+// `alt` (Excalidraw's restore). `marked` is mutated in place; returns whether it actually changed, so
+// the caller skips a re-render (and the Set allocation it forces) on a no-op move over empty space.
 export function markErase(
     ordered: VectorElement[],
     from: Point,
@@ -16,18 +21,24 @@ export function markErase(
     step: number,
     alt: boolean,
     marked: Set<string>,
-): void {
-    const samples: Point[] = [];
+): boolean {
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
-    const n = Math.max(1, Math.ceil(dist / step));
+    const n = Math.min(MAX_SAMPLES, Math.max(1, Math.ceil(dist / step)));
+    let changed = false;
     for (let i = 1; i <= n; i++) {
-        samples.push({ x: from.x + ((to.x - from.x) * i) / n, y: from.y + ((to.y - from.y) * i) / n });
-    }
-    for (const s of samples) {
+        const s = { x: from.x + ((to.x - from.x) * i) / n, y: from.y + ((to.y - from.y) * i) / n };
         for (const el of ordered) {
+            // Already-marked elements need no re-test (add is idempotent) — this skips re-parsing a
+            // freehand element's points on every sample. Alt (restore) still re-tests to un-mark.
+            if (!alt && marked.has(el.id)) continue;
             if (!hitTestElement(el, s, threshold)) continue;
-            if (alt) marked.delete(el.id);
-            else marked.add(el.id);
+            if (alt) {
+                if (marked.delete(el.id)) changed = true;
+            } else {
+                marked.add(el.id);
+                changed = true;
+            }
         }
     }
+    return changed;
 }

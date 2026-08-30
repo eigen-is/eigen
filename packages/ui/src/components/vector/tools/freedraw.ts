@@ -13,13 +13,14 @@ export function startFreedrawStroke(origin: Point): FreedrawStroke {
     return { origin, points: [{ x: 0, y: 0 }] };
 }
 
-// Append each sampled scene point (relative to the origin), skipping exact duplicates. Coalesced
-// pointer events feed several points per move so a fast scribble keeps its shape (R2.11).
-export function extendFreedrawStroke(stroke: FreedrawStroke, scenePoints: Point[]): void {
+// Append each sampled scene point (relative to the origin), skipping any within `minDist` scene units
+// of the last kept point (≈1 screen px) — thins the sub-pixel samples coalesced events feed while a
+// fast scribble still keeps its shape (R2.11).
+export function extendFreedrawStroke(stroke: FreedrawStroke, scenePoints: Point[], minDist: number): void {
     for (const s of scenePoints) {
         const p = { x: s.x - stroke.origin.x, y: s.y - stroke.origin.y };
         const last = stroke.points[stroke.points.length - 1];
-        if (last.x === p.x && last.y === p.y) continue;
+        if (Math.hypot(p.x - last.x, p.y - last.y) < minDist) continue;
         stroke.points.push(p);
     }
 }

@@ -165,6 +165,14 @@ describe('readVectorFromDoc', () => {
         expect(el).toMatchObject({ type: 'line', points: '[[0,0],[1000000,-1000000]]' });
     });
 
+    test('keeps a linear element with one non-finite point by dropping just that point', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'l', { type: 'line', index: 'a0', points: '[[0,0],[1e400,0],[40,10]]' });
+        });
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el).toMatchObject({ type: 'line', points: '[[0,0],[40,10]]' });
+    });
+
     test('accepts the new zigzag fill style', () => {
         const doc = docWith((elements) => {
             writeElement(elements, 'r', { type: 'rectangle', index: 'a0', fillStyle: 'zigzag' });

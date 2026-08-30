@@ -12,6 +12,7 @@ import { orderByFractionalIndex } from './fractional-index';
 import type { Box, Point } from './geometry';
 import { FREEDRAW_SIZE_FACTOR, getElementsBounds, isClosedPath, parsePoints } from './geometry';
 import {
+    isLinearElement,
     isTransparent,
     type VectorElement,
     type VectorImageElement,
@@ -266,7 +267,7 @@ function adjustRoughness(el: VectorShapeElement | VectorLinearElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);
     const roundable = el.type === 'rectangle' || el.type === 'diamond';
-    const linear = el.type === 'line' || el.type === 'freedraw';
+    const linear = isLinearElement(el);
     if (
         (minSize >= 20 && maxSize >= 50) ||
         (minSize >= 15 && el.roundness === 'round' && roundable) ||

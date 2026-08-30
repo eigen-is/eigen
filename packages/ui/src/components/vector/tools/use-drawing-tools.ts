@@ -26,11 +26,12 @@ import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDra
 import { LinePointHandles } from './point-handles';
 
 // Screen-px thresholds (÷ zoom → constant on-screen distance): hit tolerance and eraser sample step
-// (Excalidraw's DEFAULT_COLLISION_THRESHOLD / eraser trail), the multi-point line's confirm/close
-// radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that splits a 2-point line from a
-// multi-point one.
+// (Excalidraw's DEFAULT_COLLISION_THRESHOLD / eraser trail), the freehand minimum sample spacing that
+// thins sub-pixel points, the multi-point line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the
+// drag-vs-click threshold that splits a 2-point line from a multi-point one.
 const HIT_THRESHOLD_SCREEN = 8;
 const ERASER_STEP_SCREEN = 4;
+const FREEDRAW_MIN_STEP_SCREEN = 1;
 const LINE_CONFIRM_SCREEN = 8;
 const LINE_DRAG_SCREEN = 4;
 
@@ -123,7 +124,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const strokeRef = useRef<FreedrawStroke | null>(null);
     const lineRef = useRef<LineDraft | null>(null);
     const lineMovedRef = useRef(false);
-    const eraserRef = useRef<{ pointerId: number; marked: Set<string>; last: Point } | null>(null);
+    const eraserRef = useRef<{ marked: Set<string>; last: Point } | null>(null);
     const pointerIdRef = useRef<number | null>(null);
     const seedRef = useRef(0);
 
@@ -133,13 +134,17 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const [pointDraft, setPointDraft] = useState<{ id: string; el: VectorLinearElement } | null>(null);
 
     // --- Freehand -------------------------------------------------------------------------------
-    const finishFreedraw = () => {
-        const stroke = strokeRef.current;
+    const cancelFreedraw = () => {
         strokeRef.current = null;
         pointerIdRef.current = null;
         frozenRef.current = false;
         setActiveKind(null);
         setPreviewEl(null);
+    };
+
+    const finishFreedraw = () => {
+        const stroke = strokeRef.current;
+        cancelFreedraw();
         if (!stroke) return;
         undoManager?.stopCapturing();
         // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
@@ -153,14 +158,6 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         });
         undoManager?.stopCapturing();
         if (id) setSelectedIds([id]);
-    };
-
-    const cancelFreedraw = () => {
-        strokeRef.current = null;
-        pointerIdRef.current = null;
-        frozenRef.current = false;
-        setActiveKind(null);
-        setPreviewEl(null);
     };
 
     // --- Line -----------------------------------------------------------------------------------
@@ -217,27 +214,22 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     };
 
     // --- Eraser ---------------------------------------------------------------------------------
-    const finishEraser = () => {
-        const er = eraserRef.current;
-        eraserRef.current = null;
-        pointerIdRef.current = null;
-        frozenRef.current = false;
-        setActiveKind(null);
-        setErasing(EMPTY_IDS);
-        if (er?.marked.size) {
-            undoManager?.stopCapturing();
-            deleteElements([...er.marked]);
-            undoManager?.stopCapturing();
-        }
-        // Tool stays eraser.
-    };
-
     const cancelEraser = () => {
         eraserRef.current = null;
         pointerIdRef.current = null;
         frozenRef.current = false;
         setActiveKind(null);
         setErasing(EMPTY_IDS);
+    };
+
+    const finishEraser = () => {
+        const er = eraserRef.current;
+        cancelEraser();
+        if (!er?.marked.size) return;
+        undoManager?.stopCapturing();
+        deleteElements([...er.marked]);
+        undoManager?.stopCapturing();
+        // Tool stays eraser.
     };
 
     // --- Pointer dispatch -----------------------------------------------------------------------
@@ -258,9 +250,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         if (tool === 'eraser') {
             containerRef.current?.setPointerCapture(e.pointerId);
             frozenRef.current = true;
+            pointerIdRef.current = e.pointerId;
             const marked = new Set<string>();
             markErase(ordered, scene, scene, HIT_THRESHOLD_SCREEN / zoom, ERASER_STEP_SCREEN / zoom, e.altKey, marked);
-            eraserRef.current = { pointerId: e.pointerId, marked, last: scene };
+            eraserRef.current = { marked, last: scene };
             setErasing(new Set(marked));
             setActiveKind('eraser');
             return true;
@@ -293,7 +286,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             const pts = coalesced.length
                 ? coalesced.map((ce) => clientToScene(ce.clientX, ce.clientY))
                 : [clientToScene(e.clientX, e.clientY)];
-            extendFreedrawStroke(strokeRef.current, pts);
+            extendFreedrawStroke(strokeRef.current, pts, FREEDRAW_MIN_STEP_SCREEN / zoom);
             setPreviewEl(
                 previewElement('freedraw', strokeRef.current.origin, strokeRef.current.points, seedRef.current),
             );
@@ -301,9 +294,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         }
         if (eraserRef.current) {
             const er = eraserRef.current;
-            if (er.pointerId !== e.pointerId) return true;
+            if (pointerIdRef.current !== e.pointerId) return true;
             const scene = clientToScene(e.clientX, e.clientY);
-            markErase(
+            const changed = markErase(
                 ordered,
                 er.last,
                 scene,
@@ -313,7 +306,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 er.marked,
             );
             er.last = scene;
-            setErasing(new Set(er.marked));
+            if (changed) setErasing(new Set(er.marked));
             return true;
         }
         if (lineRef.current) {
@@ -337,7 +330,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             return true;
         }
         if (eraserRef.current) {
-            if (eraserRef.current.pointerId !== e.pointerId) return true;
+            if (pointerIdRef.current !== e.pointerId) return true;
             finishEraser();
             return true;
         }
@@ -395,9 +388,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         : null;
 
     // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
-    const apiRef = useRef<{ escape: () => boolean; finish: () => void; blur: () => void }>({
+    const apiRef = useRef<{ escape: () => boolean; finish: () => boolean; blur: () => void }>({
         escape: () => false,
-        finish: () => {},
+        finish: () => false,
         blur: () => {},
     });
     apiRef.current = {
@@ -418,7 +411,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             return false;
         },
         finish: () => {
-            if (lineRef.current) finishLineWith(lineRef.current.committed);
+            if (!lineRef.current) return false;
+            finishLineWith(lineRef.current.committed);
+            return true;
         },
         // Focus loss can swallow the pointerup (alt-tab mid-gesture) — commit like ObjectTransform does
         // so no gesture is left tracking a released pointer / a preview stuck on screen.
@@ -439,7 +434,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 }
                 return;
             }
-            if (e.key === 'Enter') apiRef.current.finish();
+            if (e.key === 'Enter' && apiRef.current.finish()) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
         };
         const onDbl = () => apiRef.current.finish();
         const onBlur = () => apiRef.current.blur();

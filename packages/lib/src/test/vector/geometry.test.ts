@@ -178,13 +178,20 @@ describe('parsePoints / serializePoints', () => {
         expect(serializePoints([{ x: -0, y: -0.001 }])).toBe('[[0,0]]');
     });
 
-    test('returns [] on garbage — bad JSON, non-array, short pair, or non-finite coord', () => {
+    test('returns [] on garbage — bad JSON, non-array, short pair, or non-number coord', () => {
         expect(parsePoints('not json')).toEqual([]);
         expect(parsePoints('{}')).toEqual([]);
         expect(parsePoints('[[0]]')).toEqual([]);
         expect(parsePoints('[[0,"x"]]')).toEqual([]);
         expect(parsePoints('[[0,null]]')).toEqual([]);
         expect(parsePoints('[]')).toEqual([]);
+    });
+
+    test('drops a non-finite point (1e400 → Infinity) but keeps the rest of the stroke', () => {
+        expect(parsePoints('[[0,0],[1e400,0],[10,10]]')).toEqual([
+            { x: 0, y: 0 },
+            { x: 10, y: 10 },
+        ]);
     });
 });
 
