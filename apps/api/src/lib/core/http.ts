@@ -107,3 +107,16 @@ export function contentDisposition(type: 'attachment' | 'inline', fileName: stri
     }
     return `${type}; filename="${ascii.replace(/["\\]/g, '_')}"; filename*=UTF-8''${encoded}`;
 }
+
+// Security headers a body needs when served INLINE from the API's own origin: an uploaded HTML/SVG
+// could otherwise run script with the viewer's session. The sandbox CSP neutralises active content
+// while still rendering the file; nosniff stops the browser re-sniffing a disguised payload. Empty
+// for non-scriptable types (media/PDF), so callers can spread it unconditionally. One home for the
+// scriptable-type set and the CSP string (serve-file's /embed and the /preview route both consult it).
+export function scriptableInlineHeaders(mimeType: string): Record<string, string> {
+    const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
+    if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
+        return { 'Content-Security-Policy': "sandbox; default-src 'none'", 'X-Content-Type-Options': 'nosniff' };
+    }
+    return {};
+}

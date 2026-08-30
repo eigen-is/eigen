@@ -126,8 +126,8 @@ export function buildElementClipboardItem(
 }
 
 // One eigen item per selected element, in z-order (so a paste keeps the relative stacking). Images
-// with unresolved (still-uploading) media are skipped.
-export function buildSelectionItems(
+// with unresolved (still-uploading) media are skipped. Local: buildSelectionData is the only caller.
+function buildSelectionItems(
     ordered: VectorElement[],
     selectedIds: string[],
     resolveMediaPath: (name: string) => DrivePath | undefined,
