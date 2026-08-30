@@ -23,7 +23,7 @@ import {
 export type VectorClipMeta = {
     x: number;
     y: number;
-    type?: 'rectangle' | 'diamond' | 'ellipse' | 'freedraw' | 'line';
+    type?: 'rectangle' | 'diamond' | 'ellipse' | 'freedraw' | 'line' | 'arrow';
     strokeColor?: string;
     backgroundColor?: string;
     fillStyle?: FillStyle;

@@ -3,7 +3,7 @@
 // what Eigen's Yjs CRDT needs: no tombstones, no version/versionNonce, no groupIds, no
 // points (freehand/line/arrow are additive later units).
 
-export type VectorElementType = 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image' | 'freedraw' | 'line';
+export type VectorElementType = 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image' | 'freedraw' | 'line' | 'arrow';
 
 // The runtime value lists are the single source; the union types derive from them, so a grown
 // list and its type can never drift. read-vector's validators consume the same arrays.
@@ -11,11 +11,15 @@ export const FILL_STYLES = ['hachure', 'cross-hatch', 'solid', 'zigzag'] as cons
 export const STROKE_STYLES = ['solid', 'dashed', 'dotted'] as const;
 export const ROUNDNESS = ['sharp', 'round'] as const;
 export const TEXT_ALIGNS = ['left', 'center', 'right'] as const;
+// Arrowhead vocabulary (both ends), Excalidraw's trimmed to the shapes we draw. read-vector validates
+// against this array; the panel's start/end selects list it (U3c).
+export const ARROWHEADS = ['none', 'arrow', 'triangle', 'bar', 'circle'] as const;
 
 export type FillStyle = (typeof FILL_STYLES)[number];
 export type StrokeStyle = (typeof STROKE_STYLES)[number];
 export type Roundness = (typeof ROUNDNESS)[number];
 export type TextAlign = (typeof TEXT_ALIGNS)[number];
+export type Arrowhead = (typeof ARROWHEADS)[number];
 
 export type VectorElementBase = {
     id: string;
@@ -57,15 +61,41 @@ export type VectorImageElement = VectorElementBase & {
 };
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
-// to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant). Shaped so 'arrow'
-// extends it additively in Phase 3 — no arrow fields here yet.
+// to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).
 export type VectorLinearElement = VectorElementBase & {
     type: 'freedraw' | 'line';
     points: string;
     roundness: Roundness; // line: 'round' = roughjs curve through the vertices, 'sharp' = linearPath. freedraw ignores it.
 };
 
-export type VectorElement = VectorShapeElement | VectorTextElement | VectorImageElement | VectorLinearElement;
+// An arrow is a line (points + roundness) plus heads, forward bindings, and an optional label. Its own
+// exclusive `type` keeps the discriminated union clean — `el.type === 'arrow'` narrows straight to the
+// arrow fields. `startBinding`/`endBinding` are a JSON `{"elementId","fixedPoint":[fx,fy]}` string or ''
+// when unbound (parseBinding/serializeBinding); the reverse index is derived, never stored (R3.2).
+export type VectorArrowElement = VectorElementBase & {
+    type: 'arrow';
+    points: string;
+    roundness: Roundness;
+    startArrowhead: Arrowhead;
+    endArrowhead: Arrowhead;
+    startBinding: string;
+    endBinding: string;
+    text: string; // the optional label; '' = no label
+    fontSize: number;
+    fontFamily: string;
+    labelWidth: number; // client-measured, the sole width source — like text elements' width
+};
+
+export type VectorElement =
+    | VectorShapeElement
+    | VectorTextElement
+    | VectorImageElement
+    | VectorLinearElement
+    | VectorArrowElement;
+
+// A forward binding: an anchor as a proportion (fixedPoint) of the target shape's local w/h, so the
+// anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
+export type Binding = { elementId: string; fixedPoint: [number, number] };
 
 export type VectorMeta = { background: string; gridSize: number };
 
@@ -99,6 +129,11 @@ export const ELEMENT_FIELDS = [
     'fontFamily',
     'textAlign',
     'mediaName',
+    'startArrowhead',
+    'endArrowhead',
+    'startBinding',
+    'endBinding',
+    'labelWidth',
 ] as const;
 
 export const DEFAULT_FONT_SIZE = 20;
@@ -132,6 +167,16 @@ export const DEFAULT_TEXT_PROPS = {
     textAlign: 'left',
 } satisfies Pick<VectorTextElement, 'text' | 'fontSize' | 'fontFamily' | 'textAlign'>;
 
+// Arrow-only defaults (label text/fontSize/fontFamily reuse DEFAULT_TEXT_PROPS). Plain arrow, head on
+// the end only, unbound, no label — Excalidraw's currentItem defaults.
+export const DEFAULT_ARROW_PROPS = {
+    startArrowhead: 'none',
+    endArrowhead: 'arrow',
+    startBinding: '',
+    endBinding: '',
+    labelWidth: 0,
+} satisfies Pick<VectorArrowElement, 'startArrowhead' | 'endArrowhead' | 'startBinding' | 'endBinding' | 'labelWidth'>;
+
 // Shared line-width presets — the ONE source for the thin/medium/bold vocabulary, consumed by both
 // the vector panel (strokeWidth, scene-px) and the slides panel (borderWidth, slide-units ≡ scene-px).
 // The Excalidraw constants (1/2/4). Data-driven: growing to more weights is an array edit, no UI
@@ -151,14 +196,62 @@ export function isVectorElementType(v: unknown): v is VectorElementType {
         v === 'text' ||
         v === 'image' ||
         v === 'freedraw' ||
-        v === 'line'
+        v === 'line' ||
+        v === 'arrow'
     );
 }
 
-// The linear family (freedraw / line, and Phase 3's arrow) — the elements carrying a `points` string.
-// One narrowing predicate so `.points`/`.roundness` access has a single owner as the family grows.
-export function isLinearElement(el: VectorElement): el is VectorLinearElement {
-    return el.type === 'freedraw' || el.type === 'line';
+// The linear family (freedraw / line / arrow) — the elements carrying a `points` string. One narrowing
+// predicate so `.points`/`.roundness` access has a single owner as the family grows.
+export function isLinearElement(el: VectorElement): el is VectorLinearElement | VectorArrowElement {
+    return el.type === 'freedraw' || el.type === 'line' || el.type === 'arrow';
+}
+
+// Bindable targets for an arrow endpoint: the closed shapes only (R3.2). One predicate so every
+// consumer — the reader's dangling-binding pass, the follow math, the tool's candidate search — agrees.
+export function isBindable(el: VectorElement): el is VectorShapeElement {
+    return el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse';
+}
+
+// A binding is a JSON `{"elementId","fixedPoint":[fx,fy]}` string, or '' when unbound. parseBinding is
+// lenient on the ratio range (a shrunk shape can push fixedPoint outside [0,1]; consumers clamp on use).
+export function parseBinding(s: string): Binding | null {
+    if (s === '') return null;
+    let raw: unknown;
+    try {
+        raw = JSON.parse(s);
+    } catch {
+        return null;
+    }
+    if (typeof raw !== 'object' || raw === null) return null;
+    const { elementId, fixedPoint } = raw as { elementId?: unknown; fixedPoint?: unknown };
+    if (typeof elementId !== 'string' || elementId === '') return null;
+    if (!Array.isArray(fixedPoint) || fixedPoint.length !== 2) return null;
+    const [fx, fy] = fixedPoint;
+    if (typeof fx !== 'number' || typeof fy !== 'number' || !Number.isFinite(fx) || !Number.isFinite(fy)) return null;
+    return { elementId, fixedPoint: [fx, fy] };
+}
+
+export function serializeBinding(b: Binding): string {
+    return JSON.stringify({ elementId: b.elementId, fixedPoint: b.fixedPoint });
+}
+
+// The reverse index the forward bindings imply: shape id → the arrows bound to it, either end. Derived
+// in memory (never stored) so there is no two-element write to keep consistent (R3.2). An arrow bound to
+// one shape at both ends lists once.
+export function arrowsBoundTo(elements: VectorElement[]): Map<string, string[]> {
+    const map = new Map<string, string[]>();
+    for (const el of elements) {
+        if (el.type !== 'arrow') continue;
+        for (const bindingStr of [el.startBinding, el.endBinding]) {
+            const b = parseBinding(bindingStr);
+            if (!b) continue;
+            const list = map.get(b.elementId);
+            if (!list) map.set(b.elementId, [el.id]);
+            else if (!list.includes(el.id)) list.push(el.id);
+        }
+    }
+    return map;
 }
 
 // A fill is absent when the color is empty or the 'transparent' sentinel (the slides

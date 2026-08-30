@@ -10,10 +10,20 @@ import { getFontFamily } from '../constants/fonts';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
 import type { Box, Point } from './geometry';
-import { FREEDRAW_SIZE_FACTOR, getElementsBounds, isClosedPath, parsePoints } from './geometry';
 import {
+    arrowheadGeometry,
+    arrowLabelBox,
+    elementBounds,
+    FREEDRAW_SIZE_FACTOR,
+    isClosedPath,
+    parsePoints,
+    unionBounds,
+} from './geometry';
+import {
+    type Arrowhead,
     isLinearElement,
     isTransparent,
+    type VectorArrowElement,
     type VectorElement,
     type VectorImageElement,
     type VectorLinearElement,
@@ -46,7 +56,9 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     }
 
     const padding = opts.padding ?? DEFAULT_PADDING;
-    const bounds = getElementsBounds(ordered);
+    // elementBounds unions an arrow's label rect (R3.6), so a wide label on a short arrow isn't clipped
+    // by the viewBox; for every other element it's the plain box AABB (unchanged from getElementsBounds).
+    const bounds = ordered.map(elementBounds).reduce(unionBounds);
     const minX = round(bounds.minX - padding);
     const minY = round(bounds.minY - padding);
     const width = round(bounds.maxX - bounds.minX + padding * 2);
@@ -81,6 +93,8 @@ export function elementToSvg(el: VectorElement, opts: SceneToSvgOptions = {}): s
             return renderFreedraw(new RoughGenerator(), el);
         case 'line':
             return renderLine(new RoughGenerator(), el);
+        case 'arrow':
+            return renderArrow(new RoughGenerator(), el);
     }
 }
 
@@ -131,6 +145,140 @@ function renderLine(gen: RoughGenerator, el: VectorLinearElement): string {
               ? gen.polygon(coords, options)
               : gen.linearPath(coords, options);
     return `${groupOpen(el, ' stroke-linecap="round"')}${drawableToSvg(drawable)}</g>`;
+}
+
+// An arrow is a line shaft (sharp linearPath / round curve, never filled) plus roughjs heads on either
+// end and an optional label. The label rect (+5px padding) is cut out of the shaft with an even-odd
+// clip hole so the shaft shows nothing under the text; heads and label draw on top, unclipped. All
+// coordinates are the arrow's local frame — the group transform rotates the whole arrow, label and all.
+function renderArrow(gen: RoughGenerator, el: VectorArrowElement): string {
+    const points = parsePoints(el.points);
+    if (points.length === 0) return `${groupOpen(el, ' stroke-linecap="round"')}</g>`;
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
+    const options = baseRoughOptions(el, false);
+    const shaftDrawable = el.roundness === 'round' ? gen.curve(coords, options) : gen.linearPath(coords, options);
+    const shaftPaths = drawableToSvg(shaftDrawable);
+
+    const label = arrowLabelBox(el);
+    let shaft = shaftPaths;
+    let defs = '';
+    if (label) {
+        const clipId = `arrow-label-clip-${el.id.replace(/[^A-Za-z0-9_-]/g, '')}`;
+        defs = `<clipPath id="${clipId}">${labelClipPath(points, label, el.strokeWidth)}</clipPath>`;
+        shaft = `<g clip-path="url(#${clipId})">${shaftPaths}</g>`;
+    }
+
+    const heads =
+        renderArrowhead(gen, el, points, 'start', el.startArrowhead) +
+        renderArrowhead(gen, el, points, 'end', el.endArrowhead);
+    const text = label ? renderArrowLabel(el, label) : '';
+    return `${groupOpen(el, ' stroke-linecap="round"')}${defs}${shaft}${heads}${text}</g>`;
+}
+
+// One arrowhead's roughjs fragment in the arrow's local frame. Barbs (arrow/bar/triangle) share the
+// tip+base geometry: arrow = two lines, bar = one line through the tip, triangle = a solid polygon;
+// circle = a solid disc. All filled solids use strokeColor (R3.5). null when the head is 'none'.
+function renderArrowhead(
+    gen: RoughGenerator,
+    el: VectorArrowElement,
+    points: Point[],
+    position: 'start' | 'end',
+    head: Arrowhead,
+): string {
+    const geo = arrowheadGeometry(el, points, position, head);
+    if (!geo) return '';
+    if (geo.kind === 'circle') {
+        return drawableToSvg(gen.circle(geo.center.x, geo.center.y, geo.diameter, headOptions(el, true)));
+    }
+    if (head === 'triangle') {
+        const options = headOptions(el, true);
+        return drawableToSvg(
+            gen.polygon(
+                [
+                    [geo.barb1.x, geo.barb1.y],
+                    [geo.tip.x, geo.tip.y],
+                    [geo.barb2.x, geo.barb2.y],
+                ],
+                options,
+            ),
+        );
+    }
+    const options = headOptions(el, false);
+    if (head === 'bar') {
+        return drawableToSvg(gen.line(geo.barb1.x, geo.barb1.y, geo.barb2.x, geo.barb2.y, options));
+    }
+    // 'arrow' — two barbs meeting at the tip
+    return (
+        drawableToSvg(gen.line(geo.barb1.x, geo.barb1.y, geo.tip.x, geo.tip.y, options)) +
+        drawableToSvg(gen.line(geo.tip.x, geo.tip.y, geo.barb2.x, geo.barb2.y, options))
+    );
+}
+
+// Head options mirror the shaft's (seed/roughness/stroke), preserveVertices on so a small head stays
+// crisp; solid heads (triangle/circle) fill with strokeColor.
+function headOptions(el: VectorArrowElement, solidFill: boolean): Options {
+    const options = baseRoughOptions(el, true);
+    if (solidFill) {
+        options.fillStyle = 'solid';
+        options.fill = el.strokeColor;
+    }
+    return options;
+}
+
+// The even-odd clip hole under a label: an outer rect minus the label rect + 5px padding, both as
+// rectangle subpaths of one path. Evenodd leaves the inner rect uncovered, so the shaft is cut there.
+// The clip HIDES anything outside the outer rect, so it must enclose the whole shaft — the point bounds
+// (and the hole) padded past roughjs jitter + the stroke half-width, never a fixed square (an arrow
+// larger than it would lose its shaft).
+function labelClipPath(
+    points: Point[],
+    label: { center: Point; width: number; height: number },
+    strokeWidth: number,
+): string {
+    const pad = 5;
+    const hx = label.center.x - label.width / 2 - pad;
+    const hy = label.center.y - label.height / 2 - pad;
+    const hw = label.width + pad * 2;
+    const hh = label.height + pad * 2;
+
+    let minX = hx;
+    let minY = hy;
+    let maxX = hx + hw;
+    let maxY = hy + hh;
+    for (const p of points) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+    }
+    const margin = 50 + strokeWidth;
+    const ox = round(minX - margin);
+    const oy = round(minY - margin);
+    const ow = round(maxX - minX + margin * 2);
+    const oh = round(maxY - minY + margin * 2);
+
+    const outer = `M${ox} ${oy} h${ow} v${oh} h${round(-ow)} Z`;
+    const hole = `M${round(hx)} ${round(hy)} h${round(hw)} v${round(hh)} h${round(-hw)} Z`;
+    return `<path clip-rule="evenodd" d="${outer} ${hole}"/>`;
+}
+
+// The label text, centered on the label rect in the arrow's local frame — the renderText baseline math
+// with text-anchor="middle" and colour = strokeColor (R3.6). Height/position come from arrowLabelBox.
+function renderArrowLabel(el: VectorArrowElement, label: { center: Point; width: number; height: number }): string {
+    const lineHeightPx = getLineHeightPx(el.fontFamily, el.fontSize);
+    const verticalOffset = getVerticalOffset(el.fontFamily, el.fontSize, lineHeightPx);
+    const fontFamily = escapeXml(getFontFamily(el.fontFamily));
+    const fill = escapeXml(el.strokeColor);
+    const lines = el.text.replace(/\r\n?/g, '\n').split('\n');
+    const top = label.center.y - label.height / 2;
+    const cx = round(label.center.x);
+
+    let out = '';
+    for (let i = 0; i < lines.length; i++) {
+        const y = round(top + i * lineHeightPx + verticalOffset);
+        out += `<text x="${cx}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="middle" style="white-space: pre;" dominant-baseline="alphabetic">${escapeXml(lines[i])}</text>`;
+    }
+    return out;
 }
 
 // Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
@@ -227,7 +375,10 @@ function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
 // dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are
 // shared by shapes and linear elements; fill differs (shapes always, lines only when they loop).
-function baseRoughOptions(el: VectorShapeElement | VectorLinearElement, continuousPath: boolean): Options {
+function baseRoughOptions(
+    el: VectorShapeElement | VectorLinearElement | VectorArrowElement,
+    continuousPath: boolean,
+): Options {
     return {
         seed: el.seed,
         strokeLineDash: dashArray(el.strokeStyle, el.strokeWidth),
@@ -263,7 +414,7 @@ function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
 
 // Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule); a relatively
 // long linear element is spared too, so a straight line doesn't wobble.
-function adjustRoughness(el: VectorShapeElement | VectorLinearElement): number {
+function adjustRoughness(el: VectorShapeElement | VectorLinearElement | VectorArrowElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);
     const roundable = el.type === 'rectangle' || el.type === 'diamond';

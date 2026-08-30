@@ -200,6 +200,95 @@ describe('readVectorFromDoc', () => {
         expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ text: 'abc\td\ne', fontFamily: 'Excalifont' });
     });
 
+    test('materializes an arrow: heads, canonical bindings, and label fields', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'rect', { type: 'rectangle', index: 'a0' });
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a1',
+                points: '[[0,0],[100,0]]',
+                startArrowhead: 'circle',
+                endArrowhead: 'triangle',
+                // a valid binding to the present rectangle survives; extra keys are dropped on re-serialize
+                startBinding: '{"elementId":"rect","fixedPoint":[0.5,1],"junk":9}',
+                text: 'hi\nthere',
+                fontSize: 18,
+                fontFamily: 'Inter',
+                labelWidth: 42,
+            });
+        });
+        const arrow = readVectorFromDoc(doc).elements.find((e) => e.id === 'ar');
+        expect(arrow).toMatchObject({
+            type: 'arrow',
+            startArrowhead: 'circle',
+            endArrowhead: 'triangle',
+            startBinding: '{"elementId":"rect","fixedPoint":[0.5,1]}',
+            endBinding: '',
+            text: 'hi\nthere',
+            fontSize: 18,
+            fontFamily: 'Inter',
+            labelWidth: 42,
+        });
+    });
+
+    test('falls back invalid heads and a malformed binding, and floors labelWidth at 0', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a0',
+                points: '[[0,0],[50,0]]',
+                startArrowhead: 'spiral',
+                endArrowhead: 42,
+                startBinding: 'not json',
+                endBinding: '{"fixedPoint":[0,0]}',
+                labelWidth: -5,
+            });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({
+            startArrowhead: 'none',
+            endArrowhead: 'arrow',
+            startBinding: '',
+            endBinding: '',
+            labelWidth: 0,
+        });
+    });
+
+    test('caps a hostile labelWidth at MAX_COORD (protects the shared viewBox)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', { type: 'arrow', index: 'a0', points: '[[0,0],[50,0]]', labelWidth: 1e9 });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ labelWidth: 1_000_000 });
+    });
+
+    test('clears a binding whose target is absent or not bindable (doc untouched)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'txt', { type: 'text', index: 'a0', text: 'x' });
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a1',
+                points: '[[0,0],[100,0]]',
+                // start → a shape that never existed; end → a text element (not bindable)
+                startBinding: '{"elementId":"ghost","fixedPoint":[0.5,0.5]}',
+                endBinding: '{"elementId":"txt","fixedPoint":[0,0]}',
+            });
+        });
+        const arrow = readVectorFromDoc(doc).elements.find((e) => e.id === 'ar');
+        expect(arrow).toMatchObject({ startBinding: '', endBinding: '' });
+        // the doc itself is left alone — nothing is written during a read
+        expect((doc.getMap('elements').get('ar') as Y.Map<unknown>).get('startBinding')).toBe(
+            '{"elementId":"ghost","fixedPoint":[0.5,0.5]}',
+        );
+    });
+
+    test('skips an arrow whose points are missing or empty', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ok', { type: 'arrow', index: 'a0', points: '[[0,0],[10,0]]' });
+            writeElement(elements, 'missing', { type: 'arrow', index: 'a1' });
+            writeElement(elements, 'empty', { type: 'arrow', index: 'a2', points: '[]' });
+        });
+        expect(readVectorFromDoc(doc).elements.map((e) => e.id)).toEqual(['ok']);
+    });
+
     test('accepts only hex / transparent colours; anything else falls back (blocks url() smuggling)', () => {
         const doc = docWith((elements, meta) => {
             meta.set('background', 'url(#evil)');
@@ -328,11 +417,59 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         'locked',
         'index',
     ];
+    // Unbound (startBinding/endBinding '') so the single-element doc's dangling-binding pass is a no-op
+    // and the values round-trip; real binding round-trips are covered by the dedicated arrow tests above.
+    const arrow: Record<string, unknown> = {
+        id: 'arrow1',
+        type: 'arrow',
+        x: 2,
+        y: 3,
+        width: 90,
+        height: 20,
+        angle: 18,
+        strokeColor: '#aabbcc',
+        backgroundColor: '#ddeeff',
+        fillStyle: 'solid',
+        strokeWidth: 3,
+        strokeStyle: 'dashed',
+        roughness: 1,
+        seed: 444,
+        opacity: 75,
+        locked: false,
+        index: 'a1',
+        roundness: 'sharp',
+        points: '[[0,0],[90,20]]',
+        startArrowhead: 'circle',
+        endArrowhead: 'triangle',
+        startBinding: '',
+        endBinding: '',
+        text: 'label',
+        fontSize: 13,
+        fontFamily: 'Inter',
+        labelWidth: 77,
+    };
+
     const cases = [
         { record: rect, fields: [...BASE_FIELDS, 'roundness'] },
         { record: text, fields: [...BASE_FIELDS, 'text', 'fontSize', 'fontFamily', 'textAlign'] },
         { record: image, fields: [...BASE_FIELDS, 'mediaName'] },
         { record: line, fields: [...BASE_FIELDS, 'roundness', 'points'] },
+        {
+            record: arrow,
+            fields: [
+                ...BASE_FIELDS,
+                'roundness',
+                'points',
+                'startArrowhead',
+                'endArrowhead',
+                'startBinding',
+                'endBinding',
+                'text',
+                'fontSize',
+                'fontFamily',
+                'labelWidth',
+            ],
+        },
     ];
 
     test('the variant field map covers ELEMENT_FIELDS exactly', () => {

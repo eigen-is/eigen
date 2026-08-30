@@ -55,6 +55,7 @@ const TYPE_LABELS: Record<VectorElementType, string> = {
     image: 'Image',
     freedraw: 'Freehand',
     line: 'Line',
+    arrow: 'Arrow',
 };
 
 // Discrete presets, the Excalidraw constants (SCOUT §6): strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,

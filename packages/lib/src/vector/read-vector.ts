@@ -7,15 +7,20 @@ import type * as Y from 'yjs';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
 import { parsePoints, serializePoints } from './geometry';
 import {
+    ARROWHEADS,
+    DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_SCENE_META,
     DEFAULT_SHAPE_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
     FILL_STYLES,
+    isBindable,
     isVectorElementType,
+    parseBinding,
     ROUNDNESS,
     STROKE_STYLES,
+    serializeBinding,
     TEXT_ALIGNS,
     type VectorElement,
     type VectorElementBase,
@@ -36,6 +41,9 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
         const el = readElement(value);
         if (el) elements.push(el);
     }
+
+    // Now that every element is known, unbind any arrow whose bound shape is gone (R3.2).
+    clearDanglingBindings(elements);
 
     // Order by z-index, then heal any collisions/invalid runs from concurrent inserts.
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements));
@@ -107,7 +115,63 @@ function readElement(value: unknown): VectorElement | null {
                 points: serializePoints(clamped),
             };
         }
+        case 'arrow': {
+            // An arrow is a linear element plus heads, forward bindings and an optional label. Its points
+            // obey the same skip/clamp rules as a line. Bindings are normalized to a canonical string here
+            // (or '' when invalid); a binding whose target is absent/not bindable is cleared in a second
+            // pass over the whole scene (clearDanglingBindings) — the doc is left untouched (R3.2/R3.7).
+            const points = parsePoints(str(value.get('points'), ''));
+            if (points.length === 0) return null;
+            const clamped = points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) }));
+            return {
+                ...base,
+                type: 'arrow',
+                roundness: oneOf(value.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
+                points: serializePoints(clamped),
+                startArrowhead: oneOf(value.get('startArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.startArrowhead),
+                endArrowhead: oneOf(value.get('endArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.endArrowhead),
+                startBinding: binding(value.get('startBinding')),
+                endBinding: binding(value.get('endBinding')),
+                text: cleanStr(value.get('text'), DEFAULT_TEXT_PROPS.text),
+                fontSize: num(value.get('fontSize'), DEFAULT_TEXT_PROPS.fontSize),
+                fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
+                // Non-negative and capped at MAX_COORD like the spatial fields — a hostile 1e9 would
+                // otherwise blow the shared viewBox (elementBounds unions the label rect) for every peer.
+                labelWidth: Math.min(
+                    MAX_COORD,
+                    Math.max(0, num(value.get('labelWidth'), DEFAULT_ARROW_PROPS.labelWidth)),
+                ),
+            };
+        }
     }
+}
+
+// A stored binding materializes to its canonical `{"elementId","fixedPoint"}` string, or '' when the
+// value is missing/malformed (parseBinding rejects it). Target existence is a whole-scene question, so
+// it is resolved separately in clearDanglingBindings once every element is read.
+function binding(v: unknown): string {
+    const parsed = parseBinding(str(v, ''));
+    return parsed ? serializeBinding(parsed) : '';
+}
+
+// Second pass: a binding whose target no longer exists — or is no longer a bindable shape — is
+// unbound (R3.2). Mutates the freshly-materialized elements in place; the Y.Doc is never written, so
+// the next real write of that arrow is what persists the cleared value.
+function clearDanglingBindings(elements: VectorElement[]): void {
+    const bindable = new Set<string>();
+    for (const el of elements) {
+        if (isBindable(el)) bindable.add(el.id);
+    }
+    for (const el of elements) {
+        if (el.type !== 'arrow') continue;
+        if (!targetPresent(el.startBinding, bindable)) el.startBinding = '';
+        if (!targetPresent(el.endBinding, bindable)) el.endBinding = '';
+    }
+}
+
+function targetPresent(bindingStr: string, bindable: Set<string>): boolean {
+    const parsed = parseBinding(bindingStr);
+    return parsed !== null && bindable.has(parsed.elementId);
 }
 
 type YMapLike = { get(key: string): unknown };

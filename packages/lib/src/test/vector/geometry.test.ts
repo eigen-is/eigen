@@ -1,9 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import {
+    anchorToScene,
     applyResize,
+    arrowheadGeometry,
+    arrowLabelBox,
     type Box,
+    bindingAnchor,
+    bindingDistance,
+    bindingGap,
+    boundEndpoint,
     boxCenter,
     distanceToPolyline,
+    elementBounds,
+    followBindings,
     getElementBounds,
     getElementsBounds,
     hitTestBox,
@@ -15,8 +24,10 @@ import {
     marqueeMode,
     normalizeAngle,
     normalizeLinear,
+    outlinePoint,
     type Point,
     parsePoints,
+    remapBinding,
     rescalePoints,
     resizeLinear,
     resizeRotatedRect,
@@ -25,7 +36,15 @@ import {
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorLinearElement } from '../../vector/types';
+import {
+    arrowsBoundTo,
+    DEFAULT_ELEMENT_PROPS,
+    serializeBinding,
+    type VectorArrowElement,
+    type VectorElement,
+    type VectorLinearElement,
+    type VectorShapeElement,
+} from '../../vector/types';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });
 
@@ -568,5 +587,339 @@ describe('marqueeHits', () => {
 
     test('a contained box also intersects', () => {
         expect(marqueeHits({ minX: 10, minY: 10, maxX: 90, maxY: 90 }, marquee, 'intersect')).toBe(true);
+    });
+});
+
+// --- Arrows: bindings, endpoints, heads, labels ---------------------------------------
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...DEFAULT_ELEMENT_PROPS,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 60,
+    angle: 0,
+    seed: 1,
+    index: 'a0',
+    roundness: 'sharp',
+    ...over,
+});
+
+const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): VectorArrowElement => ({
+    ...DEFAULT_ELEMENT_PROPS,
+    id: 'ar',
+    type: 'arrow',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 0,
+    angle: 0,
+    seed: 1,
+    index: 'a0',
+    roundness: 'sharp',
+    startArrowhead: 'none',
+    endArrowhead: 'arrow',
+    startBinding: '',
+    endBinding: '',
+    text: '',
+    fontSize: 20,
+    fontFamily: 'Excalifont',
+    labelWidth: 0,
+    ...over,
+});
+
+const bind = (shape: VectorShapeElement, fixedPoint: [number, number]): string =>
+    serializeBinding({ elementId: shape.id, fixedPoint });
+
+describe('bindingGap', () => {
+    test('is 5 + half the stroke width', () => {
+        expect(bindingGap(shapeEl({ id: 's', type: 'rectangle', strokeWidth: 2 }))).toBe(6);
+        expect(bindingGap(shapeEl({ id: 's', type: 'rectangle', strokeWidth: 8 }))).toBe(9);
+    });
+});
+
+describe('bindingAnchor / anchorToScene', () => {
+    test('a scene point round-trips to its ratio and back, unrotated', () => {
+        const shape = shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 60 });
+        expect(bindingAnchor(shape, { x: 50, y: 30 })).toEqual([0.5, 0.5]);
+        expect(anchorToScene(shape, [0.5, 0.5])).toEqual({ x: 50, y: 30 });
+    });
+
+    test('the ratio ignores rotation (unrotate on write, rotate on read) — round-trips on a rotated shape', () => {
+        const shape = shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 60, angle: 90 });
+        const p = anchorToScene(shape, [0.75, 0.25]);
+        const [fx, fy] = bindingAnchor(shape, p);
+        expect(fx).toBeCloseTo(0.75);
+        expect(fy).toBeCloseTo(0.25);
+    });
+
+    test('anchorToScene clamps a ratio pushed outside [0,1] by a shrunk shape', () => {
+        const shape = shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 60 });
+        expect(anchorToScene(shape, [1.5, -0.4])).toEqual({ x: 100, y: 0 });
+    });
+
+    test('a near-zero dimension divides by the gap, not zero (no Infinity)', () => {
+        const shape = shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 0, height: 60, strokeWidth: 2 });
+        const [fx] = bindingAnchor(shape, { x: 3, y: 30 });
+        expect(Number.isFinite(fx)).toBe(true);
+        expect(fx).toBeCloseTo(3 / 6);
+    });
+});
+
+describe('outlinePoint', () => {
+    const from = { x: -100, y: 30 };
+    const anchor = { x: 50, y: 30 };
+
+    test('rectangle: the inflated side nearest `from` (sharp corners, gap = 6)', () => {
+        const rect = shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 60, strokeWidth: 2 });
+        const p = outlinePoint(rect, from, anchor, bindingGap(rect));
+        expect(p.x).toBeCloseTo(-6);
+        expect(p.y).toBeCloseTo(30);
+    });
+
+    test('ellipse: the radius + gap crossing nearest `from`', () => {
+        const ell = shapeEl({ id: 's', type: 'ellipse', x: 0, y: 0, width: 100, height: 60, strokeWidth: 2 });
+        const p = outlinePoint(ell, from, anchor, bindingGap(ell));
+        expect(p.x).toBeCloseTo(-6);
+        expect(p.y).toBeCloseTo(30);
+    });
+
+    test('diamond: the inflated edge crossing (a vertical ray hits the bottom vertex)', () => {
+        const dia = shapeEl({ id: 's', type: 'diamond', x: 0, y: 0, width: 100, height: 60, strokeWidth: 2 });
+        const p = outlinePoint(dia, { x: 50, y: 200 }, { x: 50, y: 30 }, bindingGap(dia));
+        // bInf = 30 + gap*hypot(50,30)/50 = 36.997, bottom vertex at (50, 30 + bInf)
+        expect(p.x).toBeCloseTo(50);
+        expect(p.y).toBeCloseTo(66.997, 2);
+    });
+
+    test('rotation is transparent: a square shape rotated 90° gives the same hit as unrotated', () => {
+        for (const type of ['rectangle', 'ellipse', 'diamond'] as const) {
+            const flat = shapeEl({ id: 's', type, x: 0, y: 0, width: 60, height: 60, strokeWidth: 2 });
+            const turned = { ...flat, angle: 90 };
+            const a = outlinePoint(flat, { x: -100, y: 30 }, { x: 30, y: 30 }, bindingGap(flat));
+            const b = outlinePoint(turned, { x: -100, y: 30 }, { x: 30, y: 30 }, bindingGap(turned));
+            expect(b.x).toBeCloseTo(a.x);
+            expect(b.y).toBeCloseTo(a.y);
+        }
+    });
+});
+
+describe('boundEndpoint', () => {
+    // A rectangle to the right of the arrow; its left inflated side sits at x = 5 - gap(6) = -1.
+    const shape = shapeEl({ id: 'rect', type: 'rectangle', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
+
+    test('snaps the endpoint to the shape outline along the segment from the other end', () => {
+        const arrow = arrowEl({
+            points: '[[0,0],[36,0]]',
+            x: -30,
+            y: 0,
+            width: 36,
+            endBinding: bind(shape, [0.5, 0.5]),
+        });
+        const p = boundEndpoint(arrow, 'end', shape);
+        expect(p.x).toBeCloseTo(-1);
+        expect(p.y).toBeCloseTo(0);
+    });
+
+    test('short-arrow guard: within 10 units of the other end it returns the anchor, not the outline', () => {
+        // other end at (-3,0), outline point (-1,0) is 2 units away (< 10) → the anchor (25,0) wins.
+        const arrow = arrowEl({
+            points: '[[0,0],[9,0]]',
+            x: -3,
+            y: 0,
+            width: 9,
+            endBinding: bind(shape, [0.5, 0.5]),
+        });
+        expect(boundEndpoint(arrow, 'end', shape)).toEqual({ x: 25, y: 0 });
+    });
+});
+
+describe('followBindings', () => {
+    const shapeB = shapeEl({ id: 'rect', type: 'rectangle', x: 150, y: -30, width: 60, height: 60, strokeWidth: 2 });
+    const byId = new Map<string, VectorElement>([[shapeB.id, shapeB]]);
+
+    test('returns null when the arrow binds nothing', () => {
+        expect(followBindings(arrowEl({ points: '[[0,0],[100,0]]' }), byId)).toBeNull();
+    });
+
+    test('recomputes a bound endpoint onto the current shape outline and re-normalizes', () => {
+        const arrow = arrowEl({ points: '[[0,0],[100,0]]', width: 100, endBinding: bind(shapeB, [0, 0.5]) });
+        const next = followBindings(arrow, byId);
+        // shapeB's left inflated side is at 150 - gap(6) = 144; the start (unbound) stays at 0.
+        expect(next).toEqual({ x: 0, y: 0, width: 144, height: 0, points: '[[0,0],[144,0]]' });
+    });
+
+    test('returns null when the endpoint already sits on the outline (idempotent)', () => {
+        const settled = arrowEl({ points: '[[0,0],[144,0]]', width: 144, endBinding: bind(shapeB, [0, 0.5]) });
+        expect(followBindings(settled, byId)).toBeNull();
+    });
+
+    test('a non-bindable or missing target is treated as unbound', () => {
+        const arrow = arrowEl({ points: '[[0,0],[100,0]]', endBinding: bind({ ...shapeB, id: 'ghost' }, [0, 0.5]) });
+        expect(followBindings(arrow, byId)).toBeNull();
+    });
+
+    test('rotated arrow: the bound start moves, the untouched vertices hold their scene position', () => {
+        const arrow = arrowEl({
+            points: '[[0,0],[50,20],[100,0]]',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 20,
+            angle: 90,
+            startBinding: bind(shapeB, [0, 0.5]),
+        });
+        const endBefore = sceneOf({ x: 0, y: 0, width: 100, height: 20 }, 90, { x: 100, y: 0 });
+        const midBefore = sceneOf({ x: 0, y: 0, width: 100, height: 20 }, 90, { x: 50, y: 20 });
+        const next = followBindings(arrow, byId);
+        expect(next).not.toBeNull();
+        if (!next) return;
+        const pts: Point[] = JSON.parse(next.points).map(([x, y]: [number, number]) => ({ x, y }));
+        const endAfter = sceneOf(next, 90, pts[2]);
+        const midAfter = sceneOf(next, 90, pts[1]);
+        expect(endAfter.x).toBeCloseTo(endBefore.x);
+        expect(endAfter.y).toBeCloseTo(endBefore.y);
+        expect(midAfter.x).toBeCloseTo(midBefore.x);
+        expect(midAfter.y).toBeCloseTo(midBefore.y);
+    });
+});
+
+describe('bindingDistance', () => {
+    test('15 scene units at zoom ≥ 1, growing to 30 when zoomed far out', () => {
+        expect(bindingDistance(1)).toBe(15);
+        expect(bindingDistance(2)).toBe(15);
+        expect(bindingDistance(0.5)).toBe(20);
+        expect(bindingDistance(0.1)).toBe(30);
+    });
+});
+
+describe('remapBinding', () => {
+    const shape = shapeEl({ id: 'old', type: 'rectangle' });
+    test('rewrites the target id through the map, preserving the fixedPoint', () => {
+        const mapped = remapBinding(bind(shape, [0.25, 0.75]), new Map([['old', 'new']]));
+        expect(mapped).toBe(serializeBinding({ elementId: 'new', fixedPoint: [0.25, 0.75] }));
+    });
+
+    test('a target outside the map clears the binding', () => {
+        expect(remapBinding(bind(shape, [0.5, 0.5]), new Map([['other', 'x']]))).toBe('');
+    });
+
+    test('an empty binding stays empty', () => {
+        expect(remapBinding('', new Map([['old', 'new']]))).toBe('');
+    });
+});
+
+describe('arrowsBoundTo', () => {
+    test('indexes shape id → the arrows bound to it, listing a both-ends arrow once', () => {
+        const s1 = shapeEl({ id: 's1', type: 'rectangle' });
+        const s2 = shapeEl({ id: 's2', type: 'ellipse' });
+        const a1 = arrowEl({ points: '[[0,0],[10,0]]', startBinding: bind(s1, [0, 0]), endBinding: bind(s2, [1, 1]) });
+        const a2 = arrowEl({
+            points: '[[0,0],[10,0]]',
+            startBinding: bind(s1, [0, 0]),
+            endBinding: bind(s1, [1, 1]),
+        });
+        const map = arrowsBoundTo([s1, s2, { ...a1, id: 'a1' }, { ...a2, id: 'a2' }]);
+        expect(map.get('s1')).toEqual(['a1', 'a2']);
+        expect(map.get('s2')).toEqual(['a1']);
+    });
+});
+
+describe('arrowheadGeometry', () => {
+    const arrow = arrowEl({ points: '[[0,0],[100,0]]', strokeWidth: 2 });
+
+    test('none / too-few points yield no head', () => {
+        expect(arrowheadGeometry(arrow, parsePoints(arrow.points), 'end', 'none')).toBeNull();
+        expect(arrowheadGeometry(arrow, [{ x: 0, y: 0 }], 'end', 'arrow')).toBeNull();
+    });
+
+    test('arrow: barbs meet at the tip, symmetric about the segment, sized to 25', () => {
+        const geo = arrowheadGeometry(arrow, parsePoints(arrow.points), 'end', 'arrow');
+        expect(geo?.kind).toBe('barbs');
+        if (geo?.kind !== 'barbs') return;
+        expect(geo.tip).toEqual({ x: 100, y: 0 });
+        // barbs are the base point (tip - 25) rotated ±20° about the tip → symmetric in y
+        expect(geo.barb1.x).toBeCloseTo(geo.barb2.x);
+        expect(geo.barb1.y).toBeCloseTo(-geo.barb2.y);
+        expect(Math.hypot(geo.barb1.x - 100, geo.barb1.y)).toBeCloseTo(25);
+    });
+
+    test('the head shrinks to half a short segment instead of overrunning it', () => {
+        const short = arrowEl({ points: '[[0,0],[10,0]]' });
+        const geo = arrowheadGeometry(short, parsePoints(short.points), 'end', 'arrow');
+        if (geo?.kind !== 'barbs') throw new Error('expected barbs');
+        expect(Math.hypot(geo.barb1.x - 10, geo.barb1.y)).toBeCloseTo(5);
+    });
+
+    test('bar: a line through the tip perpendicular to the segment', () => {
+        const geo = arrowheadGeometry(arrow, parsePoints(arrow.points), 'end', 'bar');
+        if (geo?.kind !== 'barbs') throw new Error('expected barbs');
+        expect(geo.barb1).toEqual({ x: 100, y: 15 });
+        expect(geo.barb2).toEqual({ x: 100, y: -15 });
+    });
+
+    test('circle: centered on the tip, diameter from the head span + strokeWidth − 2', () => {
+        const geo = arrowheadGeometry(arrow, parsePoints(arrow.points), 'end', 'circle');
+        expect(geo).toEqual({ kind: 'circle', center: { x: 100, y: 0 }, diameter: 15 });
+    });
+
+    test('start head reads the first segment', () => {
+        const geo = arrowheadGeometry(arrow, parsePoints(arrow.points), 'start', 'triangle');
+        if (geo?.kind !== 'barbs') throw new Error('expected barbs');
+        expect(geo.tip).toEqual({ x: 0, y: 0 });
+        expect(geo.barb1.x).toBeGreaterThan(0);
+    });
+});
+
+describe('arrowLabelBox', () => {
+    test('no label when text is empty or the arrow is degenerate', () => {
+        expect(arrowLabelBox(arrowEl({ points: '[[0,0],[100,0]]' }))).toBeNull();
+        expect(arrowLabelBox(arrowEl({ points: '[[0,0]]', text: 'x' }))).toBeNull();
+    });
+
+    test('even point count centers on the middle segment midpoint; height = lines × line height', () => {
+        const el = arrowEl({ points: '[[0,0],[100,0]]', text: 'one\ntwo', labelWidth: 40 });
+        expect(arrowLabelBox(el)).toEqual({ center: { x: 50, y: 0 }, width: 40, height: 50 });
+    });
+
+    test('odd point count centers on the middle vertex', () => {
+        const el = arrowEl({ points: '[[0,0],[50,50],[100,0]]', text: 'hi', labelWidth: 20 });
+        expect(arrowLabelBox(el)).toEqual({ center: { x: 50, y: 50 }, width: 20, height: 25 });
+    });
+});
+
+describe('elementBounds', () => {
+    test('a plain arrow is its own box AABB', () => {
+        const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0 });
+        expect(elementBounds(el)).toEqual(getElementBounds(el));
+    });
+
+    test('a wide label unions its rect into the bounds', () => {
+        const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0, text: 'wide', labelWidth: 200 });
+        const b = elementBounds(el);
+        // label rect: center (50,0), 200 wide, 25 tall → x −50..150, y −12.5..12.5
+        expect(b.minX).toBeCloseTo(-50);
+        expect(b.maxX).toBeCloseTo(150);
+        expect(b.minY).toBeCloseTo(-12.5);
+        expect(b.maxY).toBeCloseTo(12.5);
+    });
+});
+
+describe('hitTestElement — arrow', () => {
+    test('hit on the shaft and inside the label rect, missed elsewhere', () => {
+        const el = arrowEl({
+            points: '[[0,0],[100,0]]',
+            width: 100,
+            height: 0,
+            strokeWidth: 4,
+            text: 'lbl',
+            labelWidth: 40,
+        });
+        // on the shaft
+        expect(hitTestElement(el, { x: 50, y: 0 }, 2)).toBe(true);
+        // off the shaft but inside the label rect (center 50,0; 40×25)
+        expect(hitTestElement(el, { x: 50, y: 10 }, 1)).toBe(true);
+        // clear of both
+        expect(hitTestElement(el, { x: 50, y: 40 }, 1)).toBe(false);
     });
 });

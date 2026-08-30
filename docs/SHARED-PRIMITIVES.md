@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1082 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1103 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -430,7 +430,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (297)
+## Types (301)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -651,6 +651,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ArrangeItem` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `ArrangeOp` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `ArrangePatch` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
+| `Arrowhead` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `ArrowheadGeometry` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `Binding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Bounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Box` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -666,6 +669,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `StrokeStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TextAlign` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorArrowElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -732,7 +736,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (386)
+## Utilities & constants (403)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1014,12 +1018,22 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateEmailTarget` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
+| `anchorToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `applyResize` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrangeBoundingBox` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
+| `arrowheadGeometry` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `ARROWHEADS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `arrowLabelBox` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `arrowsBoundTo` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `BASE_62_DIGITS` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `bindingAnchor` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `bindingDistance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `bindingGap` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `boundEndpoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
+| `DEFAULT_ARROW_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_ELEMENT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_FONT_FAMILY` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_FONT_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1032,9 +1046,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `DUPLICATE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `elementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `fitImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
+| `followBindings` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `generateNKeysBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
@@ -1047,6 +1063,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestEllipse` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isTransparent` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1061,14 +1078,18 @@ rather than inlining `queryClient.invalidateQueries`.
 | `NUDGE_STEP` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP_LARGE` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `orderByFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `outlinePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `parseBinding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
+| `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `rescalePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeRotatedRect` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `serializeBinding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
