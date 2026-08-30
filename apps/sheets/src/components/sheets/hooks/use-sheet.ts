@@ -6,6 +6,8 @@ import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type * as Y from 'yjs';
 
+const LOAD_FAILED_TOAST = 'sheet-load-failed';
+
 export function useSheet(
     ownerId: string,
     mountId: string,
@@ -99,6 +101,7 @@ export function useSheet(
                     loadedRef.current = true;
                     latestDataRef.current = data;
                     setLoadFailed(false);
+                    toast.dismiss(LOAD_FAILED_TOAST);
                     setInitialData(data);
                     setSnapshotVersion((v) => v + 1);
                 } catch (e) {
@@ -118,6 +121,7 @@ export function useSheet(
                 // provider/doc, so a WS message racing teardown can't fire against a destroyed doc.
                 opsArray.unobserve(handleOps);
                 stateMap.unobserve(handleState);
+                toast.dismiss(LOAD_FAILED_TOAST);
             };
         },
         onSync: ({ doc }, isSynced) => {
@@ -153,10 +157,7 @@ export function useSheet(
             else {
                 toast.error(
                     'This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.',
-                    {
-                        id: 'sheet-load-failed',
-                        duration: Infinity,
-                    },
+                    { id: LOAD_FAILED_TOAST, duration: Infinity },
                 );
             }
             setLoadFailed(!loaded);
