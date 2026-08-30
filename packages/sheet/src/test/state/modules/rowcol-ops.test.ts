@@ -183,6 +183,10 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
     });
 });
 
+// The engine inserts blank rows/columns and seeds no styles (engine/rowcol.ts applyInsert);
+// the clone rule below comes from the state's dataVerification shifter: the row/column at
+// `index` is the template in both directions, so insert-above at the top of a bordered
+// block repeats that row's top edge on the new row.
 describe('borders follow their cells through inserts and deletes', () => {
     test('inserting above shifts the template row down and clones its borders onto the new row', () => {
         const [, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });

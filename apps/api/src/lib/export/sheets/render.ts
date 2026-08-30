@@ -1,11 +1,12 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type {
-    Cell,
-    CellWithRowAndCol,
-    ConditionalFormatRule,
-    MergeCell,
-    Sheet,
-    SheetConfig,
+import {
+    type Cell,
+    type CellBorderSides,
+    type CellWithRowAndCol,
+    type ConditionalFormatRule,
+    type MergeCell,
+    mergedBorderSides,
+    type Sheet,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
@@ -269,7 +270,7 @@ function clipRulesToWindow(
 
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
-    const borderMap = buildBorderMap(config.borderInfo);
+    const borderMap = buildBorderMap(mergedBorderSides(config.borderInfo, config.merge));
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
 
@@ -303,8 +304,9 @@ function renderSheet(
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    // Build a border lookup from borderInfo: "r,c" -> { l?, r?, t?, b? }
-    const borderMap = buildBorderMap(config.borderInfo);
+    // Build a border lookup from borderInfo: "r,c" -> { l?, r?, t?, b? }; a merge's
+    // perimeter is folded onto the master, the only cell this renderer emits for it.
+    const borderMap = buildBorderMap(mergedBorderSides(config.borderInfo, config.merge));
 
     // Find the minimal bounding box containing all visible content
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
@@ -619,11 +621,9 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
 
 // CSS has no diagonal border, so the slash side `s` is not rendered.
 function buildBorderMap(
-    borderInfo: SheetConfig['borderInfo'],
+    borderInfo: Record<string, CellBorderSides>,
 ): Map<string, { l?: string; r?: string; t?: string; b?: string }> {
     const map = new Map<string, { l?: string; r?: string; t?: string; b?: string }>();
-    if (!borderInfo) return map;
-
     for (const [key, { l, r, t, b }] of Object.entries(borderInfo)) {
         const entry: { l?: string; r?: string; t?: string; b?: string } = {};
         if (l) entry.l = borderSideToCSS(l);

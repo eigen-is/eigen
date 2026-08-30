@@ -1,14 +1,14 @@
-import type {
-    BorderSide,
-    CellBorderSides,
-    ConditionalFormatRule,
-    DataVerificationRule,
-    DefaultConditionalFormatRule,
-    Cell as FortuneCell,
-    InlineStringSegment,
-    MergeCell,
-    Sheet,
-    SingleRange,
+import {
+    type BorderSide,
+    type CellBorderSides,
+    type ConditionalFormatRule,
+    type DataVerificationRule,
+    type DefaultConditionalFormatRule,
+    type Cell as FortuneCell,
+    type InlineStringSegment,
+    mergedBorderSides,
+    type Sheet,
+    type SingleRange,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
@@ -168,41 +168,16 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
             }
         }
 
-        if (config.borderInfo) {
-            // exceljs merge constituents SHARE the master's style object (lib/doc/
-            // cell.js merge() assigns `this.style = master.style`), so writing
-            // `cell.border` per constituent would clobber the shared border — the
-            // last constituent wins and the merge loses e.g. its left edge. Compose
-            // ONE border per merge instead: a side counts only from constituents on
-            // the merge's matching edge (the editor's render compute ignores
-            // non-edge sides under a merge, packages/sheet state/modules/border.ts);
-            // same-side conflicts resolve last-write-wins per side in map order.
-            const mergeAt = mergeConstituents(config.merge);
-            const mergeBorders = new Map<string, CellBorderSides>();
-            for (const [key, sides] of Object.entries(config.borderInfo)) {
-                const [r, c] = key.split('_').map(Number);
-                const merge = mergeAt.get(key);
-                if (merge) {
-                    const union = mergeBorders.get(`${merge.r}_${merge.c}`) ?? {};
-                    if (sides.l && c === merge.c) union.l = sides.l;
-                    if (sides.r && c === merge.c + merge.cs - 1) union.r = sides.r;
-                    if (sides.t && r === merge.r) union.t = sides.t;
-                    if (sides.b && r === merge.r + merge.rs - 1) union.b = sides.b;
-                    mergeBorders.set(`${merge.r}_${merge.c}`, union);
-                    continue;
-                }
-                const border = toBorder(sides);
-                if (border) worksheet.getCell(r + 1, c + 1).border = border;
-            }
-            for (const [key, sides] of mergeBorders) {
-                const border = toBorder(sides);
-                if (!border) continue;
-                const [r, c] = key.split('_').map(Number);
-                // One write through the anchor lands on every constituent via the
-                // shared style — Excel renders the merge perimeter from the edge
-                // cells' sides and ignores the sides facing inward.
-                worksheet.getCell(r + 1, c + 1).border = border;
-            }
+        // exceljs merge constituents SHARE the master's style object (lib/doc/cell.js
+        // merge() assigns `this.style = master.style`), so writing `cell.border` per
+        // constituent would clobber the shared border — the last constituent wins and
+        // the merge loses e.g. its left edge. One write of the folded perimeter through
+        // the anchor lands on every constituent via the shared style.
+        for (const [key, sides] of Object.entries(mergedBorderSides(config.borderInfo, config.merge))) {
+            const border = toBorder(sides);
+            if (!border) continue;
+            const [r, c] = key.split('_').map(Number);
+            worksheet.getCell(r + 1, c + 1).border = border;
         }
 
         if (sheet.filterRange) {
@@ -394,18 +369,6 @@ function toBorder(sides: CellBorderSides): Partial<Borders> | null {
         ...(sides.b && { bottom: toBorderSide(sides.b) }),
     };
     return Object.keys(border).length > 0 ? border : null;
-}
-
-function mergeConstituents(merge: Record<string, MergeCell> | undefined): Map<string, MergeCell> {
-    const byCell = new Map<string, MergeCell>();
-    for (const m of Object.values(merge ?? {})) {
-        for (let r = m.r; r < m.r + m.rs; r += 1) {
-            for (let c = m.c; c < m.c + m.cs; c += 1) {
-                byCell.set(`${r}_${c}`, m);
-            }
-        }
-    }
-    return byCell;
 }
 
 // Inline-string segments carry the cell's hex defaults or rgb(…) strings produced by

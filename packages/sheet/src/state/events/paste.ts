@@ -19,7 +19,7 @@ import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../e
 import { setRowHeight } from '../api';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { en } from '../locale/en';
-import { getBorderInfoCompute } from '../modules/border';
+import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
@@ -229,10 +229,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
                     }
                 }
 
-                const borderEntry = borderInfo?.[`${h - minh}_${c - minc}`];
-                if (borderEntry) {
-                    cfg.borderInfo[`${h}_${c}`] = borderEntry;
-                }
+                carrySides(cfg.borderInfo, h, c, borderInfo?.[`${h - minh}_${c - minc}`]);
             }
             d[h] = x;
 
@@ -443,11 +440,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             }
         }
 
-        for (let i = c_r1; i <= c_r2; i += 1) {
-            for (let j = c_c1; j <= c_c2; j += 1) {
-                delete cfg.borderInfo[`${i}_${j}`];
-            }
-        }
+        clearSides(cfg.borderInfo, c_r1, c_r2, c_c1, c_c2);
     }
 
     const offsetMC: Record<string, [number, number]> = {};
@@ -455,12 +448,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         const x = d[h];
 
         for (let c = minc; c <= maxc; c += 1) {
-            const sourceSides = borderInfoCompute[`${c_r1 + h - minh}_${c_c1 + c - minc}`];
-            if (sourceSides) {
-                cfg.borderInfo[`${h}_${c}`] = cloneDeep(sourceSides);
-            } else {
-                delete cfg.borderInfo[`${h}_${c}`];
-            }
+            carrySides(cfg.borderInfo, h, c, borderInfoCompute[`${c_r1 + h - minh}_${c_c1 + c - minc}`]);
 
             // data validation: cut
             if (c_dataVerification[`${c_r1 + h - minh}_${c_c1 + c - minc}`]) {
@@ -540,11 +528,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             }
         }
 
-        for (let source_r = c_r1; source_r <= c_r2; source_r += 1) {
-            for (let source_c = c_c1; source_c <= c_c2; source_c += 1) {
-                delete sourceCurConfig.borderInfo?.[`${source_r}_${source_c}`];
-            }
-        }
+        if (sourceCurConfig.borderInfo) clearSides(sourceCurConfig.borderInfo, c_r1, c_r2, c_c1, c_c2);
 
         // conditional formatting
         const source_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].conditionalFormatRules);
@@ -845,12 +829,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
                 for (let c = mtc; c < maxcellCahe; c += 1) {
                     if (hiddenCols?.has(c.toString())) continue;
-                    const sourceSides = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
-                    if (sourceSides) {
-                        cfg.borderInfo[`${h}_${c}`] = cloneDeep(sourceSides);
-                    } else {
-                        delete cfg.borderInfo[`${h}_${c}`];
-                    }
+                    carrySides(cfg.borderInfo, h, c, borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]);
 
                     // data validation: copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {

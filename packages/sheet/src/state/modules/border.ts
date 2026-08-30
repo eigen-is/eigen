@@ -1,4 +1,5 @@
 import type { BorderSide, BorderType, CellBorderSides, MergeCell } from '@workspace/lib/sheets';
+import { cloneDeep, isEmpty } from 'es-toolkit/compat';
 import type { CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { Selection, SheetConfig } from '../types';
@@ -30,7 +31,7 @@ type BorderSideKey = keyof CellBorderSides;
 // outer edge survive, and the diagonal is the master's (drawn with the merged extent).
 function visibleSides(cfg: SheetConfig, data: CellMatrix, r: number, c: number): CellBorderSides | undefined {
     const stored = cfg.borderInfo?.[`${r}_${c}`];
-    if (!stored || cfg.rowhidden?.[r] != null) return undefined;
+    if (!stored || cfg.rowhidden?.[r] != null || cfg.colhidden?.[c] != null) return undefined;
 
     const anchor = data[r]?.[c]?.mc;
     const mc: MergeCell | undefined = anchor && cfg.merge?.[`${anchor.r}_${anchor.c}`];
@@ -69,7 +70,7 @@ export function getBorderInfoComputeRange(
 ): Record<string, CellBorderSides> {
     const computed: Record<string, CellBorderSides> = {};
     const slice = sheetSlice(ctx, sheetId);
-    if (!slice) return computed;
+    if (!slice || isEmpty(slice.cfg.borderInfo)) return computed;
 
     for (let r = rowSt; r <= rowEd; r += 1) {
         for (let c = colSt; c <= colEd; c += 1) {
@@ -103,6 +104,28 @@ function removeSide(map: Record<string, CellBorderSides>, r: number, c: number, 
     if (!entry) return;
     delete entry[key];
     if (Object.keys(entry).length === 0) delete map[`${r}_${c}`];
+}
+
+// Carries a source cell's computed sides onto a destination cell (paste, fill, move,
+// format painter): a source without sides clears the destination, so a plain cell
+// pasted over a bordered one leaves it plain.
+export function carrySides(map: Record<string, CellBorderSides>, r: number, c: number, sides?: CellBorderSides) {
+    if (sides) map[`${r}_${c}`] = cloneDeep(sides);
+    else delete map[`${r}_${c}`];
+}
+
+export function clearSides(
+    map: Record<string, CellBorderSides>,
+    rowSt: number,
+    rowEd: number,
+    colSt: number,
+    colEd: number,
+) {
+    for (let r = rowSt; r <= rowEd; r += 1) {
+        for (let c = colSt; c <= colEd; c += 1) {
+            delete map[`${r}_${c}`];
+        }
+    }
 }
 
 // Expands a toolbar layout into the cells' own sides. A border belongs to the cell it was

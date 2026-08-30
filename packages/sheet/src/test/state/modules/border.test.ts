@@ -183,12 +183,15 @@ describe('getBorderInfoCompute', () => {
         expect(ctx.sheets[0].config!.borderInfo!['2_2']).toEqual({ l: SIDE, r: SIDE, t: SIDE, b: SIDE });
     });
 
-    test('skips hidden rows but keeps their borders stored', () => {
-        const ctx = withSelection([0, 1], [0, 0]);
+    test('skips hidden rows and columns but keeps their borders stored', () => {
+        const ctx = withSelection([0, 1], [0, 1]);
         ctx.sheets[0].config!.rowhidden = { 1: 0 };
+        ctx.sheets[0].config!.colhidden = { 1: 0 };
         handleBorder(ctx, 'border-all');
-        expect(getBorderInfoCompute(ctx)['1_0']).toBeUndefined();
+        const computed = getBorderInfoCompute(ctx);
+        expect(Object.keys(computed)).toEqual(['0_0']);
         expect(ctx.sheets[0].config!.borderInfo!['1_0']).toBeDefined();
+        expect(ctx.sheets[0].config!.borderInfo!['0_1']).toBeDefined();
     });
 });
 

@@ -7,7 +7,7 @@ import { update } from '../../engine/format';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
-import { BORDER_STYLE_NAMES, getBorderInfoCompute } from './border';
+import { BORDER_STYLE_NAMES, carrySides, getBorderInfoCompute } from './border';
 import {
     getCellValue,
     getDataBySelectionNoCopy,
@@ -350,12 +350,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
                 const x: (Cell | null)[] = flowdata[h];
 
                 for (let c = mtc; c < maxcellCahe; c += 1) {
-                    const sourceSides = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
-                    if (sourceSides) {
-                        cfg.borderInfo[`${h}_${c}`] = cloneDeep(sourceSides);
-                    } else {
-                        delete cfg.borderInfo[`${h}_${c}`];
-                    }
+                    carrySides(cfg.borderInfo, h, c, borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]);
 
                     // Data validation copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {

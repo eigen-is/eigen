@@ -5,7 +5,7 @@ import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
-import { applyBorder } from './border';
+import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
 import { colors } from './color';
 import { setFormulaCellInfo } from './formula-cache';
@@ -997,11 +997,7 @@ export function handleClearFormat(ctx: Context) {
                 flowdata[r][c] = pick(cell, 'v', 'm', 'mc', 'f', 'ct');
             }
         }
-        for (let r = rowSt; r <= rowEd; r += 1) {
-            for (let c = colSt; c <= colEd; c += 1) {
-                delete cfg.borderInfo?.[`${r}_${c}`];
-            }
-        }
+        if (cfg.borderInfo) clearSides(cfg.borderInfo, rowSt, rowEd, colSt, colEd);
     }
 }
 

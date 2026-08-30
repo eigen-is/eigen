@@ -25,6 +25,10 @@ export function useSheet(
     const isLocalOpRef = useRef(false);
     const isLocalSnapshotRef = useRef(false);
     const readyForOpsRef = useRef(false);
+    // Set only by a decode (+ pending-op replay) that succeeded. A workbook that opened on
+    // the createDefaultSheets fallback must never be flushed: that would write the blank
+    // workbook over state.snapshot and clear the op log — the real document, gone.
+    const loadedRef = useRef(false);
     const latestDataRef = useRef<Sheet[] | null>(null);
 
     // useCollabDoc owns the doc/provider lifecycle; sheets layers its op-log + snapshot protocol on
@@ -37,6 +41,7 @@ export function useSheet(
         pathId,
         onInit: ({ doc }) => {
             readyForOpsRef.current = false;
+            loadedRef.current = false;
             latestDataRef.current = null;
 
             const stateMap = doc.getMap('state');
@@ -44,7 +49,7 @@ export function useSheet(
 
             const flushSnapshot = () => {
                 const data = latestDataRef.current;
-                if (!data) return;
+                if (!loadedRef.current || !data) return;
                 let json: string;
                 try {
                     // computed: true — the client recomputes dependents inside the op-emitting produce.
@@ -98,6 +103,7 @@ export function useSheet(
                     const initial = stripSelections(decodeSheetsSnapshot(snapshot));
                     const pending = opsArray.toArray() as Op[][];
                     const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
+                    loadedRef.current = true;
                     latestDataRef.current = data;
                     setInitialData(data);
                     setSnapshotVersion((v) => v + 1);
@@ -126,11 +132,15 @@ export function useSheet(
             const opsArray = doc.getArray('ops');
             const snapshot = stateMap.get('snapshot') as string | undefined;
             let initial: Sheet[] = createDefaultSheets();
+            // Stays false on any fallback below: the editor still opens, but nothing it
+            // shows may be persisted over the document it failed to load.
+            let loaded = true;
             if (snapshot) {
                 try {
                     initial = stripSelections(decodeSheetsSnapshot(snapshot));
                 } catch (e) {
-                    console.warn('[sheet] Failed to parse initial snapshot, falling back to defaults:', e);
+                    loaded = false;
+                    console.error('[sheet] Failed to parse initial snapshot, opening defaults without persistence:', e);
                 }
             }
             const pending = opsArray.toArray() as Op[][];
@@ -142,10 +152,12 @@ export function useSheet(
                 try {
                     data = replaySheetsOps(initial, pending);
                 } catch (e) {
+                    loaded = false;
                     console.error('[sheet] Failed to replay pending ops, opening without them:', e);
                 }
             }
-            latestDataRef.current = data;
+            loadedRef.current = loaded;
+            if (loaded) latestDataRef.current = data;
             setInitialData(data);
             readyForOpsRef.current = true;
         },
@@ -154,7 +166,8 @@ export function useSheet(
     const handleOp = useCallback(
         (ops: Op[]) => {
             const doc = docRef.current;
-            if (!doc || ops.length === 0) return;
+            // Same gate as flushSnapshot: ops built against the fallback workbook must not reach peers.
+            if (!doc || !loadedRef.current || ops.length === 0) return;
             isLocalOpRef.current = true;
             try {
                 doc.transact(() => {

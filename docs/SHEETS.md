@@ -34,7 +34,7 @@ state/render/
 ├── cell-text.ts    # Text painter + overflow-span variant (layout stays in modules/text.ts)
 ├── data-bar.ts     # Conditional-format data bar
 ├── overflow.ts     # Text-spill map + trace + the shared per-row cache (cleared via the facade's idle timer)
-├── borders.ts      # config.borderInfo pass + dash patterns
+├── borders.ts      # config.borderInfo pass (viewport walk + merge-edge filter) + dash patterns
 └── filter-ui.ts    # Autofilter range border + buttons (lazy Path2D glyphs — module eval is DOM-free)
 ```
 
@@ -99,8 +99,8 @@ the op format and `replaySheetsOps` are untouched.
   `m === String(v)` (rehydrated on decode); style-only cells carry no content slot. The
   dense `data` matrix folds into the cell list at encode (editor flushes carry authoritative
   `data` over stale `celldata`) and is never persisted; `selections` never persists either.
-- `config.borderInfo`'s per-cell entries become `[r, c, borderIdx]` in an order-preserving
-  list (later entries override); other rangeTypes ride verbatim.
+- `config.borderInfo`'s `"r_c"` entries become `[r, c, borderIdx]` tuples over an interned
+  `borders` dictionary (order carries nothing; the map is rebuilt on decode).
 - `calcChain` is never persisted. `computed: true` (importer post-recalc, every editor
   flush) makes the decoder seed it from the `f` cells — which is exactly the signal
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an

@@ -210,6 +210,28 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(b.l!.style).toBe(1);
     });
 
+    test('a pre-N2 bare-object borderCells entry is dropped, the tuple next to it kept', () => {
+        // Same eigensheets/2 tag, but toolbar borders were once written as range objects
+        // into borderCells; an unopenable document is worse than a lost border.
+        const encoded = JSON.parse(
+            encodeSheetsSnapshot(
+                [
+                    {
+                        id: 'sheet-1',
+                        name: 'Sheet1',
+                        order: 0,
+                        celldata: [],
+                        config: { borderInfo: { '2_3': { l: { style: 1, color: '#000' } } } },
+                    },
+                ],
+                { computed: false },
+            ),
+        ) as Envelope;
+        (encoded.sheets[0].borderCells as unknown[]).unshift({ rangeType: 'range', borderType: 'border-all' });
+        const [sheet] = decodeSheetsSnapshot(JSON.stringify(encoded));
+        expect(sheet.config?.borderInfo).toEqual({ '2_3': { l: { style: 1, color: '#000' } } });
+    });
+
     test('an empty borderInfo map round-trips as an empty map', () => {
         // N1 materializes the config collections on every base; the codec must not
         // turn a present-but-empty map into an absent key (or the reverse).

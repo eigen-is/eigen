@@ -285,6 +285,28 @@ function shiftStateOnlyFieldsForInsert(
         });
     }
     file.hyperlink = newHyperlink;
+
+    // Border config update: same re-key as dataVerification — the row/column at `index`
+    // is the template whose entries the inserted ones clone, in both directions. Rebuilding
+    // the whole map is deliberate: `patchToOp`'s sheetMetadataOps ships config authoritatively.
+    if (!isEmpty(cfg.borderInfo)) {
+        const axis = type === 'row' ? 0 : 1;
+        const borderInfo: Record<string, CellBorderSides> = {};
+        for (const [key, sides] of Object.entries(cfg.borderInfo)) {
+            const coord = key.split('_').map(Number);
+            const at = coord[axis];
+            if (at === index) {
+                for (let n = 0; n < count; n += 1) {
+                    const inserted = [...coord];
+                    inserted[axis] = direction === 'rightbottom' ? index + n + 1 : index + n;
+                    borderInfo[inserted.join('_')] = cloneDeep(sides);
+                }
+            }
+            if (direction === 'lefttop' ? at >= index : at > index) coord[axis] += count;
+            borderInfo[coord.join('_')] = sides;
+        }
+        cfg.borderInfo = borderInfo;
+    }
 }
 
 function shiftStateOnlyFieldsForDelete(
@@ -529,6 +551,20 @@ function shiftStateOnlyFieldsForDelete(
         });
     }
     file.hyperlink = newHyperlink;
+
+    // Border config update: drop the deleted rows'/columns' keys and shift the rest.
+    if (!isEmpty(cfg.borderInfo)) {
+        const axis = type === 'row' ? 0 : 1;
+        const borderInfo: Record<string, CellBorderSides> = {};
+        for (const [key, sides] of Object.entries(cfg.borderInfo)) {
+            const coord = key.split('_').map(Number);
+            const at = coord[axis];
+            if (at >= start && at <= end) continue;
+            if (at > end) coord[axis] -= slen;
+            borderInfo[coord.join('_')] = sides;
+        }
+        cfg.borderInfo = borderInfo;
+    }
 }
 
 function adjustSelectionForInsert(
@@ -685,28 +721,6 @@ export function insertRowCol(
         }
     }
 
-    // Border config update: shift every key at/after the insert point, then clone the
-    // template row's/column's entries onto the inserted ones. Rebuilding the whole map
-    // is deliberate here — `patchToOp`'s sheetMetadataOps ships config authoritatively.
-    if (cfg.borderInfo) {
-        const axis = type === 'row' ? 0 : 1;
-        const borderInfo: Record<string, CellBorderSides> = {};
-        for (const [key, sides] of Object.entries(cfg.borderInfo)) {
-            const coord = key.split('_').map(Number);
-            const at = coord[axis];
-            if (at === index) {
-                for (let n = 0; n < count; n += 1) {
-                    const inserted = [...coord];
-                    inserted[axis] = direction === 'rightbottom' ? index + n + 1 : index + n;
-                    borderInfo[inserted.join('_')] = cloneDeep(sides);
-                }
-            }
-            if (direction === 'lefttop' ? at >= index : at > index) coord[axis] += count;
-            borderInfo[coord.join('_')] = sides;
-        }
-        cfg.borderInfo = borderInfo;
-    }
-
     file.alternateFormatRules = newAFarr;
     file.config = cfg;
 
@@ -839,20 +853,6 @@ export function deleteRowCol(
                 }
             }
         }
-    }
-
-    // Border config update: drop the deleted rows'/columns' keys and shift the rest.
-    if (cfg.borderInfo) {
-        const axis = type === 'row' ? 0 : 1;
-        const borderInfo: Record<string, CellBorderSides> = {};
-        for (const [key, sides] of Object.entries(cfg.borderInfo)) {
-            const coord = key.split('_').map(Number);
-            const at = coord[axis];
-            if (at >= start && at <= end) continue;
-            if (at > end) coord[axis] -= slen;
-            borderInfo[coord.join('_')] = sides;
-        }
-        cfg.borderInfo = borderInfo;
     }
 
     file.alternateFormatRules = newAFarr;

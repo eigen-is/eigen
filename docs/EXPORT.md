@@ -292,8 +292,9 @@ See [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md).
 
 The XLSX conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
 same ExcelJS library. Round-tripped: cell values, formulas, rich-text runs (`ct.s`), styles (font, fill,
-alignment, rotation), borders (cell-level and toolbar range borders via `range-borders.ts`; merged-region
-perimeters are unioned edge-aware into the ONE style ExcelJS shares across a merge), merged cells, column
+alignment, rotation), borders (per-cell `config.borderInfo` sides; a merge's perimeter is folded onto its
+master by `mergedBorderSides` in `packages/lib/src/sheets/borders.ts`, shared with the HTML renderer, because
+ExcelJS keeps ONE style across a merge and the HTML table emits one `<td>` for it), merged cells, column
 widths/row heights, hidden rows/cols, frozen panes (merged into the same view object as `showGridLines`),
 the autofilter range, conditional formatting (engine rule order becomes explicit xlsx priorities;
 `duplicateValue` exports as a COUNTIF expression — ExcelJS has no native writer for it), data validation
@@ -316,7 +317,6 @@ apps/api/src/lib/export/sheets/
   render.ts      # Sheet[] → HTML (renderSheetsHtml full export, renderSheetsPreviewHtml budgeted preview,
                  #   renderSheetsExportDocument + renderSheetsPdfDocument standalone documents)
   to-xlsx.ts     # Sheet[] → XLSX buffer via ExcelJS
-  range-borders.ts # expandBorderInfo: config.borderInfo (cell + toolbar range) → per-cell sides, for to-xlsx.ts
   fonts.ts       # FONT_ARRAY + resolveFontFamily (numeric/string ff → family name)
 # content loader: apps/api/src/lib/document/sheets.ts (Yjs snapshot → Sheet[])
 ```

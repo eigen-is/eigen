@@ -642,6 +642,41 @@ describe('Sheets HTML export — hostile values in CSS', () => {
         expect(useCount(out, cls)).toBe(1);
     });
 
+    test('a merge draws the perimeter its constituents store on the master td', () => {
+        const mc = { r: 0, c: 0, rs: 3, cs: 3 };
+        const cells = [];
+        for (let r = 0; r < 3; r += 1) {
+            for (let c = 0; c < 3; c += 1) {
+                cells.push({ r, c, v: r === 0 && c === 0 ? { v: 'x', mc } : { mc: { r: 0, c: 0 } } });
+            }
+        }
+        const side = { style: 1, color: '#ff0000' };
+        // What applyBorder's border-outside stores: each edge on the constituent that owns it.
+        const sheet: Sheet = {
+            ...makeSheet(cells),
+            config: {
+                merge: { '0_0': mc },
+                borderInfo: {
+                    '0_0': { t: side, l: side },
+                    '0_1': { t: side },
+                    '0_2': { t: side, r: side },
+                    '1_0': { l: side },
+                    '1_2': { r: side },
+                    '2_0': { b: side, l: side },
+                    '2_1': { b: side },
+                    '2_2': { b: side, r: side },
+                },
+            },
+        };
+        const out = renderSheetsHtml([sheet]);
+        const [cls] = classesFor(out, 'border-top:1px solid #ff0000');
+        expect(cls).toBeDefined();
+        for (const edge of ['left', 'right', 'bottom']) {
+            expect(classesFor(out, `border-${edge}:1px solid #ff0000`)).toEqual([cls]);
+        }
+        expect(out.html).toMatch(new RegExp(`<td[^>]*colspan="3"[^>]*class="(?:sheet )?${cls}"`));
+    });
+
     test('escapes dataBar colors', () => {
         const out = renderSheetsHtml([
             makeSheet(

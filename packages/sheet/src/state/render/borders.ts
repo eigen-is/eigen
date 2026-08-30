@@ -94,12 +94,6 @@ export function drawCellBorders(pass: RenderPass) {
         const bdRow = Number(x.substring(0, sepIdx));
         const bdCol = Number(x.substring(sepIdx + 1));
 
-        // Same membership the per-pass rect map used to pin: inside the pass's
-        // visible range (the compute already clamps to it) and not hidden —
-        // hidden rows/columns never produced a cell rect.
-        if (bdRow < rowStart || bdRow > rowEnd || bdCol < colStart || bdCol > colEnd) continue;
-        if (cfg?.rowhidden?.[bdRow] != null || cfg?.colhidden?.[bdCol] != null) continue;
-
         const startY = rowStartY(sheetCtx.visibledatarow, bdRow, scrollHeight);
         const startX = colStartX(sheetCtx.visibledatacolumn, bdCol, scrollWidth);
         const endY = rowEndY(sheetCtx.visibledatarow, bdRow, scrollHeight);

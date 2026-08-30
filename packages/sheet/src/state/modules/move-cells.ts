@@ -6,7 +6,7 @@ import { type Context, getFlowdata } from '../context';
 import { en } from '../locale/en';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
-import { getBorderInfoCompute } from './border';
+import { carrySides, clearSides, getBorderInfoCompute } from './border';
 import { getdatabyselection } from './cell';
 import { colLocation, colLocationByIndex, mousePosition, rowLocation, rowLocationByIndex } from './location';
 import { jfrefreshgrid } from './refresh';
@@ -276,19 +276,17 @@ export function onCellsMoveEnd(
             }
         }
     }
-    for (let r = last.row[0]; r <= last.row[1]; r += 1) {
-        for (let c = last.column[0]; c <= last.column[1]; c += 1) {
-            delete cfg.borderInfo[`${r}_${c}`];
-        }
-    }
+    clearSides(cfg.borderInfo, last.row[0], last.row[1], last.column[0], last.column[1]);
     // Replacement position data update
     const offsetMC: Record<string, [number, number]> = {};
     for (let r = 0; r < data.length; r += 1) {
         for (let c = 0; c < data[0].length; c += 1) {
-            const sourceSides = borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`];
-            if (sourceSides) {
-                cfg.borderInfo[`${r + row_s}_${c + col_s}`] = cloneDeep(sourceSides);
-            }
+            carrySides(
+                cfg.borderInfo,
+                r + row_s,
+                c + col_s,
+                borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`],
+            );
 
             let value = null;
             if (data[r] != null && data[r][c] != null) {

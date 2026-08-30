@@ -127,7 +127,10 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
             sheet.config = { ...config };
             if (borderCells) {
                 const borderInfo: Record<string, CellBorderSides> = {};
-                for (const [r, c, borderIdx] of borderCells) {
+                for (const entry of borderCells) {
+                    // Pre-N2 snapshots under the same tag hold toolbar range objects here.
+                    if (!Array.isArray(entry)) continue;
+                    const [r, c, borderIdx] = entry;
                     borderInfo[`${r}_${c}`] = materializeStyle(borders[borderIdx]) as CellBorderSides;
                 }
                 sheet.config.borderInfo = borderInfo;

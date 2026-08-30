@@ -7,7 +7,7 @@ import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
-import { getBorderInfoCompute } from './border';
+import { carrySides, getBorderInfoCompute } from './border';
 import { createContextResolver } from './formula-cache';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
@@ -2004,12 +2004,7 @@ export function updateDropCell(ctx: Context) {
             const bd_r = axisIsRow ? bd_axis : outer;
             const bd_c = axisIsRow ? outer : bd_axis;
 
-            const sourceSides = borderInfoCompute[`${bd_r}_${bd_c}`];
-            if (sourceSides) {
-                cfg.borderInfo[`${row}_${col}`] = cloneDeep(sourceSides);
-            } else {
-                delete cfg.borderInfo[`${row}_${col}`];
-            }
+            carrySides(cfg.borderInfo, row, col, borderInfoCompute[`${bd_r}_${bd_c}`]);
 
             // data validation
             if (dataVerification?.[`${bd_r}_${bd_c}`]) {
