@@ -21,9 +21,12 @@ describe('getHome teardown race', () => {
         const userId = await createHomeUser('race-order@test.eigen.is');
         const home1 = await getHome(userId);
 
-        // Spy on the ordering instead of forcing a real teardown (which would race the mount's own
-        // init-time prune timer and add flaky disk-I/O noise): stub the signal getHome branches on
-        // (destructing) and gate the call it must await (shutdown), then prove it parks on that call.
+        // Gate the ordering: stub the signal getHome branches on (destructing) and hold the call it
+        // must await (shutdown) behind a gate, then prove it parks on that call. The gated shutdown
+        // runs the REAL teardown once released, so home1's DB handles are closed before getHome opens
+        // the replacement — the same non-overlap production relies on. Skipping the real teardown here
+        // would leave home1's connections open alongside home2's on the same files, and closing both
+        // at cleanup unlinks the shared WAL/-shm out from under a live handle (SQLITE_IOERR_VNODE).
         Object.defineProperty(home1, 'destructing', { configurable: true, get: () => true });
         let releaseShutdown!: () => void;
         const gate = new Promise<void>((resolve) => {
@@ -33,6 +36,7 @@ describe('getHome teardown race', () => {
         const origShutdown = home1.shutdown.bind(home1);
         home1.shutdown = async () => {
             await gate;
+            await origShutdown();
             shutdownResolved = true;
         };
 
@@ -55,8 +59,7 @@ describe('getHome teardown race', () => {
         expect(replacementResolved).toBe(true);
         expect(home2).not.toBe(home1);
 
-        await evictHome(userId); // close the real replacement
-        await origShutdown(); // close home1, whose real teardown the spy skipped
+        await evictHome(userId); // close the real replacement; home1 was already torn down by shutdown()
     });
 
     test('destruct() runs teardown once under concurrent shutdown() calls', async () => {
