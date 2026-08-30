@@ -19,6 +19,7 @@ import {
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
     ELEMENT_FIELDS,
+    elementBounds,
     elementToSvg,
     fitImageSize,
     getElementsBounds,
@@ -34,6 +35,7 @@ import {
     type SnapTargets,
     snapBoxToTargets,
     type TextAlign,
+    unionBounds,
     type VectorArrowElement,
     type VectorElement,
     type VectorMeta,
@@ -289,9 +291,14 @@ export function VectorCanvas({
     });
 
     // Elements with their live preview boxes applied — the map a bound arrow follows while its shape is
-    // mid-drag (R3.9). Rebuilt only when the scene or a preview changes.
+    // mid-drag (R3.9). Built only while a preview is live AND the scene holds an arrow, so an arrow-free
+    // drag doesn't reallocate it every frame.
     const hasPreviews = Object.keys(previews).length > 0;
-    const previewById = useMemo(() => buildPreviewById(ordered, previews), [ordered, previews]);
+    const hasArrows = ordered.some((el) => el.type === 'arrow');
+    const previewById = useMemo(
+        () => (hasPreviews && hasArrows ? buildPreviewById(ordered, previews) : null),
+        [hasPreviews, hasArrows, ordered, previews],
+    );
 
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
     // no preview → same object identity, so the memo skips it. A linear element's resize/rotate derives
@@ -308,7 +315,7 @@ export function VectorCanvas({
             } else {
                 out = { ...el, x: p.x, y: p.y, width: p.width, height: p.height, angle: p.angle };
             }
-        } else if (hasPreviews && el.type === 'arrow') {
+        } else if (previewById && el.type === 'arrow') {
             const follow = followArrowPreview(el, previews, previewById);
             if (follow) out = { ...el, ...follow };
         }
@@ -1369,7 +1376,9 @@ export function VectorCanvas({
 
     const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
-    const unionBox = selectedRender.length >= 1 ? boundsToBox(getElementsBounds(selectedRender.map(elementBox))) : null;
+    // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang (R3.6).
+    const unionBox =
+        selectedRender.length >= 1 ? boundsToBox(selectedRender.map(elementBounds).reduce(unionBounds)) : null;
     // Chrome is suppressed while a create/marquee drag is in flight (grip flicker) or while a text
     // overlay is open; move keeps it (the ring follows the moving element). Single + write → full
     // transform; everything else → a plain translate-only union ring (multi-select never mounts

@@ -32,6 +32,11 @@ import {
 // fill cost scales with element area.
 const MAX_COORD = 1_000_000;
 
+// fontSize feeds line-height math (an arrow label's height = lines × line height, R3.6), so a hostile
+// value would blow the shared viewBox like an uncapped labelWidth; clamp to the canvas' own range.
+const MIN_FONT_SIZE = 4;
+const MAX_FONT_SIZE = 400;
+
 export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const elementsMap = doc.getMap('elements');
     const metaMap = doc.getMap('meta');
@@ -94,7 +99,7 @@ function readElement(value: unknown): VectorElement | null {
                 ...base,
                 type: 'text',
                 text: cleanStr(value.get('text'), DEFAULT_TEXT_PROPS.text),
-                fontSize: num(value.get('fontSize'), DEFAULT_TEXT_PROPS.fontSize),
+                fontSize: fontSize(value.get('fontSize')),
                 fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
                 textAlign: oneOf(value.get('textAlign'), TEXT_ALIGNS, DEFAULT_TEXT_PROPS.textAlign),
             };
@@ -133,7 +138,7 @@ function readElement(value: unknown): VectorElement | null {
                 startBinding: binding(value.get('startBinding')),
                 endBinding: binding(value.get('endBinding')),
                 text: cleanStr(value.get('text'), DEFAULT_TEXT_PROPS.text),
-                fontSize: num(value.get('fontSize'), DEFAULT_TEXT_PROPS.fontSize),
+                fontSize: fontSize(value.get('fontSize')),
                 fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
                 // Non-negative and capped at MAX_COORD like the spatial fields — a hostile 1e9 would
                 // otherwise blow the shared viewBox (elementBounds unions the label rect) for every peer.
@@ -186,6 +191,10 @@ function num(v: unknown, fallback: number): number {
 
 function coord(v: unknown): number {
     return clampCoord(num(v, 0));
+}
+
+function fontSize(v: unknown): number {
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, num(v, DEFAULT_TEXT_PROPS.fontSize)));
 }
 
 function clampCoord(n: number): number {

@@ -530,7 +530,8 @@ export function arrowheadGeometry(
     const size = head === 'arrow' ? ARROWHEAD_SIZE_LONG : ARROWHEAD_SIZE;
     const minSize = Math.min(size, len * 0.5);
     const base = { x: tip.x - (dx / len) * minSize, y: tip.y - (dy / len) * minSize };
-    if (head === 'circle') return { kind: 'circle', center: tip, diameter: minSize + el.strokeWidth - 2 };
+    // Floored at 1: a thin, short arrow's span + strokeWidth − 2 can go non-positive (no disc at all).
+    if (head === 'circle') return { kind: 'circle', center: tip, diameter: Math.max(1, minSize + el.strokeWidth - 2) };
     const angle = head === 'bar' ? 90 : head === 'arrow' ? 20 : 25;
     return { kind: 'barbs', tip, barb1: rotatePoint(base, tip, -angle), barb2: rotatePoint(base, tip, angle) };
 }

@@ -81,32 +81,43 @@ function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
     return topmost;
 }
 
-// After a patch, re-run followBindings for every arrow bound to a patched SHAPE and write its geometry
-// into the same transact (R3.9). An arrow patched in the same call moved rigidly with its shape, so it is
-// excluded (its endpoints already rode along). Skips entirely when no bindable shape was touched.
+// After a patch, re-run followBindings and write the geometry into the same transact (R3.9) for every
+// arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
+// arrow alone re-glues its endpoints to the stationary shape instead of leaving them detached until the
+// shape's next move teleports them (bound endpoints stay glued, Excalidraw's model; only a drag past the
+// unbind threshold detaches). A shape+arrow moved rigidly no-ops via followBindings' null return.
 function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: Set<string>): void {
-    let touchedShape = false;
+    let touched = false;
     for (const id of patchedIds) {
         const m = elementsMap.get(id);
         const t = m instanceof Y.Map ? m.get('type') : undefined;
-        if (t === 'rectangle' || t === 'diamond' || t === 'ellipse') {
-            touchedShape = true;
+        if (t === 'rectangle' || t === 'diamond' || t === 'ellipse') touched = true;
+        else if (t === 'arrow' && m instanceof Y.Map && (m.get('startBinding') || m.get('endBinding'))) touched = true;
+        if (touched) break;
+    }
+    if (!touched) return;
+
+    // An arrow-free scene skips the full doc read a shape patch would otherwise pay on every gesture.
+    let hasArrow = false;
+    for (const value of elementsMap.values()) {
+        if (value instanceof Y.Map && value.get('type') === 'arrow') {
+            hasArrow = true;
             break;
         }
     }
-    if (!touchedShape) return;
+    if (!hasArrow) return;
 
     const elements = readVectorFromDoc(doc).elements;
     const bound = arrowsBoundTo(elements);
+    const byId = new Map(elements.map((el) => [el.id, el]));
     const arrowIds = new Set<string>();
     for (const id of patchedIds) {
-        for (const aid of bound.get(id) ?? []) {
-            if (!patchedIds.has(aid)) arrowIds.add(aid);
-        }
+        for (const aid of bound.get(id) ?? []) arrowIds.add(aid);
+        // A dangling binding reads as '' here, so only live-bound patched arrows re-follow.
+        const el = byId.get(id);
+        if (el?.type === 'arrow' && (el.startBinding !== '' || el.endBinding !== '')) arrowIds.add(id);
     }
     if (arrowIds.size === 0) return;
-
-    const byId = new Map(elements.map((el) => [el.id, el]));
     for (const aid of arrowIds) {
         const arrow = byId.get(aid);
         if (arrow?.type !== 'arrow') continue;

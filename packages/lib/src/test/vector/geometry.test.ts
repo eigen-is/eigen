@@ -863,6 +863,12 @@ describe('arrowheadGeometry', () => {
         expect(geo).toEqual({ kind: 'circle', center: { x: 100, y: 0 }, diameter: 15 });
     });
 
+    test('circle: the diameter stays positive for a thin, short arrow', () => {
+        const tiny = arrowEl({ points: '[[0,0],[2,0]]', strokeWidth: 1 });
+        const geo = arrowheadGeometry(tiny, parsePoints(tiny.points), 'end', 'circle');
+        expect(geo).toEqual({ kind: 'circle', center: { x: 2, y: 0 }, diameter: 1 });
+    });
+
     test('start head reads the first segment', () => {
         const geo = arrowheadGeometry(arrow, parsePoints(arrow.points), 'start', 'triangle');
         if (geo?.kind !== 'barbs') throw new Error('expected barbs');

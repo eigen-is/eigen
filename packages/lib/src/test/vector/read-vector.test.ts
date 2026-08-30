@@ -260,6 +260,22 @@ describe('readVectorFromDoc', () => {
         expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ labelWidth: 1_000_000 });
     });
 
+    test('clamps a hostile fontSize (a label height derives from it, like labelWidth)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a0',
+                points: '[[0,0],[50,0]]',
+                text: 'x',
+                fontSize: 1e12,
+            });
+            writeElement(elements, 'txt', { type: 'text', index: 'a1', text: 'x', fontSize: 0.001 });
+        });
+        const [ar, txt] = readVectorFromDoc(doc).elements;
+        expect(ar).toMatchObject({ fontSize: 400 });
+        expect(txt).toMatchObject({ fontSize: 4 });
+    });
+
     test('clears a binding whose target is absent or not bindable (doc untouched)', () => {
         const doc = docWith((elements) => {
             writeElement(elements, 'txt', { type: 'text', index: 'a0', text: 'x' });

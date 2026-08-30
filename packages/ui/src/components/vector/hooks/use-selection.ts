@@ -4,7 +4,7 @@
 
 import {
     type Bounds,
-    getElementBounds,
+    elementBounds,
     hitTestElement,
     type MarqueeMode,
     marqueeHits,
@@ -27,11 +27,12 @@ export function hitTestTopmost(ordered: VectorElement[], point: Point, zoom: num
 }
 
 // Marquee selection under the shared direction-mode rule (U6c): `mode` picks contain vs intersect;
-// each element's rotated AABB is tested against the marquee bounds by the shared geometry helper.
+// each element's arrow-aware rotated AABB (a label overhang counts, R3.6) is tested against the
+// marquee bounds by the shared geometry helper.
 export function marqueeSelect(ordered: VectorElement[], marquee: Bounds, mode: MarqueeMode): string[] {
     const ids: string[] = [];
     for (const el of ordered) {
-        if (marqueeHits(getElementBounds(el), marquee, mode)) ids.push(el.id);
+        if (marqueeHits(elementBounds(el), marquee, mode)) ids.push(el.id);
     }
     return ids;
 }
