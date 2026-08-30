@@ -129,15 +129,6 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         for (const sheet of decoded) expect(sheet.calcChain).toBeUndefined();
     });
 
-    test('legacy snapshot (plain Sheet[] JSON) is parsed unchanged', () => {
-        const legacy: SheetWithCalcChain[] = [
-            { id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [{ r: 0, c: 0, v: { v: 1, m: '1' } }] },
-            { id: 'sheet-2', name: 'Sheet2', order: 1, calcChain: [{ r: 0, c: 0, id: 'sheet-2' }] },
-        ];
-        expect(decodeSheetsSnapshot(JSON.stringify(legacy))).toEqual(legacy);
-        expect(decodeSheetsSnapshot(`\n  ${JSON.stringify(legacy)}`)).toEqual(legacy);
-    });
-
     test('one shared style across 3000 cells is serialized once', () => {
         const encoded = encodeSheetsSnapshot(BULK, { computed: true });
         expect(encoded.split('#a1b2c3')).toHaveLength(2);
@@ -210,83 +201,6 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(b.l!.style).toBe(1);
     });
 
-    test('a pre-N2 bare-object borderCells entry is dropped, the tuple next to it kept', () => {
-        // Same eigensheets/2 tag, but toolbar borders were once written as range objects
-        // into borderCells; an unopenable document is worse than a lost border.
-        const encoded = JSON.parse(
-            encodeSheetsSnapshot(
-                [
-                    {
-                        id: 'sheet-1',
-                        name: 'Sheet1',
-                        order: 0,
-                        celldata: [],
-                        config: { borderInfo: { '2_3': { l: { style: 1, color: '#000' } } } },
-                    },
-                ],
-                { computed: false },
-            ),
-        ) as Envelope;
-        (encoded.sheets[0].borderCells as unknown[]).unshift({ rangeType: 'range', borderType: 'border-all' });
-        const [sheet] = decodeSheetsSnapshot(JSON.stringify(encoded));
-        expect(sheet.config?.borderInfo).toEqual({ '2_3': { l: { style: 1, color: '#000' } } });
-    });
-
-    test('a v1 snapshot coerces its pre-N2 borderInfo array to the map', () => {
-        // v1 stored `{rangeType:'cell', value:{row_index, col_index, sides…}}` entries with
-        // null for a cleared side, next to toolbar range objects whose cells were only
-        // ever expanded at render time — those are dropped, not guessed at.
-        const side = { style: 1, color: '#000' };
-        const legacy = [
-            {
-                id: 'sheet-1',
-                name: 'Sheet1',
-                order: 0,
-                celldata: [],
-                config: {
-                    merge: {},
-                    borderInfo: [
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: side, t: null } },
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-all',
-                            style: '1',
-                            color: '#000',
-                            range: [{ row: [0, 3], column: [0, 3] }],
-                        },
-                        { rangeType: 'cell', value: { row_index: 1, col_index: 1, l: null, r: null } },
-                        { rangeType: 'cell', value: { row_index: 2, col_index: 2, b: side, s: side } },
-                    ],
-                },
-            },
-        ];
-        const [sheet] = decodeSheetsSnapshot(JSON.stringify(legacy));
-        expect(sheet.config?.merge).toEqual({});
-        expect(sheet.config?.borderInfo).toEqual({ '0_0': { l: side }, '2_2': { b: side, s: side } });
-    });
-
-    test('a pre-N2 v2 tuple drops its null sides and an all-null tuple leaves no key', () => {
-        const side = { style: 1, color: '#000' };
-        const encoded = JSON.parse(
-            encodeSheetsSnapshot(
-                [
-                    {
-                        id: 'sheet-1',
-                        name: 'Sheet1',
-                        order: 0,
-                        celldata: [],
-                        config: { borderInfo: { '2_3': { l: side }, '4_4': { l: side } } },
-                    },
-                ],
-                { computed: false },
-            ),
-        ) as Envelope;
-        encoded.borders.push({ l: side, t: null }, { l: null, r: null });
-        (encoded.sheets[0].borderCells as unknown[]).push([5, 5, 1], [6, 6, 2]);
-        const [sheet] = decodeSheetsSnapshot(JSON.stringify(encoded));
-        expect(sheet.config?.borderInfo).toEqual({ '2_3': { l: side }, '4_4': { l: side }, '5_5': { l: side } });
-    });
-
     test('an empty borderInfo map round-trips as an empty map', () => {
         // N1 materializes the config collections on every base; the codec must not
         // turn a present-but-empty map into an absent key (or the reverse).
@@ -311,6 +225,14 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             'Unknown sheets snapshot format',
         );
         expect(() => decodeSheetsSnapshot('{"foo":1}')).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('a v1 snapshot (plain Sheet[] JSON) throws instead of decoding', () => {
+        // No legacy reading anywhere: the editor opens such a doc read-only on defaults
+        // (use-sheet.ts loadedRef) and never persists over it.
+        const legacy = JSON.stringify([{ id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [] }]);
+        expect(() => decodeSheetsSnapshot(legacy)).toThrow('Unknown sheets snapshot format');
+        expect(() => decodeSheetsSnapshot(`\n  ${legacy}`)).toThrow('Unknown sheets snapshot format');
     });
 
     test('encoding is byte-stable for a fixed workbook', async () => {

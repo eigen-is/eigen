@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { SearchResponse } from '@workspace/lib/types/search';
 import { sql } from 'drizzle-orm';
 import * as Y from 'yjs';
@@ -54,7 +55,7 @@ describe('Drive content-index', () => {
             },
         ];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
         });
 
         // Fire onSync → marks the container contentDirty.
@@ -250,7 +251,7 @@ describe('Drive content-index', () => {
                 },
             ];
             collab.doc.transact(() => {
-                collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+                collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             });
         };
 
@@ -302,7 +303,7 @@ describe('Drive content-index', () => {
                 },
             ];
             collab.doc.transact(() => {
-                collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+                collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             });
         };
 

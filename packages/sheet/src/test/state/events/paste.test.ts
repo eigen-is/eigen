@@ -240,6 +240,18 @@ describe('internal copy/paste — styles and merges', () => {
         expect(ctx.sheets[0].config!.borderInfo).toEqual({ '1_1': sides, '4_4': sides });
     });
 
+    it('a plain-text paste keeps the destination border (only the HTML path carries borders)', () => {
+        const side = { color: '#0000ff', style: 1 };
+        const ctx = makeCtx();
+        const sides = { l: side, r: side, t: side, b: side };
+        ctx.sheets[0].config = { borderInfo: { '0_0': sides } };
+
+        handlePasteByClick(ctx, '1\t2\n3\t4');
+
+        expect(ctx.sheets[0].data![0][0]?.v).toBe(1);
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({ '0_0': sides });
+    });
+
     it('pasting a borderless cell clears the destination border', () => {
         const side = { color: '#0000ff', style: 1 };
         const ctx = makeCtx(8, 8, (d) => {

@@ -27,7 +27,8 @@ import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-pr
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
@@ -80,12 +81,18 @@ function SheetEditorInner({
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
     const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
 
-    const { initialData, snapshotVersion, synced, handleOp, onDataChange, docRef, provider } = useSheet(
+    const { initialData, snapshotVersion, loadFailed, synced, handleOp, onDataChange, docRef, provider } = useSheet(
         ownerId,
         path.mountId,
         path.id,
         workbookRef,
     );
+    useEffect(() => {
+        if (!loadFailed) return;
+        toast.error('This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.', {
+            duration: Infinity,
+        });
+    }, [loadFailed]);
 
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
@@ -352,7 +359,7 @@ function SheetEditorInner({
                                 showToolbar={true}
                                 showFormulaBar={true}
                                 showSheetTabs={true}
-                                allowEdit={canWrite}
+                                allowEdit={canWrite && !loadFailed}
                                 toolbarLeftItems={leftItems}
                                 toolbarRightItems={rightItems}
                                 defaultRowHeight={20}

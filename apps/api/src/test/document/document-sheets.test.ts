@@ -97,7 +97,7 @@ describe('document/sheets', () => {
 
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
         });
 
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
@@ -248,7 +248,7 @@ describe('document/sheets — patch op replay', () => {
             { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 7 } }] },
         ];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 
@@ -308,7 +308,7 @@ describe('document/sheets — patch op replay', () => {
             { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 2 } }] },
         ];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch1, batch2]);
         });
 
@@ -334,7 +334,7 @@ describe('document/sheets — patch op replay', () => {
         const newSheet: Sheet = { id: 'sheet-2', name: 'Sheet2', order: 1, celldata: [], config: {} };
         const batch: Op[] = [{ op: 'addSheet', id: 'sheet-2', path: [], value: newSheet }];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 
@@ -364,7 +364,7 @@ describe('document/sheets — patch op replay', () => {
         ];
         const batch: Op[] = [{ op: 'deleteSheet', id: 'sheet-1', path: [], value: sheets[0] }];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 
@@ -393,6 +393,9 @@ describe('document/sheets — patch op replay', () => {
                 id: 'sheet-1',
                 name: 'Sheet1',
                 order: 0,
+                // v2 never persists the dense matrix; row/column size the materialized one.
+                row: 2,
+                column: 1,
                 celldata: [],
                 data: [
                     [{ v: 'first', m: 'first', ct: { fa: 'General', t: 'g' } }],
@@ -410,7 +413,7 @@ describe('document/sheets — patch op replay', () => {
             },
         ];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 
@@ -452,7 +455,7 @@ describe('document/sheets — patch op replay', () => {
         ];
         const batch: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0, 'v'], value: 'after' }];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 
@@ -486,6 +489,8 @@ describe('document/sheets — patch op replay', () => {
                 id: 'sheet-1',
                 name: 'Sheet1',
                 order: 0,
+                row: 1,
+                column: 1,
                 data: [[{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }]],
                 config: {},
             },
@@ -500,7 +505,7 @@ describe('document/sheets — patch op replay', () => {
             },
         ];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 
@@ -688,7 +693,7 @@ describe('document/sheets — patch op replay', () => {
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
         const batch: Op[] = [{ op: 'replace', id: 'sheet-missing', path: ['celldata'], value: [] }];
         collab.doc.transact(() => {
-            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 

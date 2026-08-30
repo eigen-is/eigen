@@ -209,6 +209,16 @@ export function clipToUsedExtent(ctx: Context, selection: Selection, d: CellMatr
             break;
         }
     }
+    // A bordered blank cell is used content too: without this a header-click
+    // "no border" could never reach borders dragged past the data.
+    const borderInfo = getSheetConfig(ctx)?.borderInfo;
+    if (borderInfo) {
+        for (const key in borderInfo) {
+            const [r, c] = key.split('_').map(Number);
+            if (r > lastRow) lastRow = r;
+            if (c > lastColumn) lastColumn = c;
+        }
+    }
     return {
         ...selection,
         row: wholeRows ? [selection.row[0], lastRow] : selection.row,

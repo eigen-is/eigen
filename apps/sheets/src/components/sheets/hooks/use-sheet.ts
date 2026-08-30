@@ -5,14 +5,6 @@ import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 
-// selections is a per-client cursor — the ops path already drops it (filterPatch)
-// and the snapshot encoder never writes it. Reads still strip, to heal legacy
-// snapshots that already carry one (which showed phantom stats-bar values for an
-// invisible selection on open).
-function stripSelections(sheets: Sheet[]): Sheet[] {
-    return sheets.map(({ selections: _selections, ...sheet }) => sheet);
-}
-
 export function useSheet(
     ownerId: string,
     mountId: string,
@@ -21,6 +13,9 @@ export function useSheet(
 ) {
     const [initialData, setInitialData] = useState<Sheet[] | null>(null);
     const [snapshotVersion, setSnapshotVersion] = useState(0);
+    // True while the workbook shows the defaults fallback: the consumer renders it
+    // read-only and says so, instead of letting an hour of edits go nowhere.
+    const [loadFailed, setLoadFailed] = useState(false);
 
     const isLocalOpRef = useRef(false);
     const isLocalSnapshotRef = useRef(false);
@@ -100,11 +95,12 @@ export function useSheet(
                     // Replay any pending ops on top of the remote snapshot. When browser
                     // A flushes while B has unflushed local ops, B's edits survive Yjs
                     // merge and must be reapplied here or they're lost on next render.
-                    const initial = stripSelections(decodeSheetsSnapshot(snapshot));
+                    const initial = decodeSheetsSnapshot(snapshot);
                     const pending = opsArray.toArray() as Op[][];
                     const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
                     loadedRef.current = true;
                     latestDataRef.current = data;
+                    setLoadFailed(false);
                     setInitialData(data);
                     setSnapshotVersion((v) => v + 1);
                 } catch (e) {
@@ -137,7 +133,7 @@ export function useSheet(
             let loaded = true;
             if (snapshot) {
                 try {
-                    initial = stripSelections(decodeSheetsSnapshot(snapshot));
+                    initial = decodeSheetsSnapshot(snapshot);
                 } catch (e) {
                     loaded = false;
                     console.error('[sheet] Failed to parse initial snapshot, opening defaults without persistence:', e);
@@ -158,6 +154,7 @@ export function useSheet(
             }
             loadedRef.current = loaded;
             if (loaded) latestDataRef.current = data;
+            setLoadFailed(!loaded);
             setInitialData(data);
             readyForOpsRef.current = true;
         },
@@ -188,6 +185,7 @@ export function useSheet(
     return {
         initialData,
         snapshotVersion,
+        loadFailed,
         synced,
         handleOp,
         onDataChange,

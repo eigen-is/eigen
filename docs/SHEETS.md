@@ -68,6 +68,8 @@ current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, besi
   collections already exist, no writer needs to create one, so this cannot happen by accident; `src/test/state/rejected-writes.test.ts`
   is the table-driven gate that keeps it that way. Add a row to it when you add a writer.
 
+**`config.borderInfo` is a map of each cell's own sides, keyed `"r_c"` like `merge`.** Toolbar layouts are expanded per cell at write time (`applyBorder`, `state/modules/border.ts`); `border-none` and every carry tombstone delete the key; nothing is mirrored onto the neighbour across a shared edge (that would create the neighbour's key as one whole-object `add`, the first-write clobber above). Merges are a read-time filter over raw storage — `mergeEdgeSides` in `packages/lib/src/sheets/borders.ts` is the one predicate the canvas, xlsx and HTML export share — and only the canvas pass skips hidden rows and columns. Order carries nothing, so two clients bordering different cells converge (`src/test/state/modules/border-convergence.test.ts`); two clients bordering the *same* cell still do not, because each applies its own op optimistically — see [PROPOSAL_SHEETS_YJS_CONFIG.md](proposals/PROPOSAL_SHEETS_YJS_CONFIG.md).
+
 **Resize measures page coordinates.** Mousedown stores `e.pageX`/`e.pageY`; mouseup subtracts it. Mousedown and
 mouseup measure from different elements (the header vs the overlay container), so anything element-relative needs a
 fudge factor to bridge them — there used to be a hand-tuned `3` doing exactly that. No movement is a click, any
@@ -105,11 +107,7 @@ the op format and `replaySheetsOps` are untouched.
   flush) makes the decoder seed it from the `f` cells — which is exactly the signal
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
   uncomputed snapshot (recalc-failed import) decodes without a chain and exports recalc.
-- **Legacy**: a snapshot starting with `[` is v1 `Sheet[]` JSON and passes through
-  `JSON.parse` unchanged — every pre-v2 doc keeps opening. The one exception is `config.borderInfo`: the pre-N2 shapes (v1 arrays of cell entries, v2 tuples that interned `null` sides, v2 bare range objects) are coerced to the per-cell map on decode, keeping only non-null sides; toolbar (range) borders from before N2 are dropped. That coercion is the whole backwards-compatibility concession of N2 — nothing else reads an old border shape. (The FE read seam additionally
-  strips `selections` to heal v1 snapshots that baked a cursor in; the codec itself never
-  writes one.) Any other non-v2 input throws `Unknown sheets snapshot format` — corrupt
-  envelopes fail crisp instead of decoding a half-empty workbook.
+- Any input that is not a v2 envelope — a v1 `[`-snapshot, a corrupt envelope, a future tag — throws `Unknown sheets snapshot format`; the editor then opens read-only on defaults and never persists (see `use-sheet.ts` `loadedRef`). No legacy shape is read anywhere.
 - `readSheetsFromDoc` materializes the dense `data` matrix for every sheet after replay
   (`withMaterializedData`): v2 snapshots are celldata-only, but the renderers'
   conditional-format pass and the cross-sheet formula resolver read `data`. Accepted bound:
@@ -317,8 +315,7 @@ never opened in an editor, and crash/race divergence between formula text and ca
 `recalcSheets` therefore fires only when `sheetsNeedRecalc` sees a sheet with `f` cells but no populated
 `calcChain`. The chain itself is never persisted (§ Snapshot format v2): for v2 snapshots the decoder
 seeds it exactly when the envelope says `computed: true` (every editor flush, every recalc-successful
-import), while legacy v1 snapshots still carry whatever chain the editor baked in — either way the gate
-sees the same signal it always keyed off. Any recalc failure falls back to the replayed
+import), so the gate sees the same signal it always keyed off. Any recalc failure falls back to the replayed
 stale-but-valid `Sheet[]` — an export must never 500 because recalc hiccuped. The xlsx importer
 (`import/sheets/transform.ts`, in the same Worker) also runs `recalcSheets` once at import and encodes
 with `computed: true`, so the read gate never fires for imported docs (a recalc-failed import encodes

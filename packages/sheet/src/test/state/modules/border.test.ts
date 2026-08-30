@@ -167,6 +167,18 @@ describe('handleBorder bounds a header-click selection to the used extent', () =
         handleBorder(ctx, 'border-all');
         expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toEqual(['0_2', '1_2', '2_2', '3_2']);
     });
+
+    test('a bordered blank cell counts as used, so a header-click border-none can reach it', () => {
+        // Data in rows 0-2, borders dragged down to row 20: the column-header click must
+        // clip to the bordered extent, not the data extent, or those borders are stuck.
+        const ctx = sheetWithRows(500, 2);
+        ctx.selections = [{ row: [0, 20], column: [0, 1], row_focus: 0, column_focus: 0 }];
+        handleBorder(ctx, 'border-all');
+        expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toHaveLength(42);
+        ctx.selections = [{ row: [0, 499], column: [0, 1], row_focus: 0, column_focus: 0 }];
+        handleBorder(ctx, 'border-none');
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({});
+    });
 });
 
 describe('border-none erases', () => {
