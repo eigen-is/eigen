@@ -1,5 +1,5 @@
 // handleClearFormat has to drop the border entries inside the cleared rect from the sheet's
-// config — the renderer reads them back from there (border.ts getBorderInfoComputeRange),
+// config — the renderer reads them back from there (border.ts getBorderInfoCompute),
 // and anything left behind is re-emitted to peers as real data. Driving the handler through
 // produceWithPatches is what exposes a write that never lands.
 

@@ -82,9 +82,9 @@ load from the snapshot, then replay any pending ops that arrived during initial 
 `replaySheetsOps(sheets, opBatches)` from `@workspace/sheet/engine` — the same function the BE document
 reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
 
-**`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`), and
-`use-sheet.ts` strips it from the snapshot on both write and read (older docs may still carry one baked in;
-a persisted cursor resurfaced on open as phantom stats-bar values for a selection nobody made).
+**`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`) and the
+snapshot encoder strips it (`snapshot-codec.ts`; a persisted cursor once resurfaced on open as phantom
+stats-bar values for a selection nobody made).
 
 ## Snapshot format (v2)
 
@@ -107,7 +107,7 @@ the op format and `replaySheetsOps` are untouched.
   flush) makes the decoder seed it from the `f` cells — which is exactly the signal
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
   uncomputed snapshot (recalc-failed import) decodes without a chain and exports recalc.
-- Any input that is not a v2 envelope — a v1 `[`-snapshot, a corrupt envelope, a future tag — throws `Unknown sheets snapshot format`; the editor then opens read-only on defaults and never persists (see `use-sheet.ts` `loadedRef`). No legacy shape is read anywhere.
+- Any input that is not a v2 envelope — a v1 `[`-snapshot, a corrupt envelope, a future tag — throws `Unknown sheets snapshot format`, as does a `borderCells` entry that is not a `[r, c, idx]` tuple (the pre-N2 toolbar-range shape); the editor then opens read-only on defaults and never persists (see `use-sheet.ts` `loadedRef`). A pre-N2 v2 snapshot whose borders are all cell entries decodes benignly — those were already `[r, c, idx]` tuples, and decode drops their obsolete `null` sides.
 - `readSheetsFromDoc` materializes the dense `data` matrix for every sheet after replay
   (`withMaterializedData`): v2 snapshots are celldata-only, but the renderers'
   conditional-format pass and the cross-sheet formula resolver read `data`. Accepted bound:
