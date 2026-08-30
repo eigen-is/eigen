@@ -38,6 +38,8 @@ B applies own (red),  receives A's → B ends blue
 
 The Y.Array holds `[A-batch, B-batch]` on both clients (say), so a fresh joiner replays and ends **red**. Client A also shows red. Client B shows blue, forever, until someone edits the cell again. The same shape holds for a cell value: A types `1`, B types `2` in the same cell at the same moment; each client shows the other's number.
 
+The same family, smaller: `conditionalFormatRules` and `alternateFormatRules` are arrays whose order is genuine priority. Two clients appending a rule at the same moment each insert the peer's rule before their own, so the two clients can disagree about priority order — visible only where rules overlap. Design A's slot-conflict rule covers this too (the key is the array itself); a reshape would be wrong there, order is the data.
+
 Frequency: two people bordering the same cell at the same moment is rare. Two people typing in the same cell, or one person's stale tab and their fresh tab, is not. This is the ordinary "last write wins, and both sides agree who was last" property every collaborative editor has and sheets does not.
 
 ### What "Yjs structures for config" would and would not fix

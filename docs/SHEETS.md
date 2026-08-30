@@ -115,6 +115,22 @@ the op format and `replaySheetsOps` are untouched.
   preview/extract read allocate a huge dense grid — bounded by the one-shot Worker's
   deadline/death, same class as the editor's own `initSheetData`.
 
+## Where each cell-bound property lives
+
+Two storage patterns, deliberately. Everything that IS the cell — value, formula, number format, bg/font color, bold/italic, rotation, rich-text runs — lives on the `Cell` object in the matrix and travels with it: overwrite the cell and you overwrite all of it, one op. Everything that is bound to the grid *position* rather than the cell's content lives in an `"r_c"`-keyed map beside the matrix, with its own carry rules:
+
+| Property | Home | Why not on the cell |
+|---|---|---|
+| Borders | `config.borderInfo` | A border survives content deletion, and a cell op replaces the whole `Cell` — border-on-cell would make "A types a value, B draws a border" a whole-cell clobber. The side map keeps the two edits on different keys, which is what makes them converge (§ Yjs Sync) |
+| Merges | `config.merge` | Spans cells by definition |
+| Data validation | `sheet.dataVerification` | Rule outlives the value it validates |
+| Hyperlinks | `sheet.hyperlink` | Link outlives edits to the display text |
+| Row/col geometry | `config.rowlen` / `columnlen` / `rowhidden` / `colhidden` / `customHeight` / `customWidth` | Axis-keyed, not cell-keyed |
+
+Since N2 (2026-08-30) every `"r_c"` map is the same shape and shares the same machinery: `parseCellKey` (`packages/lib/src/sheets/borders.ts`) is the one key parser, `shiftCellKeyedForInsert/Delete` (`engine/rowcol.ts`) the one row/column re-keyer (borderInfo shifts in the engine with the other config collections; dataVerification and hyperlink through the same helper state-side), and `normalizeSheetConfig` materializes every config collection on every base. **`borderInfo` was the one exception until N2** — an append-only command log replayed at render time, whose order was semantic and could not converge; [SHEETS-TODO.md § N2](SHEETS-TODO.md) records the reshape.
+
+Two arrays remain, on purpose: `conditionalFormatRules` and `alternateFormatRules` are ordered because order IS the rule priority (Excel's model, exported as explicit xlsx priorities). They share a much smaller cousin of the old border defect — two clients appending a rule at the same moment can disagree about priority order, visible only where rules overlap — which belongs to the same same-slot family as concurrent same-cell edits; see [PROPOSAL_SHEETS_YJS_CONFIG.md](proposals/PROPOSAL_SHEETS_YJS_CONFIG.md).
+
 ## Mount-time Bootstrap
 
 On first mount, the Workbook (`packages/sheet/src/components/Workbook/index.tsx`) reconciles the
