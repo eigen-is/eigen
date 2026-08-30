@@ -541,17 +541,22 @@ export function arrowheadGeometry(
 // bounds, and the renderer so the three agree.
 export function arrowLabelBox(el: VectorArrowElement): { center: Point; width: number; height: number } | null {
     if (el.text === '') return null;
-    const points = parsePoints(el.points);
-    if (points.length < 2) return null;
+    const center = arrowLabelCenter(el);
+    if (!center) return null;
     const lines = el.text.replace(/\r\n?/g, '\n').split('\n').length;
     return {
-        center: labelCenter(points),
+        center,
         width: el.labelWidth,
         height: lines * getLineHeightPx(el.fontFamily, el.fontSize),
     };
 }
 
-function labelCenter(points: Point[]): Point {
+// The label anchor in the arrow's local frame: the polyline's index-midpoint (odd → the middle vertex,
+// even → the middle segment's midpoint — scout §5). null for a degenerate arrow (< 2 points). Text-free
+// so the editor can center an empty label on the same anchor a committed one would render at.
+export function arrowLabelCenter(el: VectorArrowElement): Point | null {
+    const points = parsePoints(el.points);
+    if (points.length < 2) return null;
     const n = points.length;
     if (n % 2 === 1) return points[(n - 1) / 2];
     const i = n / 2;

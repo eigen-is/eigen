@@ -8,10 +8,10 @@
 
 import {
     type Box,
+    DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_FONT_FAMILY,
-    DEFAULT_FONT_SIZE,
     DEFAULT_LINEAR_ROUNDNESS,
+    DEFAULT_TEXT_PROPS,
     linearLocalToScene,
     normalizeLinear,
     type Point,
@@ -76,14 +76,12 @@ function arrowElement(origin: Point, points: Point[], seed: number): VectorArrow
     return {
         ...linearBase(origin, points, seed),
         type: 'arrow',
-        startArrowhead: 'none',
-        endArrowhead: 'arrow',
-        startBinding: '',
-        endBinding: '',
-        text: '',
-        fontSize: DEFAULT_FONT_SIZE,
-        fontFamily: DEFAULT_FONT_FAMILY,
-        labelWidth: 0,
+        ...DEFAULT_ARROW_PROPS,
+        // The label fields the reader reaches out of DEFAULT_TEXT_PROPS (never its textAlign, which the
+        // arrow model has no field for) — so the provisional can't drift from read-vector's defaults.
+        text: DEFAULT_TEXT_PROPS.text,
+        fontSize: DEFAULT_TEXT_PROPS.fontSize,
+        fontFamily: DEFAULT_TEXT_PROPS.fontFamily,
     };
 }
 
@@ -154,8 +152,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const eraserRef = useRef<{ marked: Set<string>; last: Point } | null>(null);
     const pointerIdRef = useRef<number | null>(null);
     const seedRef = useRef(0);
-    // Ctrl/Cmd held while dragging an arrow endpoint suppresses binding (R3.8). Tracked live off any key
-    // event so both the creation drag and a point-handle drag (its own listeners) read one source.
+    // Ctrl/Cmd held while dragging an arrow endpoint suppresses binding (R3.8). Tracked live off key
+    // events for the EVENT-LESS paths — the point-handle preview/commit callbacks and the pointer-less
+    // commitLine finish, which have no pointer event to read the modifier from. The creation drag reads
+    // it straight off its pointer event (a stuck ref after a missed keyup can't affect that path).
     const suppressRef = useRef(false);
 
     const [activeKind, setActiveKind] = useState<'freedraw' | 'line' | 'eraser' | null>(null);
@@ -384,9 +384,12 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             if (draft.mode === 'pending' && dist(scene, draft.origin) >= LINE_DRAG_SCREEN / zoom)
                 lineMovedRef.current = true;
             // The moving endpoint (origin + trailing) drives the binding highlight for an arrow draft.
+            // Read Ctrl/Cmd off the live pointer event here — a keyup missed during a window blur can
+            // leave suppressRef stuck, and this path always has the event; the event-less commit paths
+            // still read suppressRef.
             if (draft.type === 'arrow') {
                 const tip = { x: draft.origin.x + draft.trailing.x, y: draft.origin.y + draft.trailing.y };
-                setBindCandidate(bindingCandidate(ordered, tip, zoom, suppressRef.current));
+                setBindCandidate(bindingCandidate(ordered, tip, zoom, e.ctrlKey || e.metaKey));
             }
             linePreview(draft);
             return true;

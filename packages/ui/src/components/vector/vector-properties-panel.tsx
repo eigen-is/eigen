@@ -129,6 +129,9 @@ export function VectorPropertiesPanel({
     // Arrowheads apply to arrows only (both ends selectable per selection).
     const arrowEls = selectedElements.filter((el): el is VectorArrowElement => el.type === 'arrow');
     const allArrow = has && arrowEls.length === selectedElements.length;
+    // A Text section (font + size only — the label is always centered, its colour comes from Stroke)
+    // shows for arrows once every one carries a label (R3.12); an empty label has no font to tune.
+    const allArrowLabeled = allArrow && arrowEls.every((el) => el.text !== '');
 
     // Same fields on every selected element — one transact, one undo step.
     const applyToAll = (fields: VectorElementPatch) => {
@@ -176,6 +179,26 @@ export function VectorPropertiesPanel({
             const fontFamily = patch.fontFamily ?? el.fontFamily;
             const { width, height } = measureVectorText(el.text, fontSize, fontFamily);
             return { id: el.id, fields: { ...patch, width, height } };
+        });
+        undoManager?.stopCapturing();
+        updateElements(patches);
+        undoManager?.stopCapturing();
+    };
+
+    // The arrow-label mirror of applyTextFont (R3.6): a font family / size change re-measures each
+    // arrow's own label and writes `labelWidth` (the sole width source, height derives from the line
+    // count) in the SAME transact as the font — after the face loads, or measureText reads fallback
+    // metrics. Per-element widths (each label differs) in one undo step.
+    const applyArrowFont = async (patch: { fontSize?: number; fontFamily?: string }) => {
+        if (!arrowEls.length) return;
+        await Promise.all(
+            arrowEls.map((el) => loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily)),
+        );
+        const patches = arrowEls.map((el) => {
+            const fontSize = patch.fontSize ?? el.fontSize;
+            const fontFamily = patch.fontFamily ?? el.fontFamily;
+            const { width } = measureVectorText(el.text, fontSize, fontFamily);
+            return { id: el.id, fields: { ...patch, labelWidth: width } };
         });
         undoManager?.stopCapturing();
         updateElements(patches);
@@ -242,6 +265,8 @@ export function VectorPropertiesPanel({
     const textAlign = getMergedValue(textEls, (el) => el.textAlign);
     const startArrowhead = getMergedValue(arrowEls, (el) => el.startArrowhead);
     const endArrowhead = getMergedValue(arrowEls, (el) => el.endArrowhead);
+    const arrowFontFamily = getMergedValue(arrowEls, (el) => el.fontFamily);
+    const arrowFontSize = getMergedValue(arrowEls, (el) => el.fontSize);
 
     const title =
         selectedElements.length === 1 ? TYPE_LABELS[selectedElements[0].type] : `${selectedElements.length} elements`;
@@ -295,6 +320,35 @@ export function VectorPropertiesPanel({
                         <AlignmentPicker
                             value={isMixed(textAlign) ? undefined : textAlign}
                             onChange={(a) => applyToAll({ textAlign: a })}
+                        />
+                    </PropertyRow>
+                </PropertySection>
+            )}
+
+            {allArrowLabeled && (
+                <PropertySection title="Text">
+                    <PropertyRow label="Font">
+                        <FontPicker
+                            value={
+                                isMixed(arrowFontFamily)
+                                    ? DEFAULT_FONT_FAMILY
+                                    : (arrowFontFamily ?? DEFAULT_FONT_FAMILY)
+                            }
+                            onChange={(f) => {
+                                applyArrowFont({ fontFamily: f }).catch(() => {});
+                            }}
+                            className="h-7 w-full text-xs"
+                        />
+                    </PropertyRow>
+                    <PropertyRow label="Size">
+                        <MergedNumberInput
+                            value={arrowFontSize}
+                            onChange={(v) => {
+                                applyArrowFont({ fontSize: v }).catch(() => {});
+                            }}
+                            min={8}
+                            max={200}
+                            step={1}
                         />
                     </PropertyRow>
                 </PropertySection>

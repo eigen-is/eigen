@@ -16,7 +16,6 @@ import {
     type Bounds,
     type Box,
     computeSnapTargets,
-    DEFAULT_ELEMENT_PROPS,
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
     ELEMENT_FIELDS,
@@ -35,6 +34,7 @@ import {
     type SnapTargets,
     snapBoxToTargets,
     type TextAlign,
+    type VectorArrowElement,
     type VectorElement,
     type VectorMeta,
     type VectorTextElement,
@@ -59,6 +59,7 @@ import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-do
 import { applyZOrder, deleteSelection, duplicateSelection, useVectorKeyboard } from './hooks/use-vector-keyboard';
 import type { PublishCursor } from './hooks/use-vector-presence';
 import { useViewport } from './hooks/use-viewport';
+import { arrowLabelEditing, type EditingState, newTextEditing, textEditing } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import {
@@ -96,24 +97,6 @@ const IMAGE_CASCADE_OFFSET = 20;
 // A bound arrow dragged alone unbinds only past this SCREEN distance, so a click-select never detaches it
 // (Excalidraw's DRAGGING_THRESHOLD, R3.10).
 const ARROW_UNBIND_SCREEN = 10;
-
-// An open text-editing session. A new element stays LOCAL (id never written) until its first
-// commit — an empty discard writes nothing; re-editing an existing element commits one update, or
-// deletes it when committed empty.
-type EditingState = {
-    id: string;
-    isNew: boolean;
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    angle: number;
-    text: string;
-    fontSize: number;
-    fontFamily: string;
-    textAlign: TextAlign;
-    strokeColor: string;
-};
 
 // Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
 // a Yjs tick materializes fresh objects through readVectorFromDoc, so those need the field compare —
@@ -450,44 +433,23 @@ export function VectorCanvas({
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [frozenRef, setTool, setSelectedIds]);
 
-    // Open the overlay on a fresh, still-LOCAL text element at the scene point (text tool click on
-    // empty canvas / on a non-text hit).
+    // Open the overlay on a new text element, an existing one, or an arrow's label. The session shapes
+    // live in the pure text-editing module; the canvas only picks the selection and opens.
     const openNewText = (x: number, y: number) => {
         setSelectedIds([]);
-        setEditing({
-            id: '__new_text__',
-            isNew: true,
-            x,
-            y,
-            width: 0,
-            height: 0,
-            angle: 0,
-            text: '',
-            fontSize: DEFAULT_FONT_SIZE,
-            fontFamily: DEFAULT_FONT_FAMILY,
-            textAlign: 'left',
-            strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
-        });
+        setEditing(newTextEditing(x, y));
     };
 
-    // Open the overlay on an existing text element (text-tool click that hits it, or select-tool
-    // double-click) — never stacks a fresh empty on top.
     const openEditExisting = (el: VectorTextElement) => {
         setSelectedIds([el.id]);
-        setEditing({
-            id: el.id,
-            isNew: false,
-            x: el.x,
-            y: el.y,
-            width: el.width,
-            height: el.height,
-            angle: el.angle,
-            text: el.text,
-            fontSize: el.fontSize,
-            fontFamily: el.fontFamily,
-            textAlign: el.textAlign,
-            strokeColor: el.strokeColor,
-        });
+        setEditing(textEditing(el));
+    };
+
+    const openEditArrowLabel = (el: VectorArrowElement) => {
+        const ed = arrowLabelEditing(el);
+        if (!ed) return; // a degenerate arrow (< 2 points) has no label anchor
+        setSelectedIds([el.id]);
+        setEditing(ed);
     };
 
     // The overlay awaits loadVectorFont on open, so commit-time measureVectorText is normally exact.
@@ -572,9 +534,18 @@ export function VectorCanvas({
             loadVectorFont(fontSize, fontFamily)
                 .then(() => {
                     const el = elementsRef.current.find((x) => x.id === id);
-                    if (el?.type !== 'text') return; // deleted meanwhile — nothing to heal
+                    if (el?.type !== 'text' && el?.type !== 'arrow') return; // deleted meanwhile — nothing to heal
                     if (el.text !== text || el.fontSize !== fontSize || el.fontFamily !== fontFamily) return;
                     const healed = measureVectorText(text, fontSize, fontFamily);
+                    // A text element stores width + height; an arrow's label height derives from its line
+                    // count, so only labelWidth is measured (the sole width source, like text elements' width).
+                    if (el.type === 'arrow') {
+                        if (healed.width === el.labelWidth) return;
+                        undoManager?.stopCapturing();
+                        updateElement(id, { labelWidth: healed.width });
+                        undoManager?.stopCapturing();
+                        return;
+                    }
                     if (healed.width === el.width && healed.height === el.height) return;
                     undoManager?.stopCapturing();
                     updateElement(id, { width: healed.width, height: healed.height });
@@ -596,6 +567,22 @@ export function VectorCanvas({
             setEditing(null);
             if (!ed) return;
             const empty = text.trim().length === 0;
+            if (ed.kind === 'arrow') {
+                // The arrow already exists — write the label in place: `text` + measured `labelWidth`
+                // (height derives from the line count, R3.6) in one sealed transact. An empty label
+                // clears both to ''/0 and never deletes the arrow; a still-empty label is a no-op.
+                // updateElement no-ops on a Yjs map the arrow's remote deletion already removed.
+                if (!(ed.isNew && empty)) {
+                    const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
+                    undoManager?.stopCapturing();
+                    updateElement(ed.id, { text: empty ? '' : text, labelWidth });
+                    undoManager?.stopCapturing();
+                    if (!empty) healTextDims(ed.id, text, ed.fontSize, ed.fontFamily);
+                }
+                setSelectedIds([ed.id]);
+                setTool('select');
+                return;
+            }
             if (ed.isNew) {
                 if (!empty) {
                     const { width, height } = measureVectorText(text, ed.fontSize, ed.fontFamily);
@@ -1042,6 +1029,7 @@ export function VectorCanvas({
         const hit = hitTestTopmost(ordered, p, zoom);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'text') openEditExisting(hitEl);
+        else if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
     };
 
     // Right-click on an element opens the object menu (empty canvas keeps the browser default). Like
@@ -1424,13 +1412,25 @@ export function VectorCanvas({
         >
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
                 <g transform={groupTransform}>
-                    {ordered.map((el) =>
-                        // The element under edit is drawn only by the overlay textarea (WYSIWYG); a line
-                        // being vertex-dragged is drawn by the drawing preview below instead.
-                        editing?.id === el.id || drawing.hiddenId === el.id ? null : (
-                            <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} />
-                        ),
-                    )}
+                    {ordered.map((el) => {
+                        // A line being vertex-dragged is drawn by the drawing preview below instead.
+                        if (drawing.hiddenId === el.id) return null;
+                        // The element under edit is drawn only by the overlay textarea (WYSIWYG). An
+                        // arrow keeps its shaft/heads and hides just the label (render text='').
+                        if (editing?.id === el.id) {
+                            if (editing.kind === 'arrow' && el.type === 'arrow') {
+                                return (
+                                    <ElementNode
+                                        key={el.id}
+                                        el={renderEl({ ...el, text: '' })}
+                                        resolveMedia={resolveMediaUrl}
+                                    />
+                                );
+                            }
+                            return null;
+                        }
+                        return <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} />;
+                    })}
                     {creating && <ElementNode el={creatingElement(creating)} resolveMedia={resolveMediaUrl} />}
                     {/* Live freehand/line draft, or a point-edit reshape — the SAME elementToSvg path. */}
                     {drawing.previewElement && (
