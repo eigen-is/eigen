@@ -87,12 +87,18 @@ export function drawCellBorders(pass: RenderPass) {
         renderCtx.restore();
     };
 
-    const borderInfoCompute = getBorderInfoCompute(sheetCtx, undefined, [rowStart, rowEnd, colStart, colEnd]);
+    const borderInfoCompute = getBorderInfoCompute(sheetCtx, sheetCtx.currentSheetId, [
+        rowStart,
+        rowEnd,
+        colStart,
+        colEnd,
+    ]);
 
     for (const [x, bdInfo] of Object.entries(borderInfoCompute)) {
         const sepIdx = x.indexOf('_');
         const bdRow = Number(x.substring(0, sepIdx));
         const bdCol = Number(x.substring(sepIdx + 1));
+        if (cfg?.rowhidden?.[bdRow] != null || cfg?.colhidden?.[bdCol] != null) continue;
 
         const startY = rowStartY(sheetCtx.visibledatarow, bdRow, scrollHeight);
         const startX = colStartX(sheetCtx.visibledatacolumn, bdCol, scrollWidth);

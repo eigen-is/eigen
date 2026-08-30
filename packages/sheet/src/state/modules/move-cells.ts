@@ -246,7 +246,12 @@ export function onCellsMoveEnd(
     cfg.merge ??= {};
     cfg.borderInfo ??= {};
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
+    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId, [
+        last.row[0],
+        last.row[1],
+        last.column[0],
+        last.column[1],
+    ]);
 
     const hyperLinkList: Record<
         string,

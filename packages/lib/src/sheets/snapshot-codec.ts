@@ -6,6 +6,7 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
+import { cloneSides } from './borders';
 import type { Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
 
 const FORMAT = 'eigensheets/2';
@@ -217,18 +218,6 @@ function materializeStyle(style: StyleTuple): Record<string, unknown> {
         cell[key] = typeof value === 'object' && value !== null ? cloneJsonValue(value) : value;
     }
     return cell;
-}
-
-const BORDER_SIDE_KEYS = ['l', 'r', 't', 'b', 's'] as const;
-
-// Cells sharing a dictionary entry must not share side-object identity (see materializeStyle).
-function cloneSides(sides: CellBorderSides): CellBorderSides {
-    const out: CellBorderSides = {};
-    for (const key of BORDER_SIDE_KEYS) {
-        const side = sides[key];
-        if (side) out[key] = { ...side };
-    }
-    return out;
 }
 
 function cloneJsonValue(value: unknown): unknown {

@@ -1388,15 +1388,11 @@ function convertBorder(cell: XlsxCell, theme: ThemePalette): CellBorderSides | n
     const border = cell.style?.border;
     if (!border) return null;
 
-    const sides: CellBorderSides = {};
     const l = convertBorderSide(border.left, theme);
     const r = convertBorderSide(border.right, theme);
     const t = convertBorderSide(border.top, theme);
     const b = convertBorderSide(border.bottom, theme);
-    if (l) sides.l = l;
-    if (r) sides.r = r;
-    if (t) sides.t = t;
-    if (b) sides.b = b;
+    const sides: CellBorderSides = { ...(l && { l }), ...(r && { r }), ...(t && { t }), ...(b && { b }) };
     return Object.keys(sides).length > 0 ? sides : null;
 }
 

@@ -1,5 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
+    BORDER_SIDE_CSS,
     type CellBorderSides,
     type ConditionalFormatRule,
     type DataVerificationRule,
@@ -31,10 +32,10 @@ export const selectionCache = {
 
 function cellBorderCss(border: CellBorderSides): string {
     let css = '';
-    if (border.l) css += `border-left:${getHtmlBorderStyle(border.l.style, border.l.color)}`;
-    if (border.r) css += `border-right:${getHtmlBorderStyle(border.r.style, border.r.color)}`;
-    if (border.b) css += `border-bottom:${getHtmlBorderStyle(border.b.style, border.b.color)}`;
-    if (border.t) css += `border-top:${getHtmlBorderStyle(border.t.style, border.t.color)}`;
+    for (const [key, name] of BORDER_SIDE_CSS) {
+        const side = border[key];
+        if (side) css += `border-${name}:${getHtmlBorderStyle(side.style, side.color)}`;
+    }
     return css;
 }
 
@@ -291,7 +292,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     cfg.merge ??= {};
     cfg.borderInfo ??= {};
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
+    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex, [c_r1, c_r2, c_c1, c_c2]);
     const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
     let dataVerification: Record<string, DataVerificationRule> | undefined;
 
@@ -1236,6 +1237,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
     // Set-based dedupe: includes() per cell turns large copies quadratic.
     const rowIndexSet = new Set<number>();
     const colIndexSet = new Set<number>();
+    const rect: [number, number, number, number] = [Infinity, -Infinity, Infinity, -Infinity];
 
     for (let s = 0; s < (ranges?.length ?? 0); s += 1) {
         const range = ranges![s];
@@ -1244,6 +1246,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         const r2 = range.row[1];
         const c1 = range.column[0];
         const c2 = range.column[1];
+        rect[0] = Math.min(rect[0], r1);
+        rect[1] = Math.max(rect[1], r2);
+        rect[2] = Math.min(rect[2], c1);
+        rect[3] = Math.max(rect[3], c2);
 
         for (let copyR = r1; copyR <= r2; copyR += 1) {
             if (!rowIndexSet.has(copyR)) {
@@ -1261,7 +1267,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
     }
 
     // A td spans its merge, so the perimeter is read off the master.
-    const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge);
+    const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
 
     let cpdata = '';
     const d = sheet.data;

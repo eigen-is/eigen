@@ -79,6 +79,29 @@ describe('replaySheetsOps', () => {
         expect(result[0].data![1][0]?.v).toBe('a');
     });
 
+    test('insertRowCol shifts borderInfo with the other config collections, no whole-config op needed', () => {
+        const side = { style: 1, color: '#000' };
+        const sheet: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            data: [[null], [null]],
+            config: { borderInfo: { '0_0': { t: side }, '1_0': { b: side } } },
+        };
+        const ops: Op[][] = [
+            [
+                {
+                    op: 'insertRowCol',
+                    id: 's1',
+                    path: [],
+                    value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+                },
+            ],
+        ];
+        const result = replaySheetsOps([sheet], ops);
+        expect(result[0].config?.borderInfo).toEqual({ '0_0': { t: side }, '1_0': { t: side }, '2_0': { b: side } });
+    });
+
     test('deleteRowCol shrinks the target sheet', () => {
         const sheet: Sheet = {
             id: 's1',

@@ -21,6 +21,7 @@ import { clientAfterExchange, emitOps } from '../factories/collab';
 import { contextFactory } from '../factories/context';
 
 const sharedDocument = () => contextFactory({ config: { borderInfo: {} } }) as Context;
+const computed = (ctx: Context) => getBorderInfoCompute(ctx, ctx.currentSheetId, [0, 3, 0, 3]);
 
 const borderCell = (row: number, column: number, color: string) => (ctx: Context) => {
     ctx.selections = [{ row: [row, row], column: [column, column] }];
@@ -44,14 +45,14 @@ describe('two clients bordering different cells', () => {
         const onA = clientAfterExchange(base, a, emitOps(base, b));
         const onB = clientAfterExchange(base, b, emitOps(base, a));
 
-        expect(getBorderInfoCompute(onA)).toEqual(getBorderInfoCompute(onB));
+        expect(computed(onA)).toEqual(computed(onB));
     });
 
     test("neither client loses the other's border", () => {
         const base = sharedDocument();
-        const computed = getBorderInfoCompute(clientAfterExchange(base, a, emitOps(base, b)));
+        const map = computed(clientAfterExchange(base, a, emitOps(base, b)));
 
-        expect(computed['1_1']).toBeDefined();
-        expect(computed['2_2']).toBeDefined();
+        expect(map['1_1']).toBeDefined();
+        expect(map['2_2']).toBeDefined();
     });
 });

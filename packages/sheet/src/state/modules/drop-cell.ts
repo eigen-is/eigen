@@ -1896,7 +1896,6 @@ export function updateDropCell(ctx: Context) {
 
     const cfg = (file.config ??= {});
     cfg.borderInfo ??= {};
-    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
     // Live map, not a clone: the copy and apply ranges are disjoint, so reading a source
     // rule while writing the filled ones is safe — and the write has to land on the sheet
     // to sync and undo (Excel and Google both carry validation on a fill).
@@ -1913,6 +1912,12 @@ export function updateDropCell(ctx: Context) {
     const copy_str_c = copyRange.column[0];
     const copy_end_c = copyRange.column[1];
     const copyData = getCopyData(d, copy_str_r, copy_end_r, copy_str_c, copy_end_c, direction);
+    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId, [
+        copy_str_r,
+        copy_end_r,
+        copy_str_c,
+        copy_end_c,
+    ]);
 
     const csLen =
         direction === 'down' || direction === 'up' ? copy_end_r - copy_str_r + 1 : copy_end_c - copy_str_c + 1;

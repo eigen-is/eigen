@@ -1,4 +1,4 @@
-import type { MergeCell, Sheet } from '@workspace/lib/sheets';
+import { cloneSides, type MergeCell, type Sheet } from '@workspace/lib/sheets';
 import { functionStrChange } from './formula-shift';
 import type { ExtendedSheetConfig } from './types';
 
@@ -160,6 +160,61 @@ function shiftMergeForDelete(
     return merge_new;
 }
 
+// Re-keys an "r_c" map for an insert: the row/column at `index` is the template, copied by `clone`
+// onto every inserted one when given, and shifts along only for a lefttop insert.
+export function shiftCellKeyedForInsert<T>(
+    map: Record<string, T> | undefined,
+    axis: 'row' | 'column',
+    index: number,
+    count: number,
+    direction: 'lefttop' | 'rightbottom',
+    clone?: (item: T) => T,
+): Record<string, T> {
+    const shifted: Record<string, T> = {};
+    for (const key in map) {
+        const item = map[key];
+        const sep = key.indexOf('_');
+        let r = Number(key.substring(0, sep));
+        let c = Number(key.substring(sep + 1));
+        const at = axis === 'row' ? r : c;
+        if (at === index && clone) {
+            for (let n = 0; n < count; n += 1) {
+                const to = direction === 'rightbottom' ? index + n + 1 : index + n;
+                shifted[axis === 'row' ? `${to}_${c}` : `${r}_${to}`] = clone(item);
+            }
+        }
+        if (direction === 'lefttop' ? at >= index : at > index) {
+            if (axis === 'row') r += count;
+            else c += count;
+        }
+        shifted[`${r}_${c}`] = item;
+    }
+    return shifted;
+}
+
+// Re-keys an "r_c" map for a delete: entries in [start, end] drop, the ones past it shift up.
+export function shiftCellKeyedForDelete<T>(
+    map: Record<string, T> | undefined,
+    axis: 'row' | 'column',
+    start: number,
+    end: number,
+): Record<string, T> {
+    const shifted: Record<string, T> = {};
+    for (const key in map) {
+        const sep = key.indexOf('_');
+        let r = Number(key.substring(0, sep));
+        let c = Number(key.substring(sep + 1));
+        const at = axis === 'row' ? r : c;
+        if (at >= start && at <= end) continue;
+        if (at > end) {
+            if (axis === 'row') r -= end - start + 1;
+            else c -= end - start + 1;
+        }
+        shifted[`${r}_${c}`] = map[key];
+    }
+    return shifted;
+}
+
 function shiftFormulasAcrossSheets<S extends Sheet>(
     sheets: S[],
     type: 'row' | 'column',
@@ -237,6 +292,7 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
     const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
 
     newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
+    newCfg.borderInfo = shiftCellKeyedForInsert(cfg.borderInfo, op.type, op.index, count, op.direction, cloneSides);
 
     if (op.type === 'row') {
         if (cfg.rowhidden != null)
@@ -347,6 +403,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
     const removeCount = op.end - op.start + 1;
 
     newCfg.merge = shiftMergeForDelete(cfg, op.type, op.start, removeCount);
+    newCfg.borderInfo = shiftCellKeyedForDelete(cfg.borderInfo, op.type, op.start, op.end);
 
     if (op.type === 'row') {
         if (cfg.rowhidden != null) newCfg.rowhidden = shiftKeyedMapForDelete(cfg.rowhidden, op.start, op.end);

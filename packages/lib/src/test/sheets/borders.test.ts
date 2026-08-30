@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mergedBorderSides, mergeEdgeSides } from '../../sheets/borders';
+import { cloneSides, mergedBorderSides, mergeEdgeSides } from '../../sheets/borders';
 
 const SIDE = { style: 1, color: '#000' };
 const RED = { style: 8, color: '#f00' };
@@ -30,6 +30,25 @@ describe('mergedBorderSides', () => {
     test('keeps the master diagonal', () => {
         const merge = { '1_1': { r: 1, c: 1, rs: 1, cs: 2 } };
         expect(mergedBorderSides({ '1_1': { s: SIDE } }, merge)).toEqual({ '1_1': { s: SIDE } });
+    });
+
+    test('a range visits only its cells, plus every constituent of a merge crossing it', () => {
+        const merge = { '2_2': { r: 2, c: 2, rs: 2, cs: 2 } };
+        const borderInfo = { '0_0': { l: SIDE }, '9_9': { l: SIDE }, '3_3': { r: RED, b: RED } };
+        expect(mergedBorderSides(borderInfo, merge, [0, 2, 0, 2])).toEqual({
+            '0_0': { l: SIDE },
+            '2_2': { r: RED, b: RED },
+        });
+    });
+});
+
+describe('cloneSides', () => {
+    test('copies each present side into a fresh object', () => {
+        const sides = { l: SIDE, s: RED };
+        const copy = cloneSides(sides);
+        expect(copy).toEqual(sides);
+        expect(copy.l).not.toBe(sides.l);
+        expect('t' in copy).toBe(false);
     });
 });
 

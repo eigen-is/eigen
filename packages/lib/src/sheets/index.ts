@@ -1,3 +1,3 @@
-export { mergedBorderSides, mergeEdgeSides } from './borders';
+export { BORDER_SIDE_CSS, cloneSides, mergedBorderSides, mergeEdgeSides } from './borders';
 export { decodeSheetsSnapshot, encodeSheetsSnapshot } from './snapshot-codec';
 export * from './types';

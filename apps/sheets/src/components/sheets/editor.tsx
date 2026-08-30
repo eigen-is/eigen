@@ -27,8 +27,7 @@ import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-pr
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
 import { useSheetSearchController } from './hooks/use-search-controller';
@@ -87,12 +86,6 @@ function SheetEditorInner({
         path.id,
         workbookRef,
     );
-    useEffect(() => {
-        if (!loadFailed) return;
-        toast.error('This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.', {
-            duration: Infinity,
-        });
-    }, [loadFailed]);
 
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);

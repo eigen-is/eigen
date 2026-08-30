@@ -997,7 +997,7 @@ export function handleClearFormat(ctx: Context) {
                 flowdata[r][c] = pick(cell, 'v', 'm', 'mc', 'f', 'ct');
             }
         }
-        if (cfg.borderInfo) clearSides(cfg.borderInfo, rowSt, rowEd, colSt, colEd);
+        clearSides(cfg.borderInfo, rowSt, rowEd, colSt, colEd);
     }
 }
 
@@ -1016,13 +1016,10 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
 
-    const d = getFlowdata(ctx);
-    if (!d) return;
-
     const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
     const style = borderStyle == null || borderStyle === '' ? 1 : Number(borderStyle);
     // Four sides per cell: a header click over 130k rows must not become half a million patches.
-    const ranges = (ctx.selections ?? []).map((selection) => clipToUsedExtent(ctx, selection, d));
+    const ranges = clipToUsedExtent(ctx, ctx.selections ?? []);
     applyBorder((ctx.sheets[index].config ??= {}), type, { style, color }, ranges);
 }
 

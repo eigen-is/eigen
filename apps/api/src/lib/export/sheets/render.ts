@@ -1,5 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
+    BORDER_SIDE_CSS,
     type BorderSide,
     type Cell,
     type CellBorderSides,
@@ -556,10 +557,10 @@ function buildCellStyle(
 
     if (borders) {
         // CSS has no diagonal border, so the slash side `s` is not rendered.
-        if (borders.l) parts.push(`border-left:${borderSideToCSS(borders.l)}`);
-        if (borders.r) parts.push(`border-right:${borderSideToCSS(borders.r)}`);
-        if (borders.t) parts.push(`border-top:${borderSideToCSS(borders.t)}`);
-        if (borders.b) parts.push(`border-bottom:${borderSideToCSS(borders.b)}`);
+        for (const [key, name] of BORDER_SIDE_CSS) {
+            const side = borders[key];
+            if (side) parts.push(`border-${name}:${borderSideToCSS(side)}`);
+        }
     } else if (showGrid) {
         parts.push('border:1px solid #d4d4d4');
     }
@@ -645,7 +646,7 @@ function getGridBounds(
 
     if (sheet.celldata) {
         for (const { r, c, v } of sheet.celldata) {
-            if (!hasVisibleContent(v) && !borderMap[`${r}_${c}`]) continue;
+            if (!hasVisibleContent(v)) continue;
             if (r < minRow) minRow = r;
             if (c < minCol) minCol = c;
             if (r > maxRow) maxRow = r;

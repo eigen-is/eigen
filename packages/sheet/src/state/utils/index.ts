@@ -1,6 +1,5 @@
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
-import type { CellMatrix } from '../../engine/types';
-import { type Context, getSheetConfig } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { en } from '../locale/en';
 import { checkCellIsLocked } from '../modules';
 import type { Selection, Sheet } from '../types';
@@ -192,36 +191,39 @@ export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
 // (events/mouse-header.ts), and per-cell writes over 130k rows are a quarter of a million
 // immer patches for the collab layer to turn into Yjs ops. A whole-sheet axis is clipped
 // to the last cell holding something; a range the user dragged out is applied as selected.
-export function clipToUsedExtent(ctx: Context, selection: Selection, d: CellMatrix): Selection {
-    const wholeRows = selection.row[0] === 0 && selection.row[1] >= ctx.visibledatarow.length - 1;
-    const wholeColumns = selection.column[0] === 0 && selection.column[1] >= ctx.visibledatacolumn.length - 1;
-    if (!wholeRows && !wholeColumns) return selection;
+export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selection[] {
+    const wholeRows = selections.map((s) => s.row[0] === 0 && s.row[1] >= ctx.visibledatarow.length - 1);
+    const wholeColumns = selections.map((s) => s.column[0] === 0 && s.column[1] >= ctx.visibledatacolumn.length - 1);
+    const d = getFlowdata(ctx);
+    if (!d || (!wholeRows.includes(true) && !wholeColumns.includes(true))) return selections;
 
-    let lastRow = 0;
+    let lastRow = d.length - 1;
+    while (lastRow > 0 && !d[lastRow]?.some((cell) => cell != null)) lastRow -= 1;
     let lastColumn = 0;
-    for (let r = 0; r < d.length; r += 1) {
-        const row = d[r];
-        if (!row) continue;
-        for (let c = row.length - 1; c >= 0; c -= 1) {
-            if (row[c] == null) continue;
-            lastRow = r;
-            if (c > lastColumn) lastColumn = c;
-            break;
+    if (wholeColumns.includes(true)) {
+        for (let r = 0; r <= lastRow; r += 1) {
+            const row = d[r];
+            if (!row) continue;
+            for (let c = row.length - 1; c > lastColumn; c -= 1) {
+                if (row[c] == null) continue;
+                lastColumn = c;
+                break;
+            }
         }
     }
     // A bordered blank cell is used content too: without this a header-click
     // "no border" could never reach borders dragged past the data.
     const borderInfo = getSheetConfig(ctx)?.borderInfo;
-    if (borderInfo) {
-        for (const key in borderInfo) {
-            const [r, c] = key.split('_').map(Number);
-            if (r > lastRow) lastRow = r;
-            if (c > lastColumn) lastColumn = c;
-        }
+    for (const key in borderInfo) {
+        const sep = key.indexOf('_');
+        const r = Number(key.substring(0, sep));
+        const c = Number(key.substring(sep + 1));
+        if (r > lastRow) lastRow = r;
+        if (c > lastColumn) lastColumn = c;
     }
-    return {
+    return selections.map((selection, i) => ({
         ...selection,
-        row: wholeRows ? [selection.row[0], lastRow] : selection.row,
-        column: wholeColumns ? [selection.column[0], lastColumn] : selection.column,
-    };
+        row: wholeRows[i] ? [selection.row[0], lastRow] : selection.row,
+        column: wholeColumns[i] ? [selection.column[0], lastColumn] : selection.column,
+    }));
 }

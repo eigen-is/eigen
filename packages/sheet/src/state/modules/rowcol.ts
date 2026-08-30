@@ -1,6 +1,11 @@
 import type { MergeCell, SingleRange } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
+import {
+    applySheetsDeleteRowCol,
+    applySheetsInsertRowCol,
+    shiftCellKeyedForDelete,
+    shiftCellKeyedForInsert,
+} from '../../engine/rowcol';
 import { type Context, getSheetConfig } from '../context';
 import type { FilterEntry, FormulaCell, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
@@ -30,50 +35,6 @@ const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet
         }
     }
 };
-
-type Axis = 'row' | 'column';
-
-// Re-keys an "r_c" map for an insert: the row/column at `index` is the template (deep-copied onto
-// every inserted one with `cloneTemplate`) and shifts along only for a lefttop insert.
-function shiftKeyedMapForInsert<T>(
-    map: Record<string, T>,
-    axis: Axis,
-    index: number,
-    count: number,
-    direction: 'lefttop' | 'rightbottom',
-    cloneTemplate: boolean,
-): Record<string, T> {
-    const pos = axis === 'row' ? 0 : 1;
-    const shifted: Record<string, T> = {};
-    for (const [key, item] of Object.entries(map)) {
-        const coord = key.split('_').map(Number);
-        const at = coord[pos];
-        if (at === index && cloneTemplate) {
-            for (let n = 0; n < count; n += 1) {
-                const inserted = [...coord];
-                inserted[pos] = direction === 'rightbottom' ? index + n + 1 : index + n;
-                shifted[inserted.join('_')] = cloneDeep(item);
-            }
-        }
-        if (direction === 'lefttop' ? at >= index : at > index) coord[pos] += count;
-        shifted[coord.join('_')] = item;
-    }
-    return shifted;
-}
-
-// Re-keys an "r_c" map for a delete: entries in [start, end] drop, the ones past it shift up.
-function shiftKeyedMapForDelete<T>(map: Record<string, T>, axis: Axis, start: number, end: number): Record<string, T> {
-    const pos = axis === 'row' ? 0 : 1;
-    const shifted: Record<string, T> = {};
-    for (const [key, item] of Object.entries(map)) {
-        const coord = key.split('_').map(Number);
-        const at = coord[pos];
-        if (at >= start && at <= end) continue;
-        if (at > end) coord[pos] -= end - start + 1;
-        shifted[coord.join('_')] = item;
-    }
-    return shifted;
-}
 
 function shiftStateOnlyFieldsForInsert(
     ctx: Context,
@@ -238,13 +199,9 @@ function shiftStateOnlyFieldsForInsert(
         }
     }
 
-    // Inserted rows/columns clone the template's validation rules and borders, not its hyperlinks.
-    // Rebuilding a map wholesale is deliberate: `patchToOp`'s sheetMetadataOps ships config whole.
-    file.dataVerification = shiftKeyedMapForInsert(file.dataVerification ?? {}, type, index, count, direction, true);
-    file.hyperlink = shiftKeyedMapForInsert(file.hyperlink ?? {}, type, index, count, direction, false);
-    if (!isEmpty(cfg.borderInfo)) {
-        cfg.borderInfo = shiftKeyedMapForInsert(cfg.borderInfo, type, index, count, direction, true);
-    }
+    // Inserted rows/columns clone the template's validation rules, not its hyperlinks.
+    file.dataVerification = shiftCellKeyedForInsert(file.dataVerification, type, index, count, direction, cloneDeep);
+    file.hyperlink = shiftCellKeyedForInsert(file.hyperlink, type, index, count, direction);
 }
 
 function shiftStateOnlyFieldsForDelete(
@@ -438,9 +395,8 @@ function shiftStateOnlyFieldsForDelete(
         }
     }
 
-    file.dataVerification = shiftKeyedMapForDelete(file.dataVerification ?? {}, type, start, end);
-    file.hyperlink = shiftKeyedMapForDelete(file.hyperlink ?? {}, type, start, end);
-    if (!isEmpty(cfg.borderInfo)) cfg.borderInfo = shiftKeyedMapForDelete(cfg.borderInfo, type, start, end);
+    file.dataVerification = shiftCellKeyedForDelete(file.dataVerification, type, start, end);
+    file.hyperlink = shiftCellKeyedForDelete(file.hyperlink, type, start, end);
 }
 
 function adjustSelectionForInsert(

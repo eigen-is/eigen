@@ -17,7 +17,7 @@ describe('sheet/core/toolbar/border-style', () => {
         }) as Context;
 
         handleBorder(ctx, 'border-slash', '#000000', '1');
-        const map = getBorderInfoCompute(ctx);
+        const map = getBorderInfoCompute(ctx, ctx.currentSheetId, [0, 2, 0, 2]);
 
         expect(map['0_0']?.s).toEqual({ style: 1, color: '#000000' });
         expect(map['0_1']?.s).toEqual({ style: 1, color: '#000000' });

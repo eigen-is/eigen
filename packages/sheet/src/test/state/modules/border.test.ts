@@ -219,7 +219,7 @@ describe('getBorderInfoCompute', () => {
         data[2][2] = { mc: { r: 1, c: 1 } };
         handleBorder(ctx, 'border-all');
 
-        const computed = getBorderInfoCompute(ctx);
+        const computed = getBorderInfoCompute(ctx, ctx.currentSheetId, [0, 3, 0, 3]);
         expect(computed['1_1']).toEqual({ l: SIDE, t: SIDE });
         expect(computed['1_2']).toEqual({ r: SIDE, t: SIDE });
         expect(computed['2_1']).toEqual({ l: SIDE, b: SIDE });
@@ -228,20 +228,19 @@ describe('getBorderInfoCompute', () => {
         expect(ctx.sheets[0].config!.borderInfo!['2_2']).toEqual({ l: SIDE, r: SIDE, t: SIDE, b: SIDE });
     });
 
-    test('keeps hidden rows and columns: every carry (cut, move, fill) reads stored sides', () => {
+    test('keeps hidden rows and columns: every carry reads stored sides, the painter skips them', () => {
         const ctx = withSelection([0, 1], [0, 1]);
         ctx.sheets[0].config!.rowhidden = { 1: 0 };
         ctx.sheets[0].config!.colhidden = { 1: 0 };
         handleBorder(ctx, 'border-all');
-        expect(Object.keys(getBorderInfoCompute(ctx)).sort()).toEqual(['0_0', '0_1', '1_0', '1_1']);
+        const computed = getBorderInfoCompute(ctx, ctx.currentSheetId, [0, 1, 0, 1]);
+        expect(Object.keys(computed)).toEqual(['0_0', '0_1', '1_0', '1_1']);
     });
 
-    test('the canvas range walk skips hidden rows and columns', () => {
-        const ctx = withSelection([0, 1], [0, 1]);
-        ctx.sheets[0].config!.rowhidden = { 1: 0 };
-        ctx.sheets[0].config!.colhidden = { 1: 0 };
+    test('walks only the range', () => {
+        const ctx = withSelection([0, 3], [0, 3]);
         handleBorder(ctx, 'border-all');
-        expect(Object.keys(getBorderInfoCompute(ctx, undefined, [0, 1, 0, 1]))).toEqual(['0_0']);
+        expect(Object.keys(getBorderInfoCompute(ctx, ctx.currentSheetId, [1, 2, 2, 2]))).toEqual(['1_2', '2_2']);
     });
 });
 

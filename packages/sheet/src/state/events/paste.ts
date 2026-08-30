@@ -1,4 +1,9 @@
-import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import {
+    BORDER_SIDE_CSS,
+    type CellBorderSides,
+    type ConditionalFormatRule,
+    type DataVerificationRule,
+} from '@workspace/lib/sheets';
 import {
     cloneDeep,
     forEach,
@@ -29,13 +34,6 @@ import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
-
-const HTML_BORDER_SIDES = [
-    ['t', 'Top'],
-    ['b', 'Bottom'],
-    ['l', 'Left'],
-    ['r', 'Right'],
-] as const;
 
 // Snapshot built by pasteHandlerOfCutPaste describing the source and target
 // sides of a cut/paste so postPasteCut can splice both sheets at once.
@@ -399,7 +397,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         expandRowsAndColumns(d, addr, addc);
     }
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetId);
+    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetId, [c_r1, c_r2, c_c1, c_c2]);
     const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].dataVerification) || {};
     const dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification) || {};
 
@@ -535,7 +533,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             }
         }
 
-        if (sourceCurConfig.borderInfo) clearSides(sourceCurConfig.borderInfo, c_r1, c_r2, c_c1, c_c2);
+        clearSides(sourceCurConfig.borderInfo, c_r1, c_r2, c_c1, c_c2);
 
         // conditional formatting
         const source_cdformat = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetId)!].conditionalFormatRules);
@@ -804,7 +802,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
         expandRowsAndColumns(d, addr, addc);
     }
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
+    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex, [c_r1, c_r2, c_c1, c_c2]);
     const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
     let dataVerification: Record<string, DataVerificationRule> | null = null;
 
@@ -1338,14 +1336,16 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                             l: cp === 0,
                                             r: cp === colspan - 1,
                                         };
-                                        for (const [side, css] of HTML_BORDER_SIDES) {
-                                            const shorthand = onEdge[side] ? td.style[`border${css}`] : '';
+                                        for (const [side, css] of BORDER_SIDE_CSS) {
+                                            const shorthand = onEdge[side]
+                                                ? td.style.getPropertyValue(`border-${css}`)
+                                                : '';
                                             if (isEmpty(shorthand) || shorthand.slice(0, 3).toLowerCase() === '0px')
                                                 continue;
                                             (borderInfo[`${r + rp}_${c + cp}`] ??= {})[side] = getQKBorder(
-                                                td.style[`border${css}Width`],
-                                                td.style[`border${css}Style`],
-                                                td.style[`border${css}Color`],
+                                                td.style.getPropertyValue(`border-${css}-width`),
+                                                td.style.getPropertyValue(`border-${css}-style`),
+                                                td.style.getPropertyValue(`border-${css}-color`),
                                             );
                                         }
 

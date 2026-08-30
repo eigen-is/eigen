@@ -3,6 +3,7 @@ import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheet
 import type { Op, Sheet, WorkbookInstance } from '@workspace/sheet';
 import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import type * as Y from 'yjs';
 
 export function useSheet(
@@ -149,6 +150,15 @@ export function useSheet(
             }
             loadedRef.current = loaded;
             if (loaded) latestDataRef.current = data;
+            else {
+                toast.error(
+                    'This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.',
+                    {
+                        id: 'sheet-load-failed',
+                        duration: Infinity,
+                    },
+                );
+            }
             setLoadFailed(!loaded);
             setInitialData(data);
             readyForOpsRef.current = true;

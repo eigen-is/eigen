@@ -463,9 +463,7 @@ export function applyDataVerification(ctx: Context, range: SingleRange, item: Da
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;
-    const d = getFlowdata(ctx);
-    if (!d) return;
-    applyDataVerification(ctx, clipToUsedExtent(ctx, selection, d), {
+    applyDataVerification(ctx, clipToUsedExtent(ctx, [selection])[0], {
         type: 'checkbox',
         type2: '',
         value1: CHECKBOX_CHECKED_VALUE,
