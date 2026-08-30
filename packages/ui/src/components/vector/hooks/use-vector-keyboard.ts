@@ -130,8 +130,11 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     useHotkey('3', () => setTool('diamond'), { enabled });
     useHotkey('O', () => setTool('ellipse'), { enabled });
     useHotkey('4', () => setTool('ellipse'), { enabled });
+    useHotkey('L', () => setTool('line'), { enabled });
+    useHotkey('P', () => setTool('freedraw'), { enabled });
     useHotkey('T', () => setTool('text'), { enabled });
     useHotkey('8', () => setTool('text'), { enabled });
+    useHotkey('E', () => setTool('eraser'), { enabled });
 
     // Discrete ops seal the undo group on BOTH sides (see deleteSelection/duplicateSelection): a
     // nudge inside the 500ms capture window then can't merge into them. Nudges themselves carry no

@@ -8,11 +8,15 @@
 
 import {
     type ArrangeOp,
+    type Box,
     computeArrange,
     DEFAULT_FONT_FAMILY,
     type FillStyle,
+    isClosedPath,
     isTransparent,
+    parsePoints,
     type Roundness,
+    resizeLinear,
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
     type VectorElement,
@@ -72,6 +76,7 @@ const FILL_STYLE_OPTIONS: { value: FillStyle; label: string }[] = [
     { value: 'solid', label: 'Solid' },
     { value: 'hachure', label: 'Hachure' },
     { value: 'cross-hatch', label: 'Cross-hatch' },
+    { value: 'zigzag', label: 'Zigzag' },
 ];
 
 type VectorPropertiesPanelProps = {
@@ -95,18 +100,54 @@ export function VectorPropertiesPanel({
     onAspectLockChange,
 }: VectorPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
+    const byId = new Map(selectedElements.map((el) => [el.id, el]));
     const isShape = (t: VectorElementType) => t === 'rectangle' || t === 'diamond' || t === 'ellipse';
-    const allShapes = selectedElements.length > 0 && selectedElements.every((el) => isShape(el.type));
-    const allRectDiamond =
-        selectedElements.length > 0 && selectedElements.every((el) => el.type === 'rectangle' || el.type === 'diamond');
+    const isLinear = (t: VectorElementType) => t === 'line' || t === 'freedraw';
+    const has = selectedElements.length > 0;
+    const isClosedLinear = (el: VectorElement) =>
+        (el.type === 'line' || el.type === 'freedraw') && isClosedPath(parsePoints(el.points));
+    // Paint sections (Stroke / Fill / Sketch) apply to shapes and linear elements; images/text opt out.
+    const allPaintable = has && selectedElements.every((el) => isShape(el.type) || isLinear(el.type));
+    // Fill only makes sense for shapes and CLOSED linear elements (an open stroke has nothing to fill).
+    const showFill = has && selectedElements.every((el) => isShape(el.type) || isClosedLinear(el));
+    // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
+    const anyFreedraw = selectedElements.some((el) => el.type === 'freedraw');
+    // Edges (roundness) apply to rectangles/diamonds and lines (round curve vs sharp), never freedraw.
+    const allEdged =
+        has && selectedElements.every((el) => el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line');
     const textEls = selectedElements.filter((el): el is VectorTextElement => el.type === 'text');
-    const allText = selectedElements.length > 0 && textEls.length === selectedElements.length;
+    const allText = has && textEls.length === selectedElements.length;
 
     // Same fields on every selected element — one transact, one undo step.
     const applyToAll = (fields: VectorElementPatch) => {
         if (!selectedIds.length) return;
         undoManager?.stopCapturing();
         updateElements(selectedIds.map((id) => ({ id, fields })));
+        undoManager?.stopCapturing();
+    };
+
+    // Numeric transform writes. A width/height change on a linear element must rescale its points
+    // through resizeLinear (R2.6), not overwrite the box; x/y/angle-only changes pass straight through.
+    const applyTransform = (fields: VectorElementPatch) => {
+        if (!selectedIds.length) return;
+        const resizesLinear = fields.width !== undefined || fields.height !== undefined;
+        undoManager?.stopCapturing();
+        updateElements(
+            selectedIds.map((id) => {
+                const el = byId.get(id);
+                if (resizesLinear && el && (el.type === 'line' || el.type === 'freedraw')) {
+                    const box: Box = {
+                        x: fields.x ?? el.x,
+                        y: fields.y ?? el.y,
+                        width: fields.width ?? el.width,
+                        height: fields.height ?? el.height,
+                        angle: fields.angle ?? el.angle,
+                    };
+                    return { id, fields: { ...fields, ...resizeLinear(el, box) } };
+                }
+                return { id, fields };
+            }),
+        );
         undoManager?.stopCapturing();
     };
 
@@ -141,14 +182,25 @@ export function VectorPropertiesPanel({
         if (!patches.length) return;
         // Text dims are DERIVED from fontSize (the measurement util is the sole dim writer), so
         // match-size patches must never write width/height onto a text element; align/distribute
-        // (x/y-only) still applies.
-        const textIds = new Set(selectedElements.filter((el) => el.type === 'text').map((el) => el.id));
+        // (x/y-only) still applies. A linear element's width/height goes through resizeLinear so its
+        // points scale with the box (R2.6).
         undoManager?.stopCapturing();
         updateElements(
-            patches.map((p) => ({
-                id: p.id,
-                fields: textIds.has(p.id) ? { x: p.x, y: p.y } : { x: p.x, y: p.y, width: p.width, height: p.height },
-            })),
+            patches.map((p) => {
+                const el = byId.get(p.id);
+                if (el && (el.type === 'line' || el.type === 'freedraw')) {
+                    const box: Box = {
+                        x: p.x ?? el.x,
+                        y: p.y ?? el.y,
+                        width: p.width ?? el.width,
+                        height: p.height ?? el.height,
+                        angle: el.angle,
+                    };
+                    return { id: p.id, fields: resizeLinear(el, box) };
+                }
+                if (el?.type === 'text') return { id: p.id, fields: { x: p.x, y: p.y } };
+                return { id: p.id, fields: { x: p.x, y: p.y, width: p.width, height: p.height } };
+            }),
         );
         undoManager?.stopCapturing();
     };
@@ -170,7 +222,7 @@ export function VectorPropertiesPanel({
     const fillStyle = getMergedValue(selectedElements, (el) => el.fillStyle);
     const roughness = getMergedValue(selectedElements, (el) => el.roughness);
     const roundness = getMergedValue(selectedElements, (el) =>
-        el.type === 'rectangle' || el.type === 'diamond' ? el.roundness : undefined,
+        el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line' ? el.roundness : undefined,
     );
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
     const fontFamily = getMergedValue(textEls, (el) => el.fontFamily);
@@ -191,11 +243,12 @@ export function VectorPropertiesPanel({
                 width={tWidth}
                 height={tHeight}
                 angle={tAngle}
-                onChange={applyToAll}
+                onChange={applyTransform}
                 // Text dims are derived — disable W/H (and, with them, the aspect checkbox); size
-                // lives in fontSize.
-                // ANY text in the selection disables W/H: applyToAll writes every field to every
-                // selected element, and text dims are derived (measurement util is the sole writer).
+                // lives in fontSize. A linear element's W/H stay ENABLED — applyTransform routes them
+                // through resizeLinear so its points scale with the box.
+                // ANY text in the selection disables W/H: the write reaches every selected element,
+                // and text dims are derived (measurement util is the sole writer).
                 sizeDisabled={textEls.length > 0}
                 aspectLocked={aspectLocked}
                 onAspectLockChange={onAspectLockChange}
@@ -233,23 +286,25 @@ export function VectorPropertiesPanel({
                 </PropertySection>
             )}
 
-            {allShapes && (
+            {allPaintable && (
                 <>
-                    <PropertySection title="Fill">
-                        <ColorRow
-                            label="Color"
-                            value={fill}
-                            onChange={(c) => applyToAll({ backgroundColor: c })}
-                            showReset
-                        />
-                        <PropertyRow label="Style">
-                            <MergedSelect
-                                value={fillStyle}
-                                onChange={(v) => applyToAll({ fillStyle: v })}
-                                options={FILL_STYLE_OPTIONS}
+                    {showFill && (
+                        <PropertySection title="Fill">
+                            <ColorRow
+                                label="Color"
+                                value={fill}
+                                onChange={(c) => applyToAll({ backgroundColor: c })}
+                                showReset
                             />
-                        </PropertyRow>
-                    </PropertySection>
+                            <PropertyRow label="Style">
+                                <MergedSelect
+                                    value={fillStyle}
+                                    onChange={(v) => applyToAll({ fillStyle: v })}
+                                    options={FILL_STYLE_OPTIONS}
+                                />
+                            </PropertyRow>
+                        </PropertySection>
+                    )}
 
                     <PropertySection title="Stroke">
                         <ColorRow label="Color" value={strokeColor} onChange={(c) => applyToAll({ strokeColor: c })} />
@@ -260,13 +315,16 @@ export function VectorPropertiesPanel({
                                 options={STROKE_WIDTH_OPTIONS}
                             />
                         </PropertyRow>
-                        <PropertyRow label="Style">
-                            <MergedSelect
-                                value={strokeStyle}
-                                onChange={(v) => applyToAll({ strokeStyle: v })}
-                                options={STROKE_STYLE_OPTIONS}
-                            />
-                        </PropertyRow>
+                        {/* A freehand stroke is a filled outline, not a dashable line — hide Style. */}
+                        {!anyFreedraw && (
+                            <PropertyRow label="Style">
+                                <MergedSelect
+                                    value={strokeStyle}
+                                    onChange={(v) => applyToAll({ strokeStyle: v })}
+                                    options={STROKE_STYLE_OPTIONS}
+                                />
+                            </PropertyRow>
+                        )}
                     </PropertySection>
 
                     <PropertySection title="Sketch">
@@ -277,7 +335,7 @@ export function VectorPropertiesPanel({
                                 options={ROUGHNESS_OPTIONS}
                             />
                         </PropertyRow>
-                        {allRectDiamond && (
+                        {allEdged && (
                             <PropertyRow label="Edges">
                                 <MergedSelect
                                     value={roundness}

@@ -1,6 +1,4 @@
 import {
-    buildImageClipboardItem,
-    buildTextClipboardItem,
     clipboardTextItemHasContent,
     needsReUpload,
     readClipboardBox,
@@ -24,7 +22,6 @@ import {
     DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elementToSvg,
-    type FillStyle,
     fitImageSize,
     getElementsBounds,
     isTransparent,
@@ -32,11 +29,10 @@ import {
     type MediaResolver,
     marqueeMode,
     orderByFractionalIndex,
-    type Roundness,
+    resizeLinear,
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
-    type StrokeStyle,
     snapBoxToTargets,
     type TextAlign,
     type VectorElement,
@@ -65,6 +61,14 @@ import type { PublishCursor } from './hooks/use-vector-presence';
 import { useViewport } from './hooks/use-viewport';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
+import {
+    buildSelectionItems,
+    readVectorMeta,
+    selectionPlainText,
+    toVectorTextAlign,
+    type VectorClipMeta,
+} from './tools/clipboard';
+import { useDrawingTools } from './tools/use-drawing-tools';
 import { VectorObjectMenu } from './vector-object-menu';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -83,92 +87,6 @@ const MAX_FONT_SIZE = 400;
 const IMAGE_CASCADE_OFFSET = 20;
 // Half-length of a snap guide line in scene units — large enough to span the viewport at any pan/zoom.
 const SNAP_LINE_EXTENT = 1_000_000;
-
-// Vector-private clipboard meta, carried under `item.meta.vector` so cross-app consumers (slides/docs)
-// ignore it and only vector restores exact scene coords + per-element fields. Absolute scene x/y ride
-// here — NOT the typed contract fields (which forbid x/y) — so a vector→vector paste preserves the
-// selection's relative layout before it's re-anchored on the viewport. A shape has no contract item
-// kind, so it rides as a text item; `type` present ⇒ restore a shape, else a text element.
-type VectorClipMeta = {
-    x: number;
-    y: number;
-    type?: 'rectangle' | 'diamond' | 'ellipse';
-    strokeColor?: string;
-    backgroundColor?: string;
-    fillStyle?: FillStyle;
-    strokeStyle?: StrokeStyle;
-    strokeWidth?: number;
-    roughness?: number;
-    opacity?: number;
-    roundness?: Roundness;
-};
-
-function readVectorMeta(item: EigenClipboardItem): VectorClipMeta | null {
-    const v = item.meta?.vector as VectorClipMeta | undefined;
-    return v && typeof v.x === 'number' && typeof v.y === 'number' ? v : null;
-}
-
-function toVectorTextAlign(v: string | undefined): TextAlign {
-    return v === 'center' || v === 'right' ? v : 'left';
-}
-
-// Produce a clipboard item for one element: images → typed mediaName + geometry (+ a portable source
-// path via the resolver); text → typed text + typography (vector's three canonical fields); shapes →
-// a text-item carrier with the shape rebuilt from meta.vector on a vector→vector paste. Every item
-// also carries the element's scene x/y (+ vector-private fields) under meta.vector. Returns null when
-// an image's media can't be resolved to a portable path (a still-pending upload).
-function buildElementClipboardItem(
-    el: VectorElement,
-    resolveMediaPath: (name: string) => DrivePath | undefined,
-): EigenClipboardItem | null {
-    const box = { width: el.width, height: el.height, angle: el.angle };
-    if (el.type === 'image') {
-        const source = resolveMediaPath(el.mediaName);
-        if (!source) return null;
-        return buildImageClipboardItem({
-            mediaName: el.mediaName,
-            source,
-            box,
-            meta: { vector: { x: el.x, y: el.y } },
-        });
-    }
-    if (el.type === 'text') {
-        return buildTextClipboardItem({
-            text: el.text,
-            box,
-            typography: { fontFamily: el.fontFamily, fontSize: el.fontSize, textAlign: el.textAlign },
-            meta: {
-                vector: {
-                    x: el.x,
-                    y: el.y,
-                    strokeColor: el.strokeColor,
-                    backgroundColor: el.backgroundColor,
-                    opacity: el.opacity,
-                },
-            },
-        });
-    }
-    // shape (rectangle/diamond/ellipse)
-    return buildTextClipboardItem({
-        text: '',
-        box,
-        meta: {
-            vector: {
-                x: el.x,
-                y: el.y,
-                type: el.type,
-                strokeColor: el.strokeColor,
-                backgroundColor: el.backgroundColor,
-                fillStyle: el.fillStyle,
-                strokeStyle: el.strokeStyle,
-                strokeWidth: el.strokeWidth,
-                roughness: el.roughness,
-                opacity: el.opacity,
-                roundness: el.roundness,
-            },
-        },
-    });
-}
 
 // An open text-editing session. A new element stays LOCAL (id never written) until its first
 // commit — an empty discard writes nothing; re-editing an existing element commits one update, or
@@ -392,11 +310,44 @@ export function VectorCanvas({
         return m;
     }, [ordered]);
 
+    // Freehand / line / eraser gestures + line point-handles live in a sibling hook (the canvas only
+    // dispatches) — CANVAS.md's rule that this file must not grow. `busy` hides the point handles while
+    // any canvas gesture or overlay owns the surface.
+    const drawing = useDrawingTools({
+        tool,
+        setTool,
+        canWrite,
+        zoom,
+        ordered,
+        selectedIds,
+        busy: Object.keys(previews).length > 0 || !!creating || !!marquee || !!editing,
+        containerRef,
+        frozenRef,
+        clientToScene,
+        boxToStyle,
+        addElement,
+        updateElement,
+        deleteElements,
+        setSelectedIds,
+        undoManager,
+    });
+
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
-    // no preview → same object identity, so the memo skips it.
+    // no preview → same object identity, so the memo skips it. A linear element's resize/rotate derives
+    // scaled points per frame through resizeLinear (R2.6); an element marked for erasure dims to 20%.
     const renderEl = (el: VectorElement): VectorElement => {
         const p = previews[el.id];
-        return p ? { ...el, x: p.x, y: p.y, width: p.width, height: p.height, angle: p.angle } : el;
+        let out = el;
+        if (p) {
+            if (el.type === 'line' || el.type === 'freedraw') {
+                const r = resizeLinear(el, p);
+                out = { ...el, x: r.x, y: r.y, width: r.width, height: r.height, angle: p.angle, points: r.points };
+            } else {
+                out = { ...el, x: p.x, y: p.y, width: p.width, height: p.height, angle: p.angle };
+            }
+        }
+        if (drawing.erasingIds.has(el.id)) out = { ...out, opacity: out.opacity * 0.2 };
+        return out;
     };
 
     // Every canvas hotkey (V/R/D/O/T, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
@@ -793,28 +744,13 @@ export function VectorCanvas({
         void insertImageFiles(files, viewportCenterScene());
     }, imagesEnabled);
 
-    // Element clipboard PRODUCER: one eigen item per selected element, in z-order (so a paste keeps the
-    // relative stacking). Images with unresolved (still-uploading) media are skipped.
-    const buildSelectionItems = useCallback((): EigenClipboardItem[] => {
-        const items: EigenClipboardItem[] = [];
-        for (const el of ordered) {
-            if (!selectedIds.includes(el.id)) continue;
-            const item = buildElementClipboardItem(el, resolveMediaPath);
-            if (item) items.push(item);
-        }
-        return items;
-    }, [ordered, selectedIds, resolveMediaPath]);
-
-    // Concatenated plain text of the selected TEXT elements — the only flavor written alongside eigen
-    // JSON (D6: text copies carry text/plain, image/shape copies carry neither; no png in v1). undefined
-    // when the selection has no text element (a pure image/shape copy writes no text/plain).
-    const selectionPlainText = useCallback((): string | undefined => {
-        const texts: string[] = [];
-        for (const el of ordered) {
-            if (selectedIds.includes(el.id) && el.type === 'text' && el.text.length > 0) texts.push(el.text);
-        }
-        return texts.length ? texts.join('\n') : undefined;
-    }, [ordered, selectedIds]);
+    // The clipboard PRODUCER (element→item builders) + plain-text flavor live in ./tools/clipboard;
+    // the canvas calls them with the live z-order, selection and media resolver.
+    const buildItems = useCallback(
+        () => buildSelectionItems(ordered, selectedIds, resolveMediaPath),
+        [ordered, selectedIds, resolveMediaPath],
+    );
+    const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
     // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
     // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
@@ -883,7 +819,8 @@ export function VectorCanvas({
                     }
                     continue;
                 }
-                // Shape carrier (a text item whose meta.vector names a shape type).
+                // Shape or linear carrier (a text item whose meta.vector names a shape/freedraw/line
+                // type). A linear element additionally restores its `points` (undefined for shapes).
                 if (meta?.type) {
                     const w = box.width;
                     const h = box.height;
@@ -902,6 +839,7 @@ export function VectorCanvas({
                         roughness: meta.roughness,
                         opacity: meta.opacity,
                         roundness: meta.roundness,
+                        points: meta.points,
                     });
                     continue;
                 }
@@ -1033,17 +971,17 @@ export function VectorCanvas({
     useEffect(() => {
         const onCopyEvent = (e: ClipboardEvent) => {
             if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
-            const items = buildSelectionItems();
+            const items = buildItems();
             if (!items.length) return;
             e.preventDefault();
-            writeEigenClipboard(e, { version: 1, items }, selectionPlainText());
+            writeEigenClipboard(e, { version: 1, items }, plainText());
         };
         const onCutEvent = (e: ClipboardEvent) => {
             if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
-            const items = buildSelectionItems();
+            const items = buildItems();
             if (!items.length) return;
             e.preventDefault();
-            writeEigenClipboard(e, { version: 1, items }, selectionPlainText());
+            writeEigenClipboard(e, { version: 1, items }, plainText());
             // One sealed undo step (deleteSelection stopCaptures on both sides).
             deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
         };
@@ -1077,8 +1015,8 @@ export function VectorCanvas({
     }, [
         canWrite,
         selectedIds,
-        buildSelectionItems,
-        selectionPlainText,
+        buildItems,
+        plainText,
         pasteEigenItems,
         pasteNonEigenText,
         deleteElements,
@@ -1117,15 +1055,15 @@ export function VectorCanvas({
     // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as
     // the keyboard path, so the two stay one behavior.
     const onMenuCopy = () => {
-        const items = buildSelectionItems();
-        if (items.length) writeEigenClipboardAsync({ version: 1, items }, selectionPlainText()).catch(() => {});
+        const items = buildItems();
+        if (items.length) writeEigenClipboardAsync({ version: 1, items }, plainText()).catch(() => {});
     };
     const onMenuCut = () => {
-        const items = buildSelectionItems();
+        const items = buildItems();
         if (!items.length) return;
         // Delete only once the async write lands — a denied/failed clipboard write must not destroy
         // the selection (the content would exist nowhere but the undo stack).
-        writeEigenClipboardAsync({ version: 1, items }, selectionPlainText())
+        writeEigenClipboardAsync({ version: 1, items }, plainText())
             .then(() => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager))
             .catch(() => {});
     };
@@ -1170,6 +1108,10 @@ export function VectorCanvas({
 
         const p = clientToScene(e.clientX, e.clientY);
 
+        // Freehand / line / eraser own their own gesture (local state + capture); the hook consumes
+        // the event for those tools and the canvas does nothing more.
+        if (drawing.onPointerDown(e, p)) return;
+
         // Text tool: click places a caret (no drag-create, no capture). A click that hits an existing
         // text element edits THAT element instead of stacking a fresh empty on top.
         if (tool === 'text') {
@@ -1189,8 +1131,9 @@ export function VectorCanvas({
 
         containerRef.current?.setPointerCapture(e.pointerId);
 
-        // Shape tool → start a local (not-yet-Yjs) drag-create.
-        if (tool !== 'select') {
+        // Shape tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already
+        // returned via the tools hook; text was handled above.)
+        if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse') {
             frozenRef.current = true;
             undoManager?.stopCapturing();
             setSelectedIds([]);
@@ -1251,6 +1194,9 @@ export function VectorCanvas({
         // Publish the local cursor on every move (throttled downstream; no React state → no
         // re-render), then handle the active gesture if any.
         publishCursor(clientToScene(e.clientX, e.clientY));
+        // A freehand stroke / eraser swipe / line draft (incl. its hover trailing point) is handled by
+        // the tools hook, which consumes the move.
+        if (drawing.onPointerMove(e)) return;
         const g = gestureRef.current;
         if (!g || e.pointerId !== g.pointerId) return;
         if (g.kind === 'pan') {
@@ -1399,6 +1345,8 @@ export function VectorCanvas({
     finishRef.current = finishGesture;
 
     const onPointerUp = (e: React.PointerEvent) => {
+        // A freehand/line/eraser gesture finishes (writes) through the tools hook.
+        if (drawing.onPointerUp(e)) return;
         const g = gestureRef.current;
         if (g && e.pointerId !== g.pointerId) return;
         // Read Alt off the terminal event (drop-time modifier) for Alt-drag duplicate.
@@ -1412,7 +1360,7 @@ export function VectorCanvas({
     // overlay is open; move keeps it (the ring follows the moving element). Single + write → full
     // transform; everything else → a plain translate-only union ring (multi-select never mounts
     // ObjectTransform, UX-RULING 7).
-    const showChrome = !creating && !marquee && !editing;
+    const showChrome = !creating && !marquee && !editing && !drawing.active;
     const showTransform = showChrome && canWrite && single !== null;
 
     const cursor = panning
@@ -1451,12 +1399,17 @@ export function VectorCanvas({
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
                 <g transform={groupTransform}>
                     {ordered.map((el) =>
-                        // The element under edit is drawn only by the overlay textarea (WYSIWYG).
-                        editing?.id === el.id ? null : (
+                        // The element under edit is drawn only by the overlay textarea (WYSIWYG); a line
+                        // being vertex-dragged is drawn by the drawing preview below instead.
+                        editing?.id === el.id || drawing.hiddenId === el.id ? null : (
                             <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} />
                         ),
                     )}
                     {creating && <ElementNode el={creatingElement(creating)} resolveMedia={resolveMediaUrl} />}
+                    {/* Live freehand/line draft, or a point-edit reshape — the SAME elementToSvg path. */}
+                    {drawing.previewElement && (
+                        <ElementNode el={drawing.previewElement} resolveMedia={resolveMediaUrl} />
+                    )}
                     {snapLines.map((line, i) =>
                         line.orientation === 'vertical' ? (
                             <line
@@ -1527,6 +1480,18 @@ export function VectorCanvas({
                                     fields.height = height;
                                     healTextDims(single.id, single.text, size, single.fontFamily);
                                 }
+                            } else if (single.type === 'line' || single.type === 'freedraw') {
+                                // A linear element rescales its points to the new box through resizeLinear
+                                // (R2.6), reading the COMMITTED element so the total scale is exact.
+                                if (next.width !== start.width || next.height !== start.height) {
+                                    const base = elementsRef.current.find((b) => b.id === single.id);
+                                    if (base && (base.type === 'line' || base.type === 'freedraw')) {
+                                        const r = resizeLinear(base, next);
+                                        fields.width = r.width;
+                                        fields.height = r.height;
+                                        fields.points = r.points;
+                                    }
+                                }
                             } else {
                                 if (next.width !== start.width) fields.width = next.width;
                                 if (next.height !== start.height) fields.height = next.height;
@@ -1540,6 +1505,8 @@ export function VectorCanvas({
                         }}
                     />
                 )}
+                {/* Vertex handles for a single selected line, over the ObjectTransform ring (R2.13). */}
+                {drawing.handles}
                 {showChrome && !showTransform && unionBox && (
                     <div
                         className="eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute"

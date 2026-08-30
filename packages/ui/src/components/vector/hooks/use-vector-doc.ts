@@ -1,6 +1,7 @@
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_SCENE_META,
     DEFAULT_SHAPE_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
@@ -11,6 +12,7 @@ import {
     readVectorFromDoc,
     type VectorElementType,
     type VectorImageElement,
+    type VectorLinearElement,
     type VectorScene,
     type VectorShapeElement,
     type VectorTextElement,
@@ -31,7 +33,8 @@ const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
     Partial<Omit<VectorTextElement, 'id' | 'type'>> &
-    Partial<Omit<VectorImageElement, 'id' | 'type'>>;
+    Partial<Omit<VectorImageElement, 'id' | 'type'>> &
+    Partial<Omit<VectorLinearElement, 'id' | 'type'>>;
 
 // addElement input: the caller names a `type` and overrides whatever it likes; the hook fills
 // the rest from lib defaults and generates id/seed/index.
@@ -42,6 +45,8 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
     const base = { x: 0, y: 0, width: 0, height: 0, angle: 0, ...DEFAULT_ELEMENT_PROPS };
     if (type === 'text') return { ...base, ...DEFAULT_TEXT_PROPS };
     if (type === 'image') return { ...base, mediaName: '' };
+    // Linear elements draw straight by default and always arrive with real points from the gesture.
+    if (type === 'freedraw' || type === 'line') return { ...base, roundness: DEFAULT_LINEAR_ROUNDNESS, points: '[]' };
     return { ...base, roundness: DEFAULT_SHAPE_ROUNDNESS };
 }
 

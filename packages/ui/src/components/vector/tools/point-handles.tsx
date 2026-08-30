@@ -1,0 +1,129 @@
+// Draggable vertex handles for a single selected line (R2.13) — square `.eigen-selection-handle`
+// chrome, one per point, on top of the ObjectTransform ring. Dragging a vertex reshapes the line
+// through normalizeLinear as one sealed undo step; there is no add/remove in v1. Self-contained like
+// ObjectTransform: it owns its drag lifecycle (document listeners under an AbortController) and reports
+// the live points via `onPreview`, committing once on release. Freedraw shows no handles.
+
+import {
+    type Box,
+    boxCenter,
+    type Point,
+    parsePoints,
+    rotatePoint,
+    type VectorLinearElement,
+} from '@workspace/lib/vector';
+import type { MutableRefObject } from 'react';
+import { useRef, useState } from 'react';
+
+// Screen size of a handle square (Excalidraw's POINT_HANDLE_SIZE), overriding the 12px ring grip.
+const POINT_HANDLE_SCREEN_PX = 10;
+
+type LinePointHandlesProps = {
+    line: VectorLinearElement;
+    boxToStyle: (box: Box) => React.CSSProperties;
+    clientToScene: (clientX: number, clientY: number) => Point;
+    frozenRef: MutableRefObject<boolean>;
+    // Live points during a drag (null clears the preview); the host renders the reshaped line.
+    onPreview: (points: Point[] | null) => void;
+    // One sealed write of the reshaped points on release.
+    onCommit: (points: Point[]) => void;
+};
+
+// Map a point in the line's local frame to its scene position — the renderer rotates each element
+// about its box centre, so a vertex sits at rotate(origin + local, centre, angle).
+function vertexToScene(line: VectorLinearElement, local: Point): Point {
+    const center = boxCenter(line);
+    return rotatePoint({ x: line.x + local.x, y: line.y + local.y }, center, line.angle);
+}
+
+// The inverse: a scene point (the cursor) back into the line's local frame.
+function sceneToVertex(line: VectorLinearElement, scene: Point): Point {
+    const center = boxCenter(line);
+    const un = rotatePoint(scene, center, -line.angle);
+    return { x: un.x - line.x, y: un.y - line.y };
+}
+
+export function LinePointHandles({
+    line,
+    boxToStyle,
+    clientToScene,
+    frozenRef,
+    onPreview,
+    onCommit,
+}: LinePointHandlesProps) {
+    // The vertex being dragged and its live local position, so the grabbed handle follows the cursor.
+    const [drag, setDrag] = useState<{ index: number; local: Point } | null>(null);
+    const abortRef = useRef<AbortController | null>(null);
+    const points = parsePoints(line.points);
+
+    const startDrag = (e: React.PointerEvent, index: number) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (abortRef.current && !abortRef.current.signal.aborted) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        frozenRef.current = true;
+        const controller = new AbortController();
+        abortRef.current = controller;
+        const { signal } = controller;
+        const pointerId = e.pointerId;
+        let latest: Point[] | null = null;
+
+        const update = (clientX: number, clientY: number) => {
+            const local = sceneToVertex(line, clientToScene(clientX, clientY));
+            const next = points.map((p, i) => (i === index ? local : p));
+            latest = next;
+            setDrag({ index, local });
+            onPreview(next);
+        };
+        const teardown = () => {
+            setDrag(null);
+            frozenRef.current = false;
+            controller.abort();
+        };
+        const onMove = (me: PointerEvent) => {
+            if (me.pointerId !== pointerId) return;
+            update(me.clientX, me.clientY);
+        };
+        const onUp = (pe: PointerEvent) => {
+            if (pe.pointerId !== pointerId) return;
+            teardown();
+            if (latest) onCommit(latest);
+            else onPreview(null);
+        };
+        const onKey = (ke: KeyboardEvent) => {
+            if (ke.key !== 'Escape') return;
+            ke.preventDefault();
+            ke.stopPropagation();
+            teardown();
+            onPreview(null);
+        };
+        document.addEventListener('pointermove', onMove, { signal });
+        document.addEventListener('pointerup', onUp, { signal });
+        document.addEventListener('pointercancel', onUp, { signal });
+        document.addEventListener('keydown', onKey, { signal, capture: true });
+    };
+
+    return (
+        <>
+            {points.map((p, i) => {
+                const local = drag?.index === i ? drag.local : p;
+                const scene = vertexToScene(line, local);
+                const style = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
+                return (
+                    <div
+                        key={i}
+                        className="eigen-selection-handle pointer-events-auto touch-none"
+                        style={{
+                            left: style.left,
+                            top: style.top,
+                            width: POINT_HANDLE_SCREEN_PX,
+                            height: POINT_HANDLE_SCREEN_PX,
+                            transform: 'translate(-50%, -50%)',
+                        }}
+                        onPointerDown={(e) => startDrag(e, i)}
+                    />
+                );
+            })}
+        </>
+    );
+}
