@@ -12,14 +12,12 @@ import {
     DEFAULT_LINEAR_ROUNDNESS,
     normalizeLinear,
     type Point,
-    serializePoints,
     type VectorElement,
     type VectorLinearElement,
 } from '@workspace/lib/vector';
 import { createElement, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
-import { hitTestTopmost } from '../hooks/use-selection';
 import type { VectorTool } from '../hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
 import { markErase } from './eraser';
@@ -47,23 +45,19 @@ function dist(a: Point, b: Point): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// A full VectorLinearElement for the live preview, built from the shared create defaults so it matches
-// the element that will be committed (no visual pop on release). width/height stay 0 — at angle 0 the
-// linear renderers ignore them (they only fix the rotation pivot).
+// A full VectorLinearElement for the live preview, built from the shared create defaults and the same
+// normalizeLinear pass as the commit, so it matches the element that will be written exactly (the
+// renderer scales roughness by the box, so a 0×0 box would pop on release).
 function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[], seed: number): VectorLinearElement {
     return {
         id: PREVIEW_ID,
         type,
-        x: origin.x,
-        y: origin.y,
-        width: 0,
-        height: 0,
         angle: 0,
         ...DEFAULT_ELEMENT_PROPS,
         roundness: DEFAULT_LINEAR_ROUNDNESS,
         seed,
         index: 'a0',
-        points: serializePoints(points),
+        ...normalizeLinear({ x: origin.x, y: origin.y, width: 0, height: 0, angle: 0 }, points),
     };
 }
 
@@ -147,17 +141,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setActiveKind(null);
         setPreviewEl(null);
         if (!stroke) return;
-        const norm = normalizeLinear({ x: stroke.origin.x, y: stroke.origin.y, angle: 0, points: stroke.points });
         undoManager?.stopCapturing();
         // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
         const id = addElement({
             type: 'freedraw',
-            x: norm.x,
-            y: norm.y,
-            width: norm.width,
-            height: norm.height,
-            points: norm.points,
             seed: seedRef.current,
+            ...normalizeLinear(
+                { x: stroke.origin.x, y: stroke.origin.y, width: 0, height: 0, angle: 0 },
+                stroke.points,
+            ),
         });
         undoManager?.stopCapturing();
         if (id) setSelectedIds([id]);
@@ -184,26 +176,23 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setPreviewEl(null);
     };
 
-    const finishLineWith = (points: Point[]) => {
+    // Write the draft as one element. < 2 distinct points is not a line — write nothing.
+    const commitLine = (points: Point[]) => {
         const draft = lineRef.current;
         clearLine();
-        if (!draft) return;
-        // < 2 distinct points is not a line — write nothing.
-        if (distinctCount(points) >= 2) {
-            const norm = normalizeLinear({ x: draft.origin.x, y: draft.origin.y, angle: 0, points });
-            undoManager?.stopCapturing();
-            const id = addElement({
-                type: draft.type,
-                x: norm.x,
-                y: norm.y,
-                width: norm.width,
-                height: norm.height,
-                points: norm.points,
-                seed: seedRef.current,
-            });
-            undoManager?.stopCapturing();
-            if (id) setSelectedIds([id]);
-        }
+        if (!draft || distinctCount(points) < 2) return;
+        undoManager?.stopCapturing();
+        const id = addElement({
+            type: draft.type,
+            seed: seedRef.current,
+            ...normalizeLinear({ x: draft.origin.x, y: draft.origin.y, width: 0, height: 0, angle: 0 }, points),
+        });
+        undoManager?.stopCapturing();
+        if (id) setSelectedIds([id]);
+    };
+
+    const finishLineWith = (points: Point[]) => {
+        commitLine(points);
         // A finished line returns to select (Excalidraw); the pencil is the only tool that stays.
         setTool('select');
     };
@@ -270,8 +259,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             containerRef.current?.setPointerCapture(e.pointerId);
             frozenRef.current = true;
             const marked = new Set<string>();
-            const topId = e.altKey ? null : hitTestTopmost(ordered, scene, zoom);
-            if (topId) marked.add(topId);
+            markErase(ordered, scene, scene, HIT_THRESHOLD_SCREEN / zoom, ERASER_STEP_SCREEN / zoom, e.altKey, marked);
             eraserRef.current = { pointerId: e.pointerId, marked, last: scene };
             setErasing(new Set(marked));
             setActiveKind('eraser');
@@ -381,11 +369,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setPointDraft(null);
             return;
         }
-        const norm = normalizeLinear({ x: selectedLine.x, y: selectedLine.y, angle: selectedLine.angle, points });
-        setPointDraft({
-            id: selectedLine.id,
-            el: { ...selectedLine, x: norm.x, y: norm.y, width: norm.width, height: norm.height, points: norm.points },
-        });
+        setPointDraft({ id: selectedLine.id, el: { ...selectedLine, ...normalizeLinear(selectedLine, points) } });
     };
 
     const onPointCommit = (points: Point[]) => {
@@ -393,15 +377,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setPointDraft(null);
             return;
         }
-        const norm = normalizeLinear({ x: selectedLine.x, y: selectedLine.y, angle: selectedLine.angle, points });
         undoManager?.stopCapturing();
-        updateElement(selectedLine.id, {
-            x: norm.x,
-            y: norm.y,
-            width: norm.width,
-            height: norm.height,
-            points: norm.points,
-        });
+        updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
         undoManager?.stopCapturing();
         setPointDraft(null);
     };
@@ -476,12 +453,12 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         };
     }, []);
 
-    // Switching tools abandons any in-progress draw/erase gesture (via a ref so the effect only
-    // depends on `tool`, not on the per-render closures).
+    // Switching tools abandons an in-progress stroke/erase, but commits a polyline's placed points
+    // (Excalidraw finalizes rather than strands it). Via a ref so the effect only depends on `tool`.
     const abandonRef = useRef<() => void>(() => {});
     abandonRef.current = () => {
         if (tool !== 'freedraw' && strokeRef.current) cancelFreedraw();
-        if (tool !== 'line' && lineRef.current) clearLine();
+        if (tool !== 'line' && lineRef.current) commitLine(lineRef.current.committed);
         if (tool !== 'eraser' && eraserRef.current) cancelEraser();
     };
     useEffect(() => {

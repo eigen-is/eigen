@@ -822,6 +822,8 @@ export function VectorCanvas({
                 // Shape or linear carrier (a text item whose meta.vector names a shape/freedraw/line
                 // type). A linear element additionally restores its `points` (undefined for shapes).
                 if (meta?.type) {
+                    // A linear carrier without points would read back as nothing (read-vector drops it).
+                    if ((meta.type === 'freedraw' || meta.type === 'line') && !meta.points) continue;
                     const w = box.width;
                     const h = box.height;
                     const pos = placeAt(meta, w, h);
@@ -1194,17 +1196,20 @@ export function VectorCanvas({
         // Publish the local cursor on every move (throttled downstream; no React state → no
         // re-render), then handle the active gesture if any.
         publishCursor(clientToScene(e.clientX, e.clientY));
-        // A freehand stroke / eraser swipe / line draft (incl. its hover trailing point) is handled by
-        // the tools hook, which consumes the move.
-        if (drawing.onPointerMove(e)) return;
         const g = gestureRef.current;
-        if (!g || e.pointerId !== g.pointerId) return;
-        if (g.kind === 'pan') {
+        // Pan first: a multi-point line draft leaves the surface unfrozen, so a space-pan can start
+        // mid-polyline and must keep driving over the draft's trailing point.
+        if (g?.kind === 'pan') {
+            if (e.pointerId !== g.pointerId) return;
             panBy(e.clientX - g.lastX, e.clientY - g.lastY);
             g.lastX = e.clientX;
             g.lastY = e.clientY;
             return;
         }
+        // A freehand stroke / eraser swipe / line draft (incl. its hover trailing point) is handled by
+        // the tools hook, which consumes the move.
+        if (drawing.onPointerMove(e)) return;
+        if (!g || e.pointerId !== g.pointerId) return;
         const p = clientToScene(e.clientX, e.clientY);
         if (g.kind === 'create') {
             let dx = p.x - g.startX;
@@ -1345,9 +1350,10 @@ export function VectorCanvas({
     finishRef.current = finishGesture;
 
     const onPointerUp = (e: React.PointerEvent) => {
-        // A freehand/line/eraser gesture finishes (writes) through the tools hook.
-        if (drawing.onPointerUp(e)) return;
         const g = gestureRef.current;
+        // A freehand/line/eraser gesture finishes (writes) through the tools hook; a pan (the one canvas
+        // gesture that can coexist with a line draft) ends here.
+        if (g?.kind !== 'pan' && drawing.onPointerUp(e)) return;
         if (g && e.pointerId !== g.pointerId) return;
         // Read Alt off the terminal event (drop-time modifier) for Alt-drag duplicate.
         finishGesture(e.altKey);

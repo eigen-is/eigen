@@ -198,29 +198,19 @@ const sceneOf = (n: { x: number; y: number; width: number; height: number }, ang
 
 describe('normalizeLinear', () => {
     test('moves the bbox min corner to the origin and shifts x/y (angle 0)', () => {
-        const n = normalizeLinear({
-            x: 10,
-            y: 20,
-            angle: 0,
-            points: [
-                { x: 5, y: 5 },
-                { x: 15, y: 25 },
-            ],
-        });
+        const n = normalizeLinear(box({ x: 10, y: 20 }), [
+            { x: 5, y: 5 },
+            { x: 15, y: 25 },
+        ]);
         expect(n).toEqual({ x: 15, y: 25, width: 10, height: 20, points: '[[0,0],[10,20]]' });
     });
 
     test('negative-going points normalize to a non-negative set; width/height span the raw bbox', () => {
-        const n = normalizeLinear({
-            x: 0,
-            y: 0,
-            angle: 0,
-            points: [
-                { x: 0, y: 0 },
-                { x: -30, y: 10 },
-                { x: 20, y: -5 },
-            ],
-        });
+        const n = normalizeLinear(box({ width: 0, height: 0 }), [
+            { x: 0, y: 0 },
+            { x: -30, y: 10 },
+            { x: 20, y: -5 },
+        ]);
         expect(n.width).toBe(50);
         expect(n.height).toBe(15);
         // min corner (-30,-5) → origin: every coordinate is now ≥ 0, and x/y absorb the shift.
@@ -235,13 +225,14 @@ describe('normalizeLinear', () => {
             { x: 20, y: -5 },
             { x: 8, y: 40 },
         ];
+        // The current box has a DIFFERENT extent than the raw points — the rotation pivot moves.
+        const current = { x: 100, y: 60, width: 20, height: 30 };
         for (const angle of [0, 37, 90, 210]) {
-            const n = normalizeLinear({ x: 100, y: 60, angle, points: raw });
+            const n = normalizeLinear({ ...current, angle }, raw);
             const shifted: Point[] = JSON.parse(n.points).map(([x, y]: [number, number]) => ({ x, y }));
             // Each normalized point maps to the same scene position the raw point had before normalizing.
-            const rawBox = { x: 100, y: 60, width: n.width, height: n.height };
             for (let i = 0; i < raw.length; i++) {
-                const before = sceneOf(rawBox, angle, raw[i]);
+                const before = sceneOf(current, angle, raw[i]);
                 const after = sceneOf(n, angle, shifted[i]);
                 expect(after.x).toBeCloseTo(before.x);
                 expect(after.y).toBeCloseTo(before.y);
@@ -249,14 +240,19 @@ describe('normalizeLinear', () => {
         }
     });
 
+    test('dragging one vertex of a rotated line leaves the other vertex where it was', () => {
+        const line = { x: 0, y: 0, width: 100, height: 0, angle: 90 };
+        const start = { x: 0, y: 0 };
+        const n = normalizeLinear(line, [start, { x: 100, y: 50 }]);
+        expect(n).toMatchObject({ width: 100, height: 50, points: '[[0,0],[100,50]]' });
+        const before = sceneOf(line, 90, start);
+        const after = sceneOf(n, 90, start);
+        expect(after.x).toBeCloseTo(before.x);
+        expect(after.y).toBeCloseTo(before.y);
+    });
+
     test('an empty point list is a no-op box at the current position', () => {
-        expect(normalizeLinear({ x: 7, y: 8, angle: 0, points: [] })).toEqual({
-            x: 7,
-            y: 8,
-            width: 0,
-            height: 0,
-            points: '[]',
-        });
+        expect(normalizeLinear(box({ x: 7, y: 8 }), [])).toEqual({ x: 7, y: 8, width: 0, height: 0, points: '[]' });
     });
 });
 
@@ -293,7 +289,7 @@ describe('rescalePoints', () => {
 });
 
 describe('resizeLinear', () => {
-    test('rescales points to the new box per axis and keeps points[0] the origin', () => {
+    test('rescales points to the new box per axis and keeps the min corner the origin', () => {
         const el = linear({ points: '[[0,0],[50,20]]', width: 50, height: 20, x: 10, y: 10 });
         const r = resizeLinear(el, { x: 10, y: 10, width: 100, height: 10, angle: 0 });
         expect(r).toEqual({ x: 10, y: 10, width: 100, height: 10, points: '[[0,0],[100,10]]' });

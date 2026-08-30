@@ -5,12 +5,12 @@
 
 import { hitTestElement, type Point, type VectorElement } from '@workspace/lib/vector';
 
-// Sample the segment `from → to` (or just `to` when there's no previous point) every `step` scene
-// units and, for each element hit within `threshold`, add its id to `marked` — or remove it when
+// Sample the segment `from → to` every `step` scene units (from = to on pointer down samples that one
+// point) and, for each element hit within `threshold`, add its id to `marked` — or remove it when
 // `alt` (Excalidraw's restore). `marked` is mutated in place.
 export function markErase(
     ordered: VectorElement[],
-    from: Point | null,
+    from: Point,
     to: Point,
     threshold: number,
     step: number,
@@ -18,14 +18,10 @@ export function markErase(
     marked: Set<string>,
 ): void {
     const samples: Point[] = [];
-    if (from) {
-        const dist = Math.hypot(to.x - from.x, to.y - from.y);
-        const n = Math.max(1, Math.ceil(dist / step));
-        for (let i = 1; i <= n; i++) {
-            samples.push({ x: from.x + ((to.x - from.x) * i) / n, y: from.y + ((to.y - from.y) * i) / n });
-        }
-    } else {
-        samples.push(to);
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const n = Math.max(1, Math.ceil(dist / step));
+    for (let i = 1; i <= n; i++) {
+        samples.push({ x: from.x + ((to.x - from.x) * i) / n, y: from.y + ((to.y - from.y) * i) / n });
     }
     for (const s of samples) {
         for (const el of ordered) {

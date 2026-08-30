@@ -162,27 +162,31 @@ export function serializePoints(points: Point[]): string {
 
 // Re-derive (x, y, width, height, points) so the point bbox's MIN corner is the origin (every point
 // non-negative) and width/height span the raw bbox — so the box ALWAYS equals the content and bounds,
-// viewBox, selection ring, rotation pivot and hit-testing agree with no special case. Translating the
-// points by -min moves the ink; to keep it visually still, x/y shift by that offset rotated into scene
-// space (angle=0 → a plain translate), since the renderer rotates each element about its box center.
-export function normalizeLinear(input: { x: number; y: number; angle: number; points: Point[] }): {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-    points: string;
-} {
-    const { points, angle } = input;
-    if (points.length === 0) return { x: input.x, y: input.y, width: 0, height: 0, points: '[]' };
+// viewBox, selection ring, rotation pivot and hit-testing agree with no special case. `box` is the
+// element's CURRENT box (its width/height only matter when rotated): the renderer rotates about the
+// box centre, so translating the points by -min AND changing the extent both move that pivot; x/y
+// shift so every point keeps its scene position (Excalidraw's _updatePoints centre correction).
+export function normalizeLinear(
+    box: Box,
+    points: Point[],
+): { x: number; y: number; width: number; height: number; points: string } {
+    if (points.length === 0) return { x: box.x, y: box.y, width: 0, height: 0, points: '[]' };
 
     const b = pointsBounds(points);
+    const width = b.maxX - b.minX;
+    const height = b.maxY - b.minY;
     const shifted = points.map((p) => ({ x: p.x - b.minX, y: p.y - b.minY }));
-    const offset = rotatePoint({ x: b.minX, y: b.minY }, ORIGIN, angle);
+    const center = boxCenter(box);
+    const d = rotatePoint(
+        { x: b.minX + (width - box.width) / 2, y: b.minY + (height - box.height) / 2 },
+        ORIGIN,
+        box.angle,
+    );
     return {
-        x: input.x + offset.x,
-        y: input.y + offset.y,
-        width: b.maxX - b.minX,
-        height: b.maxY - b.minY,
+        x: center.x + d.x - width / 2,
+        y: center.y + d.y - height / 2,
+        width,
+        height,
         points: serializePoints(shifted),
     };
 }
@@ -201,14 +205,13 @@ export function rescalePoints(
 }
 
 // Every width/height write on a linear element goes through here: rescale the points to the new box
-// per axis, then re-normalize so points[0] stays the origin. The one owner of resize for the canvas
-// onCommit, the panel's W/H inputs, and match-size.
+// per axis, then re-normalize so the bbox min corner stays the origin. The one owner of resize for the
+// canvas onCommit, the panel's W/H inputs, and match-size.
 export function resizeLinear(
     el: VectorLinearElement,
     box: Box,
 ): { x: number; y: number; width: number; height: number; points: string } {
-    const scaled = rescalePoints(parsePoints(el.points), el, box);
-    return normalizeLinear({ x: box.x, y: box.y, angle: box.angle, points: scaled });
+    return normalizeLinear(box, rescalePoints(parsePoints(el.points), el, box));
 }
 
 // Nearest distance from a point to a polyline (min over its segments). A single point degrades to the
