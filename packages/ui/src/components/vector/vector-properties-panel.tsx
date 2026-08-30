@@ -24,6 +24,7 @@ import {
     type VectorArrowElement,
     type VectorElement,
     type VectorElementType,
+    type VectorLinearElement,
     type VectorTextElement,
 } from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
@@ -90,6 +91,18 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
     { value: 'circle', label: 'Circle' },
 ];
 
+// A width/height change on a linear element must rescale its points through resizeLinear (R2.6), not
+// overwrite the box; the box fills each unset field from the element so x/y/angle-only changes pass through.
+function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Partial<Box>) {
+    return resizeLinear(el, {
+        x: patch.x ?? el.x,
+        y: patch.y ?? el.y,
+        width: patch.width ?? el.width,
+        height: patch.height ?? el.height,
+        angle: patch.angle ?? el.angle,
+    });
+}
+
 type VectorPropertiesPanelProps = {
     // All elements — z-order reorders the selection relative to the rest (computeZOrder needs both).
     elements: VectorElement[];
@@ -141,8 +154,8 @@ export function VectorPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
-    // Numeric transform writes. A width/height change on a linear element must rescale its points
-    // through resizeLinear (R2.6), not overwrite the box; x/y/angle-only changes pass straight through.
+    // Numeric transform writes. A width/height change routes linear elements through resizeLinearTo so
+    // their points scale with the box (R2.6); x/y/angle-only changes pass straight through.
     const applyTransform = (fields: VectorElementPatch) => {
         if (!selectedIds.length) return;
         const resizesLinear = fields.width !== undefined || fields.height !== undefined;
@@ -151,14 +164,7 @@ export function VectorPropertiesPanel({
             selectedIds.map((id) => {
                 const el = byId.get(id);
                 if (resizesLinear && el && isLinearElement(el)) {
-                    const box: Box = {
-                        x: fields.x ?? el.x,
-                        y: fields.y ?? el.y,
-                        width: fields.width ?? el.width,
-                        height: fields.height ?? el.height,
-                        angle: fields.angle ?? el.angle,
-                    };
-                    return { id, fields: { ...fields, ...resizeLinear(el, box) } };
+                    return { id, fields: { ...fields, ...resizeLinearTo(el, fields) } };
                 }
                 return { id, fields };
             }),
@@ -217,21 +223,14 @@ export function VectorPropertiesPanel({
         if (!patches.length) return;
         // Text dims are DERIVED from fontSize (the measurement util is the sole dim writer), so
         // match-size patches must never write width/height onto a text element; align/distribute
-        // (x/y-only) still applies. A linear element's width/height goes through resizeLinear so its
+        // (x/y-only) still applies. A linear element's width/height goes through resizeLinearTo so its
         // points scale with the box (R2.6).
         undoManager?.stopCapturing();
         updateElements(
             patches.map((p) => {
                 const el = byId.get(p.id);
                 if (el && isLinearElement(el)) {
-                    const box: Box = {
-                        x: p.x ?? el.x,
-                        y: p.y ?? el.y,
-                        width: p.width ?? el.width,
-                        height: p.height ?? el.height,
-                        angle: el.angle,
-                    };
-                    return { id: p.id, fields: resizeLinear(el, box) };
+                    return { id: p.id, fields: resizeLinearTo(el, p) };
                 }
                 if (el?.type === 'text') return { id: p.id, fields: { x: p.x, y: p.y } };
                 return { id: p.id, fields: { x: p.x, y: p.y, width: p.width, height: p.height } };

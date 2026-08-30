@@ -491,13 +491,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const bindingHighlight = candidate
         ? createElement('div', {
               className: 'eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute',
-              style: boxToStyle({
-                  x: candidate.x,
-                  y: candidate.y,
-                  width: candidate.width,
-                  height: candidate.height,
-                  angle: candidate.angle,
-              }),
+              style: boxToStyle(candidate),
           })
         : null;
 
