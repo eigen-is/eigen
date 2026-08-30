@@ -3,17 +3,19 @@
 // and text trusts client-measured width/height so the server never measures. Shared verbatim
 // by the frontend (previews/embeds/thumbnails/export) and the API transform Worker.
 
+import { getStroke } from 'perfect-freehand';
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../constants/fonts';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
-import type { Box } from './geometry';
-import { getElementsBounds } from './geometry';
+import type { Box, Point } from './geometry';
+import { FREEDRAW_SIZE_FACTOR, getElementsBounds, isClosedPath, parsePoints } from './geometry';
 import {
     isTransparent,
     type VectorElement,
     type VectorImageElement,
+    type VectorLinearElement,
     type VectorScene,
     type VectorShapeElement,
     type VectorTextElement,
@@ -74,12 +76,79 @@ export function elementToSvg(el: VectorElement, opts: SceneToSvgOptions = {}): s
             return renderText(el);
         case 'image':
             return renderImage(el, opts);
+        case 'freedraw':
+            return renderFreedraw(new RoughGenerator(), el);
+        case 'line':
+            return renderLine(new RoughGenerator(), el);
     }
 }
 
 function renderShape(gen: RoughGenerator, el: VectorShapeElement): string {
     const paths = drawableToSvg(shapeDrawable(gen, el));
     return `${groupOpen(el, ' stroke-linecap="round"')}${paths}</g>`;
+}
+
+// Freehand strokes are perfect-freehand, not roughjs: a filled outline `<path>` with no stroke.
+// roughness/seed/strokeStyle don't touch the stroke; only a closed freedraw's optional fill uses them.
+function renderFreedraw(gen: RoughGenerator, el: VectorLinearElement): string {
+    const points = parsePoints(el.points);
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
+
+    // Closed + filled: the roughjs fill of the raw polygon, layered under the stroke (Excalidraw's
+    // order). points-on-curve simplify isn't vendored — the raw points are the fill polygon.
+    let fill = '';
+    if (isClosedPath(points) && !isTransparent(el.backgroundColor)) {
+        const options = linearRoughOptions(el, points);
+        options.stroke = 'none';
+        fill = drawableToSvg(gen.polygon(coords, options));
+    }
+
+    const outline = getStroke(coords, {
+        simulatePressure: true,
+        size: el.strokeWidth * FREEDRAW_SIZE_FACTOR,
+        thinning: 0.6,
+        smoothing: 0.5,
+        streamline: 0.5,
+        easing: (t) => Math.sin((t * Math.PI) / 2),
+        last: true,
+    });
+    const d = getSvgPathFromStroke(outline);
+    const stroke = d ? `<path d="${d}" fill="${escapeXml(el.strokeColor)}" stroke="none"/>` : '';
+    return `${groupOpen(el)}${fill}${stroke}</g>`;
+}
+
+// Lines are roughjs: Excalidraw's line arm — rounded curves through the vertices, sharp linearPaths,
+// and (only when the path loops) a filled polygon/curve.
+function renderLine(gen: RoughGenerator, el: VectorLinearElement): string {
+    const points = parsePoints(el.points);
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
+    const options = linearRoughOptions(el, points);
+    const drawable =
+        el.roundness === 'round'
+            ? gen.curve(coords, options)
+            : options.fill
+              ? gen.polygon(coords, options)
+              : gen.linearPath(coords, options);
+    return `${groupOpen(el, ' stroke-linecap="round"')}${drawableToSvg(drawable)}</g>`;
+}
+
+// Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
+// the outline vertices and whose on-curve points are the midpoints between them, closed with Z. Uses
+// our round() (2 decimals) in place of Excalidraw's TO_FIXED_PRECISION regex.
+function getSvgPathFromStroke(points: number[][]): string {
+    if (points.length === 0) return '';
+    const max = points.length - 1;
+    const parts: (number[] | string)[] = ['M', points[0], 'Q'];
+    for (let i = 0; i < points.length; i++) {
+        const point = points[i];
+        if (i === max) parts.push(point, med(point, points[0]), 'L', points[0], 'Z');
+        else parts.push(point, med(point, points[i + 1]));
+    }
+    return parts.map((part) => (typeof part === 'string' ? part : `${round(part[0])} ${round(part[1])}`)).join(' ');
+}
+
+function med(a: number[], b: number[]): number[] {
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
 function renderText(el: VectorTextElement): string {
@@ -155,9 +224,10 @@ function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
 }
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
-// dark-mode filter. Determinism comes from the persisted per-element `seed`.
-function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
-    const options: Options = {
+// dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are
+// shared by shapes and linear elements; fill differs (shapes always, lines only when they loop).
+function baseRoughOptions(el: VectorShapeElement | VectorLinearElement, continuousPath: boolean): Options {
+    return {
         seed: el.seed,
         strokeLineDash: dashArray(el.strokeStyle, el.strokeWidth),
         disableMultiStroke: el.strokeStyle !== 'solid',
@@ -169,19 +239,39 @@ function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options 
         roughness: adjustRoughness(el),
         stroke: el.strokeColor,
         preserveVertices: continuousPath || el.roughness < 2,
-        fillStyle: el.fillStyle,
-        fill: isTransparent(el.backgroundColor) ? undefined : el.backgroundColor,
     };
+}
+
+function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
+    const options = baseRoughOptions(el, continuousPath);
+    options.fillStyle = el.fillStyle;
+    options.fill = isTransparent(el.backgroundColor) ? undefined : el.backgroundColor;
     if (el.type === 'ellipse') options.curveFitting = 1;
     return options;
 }
 
-// Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule).
-function adjustRoughness(el: VectorShapeElement): number {
+// A line/freedraw fills only when its path loops (Excalidraw's generateRoughOptions line arm).
+function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
+    const options = baseRoughOptions(el, false);
+    if (isClosedPath(points) && !isTransparent(el.backgroundColor)) {
+        options.fillStyle = el.fillStyle;
+        options.fill = el.backgroundColor;
+    }
+    return options;
+}
+
+// Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule); a relatively
+// long linear element is spared too, so a straight line doesn't wobble.
+function adjustRoughness(el: VectorShapeElement | VectorLinearElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);
     const roundable = el.type === 'rectangle' || el.type === 'diamond';
-    if ((minSize >= 20 && maxSize >= 50) || (minSize >= 15 && el.roundness === 'round' && roundable)) {
+    const linear = el.type === 'line' || el.type === 'freedraw';
+    if (
+        (minSize >= 20 && maxSize >= 50) ||
+        (minSize >= 15 && el.roundness === 'round' && roundable) ||
+        (linear && maxSize >= 50)
+    ) {
         return el.roughness;
     }
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);

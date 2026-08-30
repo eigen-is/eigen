@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import { readVectorFromDoc } from '../../vector/read-vector';
-import { DEFAULT_ELEMENT_PROPS, ELEMENT_FIELDS } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META, ELEMENT_FIELDS } from '../../vector/types';
 
 function writeElement(map: Y.Map<unknown>, id: string, fields: Record<string, unknown>) {
     const m = new Y.Map();
@@ -130,6 +130,87 @@ describe('readVectorFromDoc', () => {
         expect(scene.elements).toEqual([]);
         expect(scene.meta).toEqual({ background: 'transparent', gridSize: 20 });
     });
+
+    test('materializes a linear element with points and roundness', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ln', {
+                type: 'line',
+                index: 'a0',
+                points: '[[0,0],[40,10],[80,-5]]',
+                roundness: 'round',
+            });
+            writeElement(elements, 'fd', { type: 'freedraw', index: 'a1', points: '[[0,0],[3,4]]' });
+        });
+        const [line, freedraw] = readVectorFromDoc(doc).elements;
+        expect(line).toMatchObject({ type: 'line', points: '[[0,0],[40,10],[80,-5]]', roundness: 'round' });
+        // freedraw ignores roundness but the reader still falls it back to the linear default
+        expect(freedraw).toMatchObject({ type: 'freedraw', points: '[[0,0],[3,4]]', roundness: 'sharp' });
+    });
+
+    test('skips a linear element whose points are missing, empty, or garbage', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ok', { type: 'line', index: 'a0', points: '[[0,0],[10,0]]' });
+            writeElement(elements, 'missing', { type: 'line', index: 'a1' });
+            writeElement(elements, 'empty', { type: 'freedraw', index: 'a2', points: '[]' });
+            writeElement(elements, 'garbage', { type: 'line', index: 'a3', points: '[[0,0],[1]]' });
+        });
+        expect(readVectorFromDoc(doc).elements.map((e) => e.id)).toEqual(['ok']);
+    });
+
+    test('clamps hostile point coordinates per axis', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'l', { type: 'line', index: 'a0', points: '[[0,0],[1e15,-2e9]]' });
+        });
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el).toMatchObject({ type: 'line', points: '[[0,0],[1000000,-1000000]]' });
+    });
+
+    test('accepts the new zigzag fill style', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'r', { type: 'rectangle', index: 'a0', fillStyle: 'zigzag' });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ fillStyle: 'zigzag' });
+    });
+
+    test('keeps a single-point linear element (a dot)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'dot', { type: 'freedraw', index: 'a0', points: '[[0,0]]' });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ type: 'freedraw', points: '[[0,0]]' });
+    });
+
+    test('strips XML-invalid control chars from text and fontFamily (keeps tab/newline)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 't', {
+                type: 'text',
+                index: 'a0',
+                text: `a\u0000b\u0007c\td\ne`,
+                fontFamily: `Ex\u001Fcalifont`,
+            });
+        });
+        // U+0000/U+0007/U+001F stripped; the tab and newline survive.
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ text: 'abc\td\ne', fontFamily: 'Excalifont' });
+    });
+
+    test('accepts only hex / transparent colours; anything else falls back (blocks url() smuggling)', () => {
+        const doc = docWith((elements, meta) => {
+            meta.set('background', 'url(#evil)');
+            writeElement(elements, 'a', {
+                type: 'rectangle',
+                index: 'a0',
+                strokeColor: '#abc',
+                backgroundColor: 'url(http://x/y.svg)',
+            });
+            writeElement(elements, 'b', { type: 'rectangle', index: 'a1', strokeColor: 'red' });
+        });
+        const scene = readVectorFromDoc(doc);
+        expect(scene.meta.background).toBe(DEFAULT_SCENE_META.background);
+        expect(scene.elements[0]).toMatchObject({
+            strokeColor: '#abc',
+            backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
+        });
+        expect(scene.elements[1].strokeColor).toBe(DEFAULT_ELEMENT_PROPS.strokeColor);
+    });
 });
 
 describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
@@ -198,6 +279,27 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         index: 'a1',
         mediaName: 'photo.png',
     };
+    const line: Record<string, unknown> = {
+        id: 'line1',
+        type: 'line',
+        x: 3,
+        y: 4,
+        width: 80,
+        height: 15,
+        angle: 12,
+        strokeColor: '#334455',
+        backgroundColor: '#667788',
+        fillStyle: 'zigzag',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 0,
+        seed: 333,
+        opacity: 60,
+        locked: false,
+        index: 'a1',
+        roundness: 'round',
+        points: '[[0,0],[80,10],[40,-5]]',
+    };
 
     const BASE_FIELDS = [
         'id',
@@ -222,6 +324,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         { record: rect, fields: [...BASE_FIELDS, 'roundness'] },
         { record: text, fields: [...BASE_FIELDS, 'text', 'fontSize', 'fontFamily', 'textAlign'] },
         { record: image, fields: [...BASE_FIELDS, 'mediaName'] },
+        { record: line, fields: [...BASE_FIELDS, 'roundness', 'points'] },
     ];
 
     test('the variant field map covers ELEMENT_FIELDS exactly', () => {

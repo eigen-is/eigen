@@ -1089,7 +1089,7 @@ export function VectorCanvas({
     const onDoubleClick = (e: React.MouseEvent) => {
         if (!canWrite || tool !== 'select' || editing) return;
         const p = clientToScene(e.clientX, e.clientY);
-        const hit = hitTestTopmost(ordered, p);
+        const hit = hitTestTopmost(ordered, p, zoom);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'text') openEditExisting(hitEl);
     };
@@ -1102,7 +1102,7 @@ export function VectorCanvas({
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
         if (!canWrite || editing || frozenRef.current) return;
         const p = clientToScene(e.clientX, e.clientY);
-        const hitId = hitTestTopmost(ordered, p);
+        const hitId = hitTestTopmost(ordered, p, zoom);
         if (!hitId) return;
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
         objectContextMenu.handleContextMenu(e, hitId);
@@ -1180,7 +1180,7 @@ export function VectorCanvas({
             // discards the empty session instantly (intermittent dead clicks). Canceling also
             // keeps mousedown's caret-placement from destroying the select-all on existing text.
             e.preventDefault();
-            const hit = hitTestTopmost(ordered, p);
+            const hit = hitTestTopmost(ordered, p, zoom);
             const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
             if (hitEl?.type === 'text') openEditExisting(hitEl);
             else openNewText(p.x, p.y);
@@ -1204,7 +1204,7 @@ export function VectorCanvas({
         }
 
         // Select tool.
-        const hitId = hitTestTopmost(ordered, p);
+        const hitId = hitTestTopmost(ordered, p, zoom);
         if (hitId) {
             if (e.shiftKey) {
                 toggle(hitId); // shift-click toggles membership, no move

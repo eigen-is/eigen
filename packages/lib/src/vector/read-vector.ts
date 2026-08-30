@@ -5,8 +5,10 @@
 
 import type * as Y from 'yjs';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
+import { parsePoints, serializePoints } from './geometry';
 import {
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_SCENE_META,
     DEFAULT_SHAPE_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
@@ -38,7 +40,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     // Order by z-index, then heal any collisions/invalid runs from concurrent inserts.
     const ordered = syncInvalidIndices(orderByFractionalIndex(elements));
 
-    const background = str(metaMap.get('background'), DEFAULT_SCENE_META.background);
+    const background = color(metaMap.get('background'), DEFAULT_SCENE_META.background);
     const gridSize = num(metaMap.get('gridSize'), DEFAULT_SCENE_META.gridSize);
     return { elements: ordered, meta: { background, gridSize } };
 }
@@ -58,8 +60,8 @@ function readElement(value: unknown): VectorElement | null {
         width: coord(value.get('width')),
         height: coord(value.get('height')),
         angle: num(value.get('angle'), 0),
-        strokeColor: str(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
-        backgroundColor: str(value.get('backgroundColor'), DEFAULT_ELEMENT_PROPS.backgroundColor),
+        strokeColor: color(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
+        backgroundColor: color(value.get('backgroundColor'), DEFAULT_ELEMENT_PROPS.backgroundColor),
         fillStyle: oneOf(value.get('fillStyle'), FILL_STYLES, DEFAULT_ELEMENT_PROPS.fillStyle),
         strokeWidth: num(value.get('strokeWidth'), DEFAULT_ELEMENT_PROPS.strokeWidth),
         strokeStyle: oneOf(value.get('strokeStyle'), STROKE_STYLES, DEFAULT_ELEMENT_PROPS.strokeStyle),
@@ -83,13 +85,28 @@ function readElement(value: unknown): VectorElement | null {
             return {
                 ...base,
                 type: 'text',
-                text: str(value.get('text'), DEFAULT_TEXT_PROPS.text),
+                text: cleanStr(value.get('text'), DEFAULT_TEXT_PROPS.text),
                 fontSize: num(value.get('fontSize'), DEFAULT_TEXT_PROPS.fontSize),
-                fontFamily: str(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
+                fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
                 textAlign: oneOf(value.get('textAlign'), TEXT_ALIGNS, DEFAULT_TEXT_PROPS.textAlign),
             };
         case 'image':
             return { ...base, type: 'image', mediaName: str(value.get('mediaName'), '') };
+        case 'freedraw':
+        case 'line': {
+            // A linear element without points is meaningless — skip it like an unknown type. Coords are
+            // clamped per-axis (same bound as scalar spatial fields) so one corrupt peer write can't freeze
+            // others; re-serialized back to the stored string form.
+            const points = parsePoints(str(value.get('points'), ''));
+            if (points.length === 0) return null;
+            const clamped = points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) }));
+            return {
+                ...base,
+                type: base.type,
+                roundness: oneOf(value.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
+                points: serializePoints(clamped),
+            };
+        }
     }
 }
 
@@ -104,11 +121,33 @@ function num(v: unknown, fallback: number): number {
 }
 
 function coord(v: unknown): number {
-    return Math.min(MAX_COORD, Math.max(-MAX_COORD, num(v, 0)));
+    return clampCoord(num(v, 0));
+}
+
+function clampCoord(n: number): number {
+    return Math.min(MAX_COORD, Math.max(-MAX_COORD, n));
 }
 
 function str(v: unknown, fallback: string): string {
     return typeof v === 'string' ? v : fallback;
+}
+
+// Strip XML-invalid control chars (U+0000–U+001F except tab/LF/CR). The HTML-parsed live canvas
+// tolerates them, but librsvg/WeasyPrint/strict SVG viewers reject them — so the reader, the one
+// boundary every consumer shares, cleans them for previews and svg/png/pdf export alike.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: stripping exactly those chars is the point
+const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g;
+
+function cleanStr(v: unknown, fallback: string): string {
+    return typeof v === 'string' ? v.replace(XML_INVALID, '') : fallback;
+}
+
+// Colours come from the ColorPicker: hex (#rgb/#rrggbb/#rrggbbaa) or the 'transparent' sentinel.
+// Anything else → the field default; this closes `url(...)` paint-server smuggling into export.
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+
+function color(v: unknown, fallback: string): string {
+    return typeof v === 'string' && (v === 'transparent' || HEX_COLOR.test(v)) ? v : fallback;
 }
 
 function bool(v: unknown, fallback: boolean): boolean {

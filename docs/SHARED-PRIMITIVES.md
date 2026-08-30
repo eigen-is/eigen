@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1069 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1079 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -430,7 +430,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (296)
+## Types (297)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -670,6 +670,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorElementBase` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorImageElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `VectorLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorMeta` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -731,7 +732,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (374)
+## Utilities & constants (383)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1024,14 +1025,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_FONT_SIZE` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_IMAGE_BOX` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
 | `DEFAULT_IMAGE_FIT` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
+| `DEFAULT_LINEAR_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SHAPE_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `DUPLICATE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `fitImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
+| `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `generateNKeysBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `getElementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1043,20 +1047,26 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestEllipse` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isTransparent` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isValidFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `marqueeHits` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `normalizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP_LARGE` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `orderByFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
+| `rescalePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `resizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeRotatedRect` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `snapBoxToTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |

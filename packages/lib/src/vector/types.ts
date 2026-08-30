@@ -3,11 +3,11 @@
 // what Eigen's Yjs CRDT needs: no tombstones, no version/versionNonce, no groupIds, no
 // points (freehand/line/arrow are additive later units).
 
-export type VectorElementType = 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image';
+export type VectorElementType = 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image' | 'freedraw' | 'line';
 
 // The runtime value lists are the single source; the union types derive from them, so a grown
 // list and its type can never drift. read-vector's validators consume the same arrays.
-export const FILL_STYLES = ['hachure', 'cross-hatch', 'solid'] as const;
+export const FILL_STYLES = ['hachure', 'cross-hatch', 'solid', 'zigzag'] as const;
 export const STROKE_STYLES = ['solid', 'dashed', 'dotted'] as const;
 export const ROUNDNESS = ['sharp', 'round'] as const;
 export const TEXT_ALIGNS = ['left', 'center', 'right'] as const;
@@ -56,7 +56,16 @@ export type VectorImageElement = VectorElementBase & {
     mediaName: string; // filename in the container's media/ folder, NEVER a dataURL
 };
 
-export type VectorElement = VectorShapeElement | VectorTextElement | VectorImageElement;
+// Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
+// to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant). Shaped so 'arrow'
+// extends it additively in Phase 3 — no arrow fields here yet.
+export type VectorLinearElement = VectorElementBase & {
+    type: 'freedraw' | 'line';
+    points: string;
+    roundness: Roundness; // line: 'round' = roughjs curve through the vertices, 'sharp' = linearPath. freedraw ignores it.
+};
+
+export type VectorElement = VectorShapeElement | VectorTextElement | VectorImageElement | VectorLinearElement;
 
 export type VectorMeta = { background: string; gridSize: number };
 
@@ -84,6 +93,7 @@ export const ELEMENT_FIELDS = [
     'locked',
     'index',
     'roundness',
+    'points',
     'text',
     'fontSize',
     'fontFamily',
@@ -94,6 +104,8 @@ export const ELEMENT_FIELDS = [
 export const DEFAULT_FONT_SIZE = 20;
 export const DEFAULT_FONT_FAMILY = 'Excalifont';
 export const DEFAULT_SHAPE_ROUNDNESS: Roundness = 'round';
+// A drawn line/freedraw is straight by default; the reader falls back to this for a linear element.
+export const DEFAULT_LINEAR_ROUNDNESS: Roundness = 'sharp';
 
 // Canvas-level defaults (the `meta` root).
 export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', gridSize: 20 };
@@ -132,7 +144,15 @@ export const STROKE_WIDTH_OPTIONS: { value: string; label: string }[] = [
 ];
 
 export function isVectorElementType(v: unknown): v is VectorElementType {
-    return v === 'rectangle' || v === 'diamond' || v === 'ellipse' || v === 'text' || v === 'image';
+    return (
+        v === 'rectangle' ||
+        v === 'diamond' ||
+        v === 'ellipse' ||
+        v === 'text' ||
+        v === 'image' ||
+        v === 'freedraw' ||
+        v === 'line'
+    );
 }
 
 // A fill is absent when the color is empty or the 'transparent' sentinel (the slides

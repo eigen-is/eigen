@@ -3,7 +3,7 @@
 // by hit-testing, bounds, the properties bar, and (later) the shared ObjectTransform
 // primitive.
 
-import type { VectorElement } from './types';
+import { isTransparent, type VectorElement, type VectorLinearElement } from './types';
 
 export type Point = { x: number; y: number };
 
@@ -125,7 +125,113 @@ export function hitTestDiamond(box: Box, point: Point): boolean {
     return Math.abs(p.x - (box.x + rx)) / rx + Math.abs(p.y - (box.y + ry)) / ry <= 1;
 }
 
-export function hitTestElement(element: VectorElement, point: Point): boolean {
+// --- Linear elements (freedraw / line) ------------------------------------------------
+// points is a JSON `[[x,y],…]` string, scene units relative to (x,y); the bbox min corner is (0,0).
+// Kept a string in the model so a whole stroke is one scalar write (never a per-sample Y.Array).
+
+// The full stroke diameter is `strokeWidth * FREEDRAW_SIZE_FACTOR`; hit-testing widens a freedraw's
+// tolerance by half of it (the visible ink half-width). The renderer feeds the same factor to
+// perfect-freehand's `size`. One source, imported by scene-to-svg.
+export const FREEDRAW_SIZE_FACTOR = 2.125;
+
+// A path loops when its ends meet: ≥ 3 points and the first ≈ last within 8 scene units
+// (Excalidraw's isPathALoop at zoom 1 — zoom-free so FE preview and BE export decide fill alike).
+const CLOSE_PATH_THRESHOLD = 8;
+
+export function parsePoints(points: string): Point[] {
+    let raw: unknown;
+    try {
+        raw = JSON.parse(points);
+    } catch {
+        return [];
+    }
+    if (!Array.isArray(raw)) return [];
+    const out: Point[] = [];
+    for (const pair of raw) {
+        if (!Array.isArray(pair)) return [];
+        const [x, y] = pair;
+        if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) return [];
+        out.push({ x, y });
+    }
+    return out;
+}
+
+export function serializePoints(points: Point[]): string {
+    return JSON.stringify(points.map((p) => [round2(p.x), round2(p.y)]));
+}
+
+// Re-derive (x, y, width, height, points) so the point bbox's MIN corner is the origin (every point
+// non-negative) and width/height span the raw bbox — so the box ALWAYS equals the content and bounds,
+// viewBox, selection ring, rotation pivot and hit-testing agree with no special case. Translating the
+// points by -min moves the ink; to keep it visually still, x/y shift by that offset rotated into scene
+// space (angle=0 → a plain translate), since the renderer rotates each element about its box center.
+export function normalizeLinear(input: { x: number; y: number; angle: number; points: Point[] }): {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    points: string;
+} {
+    const { points, angle } = input;
+    if (points.length === 0) return { x: input.x, y: input.y, width: 0, height: 0, points: '[]' };
+
+    const b = pointsBounds(points);
+    const shifted = points.map((p) => ({ x: p.x - b.minX, y: p.y - b.minY }));
+    const offset = rotatePoint({ x: b.minX, y: b.minY }, ORIGIN, angle);
+    return {
+        x: input.x + offset.x,
+        y: input.y + offset.y,
+        width: b.maxX - b.minX,
+        height: b.maxY - b.minY,
+        points: serializePoints(shifted),
+    };
+}
+
+// Scale points per axis to fit a new box (ObjectTransform resize). Scaling is about the origin (0,0),
+// the bbox min corner, so non-negative points stay non-negative; a degenerate old dimension keeps that
+// axis (nothing to scale from). resizeLinear re-normalizes after, so the invariant holds regardless.
+export function rescalePoints(
+    points: Point[],
+    oldSize: { width: number; height: number },
+    newSize: { width: number; height: number },
+): Point[] {
+    const sx = oldSize.width === 0 ? 1 : newSize.width / oldSize.width;
+    const sy = oldSize.height === 0 ? 1 : newSize.height / oldSize.height;
+    return points.map((p) => ({ x: p.x * sx, y: p.y * sy }));
+}
+
+// Every width/height write on a linear element goes through here: rescale the points to the new box
+// per axis, then re-normalize so points[0] stays the origin. The one owner of resize for the canvas
+// onCommit, the panel's W/H inputs, and match-size.
+export function resizeLinear(
+    el: VectorLinearElement,
+    box: Box,
+): { x: number; y: number; width: number; height: number; points: string } {
+    const scaled = rescalePoints(parsePoints(el.points), el, box);
+    return normalizeLinear({ x: box.x, y: box.y, angle: box.angle, points: scaled });
+}
+
+// Nearest distance from a point to a polyline (min over its segments). A single point degrades to the
+// distance to that point; an empty path is unreachable.
+export function distanceToPolyline(points: Point[], point: Point): number {
+    if (points.length === 0) return Number.POSITIVE_INFINITY;
+    if (points.length === 1) return Math.hypot(point.x - points[0].x, point.y - points[0].y);
+    let min = Number.POSITIVE_INFINITY;
+    for (let i = 1; i < points.length; i++) {
+        const d = distanceToSegment(point, points[i - 1], points[i]);
+        if (d < min) min = d;
+    }
+    return min;
+}
+
+export function isClosedPath(points: Point[]): boolean {
+    if (points.length < 3) return false;
+    const first = points[0];
+    const last = points[points.length - 1];
+    return Math.hypot(first.x - last.x, first.y - last.y) <= CLOSE_PATH_THRESHOLD;
+}
+
+export function hitTestElement(element: VectorElement, point: Point, threshold: number): boolean {
     switch (element.type) {
         case 'ellipse':
             return hitTestEllipse(element, point);
@@ -135,7 +241,66 @@ export function hitTestElement(element: VectorElement, point: Point): boolean {
         case 'text':
         case 'image':
             return hitTestBox(element, point);
+        case 'freedraw':
+        case 'line':
+            return hitTestLinear(element, point, threshold);
     }
+}
+
+// Unrotate the probe into the element's local frame (about the box center, matching the renderer's
+// rotate pivot), then measure to the polyline. Tolerance is the screen threshold plus half the drawn
+// ink width; a closed, filled path is also hit anywhere inside.
+function hitTestLinear(element: VectorLinearElement, point: Point, threshold: number): boolean {
+    const points = parsePoints(element.points);
+    if (points.length === 0) return false;
+    const center = boxCenter(element);
+    const local = rotatePoint(point, center, -element.angle);
+    const p: Point = { x: local.x - element.x, y: local.y - element.y };
+
+    const inkHalf =
+        element.type === 'freedraw' ? (element.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2 : element.strokeWidth / 2;
+    if (distanceToPolyline(points, p) <= threshold + inkHalf) return true;
+    return isClosedPath(points) && !isTransparent(element.backgroundColor) && pointInPolygon(p, points);
+}
+
+// Point-to-segment distance (Excalidraw's distanceToLineSegment): project onto the segment, clamp the
+// parameter to [0,1], measure to the clamped foot.
+function distanceToSegment(p: Point, a: Point, b: Point): number {
+    const cx = b.x - a.x;
+    const cy = b.y - a.y;
+    const lenSq = cx * cx + cy * cy;
+    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * cx + (p.y - a.y) * cy) / lenSq));
+    return Math.hypot(p.x - (a.x + t * cx), p.y - (a.y + t * cy));
+}
+
+// Even-odd ray cast, for inside-hits on a closed filled path.
+function pointInPolygon(p: Point, points: Point[]): boolean {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        const a = points[i];
+        const b = points[j];
+        if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    return inside;
+}
+
+function pointsBounds(points: Point[]): Bounds {
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+    for (const { x, y } of points) {
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+    }
+    return { minX, minY, maxX, maxY };
+}
+
+function round2(n: number): number {
+    const r = Math.round(n * 100) / 100;
+    return r === 0 ? 0 : r;
 }
 
 // --- Resize / rotate transform math ---------------------------------------------------

@@ -3,22 +3,29 @@ import {
     applyResize,
     type Box,
     boxCenter,
+    distanceToPolyline,
     getElementBounds,
     getElementsBounds,
     hitTestBox,
     hitTestDiamond,
     hitTestElement,
     hitTestEllipse,
+    isClosedPath,
     marqueeHits,
     marqueeMode,
     normalizeAngle,
+    normalizeLinear,
     type Point,
+    parsePoints,
+    rescalePoints,
+    resizeLinear,
     resizeRotatedRect,
     rotatePoint,
+    serializePoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorLinearElement } from '../../vector/types';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });
 
@@ -108,7 +115,7 @@ describe('hitTestDiamond', () => {
 });
 
 describe('hitTestElement', () => {
-    const make = (type: VectorElement['type']): VectorElement => {
+    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image'): VectorElement => {
         const base = {
             ...DEFAULT_ELEMENT_PROPS,
             id: 'e',
@@ -127,11 +134,254 @@ describe('hitTestElement', () => {
     };
 
     test('dispatches shape geometry per type — corner hits a rectangle but not an ellipse', () => {
-        expect(hitTestElement(make('rectangle'), { x: 0, y: 0 })).toBe(true);
-        expect(hitTestElement(make('ellipse'), { x: 0, y: 0 })).toBe(false);
-        expect(hitTestElement(make('diamond'), { x: 0, y: 0 })).toBe(false);
-        expect(hitTestElement(make('text'), { x: 0, y: 0 })).toBe(true);
-        expect(hitTestElement(make('image'), { x: 0, y: 0 })).toBe(true);
+        // Shapes ignore the outline threshold (inside/outline behaviour unchanged); pass 0.
+        expect(hitTestElement(make('rectangle'), { x: 0, y: 0 }, 0)).toBe(true);
+        expect(hitTestElement(make('ellipse'), { x: 0, y: 0 }, 0)).toBe(false);
+        expect(hitTestElement(make('diamond'), { x: 0, y: 0 }, 0)).toBe(false);
+        expect(hitTestElement(make('text'), { x: 0, y: 0 }, 0)).toBe(true);
+        expect(hitTestElement(make('image'), { x: 0, y: 0 }, 0)).toBe(true);
+    });
+});
+
+// --- Linear elements: parse/serialize, normalize, rescale, distance, closed-path, hit-testing ------
+
+const linear = (over: Partial<VectorLinearElement> & { points: string }): VectorLinearElement => ({
+    ...DEFAULT_ELEMENT_PROPS,
+    id: 'l',
+    type: 'line',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 60,
+    angle: 0,
+    seed: 1,
+    index: 'a0',
+    roundness: 'sharp',
+    ...over,
+});
+
+describe('parsePoints / serializePoints', () => {
+    test('round-trips a point list and rounds to 2 decimals', () => {
+        expect(
+            serializePoints([
+                { x: 0, y: 0 },
+                { x: 1.239, y: -2.641 },
+            ]),
+        ).toBe('[[0,0],[1.24,-2.64]]');
+        expect(parsePoints('[[0,0],[1.24,-2.64]]')).toEqual([
+            { x: 0, y: 0 },
+            { x: 1.24, y: -2.64 },
+        ]);
+    });
+
+    test('normalizes -0 to 0 on serialize', () => {
+        expect(serializePoints([{ x: -0, y: -0.001 }])).toBe('[[0,0]]');
+    });
+
+    test('returns [] on garbage — bad JSON, non-array, short pair, or non-finite coord', () => {
+        expect(parsePoints('not json')).toEqual([]);
+        expect(parsePoints('{}')).toEqual([]);
+        expect(parsePoints('[[0]]')).toEqual([]);
+        expect(parsePoints('[[0,"x"]]')).toEqual([]);
+        expect(parsePoints('[[0,null]]')).toEqual([]);
+        expect(parsePoints('[]')).toEqual([]);
+    });
+});
+
+// The scene position of a stored local point p under the renderer's transform:
+// translate(x,y) then rotate(angle) about the box centre (w/2, h/2).
+const sceneOf = (n: { x: number; y: number; width: number; height: number }, angle: number, p: Point): Point => {
+    const center = { x: n.width / 2, y: n.height / 2 };
+    const rotated = rotatePoint(p, center, angle);
+    return { x: n.x + rotated.x, y: n.y + rotated.y };
+};
+
+describe('normalizeLinear', () => {
+    test('moves the bbox min corner to the origin and shifts x/y (angle 0)', () => {
+        const n = normalizeLinear({
+            x: 10,
+            y: 20,
+            angle: 0,
+            points: [
+                { x: 5, y: 5 },
+                { x: 15, y: 25 },
+            ],
+        });
+        expect(n).toEqual({ x: 15, y: 25, width: 10, height: 20, points: '[[0,0],[10,20]]' });
+    });
+
+    test('negative-going points normalize to a non-negative set; width/height span the raw bbox', () => {
+        const n = normalizeLinear({
+            x: 0,
+            y: 0,
+            angle: 0,
+            points: [
+                { x: 0, y: 0 },
+                { x: -30, y: 10 },
+                { x: 20, y: -5 },
+            ],
+        });
+        expect(n.width).toBe(50);
+        expect(n.height).toBe(15);
+        // min corner (-30,-5) → origin: every coordinate is now ≥ 0, and x/y absorb the shift.
+        expect(n.points).toBe('[[30,5],[0,15],[50,0]]');
+        expect(n).toMatchObject({ x: -30, y: -5 });
+    });
+
+    test('the scene position of every point is preserved, with and without angle', () => {
+        const raw = [
+            { x: 0, y: 0 },
+            { x: -30, y: 10 },
+            { x: 20, y: -5 },
+            { x: 8, y: 40 },
+        ];
+        for (const angle of [0, 37, 90, 210]) {
+            const n = normalizeLinear({ x: 100, y: 60, angle, points: raw });
+            const shifted: Point[] = JSON.parse(n.points).map(([x, y]: [number, number]) => ({ x, y }));
+            // Each normalized point maps to the same scene position the raw point had before normalizing.
+            const rawBox = { x: 100, y: 60, width: n.width, height: n.height };
+            for (let i = 0; i < raw.length; i++) {
+                const before = sceneOf(rawBox, angle, raw[i]);
+                const after = sceneOf(n, angle, shifted[i]);
+                expect(after.x).toBeCloseTo(before.x);
+                expect(after.y).toBeCloseTo(before.y);
+            }
+        }
+    });
+
+    test('an empty point list is a no-op box at the current position', () => {
+        expect(normalizeLinear({ x: 7, y: 8, angle: 0, points: [] })).toEqual({
+            x: 7,
+            y: 8,
+            width: 0,
+            height: 0,
+            points: '[]',
+        });
+    });
+});
+
+describe('rescalePoints', () => {
+    test('scales per axis about the origin point', () => {
+        const scaled = rescalePoints(
+            [
+                { x: 0, y: 0 },
+                { x: 50, y: 20 },
+            ],
+            { width: 50, height: 20 },
+            { width: 100, height: 10 },
+        );
+        expect(scaled).toEqual([
+            { x: 0, y: 0 },
+            { x: 100, y: 10 },
+        ]);
+    });
+
+    test('a degenerate old dimension keeps that axis (nothing to scale from)', () => {
+        const scaled = rescalePoints(
+            [
+                { x: 0, y: 0 },
+                { x: 40, y: 0 },
+            ],
+            { width: 40, height: 0 },
+            { width: 80, height: 30 },
+        );
+        expect(scaled).toEqual([
+            { x: 0, y: 0 },
+            { x: 80, y: 0 },
+        ]);
+    });
+});
+
+describe('resizeLinear', () => {
+    test('rescales points to the new box per axis and keeps points[0] the origin', () => {
+        const el = linear({ points: '[[0,0],[50,20]]', width: 50, height: 20, x: 10, y: 10 });
+        const r = resizeLinear(el, { x: 10, y: 10, width: 100, height: 10, angle: 0 });
+        expect(r).toEqual({ x: 10, y: 10, width: 100, height: 10, points: '[[0,0],[100,10]]' });
+    });
+
+    test('a degenerate source axis is preserved (a flat line stays flat when grown vertically)', () => {
+        const el = linear({ points: '[[0,0],[40,0]]', width: 40, height: 0, x: 0, y: 0 });
+        const r = resizeLinear(el, { x: 5, y: 5, width: 80, height: 30, angle: 0 });
+        expect(r).toMatchObject({ x: 5, y: 5, width: 80, height: 0, points: '[[0,0],[80,0]]' });
+    });
+});
+
+describe('distanceToPolyline', () => {
+    test('is zero on a vertex and measures perpendicular to a segment', () => {
+        const poly = [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+        ];
+        expect(distanceToPolyline(poly, { x: 50, y: 0 })).toBe(0);
+        expect(distanceToPolyline(poly, { x: 50, y: 7 })).toBe(7);
+        // beyond the segment end clamps to the endpoint
+        expect(distanceToPolyline(poly, { x: 130, y: 0 })).toBe(30);
+    });
+
+    test('a single point degrades to point distance; an empty path is unreachable', () => {
+        expect(distanceToPolyline([{ x: 3, y: 4 }], { x: 0, y: 0 })).toBe(5);
+        expect(distanceToPolyline([], { x: 0, y: 0 })).toBe(Number.POSITIVE_INFINITY);
+    });
+});
+
+describe('isClosedPath', () => {
+    test('needs at least 3 points with the ends within 8 units', () => {
+        expect(
+            isClosedPath([
+                { x: 0, y: 0 },
+                { x: 50, y: 0 },
+            ]),
+        ).toBe(false);
+        expect(
+            isClosedPath([
+                { x: 0, y: 0 },
+                { x: 50, y: 0 },
+                { x: 25, y: 40 },
+                { x: 3, y: 2 },
+            ]),
+        ).toBe(true);
+        expect(
+            isClosedPath([
+                { x: 0, y: 0 },
+                { x: 50, y: 0 },
+                { x: 25, y: 40 },
+                { x: 20, y: 5 },
+            ]),
+        ).toBe(false);
+    });
+});
+
+describe('hitTestElement — linear', () => {
+    test('an open line is hit within threshold + half the stroke, unrotated', () => {
+        const el = linear({ points: '[[0,0],[100,40]]', strokeWidth: 4, width: 100, height: 40 });
+        // on the segment midpoint (scene = x/y + local since angle 0)
+        expect(hitTestElement(el, { x: 50, y: 20 }, 2)).toBe(true);
+        // just off the line but inside threshold(2) + strokeWidth/2(2) = 4 of the segment
+        expect(hitTestElement(el, { x: 50, y: 20 }, 2)).toBe(true);
+        // far from the segment: miss
+        expect(hitTestElement(el, { x: 50, y: 60 }, 2)).toBe(false);
+    });
+
+    test('a rotated line unrotates the probe about the box center before measuring', () => {
+        const el = linear({ points: '[[0,0],[100,0]]', width: 100, height: 0, angle: 90, x: 0, y: 0 });
+        // box center = (50, 0); a horizontal line rotated 90° cw about it runs vertically through x=50.
+        expect(hitTestElement(el, { x: 50, y: -50 }, 3)).toBe(true);
+        expect(hitTestElement(el, { x: 90, y: 0 }, 3)).toBe(false);
+    });
+
+    test('freedraw widens tolerance by half the fat ink width', () => {
+        // thin freedraw: diameter 1 * 2.125; half = ~1.06, so within threshold(1) + 1.06 ≈ 2.06 of the line.
+        const el = linear({ type: 'freedraw', points: '[[0,0],[100,0]]', strokeWidth: 1, width: 100, height: 0 });
+        expect(hitTestElement(el, { x: 50, y: 2 }, 1)).toBe(true);
+        expect(hitTestElement(el, { x: 50, y: 3 }, 1)).toBe(false);
+    });
+
+    test('a closed, filled line is hit inside the polygon; transparent is outline-only', () => {
+        const points = '[[0,0],[100,0],[50,80],[0,0]]';
+        const filled = linear({ points, backgroundColor: '#ff0000', width: 100, height: 80 });
+        const open = linear({ points, backgroundColor: 'transparent', width: 100, height: 80 });
+        expect(hitTestElement(filled, { x: 50, y: 30 }, 1)).toBe(true);
+        expect(hitTestElement(open, { x: 50, y: 30 }, 1)).toBe(false);
     });
 });
 
