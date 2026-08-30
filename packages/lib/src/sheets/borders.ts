@@ -18,6 +18,12 @@ export function cloneSides({ l, r, t, b, s }: CellBorderSides): CellBorderSides 
     };
 }
 
+// The "r_c" key every cell-keyed map shares (merge, borderInfo, dataVerification, hyperlink).
+export function parseCellKey(key: string): [row: number, col: number] {
+    const sep = key.indexOf('_');
+    return [Number(key.substring(0, sep)), Number(key.substring(sep + 1))];
+}
+
 // Folds each merge's perimeter onto its master for readers that address a merge through one
 // cell (an exceljs style, an HTML td). Storage keeps every constituent's sides for an unmerge.
 // With a `range` only its cells and the merges crossing it are visited instead of the whole map.
@@ -28,9 +34,11 @@ export function mergedBorderSides(
 ): Record<string, CellBorderSides> {
     const folded: Record<string, CellBorderSides> = {};
     if (!borderInfo) return folded;
+    const [rowSt, rowEd, colSt, colEd] = range ?? [0, Infinity, 0, Infinity];
     const mergeAt = new Map<string, MergeCell>();
     for (const key in merge) {
         const m = merge[key];
+        if (m.r > rowEd || m.r + m.rs - 1 < rowSt || m.c > colEd || m.c + m.cs - 1 < colSt) continue;
         for (let r = m.r; r < m.r + m.rs; r += 1) {
             for (let c = m.c; c < m.c + m.cs; c += 1) mergeAt.set(`${r}_${c}`, m);
         }
@@ -49,23 +57,17 @@ export function mergedBorderSides(
     };
 
     if (!range) {
-        for (const key in borderInfo) {
-            const sep = key.indexOf('_');
-            fold(key, Number(key.substring(0, sep)), Number(key.substring(sep + 1)));
-        }
+        for (const key in borderInfo) fold(key, ...parseCellKey(key));
         return folded;
     }
-    const [rowSt, rowEd, colSt, colEd] = range;
     for (let r = rowSt; r <= rowEd; r += 1) {
-        for (let c = colSt; c <= colEd; c += 1) fold(`${r}_${c}`, r, c);
-    }
-    for (const key in merge) {
-        const m = merge[key];
-        if (m.r > rowEd || m.r + m.rs - 1 < rowSt || m.c > colEd || m.c + m.cs - 1 < colSt) continue;
-        for (let r = m.r; r < m.r + m.rs; r += 1) {
-            for (let c = m.c; c < m.c + m.cs; c += 1) fold(`${r}_${c}`, r, c);
+        for (let c = colSt; c <= colEd; c += 1) {
+            const key = `${r}_${c}`;
+            if (!mergeAt.has(key)) fold(key, r, c);
         }
     }
+    // Every constituent of a crossing merge, inside the rect or not, folds once here.
+    for (const key of mergeAt.keys()) fold(key, ...parseCellKey(key));
     return folded;
 }
 

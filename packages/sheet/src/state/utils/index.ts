@@ -1,3 +1,4 @@
+import { parseCellKey } from '@workspace/lib/sheets';
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { en } from '../locale/en';
@@ -215,9 +216,7 @@ export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selecti
     // "no border" could never reach borders dragged past the data.
     const borderInfo = getSheetConfig(ctx)?.borderInfo;
     for (const key in borderInfo) {
-        const sep = key.indexOf('_');
-        const r = Number(key.substring(0, sep));
-        const c = Number(key.substring(sep + 1));
+        const [r, c] = parseCellKey(key);
         if (r > lastRow) lastRow = r;
         if (c > lastColumn) lastColumn = c;
     }

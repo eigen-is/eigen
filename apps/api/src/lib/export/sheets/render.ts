@@ -8,6 +8,7 @@ import {
     type ConditionalFormatRule,
     type MergeCell,
     mergedBorderSides,
+    parseCellKey,
     type Sheet,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
@@ -656,7 +657,7 @@ function getGridBounds(
 
     // Extend bounds to cover border cells
     for (const key of Object.keys(borderMap)) {
-        const [r, c] = key.split('_').map(Number);
+        const [r, c] = parseCellKey(key);
         if (r < minRow) minRow = r;
         if (c < minCol) minCol = c;
         if (r > maxRow) maxRow = r;

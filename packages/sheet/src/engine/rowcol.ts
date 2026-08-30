@@ -1,4 +1,4 @@
-import { cloneSides, type MergeCell, type Sheet } from '@workspace/lib/sheets';
+import { cloneSides, type MergeCell, parseCellKey, type Sheet } from '@workspace/lib/sheets';
 import { functionStrChange } from './formula-shift';
 import type { ExtendedSheetConfig } from './types';
 
@@ -173,9 +173,7 @@ export function shiftCellKeyedForInsert<T>(
     const shifted: Record<string, T> = {};
     for (const key in map) {
         const item = map[key];
-        const sep = key.indexOf('_');
-        let r = Number(key.substring(0, sep));
-        let c = Number(key.substring(sep + 1));
+        let [r, c] = parseCellKey(key);
         const at = axis === 'row' ? r : c;
         if (at === index && clone) {
             for (let n = 0; n < count; n += 1) {
@@ -201,9 +199,7 @@ export function shiftCellKeyedForDelete<T>(
 ): Record<string, T> {
     const shifted: Record<string, T> = {};
     for (const key in map) {
-        const sep = key.indexOf('_');
-        let r = Number(key.substring(0, sep));
-        let c = Number(key.substring(sep + 1));
+        let [r, c] = parseCellKey(key);
         const at = axis === 'row' ? r : c;
         if (at >= start && at <= end) continue;
         if (at > end) {

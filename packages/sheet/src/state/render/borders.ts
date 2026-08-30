@@ -1,5 +1,6 @@
 // Cell borders from config.borderInfo, drawn over the finished cells.
 
+import { parseCellKey } from '@workspace/lib/sheets';
 import { getSheetConfig } from '../context';
 import { BORDER_STYLE_NAMES, getBorderInfoCompute } from '../modules/border';
 import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
@@ -95,9 +96,7 @@ export function drawCellBorders(pass: RenderPass) {
     ]);
 
     for (const [x, bdInfo] of Object.entries(borderInfoCompute)) {
-        const sepIdx = x.indexOf('_');
-        const bdRow = Number(x.substring(0, sepIdx));
-        const bdCol = Number(x.substring(sepIdx + 1));
+        const [bdRow, bdCol] = parseCellKey(x);
         if (cfg?.rowhidden?.[bdRow] != null || cfg?.colhidden?.[bdCol] != null) continue;
 
         const startY = rowStartY(sheetCtx.visibledatarow, bdRow, scrollHeight);

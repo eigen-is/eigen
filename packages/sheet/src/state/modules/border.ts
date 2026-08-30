@@ -5,6 +5,7 @@ import {
     cloneSides,
     type MergeCell,
     mergeEdgeSides,
+    parseCellKey,
 } from '@workspace/lib/sheets';
 import type { Context } from '../context';
 import type { Selection, SheetConfig } from '../types';
@@ -31,11 +32,39 @@ export const BORDER_STYLE_NAMES: Record<string, string> = {
 
 type BorderSideKey = keyof CellBorderSides;
 
+// Visits the map's entries inside a rectangle. Select-all on a tall sheet is a million-cell
+// rectangle over a near-empty map; a one-cell paste into a huge map is the reverse — and the
+// canvas asks every scroll frame — so walk whichever of the two is smaller.
+function forEachInRect(
+    map: Record<string, CellBorderSides>,
+    rowSt: number,
+    rowEd: number,
+    colSt: number,
+    colEd: number,
+    visit: (key: string, r: number, c: number) => void,
+) {
+    const area = (rowEd - rowSt + 1) * (colEd - colSt + 1);
+    let size = 0;
+    for (const _ in map) if ((size += 1) >= area) break;
+    if (size < area) {
+        for (const key in map) {
+            const [r, c] = parseCellKey(key);
+            if (r >= rowSt && r <= rowEd && c >= colSt && c <= colEd) visit(key, r, c);
+        }
+        return;
+    }
+    for (let r = rowSt; r <= rowEd; r += 1) {
+        for (let c = colSt; c <= colEd; c += 1) {
+            const key = `${r}_${c}`;
+            if (map[key]) visit(key, r, c);
+        }
+    }
+}
+
 // A cell's sides as every reader sees them: a merged constituent shows only the sides on the
 // merge's outer edge (storage stays raw so an unmerge shows them again), the diagonal is the
-// master's. Walks the range, never the map: the canvas asks every scroll frame over hundreds
-// of thousands of entries. Hidden rows and columns are kept — a carry must still move their
-// borders; the painter skips them itself.
+// master's. Hidden rows and columns are kept — a carry must still move their borders; the
+// painter skips them itself.
 export function getBorderInfoCompute(
     ctx: Context,
     sheetId: string,
@@ -48,17 +77,12 @@ export function getBorderInfoCompute(
     const map = cfg?.borderInfo;
     if (!map || !data) return computed;
 
-    const [rowSt, rowEd, colSt, colEd] = range;
-    for (let r = rowSt; r <= rowEd; r += 1) {
-        for (let c = colSt; c <= colEd; c += 1) {
-            const stored = map[`${r}_${c}`];
-            if (!stored) continue;
-            const anchor = data[r]?.[c]?.mc;
-            const mc: MergeCell | undefined = anchor && cfg.merge?.[`${anchor.r}_${anchor.c}`];
-            const sides = mc ? mergeEdgeSides(stored, mc, r, c) : stored;
-            if (sides) computed[`${r}_${c}`] = sides;
-        }
-    }
+    forEachInRect(map, ...range, (key, r, c) => {
+        const anchor = data[r]?.[c]?.mc;
+        const mc: MergeCell | undefined = anchor && cfg.merge?.[`${anchor.r}_${anchor.c}`];
+        const sides = mc ? mergeEdgeSides(map[key], mc, r, c) : map[key];
+        if (sides) computed[key] = sides;
+    });
     return computed;
 }
 
@@ -84,24 +108,7 @@ export function clearSides(
     colSt: number,
     colEd: number,
 ) {
-    if (!map) return;
-    // Select-all on a tall sheet is a million-cell rectangle over a near-empty map; a
-    // one-cell paste into a huge map is the reverse. Walk whichever is smaller.
-    const area = (rowEd - rowSt + 1) * (colEd - colSt + 1);
-    let size = 0;
-    for (const _ in map) if ((size += 1) >= area) break;
-    if (size < area) {
-        for (const key in map) {
-            const sep = key.indexOf('_');
-            const r = Number(key.substring(0, sep));
-            const c = Number(key.substring(sep + 1));
-            if (r >= rowSt && r <= rowEd && c >= colSt && c <= colEd) delete map[key];
-        }
-        return;
-    }
-    for (let r = rowSt; r <= rowEd; r += 1) {
-        for (let c = colSt; c <= colEd; c += 1) delete map[`${r}_${c}`];
-    }
+    if (map) forEachInRect(map, rowSt, rowEd, colSt, colEd, (key) => delete map[key]);
 }
 
 // Expands a toolbar layout into the cells' own sides. A border belongs to the cell it was

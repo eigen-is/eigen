@@ -7,6 +7,7 @@ import {
     type Cell as FortuneCell,
     type InlineStringSegment,
     mergedBorderSides,
+    parseCellKey,
     type Sheet,
     type SingleRange,
 } from '@workspace/lib/sheets';
@@ -129,7 +130,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
                 // runs land intact in sharedStrings.xml.
                 const richText = inlineSegmentsToRichText(cell?.ct?.s);
                 const display = cell?.m != null ? String(cell.m) : cell?.v != null ? String(cell.v) : '';
-                const [r, c] = key.split('_').map(Number);
+                const [r, c] = parseCellKey(key);
                 worksheet.getCell(r + 1, c + 1).value = {
                     // exceljs detects hyperlink values by `text && hyperlink` — an
                     // empty display string would degrade the cell to a plain object,
@@ -173,7 +174,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
         for (const [key, sides] of Object.entries(mergedBorderSides(config.borderInfo, config.merge))) {
             const border = toBorder(sides);
             if (!border) continue;
-            const [r, c] = key.split('_').map(Number);
+            const [r, c] = parseCellKey(key);
             worksheet.getCell(r + 1, c + 1).border = border;
         }
 
@@ -197,7 +198,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         if (sheet.dataVerification) {
             for (const [key, rule] of Object.entries(sheet.dataVerification)) {
-                const [r, c] = key.split('_').map(Number);
+                const [r, c] = parseCellKey(key);
                 const validation = toDataValidation(rule, r, c);
                 if (validation) worksheet.getCell(r + 1, c + 1).dataValidation = validation;
             }

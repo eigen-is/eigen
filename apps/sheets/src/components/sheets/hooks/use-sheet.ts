@@ -26,6 +26,35 @@ export function useSheet(
     const loadedRef = useRef(false);
     const latestDataRef = useRef<Sheet[] | null>(null);
 
+    // Decodes state.snapshot with the pending ops replayed on top (browser A flushes while B
+    // has unflushed local ops: B's edits survive the Yjs merge and must be reapplied). A failure
+    // disarms persistence: what this client shows must never be flushed over a snapshot it
+    // could not read — and the doc must still open, a throw escaping the Yjs handler kills the app.
+    const loadSnapshot = (doc: Y.Doc) => {
+        const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
+        const pending = doc.getArray('ops').toArray() as Op[][];
+        let data = createDefaultSheets();
+        let loaded = true;
+        try {
+            if (snapshot) data = decodeSheetsSnapshot(snapshot);
+            if (pending.length > 0) data = replaySheetsOps(data, pending);
+        } catch (e) {
+            loaded = false;
+            console.error('[sheet] Failed to load the snapshot, opening read-only without persistence:', e);
+        }
+        loadedRef.current = loaded;
+        latestDataRef.current = data;
+        setLoadFailed(!loaded);
+        if (loaded) toast.dismiss(LOAD_FAILED_TOAST);
+        else {
+            toast.error('This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.', {
+                id: LOAD_FAILED_TOAST,
+                duration: Infinity,
+            });
+        }
+        setInitialData(data);
+    };
+
     // useCollabDoc owns the doc/provider lifecycle; sheets layers its op-log + snapshot protocol on
     // top via onInit/onSync. No UndoManager — the sheet engine's own op stack owns undo. The op-log
     // (readyForOps gating, echo suppression, flush-on-unmount, replay) is NOT collab-scaffold
@@ -89,24 +118,8 @@ export function useSheet(
                     isLocalSnapshotRef.current = false;
                     return;
                 }
-                const snapshot = stateMap.get('snapshot') as string | undefined;
-                if (!snapshot) return;
-                try {
-                    // Replay any pending ops on top of the remote snapshot. When browser
-                    // A flushes while B has unflushed local ops, B's edits survive Yjs
-                    // merge and must be reapplied here or they're lost on next render.
-                    const initial = decodeSheetsSnapshot(snapshot);
-                    const pending = opsArray.toArray() as Op[][];
-                    const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
-                    loadedRef.current = true;
-                    latestDataRef.current = data;
-                    setLoadFailed(false);
-                    toast.dismiss(LOAD_FAILED_TOAST);
-                    setInitialData(data);
-                    setSnapshotVersion((v) => v + 1);
-                } catch (e) {
-                    console.error('[sheet] Failed to apply remote snapshot:', e);
-                }
+                loadSnapshot(doc);
+                setSnapshotVersion((v) => v + 1);
             };
             stateMap.observe(handleState);
 
@@ -126,42 +139,7 @@ export function useSheet(
         },
         onSync: ({ doc }, isSynced) => {
             if (!isSynced) return;
-            const stateMap = doc.getMap('state');
-            const opsArray = doc.getArray('ops');
-            const snapshot = stateMap.get('snapshot') as string | undefined;
-            let initial: Sheet[] = createDefaultSheets();
-            let loaded = true;
-            if (snapshot) {
-                try {
-                    initial = decodeSheetsSnapshot(snapshot);
-                } catch (e) {
-                    loaded = false;
-                    console.error('[sheet] Failed to parse initial snapshot, opening defaults without persistence:', e);
-                }
-            }
-            const pending = opsArray.toArray() as Op[][];
-            let data = initial;
-            if (pending.length > 0) {
-                // The doc must still open if the pending ops can't be replayed —
-                // fall back to the snapshot (or defaults) rather than letting the
-                // throw escape the Yjs sync handler and kill the app.
-                try {
-                    data = replaySheetsOps(initial, pending);
-                } catch (e) {
-                    loaded = false;
-                    console.error('[sheet] Failed to replay pending ops, opening without them:', e);
-                }
-            }
-            loadedRef.current = loaded;
-            if (loaded) latestDataRef.current = data;
-            else {
-                toast.error(
-                    'This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.',
-                    { id: LOAD_FAILED_TOAST, duration: Infinity },
-                );
-            }
-            setLoadFailed(!loaded);
-            setInitialData(data);
+            loadSnapshot(doc);
             readyForOpsRef.current = true;
         },
     });

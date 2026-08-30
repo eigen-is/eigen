@@ -6,7 +6,7 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
-import { cloneSides } from './borders';
+import { cloneSides, parseCellKey } from './borders';
 import type { Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
 
 const FORMAT = 'eigensheets/2';
@@ -82,8 +82,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
             if (borderInfo) {
                 const borderCells: EncodedBorder[] = [];
                 for (const [key, sides] of Object.entries(borderInfo)) {
-                    const [r, c] = key.split('_').map(Number);
-                    borderCells.push([r, c, intern(sides, borders, borderIndex)]);
+                    borderCells.push([...parseCellKey(key), intern(sides, borders, borderIndex)]);
                 }
                 out.borderCells = borderCells;
             }
@@ -100,7 +99,7 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
     // Fail crisp on a corrupt envelope, a v1 array or a future format — silent
     // garbage-in would materialize a half-empty workbook instead of surfacing the problem.
-    if (f !== FORMAT) throw new Error(`Unknown sheets snapshot format: ${String(f).slice(0, 40)}`);
+    if (f !== FORMAT) throw unknownFormat(f);
     return sheets.map((encoded) => {
         const { cells, borderCells, config, ...rest } = encoded;
         const sheet: RuntimeSheet = { ...rest };
@@ -124,13 +123,21 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
             sheet.config = { ...config };
             if (borderCells) {
                 const borderInfo: Record<string, CellBorderSides> = {};
-                for (const [r, c, borderIdx] of borderCells) borderInfo[`${r}_${c}`] = cloneSides(borders[borderIdx]);
+                for (const entry of borderCells) {
+                    if (!Array.isArray(entry) || entry.length !== 3) throw unknownFormat(entry);
+                    const [r, c, borderIdx] = entry;
+                    borderInfo[`${r}_${c}`] = cloneSides(borders[borderIdx]);
+                }
                 sheet.config.borderInfo = borderInfo;
             }
         }
 
         return sheet;
     });
+}
+
+function unknownFormat(found: unknown): Error {
+    return new Error(`Unknown sheets snapshot format: ${String(found).slice(0, 40)}`);
 }
 
 function denseToEntries(data: CellMatrix): CellWithRowAndCol[] {

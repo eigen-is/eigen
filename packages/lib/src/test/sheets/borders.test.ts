@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { cloneSides, mergedBorderSides, mergeEdgeSides } from '../../sheets/borders';
+import { cloneSides, mergedBorderSides, mergeEdgeSides, parseCellKey } from '../../sheets/borders';
 
 const SIDE = { style: 1, color: '#000' };
 const RED = { style: 8, color: '#f00' };
@@ -33,12 +33,19 @@ describe('mergedBorderSides', () => {
     });
 
     test('a range visits only its cells, plus every constituent of a merge crossing it', () => {
-        const merge = { '2_2': { r: 2, c: 2, rs: 2, cs: 2 } };
+        const merge = { '2_2': { r: 2, c: 2, rs: 2, cs: 2 }, '8_8': { r: 8, c: 8, rs: 2, cs: 2 } };
         const borderInfo = { '0_0': { l: SIDE }, '9_9': { l: SIDE }, '3_3': { r: RED, b: RED } };
         expect(mergedBorderSides(borderInfo, merge, [0, 2, 0, 2])).toEqual({
             '0_0': { l: SIDE },
             '2_2': { r: RED, b: RED },
         });
+    });
+});
+
+describe('parseCellKey', () => {
+    test('splits "r_c" into numbers', () => {
+        expect(parseCellKey('12_3')).toEqual([12, 3]);
+        expect(parseCellKey('0_0')).toEqual([0, 0]);
     });
 });
 

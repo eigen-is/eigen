@@ -242,6 +242,19 @@ describe('getBorderInfoCompute', () => {
         handleBorder(ctx, 'border-all');
         expect(Object.keys(getBorderInfoCompute(ctx, ctx.currentSheetId, [1, 2, 2, 2]))).toEqual(['1_2', '2_2']);
     });
+
+    test('an empty map yields nothing for any range', () => {
+        expect(getBorderInfoCompute(withSelection([0, 0], [0, 0]), 'sheet-1', [0, 1000000, 0, 40])).toEqual({});
+    });
+
+    test('a range larger than the map reads the same as one smaller than it', () => {
+        const ctx = withSelection([1, 2], [1, 2]);
+        handleBorder(ctx, 'border-outside');
+        const byMap = getBorderInfoCompute(ctx, ctx.currentSheetId, [0, 1000000, 0, 40]);
+        const byRange = getBorderInfoCompute(ctx, ctx.currentSheetId, [1, 2, 1, 2]);
+        expect(byMap).toEqual(byRange);
+        expect(Object.keys(byMap)).toHaveLength(4);
+    });
 });
 
 describe('clearSides', () => {

@@ -227,6 +227,12 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(() => decodeSheetsSnapshot('{"foo":1}')).toThrow('Unknown sheets snapshot format');
     });
 
+    test('a border entry that is not a [row, col, index] tuple throws the same error', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['borderCells'] = [{}];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
     test('a v1 snapshot (plain Sheet[] JSON) throws instead of decoding', () => {
         // No legacy reading anywhere: the editor opens such a doc read-only on defaults
         // (use-sheet.ts loadedRef) and never persists over it.
