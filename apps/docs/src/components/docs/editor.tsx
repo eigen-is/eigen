@@ -13,7 +13,9 @@ import {
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
+    readSvgClipboard,
     reUploadImage,
+    svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { useCollabDoc } from '@workspace/lib/collab';
@@ -442,6 +444,15 @@ const TiptapEditor = ({
                 },
                 handlePaste: (_view, event) => {
                     if (!event.clipboardData) return false;
+
+                    // A vector SVG payload (or any `<svg`-leading clipboard) lands as a figure through the
+                    // exact image-upload path — stored in media/, served as-is, rendered by <image> (R4.7).
+                    const svg = readSvgClipboard(event.clipboardData);
+                    if (svg && mediaFolderIdRef.current) {
+                        event.preventDefault();
+                        handleImageUpload(svgToImageFile(svg)).catch(() => {});
+                        return true;
+                    }
 
                     const eigenData = readEigenClipboard(event.clipboardData);
                     if (eigenData && eigenData.items.length > 0) {

@@ -3,6 +3,8 @@ import {
     buildTextClipboardItem,
     clipboardTextItemHasContent,
     readEigenClipboard,
+    readSvgClipboard,
+    svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import type {
@@ -636,6 +638,18 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_MARKER);
 
                     if (!isInternalCopy) {
+                        // A vector SVG payload (or any `<svg`-leading clipboard) becomes a floating image
+                        // through the app's exact image-file path — stored in media/, served as-is, rendered
+                        // by <image> (R4.7). Ahead of the eigen-items split so a vector selection lands as one
+                        // image, not as empty shape carriers.
+                        const svg = readSvgClipboard(clipboardData);
+                        const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
+                        if (svg && onPasteImageFile) {
+                            e.preventDefault();
+                            onPasteImageFile(svgToImageFile(svg));
+                            return;
+                        }
+
                         const eigenData = readEigenClipboard(clipboardData);
                         if (eigenData) {
                             // Mixed eigen payloads split by kind: image items become floating images,

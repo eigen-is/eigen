@@ -1,6 +1,7 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, TooltipButton } from '@workspace/ui';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import { VECTOR_TOOLS, type VectorTool } from '@workspace/ui/components/vector';
 import { Diamond, Lock } from 'lucide-react';
 
@@ -42,62 +43,74 @@ export function Toolbar({
     activityPanelOpen,
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
+    const { exportPath, isExporting } = useDocumentExport();
 
     return (
-        <CenteredToolbar
-            left={
-                <div className="flex items-center">
-                    <FileMenu
-                        path={path}
-                        canWrite={canWrite}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        createLabel="New vector"
-                        createIcon={Diamond}
-                        createType="vector"
-                    />
-                    {/* Render unconditionally once vector has a DocSearchProvider (Find items survive read-only). */}
-                    {canWrite && (
-                        <EditMenu canEdit={canWrite} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo} />
-                    )}
-                </div>
-            }
-            center={
-                canWrite && (
-                    <>
-                        {VECTOR_TOOLS.map((t) => (
-                            <TooltipButton
-                                key={t.tool}
-                                icon={t.icon}
-                                tooltipText={`${t.label} (${t.shortcut})`}
-                                active={tool === t.tool}
-                                preventFocusLoss
-                                onClick={() => setTool(t.tool)}
-                            />
-                        ))}
-                        <TooltipButton
-                            icon={Lock}
-                            tooltipText="Keep selected tool (Q)"
-                            active={toolLocked}
-                            preventFocusLoss
-                            onClick={() => setToolLocked(!toolLocked)}
+        <>
+            <CenteredToolbar
+                left={
+                    <div className="flex items-center">
+                        <FileMenu
+                            path={path}
+                            canWrite={canWrite}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            onExport={(format) => exportPath(path, format)}
+                            exportFormats={['svg', 'pdf']}
+                            createLabel="New vector"
+                            createIcon={Diamond}
+                            createType="vector"
                         />
-                    </>
-                )
-            }
-            right={
-                <div className="flex items-center gap-1">
-                    <DocumentShareCluster
-                        canWrite={canWrite}
-                        onAccessDialogOpen={onAccessDialogOpen}
-                        watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
-                        onToggleCommentPanel={onToggleCommentPanel}
-                        commentPanelOpen={commentPanelOpen}
-                        assignedCommentCount={assignedCommentCount}
-                        onToggleActivityPanel={onToggleActivityPanel}
-                        activityPanelOpen={activityPanelOpen}
-                    />
-                </div>
-            }
-        />
+                        {/* Render unconditionally once vector has a DocSearchProvider (Find items survive read-only). */}
+                        {canWrite && (
+                            <EditMenu
+                                canEdit={canWrite}
+                                canUndo={canUndo}
+                                canRedo={canRedo}
+                                onUndo={undo}
+                                onRedo={redo}
+                            />
+                        )}
+                    </div>
+                }
+                center={
+                    canWrite && (
+                        <>
+                            {VECTOR_TOOLS.map((t) => (
+                                <TooltipButton
+                                    key={t.tool}
+                                    icon={t.icon}
+                                    tooltipText={`${t.label} (${t.shortcut})`}
+                                    active={tool === t.tool}
+                                    preventFocusLoss
+                                    onClick={() => setTool(t.tool)}
+                                />
+                            ))}
+                            <TooltipButton
+                                icon={Lock}
+                                tooltipText="Keep selected tool (Q)"
+                                active={toolLocked}
+                                preventFocusLoss
+                                onClick={() => setToolLocked(!toolLocked)}
+                            />
+                        </>
+                    )
+                }
+                right={
+                    <div className="flex items-center gap-1">
+                        <DocumentShareCluster
+                            canWrite={canWrite}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
+                            onToggleCommentPanel={onToggleCommentPanel}
+                            commentPanelOpen={commentPanelOpen}
+                            assignedCommentCount={assignedCommentCount}
+                            onToggleActivityPanel={onToggleActivityPanel}
+                            activityPanelOpen={activityPanelOpen}
+                        />
+                    </div>
+                }
+            />
+            <ExportProgressDialog open={isExporting} />
+        </>
     );
 }

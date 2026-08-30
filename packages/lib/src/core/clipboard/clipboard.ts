@@ -80,11 +80,59 @@ function parseEigenJson(raw: string): EigenClipboardData | null {
         if (data.version !== 1 || !Array.isArray(data.items)) return null;
         // The wire is forgeable by any web page, and consumers place items straight from the typed
         // box with no fallbacks — so a missing/NaN dim must be dropped here, not written into a doc.
-        return { version: 1, items: data.items.filter((i) => Number.isFinite(i.width) && Number.isFinite(i.height)) };
+        return {
+            version: 1,
+            items: data.items.filter((i) => Number.isFinite(i.width) && Number.isFinite(i.height)),
+            svg: typeof data.svg === 'string' ? data.svg : undefined,
+        };
     } catch {
         /* invalid data */
     }
     return null;
+}
+
+// Embed an eigen payload into an SVG's `<metadata>` block (Excalidraw's svg-source pattern) so a
+// self-contained SVG that travels alone still round-trips back to native elements. The JSON is
+// URI-encoded (attribute-safe: no quotes/`<`/`&`), and the block is inserted right after the opening
+// `<svg …>` tag; SVG renderers ignore `<metadata>`, so the drawing is unchanged. Callers embed the
+// items-only payload (never the `svg` field itself) to avoid nesting a copy of the SVG in its own text.
+export function embedClipboardSvgMetadata(svg: string, data: EigenClipboardData): string {
+    const encoded = encodeURIComponent(JSON.stringify({ version: 1, items: data.items }));
+    const block = `<metadata ${HTML_MARKER}="${encoded}"></metadata>`;
+    const open = svg.indexOf('>');
+    return open === -1 ? svg : svg.slice(0, open + 1) + block + svg.slice(open + 1);
+}
+
+// The inverse: pull an eigen payload back out of an SVG's `<metadata>` block. Returns null for any SVG
+// without our marker (a foreign drawing), so a paste consumer can tell "our SVG" (restore elements)
+// from "someone else's" (insert as an image).
+export function extractClipboardSvgMetadata(svg: string): EigenClipboardData | null {
+    const match = svg.match(new RegExp(`<metadata[^>]*${HTML_MARKER}="([^"]*?)"`));
+    if (!match?.[1]) return null;
+    try {
+        return parseEigenJson(decodeURIComponent(match[1]));
+    } catch {
+        /* invalid encoding */
+    }
+    return null;
+}
+
+// Wrap an SVG string as an `image/svg+xml` File so a paste consumer can feed it straight into its
+// existing OS-image upload path (previews serve SVG as-is; `<image href>` renders it). One home for
+// the conversion, shared by docs/sheets/slides/vector.
+export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
+    return new File([svg], name, { type: 'image/svg+xml' });
+}
+
+// The SVG a paste consumer should treat as an image: vector's copy flavour (the `svg` field on the
+// eigen payload) first, then a bare `<svg`-leading `text/plain` (a foreign SVG). Null when neither is
+// present. eigen-aware hosts call this BEFORE consuming the typed items so a vector selection lands as
+// one image, not N shape carriers — and consuming the paste there is what keeps D6 (no double-paste).
+export function readSvgClipboard(clipboardData: DataTransfer): string | null {
+    const eigen = readEigenClipboard(clipboardData);
+    if (eigen?.svg) return eigen.svg;
+    const plain = clipboardData.getData('text/plain').trimStart();
+    return plain.startsWith('<svg') ? plain : null;
 }
 
 // True when the clipboard's `text/html` carries real content beyond the eigen marker span — i.e. a

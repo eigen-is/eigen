@@ -79,7 +79,9 @@ export function DriveItemMenuItems({
     const canDownloadFile = item.type === 'file' && !!onDownload;
     const canConvertXlsx = item.type === 'file' && nameLower.endsWith('.xlsx') && !!onConvert;
     const canConvertDocx = item.type === 'file' && nameLower.endsWith('.docx') && !!onConvert;
-    const canExport = (item.type === 'doc' || item.type === 'slides' || item.type === 'sheets') && !!onExport;
+    const canExport =
+        (item.type === 'doc' || item.type === 'slides' || item.type === 'sheets' || item.type === 'vector') &&
+        !!onExport;
     const accessible = !!item.acl?.length || item.visibility !== 'private';
 
     const { direct, label, isPending, toggle } = useWatchToggle(item.ownerId, item.mountId, item.id);
@@ -147,7 +149,9 @@ export function DriveItemMenuItems({
                             ? ['docx', 'pdf', 'html']
                             : item.type === 'sheets'
                               ? ['xlsx', 'pdf', 'html']
-                              : ['pdf', 'html']
+                              : item.type === 'vector'
+                                ? ['svg', 'pdf']
+                                : ['pdf', 'html']
                         ).map((format) => (
                             <DropdownMenuItem key={format} onClick={run(() => onExport(item, format))}>
                                 {formatDownloadLabel(format)}

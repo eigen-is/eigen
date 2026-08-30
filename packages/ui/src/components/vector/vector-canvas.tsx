@@ -1,16 +1,19 @@
 import {
     clipboardTextItemHasContent,
+    extractClipboardSvgMetadata,
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
     readEigenClipboardAsync,
+    readSvgClipboard,
     reUploadImage,
+    svgToImageFile,
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
 import { isPendingMediaName, useMediaResolver, useUploadFile, useZombieMediaSweep } from '@workspace/lib/drive';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
-import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
+import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type Bounds,
@@ -70,7 +73,7 @@ import {
     unbindDraggedArrow,
 } from './tools/binding';
 import {
-    buildSelectionItems,
+    buildSelectionData,
     readVectorMeta,
     selectionPlainText,
     toVectorTextAlign,
@@ -708,11 +711,11 @@ export function VectorCanvas({
         void insertImageFiles(files, viewportCenterScene());
     }, imagesEnabled);
 
-    // The clipboard PRODUCER (element→item builders) + plain-text flavor live in ./tools/clipboard;
-    // the canvas calls them with the live z-order, selection and media resolver.
-    const buildItems = useCallback(
-        () => buildSelectionItems(ordered, selectedIds, resolveMediaPath),
-        [ordered, selectedIds, resolveMediaPath],
+    // The clipboard PRODUCER (typed items + the self-contained SVG flavour) + plain-text flavor live in
+    // ./tools/clipboard; the canvas calls them with the live z-order, selection, background and media resolvers.
+    const buildData = useCallback(
+        (): EigenClipboardData => buildSelectionData(ordered, selectedIds, meta, resolveMediaPath, resolveMediaUrl),
+        [ordered, selectedIds, meta, resolveMediaPath, resolveMediaUrl],
     );
     const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
@@ -964,17 +967,17 @@ export function VectorCanvas({
     useEffect(() => {
         const onCopyEvent = (e: ClipboardEvent) => {
             if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
-            const items = buildItems();
-            if (!items.length) return;
+            const data = buildData();
+            if (!data.items.length) return;
             e.preventDefault();
-            writeEigenClipboard(e, { version: 1, items }, plainText());
+            writeEigenClipboard(e, data, plainText());
         };
         const onCutEvent = (e: ClipboardEvent) => {
             if (isTypingTarget() || !canWrite || editingRef.current || selectedIds.length === 0) return;
-            const items = buildItems();
-            if (!items.length) return;
+            const data = buildData();
+            if (!data.items.length) return;
             e.preventDefault();
-            writeEigenClipboard(e, { version: 1, items }, plainText());
+            writeEigenClipboard(e, data, plainText());
             // One sealed undo step (deleteSelection stopCaptures on both sides).
             deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
         };
@@ -988,8 +991,20 @@ export function VectorCanvas({
                 pasteEigenItems(data.items);
                 return;
             }
-            // No eigen payload. OS files fall through to useFilePasteTarget (image drop path).
-            if (!cd || cd.files.length > 0) return;
+            if (!cd) return;
+            // A bare SVG on the clipboard: ours (element JSON in `<metadata>`) restores native elements;
+            // any other SVG inserts as an image via the media path (R4.7). OS files still fall through.
+            const svg = readSvgClipboard(cd);
+            if (svg) {
+                e.preventDefault();
+                e.stopPropagation();
+                const restored = extractClipboardSvgMetadata(svg);
+                if (restored) pasteEigenItems(restored.items);
+                else void insertImageFiles([svgToImageFile(svg)], viewportCenterScene());
+                return;
+            }
+            // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
+            if (cd.files.length > 0) return;
             // Plain text (or the text of pasted HTML) → a new text element; only claim the event when
             // content is actually consumed, else it falls through to the OS-file path.
             if (pasteNonEigenText(cd.getData('text/html'), cd.getData('text/plain'))) {
@@ -1008,10 +1023,12 @@ export function VectorCanvas({
     }, [
         canWrite,
         selectedIds,
-        buildItems,
+        buildData,
         plainText,
         pasteEigenItems,
         pasteNonEigenText,
+        insertImageFiles,
+        viewportCenterScene,
         deleteElements,
         setSelectedIds,
         undoManager,
@@ -1051,15 +1068,15 @@ export function VectorCanvas({
     // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as
     // the keyboard path, so the two stay one behavior.
     const onMenuCopy = () => {
-        const items = buildItems();
-        if (items.length) writeEigenClipboardAsync({ version: 1, items }, plainText()).catch(() => {});
+        const data = buildData();
+        if (data.items.length) writeEigenClipboardAsync(data, plainText()).catch(() => {});
     };
     const onMenuCut = () => {
-        const items = buildItems();
-        if (!items.length) return;
+        const data = buildData();
+        if (!data.items.length) return;
         // Delete only once the async write lands — a denied/failed clipboard write must not destroy
         // the selection (the content would exist nowhere but the undo stack).
-        writeEigenClipboardAsync({ version: 1, items }, plainText())
+        writeEigenClipboardAsync(data, plainText())
             .then(() => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager))
             .catch(() => {});
     };

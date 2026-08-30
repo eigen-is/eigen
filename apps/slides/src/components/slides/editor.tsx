@@ -8,7 +8,9 @@ import {
     readClipboardBox,
     readEigenClipboard,
     readEigenClipboardAsync,
+    readSvgClipboard,
     reUploadImage,
+    svgToImageFile,
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
@@ -656,6 +658,16 @@ function SlideEditorInner({
             if (imageFile) {
                 e.preventDefault();
                 handleImageFile(imageFile);
+                return;
+            }
+
+            // A vector SVG payload (or any `<svg`-leading clipboard) becomes an image object through the
+            // exact image-file path — stored in media/, served as-is, rendered by <image> (R4.7). Ahead of
+            // the eigen-items branch so a vector selection lands as one image, not its shape carriers.
+            const svg = e.clipboardData ? readSvgClipboard(e.clipboardData) : null;
+            if (svg) {
+                e.preventDefault();
+                handleImageFile(svgToImageFile(svg));
                 return;
             }
 

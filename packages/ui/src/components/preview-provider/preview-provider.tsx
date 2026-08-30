@@ -1,7 +1,7 @@
 import { getDriveDownloadUrl, getDriveEmbedUrl, getDrivePreviewUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
 import { getTextPreviewMode, isExiftoolExtension } from '@workspace/lib/constants';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isFolderType } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_VECTOR, isFolderType } from '@workspace/lib/types/drive';
 import type React from 'react';
 import { useCallback, useMemo, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
@@ -31,7 +31,8 @@ export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'fallba
 function getPreviewMode(path: DrivePath): PreviewMode {
     const mime = path.mimeType || '';
 
-    if (mime.startsWith('image/') || isExiftoolExtension(path.name)) return 'image';
+    // A vector doc previews as the SVG the server renders, served as an image (R4.2).
+    if (mime === DRIVE_MIME_VECTOR || mime.startsWith('image/') || isExiftoolExtension(path.name)) return 'image';
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';

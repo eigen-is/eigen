@@ -4,17 +4,20 @@
 // text-item carrier and rebuild from `meta.vector` on a vector→vector paste. The paste CONSUMER
 // (pasteEigenItems) stays in the canvas and reads the same `meta.vector` shape.
 
-import { buildImageClipboardItem, buildTextClipboardItem } from '@workspace/lib/clipboard';
-import type { EigenClipboardItem } from '@workspace/lib/types/clipboard';
+import { buildImageClipboardItem, buildTextClipboardItem, embedClipboardSvgMetadata } from '@workspace/lib/clipboard';
+import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type Arrowhead,
     type FillStyle,
     isLinearElement,
+    type MediaResolver,
     type Roundness,
     type StrokeStyle,
+    sceneToSvg,
     type TextAlign,
     type VectorElement,
+    type VectorMeta,
 } from '@workspace/lib/vector';
 
 // Vector-private clipboard meta, carried under `item.meta.vector`. Absolute scene x/y ride here (NOT
@@ -137,6 +140,27 @@ export function buildSelectionItems(
         if (item) items.push(item);
     }
     return items;
+}
+
+// The full eigen payload for a selection: the typed items (vector→vector paste, unchanged) PLUS a
+// self-contained SVG of the same selection (R4.7) for hosts that can't place the typed carriers —
+// docs/sheets/slides render it as an image. The SVG is `sceneToSvg` of the selected elements with
+// media resolved to their live `<image href>` URLs, and carries the element JSON in a `<metadata>`
+// block so it round-trips back to native elements if pasted into vector without the eigen flavour.
+export function buildSelectionData(
+    ordered: VectorElement[],
+    selectedIds: string[],
+    meta: VectorMeta,
+    resolveMediaPath: (name: string) => DrivePath | undefined,
+    resolveMedia: MediaResolver,
+): EigenClipboardData {
+    const items = buildSelectionItems(ordered, selectedIds, resolveMediaPath);
+    const selected = ordered.filter((el) => selectedIds.includes(el.id));
+    const svg = embedClipboardSvgMetadata(sceneToSvg({ elements: selected, meta }, { resolveMedia }), {
+        version: 1,
+        items,
+    });
+    return { version: 1, items, svg };
 }
 
 // Concatenated plain text of the selected TEXT elements — the only flavor written alongside eigen JSON
