@@ -1,4 +1,4 @@
-import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types/drive';
 import type { CollabTransformJob } from './transform/protocol';
 
 // The collab document types a transform reads, keyed by the mime Drive stores. One
@@ -10,4 +10,5 @@ export const COLLAB_DOCUMENT_TYPES = new Map<string, CollabDocumentType>([
     [DRIVE_MIME_DOC, 'eigendoc'],
     [DRIVE_MIME_SLIDES, 'eigenslides'],
     [DRIVE_MIME_SHEETS, 'eigensheets'],
+    [DRIVE_MIME_VECTOR, 'eigenvector'],
 ]);

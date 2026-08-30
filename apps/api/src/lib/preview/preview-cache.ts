@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getTextPreviewMode } from '@workspace/lib/constants';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_VECTOR, type DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { TransformPriority } from '../document/transform/runner';
@@ -244,6 +244,21 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
         );
     }
 
+    // Eigen-native vector drawings render to an SVG in the transform Worker and are then
+    // served as-is on the same SVG-as-image path — the internal preview pipeline keeps
+    // SVGs unrasterized. The text-preview registry is untouched: this is an image, not an
+    // HTML body. Generation may throw the runner's 503 under overload, which the route
+    // surfaces so the client retries — nothing is cached on failure.
+    if (mime === DRIVE_MIME_VECTOR) {
+        return getOrCacheImage(
+            mount.previewsDir,
+            drivePath.id,
+            screenCacheName(drivePath, 'svg'),
+            'image/svg+xml',
+            async () => Buffer.from(await generateDocumentPreview('eigenvector', mount, drivePath)),
+        );
+    }
+
     // Image (any format — sharp first, exiftool fallback)
     if (isExiftoolCandidate(mime, drivePath.name)) {
         return getOrCacheImage(
@@ -293,7 +308,9 @@ async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<S
 
 async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const documentType = COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '');
-    if (!documentType) return null;
+    // Vector is a collab document too, but its preview is an SVG image (getScreenPreview),
+    // never a text body — the text-preview modes exclude it.
+    if (!documentType || documentType === 'eigenvector') return null;
     return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
         generateDocumentPreview(documentType, mount, drivePath, priority),
     );

@@ -1,6 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DeckData } from '@workspace/lib/slides';
+import type { VectorScene } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
@@ -86,6 +87,18 @@ function collectSheetsText(sheets: Sheet[], cap: number): string {
     return out.parts.join(' ');
 }
 
+// Every text element's text and every arrow's label, in z-order, joined with newlines
+// — the two fields a drawing carries words in. Empty labels contribute nothing.
+function collectVectorText(scene: VectorScene, cap: number): string {
+    const out: CappedText = { parts: [], bytes: 0 };
+    for (const element of scene.elements) {
+        if ((element.type === 'text' || element.type === 'arrow') && element.text) {
+            if (!appendCapped(out, element.text, cap)) return out.parts.join('\n');
+        }
+    }
+    return out.parts.join('\n');
+}
+
 // Body text for one collab document, capped at ~100 KB. Sheets index stored values
 // only — like the preview renderer, the read never recalcs (SHEETS.md § Server-side
 // recalc), so a valueless formula cell contributes nothing.
@@ -108,6 +121,10 @@ export async function extractCollabText(
             // workbook must not cost a full recalc inside the 30s extract deadline.
             const { sheets } = readSheetsFromDoc(doc, { recalc: false });
             return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings: [] };
+        }
+        case 'eigenvector': {
+            const { readVectorFromDoc } = await import('@workspace/lib/vector');
+            return { text: collectVectorText(readVectorFromDoc(doc), CONTENT_INDEX_MAX_BYTES), warnings: [] };
         }
     }
 }

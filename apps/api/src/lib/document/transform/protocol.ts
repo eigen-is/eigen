@@ -20,10 +20,11 @@ export type TransformMedia = { name: string; contentType: string; data: ArrayBuf
 
 // A job is everything a caller decides; the shared main-thread orchestration
 // (run-transform.ts) captures the Yjs source and completes it into a request.
-// Doc/slides previews reference media by URL, so no bytes cross for a preview.
+// Doc/slides/vector previews reference media by URL, so no bytes cross for a preview.
+// (Vector renders to an SVG served as-is; the URL map resolves its <image> hrefs.)
 export type PreviewTransformJob =
     | { kind: 'preview'; documentType: 'eigensheets' }
-    | { kind: 'preview'; documentType: 'eigendoc' | 'eigenslides'; mediaUrls: Map<string, string> };
+    | { kind: 'preview'; documentType: 'eigendoc' | 'eigenslides' | 'eigenvector'; mediaUrls: Map<string, string> };
 
 // `title` is the document title the renderer embeds — the Worker has no DrivePath.
 // (Sheets and slides strip the eigen extension; eigendoc's <title> keeps the full
@@ -41,7 +42,10 @@ export type ExportTransformJob =
 
 // Search reindexing: the same captured document, read for its body text only. The
 // Worker returns text, never the materialized Sheet[]/deck/ProseMirror JSON.
-export type ExtractTextJob = { kind: 'extract-text'; documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' };
+export type ExtractTextJob = {
+    kind: 'extract-text';
+    documentType: 'eigensheets' | 'eigendoc' | 'eigenslides' | 'eigenvector';
+};
 
 // Pure conversion of uploaded bytes: the Worker learns nothing about the
 // destination — no owner, mount, ACL or path. One arm per supported source format,

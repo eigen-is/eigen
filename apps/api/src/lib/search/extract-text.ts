@@ -5,6 +5,7 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
+    DRIVE_MIME_VECTOR,
     type DrivePath,
 } from '@workspace/lib/types/drive';
 import { readChatContent } from '../document/chat';
@@ -40,7 +41,8 @@ export async function extractText(mount: Mount, path: DrivePath): Promise<string
     switch (path.mimeType) {
         case DRIVE_MIME_DOC:
         case DRIVE_MIME_SLIDES:
-        case DRIVE_MIME_SHEETS: {
+        case DRIVE_MIME_SHEETS:
+        case DRIVE_MIME_VECTOR: {
             const documentType = COLLAB_DOCUMENT_TYPES.get(path.mimeType)!;
             return runTransformToExtractedText(
                 mount,
