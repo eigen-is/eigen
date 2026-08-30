@@ -1,7 +1,12 @@
-import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types';
+import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES, DRIVE_MIME_VECTOR } from '@workspace/lib/types';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
-import type { DocumentExportFormat, EigendocExportFormat, SheetExportFormat } from '../document/transform/protocol';
+import type {
+    DocumentExportFormat,
+    EigendocExportFormat,
+    SheetExportFormat,
+    VectorExportFormat,
+} from '../document/transform/protocol';
 import { runTransformToBytes } from '../document/transform/run-transform';
 import { documentTransformRunner } from '../document/transform/runner';
 import type { Mount } from '../mount';
@@ -20,6 +25,7 @@ export type ExportResult = {
 const EXPORT_ENVELOPES = {
     html: { workerFormat: 'html', contentType: 'text/html; charset=utf-8', extension: 'html' },
     pdf: { workerFormat: 'pdf-html', contentType: 'application/pdf', extension: 'pdf' },
+    svg: { workerFormat: 'svg', contentType: 'image/svg+xml', extension: 'svg' },
     xlsx: {
         workerFormat: 'xlsx',
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -39,7 +45,8 @@ type ExportEnvelope = (typeof EXPORT_ENVELOPES)[keyof typeof EXPORT_ENVELOPES];
 export type ExportJob =
     | { documentType: 'eigensheets'; format: SheetExportFormat }
     | { documentType: 'eigendoc'; format: EigendocExportFormat }
-    | { documentType: 'eigenslides'; format: DocumentExportFormat };
+    | { documentType: 'eigenslides'; format: DocumentExportFormat }
+    | { documentType: 'eigenvector'; format: VectorExportFormat };
 
 // `signal` aborts the off-thread transforms when the client disconnects — the runner
 // drops the queued job or terminates its Worker.
@@ -67,6 +74,16 @@ export async function exportDocument(
         const envelope = EXPORT_ENVELOPES[format];
         return serveExport(
             { documentType: 'eigenslides', format: envelope.workerFormat },
+            envelope,
+            mount,
+            path,
+            signal,
+        );
+    }
+    if (path.mimeType === DRIVE_MIME_VECTOR && (format === 'svg' || format === 'pdf')) {
+        const envelope = EXPORT_ENVELOPES[format];
+        return serveExport(
+            { documentType: 'eigenvector', format: envelope.workerFormat },
             envelope,
             mount,
             path,

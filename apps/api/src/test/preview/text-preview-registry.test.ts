@@ -63,4 +63,8 @@ describe('getTextPreviewMode', () => {
     test('non-text binary types have no text preview', () => {
         expect(getTextPreviewMode('image/png', 'photo.png')).toBeNull();
     });
+
+    test('eigenvector is an image preview, not a text preview', () => {
+        expect(getTextPreviewMode('application/eigenvector', 'drawing.eigenvector')).toBeNull();
+    });
 });

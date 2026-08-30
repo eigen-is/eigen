@@ -308,8 +308,9 @@ async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<S
 
 async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const documentType = COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '');
-    // Vector is a collab document too, but its preview is an SVG image (getScreenPreview),
-    // never a text body — the text-preview modes exclude it.
+    // getTextPreview only routes doc/slides/sheets here, so eigenvector never occurs at
+    // runtime — but the map still carries it (search extraction shares the list), and it is
+    // not a TextPreviewResult['mode'], so exclude it to keep the text-preview envelope typed.
     if (!documentType || documentType === 'eigenvector') return null;
     return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
         generateDocumentPreview(documentType, mount, drivePath, priority),

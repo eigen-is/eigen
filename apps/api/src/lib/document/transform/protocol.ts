@@ -12,6 +12,8 @@ export type SheetExportFormat = 'html' | 'xlsx' | 'pdf-html';
 export type DocumentExportFormat = 'html' | 'pdf-html';
 // Only eigendoc exports to docx; the slides route rejects the format.
 export type EigendocExportFormat = DocumentExportFormat | 'docx';
+// Vector exports the drawing's own SVG, or that SVG on a page WeasyPrint renders to PDF.
+export type VectorExportFormat = 'svg' | 'pdf-html';
 
 // Doc/slides media crossing the boundary: prepared on the main thread for an export
 // (Mount I/O + screen previews), extracted from the upload by a docx import. The
@@ -36,6 +38,13 @@ export type ExportTransformJob =
           kind: 'export';
           documentType: 'eigenslides';
           format: DocumentExportFormat;
+          title: string;
+          media: TransformMedia[];
+      }
+    | {
+          kind: 'export';
+          documentType: 'eigenvector';
+          format: VectorExportFormat;
           title: string;
           media: TransformMedia[];
       };

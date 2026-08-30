@@ -58,6 +58,10 @@ async function renderExport(
             const { renderEigenslidesExport } = await import('../../export/slides/transform');
             return renderEigenslidesExport(doc, request.format, request.title, request.media);
         }
+        case 'eigenvector': {
+            const { renderEigenvectorExport } = await import('../../export/vector/transform');
+            return renderEigenvectorExport(doc, request.format, request.title, request.media);
+        }
     }
 }
 
