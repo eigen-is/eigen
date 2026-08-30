@@ -374,14 +374,14 @@ describe('isClosedPath', () => {
 });
 
 describe('hitTestElement — linear', () => {
-    test('an open line is hit within threshold + half the stroke, unrotated', () => {
-        const el = linear({ points: '[[0,0],[100,40]]', strokeWidth: 4, width: 100, height: 40 });
-        // on the segment midpoint (scene = x/y + local since angle 0)
-        expect(hitTestElement(el, { x: 50, y: 20 }, 2)).toBe(true);
-        // just off the line but inside threshold(2) + strokeWidth/2(2) = 4 of the segment
-        expect(hitTestElement(el, { x: 50, y: 20 }, 2)).toBe(true);
-        // far from the segment: miss
-        expect(hitTestElement(el, { x: 50, y: 60 }, 2)).toBe(false);
+    test('an open line is hit within max(0.85·threshold, strokeWidth/2 + 0.1), unrotated', () => {
+        const el = linear({ points: '[[0,0],[100,0]]', strokeWidth: 4, width: 100, height: 0 });
+        // wide threshold arm dominates: 0.85·10 = 8.5
+        expect(hitTestElement(el, { x: 50, y: 8 }, 10)).toBe(true);
+        expect(hitTestElement(el, { x: 50, y: 9 }, 10)).toBe(false);
+        // ink arm dominates at low threshold: strokeWidth/2 + 0.1 = 2.1 (0.85·1 = 0.85 loses)
+        expect(hitTestElement(el, { x: 50, y: 2 }, 1)).toBe(true);
+        expect(hitTestElement(el, { x: 50, y: 2.2 }, 1)).toBe(false);
     });
 
     test('a rotated line unrotates the probe about the box center before measuring', () => {
@@ -392,10 +392,10 @@ describe('hitTestElement — linear', () => {
     });
 
     test('freedraw widens tolerance by half the fat ink width', () => {
-        // thin freedraw: diameter 1 * 2.125; half = ~1.06, so within threshold(1) + 1.06 ≈ 2.06 of the line.
+        // thin freedraw: diameter 1 * 2.125; half ≈ 1.06, so the ink arm is 1.06 + 0.1 = 1.16 (beats 0.85·1).
         const el = linear({ type: 'freedraw', points: '[[0,0],[100,0]]', strokeWidth: 1, width: 100, height: 0 });
-        expect(hitTestElement(el, { x: 50, y: 2 }, 1)).toBe(true);
-        expect(hitTestElement(el, { x: 50, y: 3 }, 1)).toBe(false);
+        expect(hitTestElement(el, { x: 50, y: 1 }, 1)).toBe(true);
+        expect(hitTestElement(el, { x: 50, y: 1.3 }, 1)).toBe(false);
     });
 
     test('a closed, filled line is hit inside the polygon; transparent is outline-only', () => {

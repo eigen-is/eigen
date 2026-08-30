@@ -88,6 +88,8 @@ function arrowElement(origin: Point, points: Point[], seed: number): VectorArrow
 type DrawingToolsParams = {
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
+    // When the tool lock is on, a finished line/arrow keeps its tool active (freedraw/eraser always do).
+    toolLocked: boolean;
     canWrite: boolean;
     zoom: number;
     ordered: VectorElement[];
@@ -128,6 +130,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const {
         tool,
         setTool,
+        toolLocked,
         canWrite,
         zoom,
         ordered,
@@ -256,8 +259,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
 
     const finishLineWith = (points: Point[]) => {
         commitLine(points);
-        // A finished line returns to select (Excalidraw); the pencil is the only tool that stays.
-        setTool('select');
+        // A finished line returns to select (Excalidraw); the pencil is the only tool that always stays,
+        // and the tool lock keeps the current tool active for repeated placement.
+        if (!toolLocked) setTool('select');
     };
 
     // A click in multi mode: finish on the last/first point, else commit a new point.

@@ -2,7 +2,7 @@ import { useYjsUndoState } from '@workspace/lib/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, TooltipButton } from '@workspace/ui';
 import { VECTOR_TOOLS, type VectorTool } from '@workspace/ui/components/vector';
-import { Diamond } from 'lucide-react';
+import { Diamond, Lock } from 'lucide-react';
 
 type ToolbarProps = {
     path: DrivePath;
@@ -12,6 +12,9 @@ type ToolbarProps = {
     undoManager: Parameters<typeof useYjsUndoState>[0];
     tool: VectorTool;
     setTool: (tool: VectorTool) => void;
+    // Tool lock (Q): keeps the selected tool active for repeated placement — the padlock at the cluster end.
+    toolLocked: boolean;
+    setToolLocked: (locked: boolean) => void;
     onAccessDialogOpen: () => void;
     // Document-level comments + activity (the props U1 deliberately omitted until vector had a
     // comment lifecycle). Always offered when the panels are wired: desktop draws the side panel,
@@ -29,6 +32,8 @@ export function Toolbar({
     undoManager,
     tool,
     setTool,
+    toolLocked,
+    setToolLocked,
     onAccessDialogOpen,
     onToggleCommentPanel,
     commentPanelOpen,
@@ -57,17 +62,27 @@ export function Toolbar({
                 </div>
             }
             center={
-                canWrite &&
-                VECTOR_TOOLS.map((t) => (
-                    <TooltipButton
-                        key={t.tool}
-                        icon={t.icon}
-                        tooltipText={`${t.label} (${t.shortcut})`}
-                        active={tool === t.tool}
-                        preventFocusLoss
-                        onClick={() => setTool(t.tool)}
-                    />
-                ))
+                canWrite && (
+                    <>
+                        {VECTOR_TOOLS.map((t) => (
+                            <TooltipButton
+                                key={t.tool}
+                                icon={t.icon}
+                                tooltipText={`${t.label} (${t.shortcut})`}
+                                active={tool === t.tool}
+                                preventFocusLoss
+                                onClick={() => setTool(t.tool)}
+                            />
+                        ))}
+                        <TooltipButton
+                            icon={Lock}
+                            tooltipText="Keep selected tool (Q)"
+                            active={toolLocked}
+                            preventFocusLoss
+                            onClick={() => setToolLocked(!toolLocked)}
+                        />
+                    </>
+                )
             }
             right={
                 <div className="flex items-center gap-1">

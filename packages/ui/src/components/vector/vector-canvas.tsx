@@ -18,15 +18,12 @@ import {
     computeSnapTargets,
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
-    ELEMENT_FIELDS,
     elementBounds,
-    elementToSvg,
     fitImageSize,
     getElementsBounds,
     isLinearElement,
     isTransparent,
     type MarqueeMode,
-    type MediaResolver,
     marqueeMode,
     orderByFractionalIndex,
     resizeLinear,
@@ -44,7 +41,7 @@ import {
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WebsocketProvider } from 'y-websocket';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../hooks/is-typing-target';
@@ -55,6 +52,7 @@ import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
+import { ElementNode } from './element-node';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import type { VectorTool } from './hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-doc';
@@ -100,29 +98,6 @@ const IMAGE_CASCADE_OFFSET = 20;
 // (Excalidraw's DRAGGING_THRESHOLD, R3.10).
 const ARROW_UNBIND_SCREEN = 10;
 
-// Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
-// a Yjs tick materializes fresh objects through readVectorFromDoc, so those need the field compare —
-// every ELEMENT_FIELDS value is a scalar/string, so it is exact. Only changed elements re-run
-// elementToSvg — rough path generation is the expensive part.
-function sameElement(a: VectorElement, b: VectorElement): boolean {
-    if (a === b) return true;
-    const ra = a as Record<string, unknown>;
-    const rb = b as Record<string, unknown>;
-    for (const field of ELEMENT_FIELDS) {
-        if (ra[field] !== rb[field]) return false;
-    }
-    return true;
-}
-
-const ElementNode = memo(
-    // Each element is its own node (keyed + `data-element-id`) rendered through the SAME lib render
-    // path as previews/embeds/export — elementToSvg emits our own escaped `<g>` fragment.
-    function ElementNode({ el, resolveMedia }: { el: VectorElement; resolveMedia?: MediaResolver }) {
-        return <g data-element-id={el.id} dangerouslySetInnerHTML={{ __html: elementToSvg(el, { resolveMedia }) }} />;
-    },
-    (prev, next) => prev.resolveMedia === next.resolveMedia && sameElement(prev.el, next.el),
-);
-
 function elementBox(el: VectorElement): Box {
     return { x: el.x, y: el.y, width: el.width, height: el.height, angle: el.angle };
 }
@@ -163,6 +138,9 @@ type VectorCanvasProps = {
     meta: VectorMeta;
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
+    // Tool lock (Q / padlock): a placement keeps the current tool active; threaded like `tool`, toggled here on Q.
+    toolLocked: boolean;
+    setToolLocked: (locked: boolean) => void;
     canWrite: boolean;
     // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
     ownerId: string;
@@ -204,6 +182,8 @@ export function VectorCanvas({
     meta,
     tool,
     setTool,
+    toolLocked,
+    setToolLocked,
     canWrite,
     ownerId,
     mountId,
@@ -242,6 +222,9 @@ export function VectorCanvas({
     const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
     const [spaceHeld, setSpaceHeld] = useState(false);
     const [panning, setPanning] = useState(false);
+    // Select-mode hover affordance: true while the idle pointer is over a selectable element, so the
+    // cursor signals draggability with `move` (the suite convention — slides/docs). Item E.
+    const [hoveringSelectable, setHoveringSelectable] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
     // The object context menu (right-click) — the singleton surface; item is the right-clicked
     // element id, its ops act on the selection below.
@@ -274,6 +257,7 @@ export function VectorCanvas({
     const drawing = useDrawingTools({
         tool,
         setTool,
+        toolLocked,
         canWrite,
         zoom,
         ordered,
@@ -332,6 +316,8 @@ export function VectorCanvas({
         selectedIds,
         tool,
         setTool,
+        toolLocked,
+        setToolLocked,
         setSelection: setSelectedIds,
         undoManager,
         deleteElements,
@@ -627,10 +613,11 @@ export function VectorCanvas({
                 setSelectedIds([ed.id]);
                 healTextDims(ed.id, text, ed.fontSize, ed.fontFamily);
             }
-            // A text-tool session reverts to select; a double-click session was already select.
-            setTool('select');
+            // A text-tool session reverts to select (a double-click session was already select); the tool
+            // lock keeps the text tool active for repeated placement.
+            if (!toolLocked) setTool('select');
         },
-        [addElement, updateElement, deleteElements, undoManager, setSelectedIds, setTool, healTextDims],
+        [addElement, updateElement, deleteElements, undoManager, setSelectedIds, setTool, toolLocked, healTextDims],
     );
 
     // A paste carries no coordinates (unlike a drop), so it anchors on the visible viewport center.
@@ -1031,12 +1018,14 @@ export function VectorCanvas({
     ]);
 
     const onDoubleClick = (e: React.MouseEvent) => {
-        if (!canWrite || tool !== 'select' || editing) return;
+        // frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's openNewText); else edit the hit text/arrow label.
+        if (!canWrite || tool !== 'select' || editing || frozenRef.current) return;
         const p = clientToScene(e.clientX, e.clientY);
         const hit = hitTestTopmost(ordered, p, zoom);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'text') openEditExisting(hitEl);
         else if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
+        else if (!hitEl) openNewText(p.x, p.y);
     };
 
     // Right-click on an element opens the object menu (empty canvas keeps the browser default). Like
@@ -1200,7 +1189,8 @@ export function VectorCanvas({
     const onPointerMove = (e: React.PointerEvent) => {
         // Publish the local cursor on every move (throttled downstream; no React state → no
         // re-render), then handle the active gesture if any.
-        publishCursor(clientToScene(e.clientX, e.clientY));
+        const scene = clientToScene(e.clientX, e.clientY);
+        publishCursor(scene);
         const g = gestureRef.current;
         // Pan first: a multi-point line draft leaves the surface unfrozen, so a space-pan can start
         // mid-polyline and must keep driving over the draft's trailing point.
@@ -1214,8 +1204,13 @@ export function VectorCanvas({
         // A freehand stroke / eraser swipe / line draft (incl. its hover trailing point) is handled by
         // the tools hook, which consumes the move.
         if (drawing.onPointerMove(e)) return;
+        // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
+        if (!g && tool === 'select' && !editing) {
+            const over = hitTestTopmost(ordered, scene, zoom) !== null;
+            if (over !== hoveringSelectable) setHoveringSelectable(over);
+        }
         if (!g || e.pointerId !== g.pointerId) return;
-        const p = clientToScene(e.clientX, e.clientY);
+        const p = scene;
         if (g.kind === 'create') {
             let dx = p.x - g.startX;
             let dy = p.y - g.startY;
@@ -1308,7 +1303,7 @@ export function VectorCanvas({
         if (g.kind === 'create') {
             const c = creating;
             setCreating(null);
-            setTool('select');
+            if (!toolLocked) setTool('select');
             if (c && (c.box.width >= CREATE_MIN_SIZE || c.box.height >= CREATE_MIN_SIZE)) {
                 const id = addElement({
                     type: c.type,
@@ -1394,7 +1389,9 @@ export function VectorCanvas({
             ? 'text'
             : tool !== 'select'
               ? 'crosshair'
-              : 'default';
+              : hoveringSelectable
+                ? 'move'
+                : 'default';
     const background = isTransparent(meta.background) ? undefined : meta.background;
 
     return (
@@ -1412,7 +1409,10 @@ export function VectorCanvas({
             // Hide our cursor from peers when the pointer leaves — unless a gesture holds capture (the
             // pointer legitimately roams outside the container mid-drag).
             onPointerLeave={() => {
-                if (!gestureRef.current) publishCursor(null);
+                if (!gestureRef.current) {
+                    publishCursor(null);
+                    setHoveringSelectable(false);
+                }
             }}
             onDoubleClick={onDoubleClick}
             onContextMenu={onContextMenu}

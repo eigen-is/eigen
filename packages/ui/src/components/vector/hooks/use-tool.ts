@@ -43,5 +43,8 @@ export const VECTOR_TOOLS: { tool: VectorTool; icon: LucideIcon; label: string; 
 
 export function useTool() {
     const [tool, setTool] = useState<VectorTool>('select');
-    return { tool, setTool };
+    // Tool lock (Q / the toolbar padlock): when on, shape/line/arrow/text tools stay active after a
+    // placement instead of reverting to select (freedraw/eraser already stay). Session-only state.
+    const [toolLocked, setToolLocked] = useState(false);
+    return { tool, setTool, toolLocked, setToolLocked };
 }

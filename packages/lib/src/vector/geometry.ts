@@ -175,6 +175,11 @@ export const FREEDRAW_SIZE_FACTOR = 2.125;
 // (Excalidraw's isPathALoop at zoom 1 — zoom-free so FE preview and BE export decide fill alike).
 const CLOSE_PATH_THRESHOLD = 8;
 
+// Excalidraw's getElementHitThreshold: a linear/arrow element is grabbed within the LARGER of the
+// zoom-scaled screen threshold (0.85× — Excalidraw's tested floor; lower gets FP-flaky at high zoom)
+// and half the drawn ink width plus 0.1. Replaces an additive threshold+ink that grew both together.
+const LINEAR_HIT_SCREEN_FACTOR = 0.85;
+
 export function parsePoints(points: string): Point[] {
     let raw: unknown;
     try {
@@ -305,7 +310,8 @@ export function linearLocalToScene(box: Box, local: Point): Point {
 }
 
 // Unrotate the probe into the element's local frame, then measure to the polyline. Tolerance is the
-// screen threshold plus half the drawn ink width; a closed, filled path is also hit anywhere inside.
+// larger of the 0.85-scaled screen threshold and the drawn ink half-width (+0.1) per LINEAR_HIT_SCREEN_FACTOR;
+// a closed, filled path is also hit anywhere inside.
 function hitTestLinear(element: VectorLinearElement, point: Point, threshold: number): boolean {
     const points = parsePoints(element.points);
     if (points.length === 0) return false;
@@ -313,7 +319,7 @@ function hitTestLinear(element: VectorLinearElement, point: Point, threshold: nu
 
     const inkHalf =
         element.type === 'freedraw' ? (element.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2 : element.strokeWidth / 2;
-    if (distanceToPolyline(points, p) <= threshold + inkHalf) return true;
+    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, inkHalf + 0.1)) return true;
     return isClosedPath(points) && !isTransparent(element.backgroundColor) && pointInPolygon(p, points);
 }
 
@@ -323,7 +329,8 @@ function hitTestArrow(el: VectorArrowElement, point: Point, threshold: number): 
     const points = parsePoints(el.points);
     if (points.length === 0) return false;
     const p = linearSceneToLocal(el, point);
-    if (distanceToPolyline(points, p) <= threshold + el.strokeWidth / 2) return true;
+    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1))
+        return true;
     const label = arrowLabelBox(el);
     return (
         label !== null &&

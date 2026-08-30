@@ -50,7 +50,7 @@ export function VectorEditor({
     initialChatName,
 }: VectorEditorProps) {
     const doc = useVectorDoc(ownerId, path.mountId, path.id);
-    const { tool, setTool } = useTool();
+    const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
     // Awareness: publish this user's identity + selection, get a throttled cursor publisher for the
     // canvas. Selection is threaded from here (the editor owns selectedIds).
@@ -175,6 +175,8 @@ export function VectorEditor({
                                 undoManager={doc.undoManager}
                                 tool={tool}
                                 setTool={setTool}
+                                toolLocked={toolLocked}
+                                setToolLocked={setToolLocked}
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
@@ -195,6 +197,8 @@ export function VectorEditor({
                                         meta={doc.meta}
                                         tool={tool}
                                         setTool={setTool}
+                                        toolLocked={toolLocked}
+                                        setToolLocked={setToolLocked}
                                         canWrite={canWrite}
                                         ownerId={ownerId}
                                         mountId={path.mountId}
