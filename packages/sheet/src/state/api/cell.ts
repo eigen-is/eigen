@@ -1,4 +1,3 @@
-import type { RangeBorderInfo } from '@workspace/lib/sheets';
 import { forEach, isNil, isNumber, isPlainObject } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import type { Cell, CellStyle } from '../../engine/types';
@@ -192,28 +191,7 @@ export function setCellFormat(
         cellData.m = format(ctValue!.fa!, cellData.v); // auto generate mask
     }
 
-    // 'bd' is a pseudo-attr — not a real `keyof Cell`, but the upstream API surfaces
-    // border writes through this code path. Compare via string to keep callers' typed
-    // `keyof Cell` parameter intact. Caller-supplied `value` is spread as a partial
-    // RangeBorderInfo override (color/style/range/borderType); the spread is trusted
-    // at this API boundary.
-    if ((attr as string) === 'bd') {
-        const cfg = (sheet.config ??= {});
-        cfg.borderInfo ??= [];
-
-        const borderInfo: RangeBorderInfo = {
-            rangeType: 'range',
-            borderType: 'border-all',
-            color: '#000',
-            style: '1',
-            range: [{ column: [column, column], row: [row, row] }],
-            ...(value as Partial<RangeBorderInfo>),
-        };
-
-        cfg.borderInfo.push(borderInfo);
-    } else {
-        (cellData as Record<string, unknown>)[attr] = value;
-    }
+    (cellData as Record<string, unknown>)[attr] = value;
 
     targetSheetData[row][column] = cellData;
 }

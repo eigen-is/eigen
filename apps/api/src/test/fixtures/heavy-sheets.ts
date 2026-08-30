@@ -86,17 +86,7 @@ export function buildGoldenSheets(): Sheet[] {
         data,
         config: {
             merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } },
-            borderInfo: [
-                {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: 1,
-                        col_index: 1,
-                        l: { style: 8, color: '#1a5fb4' },
-                        b: { style: 1, color: '#1a5fb4' },
-                    },
-                },
-            ],
+            borderInfo: { '1_1': { l: { style: 8, color: '#1a5fb4' }, b: { style: 1, color: '#1a5fb4' } } },
             columnlen: { '0': 120 },
             rowlen: { '0': 28 },
         },

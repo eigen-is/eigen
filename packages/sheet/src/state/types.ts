@@ -1,5 +1,4 @@
 import type {
-    BorderInfo,
     ConditionalFormatRule,
     DataVerificationRule,
     Sheet as LibSheet,
@@ -23,14 +22,13 @@ import type { PatchOptions } from './utils';
 // Types surfaced here so state-side consumers don't have to know the canonical
 // home. Sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range) live in @workspace/lib/sheets and re-export through ../engine/types;
-// Op / BorderInfo / ConditionalFormatRule / DataVerificationRule live in lib
-// directly (the BE document reader replays ops without the engine, the HTML
-// export reads borderInfo and CF rules, and data-validation rules are touched
+// Op / ConditionalFormatRule / DataVerificationRule live in lib directly (the
+// BE document reader replays ops without the engine, the HTML export reads
+// CF rules, and data-validation rules are touched
 // by the editor + canvas painter — none is engine-conceptual). AncestorFormulaCell
 // and CalcChainEntry are engine-only (formula dep graph + calc-chain node).
 export type {
     AncestorFormulaCell,
-    BorderInfo,
     CalcChainEntry,
     Cell,
     CellMatrix,

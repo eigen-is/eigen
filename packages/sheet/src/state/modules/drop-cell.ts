@@ -1,4 +1,3 @@
-import type { CellBorderInfo } from '@workspace/lib/sheets';
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
@@ -1896,6 +1895,7 @@ export function updateDropCell(ctx: Context) {
     const resolver = createContextResolver(ctx);
 
     const cfg = (file.config ??= {});
+    cfg.borderInfo ??= {};
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
     // Live map, not a clone: the copy and apply ranges are disjoint, so reading a source
     // rule while writing the filled ones is safe — and the write has to land on the sheet
@@ -2004,35 +2004,11 @@ export function updateDropCell(ctx: Context) {
             const bd_r = axisIsRow ? bd_axis : outer;
             const bd_c = axisIsRow ? outer : bd_axis;
 
-            const computeEntry = borderInfoCompute[`${bd_r}_${bd_c}`];
-            if (computeEntry) {
-                const bd_obj: CellBorderInfo = {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: row,
-                        col_index: col,
-                        l: computeEntry.l,
-                        r: computeEntry.r,
-                        t: computeEntry.t,
-                        b: computeEntry.b,
-                    },
-                };
-
-                (cfg.borderInfo ??= []).push(bd_obj);
-            } else if (borderInfoCompute[`${row}_${col}`]) {
-                const bd_obj: CellBorderInfo = {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: row,
-                        col_index: col,
-                        l: null,
-                        r: null,
-                        t: null,
-                        b: null,
-                    },
-                };
-
-                (cfg.borderInfo ??= []).push(bd_obj);
+            const sourceSides = borderInfoCompute[`${bd_r}_${bd_c}`];
+            if (sourceSides) {
+                cfg.borderInfo[`${row}_${col}`] = cloneDeep(sourceSides);
+            } else {
+                delete cfg.borderInfo[`${row}_${col}`];
             }
 
             // data validation

@@ -404,9 +404,16 @@ describe('config ops from a normalizing editor apply to an un-normalized stored 
 
     test('a granular border op resolves and is kept', () => {
         const out = replaySheetsOps(storedBeforeThisBranch(), [
-            [{ op: 'add', id: 'id_1', path: ['config', 'borderInfo', 0], value: { rangeType: 'cell' } }],
+            [
+                {
+                    op: 'add',
+                    id: 'id_1',
+                    path: ['config', 'borderInfo', '0_0'],
+                    value: { l: { style: 1, color: '#000' } },
+                },
+            ],
         ]);
-        expect(out[0].config?.borderInfo).toHaveLength(1);
+        expect(out[0].config?.borderInfo).toEqual({ '0_0': { l: { style: 1, color: '#000' } } });
     });
 
     test('a sheet added mid-session takes ops on its config too', () => {

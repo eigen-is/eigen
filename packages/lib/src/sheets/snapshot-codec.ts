@@ -6,7 +6,7 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
-import type { BorderInfo, Cell, CellBorderInfo, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
+import type { Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
 
 const FORMAT = 'eigensheets/2';
 
@@ -22,9 +22,8 @@ type EncodedCell = [number, number, number, EncodedContent?];
 // common cell, encoded without either key name. Everything else spells out the
 // keys it had verbatim (`cc` = commentCardIds).
 type EncodedContent = string | number | boolean | Record<string, unknown>;
-// [row, col, borderIndex] for a cell border; other rangeTypes ride along verbatim
-// because the array order is semantic (later entries override earlier ones).
-type EncodedBorder = [number, number, number] | BorderInfo;
+// [row, col, borderIndex] — one per `config.borderInfo` key.
+type EncodedBorder = [number, number, number];
 
 type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config'> & {
     config?: Omit<SheetConfig, 'borderInfo'>;
@@ -80,7 +79,14 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
         if (config) {
             const { borderInfo, ...restConfig } = config;
             out.config = restConfig;
-            if (borderInfo) out.borderCells = borderInfo.map((info) => encodeBorder(info, borders, borderIndex));
+            if (borderInfo) {
+                const borderCells: EncodedBorder[] = [];
+                for (const [key, sides] of Object.entries(borderInfo)) {
+                    const [r, c] = key.split('_').map(Number);
+                    borderCells.push([r, c, intern(sides, borders, borderIndex)]);
+                }
+                out.borderCells = borderCells;
+            }
         }
 
         return out;
@@ -119,7 +125,13 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
 
         if (config || borderCells) {
             sheet.config = { ...config };
-            if (borderCells) sheet.config.borderInfo = borderCells.map((entry) => decodeBorder(entry, borders));
+            if (borderCells) {
+                const borderInfo: Record<string, CellBorderSides> = {};
+                for (const [r, c, borderIdx] of borderCells) {
+                    borderInfo[`${r}_${c}`] = materializeStyle(borders[borderIdx]) as CellBorderSides;
+                }
+                sheet.config.borderInfo = borderInfo;
+            }
         }
 
         return sheet;
@@ -222,22 +234,6 @@ function cloneJsonValue(value: unknown): unknown {
         return out;
     }
     return value;
-}
-
-function encodeBorder(info: BorderInfo, borders: BorderSides[], borderIndex: Map<string, number>): EncodedBorder {
-    if (info.rangeType !== 'cell') return info;
-    const { row_index, col_index, ...sides } = info.value;
-    return [row_index, col_index, intern(sides, borders, borderIndex)];
-}
-
-function decodeBorder(entry: EncodedBorder, borders: BorderSides[]): BorderInfo {
-    if (!Array.isArray(entry)) return entry;
-    const value = {
-        row_index: entry[0],
-        col_index: entry[1],
-        ...materializeStyle(borders[entry[2]]),
-    } as CellBorderInfo['value'];
-    return { rangeType: 'cell', value };
 }
 
 // Keys are sorted before stringifying so two payloads that were written in a

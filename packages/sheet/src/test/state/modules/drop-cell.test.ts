@@ -11,7 +11,7 @@ import { describe, expect, it } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { autoFillCell } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
-import type { BorderInfo, Cell, DataVerificationRule, SheetConfig, SingleRange } from '../../../state/types';
+import type { Cell, DataVerificationRule, SingleRange } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
 
@@ -110,24 +110,15 @@ describe('drag-fill keeps the number format in every direction', () => {
 // on the sheet shows up as a missing entry rather than an aliased one.
 describe('drag-fill carries the source cell borders', () => {
     const SIDE = { style: 1, color: '#000' };
-    const sourceBorder: BorderInfo = {
-        rangeType: 'cell',
-        value: { row_index: 0, col_index: 0, l: SIDE, r: SIDE, t: SIDE, b: SIDE },
-    };
+    const sourceBorder = { l: SIDE, r: SIDE, t: SIDE, b: SIDE };
 
     function borderedContext(): Context {
         const src: SingleRange = { row: [0, 0], column: [0, 0] };
         const ctx = makeCtx((d) => {
             d[0][0] = { v: 1, m: '1', ct: { fa: 'General', t: 'n' } };
         }, src);
-        ctx.sheets[0].config = { borderInfo: [sourceBorder] };
+        ctx.sheets[0].config = { borderInfo: { '0_0': sourceBorder } };
         return ctx;
-    }
-
-    function borderedCells(config: SheetConfig | undefined) {
-        return (config?.borderInfo ?? [])
-            .filter((entry) => entry.rangeType === 'cell')
-            .map((entry) => `${entry.value.row_index}_${entry.value.col_index}`);
     }
 
     it('lands the carried border on the sheet config', () => {
@@ -135,7 +126,20 @@ describe('drag-fill carries the source cell borders', () => {
             autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
         });
 
-        expect(borderedCells(filled.sheets[0].config)).toEqual(['0_0', '1_0']);
+        expect(filled.sheets[0].config!.borderInfo).toEqual({ '0_0': sourceBorder, '1_0': sourceBorder });
+    });
+
+    it('clears a filled cell whose source has no border', () => {
+        const src: SingleRange = { row: [0, 0], column: [0, 0] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = { v: 1, m: '1', ct: { fa: 'General', t: 'n' } };
+        }, src);
+        ctx.sheets[0].config = { borderInfo: { '1_0': sourceBorder } };
+        const [filled] = produceWithPatches(ctx, (draft: Context) => {
+            autoFillCell(draft, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+        });
+
+        expect(filled.sheets[0].config!.borderInfo).toEqual({});
     });
 });
 

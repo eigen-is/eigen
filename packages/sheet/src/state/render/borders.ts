@@ -8,7 +8,7 @@ import type { RenderPass } from './types';
 
 function setLineDash(
     canvasborder: CanvasRenderingContext2D,
-    type: number | string,
+    type: number,
     hv: string,
     moveX: number,
     moveY: number,
@@ -57,9 +57,6 @@ function setLineDash(
 export function drawCellBorders(pass: RenderPass) {
     const { sheetCtx } = pass;
     const cfg = getSheetConfig(sheetCtx);
-    if ((cfg?.borderInfo?.length ?? 0) === 0) {
-        return;
-    }
 
     const {
         renderCtx,
@@ -74,7 +71,7 @@ export function drawCellBorders(pass: RenderPass) {
     } = pass;
 
     const renderBorder = (
-        style: number | string,
+        style: number,
         color: string,
         dir: string,
         moveX: number,

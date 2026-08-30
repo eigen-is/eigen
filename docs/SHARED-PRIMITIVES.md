@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1069 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1066 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -430,7 +430,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (296)
+## Types (293)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -458,12 +458,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `CanonicalRecipient` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
 | `RecipientField` | `@workspace/lib/mail` | packages/lib/src/core/mail/addresses.ts |
-| `BorderInfo` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `BorderRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderSide` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `BorderType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Cell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `CellBorderInfo` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `CellBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellMatrix` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellStyle` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `CellType` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -479,7 +477,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MergeCell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Op` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Range` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `RangeBorderInfo` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `Sheet` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetConfig` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |

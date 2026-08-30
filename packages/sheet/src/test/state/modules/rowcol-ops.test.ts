@@ -19,6 +19,7 @@ enablePatches();
 
 const INSERT_OP = { type: 'row', index: 1, count: 1, direction: 'lefttop', id: 'id_1' } as const;
 const DELETE_OP = { type: 'row', start: 1, end: 2, id: 'id_1' } as const;
+const SIDE = { style: 1, color: '#000' };
 
 function richContext(): Context {
     const cell = (v: number) => ({ v, m: String(v) });
@@ -37,6 +38,7 @@ function richContext(): Context {
                     rowlen: { 2: 60 },
                     rowhidden: { 3: 0 },
                     merge: { '3_2': { r: 3, c: 2, rs: 1, cs: 2 } },
+                    borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
                 calcChain: [{ r: 2, c: 1, id: 'id_1' }],
                 // hyperlink + dataVerification are shifted only in the state layer,
@@ -178,6 +180,52 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
         const [next, patches] = produceWithPatches(base, (ctx: Context) => insertRowCol(ctx, op));
         const ops = patchToOp(next, filterPatch(patches), { insertRowColOp: op });
         expectConverged(replaySheetsOps(baseSheets, [ops]), next);
+    });
+});
+
+describe('borders follow their cells through inserts and deletes', () => {
+    test('inserting above shifts the template row down and clones its borders onto the new row', () => {
+        const [, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
+        expect(next.sheets[0].config?.borderInfo).toEqual({
+            '1_0': { t: SIDE },
+            '2_0': { t: SIDE },
+            '3_1': { b: SIDE },
+            '4_3': { l: SIDE },
+        });
+    });
+
+    test('inserting below keeps the template row and clones onto every inserted row', () => {
+        const op = { type: 'row', index: 1, count: 2, direction: 'rightbottom', id: 'id_1' } as const;
+        const [, next] = emittedOps((ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(next.sheets[0].config?.borderInfo).toEqual({
+            '1_0': { t: SIDE },
+            '2_0': { t: SIDE },
+            '3_0': { t: SIDE },
+            '4_1': { b: SIDE },
+            '5_3': { l: SIDE },
+        });
+    });
+
+    test('inserting a column clones the template column', () => {
+        const op = { type: 'column', index: 1, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+        const [, next] = emittedOps((ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        expect(next.sheets[0].config?.borderInfo).toEqual({
+            '1_0': { t: SIDE },
+            '2_1': { b: SIDE },
+            '2_2': { b: SIDE },
+            '3_4': { l: SIDE },
+        });
+    });
+
+    test('deleting rows drops their borders and shifts the rest up', () => {
+        const [, next] = emittedOps((ctx) => deleteRowCol(ctx, DELETE_OP), { deleteRowColOp: DELETE_OP });
+        expect(next.sheets[0].config?.borderInfo).toEqual({ '1_3': { l: SIDE } });
+    });
+
+    test('deleting a column drops its borders and shifts the rest left', () => {
+        const op = { type: 'column', start: 0, end: 0, id: 'id_1' } as const;
+        const [, next] = emittedOps((ctx) => deleteRowCol(ctx, op), { deleteRowColOp: op });
+        expect(next.sheets[0].config?.borderInfo).toEqual({ '2_0': { b: SIDE }, '3_2': { l: SIDE } });
     });
 });
 

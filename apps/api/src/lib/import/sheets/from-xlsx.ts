@@ -4,7 +4,7 @@ import { EIGEN_FONTS, type EigenFont } from '@workspace/lib/constants/fonts';
 import { formatInputDate } from '@workspace/lib/date';
 import type {
     BorderSide,
-    CellBorderInfo,
+    CellBorderSides,
     ConditionalFormatConditionName,
     ConditionalFormatRule,
     DataVerificationRule,
@@ -184,7 +184,7 @@ function worksheetToSheet(
     const celldata: { r: number; c: number; v: FortuneCell }[] = [];
     const columnlen: NonNullable<SheetConfig['columnlen']> = {};
     const rowlen: NonNullable<SheetConfig['rowlen']> = {};
-    const borderInfo: CellBorderInfo[] = [];
+    const borderInfo: NonNullable<SheetConfig['borderInfo']> = {};
     const hyperlink: NonNullable<Sheet['hyperlink']> = {};
 
     const { merge, anchorByCell } = buildMergeStructures(worksheet.model.merges ?? []);
@@ -225,13 +225,15 @@ function worksheetToSheet(
                 // (patch.ts's cell-op path keys off it).
                 converted.hl = { r, c, id: sheetId };
             }
+            // A border is config, not cell content, so it is read before the
+            // empty-cell skip decides whether a celldata entry exists.
+            const border = convertBorder(cell, theme);
+            if (border) borderInfo[`${r}_${c}`] = border;
+
             const mergeAnchor = anchorByCell.get(`${r}:${c}`);
             if (mergeAnchor) converted.mc = mergeAnchor;
             if (!mergeAnchor && isEmptyCell(converted)) return;
             celldata.push({ r, c, v: converted });
-
-            const border = convertBorder(cell, r, c, theme);
-            if (border) borderInfo.push(border);
 
             maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, c, r, merge, colWidthPx));
         });
@@ -259,7 +261,7 @@ function worksheetToSheet(
     if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
     if (Object.keys(rowhidden).length > 0) config.rowhidden = rowhidden;
     if (Object.keys(colhidden).length > 0) config.colhidden = colhidden;
-    if (borderInfo.length > 0) config.borderInfo = borderInfo;
+    if (Object.keys(borderInfo).length > 0) config.borderInfo = borderInfo;
 
     const sheet: Sheet = {
         name: worksheet.name,
@@ -1382,22 +1384,20 @@ function extractThemePalette(workbook: Workbook): ThemePalette {
     return palette;
 }
 
-function convertBorder(cell: XlsxCell, r: number, c: number, theme: ThemePalette): CellBorderInfo | null {
+function convertBorder(cell: XlsxCell, theme: ThemePalette): CellBorderSides | null {
     const border = cell.style?.border;
     if (!border) return null;
 
+    const sides: CellBorderSides = {};
     const l = convertBorderSide(border.left, theme);
-    const r_ = convertBorderSide(border.right, theme);
+    const r = convertBorderSide(border.right, theme);
     const t = convertBorderSide(border.top, theme);
     const b = convertBorderSide(border.bottom, theme);
-    if (!l && !r_ && !t && !b) return null;
-
-    const value: CellBorderInfo['value'] = { row_index: r, col_index: c };
-    if (l) value.l = l;
-    if (r_) value.r = r_;
-    if (t) value.t = t;
-    if (b) value.b = b;
-    return { rangeType: 'cell', value };
+    if (l) sides.l = l;
+    if (r) sides.r = r;
+    if (t) sides.t = t;
+    if (b) sides.b = b;
+    return Object.keys(sides).length > 0 ? sides : null;
 }
 
 function convertBorderSide(side: Partial<Border> | undefined, theme: ThemePalette): BorderSide | null {

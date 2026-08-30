@@ -621,18 +621,25 @@ describe('Sheets HTML export — hostile values in CSS', () => {
     test('escapes border colors', () => {
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
-            config: {
-                borderInfo: [
-                    {
-                        rangeType: 'cell',
-                        value: { row_index: 0, col_index: 0, b: { style: 1, color: 'red;"><script>x</script>' } },
-                    },
-                ],
-            },
+            config: { borderInfo: { '0_0': { b: { style: 1, color: 'red;"><script>x</script>' } } } },
         };
         const out = renderSheetsHtml([sheet]);
         expect(out.css).not.toMatch(/<script/i);
         expect(out.html).not.toMatch(/<script/i);
+    });
+
+    test('renders a bordered cell with CSS borders on its own sides', () => {
+        const sheet: Sheet = {
+            ...makeSheet([{ r: 0, c: 0, v: { v: 'x' } }]),
+            config: { borderInfo: { '0_0': { l: { style: 8, color: '#1a5fb4' }, b: { style: 1, color: '#ff0000' } } } },
+        };
+        const out = renderSheetsHtml([sheet]);
+        const [cls] = classesFor(out, 'border-left:2px solid #1a5fb4');
+        expect(cls).toBeDefined();
+        expect(classesFor(out, 'border-bottom:1px solid #ff0000')).toEqual([cls]);
+        expect(out.css).not.toContain('border-top:');
+        expect(out.css).not.toContain('border-right:');
+        expect(useCount(out, cls)).toBe(1);
     });
 
     test('escapes dataBar colors', () => {

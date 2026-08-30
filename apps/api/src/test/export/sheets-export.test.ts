@@ -1,11 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import type {
-    CellBorderInfo,
-    ConditionalFormatRule,
-    DataVerificationRule,
-    RangeBorderInfo,
-    Sheet,
-} from '@workspace/lib/sheets';
+import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { sheetsToXlsx } from '../../lib/export/sheets/to-xlsx';
@@ -784,244 +778,47 @@ describe('Sheets xlsx export — data validation', () => {
     });
 });
 
-describe('Sheets xlsx export — range borders', () => {
+describe('Sheets xlsx export — cell borders', () => {
     const side = (style: ExcelJS.BorderStyle, argb: string) => ({ style, color: { argb } });
 
-    test('expands border-all and border-outside over the range', async () => {
+    test('writes each cell its own sides; a slash-only cell writes none', async () => {
+        const medium = { style: 8, color: '#FF0000' };
+        const thin = { style: 1, color: '#000000' };
         const sheets: Sheet[] = [
             {
-                name: 'All',
+                name: 'Sheet1',
                 celldata: [{ r: 1, c: 1, v: { v: 'x' } }],
                 config: {
-                    borderInfo: [
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-all',
-                            color: '#FF0000',
-                            style: '8',
-                            range: [{ row: [1, 2], column: [1, 2] }],
-                        },
-                    ],
-                },
-            },
-            {
-                name: 'Outside',
-                celldata: [{ r: 1, c: 1, v: { v: 'x' } }],
-                config: {
-                    borderInfo: [
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-outside',
-                            color: '#000000',
-                            style: '1',
-                            range: [{ row: [1, 3], column: [1, 3] }],
-                        },
-                    ],
+                    borderInfo: {
+                        '1_1': { l: medium, r: medium, t: medium, b: medium },
+                        '1_2': { t: thin, r: thin },
+                        '2_1': { b: thin },
+                        // xlsx has no diagonal border; the slash side is skipped.
+                        '3_3': { s: thin },
+                        '4_4': { l: thin, s: thin },
+                    },
                 },
             },
         ];
         const wb = await exportAndReload(sheets);
-        const all = getSheet(wb, 'All');
-        const medium = side('medium', 'FFFF0000');
-        for (const a1 of ['B2', 'C2', 'B3', 'C3']) {
-            expect(all.getCell(a1).border).toEqual({ left: medium, right: medium, top: medium, bottom: medium });
-        }
-        const outside = getSheet(wb, 'Outside');
-        const thin = side('thin', 'FF000000');
-        expect(outside.getCell('B2').border).toEqual({ top: thin, left: thin });
-        expect(outside.getCell('C2').border).toEqual({ top: thin });
-        expect(outside.getCell('D2').border).toEqual({ top: thin, right: thin });
-        expect(outside.getCell('B3').border).toEqual({ left: thin });
-        expect(outside.getCell('C3').border ?? {}).toEqual({});
-        expect(outside.getCell('D4').border).toEqual({ bottom: thin, right: thin });
-    });
-
-    test('expands inside, horizontal and vertical borders onto shared inner edges', async () => {
-        const entry = (
-            borderType: RangeBorderInfo['borderType'],
-            row: number[],
-            column: number[],
-        ): RangeBorderInfo => ({
-            rangeType: 'range',
-            borderType,
-            color: '#000000',
-            style: '1',
-            range: [{ row, column }],
+        const ws = getSheet(wb, 'Sheet1');
+        const mediumRed = side('medium', 'FFFF0000');
+        const thinBlack = side('thin', 'FF000000');
+        expect(ws.getCell('B2').border).toEqual({
+            left: mediumRed,
+            right: mediumRed,
+            top: mediumRed,
+            bottom: mediumRed,
         });
-        const sheets: Sheet[] = [
-            {
-                name: 'Inside',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: { borderInfo: [entry('border-inside', [0, 1], [0, 1])] },
-            },
-            {
-                name: 'Horizontal',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: { borderInfo: [entry('border-horizontal', [0, 2], [0, 1])] },
-            },
-            {
-                name: 'Vertical',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: { borderInfo: [entry('border-vertical', [0, 1], [0, 2])] },
-            },
-        ];
-        const wb = await exportAndReload(sheets);
-        const thin = side('thin', 'FF000000');
-
-        const inside = getSheet(wb, 'Inside');
-        expect(inside.getCell('A1').border ?? {}).toEqual({});
-        expect(inside.getCell('B1').border).toEqual({ left: thin });
-        expect(inside.getCell('A2').border).toEqual({ top: thin });
-        expect(inside.getCell('B2').border).toEqual({ left: thin, top: thin });
-
-        const horizontal = getSheet(wb, 'Horizontal');
-        expect(horizontal.getCell('A1').border).toEqual({ bottom: thin });
-        expect(horizontal.getCell('A2').border).toEqual({ top: thin, bottom: thin });
-        expect(horizontal.getCell('B3').border).toEqual({ top: thin });
-
-        const vertical = getSheet(wb, 'Vertical');
-        expect(vertical.getCell('A1').border).toEqual({ right: thin });
-        expect(vertical.getCell('B1').border).toEqual({ left: thin, right: thin });
-        expect(vertical.getCell('C2').border).toEqual({ left: thin });
+        expect(ws.getCell('C2').border).toEqual({ top: thinBlack, right: thinBlack });
+        expect(ws.getCell('B3').border).toEqual({ bottom: thinBlack });
+        expect(ws.getCell('D4').border ?? {}).toEqual({});
+        expect(ws.getCell('E5').border).toEqual({ left: thinBlack });
     });
 
-    test('keeps the first-branch side for single-row horizontal and single-column vertical ranges', async () => {
-        const entry = (
-            borderType: RangeBorderInfo['borderType'],
-            row: number[],
-            column: number[],
-        ): RangeBorderInfo => ({
-            rangeType: 'range',
-            borderType,
-            color: '#000000',
-            style: '1',
-            range: [{ row, column }],
-        });
-        const sheets: Sheet[] = [
-            {
-                name: 'OneRow',
-                celldata: [{ r: 1, c: 0, v: { v: 'x' } }],
-                config: { borderInfo: [entry('border-horizontal', [1, 1], [0, 2])] },
-            },
-            {
-                name: 'OneCol',
-                celldata: [{ r: 0, c: 1, v: { v: 'x' } }],
-                config: { borderInfo: [entry('border-vertical', [0, 2], [1, 1])] },
-            },
-            // Two-row/two-col boundary: first row takes `.b`, last row `.t` (and
-            // first col `.r`, last col `.l`) — same edges as the strict inner-edge
-            // expansion, pinned here as the editor's first-branch-wins semantics.
-            {
-                name: 'TwoRow',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: { borderInfo: [entry('border-horizontal', [0, 1], [0, 0])] },
-            },
-            {
-                name: 'TwoCol',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: { borderInfo: [entry('border-vertical', [0, 0], [0, 1])] },
-            },
-        ];
-        const wb = await exportAndReload(sheets);
-        const thin = side('thin', 'FF000000');
-
-        // The editor compute's first branch wins (state/modules/border.ts): a
-        // single-row horizontal range draws the bottom edge of each cell.
-        const oneRow = getSheet(wb, 'OneRow');
-        for (const a1 of ['A2', 'B2', 'C2']) {
-            expect(oneRow.getCell(a1).border).toEqual({ bottom: thin });
-        }
-
-        const oneCol = getSheet(wb, 'OneCol');
-        for (const a1 of ['B1', 'B2', 'B3']) {
-            expect(oneCol.getCell(a1).border).toEqual({ right: thin });
-        }
-
-        const twoRow = getSheet(wb, 'TwoRow');
-        expect(twoRow.getCell('A1').border).toEqual({ bottom: thin });
-        expect(twoRow.getCell('A2').border).toEqual({ top: thin });
-
-        const twoCol = getSheet(wb, 'TwoCol');
-        expect(twoCol.getCell('A1').border).toEqual({ right: thin });
-        expect(twoCol.getCell('B1').border).toEqual({ left: thin });
-    });
-
-    test('applies entries in array order: none clears, cell entries override, slash skipped', async () => {
-        const sheets: Sheet[] = [
-            {
-                name: 'Cleared',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: {
-                    borderInfo: [
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-all',
-                            color: '#000000',
-                            style: '1',
-                            range: [{ row: [0, 1], column: [0, 1] }],
-                        },
-                        // border-none also clears the facing sides of adjacent outside cells,
-                        // matching the editor compute (state/modules/border.ts).
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-none',
-                            color: '#000000',
-                            style: '1',
-                            range: [{ row: [0, 1], column: [1, 1] }],
-                        },
-                    ],
-                },
-            },
-            {
-                name: 'CellOverride',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: {
-                    borderInfo: [
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-all',
-                            color: '#000000',
-                            style: '1',
-                            range: [{ row: [0, 0], column: [0, 0] }],
-                        },
-                        // A later cell entry re-specifies the cell: nil sides mean cleared.
-                        {
-                            rangeType: 'cell',
-                            value: { row_index: 0, col_index: 0, l: null, r: { style: 13, color: '#0000FF' } },
-                        },
-                    ],
-                },
-            },
-            {
-                name: 'Slash',
-                celldata: [{ r: 0, c: 0, v: { v: 'x' } }],
-                config: {
-                    borderInfo: [
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-slash',
-                            color: '#000000',
-                            style: '1',
-                            range: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
-                        },
-                    ],
-                },
-            },
-        ];
-        const wb = await exportAndReload(sheets);
-        const thin = side('thin', 'FF000000');
-
-        const cleared = getSheet(wb, 'Cleared');
-        expect(cleared.getCell('A1').border).toEqual({ left: thin, top: thin, bottom: thin });
-        expect(cleared.getCell('A2').border).toEqual({ left: thin, top: thin, bottom: thin });
-        expect(cleared.getCell('B1').border ?? {}).toEqual({});
-        expect(cleared.getCell('B2').border ?? {}).toEqual({});
-
-        expect(getSheet(wb, 'CellOverride').getCell('A1').border).toEqual({ right: side('thick', 'FF0000FF') });
-        expect(getSheet(wb, 'Slash').getCell('A1').border ?? {}).toEqual({});
-    });
-
-    test('round-trips toolbar borders as per-cell entries', async () => {
+    test('round-trips per-cell borders', async () => {
+        const expected = { style: 8, color: '#FF0000' };
+        const all = { l: expected, r: expected, t: expected, b: expected };
         const sheets: Sheet[] = [
             {
                 name: 'Sheet1',
@@ -1031,35 +828,11 @@ describe('Sheets xlsx export — range borders', () => {
                     { r: 2, c: 1, v: { v: 'c' } },
                     { r: 2, c: 2, v: { v: 'd' } },
                 ],
-                config: {
-                    borderInfo: [
-                        {
-                            rangeType: 'range',
-                            borderType: 'border-all',
-                            color: '#FF0000',
-                            style: '8',
-                            range: [{ row: [1, 2], column: [1, 2] }],
-                        },
-                    ],
-                },
+                config: { borderInfo: { '1_1': all, '1_2': all, '2_1': all, '2_2': all } },
             },
         ];
         const rt = await roundTrip(sheets);
-        const expected = { style: 8, color: '#FF0000' };
-        const byCell = new Map<string, CellBorderInfo['value']>(
-            (rt[0].config?.borderInfo ?? []).map((b) => {
-                if (b.rangeType !== 'cell') throw new Error('expected cell entries');
-                return [`${b.value.row_index}_${b.value.col_index}`, b.value];
-            }),
-        );
-        expect(byCell.size).toBe(4);
-        for (const key of ['1_1', '1_2', '2_1', '2_2']) {
-            const sides = byCell.get(key);
-            expect(sides?.l).toEqual(expected);
-            expect(sides?.r).toEqual(expected);
-            expect(sides?.t).toEqual(expected);
-            expect(sides?.b).toEqual(expected);
-        }
+        expect(rt[0].config?.borderInfo).toEqual({ '1_1': all, '1_2': all, '2_1': all, '2_2': all });
     });
 });
 
@@ -1083,11 +856,11 @@ describe('Sheets xlsx export — merged-cell borders', () => {
                 ],
                 config: {
                     merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 3 } },
-                    borderInfo: [
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: black, t: black, b: black } },
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 1, t: black, b: black } },
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 2, t: black, b: black, r: black } },
-                    ],
+                    borderInfo: {
+                        '0_0': { l: black, t: black, b: black },
+                        '0_1': { t: black, b: black },
+                        '0_2': { t: black, b: black, r: black },
+                    },
                 },
             },
         ];
@@ -1123,13 +896,13 @@ describe('Sheets xlsx export — merged-cell borders', () => {
                 ],
                 config: {
                     merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } },
-                    borderInfo: [
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: red, t: red } },
+                    borderInfo: {
+                        '0_0': { l: red, t: red },
                         // l here sits on the merge's INNER vertical edge — must be dropped.
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 1, l: green, t: blue, r: blue } },
-                        { rangeType: 'cell', value: { row_index: 1, col_index: 0, l: blue, b: red } },
-                        { rangeType: 'cell', value: { row_index: 1, col_index: 1, r: red, b: blue } },
-                    ],
+                        '0_1': { l: green, t: blue, r: blue },
+                        '1_0': { l: blue, b: red },
+                        '1_1': { r: red, b: blue },
+                    },
                 },
             },
         ];
@@ -1157,37 +930,32 @@ describe('Sheets xlsx export — merged-cell borders', () => {
                 ],
                 config: {
                     merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 3 } },
-                    borderInfo: [
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: black, t: black, b: black } },
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 1, t: black, b: black } },
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 2, t: black, b: black, r: black } },
-                    ],
+                    borderInfo: {
+                        '0_0': { l: black, t: black, b: black },
+                        '0_1': { t: black, b: black },
+                        '0_2': { t: black, b: black, r: black },
+                    },
                 },
             },
         ];
         const rt = await roundTrip(sheets);
         expect(rt[0].config?.merge?.['0_0']).toEqual({ r: 0, c: 0, rs: 1, cs: 3 });
-        const byCell = new Map<string, CellBorderInfo['value']>(
-            (rt[0].config?.borderInfo ?? []).map((b) => {
-                if (b.rangeType !== 'cell') throw new Error('expected cell entries');
-                return [`${b.value.row_index}_${b.value.col_index}`, b.value];
-            }),
-        );
+        const byCell = rt[0].config?.borderInfo ?? {};
         // The render-critical assert: the LEFT-edge constituent (here the value-bearing
         // anchor) re-imports its left side — the editor renders the merge's left edge
         // from the leftmost constituent's `l` only.
-        const anchor = byCell.get('0_0');
+        const anchor = byCell['0_0'];
         expect(anchor?.l).toEqual(black);
         expect(anchor?.t).toEqual(black);
         expect(anchor?.b).toEqual(black);
         // The written union styleId is shared by every constituent, so the re-import
         // carries the box on the slaves too (merge cells bypass the empty-cell skip).
         for (const key of ['0_1', '0_2']) {
-            const sides = byCell.get(key);
+            const sides = byCell[key];
             expect(sides?.t).toEqual(black);
             expect(sides?.b).toEqual(black);
         }
-        expect(byCell.get('0_2')?.r).toEqual(black);
+        expect(byCell['0_2']?.r).toEqual(black);
     });
 });
 

@@ -1,11 +1,11 @@
 import { escapeHtml } from '@workspace/lib/html';
 import type {
-    BorderInfo,
     Cell,
     CellWithRowAndCol,
     ConditionalFormatRule,
     MergeCell,
     Sheet,
+    SheetConfig,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
@@ -617,20 +617,20 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
     return inner;
 }
 
-function buildBorderMap(borderInfo?: BorderInfo[]): Map<string, { l?: string; r?: string; t?: string; b?: string }> {
+// CSS has no diagonal border, so the slash side `s` is not rendered.
+function buildBorderMap(
+    borderInfo: SheetConfig['borderInfo'],
+): Map<string, { l?: string; r?: string; t?: string; b?: string }> {
     const map = new Map<string, { l?: string; r?: string; t?: string; b?: string }>();
     if (!borderInfo) return map;
 
-    for (const border of borderInfo) {
-        if (border.rangeType !== 'cell') continue;
-        const { row_index, col_index, l, r, t, b } = border.value;
-        const key = `${row_index},${col_index}`;
+    for (const [key, { l, r, t, b }] of Object.entries(borderInfo)) {
         const entry: { l?: string; r?: string; t?: string; b?: string } = {};
         if (l) entry.l = borderSideToCSS(l);
         if (r) entry.r = borderSideToCSS(r);
         if (t) entry.t = borderSideToCSS(t);
         if (b) entry.b = borderSideToCSS(b);
-        map.set(key, entry);
+        map.set(key.replace('_', ','), entry);
     }
 
     return map;

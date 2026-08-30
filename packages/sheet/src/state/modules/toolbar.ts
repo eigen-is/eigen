@@ -1,11 +1,11 @@
-import type { BorderInfo, BorderType, RangeBorderInfo } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine/conditional-format';
+import type { BorderType } from '@workspace/lib/sheets';
+import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
 import { genarate, is_date, update } from '../../engine/format';
-import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
+import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
+import { applyBorder } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
 import { colors } from './color';
 import { setFormulaCellInfo } from './formula-cache';
@@ -21,7 +21,7 @@ import {
 } from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
-import { normalizeSelection, selectIsOverlap } from './selection';
+import { selectIsOverlap } from './selection';
 import { sortSelection } from './sort';
 import { getCellTextInfo } from './text';
 import { hasPartMC, isdatatypemulti, isRealNull, isRealNum } from './validation';
@@ -997,50 +997,10 @@ export function handleClearFormat(ctx: Context) {
                 flowdata[r][c] = pick(cell, 'v', 'm', 'mc', 'f', 'ct');
             }
         }
-        // When clearing table styles, also clear border styles
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const source_borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const entry = cfg.borderInfo[i];
-
-                if (entry.rangeType === 'range' && entry.borderType !== 'border-slash') {
-                    const bd_emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        bd_emptyRange.push(
-                            ...cfSplitRange(
-                                entry.range[j],
-                                { row: [rowSt, rowEd], column: [colSt, colEd] },
-                                { row: [rowSt, rowEd], column: [colSt, colEd] },
-                                'restPart',
-                            ),
-                        );
-                    }
-
-                    entry.range = bd_emptyRange;
-                    source_borderInfo.push(entry);
-                } else if (entry.rangeType === 'cell') {
-                    const bd_r = entry.value.row_index;
-                    const bd_c = entry.value.col_index;
-
-                    if (!(bd_r >= rowSt && bd_r <= rowEd && bd_c >= colSt && bd_c <= colEd)) {
-                        source_borderInfo.push(entry);
-                    }
-                } else if (
-                    !(
-                        entry.range[0].row[0] >= rowSt &&
-                        entry.range[0].row[0] <= rowEd &&
-                        entry.range[0].column[0] >= colSt &&
-                        entry.range[0].column[0] <= colEd
-                    )
-                ) {
-                    // remaining slash range entries that fall outside the clear rect
-                    source_borderInfo.push(entry);
-                }
+        for (let r = rowSt; r <= rowEd; r += 1) {
+            for (let c = colSt; c <= colEd; c += 1) {
+                delete cfg.borderInfo?.[`${r}_${c}`];
             }
-
-            cfg.borderInfo = source_borderInfo;
         }
     }
 }
@@ -1057,46 +1017,12 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
-    const style = borderStyle == null || borderStyle === '' ? '1' : borderStyle;
-
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
 
-    const cfg = (ctx.sheets[index].config ??= {});
-    if (cfg.borderInfo == null) {
-        cfg.borderInfo = [];
-    }
-
-    if (type !== 'border-slash') {
-        const borderInfo: RangeBorderInfo = {
-            rangeType: 'range',
-            borderType: type,
-            color,
-            style,
-            range: cloneDeep(ctx.selections) || [],
-        };
-        cfg.borderInfo.push(borderInfo);
-    } else {
-        const rangeList: string[] = [];
-        forEach(ctx.selections, (selection) => {
-            for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
-                for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                    const range = `${r}_${c}`;
-                    if (includes(rangeList, range)) continue;
-                    const borderInfo: RangeBorderInfo = {
-                        rangeType: 'range',
-                        borderType: type,
-                        color,
-                        style,
-                        range: normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]),
-                    };
-                    cfg.borderInfo!.push(borderInfo);
-                    rangeList.push(range);
-                }
-            }
-        });
-    }
+    const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
+    const style = borderStyle == null || borderStyle === '' ? 1 : Number(borderStyle);
+    applyBorder((ctx.sheets[index].config ??= {}), type, { style, color }, ctx.selections ?? []);
 }
 
 export function handleMerge(ctx: Context, type: string) {

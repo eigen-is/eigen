@@ -1,10 +1,4 @@
-import type {
-    BorderInfo,
-    CellBorderInfo,
-    ConditionalFormatRule,
-    DataVerificationRule,
-    RangeBorderInfo,
-} from '@workspace/lib/sheets';
+import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import {
     cloneDeep,
     forEach,
@@ -30,7 +24,7 @@ import { getdatabyselection, getQKBorder } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, normalizeSelection, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
@@ -135,12 +129,8 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
     storeSheetSelections(ctx);
 }
 
-// Per-cell border map produced by the HTML paste path before being attached to
-// cfg.borderInfo. Keyed by `${row}_${col}` relative to the pasted block; sides
-// are the `BorderSide` shape getQKBorder returns.
-type CellBorderMap = Record<string, Pick<CellBorderInfo['value'], 'l' | 'r' | 't' | 'b'>>;
-
-function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: CellBorderMap) {
+// The HTML paste path's per-cell borders, keyed `${row}_${col}` relative to the pasted block.
+function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Record<string, CellBorderSides>) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
@@ -170,9 +160,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
         // mirror is gone, so seeding above the guard would ship an op for a paste that never ran.
         const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
         cfg.merge ??= {};
-        if (JSON.stringify(borderInfo).length > 2) {
-            cfg.borderInfo ??= [];
-        }
+        cfg.borderInfo ??= {};
 
         const d = getFlowdata(ctx); // fetch data
         if (!d) return;
@@ -243,19 +231,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Cell
 
                 const borderEntry = borderInfo?.[`${h - minh}_${c - minc}`];
                 if (borderEntry) {
-                    const bd_obj: CellBorderInfo = {
-                        rangeType: 'cell',
-                        value: {
-                            row_index: h,
-                            col_index: c,
-                            l: borderEntry.l,
-                            r: borderEntry.r,
-                            t: borderEntry.t,
-                            b: borderEntry.b,
-                        },
-                    };
-
-                    cfg.borderInfo?.push(bd_obj);
+                    cfg.borderInfo[`${h}_${c}`] = borderEntry;
                 }
             }
             d[h] = x;
@@ -406,6 +382,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     // Seeded only once the cut-paste is certain — see pasteHandler above.
     const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
     cfg.merge ??= {};
+    cfg.borderInfo ??= {};
 
     const d = getFlowdata(ctx); // fetch data
     if (!d) return;
@@ -466,40 +443,10 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             }
         }
 
-        // borders
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const source_borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const entry = cfg.borderInfo[i];
-
-                if (entry.rangeType === 'range') {
-                    const bd_emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        bd_emptyRange.push(
-                            ...cfSplitRange(
-                                entry.range[j],
-                                { row: [c_r1, c_r2], column: [c_c1, c_c2] },
-                                { row: [minh, maxh], column: [minc, maxc] },
-                                'restPart',
-                            ),
-                        );
-                    }
-
-                    entry.range = bd_emptyRange;
-                    source_borderInfo.push(entry);
-                } else {
-                    const bd_r = entry.value.row_index;
-                    const bd_c = entry.value.col_index;
-
-                    if (!(bd_r >= c_r1 && bd_r <= c_r2 && bd_c >= c_c1 && bd_c <= c_c2)) {
-                        source_borderInfo.push(entry);
-                    }
-                }
+        for (let i = c_r1; i <= c_r2; i += 1) {
+            for (let j = c_c1; j <= c_c2; j += 1) {
+                delete cfg.borderInfo[`${i}_${j}`];
             }
-
-            cfg.borderInfo = source_borderInfo;
         }
     }
 
@@ -508,57 +455,11 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         const x = d[h];
 
         for (let c = minc; c <= maxc; c += 1) {
-            const computeEntry = borderInfoCompute[`${c_r1 + h - minh}_${c_c1 + c - minc}`];
-            if (computeEntry && !computeEntry.s) {
-                const bd_obj: CellBorderInfo = {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: h,
-                        col_index: c,
-                        l: computeEntry.l,
-                        r: computeEntry.r,
-                        t: computeEntry.t,
-                        b: computeEntry.b,
-                    },
-                };
-
-                if (cfg.borderInfo == null) {
-                    cfg.borderInfo = [];
-                }
-
-                cfg.borderInfo.push(bd_obj);
-            } else if (borderInfoCompute[`${h}_${c}`]) {
-                const bd_obj: CellBorderInfo = {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: h,
-                        col_index: c,
-                        l: null,
-                        r: null,
-                        t: null,
-                        b: null,
-                    },
-                };
-
-                if (cfg.borderInfo == null) {
-                    cfg.borderInfo = [];
-                }
-
-                cfg.borderInfo.push(bd_obj);
-            } else if (computeEntry) {
-                const bd_obj: RangeBorderInfo = {
-                    rangeType: 'range',
-                    borderType: 'border-slash',
-                    color: computeEntry.s!.color,
-                    style: computeEntry.s!.style,
-                    range: normalizeSelection(ctx, [{ row: [h, h], column: [c, c] }]),
-                };
-
-                if (cfg.borderInfo == null) {
-                    cfg.borderInfo = [];
-                }
-
-                cfg.borderInfo.push(bd_obj);
+            const sourceSides = borderInfoCompute[`${c_r1 + h - minh}_${c_c1 + c - minc}`];
+            if (sourceSides) {
+                cfg.borderInfo[`${h}_${c}`] = cloneDeep(sourceSides);
+            } else {
+                delete cfg.borderInfo[`${h}_${c}`];
             }
 
             // data validation: cut
@@ -639,40 +540,10 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
             }
         }
 
-        // borders
-        if (sourceCurConfig.borderInfo && sourceCurConfig.borderInfo.length > 0) {
-            const source_borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < sourceCurConfig.borderInfo.length; i += 1) {
-                const entry = sourceCurConfig.borderInfo[i];
-
-                if (entry.rangeType === 'range') {
-                    const bd_emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        bd_emptyRange.push(
-                            ...cfSplitRange(
-                                entry.range[j],
-                                { row: [c_r1, c_r2], column: [c_c1, c_c2] },
-                                { row: [minh, maxh], column: [minc, maxc] },
-                                'restPart',
-                            ),
-                        );
-                    }
-
-                    entry.range = bd_emptyRange;
-                    source_borderInfo.push(entry);
-                } else {
-                    const bd_r = entry.value.row_index;
-                    const bd_c = entry.value.col_index;
-
-                    if (!(bd_r >= c_r1 && bd_r <= c_r2 && bd_c >= c_c1 && bd_c <= c_c2)) {
-                        source_borderInfo.push(entry);
-                    }
-                }
+        for (let source_r = c_r1; source_r <= c_r2; source_r += 1) {
+            for (let source_c = c_c1; source_c <= c_c2; source_c += 1) {
+                delete sourceCurConfig.borderInfo?.[`${source_r}_${source_c}`];
             }
-
-            sourceCurConfig.borderInfo = source_borderInfo;
         }
 
         // conditional formatting
@@ -832,9 +703,8 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     const resolver = createContextResolver(ctx);
 
     const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
-    if (isNil(cfg.merge)) {
-        cfg.merge = {};
-    }
+    cfg.merge ??= {};
+    cfg.borderInfo ??= {};
 
     // copy range
     const copyHasMC = copyRange.HasMC;
@@ -975,62 +845,11 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
                 for (let c = mtc; c < maxcellCahe; c += 1) {
                     if (hiddenCols?.has(c.toString())) continue;
-                    const computeEntry = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
-                    if (computeEntry && !computeEntry.s) {
-                        const bd_obj: CellBorderInfo = {
-                            rangeType: 'cell',
-                            value: {
-                                row_index: h,
-                                col_index: c,
-                                l: computeEntry.l,
-                                r: computeEntry.r,
-                                t: computeEntry.t,
-                                b: computeEntry.b,
-                            },
-                        };
-
-                        if (isNil(cfg.borderInfo)) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
-                    } else if (computeEntry?.s) {
-                        const slashSide = computeEntry.s;
-                        const bd_obj: RangeBorderInfo = {
-                            rangeType: 'range',
-                            borderType: 'border-slash',
-                            color: slashSide.color,
-                            style: slashSide.style,
-                            range: normalizeSelection(ctx, [{ row: [h, h], column: [c, c] }]),
-                        };
-
-                        if (cfg.borderInfo == null) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
-                    } else if (borderInfoCompute[`${h}_${c}`]) {
-                        // Source has no border at this cell, but source's borderInfo
-                        // contains an entry at the destination coords (within-sheet
-                        // overlap). Push an explicit null-sides entry so the dest's
-                        // pre-existing borders clear at render time.
-                        const bd_obj: CellBorderInfo = {
-                            rangeType: 'cell',
-                            value: {
-                                row_index: h,
-                                col_index: c,
-                                l: null,
-                                r: null,
-                                t: null,
-                                b: null,
-                            },
-                        };
-
-                        if (isNil(cfg.borderInfo)) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
+                    const sourceSides = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
+                    if (sourceSides) {
+                        cfg.borderInfo[`${h}_${c}`] = cloneDeep(sourceSides);
+                    } else {
+                        delete cfg.borderInfo[`${h}_${c}`];
                     }
 
                     // data validation: copy
@@ -1359,7 +1178,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 }
 
                 let r = 0;
-                const borderInfo: CellBorderMap = {};
+                const borderInfo: Record<string, CellBorderSides> = {};
                 const styleInner = ele.querySelectorAll('style')[0]?.innerHTML || '';
                 const patternReg = /{([^}]*)}/g;
                 const patternStyle = styleInner.match(patternReg);

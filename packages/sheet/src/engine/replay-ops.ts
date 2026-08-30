@@ -68,13 +68,13 @@ const SHEET_CONFIG_COLLECTIONS = [
     'customWidth',
     'rowReadOnly',
     'colReadOnly',
+    'borderInfo',
 ] as const satisfies readonly (keyof ExtendedSheetConfig)[];
 
 export function normalizeSheetConfig(sheet: Sheet) {
     // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
     const cfg = (sheet.config ??= {}) as ExtendedSheetConfig;
     for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
-    cfg.borderInfo ??= [];
 }
 
 function withNormalizedConfig(s: Sheet): Sheet {

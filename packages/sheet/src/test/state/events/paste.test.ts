@@ -230,31 +230,26 @@ describe('internal copy/paste — styles and merges', () => {
         const ctx = makeCtx(8, 8, (d) => {
             d[1][1] = { v: 'B', m: 'B' };
         });
-        ctx.sheets[0].config = {
-            borderInfo: [
-                {
-                    rangeType: 'cell',
-                    value: { row_index: 1, col_index: 1, l: side, r: side, t: side, b: side },
-                },
-            ],
-        };
+        const sides = { l: side, r: side, t: side, b: side };
+        ctx.sheets[0].config = { borderInfo: { '1_1': sides } };
 
         copyThenPaste(ctx, single(1, 1), single(4, 4));
 
-        // the paste pushes a new cell entry at the destination with the sides
-        // computed from the source (getBorderInfoCompute -> paste seam into C1)
-        const pushed = ctx.sheets[0].config!.borderInfo!.find(
-            (e) => e.rangeType === 'cell' && e.value.row_index === 4 && e.value.col_index === 4,
-        );
-        expect(pushed).toEqual({
-            rangeType: 'cell',
-            value: { row_index: 4, col_index: 4, l: side, r: side, t: side, b: side },
+        // the paste writes the destination key with the sides computed from the source
+        // (getBorderInfoCompute -> paste seam into C1); the source entry is untouched by a copy
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({ '1_1': sides, '4_4': sides });
+    });
+
+    it('pasting a borderless cell clears the destination border', () => {
+        const side = { color: '#0000ff', style: 1 };
+        const ctx = makeCtx(8, 8, (d) => {
+            d[1][1] = { v: 'B', m: 'B' };
         });
-        // the source entry is untouched by a copy
-        expect(ctx.sheets[0].config!.borderInfo![0]).toEqual({
-            rangeType: 'cell',
-            value: { row_index: 1, col_index: 1, l: side, r: side, t: side, b: side },
-        });
+        ctx.sheets[0].config = { borderInfo: { '4_4': { l: side, r: side, t: side, b: side } } };
+
+        copyThenPaste(ctx, single(1, 1), single(4, 4));
+
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({});
     });
 
     it('tiles the copy block across a destination that is an integer multiple', () => {

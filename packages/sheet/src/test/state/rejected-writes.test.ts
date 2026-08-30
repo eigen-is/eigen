@@ -20,7 +20,7 @@ import type { Context } from '../../state/context';
 import { clearFilter } from '../../state/modules/filter';
 import { showSelected } from '../../state/modules/rowcol';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
-import { handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
+import { handleBorder, handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
 import { syncablePaths } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { mouseUpAt, withGridGeometry } from './factories/grid-dom';
@@ -75,6 +75,13 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
         },
     ],
     ['the format painter with no copy state', (ctx) => pasteHandlerOfPaintModel(ctx, undefined)],
+    [
+        'a border on a read-only sheet',
+        (ctx) => {
+            ctx.allowEdit = false;
+            handleBorder(ctx, 'border-all');
+        },
+    ],
     ['unhiding a row via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'row')],
     ['unhiding a column via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'column')],
     ['unhiding a selected row when nothing is hidden', (ctx) => showSelected(ctx, 'row')],

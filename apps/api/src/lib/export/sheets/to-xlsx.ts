@@ -1,5 +1,6 @@
 import type {
     BorderSide,
+    CellBorderSides,
     ConditionalFormatRule,
     DataVerificationRule,
     DefaultConditionalFormatRule,
@@ -30,7 +31,6 @@ import type {
 } from 'exceljs';
 import JSZip from 'jszip';
 import { resolveFontFamily } from './fonts';
-import { type CellBorderSides, expandBorderInfo } from './range-borders';
 
 // Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This module
@@ -179,7 +179,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
             // same-side conflicts resolve last-write-wins per side in map order.
             const mergeAt = mergeConstituents(config.merge);
             const mergeBorders = new Map<string, CellBorderSides>();
-            for (const [key, sides] of expandBorderInfo(config.borderInfo)) {
+            for (const [key, sides] of Object.entries(config.borderInfo)) {
                 const [r, c] = key.split('_').map(Number);
                 const merge = mergeAt.get(key);
                 if (merge) {
@@ -385,6 +385,7 @@ function toBorderSide(side: BorderSide): Partial<Border> {
     };
 }
 
+// xlsx has no diagonal border, so the slash side `s` is skipped.
 function toBorder(sides: CellBorderSides): Partial<Borders> | null {
     const border = {
         ...(sides.l && { left: toBorderSide(sides.l) }),

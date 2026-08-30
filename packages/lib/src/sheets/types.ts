@@ -74,28 +74,19 @@ export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
 export type BorderSide = { style: number; color: string };
-// Editor producers (selection.ts, paste.ts, drop-cell.ts) write `l: null` (and
-// peers) to mean "cleared" so the entry survives JSON / Yjs serialization with
-// the slot explicitly absent; readers narrow via `!isNil(value.l)`. Treating
-// null and undefined identically keeps both representations in the type.
-export type CellBorderInfo = {
-    rangeType: 'cell';
-    value: {
-        row_index: number;
-        col_index: number;
-        l?: BorderSide | null;
-        r?: BorderSide | null;
-        t?: BorderSide | null;
-        b?: BorderSide | null;
-    };
+// One cell's own borders, keyed `${row}_${col}` in `SheetConfig.borderInfo` like
+// `merge`. A border belongs to the cell it was drawn on — nothing is mirrored onto
+// the neighbour across the shared edge — and a side that is absent has no border.
+// `s` is the editor's diagonal slash; xlsx has no equivalent and skips it.
+export type CellBorderSides = {
+    l?: BorderSide;
+    r?: BorderSide;
+    t?: BorderSide;
+    b?: BorderSide;
+    s?: BorderSide;
 };
-// Editor's range-border has the same row/column rectangle as a SingleRange plus
-// optional `row_focus`/`column_focus` carried over from the `Selection` the
-// toolbar cloned when emitting the border (read by the 'border-slash' branch in
-// state/modules/border.ts).
-export type BorderRange = SingleRange & { row_focus?: number; column_focus?: number };
-// Toolbar-emitted border layouts. The exhaustive set the state/modules/border.ts
-// switch handles. Listed here so consumers narrow via `borderType === '…'`.
+// Toolbar border layouts, expanded into per-cell sides at write time
+// (state/modules/border.ts). Listed here so consumers narrow via `type === '…'`.
 export type BorderType =
     | 'border-all'
     | 'border-slash'
@@ -108,16 +99,6 @@ export type BorderType =
     | 'border-horizontal'
     | 'border-vertical'
     | 'border-none';
-export type RangeBorderInfo = {
-    rangeType: 'range';
-    borderType: BorderType;
-    color: string;
-    // FE toolbar pushes strings like '1'..'13'; xlsx import never emits this variant.
-    // Canvas painter coerces via `.toString()` before dispatch in setLineDash().
-    style: number | string;
-    range: BorderRange[];
-};
-export type BorderInfo = CellBorderInfo | RangeBorderInfo;
 
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
@@ -166,7 +147,7 @@ export type SheetConfig = {
     columnlen?: Record<string, number>;
     rowhidden?: Record<string, number>;
     colhidden?: Record<string, number>;
-    borderInfo?: BorderInfo[];
+    borderInfo?: Record<string, CellBorderSides>;
 };
 
 // Conditional-format rule shape, produced by the editor's state layer

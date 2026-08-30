@@ -1,5 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { BorderSide, CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import type { BorderSide, CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine/conditional-format';
@@ -7,7 +7,7 @@ import { update } from '../../engine/format';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
-import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
+import { BORDER_STYLE_NAMES, getBorderInfoCompute } from './border';
 import {
     getCellValue,
     getDataBySelectionNoCopy,
@@ -50,12 +50,12 @@ function dominantBorderSideCss(hist: BorderEdgeHistogram, edgeLen: number, cssSi
     }
 
     if (!isNil(color) && !isNil(style)) {
-        return `border-${cssSide}:${getHtmlBorderStyle(style, color)}`;
+        return `border-${cssSide}:${getHtmlBorderStyle(Number(style), color)}`;
     }
     return '';
 }
 
-function cellBorderCss(border: ComputedBorderEntry): string {
+function cellBorderCss(border: CellBorderSides): string {
     let css = '';
     if (border.l) css += `border-left:${getHtmlBorderStyle(border.l.style, border.l.color)}`;
     if (border.r) css += `border-right:${getHtmlBorderStyle(border.r.style, border.r.color)}`;
@@ -315,6 +315,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     // ship a no-op op to peers and take the user's next undo.
     const cfg = (ctx.sheets[sheetIndex].config ??= {});
     cfg.merge ??= {};
+    cfg.borderInfo ??= {};
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
     const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
@@ -349,43 +350,11 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
                 const x: (Cell | null)[] = flowdata[h];
 
                 for (let c = mtc; c < maxcellCahe; c += 1) {
-                    const computeEntry = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
-                    if (computeEntry) {
-                        const bd_obj: CellBorderInfo = {
-                            rangeType: 'cell',
-                            value: {
-                                row_index: h,
-                                col_index: c,
-                                l: computeEntry.l,
-                                r: computeEntry.r,
-                                t: computeEntry.t,
-                                b: computeEntry.b,
-                            },
-                        };
-
-                        if (cfg.borderInfo == null) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
-                    } else if (borderInfoCompute[`${h}_${c}`]) {
-                        const bd_obj: CellBorderInfo = {
-                            rangeType: 'cell',
-                            value: {
-                                row_index: h,
-                                col_index: c,
-                                l: null,
-                                r: null,
-                                t: null,
-                                b: null,
-                            },
-                        };
-
-                        if (cfg.borderInfo == null) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
+                    const sourceSides = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
+                    if (sourceSides) {
+                        cfg.borderInfo[`${h}_${c}`] = cloneDeep(sourceSides);
+                    } else {
+                        delete cfg.borderInfo[`${h}_${c}`];
                     }
 
                     // Data validation copy
@@ -1255,27 +1224,27 @@ export function moveHighlightRange(
     }
 }
 
-function getHtmlBorderStyle(type: string | number, color: string) {
+function getHtmlBorderStyle(type: number, color: string) {
     let style = '';
-    type = BORDER_STYLE_NAMES[type.toString()];
+    const name = BORDER_STYLE_NAMES[String(type)];
 
-    if (type.indexOf('Medium') > -1) {
+    if (name.includes('Medium')) {
         style += '1pt ';
-    } else if (type === 'Thick') {
+    } else if (name === 'Thick') {
         style += '1.5pt ';
     } else {
         style += '0.5pt ';
     }
 
-    if (type === 'Hair') {
+    if (name === 'Hair') {
         style += 'double ';
-    } else if (type.indexOf('DashDotDot') > -1) {
+    } else if (name.includes('DashDotDot')) {
         style += 'dotted ';
-    } else if (type.indexOf('DashDot') > -1) {
+    } else if (name.includes('DashDot')) {
         style += 'dashed ';
-    } else if (type.indexOf('Dotted') > -1) {
+    } else if (name.includes('Dotted')) {
         style += 'dotted ';
-    } else if (type.indexOf('Dashed') > -1) {
+    } else if (name.includes('Dashed')) {
         style += 'dashed ';
     } else {
         style += 'solid ';
@@ -1322,10 +1291,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         }
     }
 
-    let borderInfoCompute: ReturnType<typeof getBorderInfoCompute> | undefined;
-    if (sheet.config?.borderInfo && sheet.config.borderInfo.length > 0) {
-        borderInfoCompute = getBorderInfoCompute(ctx, sheetId);
-    }
+    const borderInfoCompute = getBorderInfoCompute(ctx, sheetId);
 
     let cpdata = '';
     const d = sheet.data;
@@ -1396,7 +1362,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                         span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
 
                         // Border
-                        if (borderInfoCompute?.[`${r}_${c}`]) {
+                        if (borderInfoCompute[`${r}_${c}`]) {
                             // Per-side histograms: count how many cells along the merged
                             // edge share each border color / line-style. The winning side
                             // (>= half the edge length) drives the merged cell's HTML
@@ -1438,7 +1404,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                         continue;
                     }
                 } else {
-                    const cellBorder = borderInfoCompute?.[`${r}_${c}`];
+                    const cellBorder = borderInfoCompute[`${r}_${c}`];
                     if (cellBorder) {
                         style += cellBorderCss(cellBorder);
                     }
@@ -1458,7 +1424,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
             } else {
                 let style = '';
 
-                const cellBorder = borderInfoCompute?.[`${r}_${c}`];
+                const cellBorder = borderInfoCompute[`${r}_${c}`];
                 if (cellBorder) {
                     style += cellBorderCss(cellBorder);
                 }
