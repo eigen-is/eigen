@@ -2,6 +2,7 @@ import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
 import { FormulaCache } from './modules';
+import type { CellGlyph } from './modules/cell-glyph';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
@@ -146,6 +147,8 @@ export type Context = {
     filter: Record<string, FilterEntry>;
     // Transient hover column for the canvas-drawn filter buttons.
     filterButtonHover?: number;
+    // Transient hover for the painted cell glyphs (list chevron, tick box, corner marks).
+    cellGlyphHover?: CellGlyph;
 
     sheetTabDragging: boolean;
     sheetTabDragData: unknown[];

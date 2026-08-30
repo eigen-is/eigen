@@ -427,12 +427,16 @@ export const SheetOverlay: React.FC = () => {
                     onContextMenu={cellAreaContextMenu}
                     onScroll={onCellAreaScroll}
                     {...cellAreaLongPress.bind(null)}
+                    // A hovered glyph also stands the drag handles' cursors down (index.css).
+                    data-glyph-hover={context.cellGlyphHover}
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,
                         cursor: context.cellSelectExtending
                             ? 'crosshair'
-                            : context.filterButtonHover != null
+                            : context.filterButtonHover != null ||
+                                context.cellGlyphHover === 'dropdown' ||
+                                context.cellGlyphHover === 'checkbox'
                               ? 'pointer'
                               : 'default',
                     }}

@@ -10,6 +10,7 @@ import {
     rangeDrag,
 } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
+import { type CellGlyph, cellGlyphAt } from '../modules/cell-glyph';
 import { onDropCellSelect, onDropCellSelectEnd } from '../modules/drop-cell';
 import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
@@ -343,29 +344,28 @@ function mouseRender(
 // Exported handlers
 // ---------------------------------------------------------------------------
 
-// Track which canvas-drawn filter button the pointer is over; written only on
-// change so idle mousemoves stay redraw-free. The matching pointer cursor and
-// hover fill read ctx.filterButtonHover.
-function updateFilterButtonHover(ctx: Context, globalCache: GlobalCache, e: MouseEvent, scrollEl: HTMLDivElement) {
-    const setHover = (col: number | undefined) => {
+// Track which canvas-drawn affordance the pointer is over — a filter button, a
+// cell glyph; written only on change so idle mousemoves stay redraw-free. The
+// cursor reads both (SheetOverlay), the filter hover fill ctx.filterButtonHover;
+// a hovered glyph also stands the drag handles' cursors down, since a press on
+// it goes to the cell, not the handle (cellGlyphAtPointer).
+function updateCanvasHover(ctx: Context, globalCache: GlobalCache, e: MouseEvent, scrollEl: HTMLDivElement) {
+    const setHover = (col: number | undefined, glyph: CellGlyph | undefined) => {
         if (ctx.filterButtonHover !== col) ctx.filterButtonHover = col;
+        if (ctx.cellGlyphHover !== glyph) ctx.cellGlyphHover = glyph;
     };
-    if (ctx.filterOptions == null) {
-        setHover(undefined);
-        return;
-    }
     const rect = scrollEl.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;
     const mouseY = e.pageY - rect.top - window.scrollY;
     // Document-level listener: outside the cell area the scroll-shifted sheet
     // coordinates below would be meaningless and could phantom-hit a button.
     if (mouseX < 0 || mouseY < 0 || mouseX >= rect.width || mouseY >= rect.height) {
-        setHover(undefined);
+        setHover(undefined, undefined);
         return;
     }
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
     const { x, y } = fixPositionOnFrozenCells(freeze, mouseX + ctx.scrollLeft, mouseY + ctx.scrollTop, mouseX, mouseY);
-    setHover(getFilterButtonAtPosition(ctx, x, y)?.col);
+    setHover(ctx.filterOptions == null ? undefined : getFilterButtonAtPosition(ctx, x, y)?.col, cellGlyphAt(ctx, x, y));
 }
 
 export function handleOverlayMouseMove(
@@ -381,7 +381,7 @@ export function handleOverlayMouseMove(
     onCellsMove(ctx, globalCache, e, scrollEl, container);
 
     if (!ctx.selectionActive && !ctx.scrolling) {
-        updateFilterButtonHover(ctx, globalCache, e, scrollEl);
+        updateCanvasHover(ctx, globalCache, e, scrollEl);
     }
 
     if (

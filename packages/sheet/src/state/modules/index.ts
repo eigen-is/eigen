@@ -2,6 +2,7 @@ export * from '../../engine/format';
 export { functionCopy } from '../../engine/formula-shift';
 export * from './border';
 export * from './cell';
+export * from './cell-glyph';
 export * from './clipboard';
 export * from './color';
 export * from './condition-format';

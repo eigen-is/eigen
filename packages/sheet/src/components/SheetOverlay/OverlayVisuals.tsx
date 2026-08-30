@@ -2,7 +2,7 @@ import { PresenceLabel } from '@workspace/ui/components/collab';
 import type React from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { createDropCellRange, onCellsMoveStart, seletedHighlistByindex } from '../../state';
+import { cellGlyphAtPointer, createDropCellRange, onCellsMoveStart, seletedHighlistByindex } from '../../state';
 
 type Props = {
     containerRef: React.RefObject<HTMLDivElement | null>;
@@ -17,6 +17,30 @@ type Props = {
 // select) are written per-copy via querySelectorAll.
 export function OverlayVisuals({ containerRef }: Props) {
     const { context, setContext, refs } = useContext(WorkbookContext);
+
+    // The one entry for the selection's two DOM drag targets, the move band and
+    // the fill handle. A painted cell glyph under the pointer outranks either:
+    // the press is left to bubble to the cell area, whose mousedown opens the
+    // list, toggles the box or selects the marked cell instead of starting a drag.
+    // Decided outside the recipe, since stopPropagation has to happen now.
+    const onHandleMouseDown = (e: React.MouseEvent<HTMLDivElement>, handle: 'move' | 'fill') => {
+        const { nativeEvent } = e;
+        if (cellGlyphAtPointer(context, refs.globalCache, nativeEvent, refs.cellArea.current!) != null) return;
+        e.stopPropagation();
+        setContext((draftCtx) => {
+            if (handle === 'fill') {
+                createDropCellRange(draftCtx, nativeEvent, containerRef.current!);
+            } else {
+                onCellsMoveStart(
+                    draftCtx,
+                    refs.globalCache,
+                    nativeEvent,
+                    refs.cellArea.current!,
+                    containerRef.current!,
+                );
+            }
+        });
+    };
 
     return (
         <>
@@ -147,32 +171,11 @@ export function OverlayVisuals({ containerRef }: Props) {
                                 height: selection?.height_move || 0,
                                 display: 'block',
                             }}
-                            onMouseDown={(e) => {
-                                e.stopPropagation();
-                                const { nativeEvent } = e;
-                                setContext((draftCtx) => {
-                                    onCellsMoveStart(
-                                        draftCtx,
-                                        refs.globalCache,
-                                        nativeEvent,
-                                        refs.cellArea.current!,
-                                        containerRef.current!,
-                                    );
-                                });
-                            }}
+                            onMouseDown={(e) => onHandleMouseDown(e, 'move')}
                         >
                             <div className="sheet-cs-inner-border" />
-                            <div
-                                className="sheet-cs-fillhandle"
-                                onMouseDown={(e) => {
-                                    // Keeps the parent's move-start off: at the corner the fill wins.
-                                    e.stopPropagation();
-                                    const { nativeEvent } = e;
-                                    setContext((draftContext) => {
-                                        createDropCellRange(draftContext, nativeEvent, containerRef.current!);
-                                    });
-                                }}
-                            />
+                            {/* Its stopPropagation keeps the parent's move-start off: at the corner the fill wins. */}
+                            <div className="sheet-cs-fillhandle" onMouseDown={(e) => onHandleMouseDown(e, 'fill')} />
                             <div
                                 className="sheet-cs-draghandle-top sheet-cs-draghandle"
                                 onMouseDown={(e) => e.preventDefault()}

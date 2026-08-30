@@ -16,6 +16,7 @@ import {
     rangeSetValue,
 } from '../modules';
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
+import { type CellGlyph, cellGlyphAt } from '../modules/cell-glyph';
 import { FILTER_BUTTON_HEIGHT, getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
@@ -26,6 +27,32 @@ import type { GlobalCache } from '../types';
 import { isAllowEdit } from '../utils';
 import { extendSelectionGeometry } from './mouse-drag';
 import { fixPositionOnFrozenCells } from './mouse-resize';
+
+// The painted cell glyph under the pointer, if any — read off the live scroll in
+// globalCache, the way the header hover does, so the selection's DOM drag
+// handles can ask before their mousedown starts a drag, outside a recipe. A
+// glyph outranks both handles: OverlayVisuals then leaves the press to bubble
+// to the cell area, whose handleCellAreaMouseDown below does the glyph's job.
+export function cellGlyphAtPointer(
+    ctx: Context,
+    globalCache: GlobalCache,
+    e: MouseEvent,
+    scrollEl: HTMLDivElement,
+): CellGlyph | undefined {
+    const rect = scrollEl.getBoundingClientRect();
+    const mouseX = e.pageX - rect.left - window.scrollX;
+    const mouseY = e.pageY - rect.top - window.scrollY;
+    if (mouseX < 0 || mouseY < 0 || mouseX >= rect.width || mouseY >= rect.height) return undefined;
+    const freeze = globalCache.freezen?.[ctx.currentSheetId];
+    const { x, y } = fixPositionOnFrozenCells(
+        freeze,
+        mouseX + globalCache.scrollLeft,
+        mouseY + globalCache.scrollTop,
+        mouseX,
+        mouseY,
+    );
+    return cellGlyphAt(ctx, x, y);
+}
 
 // Returns true when the filter button consumed the click (the caller must then
 // skip the cell-input focus, whose auto-scroll would close the just-opened menu).

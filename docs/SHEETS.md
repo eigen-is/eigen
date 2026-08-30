@@ -242,11 +242,27 @@ value in it fails the rule — why. Both render through one React card,
 ## Cell corner indicators
 
 Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string
-(top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one size,
-`CELL_INDICATOR_SIZE` — they used to be 11px, 5px and 6px of inline magic numbers, with the comment
-block copied verbatim between `nullCellRender` and `cellRender`. Unlike the tick box and the list
-chevron, no hit test reads this geometry, so it stays in the render module rather than the state one.
-Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
+(top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one geometry,
+`cellIndicatorRect` / `CELL_INDICATOR_SIZE` in `state/modules/cell-glyph.ts` — they used to be 11px, 5px
+and 6px of inline magic numbers, with the comment block copied verbatim between `nullCellRender` and
+`cellRender`. Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
+
+## Cell glyphs outrank the drag handles
+
+The selection box carries two invisible DOM hit targets over the canvas — the drag-to-move band
+straddling its border and the fill handle's grab at its bottom-right corner (see the CSS pinned by
+`test/components/SheetOverlay/selection-hit-targets.test.ts`). A painted glyph in the same corner used to
+lose to them: a press on the list chevron at the fill corner started a fill drag, a press on a comment
+or invalid-value triangle under the band started a move. `cellGlyphAt` (`state/modules/cell-glyph.ts`)
+is the one predicate that says which glyph — `dropdown`, `checkbox`, `comment`, `invalid` — sits under a
+sheet-space point, from the same rects the painter draws (`dropdownChevronRect`, `checkboxRect`,
+`cellIndicatorRect`). Both handle mousedowns in `OverlayVisuals` ask `cellGlyphAtPointer` first and, on
+a hit, neither stop propagation nor start a drag: the press bubbles to the cell area, whose
+`handleCellAreaMouseDown` opens the list, toggles the box or selects the marked cell as it always did.
+The hover path (`updateCanvasHover` in `events/mouse-drag.ts`) writes the same answer to
+`context.cellGlyphHover`, which sets the cell area's cursor (pointer on a chevron or tick box) and, via
+`data-glyph-hover`, stands the handles' own `move`/`crosshair` cursors down so the affordance matches
+what a press will do. Row and column resize never compete — those handles live in the headers.
 
 ## Headless Formula Engine
 
