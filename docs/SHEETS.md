@@ -106,7 +106,7 @@ the op format and `replaySheetsOps` are untouched.
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
   uncomputed snapshot (recalc-failed import) decodes without a chain and exports recalc.
 - **Legacy**: a snapshot starting with `[` is v1 `Sheet[]` JSON and passes through
-  `JSON.parse` unchanged — every pre-v2 doc keeps opening. (The FE read seam additionally
+  `JSON.parse` unchanged — every pre-v2 doc keeps opening. The one exception is `config.borderInfo`: the pre-N2 shapes (v1 arrays of cell entries, v2 tuples that interned `null` sides, v2 bare range objects) are coerced to the per-cell map on decode, keeping only non-null sides; toolbar (range) borders from before N2 are dropped. That coercion is the whole backwards-compatibility concession of N2 — nothing else reads an old border shape. (The FE read seam additionally
   strips `selections` to heal v1 snapshots that baked a cursor in; the codec itself never
   writes one.) Any other non-v2 input throws `Unknown sheets snapshot format` — corrupt
   envelopes fail crisp instead of decoding a half-empty workbook.

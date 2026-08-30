@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { mergedBorderSides } from '../../sheets/borders';
+import { mergedBorderSides, mergeEdgeSides } from '../../sheets/borders';
 
 const SIDE = { style: 1, color: '#000' };
 const RED = { style: 8, color: '#f00' };
@@ -30,5 +30,19 @@ describe('mergedBorderSides', () => {
     test('keeps the master diagonal', () => {
         const merge = { '1_1': { r: 1, c: 1, rs: 1, cs: 2 } };
         expect(mergedBorderSides({ '1_1': { s: SIDE } }, merge)).toEqual({ '1_1': { s: SIDE } });
+    });
+});
+
+describe('mergeEdgeSides', () => {
+    const mc = { r: 1, c: 1, rs: 2, cs: 2 };
+    const all = { l: SIDE, r: SIDE, t: SIDE, b: SIDE, s: RED };
+
+    test('keeps only the sides on the merge outer edge; the diagonal only on the master', () => {
+        expect(mergeEdgeSides(all, mc, 1, 1)).toEqual({ l: SIDE, t: SIDE, s: RED });
+        expect(mergeEdgeSides(all, mc, 2, 2)).toEqual({ r: SIDE, b: SIDE });
+    });
+
+    test('returns undefined when nothing survives', () => {
+        expect(mergeEdgeSides({ l: SIDE, t: SIDE, s: RED }, mc, 2, 2)).toBeUndefined();
     });
 });

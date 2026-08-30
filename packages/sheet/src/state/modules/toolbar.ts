@@ -4,7 +4,7 @@ import { genarate, is_date, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
 import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
 import { colors } from './color';
@@ -1016,9 +1016,14 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
 
+    const d = getFlowdata(ctx);
+    if (!d) return;
+
     const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
     const style = borderStyle == null || borderStyle === '' ? 1 : Number(borderStyle);
-    applyBorder((ctx.sheets[index].config ??= {}), type, { style, color }, ctx.selections ?? []);
+    // Four sides per cell: a header click over 130k rows must not become half a million patches.
+    const ranges = (ctx.selections ?? []).map((selection) => clipToUsedExtent(ctx, selection, d));
+    applyBorder((ctx.sheets[index].config ??= {}), type, { style, color }, ranges);
 }
 
 export function handleMerge(ctx: Context, type: string) {

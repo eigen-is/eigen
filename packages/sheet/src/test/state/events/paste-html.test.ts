@@ -285,6 +285,16 @@ describe('HTML-table paste — merges, borders, row height', () => {
         });
     });
 
+    it('a td without a border clears the border the destination cell had (paste with formatting)', () => {
+        const ctx = makeCtx();
+        const side = { style: 1, color: '#0000ff' };
+        ctx.sheets[0].config = { borderInfo: { '0_0': { l: side, r: side, t: side, b: side }, '5_5': { l: side } } };
+        pasteHtml(ctx, '<table><tr><td>plain</td></tr></table>');
+
+        expect(ctx.sheets[0].data![0][0]?.v).toBe('plain');
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({ '5_5': { l: side } });
+    });
+
     it('keys merges and borders correctly at a non-origin anchor (absolute vs relative coordinates)', () => {
         // cfg.merge/mc use absolute coordinates while the borderInfo lookup is
         // relative (`${h - minh}_${c - minc}`); at anchor (0,0) the two coincide,

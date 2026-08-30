@@ -232,6 +232,61 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(sheet.config?.borderInfo).toEqual({ '2_3': { l: { style: 1, color: '#000' } } });
     });
 
+    test('a v1 snapshot coerces its pre-N2 borderInfo array to the map', () => {
+        // v1 stored `{rangeType:'cell', value:{row_index, col_index, sides…}}` entries with
+        // null for a cleared side, next to toolbar range objects whose cells were only
+        // ever expanded at render time — those are dropped, not guessed at.
+        const side = { style: 1, color: '#000' };
+        const legacy = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                celldata: [],
+                config: {
+                    merge: {},
+                    borderInfo: [
+                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, l: side, t: null } },
+                        {
+                            rangeType: 'range',
+                            borderType: 'border-all',
+                            style: '1',
+                            color: '#000',
+                            range: [{ row: [0, 3], column: [0, 3] }],
+                        },
+                        { rangeType: 'cell', value: { row_index: 1, col_index: 1, l: null, r: null } },
+                        { rangeType: 'cell', value: { row_index: 2, col_index: 2, b: side, s: side } },
+                    ],
+                },
+            },
+        ];
+        const [sheet] = decodeSheetsSnapshot(JSON.stringify(legacy));
+        expect(sheet.config?.merge).toEqual({});
+        expect(sheet.config?.borderInfo).toEqual({ '0_0': { l: side }, '2_2': { b: side, s: side } });
+    });
+
+    test('a pre-N2 v2 tuple drops its null sides and an all-null tuple leaves no key', () => {
+        const side = { style: 1, color: '#000' };
+        const encoded = JSON.parse(
+            encodeSheetsSnapshot(
+                [
+                    {
+                        id: 'sheet-1',
+                        name: 'Sheet1',
+                        order: 0,
+                        celldata: [],
+                        config: { borderInfo: { '2_3': { l: side }, '4_4': { l: side } } },
+                    },
+                ],
+                { computed: false },
+            ),
+        ) as Envelope;
+        encoded.borders.push({ l: side, t: null }, { l: null, r: null });
+        (encoded.sheets[0].borderCells as unknown[]).push([5, 5, 1], [6, 6, 2]);
+        const [sheet] = decodeSheetsSnapshot(JSON.stringify(encoded));
+        expect(sheet.config?.borderInfo).toEqual({ '2_3': { l: side }, '4_4': { l: side }, '5_5': { l: side } });
+    });
+
     test('an empty borderInfo map round-trips as an empty map', () => {
         // N1 materializes the config collections on every base; the codec must not
         // turn a present-but-empty map into an absent key (or the reverse).

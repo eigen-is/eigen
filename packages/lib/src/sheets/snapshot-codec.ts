@@ -6,7 +6,7 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
-import type { Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
+import type { BorderSide, Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
 
 const FORMAT = 'eigensheets/2';
 
@@ -98,12 +98,22 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
 
 export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     // Every doc written before v2 stores a plain Sheet[] array.
-    if (snapshot.trimStart().startsWith('[')) return JSON.parse(snapshot) as Sheet[];
+    if (snapshot.trimStart().startsWith('[')) {
+        const sheets = JSON.parse(snapshot) as Sheet[];
+        for (const sheet of sheets) {
+            const borderInfo: unknown = sheet.config?.borderInfo;
+            if (sheet.config && Array.isArray(borderInfo)) sheet.config.borderInfo = legacyBorderMap(borderInfo);
+        }
+        return sheets;
+    }
 
     const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
     // Fail crisp on a corrupt envelope or a future format — silent garbage-in
     // would materialize a half-empty workbook instead of surfacing the problem.
     if (f !== FORMAT) throw new Error(`Unknown sheets snapshot format: ${String(f).slice(0, 40)}`);
+    // Coerced once per dictionary entry, not per cell: the dictionary is ~100 entries,
+    // the tuples hundreds of thousands.
+    const borderSides = borders.map(legacyCellSides);
     return sheets.map((encoded) => {
         const { cells, borderCells, config, ...rest } = encoded;
         const sheet: RuntimeSheet = { ...rest };
@@ -131,7 +141,8 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
                     // Pre-N2 snapshots under the same tag hold toolbar range objects here.
                     if (!Array.isArray(entry)) continue;
                     const [r, c, borderIdx] = entry;
-                    borderInfo[`${r}_${c}`] = materializeStyle(borders[borderIdx]) as CellBorderSides;
+                    const sides = borderSides[borderIdx];
+                    if (sides) borderInfo[`${r}_${c}`] = cloneSides(sides);
                 }
                 sheet.config.borderInfo = borderInfo;
             }
@@ -226,6 +237,50 @@ function materializeStyle(style: StyleTuple): Record<string, unknown> {
         cell[key] = typeof value === 'object' && value !== null ? cloneJsonValue(value) : value;
     }
     return cell;
+}
+
+const BORDER_SIDE_KEYS = ['l', 'r', 't', 'b', 's'] as const;
+
+// The one place a pre-N2 border shape is read. v1 docs stored an array of
+// `{rangeType:'cell', value:{row_index, col_index, …sides}}` next to toolbar range
+// objects (dropped — their cells were only ever expanded at render time); v2 docs from
+// the same era interned `null` for a cleared side. Only non-null sides survive and a
+// cell left without any gets no key, which is the map's contract.
+function legacyBorderMap(entries: unknown[]): Record<string, CellBorderSides> {
+    const borderInfo: Record<string, CellBorderSides> = {};
+    for (const entry of entries) {
+        if (!isRecord(entry) || entry['rangeType'] !== 'cell' || !isRecord(entry['value'])) continue;
+        const value = entry['value'];
+        const sides = legacyCellSides(value);
+        if (sides) borderInfo[`${String(value['row_index'])}_${String(value['col_index'])}`] = sides;
+    }
+    return borderInfo;
+}
+
+function legacyCellSides(raw: Record<string, unknown>): CellBorderSides | undefined {
+    let sides: CellBorderSides | undefined;
+    for (const key of BORDER_SIDE_KEYS) {
+        const side = raw[key];
+        if (!isRecord(side) || typeof side['color'] !== 'string') continue;
+        const style = side['style'];
+        if (typeof style !== 'number' && typeof style !== 'string') continue;
+        (sides ??= {})[key] = { style: Number(style), color: side['color'] };
+    }
+    return sides;
+}
+
+// Cells sharing a dictionary entry must not share side-object identity (see materializeStyle).
+function cloneSides(sides: CellBorderSides): CellBorderSides {
+    const out: CellBorderSides = {};
+    for (const key of BORDER_SIDE_KEYS) {
+        const side: BorderSide | undefined = sides[key];
+        if (side) out[key] = { style: side.style, color: side.color };
+    }
+    return out;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function cloneJsonValue(value: unknown): unknown {

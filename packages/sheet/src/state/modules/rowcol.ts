@@ -1,4 +1,4 @@
-import type { CellBorderSides, DataVerificationRule, MergeCell, SingleRange } from '@workspace/lib/sheets';
+import type { MergeCell, SingleRange } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import { type Context, getSheetConfig } from '../context';
@@ -30,6 +30,52 @@ const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet
         }
     }
 };
+
+type Axis = 'row' | 'column';
+
+// Re-keys an "r_c" map for an insert. Entries on the row/column at `index` are the template:
+// with `cloneTemplate` every inserted row/column gets a deep copy of them, without it the
+// inserted ones start empty. Entries at or past the insert shift by `count` (a lefttop
+// insert moves the template too, a rightbottom one keeps it in place).
+function shiftKeyedMapForInsert<T>(
+    map: Record<string, T>,
+    axis: Axis,
+    index: number,
+    count: number,
+    direction: 'lefttop' | 'rightbottom',
+    cloneTemplate: boolean,
+): Record<string, T> {
+    const pos = axis === 'row' ? 0 : 1;
+    const shifted: Record<string, T> = {};
+    for (const [key, item] of Object.entries(map)) {
+        const coord = key.split('_').map(Number);
+        const at = coord[pos];
+        if (at === index && cloneTemplate) {
+            for (let n = 0; n < count; n += 1) {
+                const inserted = [...coord];
+                inserted[pos] = direction === 'rightbottom' ? index + n + 1 : index + n;
+                shifted[inserted.join('_')] = cloneDeep(item);
+            }
+        }
+        if (direction === 'lefttop' ? at >= index : at > index) coord[pos] += count;
+        shifted[coord.join('_')] = item;
+    }
+    return shifted;
+}
+
+// Re-keys an "r_c" map for a delete: entries in [start, end] drop, the ones past it shift up.
+function shiftKeyedMapForDelete<T>(map: Record<string, T>, axis: Axis, start: number, end: number): Record<string, T> {
+    const pos = axis === 'row' ? 0 : 1;
+    const shifted: Record<string, T> = {};
+    for (const [key, item] of Object.entries(map)) {
+        const coord = key.split('_').map(Number);
+        const at = coord[pos];
+        if (at >= start && at <= end) continue;
+        if (at > end) coord[pos] -= end - start + 1;
+        shifted[coord.join('_')] = item;
+    }
+    return shifted;
+}
 
 function shiftStateOnlyFieldsForInsert(
     ctx: Context,
@@ -194,118 +240,14 @@ function shiftStateOnlyFieldsForInsert(
         }
     }
 
-    // Data validation config update — re-key entries without inspecting shape.
-    const { dataVerification } = file;
-    const newDataVerification: Record<string, DataVerificationRule> = {};
-    if (dataVerification != null) {
-        forEach(dataVerification, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = dataVerification[key];
-
-            if (type === 'row') {
-                if (index < r) {
-                    newDataVerification[`${r + count}_${c}`] = item;
-                } else if (index === r) {
-                    if (direction === 'lefttop') {
-                        newDataVerification[`${r + count}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r + i}_${c}`] = item;
-                        }
-                    } else {
-                        newDataVerification[`${r}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r + i + 1}_${c}`] = item;
-                        }
-                    }
-                } else {
-                    newDataVerification[`${r}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (index < c) {
-                    newDataVerification[`${r}_${c + count}`] = item;
-                } else if (index === c) {
-                    if (direction === 'lefttop') {
-                        newDataVerification[`${r}_${c + count}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r}_${c + i}`] = item;
-                        }
-                    } else {
-                        newDataVerification[`${r}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r}_${c + i + 1}`] = item;
-                        }
-                    }
-                } else {
-                    newDataVerification[`${r}_${c}`] = item;
-                }
-            }
-        });
-    }
-    file.dataVerification = newDataVerification;
-
-    // Hyperlink config update
-    const { hyperlink } = file;
-    const newHyperlink: Record<string, { linkType: string; linkAddress: string }> = {};
-    if (hyperlink != null) {
-        forEach(hyperlink, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = hyperlink[key];
-
-            if (type === 'row') {
-                if (index < r) {
-                    newHyperlink[`${r + count}_${c}`] = item;
-                } else if (index === r) {
-                    if (direction === 'lefttop') {
-                        newHyperlink[`${r + count}_${c}`] = item;
-                    } else {
-                        newHyperlink[`${r}_${c}`] = item;
-                    }
-                } else {
-                    newHyperlink[`${r}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (index < c) {
-                    newHyperlink[`${r}_${c + count}`] = item;
-                } else if (index === c) {
-                    if (direction === 'lefttop') {
-                        newHyperlink[`${r}_${c + count}`] = item;
-                    } else {
-                        newHyperlink[`${r}_${c}`] = item;
-                    }
-                } else {
-                    newHyperlink[`${r}_${c}`] = item;
-                }
-            }
-        });
-    }
-    file.hyperlink = newHyperlink;
-
-    // Border config update: same re-key as dataVerification — the row/column at `index`
-    // is the template whose entries the inserted ones clone, in both directions. Rebuilding
-    // the whole map is deliberate: `patchToOp`'s sheetMetadataOps ships config authoritatively.
+    // Per-cell maps re-key without inspecting shape. The row/column at `index` is the template
+    // whose validation rules and borders the inserted ones clone; a hyperlink is not cloned.
+    // Rebuilding a map wholesale is deliberate: `patchToOp`'s sheetMetadataOps ships config
+    // authoritatively.
+    file.dataVerification = shiftKeyedMapForInsert(file.dataVerification ?? {}, type, index, count, direction, true);
+    file.hyperlink = shiftKeyedMapForInsert(file.hyperlink ?? {}, type, index, count, direction, false);
     if (!isEmpty(cfg.borderInfo)) {
-        const axis = type === 'row' ? 0 : 1;
-        const borderInfo: Record<string, CellBorderSides> = {};
-        for (const [key, sides] of Object.entries(cfg.borderInfo)) {
-            const coord = key.split('_').map(Number);
-            const at = coord[axis];
-            if (at === index) {
-                for (let n = 0; n < count; n += 1) {
-                    const inserted = [...coord];
-                    inserted[axis] = direction === 'rightbottom' ? index + n + 1 : index + n;
-                    borderInfo[inserted.join('_')] = cloneDeep(sides);
-                }
-            }
-            if (direction === 'lefttop' ? at >= index : at > index) coord[axis] += count;
-            borderInfo[coord.join('_')] = sides;
-        }
-        cfg.borderInfo = borderInfo;
+        cfg.borderInfo = shiftKeyedMapForInsert(cfg.borderInfo, type, index, count, direction, true);
     }
 }
 
@@ -500,71 +442,10 @@ function shiftStateOnlyFieldsForDelete(
         }
     }
 
-    // Data validation config update — re-key entries on delete (mirror of insert).
-    const { dataVerification } = file;
-    const newDataVerification: Record<string, DataVerificationRule> = {};
-    if (dataVerification != null) {
-        forEach(dataVerification, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = dataVerification[key];
-
-            if (type === 'row') {
-                if (r < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newDataVerification[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (c < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newDataVerification[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
-    }
-    file.dataVerification = newDataVerification;
-
-    // Hyperlink config update
-    const { hyperlink } = file;
-    const newHyperlink: Record<string, { linkType: string; linkAddress: string }> = {};
-    if (hyperlink != null) {
-        forEach(hyperlink, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = hyperlink[key];
-
-            if (type === 'row') {
-                if (r < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newHyperlink[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (c < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newHyperlink[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
-    }
-    file.hyperlink = newHyperlink;
-
-    // Border config update: drop the deleted rows'/columns' keys and shift the rest.
-    if (!isEmpty(cfg.borderInfo)) {
-        const axis = type === 'row' ? 0 : 1;
-        const borderInfo: Record<string, CellBorderSides> = {};
-        for (const [key, sides] of Object.entries(cfg.borderInfo)) {
-            const coord = key.split('_').map(Number);
-            const at = coord[axis];
-            if (at >= start && at <= end) continue;
-            if (at > end) coord[axis] -= slen;
-            borderInfo[coord.join('_')] = sides;
-        }
-        cfg.borderInfo = borderInfo;
-    }
+    // Per-cell maps: the deleted rows'/columns' keys drop and the rest shift (mirror of insert).
+    file.dataVerification = shiftKeyedMapForDelete(file.dataVerification ?? {}, type, start, end);
+    file.hyperlink = shiftKeyedMapForDelete(file.hyperlink ?? {}, type, start, end);
+    if (!isEmpty(cfg.borderInfo)) cfg.borderInfo = shiftKeyedMapForDelete(cfg.borderInfo, type, start, end);
 }
 
 function adjustSelectionForInsert(

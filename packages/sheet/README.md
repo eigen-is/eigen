@@ -27,13 +27,12 @@ was removed and the code became internal. The package is now treated as
   `@workspace/sheet/engine` subpath export — used by xlsx/PDF/HTML export
   and the document-load replay layer in `apps/api`.
 - `Cell`, `Sheet`, `Op`, `CellMatrix`, `Range`, `SingleRange`,
-  `ConditionalFormatRule`, `MergeCell`, `BorderInfo`,
+  `ConditionalFormatRule`, `MergeCell`, `CellBorderSides`,
   `DataVerificationRule`, `CalcChainEntry`, `AncestorFormulaCell` etc.
   canonicalised into `@workspace/lib/sheets`; the sheet package
   re-exports the canonicals to keep the FE↔BE type chain honest.
-- Many `any`-typed APIs tightened to discriminated unions (border info,
-  conditional-format rules, freeze-pane data, sheet authority, range or
-  whole-axis selections, computed border maps, …).
+- Many `any`-typed APIs tightened to discriminated unions (conditional-format
+  rules, freeze-pane data, sheet authority, range or whole-axis selections, …).
 - All `/** */` JSDoc/doc-comment blocks removed; comments only where the
   *why* is non-obvious.
 - lodash → [es-toolkit](https://github.com/toss/es-toolkit) (zero lodash

@@ -129,6 +129,21 @@ describe('drag-fill carries the source cell borders', () => {
         expect(filled.sheets[0].config!.borderInfo).toEqual({ '0_0': sourceBorder, '1_0': sourceBorder });
     });
 
+    it('a hidden source row is filled with its border, like its value', () => {
+        const src: SingleRange = { row: [0, 1], column: [0, 0] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = { v: 'a', m: 'a' };
+            d[1][0] = { v: 'b', m: 'b' };
+        }, src);
+        ctx.sheets[0].config = { rowhidden: { 1: 0 }, borderInfo: { '1_0': sourceBorder } };
+        const [filled] = produceWithPatches(ctx, (draft: Context) => {
+            autoFillCell(draft, src, { row: [2, 3], column: [0, 0] }, 'down');
+        });
+
+        expect(filled.sheets[0].data![3][0]?.v).toBe('b');
+        expect(filled.sheets[0].config!.borderInfo).toEqual({ '1_0': sourceBorder, '3_0': sourceBorder });
+    });
+
     it('clears a filled cell whose source has no border', () => {
         const src: SingleRange = { row: [0, 0], column: [0, 0] };
         const ctx = makeCtx((d) => {

@@ -26,13 +26,25 @@ export function mergedBorderSides(
             continue;
         }
         const [r, c] = key.split('_').map(Number);
-        const master = (folded[`${m.r}_${m.c}`] ??= {});
-        if (sides.l && c === m.c) master.l = sides.l;
-        if (sides.r && c === m.c + m.cs - 1) master.r = sides.r;
-        if (sides.t && r === m.r) master.t = sides.t;
-        if (sides.b && r === m.r + m.rs - 1) master.b = sides.b;
-        if (sides.s && r === m.r && c === m.c) master.s = sides.s;
-        if (Object.keys(master).length === 0) delete folded[`${m.r}_${m.c}`];
+        const edge = mergeEdgeSides(sides, m, r, c);
+        if (edge) Object.assign((folded[`${m.r}_${m.c}`] ??= {}), edge);
     }
     return folded;
+}
+
+// The sides of a merged constituent that lie on the merge's outer edge — what a painter or
+// exporter shows for it; the diagonal belongs to the master alone. Undefined when none do.
+export function mergeEdgeSides(
+    sides: CellBorderSides,
+    mc: MergeCell,
+    r: number,
+    c: number,
+): CellBorderSides | undefined {
+    const edge: CellBorderSides = {};
+    if (sides.l && c === mc.c) edge.l = sides.l;
+    if (sides.r && c === mc.c + mc.cs - 1) edge.r = sides.r;
+    if (sides.t && r === mc.r) edge.t = sides.t;
+    if (sides.b && r === mc.r + mc.rs - 1) edge.b = sides.b;
+    if (sides.s && r === mc.r && c === mc.c) edge.s = sides.s;
+    return Object.keys(edge).length > 0 ? edge : undefined;
 }

@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { BorderType, CellBorderSides } from '@workspace/lib/sheets';
 import type { Context } from '../../../state/context';
-import { getBorderInfoCompute } from '../../../state/modules/border';
+import { clearSides, getBorderInfoCompute, getBorderInfoComputeRange } from '../../../state/modules/border';
 import { handleBorder } from '../../../state/modules/toolbar';
 import { syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
@@ -136,6 +136,39 @@ describe('handleBorder expands each layout into per-cell sides', () => {
     });
 });
 
+describe('handleBorder bounds a header-click selection to the used extent', () => {
+    function sheetWithRows(rows: number, usedThrough: number): Context {
+        const ctx = contextFactory({ config: { borderInfo: {} } }) as Context;
+        ctx.sheets[0].data = Array.from({ length: rows }, (_, r) =>
+            Array.from({ length: 4 }, (_, c) => (r <= usedThrough && c <= 1 ? { v: 'x', m: 'x' } : null)),
+        );
+        ctx.visibledatarow = Array.from({ length: rows }, (_, r) => (r + 1) * 20);
+        ctx.visibledatacolumn = Array.from({ length: 4 }, (_, c) => (c + 1) * 74);
+        return ctx;
+    }
+
+    test('a whole column stops at the last row that holds data', () => {
+        const ctx = sheetWithRows(500, 4);
+        ctx.selections = [{ row: [0, 499], column: [2, 2], row_focus: 0, column_focus: 2 }];
+        handleBorder(ctx, 'border-all');
+        expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toEqual(['0_2', '1_2', '2_2', '3_2', '4_2']);
+    });
+
+    test('a whole row stops at the last column that holds data', () => {
+        const ctx = sheetWithRows(500, 4);
+        ctx.selections = [{ row: [7, 7], column: [0, 3], row_focus: 7, column_focus: 0 }];
+        handleBorder(ctx, 'border-all');
+        expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toEqual(['7_0', '7_1']);
+    });
+
+    test('a dragged range is applied as selected, past the used extent', () => {
+        const ctx = sheetWithRows(500, 0);
+        ctx.selections = [{ row: [0, 3], column: [2, 2], row_focus: 0, column_focus: 2 }];
+        handleBorder(ctx, 'border-all');
+        expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toEqual(['0_2', '1_2', '2_2', '3_2']);
+    });
+});
+
 describe('border-none erases', () => {
     test('the range entries and the facing sides of the outside neighbours', () => {
         const ctx = withSelection([0, 2], [0, 2]);
@@ -183,15 +216,38 @@ describe('getBorderInfoCompute', () => {
         expect(ctx.sheets[0].config!.borderInfo!['2_2']).toEqual({ l: SIDE, r: SIDE, t: SIDE, b: SIDE });
     });
 
-    test('skips hidden rows and columns but keeps their borders stored', () => {
+    test('keeps hidden rows and columns: every carry (cut, move, fill) reads stored sides', () => {
         const ctx = withSelection([0, 1], [0, 1]);
         ctx.sheets[0].config!.rowhidden = { 1: 0 };
         ctx.sheets[0].config!.colhidden = { 1: 0 };
         handleBorder(ctx, 'border-all');
-        const computed = getBorderInfoCompute(ctx);
-        expect(Object.keys(computed)).toEqual(['0_0']);
-        expect(ctx.sheets[0].config!.borderInfo!['1_0']).toBeDefined();
-        expect(ctx.sheets[0].config!.borderInfo!['0_1']).toBeDefined();
+        expect(Object.keys(getBorderInfoCompute(ctx)).sort()).toEqual(['0_0', '0_1', '1_0', '1_1']);
+    });
+
+    test('the canvas range walk skips hidden rows and columns', () => {
+        const ctx = withSelection([0, 1], [0, 1]);
+        ctx.sheets[0].config!.rowhidden = { 1: 0 };
+        ctx.sheets[0].config!.colhidden = { 1: 0 };
+        handleBorder(ctx, 'border-all');
+        expect(Object.keys(getBorderInfoComputeRange(ctx, 0, 1, 0, 1))).toEqual(['0_0']);
+    });
+});
+
+describe('clearSides', () => {
+    test('a rectangle larger than the map clears by walking the map', () => {
+        const map: Record<string, CellBorderSides> = {
+            '5_5': { l: SIDE },
+            '999999_0': { l: SIDE },
+            '2_50': { l: SIDE },
+        };
+        clearSides(map, 0, 1000000, 0, 40);
+        expect(map).toEqual({ '2_50': { l: SIDE } });
+    });
+
+    test('a one-cell rectangle into a larger map clears by walking the rectangle', () => {
+        const map: Record<string, CellBorderSides> = { '0_0': { l: SIDE }, '0_1': { l: SIDE }, '1_1': { l: SIDE } };
+        clearSides(map, 1, 1, 1, 1);
+        expect(map).toEqual({ '0_0': { l: SIDE }, '0_1': { l: SIDE } });
     });
 });
 

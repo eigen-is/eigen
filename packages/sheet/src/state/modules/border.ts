@@ -1,4 +1,10 @@
-import type { BorderSide, BorderType, CellBorderSides, MergeCell } from '@workspace/lib/sheets';
+import {
+    type BorderSide,
+    type BorderType,
+    type CellBorderSides,
+    type MergeCell,
+    mergeEdgeSides,
+} from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty } from 'es-toolkit/compat';
 import type { CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
@@ -26,24 +32,15 @@ export const BORDER_STYLE_NAMES: Record<string, string> = {
 
 type BorderSideKey = keyof CellBorderSides;
 
-// A cell's own stored sides, as the painter should draw them. Storage stays raw so an
-// unmerge shows a merged constituent's borders again; here only the sides on the merge's
-// outer edge survive, and the diagonal is the master's (drawn with the merged extent).
-function visibleSides(cfg: SheetConfig, data: CellMatrix, r: number, c: number): CellBorderSides | undefined {
+// A cell's own stored sides as every reader sees them. Storage stays raw so an unmerge
+// shows a merged constituent's borders again; here only the sides on the merge's outer
+// edge survive, and the diagonal is the master's (drawn with the merged extent).
+function computedSides(cfg: SheetConfig, data: CellMatrix, r: number, c: number): CellBorderSides | undefined {
     const stored = cfg.borderInfo?.[`${r}_${c}`];
-    if (!stored || cfg.rowhidden?.[r] != null || cfg.colhidden?.[c] != null) return undefined;
-
+    if (!stored) return undefined;
     const anchor = data[r]?.[c]?.mc;
     const mc: MergeCell | undefined = anchor && cfg.merge?.[`${anchor.r}_${anchor.c}`];
-    if (!mc) return stored;
-
-    const sides: CellBorderSides = {};
-    if (stored.l && c === mc.c) sides.l = stored.l;
-    if (stored.r && c === mc.c + mc.cs - 1) sides.r = stored.r;
-    if (stored.t && r === mc.r) sides.t = stored.t;
-    if (stored.b && r === mc.r + mc.rs - 1) sides.b = stored.b;
-    if (stored.s && r === mc.r && c === mc.c) sides.s = stored.s;
-    return Object.keys(sides).length > 0 ? sides : undefined;
+    return mc ? mergeEdgeSides(stored, mc, r, c) : stored;
 }
 
 function sheetSlice(ctx: Context, sheetId?: string): { cfg: SheetConfig; data: CellMatrix } | undefined {
@@ -58,8 +55,9 @@ function sheetSlice(ctx: Context, sheetId?: string): { cfg: SheetConfig; data: C
     return config && data ? { cfg: config, data } : undefined;
 }
 
-// Walks the visible cells rather than the map: this runs every scroll frame and a large
-// workbook stores hundreds of thousands of entries.
+// The canvas pass: walks the visible cells rather than the map (this runs every scroll
+// frame and a large workbook stores hundreds of thousands of entries) and is the only
+// reader that drops hidden rows and columns — a carry must still move their borders.
 export function getBorderInfoComputeRange(
     ctx: Context,
     rowSt: number,
@@ -72,9 +70,12 @@ export function getBorderInfoComputeRange(
     const slice = sheetSlice(ctx, sheetId);
     if (!slice || isEmpty(slice.cfg.borderInfo)) return computed;
 
+    const { cfg, data } = slice;
     for (let r = rowSt; r <= rowEd; r += 1) {
+        if (cfg.rowhidden?.[r] != null) continue;
         for (let c = colSt; c <= colEd; c += 1) {
-            const sides = visibleSides(slice.cfg, slice.data, r, c);
+            if (cfg.colhidden?.[c] != null) continue;
+            const sides = computedSides(cfg, data, r, c);
             if (sides) computed[`${r}_${c}`] = sides;
         }
     }
@@ -88,7 +89,7 @@ export function getBorderInfoCompute(ctx: Context, sheetId?: string): Record<str
 
     for (const key of Object.keys(slice.cfg.borderInfo ?? {})) {
         const sepIdx = key.indexOf('_');
-        const sides = visibleSides(slice.cfg, slice.data, Number(key.slice(0, sepIdx)), Number(key.slice(sepIdx + 1)));
+        const sides = computedSides(slice.cfg, slice.data, Number(key.slice(0, sepIdx)), Number(key.slice(sepIdx + 1)));
         if (sides) computed[key] = sides;
     }
     return computed;
@@ -121,6 +122,16 @@ export function clearSides(
     colSt: number,
     colEd: number,
 ) {
+    // Select-all on a tall sheet is a million-cell rectangle over a near-empty map; a
+    // one-cell paste into a huge map is the reverse. Walk whichever is smaller.
+    const keys = Object.keys(map);
+    if (keys.length < (rowEd - rowSt + 1) * (colEd - colSt + 1)) {
+        for (const key of keys) {
+            const [r, c] = key.split('_').map(Number);
+            if (r >= rowSt && r <= rowEd && c >= colSt && c <= colEd) delete map[key];
+        }
+        return;
+    }
     for (let r = rowSt; r <= rowEd; r += 1) {
         for (let c = colSt; c <= colEd; c += 1) {
             delete map[`${r}_${c}`];

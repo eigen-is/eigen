@@ -1,8 +1,9 @@
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
+import type { CellMatrix } from '../../engine/types';
 import { type Context, getSheetConfig } from '../context';
 import { en } from '../locale/en';
 import { checkCellIsLocked } from '../modules';
-import type { Sheet } from '../types';
+import type { Selection, Sheet } from '../types';
 
 export * from './patch';
 
@@ -185,4 +186,32 @@ export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
             return true;
         }) && (isUndefined(ctx.allowEdit) ? true : ctx.allowEdit)
     );
+}
+
+// A click on a row or column header hands over every row or column the sheet has
+// (events/mouse-header.ts), and per-cell writes over 130k rows are a quarter of a million
+// immer patches for the collab layer to turn into Yjs ops. A whole-sheet axis is clipped
+// to the last cell holding something; a range the user dragged out is applied as selected.
+export function clipToUsedExtent(ctx: Context, selection: Selection, d: CellMatrix): Selection {
+    const wholeRows = selection.row[0] === 0 && selection.row[1] >= ctx.visibledatarow.length - 1;
+    const wholeColumns = selection.column[0] === 0 && selection.column[1] >= ctx.visibledatacolumn.length - 1;
+    if (!wholeRows && !wholeColumns) return selection;
+
+    let lastRow = 0;
+    let lastColumn = 0;
+    for (let r = 0; r < d.length; r += 1) {
+        const row = d[r];
+        if (!row) continue;
+        for (let c = row.length - 1; c >= 0; c -= 1) {
+            if (row[c] == null) continue;
+            lastRow = r;
+            if (c > lastColumn) lastColumn = c;
+            break;
+        }
+    }
+    return {
+        ...selection,
+        row: wholeRows ? [selection.row[0], lastRow] : selection.row,
+        column: wholeColumns ? [selection.column[0], lastColumn] : selection.column,
+    };
 }
