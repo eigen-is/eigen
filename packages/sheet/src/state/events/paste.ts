@@ -30,6 +30,13 @@ import { hasPartMC, isRealNum } from '../modules/validation';
 import type { SheetConfig } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 
+const HTML_BORDER_SIDES = [
+    ['t', 'Top'],
+    ['b', 'Bottom'],
+    ['l', 'Left'],
+    ['r', 'Right'],
+] as const;
+
 // Snapshot built by pasteHandlerOfCutPaste describing the source and target
 // sides of a cut/paste so postPasteCut can splice both sheets at once.
 type CutPasteSide = {
@@ -1325,68 +1332,21 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                                 for (let rp = 0; rp < rowspan; rp += 1) {
                                     for (let cp = 0; cp < colspan; cp += 1) {
-                                        if (rp === 0) {
-                                            const bt = td.style.borderTop;
-                                            if (!isEmpty(bt) && bt.substring(0, 3).toLowerCase() !== '0px') {
-                                                const width = td.style.borderTopWidth;
-                                                const type = td.style.borderTopStyle;
-                                                const color = td.style.borderTopColor;
-                                                const borderconfig = getQKBorder(width, type, color);
-
-                                                if (!borderInfo[`${r + rp}_${c + cp}`]) {
-                                                    borderInfo[`${r + rp}_${c + cp}`] = {};
-                                                }
-
-                                                borderInfo[`${r + rp}_${c + cp}`].t = borderconfig;
-                                            }
-                                        }
-
-                                        if (rp === rowspan - 1) {
-                                            const bb = td.style.borderBottom;
-                                            if (!isEmpty(bb) && bb.substring(0, 3).toLowerCase() !== '0px') {
-                                                const width = td.style.borderBottomWidth;
-                                                const type = td.style.borderBottomStyle;
-                                                const color = td.style.borderBottomColor;
-                                                const borderconfig = getQKBorder(width, type, color);
-
-                                                if (!borderInfo[`${r + rp}_${c + cp}`]) {
-                                                    borderInfo[`${r + rp}_${c + cp}`] = {};
-                                                }
-
-                                                borderInfo[`${r + rp}_${c + cp}`].b = borderconfig;
-                                            }
-                                        }
-
-                                        if (cp === 0) {
-                                            const bl = td.style.borderLeft;
-                                            if (!isEmpty(bl) && bl.substring(0, 3).toLowerCase() !== '0px') {
-                                                const width = td.style.borderLeftWidth;
-                                                const type = td.style.borderLeftStyle;
-                                                const color = td.style.borderLeftColor;
-                                                const borderconfig = getQKBorder(width, type, color);
-
-                                                if (!borderInfo[`${r + rp}_${c + cp}`]) {
-                                                    borderInfo[`${r + rp}_${c + cp}`] = {};
-                                                }
-
-                                                borderInfo[`${r + rp}_${c + cp}`].l = borderconfig;
-                                            }
-                                        }
-
-                                        if (cp === colspan - 1) {
-                                            const br = td.style.borderRight;
-                                            if (!isEmpty(br) && br.substring(0, 3).toLowerCase() !== '0px') {
-                                                const width = td.style.borderRightWidth;
-                                                const type = td.style.borderRightStyle;
-                                                const color = td.style.borderRightColor;
-                                                const borderconfig = getQKBorder(width, type, color);
-
-                                                if (!borderInfo[`${r + rp}_${c + cp}`]) {
-                                                    borderInfo[`${r + rp}_${c + cp}`] = {};
-                                                }
-
-                                                borderInfo[`${r + rp}_${c + cp}`].r = borderconfig;
-                                            }
+                                        const onEdge = {
+                                            t: rp === 0,
+                                            b: rp === rowspan - 1,
+                                            l: cp === 0,
+                                            r: cp === colspan - 1,
+                                        };
+                                        for (const [side, css] of HTML_BORDER_SIDES) {
+                                            const shorthand = onEdge[side] ? td.style[`border${css}`] : '';
+                                            if (isEmpty(shorthand) || shorthand.slice(0, 3).toLowerCase() === '0px')
+                                                continue;
+                                            (borderInfo[`${r + rp}_${c + cp}`] ??= {})[side] = getQKBorder(
+                                                td.style[`border${css}Width`],
+                                                td.style[`border${css}Style`],
+                                                td.style[`border${css}Color`],
+                                            );
                                         }
 
                                         if (rp === 0 && cp === 0) {

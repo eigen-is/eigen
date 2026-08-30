@@ -13,16 +13,13 @@ export function useSheet(
 ) {
     const [initialData, setInitialData] = useState<Sheet[] | null>(null);
     const [snapshotVersion, setSnapshotVersion] = useState(0);
-    // True while the workbook shows the defaults fallback: the consumer renders it
-    // read-only and says so, instead of letting an hour of edits go nowhere.
+    // The workbook shows the defaults fallback; the consumer renders it read-only and says so.
     const [loadFailed, setLoadFailed] = useState(false);
 
     const isLocalOpRef = useRef(false);
     const isLocalSnapshotRef = useRef(false);
     const readyForOpsRef = useRef(false);
-    // Set only by a decode (+ pending-op replay) that succeeded. A workbook that opened on
-    // the createDefaultSheets fallback must never be flushed: that would write the blank
-    // workbook over state.snapshot and clear the op log — the real document, gone.
+    // Same fact for the callbacks: a fallback workbook must never be flushed over state.snapshot.
     const loadedRef = useRef(false);
     const latestDataRef = useRef<Sheet[] | null>(null);
 
@@ -128,8 +125,6 @@ export function useSheet(
             const opsArray = doc.getArray('ops');
             const snapshot = stateMap.get('snapshot') as string | undefined;
             let initial: Sheet[] = createDefaultSheets();
-            // Stays false on any fallback below: the editor still opens, but nothing it
-            // shows may be persisted over the document it failed to load.
             let loaded = true;
             if (snapshot) {
                 try {

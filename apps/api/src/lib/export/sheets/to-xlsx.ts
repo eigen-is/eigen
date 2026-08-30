@@ -168,11 +168,8 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
             }
         }
 
-        // exceljs merge constituents SHARE the master's style object (lib/doc/cell.js
-        // merge() assigns `this.style = master.style`), so writing `cell.border` per
-        // constituent would clobber the shared border — the last constituent wins and
-        // the merge loses e.g. its left edge. One write of the folded perimeter through
-        // the anchor lands on every constituent via the shared style.
+        // exceljs constituents share the master's style object, so a merge's perimeter is
+        // written once through the master; per-constituent writes would clobber each other.
         for (const [key, sides] of Object.entries(mergedBorderSides(config.borderInfo, config.merge))) {
             const border = toBorder(sides);
             if (!border) continue;

@@ -33,10 +33,8 @@ const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet
 
 type Axis = 'row' | 'column';
 
-// Re-keys an "r_c" map for an insert. Entries on the row/column at `index` are the template:
-// with `cloneTemplate` every inserted row/column gets a deep copy of them, without it the
-// inserted ones start empty. Entries at or past the insert shift by `count` (a lefttop
-// insert moves the template too, a rightbottom one keeps it in place).
+// Re-keys an "r_c" map for an insert: the row/column at `index` is the template (deep-copied onto
+// every inserted one with `cloneTemplate`) and shifts along only for a lefttop insert.
 function shiftKeyedMapForInsert<T>(
     map: Record<string, T>,
     axis: Axis,
@@ -240,10 +238,8 @@ function shiftStateOnlyFieldsForInsert(
         }
     }
 
-    // Per-cell maps re-key without inspecting shape. The row/column at `index` is the template
-    // whose validation rules and borders the inserted ones clone; a hyperlink is not cloned.
-    // Rebuilding a map wholesale is deliberate: `patchToOp`'s sheetMetadataOps ships config
-    // authoritatively.
+    // Inserted rows/columns clone the template's validation rules and borders, not its hyperlinks.
+    // Rebuilding a map wholesale is deliberate: `patchToOp`'s sheetMetadataOps ships config whole.
     file.dataVerification = shiftKeyedMapForInsert(file.dataVerification ?? {}, type, index, count, direction, true);
     file.hyperlink = shiftKeyedMapForInsert(file.hyperlink ?? {}, type, index, count, direction, false);
     if (!isEmpty(cfg.borderInfo)) {
@@ -442,7 +438,6 @@ function shiftStateOnlyFieldsForDelete(
         }
     }
 
-    // Per-cell maps: the deleted rows'/columns' keys drop and the rest shift (mirror of insert).
     file.dataVerification = shiftKeyedMapForDelete(file.dataVerification ?? {}, type, start, end);
     file.hyperlink = shiftKeyedMapForDelete(file.hyperlink ?? {}, type, start, end);
     if (!isEmpty(cfg.borderInfo)) cfg.borderInfo = shiftKeyedMapForDelete(cfg.borderInfo, type, start, end);

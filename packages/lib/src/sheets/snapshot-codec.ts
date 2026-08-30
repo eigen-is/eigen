@@ -6,7 +6,7 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
-import type { BorderSide, Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
+import type { Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
 
 const FORMAT = 'eigensheets/2';
 
@@ -225,8 +225,8 @@ const BORDER_SIDE_KEYS = ['l', 'r', 't', 'b', 's'] as const;
 function cloneSides(sides: CellBorderSides): CellBorderSides {
     const out: CellBorderSides = {};
     for (const key of BORDER_SIDE_KEYS) {
-        const side: BorderSide | undefined = sides[key];
-        if (side) out[key] = { style: side.style, color: side.color };
+        const side = sides[key];
+        if (side) out[key] = { ...side };
     }
     return out;
 }

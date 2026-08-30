@@ -1,7 +1,7 @@
 // Cell borders from config.borderInfo, drawn over the finished cells.
 
 import { getSheetConfig } from '../context';
-import { BORDER_STYLE_NAMES, getBorderInfoComputeRange } from '../modules/border';
+import { BORDER_STYLE_NAMES, getBorderInfoCompute } from '../modules/border';
 import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
@@ -87,7 +87,7 @@ export function drawCellBorders(pass: RenderPass) {
         renderCtx.restore();
     };
 
-    const borderInfoCompute = getBorderInfoComputeRange(sheetCtx, rowStart, rowEnd, colStart, colEnd);
+    const borderInfoCompute = getBorderInfoCompute(sheetCtx, undefined, [rowStart, rowEnd, colStart, colEnd]);
 
     for (const [x, bdInfo] of Object.entries(borderInfoCompute)) {
         const sepIdx = x.indexOf('_');

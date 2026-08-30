@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { BorderType, CellBorderSides } from '@workspace/lib/sheets';
 import type { Context } from '../../../state/context';
-import { clearSides, getBorderInfoCompute, getBorderInfoComputeRange } from '../../../state/modules/border';
+import { clearSides, getBorderInfoCompute } from '../../../state/modules/border';
 import { handleBorder } from '../../../state/modules/toolbar';
 import { syncablePaths } from '../factories/collab';
 import { contextFactory } from '../factories/context';
@@ -241,7 +241,7 @@ describe('getBorderInfoCompute', () => {
         ctx.sheets[0].config!.rowhidden = { 1: 0 };
         ctx.sheets[0].config!.colhidden = { 1: 0 };
         handleBorder(ctx, 'border-all');
-        expect(Object.keys(getBorderInfoComputeRange(ctx, 0, 1, 0, 1))).toEqual(['0_0']);
+        expect(Object.keys(getBorderInfoCompute(ctx, undefined, [0, 1, 0, 1]))).toEqual(['0_0']);
     });
 });
 

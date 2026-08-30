@@ -1,11 +1,7 @@
-// Folds a merge's stored borders onto its master. Storage keeps every constituent's own
-// sides (an unmerge shows them again); exporters that address a merge through one cell
-// (exceljs shares one style across a merge, an HTML td spans it) need the perimeter on
-// the master: a side counts only from the constituent on the merge's matching edge, the
-// diagonal only from the master. Same-side conflicts resolve last-write-wins in map order.
-
 import type { CellBorderSides, MergeCell } from './types';
 
+// Folds each merge's perimeter onto its master for readers that address a merge through one
+// cell (an exceljs style, an HTML td). Storage keeps every constituent's sides for an unmerge.
 export function mergedBorderSides(
     borderInfo: Record<string, CellBorderSides> | undefined,
     merge: Record<string, MergeCell> | undefined,
@@ -32,8 +28,7 @@ export function mergedBorderSides(
     return folded;
 }
 
-// The sides of a merged constituent that lie on the merge's outer edge — what a painter or
-// exporter shows for it; the diagonal belongs to the master alone. Undefined when none do.
+// A constituent's sides on the merge's outer edge; the diagonal belongs to the master alone.
 export function mergeEdgeSides(
     sides: CellBorderSides,
     mc: MergeCell,

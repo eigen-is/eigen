@@ -1,5 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
+    type BorderSide,
     type Cell,
     type CellBorderSides,
     type CellWithRowAndCol,
@@ -270,7 +271,7 @@ function clipRulesToWindow(
 
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
-    const borderMap = buildBorderMap(mergedBorderSides(config.borderInfo, config.merge));
+    const borderMap = mergedBorderSides(config.borderInfo, config.merge);
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
 
@@ -304,9 +305,8 @@ function renderSheet(
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    // Build a border lookup from borderInfo: "r,c" -> { l?, r?, t?, b? }; a merge's
-    // perimeter is folded onto the master, the only cell this renderer emits for it.
-    const borderMap = buildBorderMap(mergedBorderSides(config.borderInfo, config.merge));
+    // A merge's perimeter sits on the master, the only cell this renderer emits for it.
+    const borderMap = mergedBorderSides(config.borderInfo, config.merge);
 
     // Find the minimal bounding box containing all visible content
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
@@ -411,7 +411,7 @@ function renderSheet(
                 if (rs > 1) attrs.push(`rowspan="${rs}"`);
             }
 
-            const cellStyle = buildCellStyle(v, borderMap.get(key), showGrid, cfStyle, styles !== undefined);
+            const cellStyle = buildCellStyle(v, borderMap[`${r}_${c}`], showGrid, cfStyle, styles !== undefined);
             if (styles) {
                 // The base td declarations live in the shared td{} rule; an unstyled
                 // cell needs no class at all.
@@ -493,7 +493,7 @@ function renderDataBar(bar: DataBar, display: string, styles?: StyleRegistry): s
 
 function buildCellStyle(
     v: Cell | null,
-    borders: { l?: string; r?: string; t?: string; b?: string } | undefined,
+    borders: CellBorderSides | undefined,
     showGrid: boolean,
     cfStyle: CellFormatStyle | undefined,
     forStylesheet: boolean,
@@ -555,10 +555,11 @@ function buildCellStyle(
     }
 
     if (borders) {
-        if (borders.l) parts.push(`border-left:${borders.l}`);
-        if (borders.r) parts.push(`border-right:${borders.r}`);
-        if (borders.t) parts.push(`border-top:${borders.t}`);
-        if (borders.b) parts.push(`border-bottom:${borders.b}`);
+        // CSS has no diagonal border, so the slash side `s` is not rendered.
+        if (borders.l) parts.push(`border-left:${borderSideToCSS(borders.l)}`);
+        if (borders.r) parts.push(`border-right:${borderSideToCSS(borders.r)}`);
+        if (borders.t) parts.push(`border-top:${borderSideToCSS(borders.t)}`);
+        if (borders.b) parts.push(`border-bottom:${borderSideToCSS(borders.b)}`);
     } else if (showGrid) {
         parts.push('border:1px solid #d4d4d4');
     }
@@ -619,24 +620,7 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
     return inner;
 }
 
-// CSS has no diagonal border, so the slash side `s` is not rendered.
-function buildBorderMap(
-    borderInfo: Record<string, CellBorderSides>,
-): Map<string, { l?: string; r?: string; t?: string; b?: string }> {
-    const map = new Map<string, { l?: string; r?: string; t?: string; b?: string }>();
-    for (const [key, { l, r, t, b }] of Object.entries(borderInfo)) {
-        const entry: { l?: string; r?: string; t?: string; b?: string } = {};
-        if (l) entry.l = borderSideToCSS(l);
-        if (r) entry.r = borderSideToCSS(r);
-        if (t) entry.t = borderSideToCSS(t);
-        if (b) entry.b = borderSideToCSS(b);
-        map.set(key.replace('_', ','), entry);
-    }
-
-    return map;
-}
-
-function borderSideToCSS(side: { style: number; color: string }): string {
+function borderSideToCSS(side: BorderSide): string {
     const css = BORDER_STYLE_CSS[side.style] ?? '1px solid';
     return `${css} ${escapeHtml(side.color)}`;
 }
@@ -652,7 +636,7 @@ function hasVisibleContent(v: Cell | null): boolean {
 
 function getGridBounds(
     sheet: Sheet,
-    borderMap: Map<string, { l?: string; r?: string; t?: string; b?: string }>,
+    borderMap: Record<string, CellBorderSides>,
 ): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
     let minRow = Number.MAX_SAFE_INTEGER;
     let minCol = Number.MAX_SAFE_INTEGER;
@@ -661,7 +645,7 @@ function getGridBounds(
 
     if (sheet.celldata) {
         for (const { r, c, v } of sheet.celldata) {
-            if (!hasVisibleContent(v) && !borderMap.has(`${r},${c}`)) continue;
+            if (!hasVisibleContent(v) && !borderMap[`${r}_${c}`]) continue;
             if (r < minRow) minRow = r;
             if (c < minCol) minCol = c;
             if (r > maxRow) maxRow = r;
@@ -670,8 +654,8 @@ function getGridBounds(
     }
 
     // Extend bounds to cover border cells
-    for (const key of borderMap.keys()) {
-        const [r, c] = key.split(',').map(Number);
+    for (const key of Object.keys(borderMap)) {
+        const [r, c] = key.split('_').map(Number);
         if (r < minRow) minRow = r;
         if (c < minCol) minCol = c;
         if (r > maxRow) maxRow = r;

@@ -6,8 +6,7 @@ import {
     mergeEdgeSides,
 } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty } from 'es-toolkit/compat';
-import type { CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Context } from '../context';
 import type { Selection, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
@@ -32,65 +31,45 @@ export const BORDER_STYLE_NAMES: Record<string, string> = {
 
 type BorderSideKey = keyof CellBorderSides;
 
-// A cell's own stored sides as every reader sees them. Storage stays raw so an unmerge
-// shows a merged constituent's borders again; here only the sides on the merge's outer
-// edge survive, and the diagonal is the master's (drawn with the merged extent).
-function computedSides(cfg: SheetConfig, data: CellMatrix, r: number, c: number): CellBorderSides | undefined {
-    const stored = cfg.borderInfo?.[`${r}_${c}`];
-    if (!stored) return undefined;
-    const anchor = data[r]?.[c]?.mc;
-    const mc: MergeCell | undefined = anchor && cfg.merge?.[`${anchor.r}_${anchor.c}`];
-    return mc ? mergeEdgeSides(stored, mc, r, c) : stored;
-}
-
-function sheetSlice(ctx: Context, sheetId?: string): { cfg: SheetConfig; data: CellMatrix } | undefined {
-    if (sheetId === undefined) {
-        const cfg = getSheetConfig(ctx);
-        const data = getFlowdata(ctx);
-        return cfg && data ? { cfg, data } : undefined;
-    }
-    const index = getSheetIndex(ctx, sheetId);
-    if (index == null) return undefined;
-    const { config, data } = ctx.sheets[index];
-    return config && data ? { cfg: config, data } : undefined;
-}
-
-// The canvas pass: walks the visible cells rather than the map (this runs every scroll
-// frame and a large workbook stores hundreds of thousands of entries) and is the only
-// reader that drops hidden rows and columns — a carry must still move their borders.
-export function getBorderInfoComputeRange(
+// A cell's sides as every reader sees them: a merged constituent shows only the sides on the
+// merge's outer edge (storage stays raw so an unmerge shows them again), the diagonal is the
+// master's. The canvas pass hands a `range` and walks it instead of the map (every scroll frame
+// over hundreds of thousands of entries); it is also the only reader that drops hidden rows and
+// columns — a carry must still move their borders.
+export function getBorderInfoCompute(
     ctx: Context,
-    rowSt: number,
-    rowEd: number,
-    colSt: number,
-    colEd: number,
     sheetId?: string,
+    range?: [rowSt: number, rowEd: number, colSt: number, colEd: number],
 ): Record<string, CellBorderSides> {
     const computed: Record<string, CellBorderSides> = {};
-    const slice = sheetSlice(ctx, sheetId);
-    if (!slice || isEmpty(slice.cfg.borderInfo)) return computed;
+    const index = getSheetIndex(ctx, sheetId ?? ctx.currentSheetId);
+    if (index == null) return computed;
+    const { config: cfg, data } = ctx.sheets[index];
+    const map = cfg?.borderInfo;
+    if (!map || !data || isEmpty(map)) return computed;
 
-    const { cfg, data } = slice;
+    const compute = (r: number, c: number) => {
+        const stored = map[`${r}_${c}`];
+        if (!stored) return;
+        const anchor = data[r]?.[c]?.mc;
+        const mc: MergeCell | undefined = anchor && cfg.merge?.[`${anchor.r}_${anchor.c}`];
+        const sides = mc ? mergeEdgeSides(stored, mc, r, c) : stored;
+        if (sides) computed[`${r}_${c}`] = sides;
+    };
+    if (!range) {
+        for (const key of Object.keys(map)) {
+            const [r, c] = key.split('_').map(Number);
+            compute(r, c);
+        }
+        return computed;
+    }
+    const [rowSt, rowEd, colSt, colEd] = range;
     for (let r = rowSt; r <= rowEd; r += 1) {
         if (cfg.rowhidden?.[r] != null) continue;
         for (let c = colSt; c <= colEd; c += 1) {
             if (cfg.colhidden?.[c] != null) continue;
-            const sides = computedSides(cfg, data, r, c);
-            if (sides) computed[`${r}_${c}`] = sides;
+            compute(r, c);
         }
-    }
-    return computed;
-}
-
-export function getBorderInfoCompute(ctx: Context, sheetId?: string): Record<string, CellBorderSides> {
-    const computed: Record<string, CellBorderSides> = {};
-    const slice = sheetSlice(ctx, sheetId);
-    if (!slice) return computed;
-
-    for (const key of Object.keys(slice.cfg.borderInfo ?? {})) {
-        const sepIdx = key.indexOf('_');
-        const sides = computedSides(slice.cfg, slice.data, Number(key.slice(0, sepIdx)), Number(key.slice(sepIdx + 1)));
-        if (sides) computed[key] = sides;
     }
     return computed;
 }

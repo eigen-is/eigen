@@ -1,5 +1,10 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { BorderSide, CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import {
+    type CellBorderSides,
+    type ConditionalFormatRule,
+    type DataVerificationRule,
+    mergedBorderSides,
+} from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine/conditional-format';
@@ -23,37 +28,6 @@ import { hasPartMC } from './validation';
 export const selectionCache = {
     isPasteAction: false,
 };
-
-// HTML copy-export builds a histogram of border colors and line styles along
-// each side of a merged cell so it can pick the dominant value (>= half the
-// edge length) for the rendered `<td>` border.
-type BorderEdgeHistogram = { color: Record<string, number>; style: Record<string, number> };
-
-function bumpHistogram(hist: BorderEdgeHistogram, side: BorderSide) {
-    hist.style[side.style] = (hist.style[side.style] ?? 0) + 1;
-    hist.color[side.color] = (hist.color[side.color] ?? 0) + 1;
-}
-
-// Pick the dominant color and line-style along one merged-cell edge — each must
-// appear on at least half the edge's cells — and render it as a CSS declaration.
-// An empty histogram serializes to exactly 23 chars, so `> 23` means "saw a border".
-function dominantBorderSideCss(hist: BorderEdgeHistogram, edgeLen: number, cssSide: string): string {
-    if (JSON.stringify(hist).length <= 23) return '';
-
-    let color: string | null = null;
-    let style: string | null = null;
-    for (const key of Object.keys(hist.color)) {
-        if (hist.color[key] >= edgeLen / 2) color = key;
-    }
-    for (const key of Object.keys(hist.style)) {
-        if (hist.style[key] >= edgeLen / 2) style = key;
-    }
-
-    if (!isNil(color) && !isNil(style)) {
-        return `border-${cssSide}:${getHtmlBorderStyle(Number(style), color)}`;
-    }
-    return '';
-}
 
 function cellBorderCss(border: CellBorderSides): string {
     let css = '';
@@ -1286,7 +1260,8 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         }
     }
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, sheetId);
+    // A td spans its merge, so the perimeter is read off the master.
+    const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge);
 
     let cpdata = '';
     const d = sheet.data;
@@ -1353,57 +1328,11 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 style += escapeHtml(styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute)));
 
                 if (cell.mc) {
-                    if ('rs' in cell.mc) {
-                        span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
-
-                        // Border
-                        if (borderInfoCompute[`${r}_${c}`]) {
-                            // Per-side histograms: count how many cells along the merged
-                            // edge share each border color / line-style. The winning side
-                            // (>= half the edge length) drives the merged cell's HTML
-                            // border below.
-                            const bl_obj: BorderEdgeHistogram = { color: {}, style: {} };
-                            const br_obj: BorderEdgeHistogram = { color: {}, style: {} };
-                            const bt_obj: BorderEdgeHistogram = { color: {}, style: {} };
-                            const bb_obj: BorderEdgeHistogram = { color: {}, style: {} };
-
-                            for (let bd_r = r; bd_r < r + cell.mc.rs!; bd_r += 1) {
-                                for (let bd_c = c; bd_c < c + cell.mc.cs!; bd_c += 1) {
-                                    const cellBorder = borderInfoCompute[`${bd_r}_${bd_c}`];
-                                    if (!cellBorder) continue;
-
-                                    if (bd_r === r && cellBorder.t) {
-                                        bumpHistogram(bt_obj, cellBorder.t);
-                                    }
-                                    if (bd_r === r + cell.mc.rs! - 1 && cellBorder.b) {
-                                        bumpHistogram(bb_obj, cellBorder.b);
-                                    }
-                                    if (bd_c === c && cellBorder.l) {
-                                        bumpHistogram(bl_obj, cellBorder.l);
-                                    }
-                                    if (bd_c === c + cell.mc.cs! - 1 && cellBorder.r) {
-                                        bumpHistogram(br_obj, cellBorder.r);
-                                    }
-                                }
-                            }
-
-                            const rowlen = cell.mc.rs!;
-                            const collen = cell.mc.cs!;
-
-                            style += dominantBorderSideCss(bl_obj, rowlen, 'left');
-                            style += dominantBorderSideCss(br_obj, rowlen, 'right');
-                            style += dominantBorderSideCss(bt_obj, collen, 'top');
-                            style += dominantBorderSideCss(bb_obj, collen, 'bottom');
-                        }
-                    } else {
-                        continue;
-                    }
-                } else {
-                    const cellBorder = borderInfoCompute[`${r}_${c}`];
-                    if (cellBorder) {
-                        style += cellBorderCss(cellBorder);
-                    }
+                    if (!('rs' in cell.mc)) continue;
+                    span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
                 }
+                const cellBorder = borderInfoCompute[`${r}_${c}`];
+                if (cellBorder) style += cellBorderCss(cellBorder);
 
                 column = replaceHtml(column, { style, span });
 
@@ -1420,11 +1349,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 let style = '';
 
                 const cellBorder = borderInfoCompute[`${r}_${c}`];
-                if (cellBorder) {
-                    style += cellBorderCss(cellBorder);
-                }
-
-                column += '';
+                if (cellBorder) style += cellBorderCss(cellBorder);
 
                 if (r === rowIndexArr[0]) {
                     if (
