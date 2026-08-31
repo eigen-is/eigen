@@ -9,6 +9,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useFindBarRefocus } from '../../search/find-in-document-button';
 
 type EditMenuProps = {
@@ -20,12 +21,14 @@ type EditMenuProps = {
     canRedo: boolean;
     onUndo: () => void;
     onRedo: () => void;
+    // Host-app edit entries (vector's tool-lock toggle), rendered after Undo/Redo when canEdit.
+    children?: ReactNode;
 };
 
 // The 'Edit' menubar entry next to FileMenu, shared by all eigendoc toolbars. Undo machinery is
 // per-app (Yjs UndoManager, TipTap history), so handlers come in as props; the find entries come
 // from the DocSearchProvider the toolbar is mounted under (null-safe: absent provider → no items).
-export function EditMenu({ canEdit, canUndo, canRedo, onUndo, onRedo }: EditMenuProps) {
+export function EditMenu({ canEdit, canUndo, canRedo, onUndo, onRedo, children }: EditMenuProps) {
     const { docSearchBar, focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
 
     return (
@@ -44,6 +47,7 @@ export function EditMenu({ canEdit, canUndo, canRedo, onUndo, onRedo }: EditMenu
                             <Redo className="h-4 w-4 mr-2" /> Redo
                             <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+Z')}</DropdownMenuShortcut>
                         </DropdownMenuItem>
+                        {children}
                         {docSearchBar && <DropdownMenuSeparator />}
                     </>
                 )}

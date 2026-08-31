@@ -7,6 +7,7 @@ import { Column, ColumnLayout, LoadingState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
+import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
 import {
     useSelection,
@@ -14,10 +15,11 @@ import {
     useVectorDoc,
     useVectorPresence,
     VectorCanvas,
+    type VectorImageInsert,
     VectorPropertiesPanel,
 } from '@workspace/ui/components/vector';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Toolbar } from './toolbar';
 
 type VectorEditorProps = {
@@ -108,6 +110,11 @@ export function VectorEditor({
 
     const [addOpen, setAddOpen] = useState(false);
 
+    // Toolbar "Add image": the picker lives here, placement goes through the canvas' published
+    // insert surface (placement needs the live viewport).
+    const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const imageInsertRef = useRef<VectorImageInsert | null>(null);
+
     // Document-level create: the card anchors to the document (no anchor callback), so it lands in the
     // `comments` Y.Map and is active by construction.
     const handleSaveNew = useCallback(
@@ -177,6 +184,7 @@ export function VectorEditor({
                                 setTool={setTool}
                                 toolLocked={toolLocked}
                                 setToolLocked={setToolLocked}
+                                onInsertImage={canWrite && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
@@ -217,6 +225,7 @@ export function VectorEditor({
                                         aspectLocked={aspectLocked}
                                         provider={doc.provider}
                                         publishCursor={publishCursor}
+                                        imageInsertRef={imageInsertRef}
                                     />
                                 </div>
                                 {/* Right side: the comment/activity pane wins over the properties panel
@@ -234,6 +243,22 @@ export function VectorEditor({
                                     />
                                 ) : null}
                             </div>
+                        )}
+
+                        {mediaFolderId && (
+                            <DrivePickerWithUpload
+                                open={imagePickerOpen}
+                                onOpenChange={setImagePickerOpen}
+                                title="Add image"
+                                mimeFilter={['image/*']}
+                                multiSelect
+                                onPickFromDrive={(paths) =>
+                                    void imageInsertRef.current?.insertDrivePaths(paths).catch(() => {})
+                                }
+                                onPickFromDevice={(files) => imageInsertRef.current?.insertFiles(files)}
+                                accept="image/*"
+                                multiple
+                            />
                         )}
                     </Column>
                 </div>

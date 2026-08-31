@@ -29,17 +29,20 @@ export type VectorTool =
     | 'eraser';
 
 // Toolbar order (arrow slots between ellipse and line in Phase 3); letters are Excalidraw's.
-export const VECTOR_TOOLS: { tool: VectorTool; icon: LucideIcon; label: string; shortcut: string }[] = [
-    { tool: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
-    { tool: 'rectangle', icon: Square, label: 'Rectangle', shortcut: 'R' },
-    { tool: 'diamond', icon: Diamond, label: 'Diamond', shortcut: 'D' },
-    { tool: 'ellipse', icon: Circle, label: 'Ellipse', shortcut: 'O' },
-    { tool: 'arrow', icon: MoveUpRight, label: 'Arrow', shortcut: 'A' },
-    { tool: 'line', icon: Minus, label: 'Line', shortcut: 'L' },
-    { tool: 'freedraw', icon: Pencil, label: 'Draw', shortcut: 'P' },
-    { tool: 'text', icon: Type, label: 'Text', shortcut: 'T' },
-    { tool: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E' },
-];
+// `inserts` drives the toolbar's menu split: inserting tools fill the Insert menu, the rest (the
+// select mode + eraser) live in the Edit menu.
+export const VECTOR_TOOLS: { tool: VectorTool; icon: LucideIcon; label: string; shortcut: string; inserts: boolean }[] =
+    [
+        { tool: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V', inserts: false },
+        { tool: 'rectangle', icon: Square, label: 'Rectangle', shortcut: 'R', inserts: true },
+        { tool: 'diamond', icon: Diamond, label: 'Diamond', shortcut: 'D', inserts: true },
+        { tool: 'ellipse', icon: Circle, label: 'Ellipse', shortcut: 'O', inserts: true },
+        { tool: 'arrow', icon: MoveUpRight, label: 'Arrow', shortcut: 'A', inserts: true },
+        { tool: 'line', icon: Minus, label: 'Line', shortcut: 'L', inserts: true },
+        { tool: 'freedraw', icon: Pencil, label: 'Draw', shortcut: 'P', inserts: true },
+        { tool: 'text', icon: Type, label: 'Text', shortcut: 'T', inserts: true },
+        { tool: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E', inserts: false },
+    ];
 
 export function useTool() {
     const [tool, setTool] = useState<VectorTool>('select');

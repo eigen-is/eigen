@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1146 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1148 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (143)
+## Components (144)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -43,6 +43,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ErrorState` | `@workspace/ui` | packages/ui/src/components/layout/app/error-state.tsx |
 | `FileDropOverlay` | `@workspace/ui` | packages/ui/src/components/file-drop-overlay.tsx |
 | `FileMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
+| `HintPill` | `@workspace/ui` | packages/ui/src/components/hint-pill.tsx |
 | `InfoBlock` | `@workspace/ui` | packages/ui/src/components/info-block.tsx |
 | `KebabTrigger` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/kebab-trigger.tsx |
 | `Ket` | `@workspace/ui` | packages/ui/src/components/braket/ket.tsx |
@@ -430,7 +431,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (305)
+## Types (306)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -737,6 +738,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-presence.ts |
 | `TextDimensions` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/text-measure.ts |
 | `VectorElementPatch` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
+| `VectorImageInsert` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/vector-canvas.tsx |
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 

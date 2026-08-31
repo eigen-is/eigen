@@ -13,6 +13,13 @@ type ViewportState = { zoom: number; scrollX: number; scrollY: number };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
+// Zoom to `nextZoom`, keeping the scene point under the container-relative (px, py) fixed.
+const zoomAt = (v: ViewportState, nextZoom: number, px: number, py: number): ViewportState => ({
+    zoom: nextZoom,
+    scrollX: v.scrollX + px / nextZoom - px / v.zoom,
+    scrollY: v.scrollY + py / nextZoom - py / v.zoom,
+});
+
 export function useViewport() {
     const containerRef = useRef<HTMLDivElement>(null);
     const [viewport, setViewport] = useState<ViewportState>({ zoom: 1, scrollX: 0, scrollY: 0 });
@@ -58,6 +65,14 @@ export function useViewport() {
         setViewport((v) => ({ ...v, scrollX: v.scrollX + dxPx / v.zoom, scrollY: v.scrollY + dyPx / v.zoom }));
     }, []);
 
+    // Zoom-pill reset: back to 100%, keeping the scene point at the container centre fixed.
+    const resetZoom = useCallback(() => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        const px = (rect?.width ?? 0) / 2;
+        const py = (rect?.height ?? 0) / 2;
+        setViewport((v) => zoomAt(v, 1, px, py));
+    }, []);
+
     // Non-passive wheel: pan by default, zoom-at-cursor on ctrl/meta (trackpad pinch sends ctrl).
     // Bound once; reads live viewport via functional setState and the container rect at call time.
     useEffect(() => {
@@ -73,13 +88,7 @@ export function useViewport() {
                 const delta = clamp(e.deltaY, -WHEEL_DELTA_CLAMP, WHEEL_DELTA_CLAMP);
                 setViewport((v) => {
                     const nextZoom = clamp(v.zoom - delta / 100, MIN_ZOOM, MAX_ZOOM);
-                    if (nextZoom === v.zoom) return v;
-                    // Keep the scene point under the cursor fixed.
-                    return {
-                        zoom: nextZoom,
-                        scrollX: v.scrollX + px / nextZoom - px / v.zoom,
-                        scrollY: v.scrollY + py / nextZoom - py / v.zoom,
-                    };
+                    return nextZoom === v.zoom ? v : zoomAt(v, nextZoom, px, py);
                 });
             } else {
                 const dx = e.shiftKey ? e.deltaY : e.deltaX;
@@ -91,5 +100,15 @@ export function useViewport() {
         return () => el.removeEventListener('wheel', onWheel);
     }, []);
 
-    return { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef, zoom };
+    return {
+        containerRef,
+        clientToScene,
+        screenDeltaToScene,
+        boxToStyle,
+        groupTransform,
+        panBy,
+        resetZoom,
+        frozenRef,
+        zoom,
+    };
 }

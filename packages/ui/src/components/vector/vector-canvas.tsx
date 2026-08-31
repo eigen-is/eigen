@@ -11,7 +11,13 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
-import { isPendingMediaName, useMediaResolver, useUploadFile, useZombieMediaSweep } from '@workspace/lib/drive';
+import {
+    isPendingMediaName,
+    useCopyToMediaFolder,
+    useMediaResolver,
+    useUploadFile,
+    useZombieMediaSweep,
+} from '@workspace/lib/drive';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -25,6 +31,7 @@ import {
     elementBounds,
     fitImageSize,
     getElementsBounds,
+    type ImageSize,
     isLinearElement,
     isTransparent,
     type MarqueeMode,
@@ -55,7 +62,8 @@ import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
 import { CursorLayer } from '../collab';
 import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
-import { readImageSize } from '../media/read-image-size';
+import { HintPill } from '../hint-pill';
+import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { pointerCursor } from './cursor';
 import { ElementNode } from './element-node';
@@ -143,6 +151,13 @@ type Gesture = { pointerId: number } & (
     | { kind: 'marquee'; startX: number; startY: number; additive: boolean; base: string[] }
 );
 
+// Imperative image-insert surface the canvas publishes for the toolbar's Insert entries — the
+// editor owns the picker dialog, but placement needs the live viewport (centre + zoom).
+export type VectorImageInsert = {
+    insertFiles: (files: File[]) => void;
+    insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
+};
+
 type VectorCanvasProps = {
     elements: VectorElement[];
     meta: VectorMeta;
@@ -181,6 +196,8 @@ type VectorCanvasProps = {
     // local pointer's scene position (throttled in the editor's use-vector-presence).
     provider: WebsocketProvider | null;
     publishCursor: PublishCursor;
+    // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
+    imageInsertRef?: { current: VectorImageInsert | null };
 };
 
 // The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
@@ -212,15 +229,27 @@ export function VectorCanvas({
     aspectLocked,
     provider,
     publishCursor,
+    imageInsertRef,
 }: VectorCanvasProps) {
-    const { containerRef, clientToScene, screenDeltaToScene, boxToStyle, groupTransform, panBy, frozenRef, zoom } =
-        useViewport();
+    const {
+        containerRef,
+        clientToScene,
+        screenDeltaToScene,
+        boxToStyle,
+        groupTransform,
+        panBy,
+        resetZoom,
+        frozenRef,
+        zoom,
+    } = useViewport();
     // Images resolve/upload through the container's media/ folder (the provider the editor wraps
     // us in). resolveMediaUrl feeds every <image> href; startUpload drives the optimistic insert;
     // resolveMediaPath gives a copied image a portable source path for cross-mount paste.
-    const { resolveMediaUrl, resolveMediaPath, startUpload, mediaFolderId } = useMediaResolver();
+    const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, startUpload, mediaFolderId } = useMediaResolver();
     // Cross-mount paste re-uploads a copied image's blob into OUR media/ folder; mutateAsync is stable.
     const uploadFile = useUploadFile(ownerId, mountId);
+    // Toolbar "Add image" drive picks copy into media/ first (the slides idiom); mutateAsync is stable.
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, mountId);
 
     const [previews, setPreviews] = useState<Record<string, Box>>({});
     const [creating, setCreating] = useState<CreatingState | null>(null);
@@ -639,6 +668,21 @@ export function VectorCanvas({
         return clientToScene(rect.left + rect.width / 2, rect.top + rect.height / 2);
     }, [clientToScene, containerRef]);
 
+    // Natural-size boxes for a batch of images: each fits within the visible viewport (uniform,
+    // never upscale), centred on `anchor`, cascading +20,+20 per item — shared by every insert path.
+    const imagePlacements = useCallback(
+        (intrinsics: (ImageSize | null)[], anchor: { x: number; y: number }) => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            const view = { width: (rect?.width ?? 0) / zoom, height: (rect?.height ?? 0) / zoom };
+            return intrinsics.map((intrinsic, i) => {
+                const { width, height } = fitImageSize(intrinsic, view);
+                const off = i * IMAGE_CASCADE_OFFSET;
+                return { x: anchor.x + off - width / 2, y: anchor.y + off - height / 2, width, height };
+            });
+        },
+        [containerRef, zoom],
+    );
+
     // Drop/paste image(s) → upload into media/ and place each at natural size, centered on `anchor`
     // (a multi-file drop cascades +20,+20). Sizes are measured up-front so the adds run as one tight
     // synchronous batch = one undo step (an await between adds could split it past the UndoManager's
@@ -656,26 +700,16 @@ export function VectorCanvas({
                 images.map(async (file) => ({ file, intrinsic: await readImageSize(file) })),
             );
 
-            const rect = containerRef.current?.getBoundingClientRect();
-            const viewW = (rect?.width ?? 0) / zoom;
-            const viewH = (rect?.height ?? 0) / zoom;
+            const boxes = imagePlacements(
+                measured.map((m) => m.intrinsic),
+                anchor,
+            );
 
             undoManager?.stopCapturing();
             const pending: { id: string; promise: Promise<DrivePath | null> }[] = [];
-            for (const [i, { file, intrinsic }] of measured.entries()) {
-                // Natural size that fits within 80% of the visible viewport, uniform, never upscale.
-                const { width: w, height: h } = fitImageSize(intrinsic, { width: viewW, height: viewH });
-                const cx = anchor.x + i * IMAGE_CASCADE_OFFSET;
-                const cy = anchor.y + i * IMAGE_CASCADE_OFFSET;
+            for (const [i, { file }] of measured.entries()) {
                 const { pendingName, promise } = startUpload(file);
-                const id = addElement({
-                    type: 'image',
-                    x: cx - w / 2,
-                    y: cy - h / 2,
-                    width: w,
-                    height: h,
-                    mediaName: pendingName,
-                });
+                const id = addElement({ type: 'image', ...boxes[i], mediaName: pendingName });
                 if (id) pending.push({ id, promise });
             }
             undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
@@ -693,16 +727,64 @@ export function VectorCanvas({
         },
         [
             mediaFolderId,
-            zoom,
+            imagePlacements,
             startUpload,
             addElement,
             updateElementUntracked,
             deleteElementsUntracked,
             setSelectedIds,
             undoManager,
-            containerRef,
         ],
     );
+
+    // Drive-picked images: copy into media/, measure, then place all at natural size around the
+    // viewport centre in ONE transact = one undo step. Measuring goes by the copy result's own path —
+    // by NAME it would miss the pre-copy media listing (the slides idiom).
+    const insertDrivePaths = useCallback(
+        async (paths: DrivePath[]) => {
+            if (!mediaFolderId) return;
+            const results = await copyToMediaFolder({ paths, mediaFolderId }).catch(() => null);
+            if (!results?.length) return;
+            const measured = await Promise.all(
+                results.map(async (result) => ({
+                    name: result.name,
+                    intrinsic: await readImageSizeFromUrl(resolveMediaUrlByPath(result)),
+                })),
+            );
+            const boxes = imagePlacements(
+                measured.map((m) => m.intrinsic),
+                viewportCenterScene(),
+            );
+            undoManager?.stopCapturing();
+            const ids = addElements(
+                measured.map(({ name }, i) => ({ type: 'image' as const, ...boxes[i], mediaName: name })),
+            );
+            undoManager?.stopCapturing(); // trailing seal — the whole batch is one undo step
+            setSelectedIds(ids);
+        },
+        [
+            mediaFolderId,
+            copyToMediaFolder,
+            resolveMediaUrlByPath,
+            viewportCenterScene,
+            imagePlacements,
+            addElements,
+            undoManager,
+            setSelectedIds,
+        ],
+    );
+
+    // Publish the insert surface for the toolbar (cleared on unmount so a stale canvas never places).
+    useEffect(() => {
+        if (!imageInsertRef) return;
+        imageInsertRef.current = {
+            insertFiles: (files) => void insertImageFiles(files, viewportCenterScene()),
+            insertDrivePaths,
+        };
+        return () => {
+            imageInsertRef.current = null;
+        };
+    }, [imageInsertRef, insertImageFiles, viewportCenterScene, insertDrivePaths]);
 
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.
@@ -1600,10 +1682,15 @@ export function VectorCanvas({
             {/* Finish hint for a multi-point line/arrow draft: the finish triggers aren't discoverable, so
                 surface them while collecting clicks. Tokens resolve light inside .eigen-paper. */}
             {drawing.multiPointDraft && (
-                <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1 text-xs text-muted-foreground shadow-sm">
+                <HintPill className="bottom-3 left-1/2 -translate-x-1/2">
                     Enter or double-click to finish · Esc to cancel
-                </div>
+                </HintPill>
             )}
+            {/* Zoom readout; click resets to 100% about the viewport centre. Bottom-RIGHT: the
+                router devtools badge owns the bottom-left corner in dev. */}
+            <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
+                {Math.round(zoom * 100)}%
+            </HintPill>
             <VectorObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}

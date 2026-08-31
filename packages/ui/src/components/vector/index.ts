@@ -10,5 +10,5 @@ export {
     type TextDimensions,
     vectorFontString,
 } from './text-measure';
-export { VectorCanvas } from './vector-canvas';
+export { VectorCanvas, type VectorImageInsert } from './vector-canvas';
 export { VectorPropertiesPanel } from './vector-properties-panel';

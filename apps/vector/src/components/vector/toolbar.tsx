@@ -1,9 +1,19 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
+import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, TooltipButton } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuShortcut,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
 import { VECTOR_TOOLS, type VectorTool } from '@workspace/ui/components/vector';
-import { Diamond, Lock } from 'lucide-react';
+import { Diamond, ImagePlus } from 'lucide-react';
 
 type ToolbarProps = {
     path: DrivePath;
@@ -13,9 +23,11 @@ type ToolbarProps = {
     undoManager: Parameters<typeof useYjsUndoState>[0];
     tool: VectorTool;
     setTool: (tool: VectorTool) => void;
-    // Tool lock (Q): keeps the selected tool active for repeated placement — the padlock at the cluster end.
+    // Tool lock (Q): keeps the selected tool active for repeated placement — a toggle in the Edit menu.
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
+    // Present when the container has a media/ folder — opens the editor's image picker.
+    onInsertImage?: () => void;
     onAccessDialogOpen: () => void;
     // Document-level comments + activity (the props deliberately omitted until vector had a
     // comment lifecycle). Always offered when the panels are wired: desktop draws the side panel,
@@ -27,6 +39,20 @@ type ToolbarProps = {
     activityPanelOpen: boolean;
 };
 
+// The registry's `inserts` flag splits the menus: inserting tools fill the Insert menu; Select +
+// Eraser live in the Edit menu — also the only surface that reaches them below the compact breakpoint.
+const INSERT_TOOLS = VECTOR_TOOLS.filter((t) => t.inserts);
+const EDIT_TOOLS = VECTOR_TOOLS.filter((t) => !t.inserts);
+
+function ToolMenuItem({ tool, setTool }: { tool: (typeof VECTOR_TOOLS)[number]; setTool: (t: VectorTool) => void }) {
+    return (
+        <DropdownMenuItem onClick={() => setTool(tool.tool)}>
+            <tool.icon className="h-4 w-4 mr-2" /> {tool.label}
+            <DropdownMenuShortcut>{tool.shortcut}</DropdownMenuShortcut>
+        </DropdownMenuItem>
+    );
+}
+
 export function Toolbar({
     path,
     canWrite,
@@ -35,6 +61,7 @@ export function Toolbar({
     setTool,
     toolLocked,
     setToolLocked,
+    onInsertImage,
     onAccessDialogOpen,
     onToggleCommentPanel,
     commentPanelOpen,
@@ -44,6 +71,7 @@ export function Toolbar({
 }: ToolbarProps) {
     const { canUndo, canRedo, undo, redo } = useYjsUndoState(undoManager, canWrite);
     const { exportPath, isExporting } = useDocumentExport();
+    const isCompact = useIsCompactToolbar();
 
     return (
         <>
@@ -62,18 +90,45 @@ export function Toolbar({
                         />
                         {/* Render unconditionally once vector has a DocSearchProvider (Find items survive read-only). */}
                         {canWrite && (
-                            <EditMenu
-                                canEdit={canWrite}
-                                canUndo={canUndo}
-                                canRedo={canRedo}
-                                onUndo={undo}
-                                onRedo={redo}
-                            />
+                            <>
+                                <EditMenu
+                                    canEdit={canWrite}
+                                    canUndo={canUndo}
+                                    canRedo={canRedo}
+                                    onUndo={undo}
+                                    onRedo={redo}
+                                >
+                                    {EDIT_TOOLS.map((t) => (
+                                        <ToolMenuItem key={t.tool} tool={t} setTool={setTool} />
+                                    ))}
+                                    <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
+                                        Keep selected tool
+                                        <DropdownMenuShortcut>Q</DropdownMenuShortcut>
+                                    </DropdownMenuCheckboxItem>
+                                </EditMenu>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost">Insert</Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                        {INSERT_TOOLS.map((t) => (
+                                            <ToolMenuItem key={t.tool} tool={t} setTool={setTool} />
+                                        ))}
+                                        {onInsertImage && (
+                                            <DropdownMenuItem onClick={onInsertImage}>
+                                                <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                            </DropdownMenuItem>
+                                        )}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </>
                         )}
                     </div>
                 }
                 center={
-                    canWrite && (
+                    // Below the compact-toolbar breakpoint the cluster folds into the Insert menu (the slides idiom).
+                    canWrite &&
+                    !isCompact && (
                         <>
                             {VECTOR_TOOLS.map((t) => (
                                 <TooltipButton
@@ -85,13 +140,9 @@ export function Toolbar({
                                     onClick={() => setTool(t.tool)}
                                 />
                             ))}
-                            <TooltipButton
-                                icon={Lock}
-                                tooltipText="Keep selected tool (Q)"
-                                active={toolLocked}
-                                preventFocusLoss
-                                onClick={() => setToolLocked(!toolLocked)}
-                            />
+                            {onInsertImage && (
+                                <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onInsertImage} />
+                            )}
                         </>
                     )
                 }
