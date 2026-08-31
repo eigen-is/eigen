@@ -10,12 +10,12 @@ import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildImageClipboardItem,
     hasRichHtmlBeyondMarker,
+    materializeClipboardSvg,
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
-    readSvgClipboard,
+    readSvgClipboardWithItems,
     reUploadImage,
-    svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import { useCollabDoc } from '@workspace/lib/collab';
@@ -447,10 +447,20 @@ const TiptapEditor = ({
 
                     // A vector SVG payload (or a pasted SVG document) lands as a figure through the
                     // exact image-upload path — stored in media/, served as-is, rendered by <image> (R4.7).
-                    const svg = readSvgClipboard(event.clipboardData);
-                    if (svg && mediaFolderIdRef.current) {
+                    // Its images are name-referenced (eigen-media:); materialize re-uploads each into our
+                    // media/ and rewrites the svg's refs before it's stored (SVG-IMAGE-PASTE-PLAN R3).
+                    const svgPayload = readSvgClipboardWithItems(event.clipboardData);
+                    const svgMediaFolderId = mediaFolderIdRef.current;
+                    if (svgPayload && svgMediaFolderId) {
                         event.preventDefault();
-                        handleImageUpload(svgToImageFile(svg)).catch(() => {});
+                        materializeClipboardSvg(
+                            svgPayload.svg,
+                            svgPayload.items,
+                            svgMediaFolderId,
+                            uploadFile.mutateAsync,
+                        )
+                            .then(handleImageUpload)
+                            .catch(() => {});
                         return true;
                     }
 

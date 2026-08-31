@@ -3,7 +3,7 @@ import {
     buildTextClipboardItem,
     clipboardTextItemHasContent,
     readEigenClipboard,
-    readSvgClipboard,
+    readSvgClipboardWithItems,
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
@@ -641,13 +641,27 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         // A vector SVG payload (or a pasted SVG document) becomes a floating image
                         // through the app's exact image-file path — stored in media/, served as-is, rendered
                         // by <image> (R4.7). Ahead of the eigen-items split so a vector selection lands as one
-                        // image, not as empty shape carriers.
-                        const svg = readSvgClipboard(clipboardData);
-                        const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
-                        if (svg && onPasteImageFile) {
-                            e.preventDefault();
-                            onPasteImageFile(svgToImageFile(svg));
-                            return;
+                        // image, not as empty shape carriers. An image-bearing selection's svg references its
+                        // images BY NAME (eigen-media:), so it rides onPasteSvgFile — the app materializes each
+                        // into its media/ before storing the svg (SVG-IMAGE-PASTE-PLAN R3); an image-free svg
+                        // (foreign drawing, or a vector selection with no images) rides onPasteImageFile as today.
+                        const svgPayload = readSvgClipboardWithItems(clipboardData);
+                        if (svgPayload) {
+                            const svgImageItems = svgPayload.items.filter(
+                                (item): item is EigenClipboardImageItem => item.type === 'image',
+                            );
+                            const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
+                            const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
+                            if (onPasteSvgFile && svgImageItems.length > 0) {
+                                e.preventDefault();
+                                onPasteSvgFile(svgPayload.svg, svgImageItems);
+                                return;
+                            }
+                            if (onPasteImageFile) {
+                                e.preventDefault();
+                                onPasteImageFile(svgToImageFile(svgPayload.svg));
+                                return;
+                            }
                         }
 
                         const eigenData = readEigenClipboard(clipboardData);

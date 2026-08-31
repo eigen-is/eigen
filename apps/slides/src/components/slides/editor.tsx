@@ -4,13 +4,13 @@ import { getBackgroundStyle } from '@workspace/lib/background';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
+    materializeClipboardSvg,
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
     readEigenClipboardAsync,
-    readSvgClipboard,
+    readSvgClipboardWithItems,
     reUploadImage,
-    svgToImageFile,
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
@@ -663,11 +663,15 @@ function SlideEditorInner({
 
             // A vector SVG payload (or a pasted SVG document) becomes an image object through the
             // exact image-file path — stored in media/, served as-is, rendered by <image> (R4.7). Ahead of
-            // the eigen-items branch so a vector selection lands as one image, not its shape carriers.
-            const svg = e.clipboardData ? readSvgClipboard(e.clipboardData) : null;
-            if (svg) {
+            // the eigen-items branch so a vector selection lands as one image, not its shape carriers. Its
+            // images are name-referenced (eigen-media:); materialize re-uploads each into our media/ and
+            // rewrites the svg's refs before it's stored (SVG-IMAGE-PASTE-PLAN R3).
+            const svgPayload = e.clipboardData ? readSvgClipboardWithItems(e.clipboardData) : null;
+            if (svgPayload && mediaFolderId) {
                 e.preventDefault();
-                handleImageFile(svgToImageFile(svg));
+                materializeClipboardSvg(svgPayload.svg, svgPayload.items, mediaFolderId, uploadFile.mutateAsync)
+                    .then(handleImageFile)
+                    .catch(() => {});
                 return;
             }
 

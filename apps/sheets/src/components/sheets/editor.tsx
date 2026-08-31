@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
+import { materializeClipboardSvg, needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
 import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
@@ -197,6 +197,19 @@ function SheetEditorInner({
         [mediaFolderId, uploadFile.mutateAsync],
     );
 
+    // Consume a pasted vector SVG whose images are name-referenced (eigen-media:): materialize each
+    // into our media/ (re-uploading cross-container via the same seam as handlePasteEigenImage) and
+    // rewrite the svg's refs, then insert the rewritten svg as one floating image through the normal
+    // image path (SVG-IMAGE-PASTE-PLAN R3).
+    const handlePasteSvgFile = useCallback(
+        async (svg: string, imageItems: EigenClipboardImageItem[]) => {
+            if (!mediaFolderId) return;
+            const file = await materializeClipboardSvg(svg, imageItems, mediaFolderId, uploadFile.mutateAsync);
+            await handleImageFile(file);
+        },
+        [mediaFolderId, uploadFile.mutateAsync, handleImageFile],
+    );
+
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot pending
     // mediaNames over the imperative workbook API; removeImageByMediaName is noUndo (correct for a
     // sweep) and no-ops on a name a completed upload already swapped away.
@@ -371,6 +384,7 @@ function SheetEditorInner({
                                               onInsertImage: () => setImagePickerOpen(true),
                                               onPasteEigenImage: handlePasteEigenImage,
                                               onPasteImageFile: handleImageFile,
+                                              onPasteSvgFile: handlePasteSvgFile,
                                           }
                                         : {}),
                                     resolveImageUrl: resolveMediaUrl,

@@ -9,6 +9,7 @@ import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/type
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type Arrowhead,
+    eigenMediaHref,
     type FillStyle,
     isLinearElement,
     type Roundness,
@@ -147,10 +148,11 @@ function buildSelectionItems(
 // self-contained SVG of the same selection (R4.7) for hosts that can't place the typed carriers —
 // docs/sheets/slides render it as an image. The SVG carries the element JSON in a `<metadata>` block so
 // it round-trips back to native elements if pasted into vector without the eigen flavour. An
-// image-bearing selection writes NO svg flavour: the sync copy path can't inline image bytes, and baking
-// the live hrefs would break for every other viewer (preview URLs are owner-scoped, pending uploads are
-// tab-local blob: URLs) — those selections ride the typed items alone, where the cross-mount re-upload
-// seam keeps image fidelity (see CLIPBOARD.md).
+// image-bearing selection's SVG references its images BY NAME — `href="eigen-media:<name>"`, never
+// bytes — so the sync copy path stays byte-free and the ref resolves against the target's own media/
+// on paste (materializeClipboardSvg re-uploads, then the display path inlines, see CLIPBOARD.md). A
+// still-pending upload has no portable path, so it's omitted from the svg (sceneToSvg's null-media
+// contract) exactly as it's omitted from the typed items.
 export function buildSelectionData(
     ordered: VectorElement[],
     selectedIds: string[],
@@ -159,8 +161,13 @@ export function buildSelectionData(
 ): EigenClipboardData {
     const items = buildSelectionItems(ordered, selectedIds, resolveMediaPath);
     const selected = ordered.filter((el) => selectedIds.includes(el.id));
-    if (selected.some((el) => el.type === 'image')) return { version: 1, items };
-    const svg = embedClipboardSvgMetadata(sceneToSvg({ elements: selected, meta }), { version: 1, items });
+    const svg = embedClipboardSvgMetadata(
+        sceneToSvg(
+            { elements: selected, meta },
+            { resolveMedia: (name) => (resolveMediaPath(name) ? eigenMediaHref(name) : null) },
+        ),
+        { version: 1, items },
+    );
     return { version: 1, items, svg };
 }
 

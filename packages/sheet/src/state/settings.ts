@@ -129,6 +129,11 @@ export type Hooks = {
     // Paste of an OS image file (no eigen payload) — the app runs its fit-to-pane insert + upload
     // (the same path as the Insert menu and OS-file drop) (U5c OS branch).
     onPasteImageFile?: (file: File) => void;
+    // Paste of a vector SVG whose images are name-referenced (eigen-media:) — the app materializes
+    // each image into its media/ (re-uploading cross-container) and rewrites the svg's refs before
+    // inserting it as one floating image (SVG-IMAGE-PASTE-PLAN R3). `imageItems` is the re-upload
+    // manifest; a pasted svg with no image items rides onPasteImageFile instead.
+    onPasteSvgFile?: (svg: string, imageItems: EigenClipboardImageItem[]) => void;
     // Fired whenever the active floating image changes (selected, deselected, or its geometry
     // committed), so the app can mount/refresh its image properties panel. `null` when nothing is
     // active.
