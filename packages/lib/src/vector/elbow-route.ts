@@ -32,7 +32,6 @@ import { linearLocalToScene, linearSceneToLocal, type Point, parsePoints } from 
 import {
     isBindable,
     parseBinding,
-    parseFixedSegments,
     type VectorArrowElement,
     type VectorElement,
     type VectorShapeElement,
@@ -74,6 +73,8 @@ export function elbowRoute(
     const startArrowhead = arrow.startArrowhead !== 'none';
     const endArrowhead = arrow.endArrowhead !== 'none';
 
+    // The single derived route (DERIVED mode only — a pinned arrow never reaches here; arrowRoute returns
+    // its stored polyline verbatim, P1).
     const startEnd: LegEnd = {
         point: startGlobal,
         shape: startShape,
@@ -88,14 +89,7 @@ export function elbowRoute(
         arrowhead: endArrowhead,
         orig: origPoints?.end ?? endGlobal,
     };
-
-    // Pinned segments (EP-U5) split the route: A* only the connector legs between them, keep each pin
-    // verbatim. No pins ⇒ one leg, byte-identical to the pre-U5 single-route path.
-    const pins = scenePins(arrow, startGlobal, endGlobal);
-    const routeScene =
-        pins.length === 0
-            ? routeSceneLeg(startEnd, endEnd, !!arrow.startBinding)
-            : pinnedRoute(pins, startEnd, endEnd, !!arrow.startBinding);
+    const routeScene = routeSceneLeg(startEnd, endEnd, !!arrow.startBinding);
 
     const corners = getElbowArrowCornerPoints(removeElbowArrowShortSegments(routeScene));
     const local = corners.map((p) => linearSceneToLocal(arrow, p));
@@ -133,80 +127,17 @@ function routeSceneLeg(start: LegEnd, end: LegEnd, startBinding: boolean): Point
     return routeElbowArrow(data) ?? lRoute(start.point, end.point, data.startHeading);
 }
 
-// The pinned segments in SCENE space, degenerate ones dropped, ordered along the start→end chord. A pin
-// is a bare {a,b} vertex pair here — which end is the entry vs the exit is decided per pin in the stitch
-// loop by proximity to the incoming point, so a re-route can't misattribute it (no stored index).
-function scenePins(arrow: VectorArrowElement, startGlobal: Point, endGlobal: Point): { a: Point; b: Point }[] {
-    const segs = parseFixedSegments(arrow.fixedSegments);
-    if (segs.length === 0) return [];
-    const scene = segs
-        .map((s) => ({
-            a: linearLocalToScene(arrow, { x: s.start[0], y: s.start[1] }),
-            b: linearLocalToScene(arrow, { x: s.end[0], y: s.end[1] }),
-        }))
-        .filter((p) => p.a.x !== p.b.x || p.a.y !== p.b.y);
-    const vx = endGlobal.x - startGlobal.x;
-    const vy = endGlobal.y - startGlobal.y;
-    const len2 = vx * vx + vy * vy || 1;
-    const t = (p: { a: Point; b: Point }): number =>
-        (((p.a.x + p.b.x) / 2 - startGlobal.x) * vx + ((p.a.y + p.b.y) / 2 - startGlobal.y) * vy) / len2;
-    return scene
-        .map((p) => ({ p, t: t(p) }))
-        .sort((m, n) => m.t - n.t)
-        .map(({ p }) => p);
-}
-
-// Stitch the full route: connector leg → pinned segment → connector leg → … Each pinned segment is kept
-// verbatim (its two vertices); the leg before it is forced to arrive travelling along the pin's axis, and
-// the leg after it to leave along the same axis, so the joints stay orthogonal.
-function pinnedRoute(pins: { a: Point; b: Point }[], startEnd: LegEnd, endEnd: LegEnd, startBinding: boolean): Point[] {
-    const full: Point[] = [];
-    let prev = startEnd;
-    let prevBinding = startBinding;
-
-    for (const pin of pins) {
-        const entryIsA = manhattan(prev.point, pin.a) <= manhattan(prev.point, pin.b);
-        const entry = entryIsA ? pin.a : pin.b;
-        const exit = entryIsA ? pin.b : pin.a;
-        const axis = axisHeading(entry, exit);
-        appendLeg(full, routeSceneLeg(prev, virtualEnd(entry, axis), prevBinding));
-        full.push(exit);
-        prev = virtualEnd(exit, axis);
-        prevBinding = false;
-    }
-
-    appendLeg(full, routeSceneLeg(prev, endEnd, prevBinding));
-    return full;
-}
-
-// A virtual leg end at a pinned vertex: no shape, heading forced to the pin axis.
-function virtualEnd(point: Point, heading: Heading): LegEnd {
-    return { point, shape: null, headingOverride: heading, arrowhead: false, orig: point };
-}
-
-// Append a leg, dropping its first point when it repeats the running route's last (every leg starts where
-// the previous pinned vertex left off).
-function appendLeg(full: Point[], leg: Point[]): void {
-    const skip = full.length > 0 && leg.length > 0 && samePoint(full[full.length - 1], leg[0]) ? 1 : 0;
-    for (let i = skip; i < leg.length; i++) full.push(leg[i]);
-}
-
-function samePoint(a: Point, b: Point): boolean {
-    return a.x === b.x && a.y === b.y;
-}
-
-// The orthogonal heading from `from` to `to` — the pinned segment's own axis direction.
-function axisHeading(from: Point, to: Point): Heading {
-    if (from.x === to.x) return to.y > from.y ? HEADING_DOWN : HEADING_UP;
-    return to.x > from.x ? HEADING_RIGHT : HEADING_LEFT;
-}
-
 // The polyline an arrow draws/hits as: the derived orthogonal route for an elbow arrow (undefined without
 // scene context, so callers fall back to the stored points), or undefined for a straight arrow. The single
 // gate for "when does an elbow arrow get a derived route" — every render path (live canvas, previews, export)
 // routes through here so none can silently degrade an elbow arrow back to a straight line.
 export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>): Point[] | undefined {
-    return el.type === 'arrow' && el.elbow && byId ? elbowRoute(el, byId) : undefined;
+    if (el.type !== 'arrow' || !el.elbow) return undefined;
+    // PINNED (P1): the stored polyline IS the route — no router, no corner/short passes. The incremental
+    // editors (elbow-pins.ts) own it; every render path returns it verbatim so preview===commit holds.
+    if (el.fixedSegments !== '') return parsePoints(el.points);
+    // DERIVED: route the two endpoints (needs scene context for bound obstacles/headings).
+    return byId ? elbowRoute(el, byId) : undefined;
 }
 
 function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {

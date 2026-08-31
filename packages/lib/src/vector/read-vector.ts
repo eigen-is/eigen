@@ -4,6 +4,7 @@
 // primitive reads suffice even when the server hydrates values via Y.applyUpdate.
 
 import type * as Y from 'yjs';
+import { validateElbowPoints } from './elbow-pins';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
 import { parsePoints, serializePoints } from './geometry';
 import {
@@ -143,7 +144,7 @@ function readElement(value: unknown): VectorElement | null {
                 // Pinned route segments live only on an elbow arrow — a straight arrow ignores them (its
                 // route is the raw chord). Re-serialized through the canonical form: garbage and non
                 // axis-aligned entries drop, coords clamp like the endpoints, '' when none remain.
-                fixedSegments: elbow ? fixedSegments(value.get('fixedSegments')) : '',
+                fixedSegments: elbow ? fixedSegments(value.get('fixedSegments'), clamped) : '',
                 startArrowhead: oneOf(value.get('startArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.startArrowhead),
                 endArrowhead: oneOf(value.get('endArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.endArrowhead),
                 startBinding: binding(value.get('startBinding')),
@@ -170,16 +171,30 @@ function binding(v: unknown): string {
     return parsed ? serializeBinding(parsed) : '';
 }
 
-// Pinned segments to canonical form: drop malformed/non-axis-aligned entries (parseFixedSegments), clamp
-// each coordinate like a spatial field so one corrupt peer write can't blow the shared viewBox, then
-// re-serialize (or '' when nothing survives).
-function fixedSegments(v: unknown): string {
+// Pinned segments to canonical form (P12). A pinned elbow arrow stores its full polyline in `points`, so
+// the pins are validated against it: the polyline must be a valid orthogonal run of >= 4 points, each pin
+// index must fall on an interior segment (2 .. len-2 — the first and last segment can't be fixed), and each
+// pin's start/end are REBUILT from the polyline at its index so the stored copies can never drift. Any
+// violation ⇒ drop ALL pins ('' ⇒ the arrow self-heals to the derived route). Never throws.
+function fixedSegments(v: unknown, points: { x: number; y: number }[]): string {
     const parsed = parseFixedSegments(str(v, ''));
-    const clamped = parsed.map((s) => ({
-        start: [clampCoord(s.start[0]), clampCoord(s.start[1])] as [number, number],
-        end: [clampCoord(s.end[0]), clampCoord(s.end[1])] as [number, number],
-    }));
-    return serializeFixedSegments(clamped);
+    if (parsed.segments.length === 0) return '';
+    if (points.length < 4 || !validateElbowPoints(points)) return '';
+    const kept = [];
+    for (const seg of parsed.segments) {
+        if (seg.index < 2 || seg.index > points.length - 2) continue;
+        kept.push({
+            index: seg.index,
+            start: [points[seg.index - 1].x, points[seg.index - 1].y] as [number, number],
+            end: [points[seg.index].x, points[seg.index].y] as [number, number],
+        });
+    }
+    if (kept.length === 0) return '';
+    return serializeFixedSegments({
+        segments: kept,
+        startIsSpecial: parsed.startIsSpecial,
+        endIsSpecial: parsed.endIsSpecial,
+    });
 }
 
 // Second pass: a binding whose target no longer exists — or is no longer a bindable shape — is

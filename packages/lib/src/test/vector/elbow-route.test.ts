@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { elbowRoute } from '../../vector/elbow-route';
-import { type Bounds, followBindings, linearLocalToScene, type Point } from '../../vector/geometry';
+import type { Bounds, Point } from '../../vector/geometry';
 import {
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
@@ -251,86 +251,5 @@ describe('elbowRoute — route endpoints equal the stored endpoints exactly', ()
         const [first, last] = firstLast(arrow.points);
         expect(route[0]).toEqual(first);
         expect(route[route.length - 1]).toEqual(last);
-    });
-});
-
-describe('elbowRoute — pinned segments (fixedSegments)', () => {
-    // A pinned horizontal segment displaced off the direct path forces the route through that coordinate.
-    test('honors a pin — the route detours through the pinned coordinate', () => {
-        const arrow = arrowEl({
-            points: '[[0,0],[200,0]]',
-            width: 200,
-            height: 0,
-            fixedSegments: '[{"start":[60,-40],"end":[140,-40]}]',
-        });
-        const route = elbowRoute(arrow, byIdOf(arrow));
-        expect(isOrthogonal(route)).toBe(true);
-        // The pinned y=-40 is off the straight y=0 chord, so the route must reach it.
-        expect(route.some((p) => p.y === -40)).toBe(true);
-        expect(route.length).toBeGreaterThan(2);
-    });
-
-    test('is deterministic with a pin — identical every call', () => {
-        const arrow = arrowEl({
-            points: '[[0,0],[200,0]]',
-            width: 200,
-            height: 0,
-            fixedSegments: '[{"start":[60,-40],"end":[140,-40]}]',
-        });
-        expect(elbowRoute(arrow, byIdOf(arrow))).toEqual(elbowRoute(arrow, byIdOf(arrow)));
-    });
-
-    // Moving a bound shape re-glues the endpoint (followBindings) but the pin holds its SCENE coordinate.
-    test('a pin survives a bound-shape move — the pinned coordinate is kept', () => {
-        const a = shapeEl({ id: 'A', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 });
-        const arrow = arrowEl({
-            id: 'ar',
-            points: '[[150,0],[350,0]]',
-            x: 0,
-            y: 50,
-            width: 350,
-            height: 0,
-            startBinding: bind(a, [1, 0.5]),
-            fixedSegments: '[{"start":[200,-60],"end":[280,-60]}]',
-        });
-        // Pinned scene y before the move (arrow.y=50 + local -60 = -10).
-        const pinnedSceneY = 50 - 60;
-        const hasSceneY = (route: Point[], box: VectorArrowElement, y: number): boolean =>
-            route.some((p) => Math.abs(linearLocalToScene(box, p).y - y) < 1e-6);
-        const before = elbowRoute(arrow, byIdOf(a, arrow));
-        expect(hasSceneY(before, arrow, pinnedSceneY)).toBe(true);
-
-        // Move the shape up by 40; re-glue the arrow (co-shifts the pin) and re-route.
-        const a2 = { ...a, y: -40 };
-        const followed = followBindings(arrow, byIdOf(a2, arrow));
-        expect(followed).not.toBeNull();
-        const arrow2 = { ...arrow, ...followed! };
-        const after = elbowRoute(arrow2, byIdOf(a2, arrow2));
-        // Same SCENE coordinate, even though the arrow re-normalized to a new origin.
-        expect(hasSceneY(after, arrow2, pinnedSceneY)).toBe(true);
-    });
-
-    test('a pin on the direct path is a no-op detour and never throws', () => {
-        const arrow = arrowEl({
-            points: '[[0,0],[200,0]]',
-            width: 200,
-            height: 0,
-            // Pin lies exactly on the y=0 chord — no detour, must stay orthogonal and finite.
-            fixedSegments: '[{"start":[60,0],"end":[140,0]}]',
-        });
-        const route = elbowRoute(arrow, byIdOf(arrow));
-        expect(isOrthogonal(route)).toBe(true);
-        expect(route.every((p) => Number.isFinite(p.x) && Number.isFinite(p.y))).toBe(true);
-    });
-
-    test('a malformed / degenerate pin string routes as if unpinned', () => {
-        const pinned = arrowEl({
-            points: '[[0,0],[200,0]]',
-            width: 200,
-            height: 0,
-            fixedSegments: '[{"start":[10,10],"end":[10,10]}]', // zero-length ⇒ dropped
-        });
-        const plain = arrowEl({ points: '[[0,0],[200,0]]', width: 200, height: 0 });
-        expect(elbowRoute(pinned, byIdOf(pinned))).toEqual(elbowRoute(plain, byIdOf(plain)));
     });
 });

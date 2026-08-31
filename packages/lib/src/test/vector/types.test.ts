@@ -56,22 +56,26 @@ describe('arrowShapeFields', () => {
 });
 
 describe('parseFixedSegments / serializeFixedSegments', () => {
-    test('round-trips valid axis-aligned segments', () => {
-        const s = '[{"start":[10,0],"end":[10,50]},{"start":[0,20],"end":[30,20]}]';
+    test('round-trips a valid envelope (index + axis-aligned segments + flags)', () => {
+        const s =
+            '{"segments":[{"index":2,"start":[10,0],"end":[10,50]},{"index":4,"start":[0,20],"end":[30,20]}],"startIsSpecial":true,"endIsSpecial":false}';
         expect(serializeFixedSegments(parseFixedSegments(s))).toBe(s);
     });
 
-    test("'' ⇒ no segments, and empty array serializes back to ''", () => {
-        expect(parseFixedSegments('')).toEqual([]);
-        expect(serializeFixedSegments([])).toBe('');
+    test("'' ⇒ no pins, and an empty envelope serializes back to ''", () => {
+        expect(parseFixedSegments('')).toEqual({ segments: [], startIsSpecial: false, endIsSpecial: false });
+        expect(serializeFixedSegments({ segments: [], startIsSpecial: false, endIsSpecial: false })).toBe('');
     });
 
-    test('drops garbage: non-JSON, non-array, non-axis-aligned and degenerate entries', () => {
-        expect(parseFixedSegments('not json')).toEqual([]);
-        expect(parseFixedSegments('{"start":[0,0]}')).toEqual([]);
-        // Diagonal (neither x nor y shared) and zero-length (both shared) are rejected; the valid one stays.
+    test('drops garbage: non-JSON, legacy bare arrays, and diagonal/degenerate/indexless entries', () => {
+        expect(parseFixedSegments('not json').segments).toEqual([]);
+        // Legacy index-less array form (deleted EP-U5 geometric keying) is dropped wholesale.
+        expect(parseFixedSegments('[{"start":[0,0],"end":[0,5]}]').segments).toEqual([]);
+        // Diagonal, zero-length and index-less entries rejected; the valid one stays.
         expect(
-            parseFixedSegments('[{"start":[0,0],"end":[5,5]},{"start":[1,1],"end":[1,1]},{"start":[2,0],"end":[2,9]}]'),
-        ).toEqual([{ start: [2, 0], end: [2, 9] }]);
+            parseFixedSegments(
+                '{"segments":[{"index":2,"start":[0,0],"end":[5,5]},{"index":3,"start":[1,1],"end":[1,1]},{"start":[2,0],"end":[2,9]},{"index":5,"start":[2,0],"end":[2,9]}]}',
+            ).segments,
+        ).toEqual([{ index: 5, start: [2, 0], end: [2, 9] }]);
     });
 });

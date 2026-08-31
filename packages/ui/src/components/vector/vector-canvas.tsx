@@ -258,9 +258,19 @@ export function VectorCanvas({
     // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
     const cursorBoxes = useMemo(() => {
         const m = new Map<string, Box>();
-        for (const el of ordered) m.set(el.id, elementBox(el));
+        // An elbow arrow's ring must enclose its ROUTED polyline (the derived route or, when pinned, the
+        // stored polyline), never the raw 2-endpoint frame — elementBounds(el, route). Others keep their
+        // own rotated box.
+        for (const el of ordered) {
+            m.set(
+                el.id,
+                el.type === 'arrow' && el.elbow
+                    ? boundsToBox(elementBounds(el, arrowRoute(el, committedById)))
+                    : elementBox(el),
+            );
+        }
         return m;
-    }, [ordered]);
+    }, [ordered, committedById]);
 
     // Freehand / line / eraser gestures + line point-handles live in a sibling hook (the canvas only
     // dispatches) — CANVAS.md's rule that this file must not grow. `busy` hides the point handles while
@@ -1392,12 +1402,14 @@ export function VectorCanvas({
         selectedRender.length >= 1
             ? boundsToBox(selectedRender.map((el) => elementBounds(el, arrowRoute(el, renderById))).reduce(unionBounds))
             : null;
-    // A single 2-point line/arrow shows no ObjectTransform (no ring/grips/rotate grip) — the round vertex
-    // handles below are its whole affordance, rotation via the panel Angle input. 3+-point linears keep the box.
+    // No ObjectTransform box (no ring/grips/rotate grip) for a single 2-point line/arrow OR any ELBOW arrow —
+    // the round endpoint dots (and, for an elbow, the pin dots) are its whole affordance. The elbow gate keys
+    // on `elbow`, NOT the stored point count: a pinned elbow stores its full polyline (>2 points), and stale
+    // pre-collapse data can too, yet an elbow must never mount the box. 3+-point straight linears keep the box.
     const singleLinear2pt =
         single !== null &&
         (single.type === 'line' || single.type === 'arrow') &&
-        parsePoints(single.points).length <= 2;
+        ((single.type === 'arrow' && single.elbow) || parsePoints(single.points).length <= 2);
     // Chrome is suppressed during a create/marquee drag (grip flicker), a vertex drag (drawing.hiddenId —
     // else a stale box lingers over the reshaping point draft), or a text overlay; a move keeps it.
     const showChrome = !creating && !marquee && !editing && !drawing.active && !drawing.hiddenId;

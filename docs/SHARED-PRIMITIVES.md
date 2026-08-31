@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1133 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1141 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -430,7 +430,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (303)
+## Types (305)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -663,6 +663,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
+| `ParsedFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `SceneToSvgOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
@@ -738,7 +740,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (431)
+## Utilities & constants (437)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1068,6 +1070,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `fitImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
+| `focusSnapPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `followBindings` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `FREEDRAW_SIZE_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `generateKeyBetween` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
@@ -1092,6 +1095,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `listEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `marqueeHits` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `marqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `materializeFirstPin` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
+| `moveEndpoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
+| `moveSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `normalizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1108,6 +1114,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `redockBindingsForElbow` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `renormalize` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `rescalePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeRotatedRect` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1119,7 +1126,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializeFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeSideMidpoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `shiftFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `snapBoxToTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
@@ -1129,6 +1135,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `unpinSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
+| `validateElbowPoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateOrderKey` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `alphaGroupKey` | `@workspace/ui` | packages/ui/src/components/alphabetical-list.tsx |
 | `FILTER_LABELS` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/app-sidebar.tsx |

@@ -456,13 +456,14 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         locked: false,
         index: 'a1',
         roundness: 'sharp',
-        points: '[[0,0],[90,20]]',
+        points: '[[0,0],[45,0],[45,20],[90,20]]',
         startArrowhead: 'circle',
         endArrowhead: 'triangle',
         startBinding: '',
         endBinding: '',
         elbow: true,
-        fixedSegments: '[{"start":[45,0],"end":[45,20]}]',
+        fixedSegments:
+            '{"segments":[{"index":2,"start":[45,0],"end":[45,20]}],"startIsSpecial":false,"endIsSpecial":false}',
         text: 'label',
         fontSize: 13,
         fontFamily: 'Inter',
@@ -510,5 +511,65 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
                 expect(got[field]).toEqual(record[field]);
             }
         }
+    });
+});
+
+describe('readVectorFromDoc — pinned elbow validation (P12)', () => {
+    const arrowFields = (over: Record<string, unknown>) => ({
+        type: 'arrow',
+        elbow: true,
+        x: 0,
+        y: 0,
+        ...over,
+    });
+
+    test('a valid pinned polyline round-trips its pins (index rebuilt from the polyline)', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                arrowFields({
+                    points: '[[0,0],[40,0],[40,60],[80,60]]',
+                    fixedSegments:
+                        '{"segments":[{"index":2,"start":[40,0],"end":[40,60]}],"startIsSpecial":false,"endIsSpecial":false}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.fixedSegments).toBe(
+            '{"segments":[{"index":2,"start":[40,0],"end":[40,60]}],"startIsSpecial":false,"endIsSpecial":false}',
+        );
+    });
+
+    test('pins are DROPPED (arrow stays a derived elbow) when the polyline is too short for them', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                // Only two points — no interior segment can carry a pin.
+                arrowFields({
+                    points: '[[0,0],[80,60]]',
+                    fixedSegments: '{"segments":[{"index":2,"start":[40,0],"end":[40,60]}]}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.fixedSegments).toBe('');
+    });
+
+    test('an out-of-range / first-or-last index is dropped', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                arrowFields({
+                    points: '[[0,0],[40,0],[40,60],[80,60]]',
+                    // index 3 is the LAST segment (points[2]→points[3]) — unfixable.
+                    fixedSegments: '{"segments":[{"index":3,"start":[40,60],"end":[80,60]}]}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.fixedSegments).toBe('');
     });
 });

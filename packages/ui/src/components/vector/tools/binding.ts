@@ -94,6 +94,12 @@ function otherEndAim(
     points: Point[],
     ordered: VectorElement[],
 ): Point {
+    // A multi-point straight arrow aims from the ADJACENT vertex — the segment that actually leaves this
+    // end — not the far endpoint (Excalidraw's utils.ts:707-733). Only a 2-pointer falls back to the
+    // opposite end (its bound anchor when set, else the far endpoint).
+    if (points.length > 2) {
+        return linearLocalToScene(arrow, end === 'start' ? points[1] : points[points.length - 2]);
+    }
     const otherLocal = end === 'start' ? points[points.length - 1] : points[0];
     const parsed = parseBinding(end === 'start' ? arrow.endBinding : arrow.startBinding);
     if (parsed) {

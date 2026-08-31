@@ -174,7 +174,9 @@ export function LinePointHandles({
     return (
         <>
             {vertices.map((p, i) =>
-                hiddenVertex(i) ? null : (
+                // An elbow arrow shows ONLY its two endpoint dots — its interior vertices are the routed/
+                // pinned polyline, managed by ElbowPinHandles, not draggable here.
+                (isElbow && i !== 0 && i !== vertices.length - 1) || hiddenVertex(i) ? null : (
                     <div
                         key={`v${i}`}
                         className={`eigen-vertex-handle pointer-events-auto touch-none cursor-pointer${

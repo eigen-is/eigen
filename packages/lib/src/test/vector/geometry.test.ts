@@ -14,6 +14,7 @@ import {
     distanceToPolyline,
     elbowAnchorScene,
     elementBounds,
+    focusSnapPoint,
     followBindings,
     getElementBounds,
     getElementsBounds,
@@ -947,6 +948,28 @@ describe('elementBounds', () => {
         expect(elementBounds(el)).toEqual(getElementBounds(el));
     });
 
+    test('an elbow with a STALE >2-point stored box uses the route bounds when the route is passed (EP-U5b)', () => {
+        // A pinned/converted elbow whose stored box is stale-wide (200x160) but whose real polyline spans
+        // only 80x60. The selection/union/ring path passes the route, so the box must track the route — a
+        // stale stored frame (Reinder\'s below-right ghost box) must never leak.
+        const stale = arrowEl({
+            points: '[[0,0],[40,0],[40,60],[80,60]]',
+            elbow: true,
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 160,
+        });
+        const route = parsePoints(stale.points);
+        // With the route: bounds are the polyline bbox (80x60), NOT the stale 200x160 stored box.
+        const b = elementBounds(stale, route);
+        expect([b.minX, b.minY, b.maxX, b.maxY]).toEqual([0, 0, 80, 60]);
+        // Without a route (a callsite that forgot it) it would fall back to the stale box — the trap.
+        const stale2 = elementBounds(stale);
+        expect(stale2.maxX).toBe(200);
+        expect(b.maxX).not.toBe(stale2.maxX);
+    });
+
     test('a wide label unions its rect into the bounds', () => {
         const el = arrowEl({ points: '[[0,0],[100,0]]', width: 100, height: 0, text: 'wide', labelWidth: 200 });
         const b = elementBounds(el);
@@ -1146,13 +1169,29 @@ describe('shapeSideMidpoints', () => {
         ]);
     });
 
-    test('diamond → the four slanted-edge midpoints', () => {
+    test('diamond → its four vertices/tips (right, bottom, left, top)', () => {
         const dia = shapeEl({ id: 'd', type: 'diamond', x: 0, y: 0, width: 200, height: 100 });
         expect(shapeSideMidpoints(dia)).toEqual([
-            { x: 150, y: 25 },
-            { x: 150, y: 75 },
-            { x: 50, y: 75 },
-            { x: 50, y: 25 },
+            { x: 200, y: 50 },
+            { x: 100, y: 100 },
+            { x: 0, y: 50 },
+            { x: 100, y: 0 },
         ]);
+    });
+});
+
+describe('focusSnapPoint (EP-U5b eigen extension)', () => {
+    const rect = () => shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+    // zoom 1 ⇒ bindingDistance 15 + strokeWidth/2 (1) = 16px magnet radius.
+    test('snaps the aim to the nearest side midpoint within the band', () => {
+        expect(focusSnapPoint(rect(), { x: 198, y: 50 }, 1)).toEqual({ x: 200, y: 50 });
+        expect(focusSnapPoint(rect(), { x: 100, y: 3 }, 1)).toEqual({ x: 100, y: 0 });
+    });
+    test('snaps to the centre when the aim sits near the middle', () => {
+        expect(focusSnapPoint(rect(), { x: 102, y: 52 }, 1)).toEqual({ x: 100, y: 50 });
+    });
+    test('returns null past the band (no magnet — the raw aim stands)', () => {
+        expect(focusSnapPoint(rect(), { x: 100, y: 200 }, 1)).toBeNull();
+        expect(focusSnapPoint(rect(), { x: 50, y: 50 }, 1)).toBeNull();
     });
 });

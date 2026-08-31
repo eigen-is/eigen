@@ -3,15 +3,14 @@
 // by hit-testing, bounds, the properties bar, and (later) the shared ObjectTransform
 // primitive.
 
+import { moveEndpoints, renormalize } from './elbow-pins';
 import { getLineHeightPx } from './font-metrics';
 import {
     type Arrowhead,
     isBindable,
     isTransparent,
     parseBinding,
-    parseFixedSegments,
     serializeBinding,
-    serializeFixedSegments,
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
@@ -442,10 +441,12 @@ export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
     const local: Point[] =
         shape.type === 'diamond'
             ? [
-                  { x: x + (3 * w) / 4, y: y + h / 4 }, // top-right edge
-                  { x: x + (3 * w) / 4, y: y + (3 * h) / 4 }, // bottom-right edge
-                  { x: x + w / 4, y: y + (3 * h) / 4 }, // bottom-left edge
-                  { x: x + w / 4, y: y + h / 4 }, // top-left edge
+                  // The diamond's four VERTICES (its tips — getDiamondBaseCorners), where a bound arrow docks,
+                  // NOT the slanted-edge midpoints. Same order as the rect sides: right, bottom, left, top.
+                  { x: x + w, y: y + h / 2 }, // right tip
+                  { x: x + w / 2, y: y + h }, // bottom tip
+                  { x, y: y + h / 2 }, // left tip
+                  { x: x + w / 2, y }, // top tip
               ]
             : [
                   { x: x + w, y: y + h / 2 }, // right
@@ -455,6 +456,26 @@ export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
               ];
     const center = boxCenter(shape);
     return local.map((p) => rotatePoint(p, center, shape.angle));
+}
+
+// The nearest focus SNAP target for a dragged aim — one of the shape's four side midpoints or its centre,
+// within bindingDistance + strokeWidth/2, else null (EP-U5b eigen extension: Excalidraw's focus-point drag
+// stores the RAW pointer ratio and lights no dots — arrows/focus.ts handleFocusPointDrag; Reinder wants the
+// aim to snap to and light the shape's snap points, so this magnet mirrors SnapDots' side-midpoint set plus
+// the centre). Scene coordinates throughout; the caller suppresses it on Ctrl/Cmd like every other snap.
+export function focusSnapPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
+    const within = bindingDistance(zoom) + shape.strokeWidth / 2;
+    const targets = [...shapeSideMidpoints(shape), boxCenter(shape)];
+    let best: Point | null = null;
+    let bestDist = within;
+    for (const t of targets) {
+        const d = Math.hypot(point.x - t.x, point.y - t.y);
+        if (d <= bestDist) {
+            bestDist = d;
+            best = t;
+        }
+    }
+    return best;
 }
 
 // The nearest side midpoint the bind-time snap docks onto, or null: the FIRST midpoint within
@@ -678,14 +699,31 @@ export function followBindings(
     if (!start && !end) return null;
     const points = parsePoints(arrow.points);
     if (points.length < 2) return null;
+    // PINNED (P6): keep the interior polyline + pins verbatim, move only the bound endpoints and re-drop
+    // their connector pairs (moveEndpoints), then renormalize as the sealed write. The A* router never runs.
+    if (arrow.fixedSegments !== '') {
+        const newStart = start ? boundEndpoint(arrow, 'start', start) : null;
+        const newEnd = end ? boundEndpoint(arrow, 'end', end) : null;
+        const moved = moveEndpoints(arrow, newStart, newEnd);
+        const patch = renormalize({ ...arrow, ...moved });
+        if (
+            patch.points === arrow.points &&
+            patch.x === arrow.x &&
+            patch.y === arrow.y &&
+            patch.width === arrow.width &&
+            patch.height === arrow.height &&
+            patch.fixedSegments === arrow.fixedSegments
+        ) {
+            return null;
+        }
+        return patch;
+    }
+
+    // DERIVED: recompute the two endpoints and re-normalize (unchanged pre-pin behaviour).
     const next = points.map((p) => ({ ...p }));
     if (start) next[0] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start));
     if (end) next[next.length - 1] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end));
     const result = normalizeLinear(arrow, next);
-    // Pins are stored in the local frame; normalizeLinear re-origins x/y, so a pinned elbow's segments
-    // co-shift by the origin delta to hold their SCENE position while the bound endpoint follows the shape
-    // (EP-U5: "pin survives a shape move, keeps the pinned coordinate"). A no-op when there are no pins.
-    const fixedSegments = shiftFixedSegments(arrow.fixedSegments, arrow.x - result.x, arrow.y - result.y);
     if (
         result.points === arrow.points &&
         result.x === arrow.x &&
@@ -695,22 +733,7 @@ export function followBindings(
     ) {
         return null;
     }
-    return { ...result, fixedSegments };
-}
-
-// Translate every pinned segment by (dx,dy) in the local frame — the one owner of pin co-shifting, used
-// wherever an elbow arrow's origin is re-normalized (bound follow, endpoint-drag commit). Returns the
-// input verbatim when there is nothing to shift, so a straight arrow and the no-pin case pay nothing.
-export function shiftFixedSegments(fixedSegments: string, dx: number, dy: number): string {
-    if (fixedSegments === '' || (dx === 0 && dy === 0)) return fixedSegments;
-    const segs = parseFixedSegments(fixedSegments);
-    if (segs.length === 0) return fixedSegments;
-    return serializeFixedSegments(
-        segs.map((s) => ({
-            start: [s.start[0] + dx, s.start[1] + dy] as [number, number],
-            end: [s.end[0] + dx, s.end[1] + dy] as [number, number],
-        })),
-    );
+    return { ...result, fixedSegments: '' };
 }
 
 function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {

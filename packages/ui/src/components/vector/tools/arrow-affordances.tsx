@@ -11,6 +11,7 @@ import {
     bindingAnchor,
     bindingDistance,
     boundEndpoint,
+    focusSnapPoint,
     type Point,
     parseBinding,
     parsePoints,
@@ -30,6 +31,10 @@ const SNAP_DOT_SCREEN_R = 4;
 const FOCUS_POINT_SIZE = 10;
 const FOCUS_CIRCLE_SCREEN_R = FOCUS_POINT_SIZE / 1.5 / 1.5;
 const FOCUS_MIN_SCREEN_GAP = FOCUS_POINT_SIZE * 1.5;
+// The focus GRAB ring only claims the pointer once the anchor clears the endpoint's own ~22px grab radius —
+// in the 15-22px overlap zone the ENDPOINT drag takes precedence (Excalidraw's "endpoint dragging takes
+// precedence"). The dashed INDICATOR still shows from FOCUS_MIN_SCREEN_GAP; only the grab is gated wider.
+const FOCUS_GRAB_MIN_SCREEN_GAP = 22;
 // Screen radius of the solid dock dot at a bound straight endpoint.
 const FOCUS_DOCK_SCREEN_R = 4;
 
@@ -113,6 +118,7 @@ function focusEnds(
     byId: Map<string, VectorElement>,
     zoom: number,
     hideEnd: 'start' | 'end' | null,
+    minScreenGap: number = FOCUS_MIN_SCREEN_GAP,
 ): FocusEnd[] {
     if (arrow.elbow || parsePoints(arrow.points).length !== 2) return [];
     const out: FocusEnd[] = [];
@@ -124,7 +130,7 @@ function focusEnds(
         if (!isBindableShape(shape)) continue;
         const anchor = anchorToScene(shape, binding.fixedPoint);
         const endpoint = boundEndpoint(arrow, end, shape);
-        if (dist(anchor, endpoint) * zoom < FOCUS_MIN_SCREEN_GAP) continue;
+        if (dist(anchor, endpoint) * zoom < minScreenGap) continue;
         out.push({ end, shape, anchor, endpoint });
     }
     return out;
@@ -213,7 +219,7 @@ export function FocusPointHandles({
     frozenRef: MutableRefObject<boolean>;
     // Live aim during a drag (null clears the preview) — the host re-binds the dragged end to `fixedPoint`
     // and re-derives its endpoint, so the drawn arrow + this handle both track.
-    onPreview: (end: 'start' | 'end', fixedPoint: [number, number] | null) => void;
+    onPreview: (end: 'start' | 'end', fixedPoint: [number, number] | null, pointer?: Point) => void;
     // One sealed write of the new aim on release.
     onCommit: (end: 'start' | 'end', fixedPoint: [number, number]) => void;
 }) {
@@ -223,7 +229,8 @@ export function FocusPointHandles({
     const abortRef = useRef<AbortController | null>(null);
     useEffect(() => () => abortRef.current?.abort(), []);
 
-    const ends = focusEnds(arrow, byId, zoom, hideEnd);
+    // Grab handles claim the pointer only past the wider gap, so the endpoint wins the 15-22px overlap zone.
+    const ends = focusEnds(arrow, byId, zoom, hideEnd, FOCUS_GRAB_MIN_SCREEN_GAP);
     if (ends.length === 0) return null;
 
     const startDrag = (e: React.PointerEvent, end: 'start' | 'end', shape: VectorShapeElement) => {
@@ -239,13 +246,17 @@ export function FocusPointHandles({
         const pointerId = e.pointerId;
         let latest: [number, number] | null = null;
 
-        const update = (clientX: number, clientY: number) => {
+        const update = (clientX: number, clientY: number, suppressed: boolean) => {
             const scene = clientToScene(clientX, clientY);
-            const [rx, ry] = bindingAnchor(shape, scene);
+            // EP-U5b eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
+            // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer is
+            // still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
+            const snapped = suppressed ? scene : (focusSnapPoint(shape, scene, zoom) ?? scene);
+            const [rx, ry] = bindingAnchor(shape, snapped);
             const fixedPoint: [number, number] = [clampUnit(rx), clampUnit(ry)];
             latest = fixedPoint;
             setDrag({ end, anchor: anchorToScene(shape, fixedPoint) });
-            onPreview(end, fixedPoint);
+            onPreview(end, fixedPoint, scene);
         };
         const teardown = () => {
             setDrag(null);
@@ -254,7 +265,7 @@ export function FocusPointHandles({
         };
         const onMove = (me: PointerEvent) => {
             if (me.pointerId !== pointerId) return;
-            update(me.clientX, me.clientY);
+            update(me.clientX, me.clientY, me.ctrlKey || me.metaKey);
         };
         const onUp = (pe: PointerEvent) => {
             if (pe.pointerId !== pointerId) return;

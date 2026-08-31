@@ -87,13 +87,14 @@ export type VectorArrowElement = VectorElementBase & {
     // route is DERIVED on every read/render (elbowRoute), never stored. An elbow arrow pins angle 0 (its
     // route lives in the unrotated local frame — the reader forces it). `roundness` is ignored while true.
     elbow: boolean;
-    // Pinned route segments (Excalidraw's fixedSegments), a JSON `[{start,end},…]` string or '' when
-    // none (parseFixedSegments/serializeFixedSegments). Each entry is one axis-aligned segment the router
-    // must keep where the user dragged it, in the arrow's LOCAL frame (same as points; elbow pins angle 0
-    // so it's a pure translation). Excalidraw keys a pin by its INDEX into the stored full polyline; we
-    // store no polyline (the route is derived every read), so an index would be meaningless across a
-    // re-route — we store the pin's two vertices instead and order them geometrically at route time
-    // (elbow-route). Ignored on a straight (non-elbow) arrow. Empty for old data ⇒ reads back unchanged.
+    // Pinned route segments (Excalidraw's fixedSegments), '' when none. NON-empty flips the elbow arrow
+    // into STORED-POLYLINE mode: `points` then holds the full routed polyline (not just the two endpoints)
+    // and the incremental editors in elbow-pins.ts mutate it — the A* router never runs on a pinned arrow
+    // (P1). The string is a JSON envelope `{"segments":[{index,start,end},…],"startIsSpecial","endIsSpecial"}`:
+    // each pin keys `points[index-1]→points[index]` (Excalidraw's identity), start/end are LOCAL copies of
+    // those two vertices (self-describing for validation/resize, always re-derived from the polyline), and
+    // the isSpecial flags mark a synthetic L-jog point after start / before end. Ignored on a straight
+    // arrow. Old index-less data is dropped by the reader (the feature is unreleased — no BC).
     fixedSegments: string;
     startArrowhead: Arrowhead;
     endArrowhead: Arrowhead;
@@ -116,11 +117,15 @@ export type VectorElement =
 // anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
 export type Binding = { elementId: string; fixedPoint: [number, number] };
 
-// One pinned route segment: its two endpoints in the arrow's LOCAL frame (like points). Always
-// axis-aligned — start and end share exactly one coordinate (a horizontal OR vertical segment) — which
-// is the invariant the router relies on to keep the pin on its axis. No index: order is re-derived from
-// geometry at route time, so a re-route that changes the segment count can't misattribute a pin.
-export type FixedSegment = { start: [number, number]; end: [number, number] };
+// One pinned polyline segment (Excalidraw's FixedSegment). `index` is the identity — it keys
+// `points[index-1]→points[index]`; `start`/`end` are LOCAL copies of those two vertices (always
+// axis-aligned: they share exactly one coordinate). Every writer rebuilds start/end from the
+// post-normalization polyline, so the copies never drift from the index.
+export type FixedSegment = { index: number; start: [number, number]; end: [number, number] };
+
+// The parsed fixedSegments envelope: the pins plus the two synthetic-point markers (P3). A pinned elbow
+// arrow's whole pin state, decoded from the one JSON scalar.
+export type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
 export type VectorMeta = { background: string; gridSize: number };
 
@@ -268,30 +273,44 @@ export function serializeBinding(b: Binding): string {
     return JSON.stringify({ elementId: b.elementId, fixedPoint: b.fixedPoint });
 }
 
-// Pinned segments materialize from their JSON string, dropping anything malformed: an entry must be a
-// finite axis-aligned segment (start/end sharing exactly one coordinate, and not a degenerate point).
-// A '' or all-invalid string ⇒ no pins. Lenient like parseBinding — one corrupt entry can't wedge the
-// arrow; the whole scene never throws over a bad peer write.
-export function parseFixedSegments(s: string): FixedSegment[] {
-    if (s === '') return [];
+// Decode the fixedSegments envelope, dropping anything malformed: each pin needs an integer index and a
+// finite axis-aligned start/end (sharing exactly one coordinate, not degenerate). A '' or unusable string
+// ⇒ no pins. Lenient like parseBinding — a corrupt entry can't wedge the arrow, and the scene never throws
+// over a bad peer write. Index-less legacy arrays (the deleted EP-U5 geometric keying) decode to no pins.
+export function parseFixedSegments(s: string): ParsedFixedSegments {
+    const empty: ParsedFixedSegments = { segments: [], startIsSpecial: false, endIsSpecial: false };
+    if (s === '') return empty;
     let raw: unknown;
     try {
         raw = JSON.parse(s);
     } catch {
-        return [];
+        return empty;
     }
-    if (!Array.isArray(raw)) return [];
+    // Envelope form only — a bare array is legacy and dropped.
+    if (typeof raw !== 'object' || raw === null || !Array.isArray((raw as { segments?: unknown }).segments)) {
+        return empty;
+    }
+    const { segments, startIsSpecial, endIsSpecial } = raw as {
+        segments: unknown[];
+        startIsSpecial?: unknown;
+        endIsSpecial?: unknown;
+    };
     const out: FixedSegment[] = [];
-    for (const entry of raw) {
+    for (const entry of segments) {
         const seg = fixedSegmentOf(entry);
         if (seg) out.push(seg);
     }
-    return out;
+    return {
+        segments: out,
+        startIsSpecial: startIsSpecial === true,
+        endIsSpecial: endIsSpecial === true,
+    };
 }
 
 function fixedSegmentOf(entry: unknown): FixedSegment | null {
     if (typeof entry !== 'object' || entry === null) return null;
-    const { start, end } = entry as { start?: unknown; end?: unknown };
+    const { index, start, end } = entry as { index?: unknown; start?: unknown; end?: unknown };
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 1) return null;
     const s = pairOf(start);
     const e = pairOf(end);
     if (!s || !e) return null;
@@ -299,7 +318,7 @@ function fixedSegmentOf(entry: unknown): FixedSegment | null {
     const vertical = s[0] === e[0];
     // Exactly one axis shared, and the segment has length (a point is not a segment).
     if (horizontal === vertical) return null;
-    return { start: s, end: e };
+    return { index, start: s, end: e };
 }
 
 function pairOf(v: unknown): [number, number] | null {
@@ -309,8 +328,14 @@ function pairOf(v: unknown): [number, number] | null {
     return [a, b];
 }
 
-export function serializeFixedSegments(segments: FixedSegment[]): string {
-    return segments.length === 0 ? '' : JSON.stringify(segments.map((s) => ({ start: s.start, end: s.end })));
+// Encode pins back to the envelope scalar. '' when there are no pins (⇒ the arrow returns to derived mode).
+export function serializeFixedSegments(parsed: ParsedFixedSegments): string {
+    if (parsed.segments.length === 0) return '';
+    return JSON.stringify({
+        segments: parsed.segments.map((s) => ({ index: s.index, start: s.start, end: s.end })),
+        startIsSpecial: parsed.startIsSpecial,
+        endIsSpecial: parsed.endIsSpecial,
+    });
 }
 
 // The reverse index the forward bindings imply: shape id → the arrows bound to it, either end. Derived

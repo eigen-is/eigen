@@ -17,11 +17,14 @@ import {
     elementToSvg,
     isBindable,
     linearLocalToScene,
+    moveEndpoints,
     normalizeLinear,
+    type PinPatch,
     type Point,
     parseBinding,
     parsePoints,
-    shiftFixedSegments,
+    renormalize,
+    unpinSegment,
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
@@ -100,16 +103,6 @@ function arrowElement(origin: Point, points: Point[], seed: number): VectorArrow
         fontSize: DEFAULT_TEXT_PROPS.fontSize,
         fontFamily: DEFAULT_TEXT_PROPS.fontFamily,
     };
-}
-
-// normalizeLinear for a reshape, co-shifting an elbow arrow's pinned segments with the re-origin so they
-// hold their scene position (EP-U5). Lines and unpinned arrows return the plain normalize — no extra field.
-function reshapeLinear(el: VectorLinearElement | VectorArrowElement, points: Point[]) {
-    const norm = normalizeLinear(el, points);
-    if (el.type === 'arrow' && el.elbow && el.fixedSegments !== '') {
-        return { ...norm, fixedSegments: shiftFixedSegments(el.fixedSegments, el.x - norm.x, el.y - norm.y) };
-    }
-    return norm;
 }
 
 type DrawingToolsParams = {
@@ -201,6 +194,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // Drives the filled `.eigen-vertex-handle-selected` dot, and is what Delete/Backspace removes — never
     // the whole element while a point is selected. State, not a ref: the selected dot must re-render.
     const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
+    // The pinned segment (polyline index) the user has clicked to select — Delete on it unpins (P9.3).
+    const [selectedPinIndex, setSelectedPinIndex] = useState<number | null>(null);
 
     const [activeKind, setActiveKind] = useState<'freedraw' | 'line' | 'eraser' | null>(null);
     const [previewEl, setPreviewEl] = useState<VectorElement | null>(null);
@@ -550,6 +545,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             elbowDragRef.current = null;
             setDragEnd(null);
             setFocusDragEnd(null);
+            setSelectedPinIndex(null);
         }
         // Drop any point selection that no longer resolves: the element deselected/changed, or a remote
         // peer shrank its point count below the selected index — leaving the filled dot gone while Delete
@@ -565,10 +561,27 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setDragEnd(null);
             return;
         }
+        if (
+            selectedLine.type === 'arrow' &&
+            selectedLine.elbow &&
+            selectedLine.fixedSegments !== '' &&
+            isEndpoint(index, points.length)
+        ) {
+            // A PINNED elbow endpoint drag (P6): keep the interior polyline + every pin verbatim, re-drop
+            // only this end's connector (moveEndpoints). The binding rides along unchanged (no re-dock, v1).
+            const arrow = selectedLine;
+            const end = index === 0 ? 'start' : 'end';
+            const scene = linearLocalToScene(arrow, points[index]);
+            const patch = moveEndpoints(arrow, end === 'start' ? scene : null, end === 'end' ? scene : null);
+            elbowDragRef.current = null;
+            setDragEnd(end);
+            setPointDraft({ id: arrow.id, el: { ...arrow, ...patch } });
+            return;
+        }
         if (selectedLine.type === 'arrow' && isEndpoint(index, points.length)) {
             const arrow = selectedLine;
             const end = index === 0 ? 'start' : 'end';
-            const reshaped = { ...arrow, ...reshapeLinear(arrow, points) };
+            const reshaped = { ...arrow, ...normalizeLinear(arrow, points) };
             setDragEnd(end);
             const endScene = linearLocalToScene(arrow, points[index]);
             if (arrow.elbow) {
@@ -608,8 +621,20 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             return;
         }
         undoManager?.stopCapturing();
-        if (selectedLine.type === 'arrow') {
-            const reshaped = { ...selectedLine, ...reshapeLinear(selectedLine, points) };
+        if (
+            selectedLine.type === 'arrow' &&
+            selectedLine.elbow &&
+            selectedLine.fixedSegments !== '' &&
+            isEndpoint(index, points.length)
+        ) {
+            // Pinned elbow endpoint commit (P6): moveEndpoints then the P7 renormalization, one sealed write.
+            const arrow = selectedLine;
+            const end = index === 0 ? 'start' : 'end';
+            const scene = linearLocalToScene(arrow, points[index]);
+            const moved = moveEndpoints(arrow, end === 'start' ? scene : null, end === 'end' ? scene : null);
+            updateElement(arrow.id, renormalize({ ...arrow, ...moved }));
+        } else if (selectedLine.type === 'arrow') {
+            const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
             if (selectedLine.elbow && isEndpoint(index, points.length)) {
                 // Replay the last preview frame's cached dock — never re-run the candidate search from the
                 // release cursor (D4). Recompute only in the degenerate no-move case (no preview frame ran).
@@ -638,20 +663,22 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setPointDraft(null);
     };
 
-    // Elbow segment-pin (fixedSegments) preview/commit (EP-U5). The preview stores the tentative pins on a
-    // draft element so its DERIVED route — the same elbowRoute the commit reads — is exactly what release
-    // writes (preview===commit). The commit changes only `fixedSegments`; the endpoints don't move.
-    const onElbowPinPreview = (fixedSegments: string | null) => {
-        if (fixedSegments === null || selectedLine?.type !== 'arrow') {
+    // Elbow segment-pin preview/commit (EP-U5b). A pin drag returns a full geometry PATCH (points +
+    // fixedSegments + box); the preview mounts it on a draft element (arrowRoute reads its stored polyline
+    // verbatim, P1), and the commit runs the P7 renormalization so the sealed write === the last preview
+    // frame for a clean drag (P13). Materialize/moveSegment/unpin all flow through here.
+    const onElbowPinPreview = (patch: PinPatch | null) => {
+        if (patch === null || selectedLine?.type !== 'arrow') {
             setPointDraft(null);
             return;
         }
-        setPointDraft({ id: selectedLine.id, el: { ...selectedLine, fixedSegments } });
+        setPointDraft({ id: selectedLine.id, el: { ...selectedLine, ...patch } });
     };
-    const onElbowPinCommit = (fixedSegments: string) => {
+    const onElbowPinCommit = (patch: PinPatch) => {
         if (selectedLine?.type !== 'arrow') return;
         undoManager?.stopCapturing();
-        updateElement(selectedLine.id, { fixedSegments });
+        updateElement(selectedLine.id, renormalize({ ...selectedLine, ...patch }));
+        setSelectedPinIndex(null);
         setPointDraft(null);
     };
 
@@ -659,10 +686,11 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // and re-derives its chord endpoint on a draft element, so the drawn arrow + the dashed line + the dots
     // all track; `focusDragEnd` hides the vertex handles for the drag. The commit stores the RAW dragged aim
     // (no re-projection — Excalidraw's handleFocusPointDrag) as one sealed write.
-    const onFocusPreview = (end: 'start' | 'end', fixedPoint: [number, number] | null) => {
+    const onFocusPreview = (end: 'start' | 'end', fixedPoint: [number, number] | null, pointer?: Point) => {
         if (fixedPoint === null || selectedLine?.type !== 'arrow') {
             setPointDraft(null);
             setFocusDragEnd(null);
+            setBindHint(null);
             return;
         }
         const binding = parseBinding(end === 'start' ? selectedLine.startBinding : selectedLine.endBinding);
@@ -672,9 +700,14 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             id: selectedLine.id,
             el: { ...selectedLine, ...bindFocusPoint(selectedLine, end, binding.elementId, fixedPoint, byId) },
         });
+        // EP-U5b eigen extension: light the shape's snap dots at the live aim so the magnet is visible.
+        const shape = ordered.find((el) => el.id === binding.elementId);
+        if (pointer && shape && isBindable(shape)) setBindShape(shape, pointer, false);
+        else setBindHint(null);
     };
     const onFocusCommit = (end: 'start' | 'end', fixedPoint: [number, number]) => {
         setFocusDragEnd(null);
+        setBindHint(null);
         if (selectedLine?.type !== 'arrow') {
             setPointDraft(null);
             return;
@@ -750,6 +783,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
               frozenRef,
               onPreview: onElbowPinPreview,
               onCommit: onElbowPinCommit,
+              selectedPinIndex,
+              onSelectPin: setSelectedPinIndex,
           })
         : null;
     const handles =
@@ -819,6 +854,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 setSelectedPointIndex(null);
                 return true;
             }
+            if (selectedPinIndex !== null) {
+                setSelectedPinIndex(null);
+                return true;
+            }
             return false;
         },
         finish: () => {
@@ -833,6 +872,21 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         // cannot fall through and delete the element out from under a selected point. With no point
         // selected we return false and selection-delete removes the whole element as usual.
         deleteSelectedPoint: () => {
+            // A selected PIN unpins (P9.3) — precedence over vertex/element delete, one sealed step.
+            if (
+                selectedPinIndex !== null &&
+                selectedLine?.type === 'arrow' &&
+                selectedLine.elbow &&
+                selectedLine.fixedSegments !== ''
+            ) {
+                undoManager?.stopCapturing();
+                updateElement(
+                    selectedLine.id,
+                    renormalize({ ...selectedLine, ...unpinSegment(selectedLine, selectedPinIndex) }),
+                );
+                setSelectedPinIndex(null);
+                return true;
+            }
             const index = selectedPointIndex;
             if (index === null || !selectedLine) return false;
             const pts = parsePoints(selectedLine.points);
