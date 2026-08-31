@@ -17,6 +17,7 @@ import {
     linearLocalToScene,
     normalizeLinear,
     type Point,
+    parsePoints,
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
@@ -165,6 +166,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // commitLine finish, which have no pointer event to read the modifier from. The creation drag reads
     // it straight off its pointer event (a stuck ref after a missed keyup can't affect that path).
     const suppressRef = useRef(false);
+    // The vertex index the pointer rests on over a selected line/arrow's handles (null off any handle) —
+    // Delete/Backspace removes THAT vertex rather than the whole element (UA3). Read synchronously in the
+    // capture-phase key handler, so a ref, not state.
+    const hoveredVertexRef = useRef<number | null>(null);
 
     const [activeKind, setActiveKind] = useState<'freedraw' | 'line' | 'eraser' | null>(null);
     const [previewEl, setPreviewEl] = useState<VectorElement | null>(null);
@@ -455,6 +460,17 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         !busy && !activeKind && canWrite && (sole?.type === 'line' || sole?.type === 'arrow') ? sole : undefined;
     const isEndpoint = (index: number, count: number) => index === 0 || index === count - 1;
 
+    // If the selected line/arrow vanishes mid vertex-drag — a remote delete unmounts LinePointHandles
+    // before its pointerup — its preview element and binding highlight would otherwise linger. Drop them
+    // the moment the selection stops resolving to a line/arrow (also a plain deselect: harmless there).
+    const selectedLineId = selectedLine?.id;
+    useEffect(() => {
+        if (!selectedLineId) {
+            setPointDraft(null);
+            setBindCandidate(null);
+        }
+    }, [selectedLineId]);
+
     const onPointPreview = (points: Point[] | null, index: number) => {
         if (!points || !selectedLine) {
             setPointDraft(null);
@@ -504,6 +520,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
               frozenRef,
               onPreview: onPointPreview,
               onCommit: onPointCommit,
+              onVertexHover: (index: number | null) => {
+                  hoveredVertexRef.current = index;
+              },
           })
         : null;
 
@@ -521,9 +540,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             : null;
 
     // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
-    const apiRef = useRef<{ escape: () => boolean; finish: () => boolean; blur: () => void }>({
+    const apiRef = useRef<{
+        escape: () => boolean;
+        finish: () => boolean;
+        deleteVertex: () => boolean;
+        blur: () => void;
+    }>({
         escape: () => false,
         finish: () => false,
+        deleteVertex: () => false,
         blur: () => {},
     });
     apiRef.current = {
@@ -548,6 +573,31 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             finishLineWith(lineRef.current.committed);
             return true;
         },
+        // Delete/Backspace with a vertex handle hovered acts on THAT vertex, winning over the keyboard
+        // hook's delete-selection. While a handle is hovered the key is ABSORBED here — it never deletes
+        // the whole element out from under the pointer: an interior vertex of a 3+-point linear is
+        // removed (one sealed step), an endpoint (index 0/last, where an arrow's bindings ride) or a
+        // 2-pointer no-ops. Elbow arrows are the exception: their route is derived, they have no editable
+        // vertex, so we DON'T consume and Delete falls through to removing the whole arrow.
+        deleteVertex: () => {
+            const index = hoveredVertexRef.current;
+            if (index === null || !selectedLine) return false;
+            if (selectedLine.type === 'arrow' && selectedLine.elbow) return false;
+            const pts = parsePoints(selectedLine.points);
+            if (index > 0 && index < pts.length - 1 && pts.length > 2) {
+                undoManager?.stopCapturing();
+                updateElement(
+                    selectedLine.id,
+                    normalizeLinear(
+                        selectedLine,
+                        pts.filter((_, i) => i !== index),
+                    ),
+                );
+                undoManager?.stopCapturing();
+                hoveredVertexRef.current = null;
+            }
+            return true;
+        },
         // Focus loss can swallow the pointerup (alt-tab mid-gesture) — commit like ObjectTransform does
         // so no gesture is left tracking a released pointer / a preview stuck on screen.
         blur: () => {
@@ -568,6 +618,15 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 return;
             }
             if (e.key === 'Enter' && apiRef.current.finish()) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            // A hovered vertex claims Delete/Backspace before the keyboard hook's delete-selection (which
+            // binds on document in the bubble phase) — stopping propagation here keeps that from also
+            // firing. Falls through when no vertex is hovered (or an elbow arrow), so selection delete
+            // still works normally.
+            if ((e.key === 'Delete' || e.key === 'Backspace') && apiRef.current.deleteVertex()) {
                 e.preventDefault();
                 e.stopPropagation();
             }
