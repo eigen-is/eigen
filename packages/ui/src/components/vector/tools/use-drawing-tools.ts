@@ -19,6 +19,7 @@ import {
     linearLocalToScene,
     normalizeLinear,
     type Point,
+    parseBinding,
     parsePoints,
     shiftFixedSegments,
     type VectorArrowElement,
@@ -31,8 +32,15 @@ import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import type { VectorTool } from '../hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
-import { FocusIndicators, SnapDots } from './arrow-affordances';
-import { bindArrow, bindElbowEnd, bindingCandidate, bindingOutlineElement, followOtherEnd } from './binding';
+import { FocusIndicators, FocusPointHandles, SnapDots } from './arrow-affordances';
+import {
+    bindArrow,
+    bindElbowEnd,
+    bindFocusPoint,
+    bindingCandidate,
+    bindingOutlineElement,
+    followOtherEnd,
+} from './binding';
 import { ElbowPinHandles } from './elbow-pin-handles';
 import { markErase } from './eraser';
 import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from './freedraw';
@@ -213,6 +221,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     } | null>(null);
     // Which arrow endpoint is mid-drag (null when idle) — the focus indicator hides that end (B4).
     const [draggedEnd, setDragEnd] = useState<'start' | 'end' | null>(null);
+    // Which end's focus point (the aim dot inside a bound shape) is being dragged (null when idle) — its
+    // vertex/endpoint handles are suppressed for the drag so a re-orbiting endpoint dot can't mislead (D5).
+    const [focusDragEnd, setFocusDragEnd] = useState<'start' | 'end' | null>(null);
 
     const setBindShape = (shape: VectorShapeElement | undefined, pointer: Point, elbow: boolean) =>
         setBindHint(shape ? { shapeId: shape.id, pointer, elbow } : null);
@@ -538,6 +549,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setBindHint(null);
             elbowDragRef.current = null;
             setDragEnd(null);
+            setFocusDragEnd(null);
         }
         // Drop any point selection that no longer resolves: the element deselected/changed, or a remote
         // peer shrank its point count below the selected index — leaving the filled dot gone while Delete
@@ -643,6 +655,39 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setPointDraft(null);
     };
 
+    // Focus-point (aim dot) drag preview/commit (D5). The preview re-binds the dragged end to the live aim
+    // and re-derives its chord endpoint on a draft element, so the drawn arrow + the dashed line + the dots
+    // all track; `focusDragEnd` hides the vertex handles for the drag. The commit stores the RAW dragged aim
+    // (no re-projection — Excalidraw's handleFocusPointDrag) as one sealed write.
+    const onFocusPreview = (end: 'start' | 'end', fixedPoint: [number, number] | null) => {
+        if (fixedPoint === null || selectedLine?.type !== 'arrow') {
+            setPointDraft(null);
+            setFocusDragEnd(null);
+            return;
+        }
+        const binding = parseBinding(end === 'start' ? selectedLine.startBinding : selectedLine.endBinding);
+        if (!binding) return;
+        setFocusDragEnd(end);
+        setPointDraft({
+            id: selectedLine.id,
+            el: { ...selectedLine, ...bindFocusPoint(selectedLine, end, binding.elementId, fixedPoint, byId) },
+        });
+    };
+    const onFocusCommit = (end: 'start' | 'end', fixedPoint: [number, number]) => {
+        setFocusDragEnd(null);
+        if (selectedLine?.type !== 'arrow') {
+            setPointDraft(null);
+            return;
+        }
+        const binding = parseBinding(end === 'start' ? selectedLine.startBinding : selectedLine.endBinding);
+        if (binding) {
+            undoManager?.stopCapturing();
+            updateElement(selectedLine.id, bindFocusPoint(selectedLine, end, binding.elementId, fixedPoint, byId));
+            undoManager?.stopCapturing();
+        }
+        setPointDraft(null);
+    };
+
     // The elbow arrow whose route the pin dots sit on: the live preview draft while a pin drags (so the
     // dots track the re-routing snake), else the committed selection.
     const elbowForPins =
@@ -652,19 +697,46 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 : selectedLine
             : null;
 
-    const linePointHandles = selectedLine
-        ? createElement(LinePointHandles, {
-              line: selectedLine,
-              zoom,
-              boxToStyle,
-              clientToScene,
-              frozenRef,
-              onPreview: onPointPreview,
-              onCommit: onPointCommit,
-              selectedIndex: selectedPointIndex,
-              onSelect: setSelectedPointIndex,
-          })
-        : null;
+    // The arrow the focus affordances read: the live preview draft (so a focus/endpoint drag re-aims the
+    // dashed line + dots) else the committed selection.
+    const focusArrow =
+        pointDraft?.el.type === 'arrow' ? pointDraft.el : selectedLine?.type === 'arrow' ? selectedLine : null;
+
+    // A focus-point drag suppresses the vertex handles (a re-orbiting endpoint dot would detach from the
+    // shaft mid-drag); every other time they show for a selected line/arrow.
+    const linePointHandles =
+        selectedLine && !focusDragEnd
+            ? createElement(LinePointHandles, {
+                  line: selectedLine,
+                  zoom,
+                  boxToStyle,
+                  clientToScene,
+                  frozenRef,
+                  onPreview: onPointPreview,
+                  onCommit: onPointCommit,
+                  selectedIndex: selectedPointIndex,
+                  onSelect: setSelectedPointIndex,
+              })
+            : null;
+
+    // The draggable aim dots over a selected bound straight arrow's focus points (D5) — a DOM overlay, so its
+    // pointerdown claims the gesture before the canvas hit-test. Hidden during an endpoint/pin drag
+    // (`draggedEnd`) and while a non-select tool is active.
+    const focusPointHandles =
+        focusArrow && !focusArrow.elbow && !activeKind && !draggedEnd
+            ? createElement(FocusPointHandles, {
+                  key: 'focus-handles',
+                  arrow: focusArrow,
+                  byId,
+                  zoom,
+                  hideEnd: null,
+                  boxToStyle,
+                  clientToScene,
+                  frozenRef,
+                  onPreview: onFocusPreview,
+                  onCommit: onFocusCommit,
+              })
+            : null;
 
     // Endpoint dots (every line/arrow) plus, for an elbow arrow, the segment-pin dots on its derived route.
     const elbowPinHandles = elbowForPins
@@ -681,7 +753,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
           })
         : null;
     const handles =
-        linePointHandles || elbowPinHandles ? createElement(Fragment, null, linePointHandles, elbowPinHandles) : null;
+        linePointHandles || elbowPinHandles || focusPointHandles
+            ? createElement(Fragment, null, linePointHandles, elbowPinHandles, focusPointHandles)
+            : null;
 
     // The shape-following outline over the shape a dragged/hovered arrow endpoint reaches (creation, a
     // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: `elementToSvg`
@@ -705,9 +779,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
 
     // The straight-arrow focus point (B4/D5): shown for a single selected bound arrow, and during its
     // endpoint drag for the OTHER end (the dragged end is hidden). Reads the live preview element while
-    // dragging so the un-dragged end reflects its re-orbit (D7).
-    const focusArrow =
-        pointDraft?.el.type === 'arrow' ? pointDraft.el : selectedLine?.type === 'arrow' ? selectedLine : null;
+    // dragging so the un-dragged end reflects its re-orbit (D7) / its aim (D5).
     const focusIndicators =
         focusArrow && !focusArrow.elbow && !activeKind
             ? createElement(FocusIndicators, { arrow: focusArrow, byId, zoom, hideEnd: draggedEnd })

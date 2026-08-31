@@ -728,6 +728,43 @@
     @apply h-6 w-6;
 }
 
+/* The draggable focus-point grab target (EP-U4/D5): a transparent 22px hit ring, centred over the SVG hollow
+   anchor dot that arrow-affordances draws in the scene group, so a straight arrow's aim point can be grabbed
+   with the same generous target as a vertex handle (Excalidraw's POINT_HANDLE_SIZE+1). The visible hollow dot
+   + dashed line + solid dock dot are SVG; this element is interaction only. A hover halo (::before) mirrors
+   the vertex dots' affordance, suppressed mid-drag via .eigen-point-handle-no-halo. */
+.eigen-focus-handle {
+    @apply absolute rounded-full;
+    width: 22px;
+    height: 22px;
+    transform: translate(-50%, -50%);
+    /* Contain the ::before halo's negative z-index so it sits behind the SVG dot but above the scene. */
+    isolation: isolate;
+}
+
+.eigen-focus-handle::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    background: var(--selection-handle);
+    opacity: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.eigen-focus-handle:hover::before {
+    opacity: 0.4;
+}
+
+.eigen-focus-handle.eigen-point-handle-no-halo::before {
+    opacity: 0;
+}
+
 /* Presence, selection, and in-document search chrome is screen-only; the print
    clone copies the live editor DOM, so strip it here. */
 @media print {
@@ -735,7 +772,8 @@
     .collaboration-cursor__label,
     .eigen-selection-handle,
     .eigen-vertex-handle,
-    .eigen-midpoint-handle {
+    .eigen-midpoint-handle,
+    .eigen-focus-handle {
         display: none;
     }
 

@@ -5,6 +5,7 @@
 // canvas and the drawing hook call, so those files only dispatch.
 
 import {
+    anchorToScene,
     type Box,
     bindingAnchor,
     bindingDistance,
@@ -18,6 +19,7 @@ import {
     type Point,
     parseBinding,
     parsePoints,
+    projectFixedPointOntoDiagonal,
     remapBinding,
     serializeBinding,
     type VectorArrowElement,
@@ -83,12 +85,42 @@ export function bindingOutlineElement(shape: VectorShapeElement, zoom: number): 
     };
 }
 
-function bindingFor(ordered: VectorElement[], scene: Point, zoom: number, suppressed: boolean): string {
+// The aim the OTHER end holds while `end` binds — the point projectFixedPointOntoDiagonal casts its ray
+// from (Excalidraw's `a`): the opposite end's anchor when it is bound (stable through this end's drag),
+// else the opposite endpoint's raw scene position.
+function otherEndAim(
+    arrow: VectorArrowElement,
+    end: 'start' | 'end',
+    points: Point[],
+    ordered: VectorElement[],
+): Point {
+    const otherLocal = end === 'start' ? points[points.length - 1] : points[0];
+    const parsed = parseBinding(end === 'start' ? arrow.endBinding : arrow.startBinding);
+    if (parsed) {
+        const otherShape = ordered.find((el) => el.id === parsed.elementId);
+        if (otherShape && isBindable(otherShape)) return anchorToScene(otherShape, parsed.fixedPoint);
+    }
+    return linearLocalToScene(arrow, otherLocal);
+}
+
+function bindingFor(
+    arrow: VectorArrowElement,
+    ordered: VectorElement[],
+    scene: Point,
+    otherEnd: Point,
+    zoom: number,
+    suppressed: boolean,
+): string {
     const id = bindingCandidate(ordered, scene, zoom, suppressed);
     if (!id) return '';
     const shape = ordered.find((el) => el.id === id);
     if (!shape || !isBindable(shape)) return '';
-    return serializeBinding({ elementId: id, fixedPoint: bindingAnchor(shape, scene) });
+    // Straight arrows aim the stored ratio through a natural line — project the raw endpoint onto the shape's
+    // diagonals / centre lines (or snap to a side midpoint), Excalidraw's bind-time nicety that makes fresh
+    // arrows point through the middle rather than at wherever the cursor landed. Elbow arrows keep the raw
+    // anchor (their outline dock is resolved separately, never a diagonal).
+    const focus = arrow.elbow ? scene : (projectFixedPointOntoDiagonal(shape, scene, otherEnd, arrow, zoom) ?? scene);
+    return serializeBinding({ elementId: id, fixedPoint: bindingAnchor(shape, focus) });
 }
 
 // Resolve an arrow's bindings on commit (creation or an endpoint-handle drag). For each end flagged in
@@ -114,8 +146,12 @@ export function bindArrow(
     const points = parsePoints(arrow.points);
     const startScene = linearLocalToScene(arrow, points[0]);
     const endScene = linearLocalToScene(arrow, points[points.length - 1]);
-    const startBinding = evaluate.start ? bindingFor(ordered, startScene, zoom, suppressed) : arrow.startBinding;
-    const endBinding = evaluate.end ? bindingFor(ordered, endScene, zoom, suppressed) : arrow.endBinding;
+    const startBinding = evaluate.start
+        ? bindingFor(arrow, ordered, startScene, otherEndAim(arrow, 'start', points, ordered), zoom, suppressed)
+        : arrow.startBinding;
+    const endBinding = evaluate.end
+        ? bindingFor(arrow, ordered, endScene, otherEndAim(arrow, 'end', points, ordered), zoom, suppressed)
+        : arrow.endBinding;
     const bound = { ...arrow, startBinding, endBinding };
     const byId = new Map(ordered.map((el) => [el.id, el]));
     const geom = followBindings(bound, byId) ?? {
@@ -171,6 +207,25 @@ export function bindElbowEnd(
     byId: Map<string, VectorElement>,
 ): BoundGeom {
     const binding = candidate && fixedPoint ? serializeBinding({ elementId: candidate, fixedPoint }) : '';
+    const startBinding = end === 'start' ? binding : arrow.startBinding;
+    const endBinding = end === 'end' ? binding : arrow.endBinding;
+    return { startBinding, endBinding, ...followedGeom({ ...arrow, startBinding, endBinding }, byId) };
+}
+
+// Re-aim a straight arrow's already-bound end to a NEW fixedPoint dragged on its focus dot (D5). The bound
+// SHAPE is unchanged — only the aim ratio moves — so there is no candidate search and no diagonal projection
+// (Excalidraw's handleFocusPointDrag stores the raw dragged ratio; the projection is a bind-time-only
+// nicety, and re-projecting here would fight the drag). followBindings re-derives the chord endpoint from the
+// new anchor, exactly as the preview showed, so pointer-up is a visual no-op. `fixedPoint` is the caller's
+// already-clamped ([0,1]) aim, so the anchor stays inside the shape.
+export function bindFocusPoint(
+    arrow: VectorArrowElement,
+    end: 'start' | 'end',
+    elementId: string,
+    fixedPoint: [number, number],
+    byId: Map<string, VectorElement>,
+): BoundGeom {
+    const binding = serializeBinding({ elementId, fixedPoint });
     const startBinding = end === 'start' ? binding : arrow.startBinding;
     const endBinding = end === 'end' ? binding : arrow.endBinding;
     return { startBinding, endBinding, ...followedGeom({ ...arrow, startBinding, endBinding }, byId) };

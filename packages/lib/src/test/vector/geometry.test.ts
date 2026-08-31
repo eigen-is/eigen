@@ -30,12 +30,14 @@ import {
     outlinePoint,
     type Point,
     parsePoints,
+    projectFixedPointOntoDiagonal,
     remapBinding,
     rescalePoints,
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
     serializePoints,
+    shapeSideMidpoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
@@ -1039,5 +1041,118 @@ describe('elbow arrows — derived-route consumption', () => {
             ]),
         );
         expect(after).not.toEqual(before);
+    });
+});
+
+// --- projectFixedPointOntoDiagonal (D5 bind-time aim) ---------------------------------
+// Excalidraw's projectFixedPointOntoDiagonal: a straight arrow's bind-time aim snaps to a side midpoint the
+// cursor is near, else projects onto the shape's diagonals (rect) / centre lines (ellipse/diamond) along the
+// ray from the other end, accepted only inside the shape; null → fall back to the raw cursor.
+describe('projectFixedPointOntoDiagonal', () => {
+    // A point P is collinear with the infinite line through A,B (the shrunk diagonal is a sub-segment of it).
+    const onLine = (a: Point, b: Point, p: Point): boolean =>
+        Math.abs((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) < 1e-6;
+    const big = { width: 200, height: 100 };
+
+    test('a degenerate arrow (both extents < 3) never projects', () => {
+        const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+        expect(
+            projectFixedPointOntoDiagonal(rect, { x: 120, y: 60 }, { x: 100, y: 300 }, { width: 2, height: 2 }, 1),
+        ).toBeNull();
+    });
+
+    test('snaps to the nearest side midpoint when the cursor sits just outside one', () => {
+        const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100, strokeWidth: 2 });
+        // 5px right of the right-edge midpoint (200,50); within bindingDistance(1)+strokeWidth/2 = 16, outside the shape.
+        const p = projectFixedPointOntoDiagonal(rect, { x: 205, y: 50 }, { x: -300, y: 50 }, big, 1);
+        expect(p).toEqual({ x: 200, y: 50 });
+    });
+
+    test('a cursor buried inside the shape does NOT midpoint-snap — it projects onto a diagonal', () => {
+        const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+        // (120,60) is inside; the ray from far below projects onto a corner diagonal, not a side midpoint.
+        const p = projectFixedPointOntoDiagonal(rect, { x: 120, y: 60 }, { x: 100, y: 300 }, big, 1);
+        expect(p).not.toBeNull();
+        if (!p) return;
+        expect(hitTestBox(rect, p)).toBe(true);
+        const tlbr = onLine({ x: 0, y: 0 }, { x: 200, y: 100 }, p);
+        const trbl = onLine({ x: 200, y: 0 }, { x: 0, y: 100 }, p);
+        expect(tlbr || trbl).toBe(true);
+    });
+
+    test('an ellipse projects onto its centre lines (vertical x=centre or horizontal y=centre)', () => {
+        const ell = shapeEl({ id: 'e', type: 'ellipse', x: 0, y: 0, width: 200, height: 100 });
+        const p = projectFixedPointOntoDiagonal(ell, { x: 120, y: 40 }, { x: 100, y: 300 }, big, 1);
+        expect(p).not.toBeNull();
+        if (!p) return;
+        expect(hitTestEllipse(ell, p)).toBe(true);
+        const vertical = onLine({ x: 100, y: 0 }, { x: 100, y: 100 }, p);
+        const horizontal = onLine({ x: 0, y: 50 }, { x: 200, y: 50 }, p);
+        expect(vertical || horizontal).toBe(true);
+    });
+
+    test('returns null when the ray crosses the diagonals only outside the shape', () => {
+        const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+        // A vertical ray at x=500 never meets the shrunk diagonals (x in [13,187]); nothing to project onto.
+        expect(projectFixedPointOntoDiagonal(rect, { x: 500, y: 400 }, { x: 500, y: 500 }, big, 1)).toBeNull();
+    });
+
+    test('rotational equivariance: rotating the shape + inputs rotates the projection', () => {
+        const rect0 = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+        const rect30 = { ...rect0, angle: 30 };
+        const center = boxCenter(rect0);
+        const point0 = { x: 120, y: 60 };
+        const other0 = { x: 100, y: 300 };
+        const p0 = projectFixedPointOntoDiagonal(rect0, point0, other0, big, 1);
+        const p30 = projectFixedPointOntoDiagonal(
+            rect30,
+            rotatePoint(point0, center, 30),
+            rotatePoint(other0, center, 30),
+            big,
+            1,
+        );
+        expect(p0).not.toBeNull();
+        expect(p30).not.toBeNull();
+        if (!p0 || !p30) return;
+        const expected = rotatePoint(p0, center, 30);
+        expect(p30.x).toBeCloseTo(expected.x, 6);
+        expect(p30.y).toBeCloseTo(expected.y, 6);
+    });
+
+    test('the bound ratio stored is the projection, not the raw cursor', () => {
+        const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+        const raw = { x: 120, y: 60 };
+        const projected = projectFixedPointOntoDiagonal(rect, raw, { x: 100, y: 300 }, big, 1);
+        expect(projected).not.toBeNull();
+        if (!projected) return;
+        // The stored fixedPoint is the projection's ratio; anchorToScene round-trips back to the projection,
+        // and it differs from anchoring the raw cursor (proof the projection actually moved the aim).
+        const stored = bindingAnchor(rect, projected);
+        const back = anchorToScene(rect, stored);
+        expect(back.x).toBeCloseTo(projected.x, 6);
+        expect(back.y).toBeCloseTo(projected.y, 6);
+        expect(stored).not.toEqual(bindingAnchor(rect, raw));
+    });
+});
+
+describe('shapeSideMidpoints', () => {
+    test('rect/ellipse → right, bottom, left, top edge midpoints (Excalidraw order)', () => {
+        const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
+        expect(shapeSideMidpoints(rect)).toEqual([
+            { x: 200, y: 50 },
+            { x: 100, y: 100 },
+            { x: 0, y: 50 },
+            { x: 100, y: 0 },
+        ]);
+    });
+
+    test('diamond → the four slanted-edge midpoints', () => {
+        const dia = shapeEl({ id: 'd', type: 'diamond', x: 0, y: 0, width: 200, height: 100 });
+        expect(shapeSideMidpoints(dia)).toEqual([
+            { x: 150, y: 25 },
+            { x: 150, y: 75 },
+            { x: 50, y: 75 },
+            { x: 50, y: 25 },
+        ]);
     });
 });

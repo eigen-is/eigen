@@ -401,6 +401,12 @@ const FIXED_POINT_BOUND = 10;
 const FIXED_POINT_EPSILON = 0.0001;
 const ARROWHEAD_SIZE = 15;
 const ARROWHEAD_SIZE_LONG = 25; // the plain 'arrow' head is longer
+// Excalidraw shrinks a rectangle's projection diagonals by 15px at each end (getDiagonalsForBindableElement)
+// — the focus points behave oddly right at the corners. Ellipse/diamond use un-shrunk centre lines.
+const DIAGONAL_SHRINK = 15;
+// A bind-time arrow this small (both extents < 3) is too degenerate to project a natural aim from — bind
+// to the raw cursor instead (Excalidraw's projectFixedPointOntoDiagonal early-out).
+const MIN_PROJECTABLE_ARROW = 3;
 
 // The outward inflation of a shape's outline when snapping an endpoint to it, and the divide-by-zero
 // floor for the anchor ratio: 5 + half the stroke, so a thicker border pushes the arrow out further.
@@ -415,6 +421,146 @@ export function bindingAnchor(shape: VectorShapeElement, point: Point): [number,
     const local = rotatePoint(point, boxCenter(shape), -shape.angle);
     const gap = bindingGap(shape);
     return [(local.x - shape.x) / Math.max(shape.width, gap), (local.y - shape.y) / Math.max(shape.height, gap)];
+}
+
+// Is a SCENE point inside a shape's exact fill (by type, unrotated about the centre) — the "focus point
+// sits inside the box" test Excalidraw's projection uses to accept a diagonal hit (isPointInElement) and to
+// suppress the side-midpoint snap when the cursor is buried inside (hitElementItself).
+function pointInShape(shape: VectorShapeElement, point: Point): boolean {
+    if (shape.type === 'ellipse') return hitTestEllipse(shape, point);
+    if (shape.type === 'diamond') return hitTestDiamond(shape, point);
+    return hitTestBox(shape, point);
+}
+
+// The four side midpoints of a shape in SCENE space, rotated by its angle: rect/ellipse → the right/bottom/
+// left/top edge midpoints (an ellipse's are its axis extremes); diamond → the midpoints of its four slanted
+// edges. Excalidraw's getSnapOutlineMidPoint order (right, bottom, left, top) so a bind-time midpoint snap
+// resolves the same side on a tie. The one owner of this geometry — both the snap-to-midpoint bind and the
+// B2 snap-dot overlay read it, so the dots sit exactly where the dock lands.
+export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
+    const { x, y, width: w, height: h } = shape;
+    const local: Point[] =
+        shape.type === 'diamond'
+            ? [
+                  { x: x + (3 * w) / 4, y: y + h / 4 }, // top-right edge
+                  { x: x + (3 * w) / 4, y: y + (3 * h) / 4 }, // bottom-right edge
+                  { x: x + w / 4, y: y + (3 * h) / 4 }, // bottom-left edge
+                  { x: x + w / 4, y: y + h / 4 }, // top-left edge
+              ]
+            : [
+                  { x: x + w, y: y + h / 2 }, // right
+                  { x: x + w / 2, y: y + h }, // bottom
+                  { x, y: y + h / 2 }, // left
+                  { x: x + w / 2, y }, // top
+              ];
+    const center = boxCenter(shape);
+    return local.map((p) => rotatePoint(p, center, shape.angle));
+}
+
+// The nearest side midpoint the bind-time snap docks onto, or null: the FIRST midpoint within
+// bindingDistance + strokeWidth/2 of `point`, and only when the cursor sits OUTSIDE the shape's fill
+// (Excalidraw's getSnapOutlineMidPoint — buried-inside cursors fall through to the diagonal projection).
+function snapOutlineMidPoint(shape: VectorShapeElement, point: Point, zoom: number): Point | null {
+    if (pointInShape(shape, point)) return null;
+    const within = bindingDistance(zoom) + shape.strokeWidth / 2;
+    for (const mid of shapeSideMidpoints(shape)) {
+        if (Math.hypot(point.x - mid.x, point.y - mid.y) <= within) return mid;
+    }
+    return null;
+}
+
+// Shrink a segment inward by `offset` at each end (along its own direction). A zero offset / degenerate
+// segment is returned unchanged.
+function shrinkSegment(a: Point, b: Point, offset: number): [Point, Point] {
+    if (offset === 0) return [a, b];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return [a, b];
+    const ox = (dx / len) * offset;
+    const oy = (dy / len) * offset;
+    return [
+        { x: a.x + ox, y: a.y + oy },
+        { x: b.x - ox, y: b.y - oy },
+    ];
+}
+
+// The two lines a straight arrow's bind-time aim projects onto (Excalidraw's getDiagonalsForBindableElement),
+// in SCENE space rotated by the shape's angle: a rectangle uses its two corner diagonals (shrunk 15px at each
+// end); an ellipse/diamond uses its vertical + horizontal centre lines (un-shrunk).
+function shapeDiagonals(shape: VectorShapeElement): [[Point, Point], [Point, Point]] {
+    const { x, y, width: w, height: h } = shape;
+    const offset = shape.type === 'rectangle' ? DIAGONAL_SHRINK : 0;
+    const [one, two]: [[Point, Point], [Point, Point]] =
+        shape.type === 'rectangle'
+            ? [
+                  [
+                      { x, y },
+                      { x: x + w, y: y + h },
+                  ],
+                  [
+                      { x: x + w, y },
+                      { x, y: y + h },
+                  ],
+              ]
+            : [
+                  [
+                      { x: x + w / 2, y },
+                      { x: x + w / 2, y: y + h },
+                  ],
+                  [
+                      { x, y: y + h / 2 },
+                      { x: x + w, y: y + h / 2 },
+                  ],
+              ];
+    const center = boxCenter(shape);
+    const rot = (p: Point): Point => rotatePoint(p, center, shape.angle);
+    const s1 = shrinkSegment(one[0], one[1], offset);
+    const s2 = shrinkSegment(two[0], two[1], offset);
+    return [
+        [rot(s1[0]), rot(s1[1])],
+        [rot(s2[0]), rot(s2[1])],
+    ];
+}
+
+// Project a straight arrow's bind-time aim onto a natural line of the shape (Excalidraw's
+// projectFixedPointOntoDiagonal), so a fresh bind aims THROUGH the shape rather than at the raw cursor.
+// Returns a SCENE point, or null to fall back to the raw cursor. In order: a snap to a side midpoint the
+// cursor is near (outside the shape); else the crossing of the ray `otherEnd → point` (extended) with the
+// shape's diagonals/centre lines, nearest to `otherEnd`, accepted only when it lands inside the shape.
+// `otherEnd` is the arrow's opposite aim (the other endpoint, or its anchor when that end is bound) — the
+// point that stays put while this endpoint drags. Applied at BIND time only (creation + endpoint-drag);
+// dragging the focus dot stores the raw aim, never re-projected (handleFocusPointDrag). Elbow arrows never
+// call this — their dock is resolved from the outline, not a diagonal.
+export function projectFixedPointOntoDiagonal(
+    shape: VectorShapeElement,
+    point: Point,
+    otherEnd: Point,
+    arrowSize: { width: number; height: number },
+    zoom: number,
+): Point | null {
+    if (arrowSize.width < MIN_PROJECTABLE_ARROW && arrowSize.height < MIN_PROJECTABLE_ARROW) return null;
+    const mid = snapOutlineMidPoint(shape, point, zoom);
+    if (mid) return mid;
+    const [diag1, diag2] = shapeDiagonals(shape);
+    const a = otherEnd;
+    // A point far along a → point (past `point`), long enough for the ray to cross both diagonals: their
+    // combined reach is 2·|a→point| + the longer diagonal, so segSegIntersect always catches the crossing.
+    const reach =
+        2 * Math.hypot(point.x - a.x, point.y - a.y) +
+        Math.max(
+            Math.hypot(diag1[1].x - diag1[0].x, diag1[1].y - diag1[0].y),
+            Math.hypot(diag2[1].x - diag2[0].x, diag2[1].y - diag2[0].y),
+        );
+    const b = { x: a.x + (point.x - a.x) * reach, y: a.y + (point.y - a.y) * reach };
+    const p1 = segSegIntersect(a, b, diag1[0], diag1[1]);
+    const p2 = segSegIntersect(a, b, diag2[0], diag2[1]);
+    const d1 = p1 ? Math.hypot(p1.x - a.x, p1.y - a.y) : null;
+    const d2 = p2 ? Math.hypot(p2.x - a.x, p2.y - a.y) : null;
+    let projection: Point | null;
+    if (d1 !== null && d2 !== null) projection = d1 < d2 ? p1 : p2;
+    else projection = p1 ?? p2 ?? null;
+    return projection && pointInShape(shape, projection) ? projection : null;
 }
 
 // The scene point a STRAIGHT arrow's anchor resolves to on the CURRENT shape: the ratio of its w/h, rotated
