@@ -3,6 +3,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { collectExportMedia } from '../../lib/export/media';
 import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { inlineSvgMediaRefs } from '../../lib/preview/svg-media-inline';
@@ -81,6 +82,18 @@ describe('inlineSvgMediaRefs', () => {
         expect(out).toContain(href); // unresolved, unchanged
     });
 
+    test('a crafted sibling mime cannot break out of the href', async () => {
+        // mimeType is client-supplied at upload; a type carrying a quote would otherwise escape the
+        // attribute. The inliner falls back to a neutral binary type instead of interpolating it.
+        const evil = Buffer.from('gif89a-ish');
+        await mount.createFile(folderId, 'evil.gif', 'image/gif" onerror="alert(1)', evil.length, evil);
+        const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svgReferencing('evil.gif')))).toString(
+            'utf8',
+        );
+        expect(out).not.toContain('onerror');
+        expect(out).toContain(`data:application/octet-stream;base64,${evil.toString('base64')}`);
+    });
+
     test('a sibling svg is inlined recursively', async () => {
         await mount.createFile(folderId, 'inner.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
         const svg = svgReferencing('inner.svg');
@@ -116,6 +129,44 @@ describe('inlineSvgMediaRefs', () => {
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
         expect(out).not.toContain('data:');
         expect(out).not.toContain('eigen-media:');
+    });
+});
+
+describe('export media path (prepareMedia + sanitizeExportHtml)', () => {
+    let mount: Mount;
+    let containerId: string;
+    const pngBytes = Buffer.from(TEST_PNG_BYTES);
+    const dir = join(import.meta.dir, `../../../../../data-test/test-svg-inline-export-${Date.now()}`);
+
+    beforeAll(async () => {
+        mkdirSync(dir, { recursive: true });
+        const config = createDefaultMountConfig('test-svg-inline-export', 'local-key');
+        mount = new Mount(OWNER_ID, dir, config, createGetLocalDatabase(dir));
+        await mount.init();
+        const rootId = (await mount.getRootFolder())!.id;
+        containerId = await mount.createFolder(rootId, 'doc.eigendoc');
+        const mediaId = await mount.createFolder(containerId, 'media');
+        await mount.createFile(mediaId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
+        await mount.createFile(mediaId, 'figure.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
+    });
+
+    afterAll(() => {
+        try {
+            rmSync(dir, { recursive: true, force: true });
+        } catch {}
+    });
+
+    test('a name-ref svg figure reaches export html as a data: URI', async () => {
+        // collectExportMedia runs the real getScreenPreview (inlines) → sanitizeExportHtml (keeps data:
+        // hrefs, strips the rest). The exported svg figure must therefore carry the png as a data: URI,
+        // not an eigen-media ref WeasyPrint would try to fetch.
+        const container = (await mount.getPath(containerId))!;
+        const media = await collectExportMedia(mount, container);
+        const svg = media.find((item) => item.name === 'figure.svg');
+        expect(svg).toBeDefined();
+        const html = Buffer.from(svg!.data).toString('utf8');
+        expect(html).toContain(`data:image/png;base64,${pngBytes.toString('base64')}`);
+        expect(html).not.toContain('eigen-media:');
     });
 });
 

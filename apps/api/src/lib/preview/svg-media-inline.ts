@@ -79,51 +79,89 @@ async function resolveSvgRefs(
     let out = svg;
     const strip: string[] = [];
     for (const name of names) {
-        const dataUri = await resolveRef(mount, parentId, name, depth, budget);
+        // Exact-token, quote-bounded needle: rebuild the stored token with eigenMediaHref and match
+        // every `"<token>"`. sceneToSvg writes double-quoted hrefs and the token percent-encodes every
+        // quote/angle/space, so this never mis-hits surrounding markup.
+        const token = eigenMediaHref(name);
+        const needle = `"${token}"`;
+        const occurrences = out.split(needle).length - 1;
+        if (occurrences === 0) continue; // ref present but not as a quoted href attribute — nothing to inline
+        // resolveRef charges the budget against `occurrences` BEFORE it reads/encodes a leaf, so a huge
+        // sibling degrades the whole pass without ever being pulled into memory.
+        const dataUri = await resolveRef(mount, parentId, name, depth, budget, occurrences, token.length);
         if (dataUri === null) {
             strip.push(name);
             continue;
         }
-        // Exact-token, quote-bounded replace: rebuild the stored token with eigenMediaHref and swap
-        // every `"<token>"` for `"<dataUri>"`. sceneToSvg writes double-quoted hrefs and the token
-        // percent-encodes every quote/angle/space, so this never mis-hits surrounding markup.
-        const needle = `"${eigenMediaHref(name)}"`;
-        const occurrences = out.split(needle).length - 1;
-        if (occurrences === 0) continue;
-        // Charge the growth before building the big string so a repeated huge ref can't OOM us first.
-        budget.remaining -= occurrences * (dataUri.length - eigenMediaHref(name).length);
-        if (budget.remaining < 0) throw new OutputTooLargeError();
         out = out.split(needle).join(`"${dataUri}"`);
     }
     return strip.length > 0 ? stripEigenMediaRefs(out, strip) : out;
 }
 
 // Resolve one media name to a `data:` URI, or null to signal "strip this ref" (missing sibling, a
-// non-file match, a sibling too deep to recurse, or an unreadable object).
+// non-file match, a sibling too deep to recurse, or an unreadable object). Charges `budget` for the
+// projected growth (`occurrences` copies of the URI minus the token it replaces); a breach throws
+// OutputTooLargeError, caught at the top to degrade to a stripped svg.
 async function resolveRef(
     mount: Mount,
     parentId: string,
     name: string,
     depth: number,
     budget: Budget,
+    occurrences: number,
+    tokenLen: number,
 ): Promise<string | null> {
     const child = await mount.getChildByName(parentId, name);
     if (child?.type !== 'file') return null;
 
+    if (child.mimeType === 'image/svg+xml') {
+        // A sibling svg may carry its own name-refs — inline them first, then embed the whole thing.
+        // The recursion charges its own leaves; the byte size is bounded by the depth cap, so the svg
+        // data URI is built (small, capped at depth 3) and only then charged.
+        if (depth + 1 > MAX_SVG_INLINE_DEPTH) return null;
+        const file = await mount.readFile(child.id);
+        if (!file) return null;
+        const bytes = Buffer.from(await file.arrayBuffer());
+        const inner = bytes.includes(SNIFF)
+            ? Buffer.from(await resolveSvgRefs(mount, parentId, bytes.toString('utf8'), depth + 1, budget), 'utf8')
+            : bytes;
+        const uri = svgDataUri(inner);
+        charge(budget, occurrences, uri.length, tokenLen);
+        return uri;
+    }
+
+    // Non-svg leaf: `child.mimeType` is client-supplied at upload, so validate it before it lands in a
+    // data: URI — a crafted type carrying a `"` would otherwise break out of the href (defense in depth
+    // behind the sandbox CSP). base64 length is deterministic from the DECLARED size, so charge the
+    // budget from `child.size` BEFORE reading/encoding: a leaf too big to fit degrades the whole pass
+    // without ever being pulled into memory.
+    const mime = safeDataUriMime(child.mimeType);
+    const projectedLen = `data:${mime};base64,`.length + base64Len(child.size);
+    charge(budget, occurrences, projectedLen, tokenLen);
     const file = await mount.readFile(child.id);
     if (!file) return null;
     const bytes = Buffer.from(await file.arrayBuffer());
-
-    if (child.mimeType === 'image/svg+xml') {
-        // A sibling svg may carry its own name-refs — inline them first, then embed the whole thing.
-        if (depth + 1 > MAX_SVG_INLINE_DEPTH) return null;
-        if (!bytes.includes(SNIFF)) return svgDataUri(bytes);
-        const nested = await resolveSvgRefs(mount, parentId, bytes.toString('utf8'), depth + 1, budget);
-        return svgDataUri(Buffer.from(nested, 'utf8'));
-    }
-
-    const mime = child.mimeType || 'application/octet-stream';
     return `data:${mime};base64,${bytes.toString('base64')}`;
+}
+
+// Deduct `occurrences` copies of the URI (net of the token each replaces) from the budget; a breach
+// throws so the top-level catch degrades to a stripped svg. A URI shorter than the token nets a
+// negative charge (the output shrinks) — harmless.
+function charge(budget: Budget, occurrences: number, uriLen: number, tokenLen: number): void {
+    budget.remaining -= occurrences * (uriLen - tokenLen);
+    if (budget.remaining < 0) throw new OutputTooLargeError();
+}
+
+// Exact base64 length for a byte count (`4 * ceil(n / 3)`, padding included).
+function base64Len(byteLen: number): number {
+    return 4 * Math.ceil(byteLen / 3);
+}
+
+// A `type/subtype` shape of unreserved token chars only — rejects any client-supplied mime that could
+// carry a `"`, whitespace, or other href-breaking byte, falling back to a neutral binary type.
+const MIME_RE = /^[\w.+-]+\/[\w.+-]+$/;
+function safeDataUriMime(mimeType: string): string {
+    return MIME_RE.test(mimeType) ? mimeType : 'application/octet-stream';
 }
 
 // base64 (not utf8) so the svg payload can never break out of the enclosing href attribute.
