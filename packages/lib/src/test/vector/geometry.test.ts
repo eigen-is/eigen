@@ -12,6 +12,7 @@ import {
     boundEndpoint,
     boxCenter,
     distanceToPolyline,
+    elbowAnchorScene,
     elementBounds,
     followBindings,
     getElementBounds,
@@ -24,6 +25,7 @@ import {
     marqueeHits,
     marqueeMode,
     normalizeAngle,
+    normalizeFixedPoint,
     normalizeLinear,
     outlinePoint,
     type Point,
@@ -668,6 +670,23 @@ describe('bindingAnchor / anchorToScene', () => {
     });
 });
 
+describe('normalizeFixedPoint (Excalidraw bind-time bounds)', () => {
+    test('clamps each ratio to ±10, leaving a mild out-of-[0,1] dock ratio intact', () => {
+        // A dock a gap outside a 200-wide box reads back as ~-0.03 — kept, not unit-clamped.
+        expect(normalizeFixedPoint([-0.03, 0.42])).toEqual([-0.03, 0.42]);
+        expect(normalizeFixedPoint([1.03, 0.42])).toEqual([1.03, 0.42]);
+        // Only a truly wild ratio (shrunk shape) is bounded, at ±10 not ±1.
+        expect(normalizeFixedPoint([50, -50])).toEqual([10, -10]);
+    });
+
+    test('never returns exactly 0.5 on either axis (heading-cone stability, E11)', () => {
+        expect(normalizeFixedPoint([0.5, 0.5])).toEqual([0.5001, 0.5001]);
+        // Only the near-0.5 axis is bumped; the other is left alone.
+        expect(normalizeFixedPoint([0.5, 0.25])).toEqual([0.5001, 0.25]);
+        expect(normalizeFixedPoint([0.8, 0.5])).toEqual([0.8, 0.5001]);
+    });
+});
+
 describe('outlinePoint', () => {
     const from = { x: -100, y: 30 };
     const anchor = { x: 50, y: 30 };
@@ -733,6 +752,28 @@ describe('boundEndpoint', () => {
             endBinding: bind(shape, [0.5, 0.5]),
         });
         expect(boundEndpoint(arrow, 'end', shape)).toEqual({ x: 25, y: 0 });
+    });
+
+    // D1: an elbow end derives from the fixedPoint alone — no chord, the other end never enters — so the
+    // stored fixedPoint's own side is authoritative. A straight end keeps the chord orbit above (unchanged).
+    test('elbow end resolves the fixedPoint dock on its own side, ignoring the other end', () => {
+        // 200×100 rect; a fixedPoint a gap OUTSIDE the left edge (-0.03) is the far-side dock.
+        const rect = shapeEl({ id: 'rect', type: 'rectangle', x: 0, y: 0, width: 200, height: 100, strokeWidth: 2 });
+        const elbow = arrowEl({
+            points: '[[0,0],[400,0]]',
+            x: -6,
+            y: 50,
+            width: 406,
+            elbow: true,
+            endBinding: bind(rect, [-0.03, 0.42]),
+        });
+        // end stored at scene (394,50) — far to the RIGHT of the rect — yet the dock is the LEFT side.
+        const p = boundEndpoint(elbow, 'end', rect);
+        expect(p).toEqual(elbowAnchorScene(rect, [-0.03, 0.42]));
+        expect(p.x).toBeCloseTo(-6); // 200 * -0.03
+        expect(p.y).toBeCloseTo(42); // 100 * 0.42
+        // The other end sits at x=-6 (far left in scene); moving conceptually never enters the computation:
+        // boundEndpoint took no `from`/chord path, so the same call is invariant to the stored other point.
     });
 });
 

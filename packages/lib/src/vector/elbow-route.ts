@@ -46,7 +46,15 @@ const DEDUP_THRESHOLD = 1;
 // right-angled path routed between them. The route ALWAYS starts at points[0] and ends at points[last]
 // exactly — the endpoint dot and the shaft share that one value. Deterministic and pure; degenerate
 // (< 2 points) arrows pass through untouched. Obstacles are only the bound shapes.
-export function elbowRoute(arrow: VectorArrowElement, byId: Map<string, VectorElement>): Point[] {
+// `origPoints` (D6): the PRE-DOCK scene point per end, distinct from the stored/docked endpoint, used only to
+// gate the heading cone by distance (getHeadingForElbowArrowSnap). At rest the stored point IS the dock, so
+// callers omit it and it defaults to the stored globals; during an endpoint drag EP-U3 passes the raw cursor
+// so the exit side follows the anchor, not the gliding dock, exactly as Excalidraw does.
+export function elbowRoute(
+    arrow: VectorArrowElement,
+    byId: Map<string, VectorElement>,
+    origPoints?: { start?: Point; end?: Point },
+): Point[] {
     const pts = parsePoints(arrow.points);
     if (pts.length < 2) return pts;
 
@@ -66,7 +74,16 @@ export function elbowRoute(arrow: VectorArrowElement, byId: Map<string, VectorEl
     const endArrowhead = arrow.endArrowhead !== 'none';
 
     const data = getElbowArrowData(
-        { startShape, endShape, startGlobal, endGlobal, startArrowhead, endArrowhead },
+        {
+            startShape,
+            endShape,
+            startGlobal,
+            endGlobal,
+            startArrowhead,
+            endArrowhead,
+            origStart: origPoints?.start ?? startGlobal,
+            origEnd: origPoints?.end ?? endGlobal,
+        },
         !!arrow.startBinding,
     );
 
@@ -100,6 +117,9 @@ type RouteInputs = {
     endGlobal: Point;
     startArrowhead: boolean;
     endArrowhead: boolean;
+    // The pre-dock scene point per end for the heading distance-gate (D6); equals the stored global at rest.
+    origStart: Point;
+    origEnd: Point;
 };
 
 type ElbowArrowData = {
@@ -116,17 +136,18 @@ type ElbowArrowData = {
 };
 
 function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArrowData {
-    const { startShape, endShape, startGlobal, endGlobal, startArrowhead, endArrowhead } = input;
+    const { startShape, endShape, startGlobal, endGlobal, startArrowhead, endArrowhead, origStart, origEnd } = input;
 
     // Heading cone AABB is the element inflated on all sides by the endpoint's distance to the outline. The
-    // stored endpoint is both the cone point and the distance-gate "original" point (U2 will split these when
-    // it live-docks a dragged endpoint).
+    // cone geometry keys on the rest/docked endpoint; the distance-GATE keys on the pre-dock original point
+    // (origStart/origEnd — equal to the stored endpoint at rest, D6), so a dragged dock gliding on the
+    // outline doesn't flip the exit side under the anchor.
     const startConeAABB = startShape
         ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
         : null;
     const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
-    const startHeading = getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, startGlobal);
-    const endHeading = getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, endGlobal);
+    const startHeading = getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart);
+    const endHeading = getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd);
 
     const startPointBounds = pointBounds(startGlobal);
     const endPointBounds = pointBounds(endGlobal);

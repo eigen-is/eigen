@@ -391,6 +391,12 @@ function round2(n: number): number {
 const BASE_BINDING_GAP = 5;
 const BASE_BINDING_DISTANCE = 15; // = max(BASE_BINDING_GAP, 15), Excalidraw's floor
 const BASE_ARROW_MIN_LENGTH = 10; // below this the bound endpoint snaps to the anchor, not the outline
+// Excalidraw's normalizeFixedPoint bounds (binding.ts): a bind-time ratio is kept within ±10 of the box
+// and never exactly 0.5. The half-dodge exists because a precise 0.5 makes the heading cone flip on
+// floating-point noise (E11); the ±10 bound just stops a shrunk shape flinging an anchor to infinity while
+// still allowing the outline+gap dock to sit a little outside [0,1].
+const FIXED_POINT_BOUND = 10;
+const FIXED_POINT_EPSILON = 0.0001;
 const ARROWHEAD_SIZE = 15;
 const ARROWHEAD_SIZE_LONG = 25; // the plain 'arrow' head is longer
 
@@ -409,10 +415,12 @@ export function bindingAnchor(shape: VectorShapeElement, point: Point): [number,
     return [(local.x - shape.x) / Math.max(shape.width, gap), (local.y - shape.y) / Math.max(shape.height, gap)];
 }
 
-// The scene point an anchor resolves to on the CURRENT shape: the ratio of its w/h, rotated by its angle.
-// The ratio is clamped to [0,1] here (the read-side normalize) so a shrunk shape can't fling the anchor.
+// The scene point a STRAIGHT arrow's anchor resolves to on the CURRENT shape: the ratio of its w/h, rotated
+// by its angle. The ratio is clamped to [0,1] here (clampUnit) so a shrunk shape can't fling a straight
+// arrow's chord anchor off the box. An elbow end reads through elbowAnchorScene instead — its stored
+// fixedPoint is the outline+gap dock, deliberately a little outside [0,1], so it must NOT be unit-clamped.
 export function anchorToScene(shape: VectorShapeElement, fixedPoint: [number, number]): Point {
-    const [fx, fy] = normalizeFixedPoint(fixedPoint);
+    const [fx, fy] = clampUnit(fixedPoint);
     return rotatePoint(
         { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
         boxCenter(shape),
@@ -420,8 +428,38 @@ export function anchorToScene(shape: VectorShapeElement, fixedPoint: [number, nu
     );
 }
 
-function normalizeFixedPoint([fx, fy]: [number, number]): [number, number] {
+function clampUnit([fx, fy]: [number, number]): [number, number] {
     return [clamp(fx, 0, 1), clamp(fy, 0, 1)];
+}
+
+// Excalidraw's normalizeFixedPoint (binding.ts:2716): keep a bind-time ratio within ±10 of the box and never
+// exactly 0.5 (a precise 0.5 makes the heading cone flip on FP noise — E11). Shared by both binds' write
+// path (elbow: elbowBindPoint; straight: U4's diagonal-projection upgrade) and by the elbow read
+// (elbowAnchorScene), so preview → fixedPoint → rest-endpoint is one function composition in both directions.
+export function normalizeFixedPoint([fx, fy]: [number, number]): [number, number] {
+    const cx = clamp(fx, -FIXED_POINT_BOUND, FIXED_POINT_BOUND);
+    const cy = clamp(fy, -FIXED_POINT_BOUND, FIXED_POINT_BOUND);
+    if (Math.abs(cx - 0.5) < FIXED_POINT_EPSILON || Math.abs(cy - 0.5) < FIXED_POINT_EPSILON) {
+        return [dodgeHalf(cx), dodgeHalf(cy)];
+    }
+    return [cx, cy];
+}
+
+function dodgeHalf(ratio: number): number {
+    return Math.abs(ratio - 0.5) < FIXED_POINT_EPSILON ? 0.5001 : ratio;
+}
+
+// The scene point an ELBOW end rests at: the fixedPoint mapped straight onto the current box (no chord — the
+// other end never enters), bounded exactly as Excalidraw's getGlobalFixedPointForBindableElement. The stored
+// fixedPoint already encodes the outline+gap dock (elbowBindPoint), so this sits the endpoint on the
+// anchor's own side and holds it there no matter where the other end moves.
+export function elbowAnchorScene(shape: VectorShapeElement, fixedPoint: [number, number]): Point {
+    const [fx, fy] = normalizeFixedPoint(fixedPoint);
+    return rotatePoint(
+        { x: shape.x + shape.width * fx, y: shape.y + shape.height * fy },
+        boxCenter(shape),
+        shape.angle,
+    );
 }
 
 // Where the segment from → anchor crosses the shape's outline inflated by `gap`, nearest to `from`; the
@@ -448,6 +486,16 @@ export function outlinePoint(shape: VectorShapeElement, from: Point, anchor: Poi
     return rotatePoint(best, center, shape.angle);
 }
 
+// All intersections of the SCENE segment a→b with `shape`'s outline inflated outward by `gap`, in scene
+// space (outlineHits works in the shape's unrotated local frame; this rotates in and back out). One source
+// for the outline geometry the elbow dock (elbowBindPoint) and outlinePoint both consume.
+export function outlineIntersections(shape: VectorShapeElement, a: Point, b: Point, gap: number): Point[] {
+    const center = boxCenter(shape);
+    const la = rotatePoint(a, center, -shape.angle);
+    const lb = rotatePoint(b, center, -shape.angle);
+    return outlineHits(shape, la, lb, gap).map((h) => rotatePoint(h, center, shape.angle));
+}
+
 // A bound endpoint's scene position: snap the anchor to the shape outline along the segment from the
 // other end, with Excalidraw's guard — if that would make the arrow shorter than 10 units, sit on the
 // anchor instead (a degenerate arrow would otherwise flip inside the shape).
@@ -457,6 +505,10 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
     const thisLocal = end === 'start' ? points[0] : points[points.length - 1];
     const binding = parseBinding(end === 'start' ? arrow.startBinding : arrow.endBinding);
     if (!binding) return linearLocalToScene(arrow, thisLocal);
+    // D1: an elbow end resolves from the fixedPoint alone — the dock on its own side, no chord, the other
+    // end never enters — so it can't change side when the other end moves. Straight ends keep the chord
+    // orbit below (that IS Excalidraw parity, and U4 adds the anchor UX around it).
+    if (arrow.elbow) return elbowAnchorScene(shape, binding.fixedPoint);
     const otherScene = linearLocalToScene(arrow, end === 'start' ? points[points.length - 1] : points[0]);
     const anchor = anchorToScene(shape, binding.fixedPoint);
     const endpoint = outlinePoint(shape, otherScene, anchor, bindingGap(shape));

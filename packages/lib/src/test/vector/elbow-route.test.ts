@@ -128,6 +128,9 @@ describe('elbowRoute', () => {
 // stored point exactly; U2 will make the stored point the fixedPoint-derived dock, closing the last gap to
 // Excalidraw's globalFixedPoint terminal. Where these differ from the hand-computed numbers in
 // ELBOW-PARITY-SPEC (E9's bend row, E10's "tight S"), the spec's arithmetic was the approximation.
+// CAVEAT: these expected tuples are CAPTURED FROM OUR PORT of that pipeline, not from an independent
+// Excalidraw run — so they pin against regression, not against the source. The real check that the port
+// matches Excalidraw is line-level review of elbow-route.ts / elbow-heading.ts against the reference files.
 describe('elbowRoute — exact parity with Excalidraw', () => {
     const asPairs = (route: Point[]): [number, number][] => route.map((p) => [p.x, p.y]);
 

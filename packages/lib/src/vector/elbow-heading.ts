@@ -5,7 +5,17 @@
 // "how does it snake there". Everything is SCENE space; shape angles are DEGREES (rotatePoint owns the
 // radian conversion), matching the rest of packages/lib/src/vector.
 
-import { boxCenter, getElementBounds, type Point, rotatePoint } from './geometry';
+import {
+    bindingAnchor,
+    bindingGap,
+    boxCenter,
+    elbowAnchorScene,
+    getElementBounds,
+    normalizeFixedPoint,
+    outlineIntersections,
+    type Point,
+    rotatePoint,
+} from './geometry';
 import type { VectorShapeElement } from './types';
 
 // A unit orthogonal direction. Compared by value (compareHeading), never by reference.
@@ -23,6 +33,12 @@ export type B4 = [number, number, number, number];
 // How near (SCENE units) a bound endpoint must sit to its shape for cone-based heading to apply. The router
 // runs zoom-free (server + derive path), so this is maxBindingDistance_simple at zoom 1 = clamp(15/1.5,15,30).
 export const MAX_BINDING_DISTANCE = 15;
+
+// Excalidraw's exact ellipse-projection iteration seed. The literal 0.707 (not Math.SQRT1_2) is the point —
+// matching it byte-for-byte keeps ellipseDistance identical to the source; the more precise constant drifts
+// the result. Hoisted to one place so the biome allowance lives once, not once per `let`.
+// biome-ignore lint/suspicious/noApproximativeNumericConstant: parity with Excalidraw's 0.707 seed
+const ELLIPSE_SEED = 0.707;
 
 // Excalidraw's vectorToHeading: snap a free vector to its dominant axis direction (the `<=` on LEFT and the
 // strict `>` elsewhere are load-bearing — they decide the exit side on exact diagonals).
@@ -121,12 +137,8 @@ function ellipseDistance(s: VectorShapeElement, center: Point, rp: Point): numbe
     const tpy = rp.y - center.y;
     const px = Math.abs(tpx);
     const py = Math.abs(tpy);
-    // The literal 0.707 (not Math.SQRT1_2) is Excalidraw's exact iteration seed — matching it byte-for-byte is
-    // the point; the more precise constant would drift the result.
-    // biome-ignore lint/suspicious/noApproximativeNumericConstant: parity with Excalidraw's 0.707 seed
-    let tx = 0.707;
-    // biome-ignore lint/suspicious/noApproximativeNumericConstant: parity with Excalidraw's 0.707 seed
-    let ty = 0.707;
+    let tx = ELLIPSE_SEED;
+    let ty = ELLIPSE_SEED;
     for (let i = 0; i < 3; i++) {
         const ex = ((a * a - b * b) * tx ** 3) / a;
         const ey = ((b * b - a * a) * ty ** 3) / b;
@@ -234,4 +246,151 @@ function distanceToSegment(p: Point, a: Point, b: Point): number {
     const lenSq = cx * cx + cy * cy;
     const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * cx + (p.y - a.y) * cy) / lenSq));
     return Math.hypot(p.x - (a.x + t * cx), p.y - (a.y + t * cy));
+}
+
+// --- elbow bind-time dock (Excalidraw's bindPointToSnapToElementOutline elbow branch + snapToMid +
+// avoidRectangularCorner) --------------------------------------------------------------------------------
+// D2: an elbow end's fixedPoint is stored from the DOCK — the point on the shape's outline+gap the endpoint
+// snaps to — not from the raw cursor, so the preview the user releases on is exactly what commits. EP-U3's
+// bindingFor calls elbowBindPoint per drag frame (dock = the previewed endpoint) and again on commit
+// (fixedPoint = the stored anchor); boundEndpoint then reproduces the same dock at rest via elbowAnchorScene.
+
+// Below this w/h a shape has no interior to anchor a proportional point into — bind to the (0.5-dodged)
+// centre so the arrow stays put on a later resize. Excalidraw's MIN_BINDABLE_SIZE.
+const MIN_BINDABLE_SIZE = 1;
+// The elbow base gap, used only for the axis-swap intersection fallback (Excalidraw's BASE_BINDING_GAP_ELBOW).
+const BASE_BINDING_GAP_ELBOW = 5;
+// Excalidraw's PRECISION: an intersection this close to the edge point is treated as no snap.
+const DOCK_PRECISION = 1e-4;
+
+// Where a raw scene point docks onto a bindable shape for an elbow arrow, and the fixedPoint that stores it.
+// `dock` is the outline+gap point (the previewed/rest endpoint); `fixedPoint` is its ratio through
+// normalizeFixedPoint, so it can sit a little outside [0,1] and never exactly 0.5.
+export function elbowBindPoint(shape: VectorShapeElement, point: Point): { dock: Point; fixedPoint: [number, number] } {
+    if (shape.width < MIN_BINDABLE_SIZE || shape.height < MIN_BINDABLE_SIZE) {
+        const fixedPoint = normalizeFixedPoint([0.5, 0.5]);
+        return { dock: elbowAnchorScene(shape, fixedPoint), fixedPoint };
+    }
+    const dock = elbowDock(shape, point);
+    return { dock, fixedPoint: normalizeFixedPoint(bindingAnchor(shape, dock)) };
+}
+
+// The outline dock for a raw point: push it off a rectangle corner (avoidRectangularCorner), snap it toward
+// the nearest side/vertex midpoint (snapToMid), then intersect the shape's outline+gap along the resolved
+// axis. Falls back to the other axis with the elbow base gap, and to the edge point when neither crosses.
+function elbowDock(shape: VectorShapeElement, point: Point): Point {
+    const gap = bindingGap(shape);
+    const center = boxCenter(shape);
+    const aabb = aabbForElement(shape);
+    const edgePoint = shape.type === 'rectangle' ? avoidRectangularCorner(shape, point, gap) : point;
+    const isHorizontal = headingIsHorizontal(headingForPointFromElement(shape, aabb, point));
+    const resolved = snapToMid(shape, edgePoint, 0.05, gap) ?? point;
+
+    const intersection =
+        dockIntersection(shape, center, resolved, isHorizontal, gap) ??
+        dockIntersection(shape, center, resolved, !isHorizontal, BASE_BINDING_GAP_ELBOW);
+
+    if (!intersection || distSq(edgePoint, intersection) < DOCK_PRECISION) return edgePoint;
+    return intersection;
+}
+
+// One axis of the dock intersection: a ray from the shape centre (on the chosen axis line through `resolved`)
+// outward through `resolved`, crossing the outline+gap. `isHorizontal` picks the ray's free axis exactly as
+// Excalidraw does. Null when the ray is degenerate or misses.
+function dockIntersection(
+    shape: VectorShapeElement,
+    center: Point,
+    resolved: Point,
+    isHorizontal: boolean,
+    gap: number,
+): Point | null {
+    const otherPoint = isHorizontal ? { x: center.x, y: resolved.y } : { x: resolved.x, y: center.y };
+    const dx = resolved.x - otherPoint.x;
+    const dy = resolved.y - otherPoint.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return null;
+    const reach = Math.max(shape.width, shape.height) * 2;
+    const far = { x: otherPoint.x + (dx / len) * reach, y: otherPoint.y + (dy / len) * reach };
+    const hits = outlineIntersections(shape, otherPoint, far, gap);
+    if (hits.length === 0) return null;
+    // The ray leaves the interior and crosses one side; when it clips two, take the one nearest the resolved
+    // dock direction (Excalidraw's degenerate distance sort collapses to the same single crossing here).
+    let best = hits[0];
+    let bestDist = distSq(resolved, best);
+    for (const h of hits) {
+        const d = distSq(resolved, h);
+        if (d < bestDist) {
+            bestDist = d;
+            best = h;
+        }
+    }
+    return best;
+}
+
+// Excalidraw's avoidRectangularCorner: when a point sits in one of the four diagonal corner regions of a
+// rectangle, slide it onto the nearer adjacent edge (offset by the gap) so the dock never lands on the sharp
+// corner. Everything in the shape's unrotated frame, rotated back out. Rectangles only.
+function avoidRectangularCorner(shape: VectorShapeElement, p: Point, gap: number): Point {
+    const center = boxCenter(shape);
+    const np = rotatePoint(p, center, -shape.angle);
+    const { x, y, width: w, height: h } = shape;
+    const rot = (q: Point): Point => rotatePoint(q, center, shape.angle);
+    if (np.x < x && np.y < y) {
+        return np.y - y > -gap ? rot({ x: x - gap, y }) : rot({ x, y: y - gap });
+    }
+    if (np.x < x && np.y > y + h) {
+        return np.x - x > -gap ? rot({ x, y: y + h + gap }) : rot({ x: x - gap, y: y + h });
+    }
+    if (np.x > x + w && np.y > y + h) {
+        return np.x - x < w + gap ? rot({ x: x + w, y: y + h + gap }) : rot({ x: x + w + gap, y: y + h });
+    }
+    if (np.x > x + w && np.y < y) {
+        return np.x - x < w + gap ? rot({ x: x + w, y: y - gap }) : rot({ x: x + w + gap, y });
+    }
+    return p;
+}
+
+// Excalidraw's snapToMid: within an adaptive band of a side (or a diamond vertex) the dock snaps to that
+// side/vertex midpoint, so an endpoint dragged near the middle of an edge locks to it. The band is
+// clamp(5%·size, 5, 80). The centre carries Excalidraw's −0.1 tie-break nudge. Null = no snap (caller keeps
+// the raw point).
+function snapToMid(shape: VectorShapeElement, p: Point, tolerance: number, gap: number): Point | null {
+    const { x, y, width: w, height: h } = shape;
+    const boxC = boxCenter(shape);
+    const center = { x: boxC.x - 0.1, y: boxC.y - 0.1 };
+    const np = rotatePoint(p, center, -shape.angle);
+    const vThresh = clamp(tolerance * h, 5, 80);
+    const hThresh = clamp(tolerance * w, 5, 80);
+    const rot = (q: Point): Point => rotatePoint(q, center, shape.angle);
+    // Too close to the centre makes the direction ambiguous.
+    if (Math.hypot(center.x - np.x, center.y - np.y) < gap) return null;
+    if (np.x <= x + w / 2 && np.y > center.y - vThresh && np.y < center.y + vThresh)
+        return rot({ x: x - gap, y: center.y });
+    if (np.y <= y + h / 2 && np.x > center.x - hThresh && np.x < center.x + hThresh)
+        return rot({ x: center.x, y: y - gap });
+    if (np.x >= x + w / 2 && np.y > center.y - vThresh && np.y < center.y + vThresh)
+        return rot({ x: x + w + gap, y: center.y });
+    if (np.y >= y + h / 2 && np.x > center.x - hThresh && np.x < center.x + hThresh)
+        return rot({ x: center.x, y: y + h + gap });
+    if (shape.type === 'diamond') {
+        const thr = Math.max(hThresh, vThresh);
+        const corners: Point[] = [
+            { x: x + w / 4 - gap, y: y + h / 4 - gap },
+            { x: x + (3 * w) / 4 + gap, y: y + h / 4 - gap },
+            { x: x + w / 4 - gap, y: y + (3 * h) / 4 + gap },
+            { x: x + (3 * w) / 4 + gap, y: y + (3 * h) / 4 + gap },
+        ];
+        for (const c of corners) if (Math.hypot(c.x - np.x, c.y - np.y) < thr) return rot(c);
+    }
+    return null;
+}
+
+function distSq(a: Point, b: Point): number {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+    return Math.min(hi, Math.max(lo, v));
 }
