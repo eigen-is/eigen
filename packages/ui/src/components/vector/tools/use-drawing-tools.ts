@@ -169,10 +169,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // commitLine finish, which have no pointer event to read the modifier from. The creation drag reads
     // it straight off its pointer event (a stuck ref after a missed keyup can't affect that path).
     const suppressRef = useRef(false);
-    // The vertex index the pointer rests on over a selected line/arrow's handles (null off any handle) —
-    // Delete/Backspace removes THAT vertex rather than the whole element (UA3). Read synchronously in the
-    // capture-phase key handler, so a ref, not state.
-    const hoveredVertexRef = useRef<number | null>(null);
+    // The vertex the user has CLICKED to select over a selected line/arrow's handles (null = none; EP-PT).
+    // Drives the filled `.eigen-vertex-handle-selected` dot, and is what Delete/Backspace removes — never
+    // the whole element while a point is selected. State, not a ref: the selected dot must re-render.
+    const [selectedPointIndex, setSelectedPointIndex] = useState<number | null>(null);
 
     const [activeKind, setActiveKind] = useState<'freedraw' | 'line' | 'eraser' | null>(null);
     const [previewEl, setPreviewEl] = useState<VectorElement | null>(null);
@@ -318,6 +318,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // --- Pointer dispatch -----------------------------------------------------------------------
     const onPointerDown = (e: React.PointerEvent, scene: Point): boolean => {
         if (!canWrite) return false;
+        // Any pointerdown that reaches the surface clears the point selection (clicking the shaft, the
+        // canvas, or another element) — vertex/midpoint handles stopPropagation, so a handle click never
+        // gets here and keeps its own selection.
+        setSelectedPointIndex(null);
         if (tool === 'freedraw') {
             containerRef.current?.setPointerCapture(e.pointerId);
             frozenRef.current = true;
@@ -482,6 +486,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setPointDraft(null);
             setBindCandidate(null);
         }
+        // Deselecting the element, switching to another, or a remote delete of it also drops any point
+        // selection (it only ever refers to the current line's vertices).
+        setSelectedPointIndex(null);
     }, [selectedLineId]);
 
     const onPointPreview = (points: Point[] | null, index: number) => {
@@ -533,9 +540,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
               frozenRef,
               onPreview: onPointPreview,
               onCommit: onPointCommit,
-              onVertexHover: (index: number | null) => {
-                  hoveredVertexRef.current = index;
-              },
+              selectedIndex: selectedPointIndex,
+              onSelect: setSelectedPointIndex,
           })
         : null;
 
@@ -556,12 +562,12 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const apiRef = useRef<{
         escape: () => boolean;
         finish: () => boolean;
-        deleteVertex: () => boolean;
+        deleteSelectedPoint: () => boolean;
         blur: () => void;
     }>({
         escape: () => false,
         finish: () => false,
-        deleteVertex: () => false,
+        deleteSelectedPoint: () => false,
         blur: () => {},
     });
     apiRef.current = {
@@ -579,6 +585,13 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 finishLineWith(lineRef.current.committed);
                 return true;
             }
+            // Layered Escape: a selected point releases BEFORE the element does. Clear it here (capture
+            // phase, so `stopPropagation` beats the canvas's bubble-phase element-deselect) and consume;
+            // with no point selected we fall through and the canvas deselects the element as usual.
+            if (selectedPointIndex !== null) {
+                setSelectedPointIndex(null);
+                return true;
+            }
             return false;
         },
         finish: () => {
@@ -586,19 +599,19 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             finishLineWith(lineRef.current.committed);
             return true;
         },
-        // Delete/Backspace with a vertex handle hovered removes THAT interior vertex (one sealed step),
-        // winning over the keyboard hook's delete-selection — and ONLY then is the key absorbed. Over an
-        // ENDPOINT dot (index 0/last, where an arrow's bindings ride) there is no removable vertex, so we
-        // do NOT consume: the key falls through to selection-delete and removes the whole element, which
-        // is what the user expects — absorbing it there would trap the element on screen. Elbow arrows
-        // fall through the same way: their route is derived, they have no editable vertex.
-        deleteVertex: () => {
-            const index = hoveredVertexRef.current;
+        // Delete/Backspace with a point SELECTED acts on THAT point, never the whole element (EP-PT). An
+        // interior point is removed (one sealed step, winning over the keyboard hook's delete-selection).
+        // A selected ENDPOINT (index 0/last, where an arrow's bindings ride) or any point of an elbow
+        // arrow (route derived, no editable interior) is a no-op — but we STILL consume the key so it
+        // cannot fall through and delete the element out from under a selected point. With no point
+        // selected we return false and selection-delete removes the whole element as usual.
+        deleteSelectedPoint: () => {
+            const index = selectedPointIndex;
             if (index === null || !selectedLine) return false;
-            if (selectedLine.type === 'arrow' && selectedLine.elbow) return false;
             const pts = parsePoints(selectedLine.points);
-            const interior = index > 0 && index < pts.length - 1;
-            if (!interior) return false;
+            const interior =
+                !(selectedLine.type === 'arrow' && selectedLine.elbow) && index > 0 && index < pts.length - 1;
+            if (!interior) return true; // endpoint / elbow → no-op, but consume (never delete the element)
             undoManager?.stopCapturing();
             updateElement(
                 selectedLine.id,
@@ -608,7 +621,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 ),
             );
             undoManager?.stopCapturing();
-            hoveredVertexRef.current = null;
+            // After removing an interior point, keep editing the previous point IF it is still interior
+            // (i.e. the removed one wasn't the first interior point); otherwise clear the point selection.
+            // Points before the removed index keep their index, so `index - 1` still addresses that point.
+            setSelectedPointIndex(index >= 2 ? index - 1 : null);
             return true;
         },
         // Focus loss can swallow the pointerup (alt-tab mid-gesture) — commit like ObjectTransform does
@@ -635,11 +651,11 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 e.stopPropagation();
                 return;
             }
-            // A hovered INTERIOR vertex claims Delete/Backspace before the keyboard hook's delete-selection
-            // (which binds on document in the bubble phase) — stopping propagation here keeps that from also
-            // firing. Falls through when no vertex is hovered, an endpoint is hovered, or an elbow arrow, so
-            // selection delete still removes the whole element normally.
-            if ((e.key === 'Delete' || e.key === 'Backspace') && apiRef.current.deleteVertex()) {
+            // A SELECTED point claims Delete/Backspace before the keyboard hook's delete-selection (which
+            // binds on document in the bubble phase) — stopping propagation here keeps that from also
+            // firing, so the element is never deleted while a point is selected. Falls through only when no
+            // point is selected, and then selection-delete removes the whole element normally.
+            if ((e.key === 'Delete' || e.key === 'Backspace') && apiRef.current.deleteSelectedPoint()) {
                 e.preventDefault();
                 e.stopPropagation();
             }

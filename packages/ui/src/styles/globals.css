@@ -658,6 +658,15 @@
     @apply absolute h-3 w-3 bg-background border border-selection-handle rounded-full;
 }
 
+/* A vertex dot the user has clicked to SELECT (EP-PT): filled with the selection-handle accent
+   instead of hollow, cloning Excalidraw's selected-point look (filled vs the idle hollow dots) so
+   Delete/Backspace visibly targets THIS point rather than the whole element. Applied alongside
+   .eigen-vertex-handle; source order after it carries the fill (the print block below hides it too,
+   since the element still matches .eigen-vertex-handle). */
+.eigen-vertex-handle-selected {
+    @apply bg-selection-handle;
+}
+
 /* The translucent dot at each segment midpoint of a selected line/arrow: drag it to INSERT a vertex
    there (point-handles.tsx, UA3). Same round token as the vertex dot but ghosted, so it reads as
    "add a point here" rather than an existing one; hover brings it to full strength (pointer cursor
