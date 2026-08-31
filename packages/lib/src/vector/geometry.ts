@@ -9,7 +9,9 @@ import {
     isBindable,
     isTransparent,
     parseBinding,
+    parseFixedSegments,
     serializeBinding,
+    serializeFixedSegments,
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
@@ -524,7 +526,7 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
 export function followBindings(
     arrow: VectorArrowElement,
     byId: Map<string, VectorElement>,
-): { x: number; y: number; width: number; height: number; points: string } | null {
+): { x: number; y: number; width: number; height: number; points: string; fixedSegments: string } | null {
     const start = boundShape(arrow.startBinding, byId);
     const end = boundShape(arrow.endBinding, byId);
     if (!start && !end) return null;
@@ -534,6 +536,10 @@ export function followBindings(
     if (start) next[0] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'start', start));
     if (end) next[next.length - 1] = linearSceneToLocal(arrow, boundEndpoint(arrow, 'end', end));
     const result = normalizeLinear(arrow, next);
+    // Pins are stored in the local frame; normalizeLinear re-origins x/y, so a pinned elbow's segments
+    // co-shift by the origin delta to hold their SCENE position while the bound endpoint follows the shape
+    // (EP-U5: "pin survives a shape move, keeps the pinned coordinate"). A no-op when there are no pins.
+    const fixedSegments = shiftFixedSegments(arrow.fixedSegments, arrow.x - result.x, arrow.y - result.y);
     if (
         result.points === arrow.points &&
         result.x === arrow.x &&
@@ -543,7 +549,22 @@ export function followBindings(
     ) {
         return null;
     }
-    return result;
+    return { ...result, fixedSegments };
+}
+
+// Translate every pinned segment by (dx,dy) in the local frame — the one owner of pin co-shifting, used
+// wherever an elbow arrow's origin is re-normalized (bound follow, endpoint-drag commit). Returns the
+// input verbatim when there is nothing to shift, so a straight arrow and the no-pin case pay nothing.
+export function shiftFixedSegments(fixedSegments: string, dx: number, dy: number): string {
+    if (fixedSegments === '' || (dx === 0 && dy === 0)) return fixedSegments;
+    const segs = parseFixedSegments(fixedSegments);
+    if (segs.length === 0) return fixedSegments;
+    return serializeFixedSegments(
+        segs.map((s) => ({
+            start: [s.start[0] + dx, s.start[1] + dy] as [number, number],
+            end: [s.end[0] + dx, s.end[1] + dy] as [number, number],
+        })),
+    );
 }
 
 function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {

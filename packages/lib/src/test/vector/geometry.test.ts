@@ -625,6 +625,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     startBinding: '',
     endBinding: '',
     elbow: false,
+    fixedSegments: '',
     text: '',
     fontSize: 20,
     fontFamily: 'Excalifont',
@@ -765,6 +766,7 @@ describe('boundEndpoint', () => {
             y: 50,
             width: 406,
             elbow: true,
+            fixedSegments: '',
             endBinding: bind(rect, [-0.03, 0.42]),
         });
         // end stored at scene (394,50) — far to the RIGHT of the rect — yet the dock is the LEFT side.
@@ -789,7 +791,7 @@ describe('followBindings', () => {
         const arrow = arrowEl({ points: '[[0,0],[100,0]]', width: 100, endBinding: bind(shapeB, [0, 0.5]) });
         const next = followBindings(arrow, byId);
         // shapeB's left inflated side is at 150 - gap(6) = 144; the start (unbound) stays at 0.
-        expect(next).toEqual({ x: 0, y: 0, width: 144, height: 0, points: '[[0,0],[144,0]]' });
+        expect(next).toEqual({ x: 0, y: 0, width: 144, height: 0, points: '[[0,0],[144,0]]', fixedSegments: '' });
     });
 
     test('returns null when the endpoint already sits on the outline (idempotent)', () => {
@@ -1003,6 +1005,7 @@ describe('elbow arrows — derived-route consumption', () => {
             width: 100,
             height: 0,
             elbow: true,
+            fixedSegments: '',
             startBinding: bind(a, [1, 0.5]),
             endBinding: bind(b, [0, 0.5]),
         });

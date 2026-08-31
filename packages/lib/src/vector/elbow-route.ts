@@ -32,6 +32,7 @@ import { linearLocalToScene, linearSceneToLocal, type Point, parsePoints } from 
 import {
     isBindable,
     parseBinding,
+    parseFixedSegments,
     type VectorArrowElement,
     type VectorElement,
     type VectorShapeElement,
@@ -73,24 +74,131 @@ export function elbowRoute(
     const startArrowhead = arrow.startArrowhead !== 'none';
     const endArrowhead = arrow.endArrowhead !== 'none';
 
-    const data = getElbowArrowData(
-        {
-            startShape,
-            endShape,
-            startGlobal,
-            endGlobal,
-            startArrowhead,
-            endArrowhead,
-            origStart: origPoints?.start ?? startGlobal,
-            origEnd: origPoints?.end ?? endGlobal,
-        },
-        !!arrow.startBinding,
-    );
+    const startEnd: LegEnd = {
+        point: startGlobal,
+        shape: startShape,
+        headingOverride: null,
+        arrowhead: startArrowhead,
+        orig: origPoints?.start ?? startGlobal,
+    };
+    const endEnd: LegEnd = {
+        point: endGlobal,
+        shape: endShape,
+        headingOverride: null,
+        arrowhead: endArrowhead,
+        orig: origPoints?.end ?? endGlobal,
+    };
 
-    const routeScene = routeElbowArrow(data) ?? lRoute(startGlobal, endGlobal, data.startHeading);
+    // Pinned segments (EP-U5) split the route: A* only the connector legs between them, keep each pin
+    // verbatim. No pins ⇒ one leg, byte-identical to the pre-U5 single-route path.
+    const pins = scenePins(arrow, startGlobal, endGlobal);
+    const routeScene =
+        pins.length === 0
+            ? routeSceneLeg(startEnd, endEnd, !!arrow.startBinding)
+            : pinnedRoute(pins, startEnd, endEnd, !!arrow.startBinding);
+
     const corners = getElbowArrowCornerPoints(removeElbowArrowShortSegments(routeScene));
     const local = corners.map((p) => linearSceneToLocal(arrow, p));
     return local.length >= 2 ? local : [linearSceneToLocal(arrow, startGlobal), linearSceneToLocal(arrow, endGlobal)];
+}
+
+// One end of a routing leg — a real bound shape (heading from the cone) or a virtual pinned-segment
+// vertex (heading forced to the pin's axis, no obstacle beyond its ±2 point box).
+type LegEnd = {
+    point: Point;
+    shape: VectorShapeElement | null;
+    headingOverride: Heading | null;
+    arrowhead: boolean;
+    orig: Point;
+};
+
+// Route one leg in scene space (endpoints included), never null: the guaranteed-draw L fallback stands in
+// when A* is walled. The shared core of both the no-pin route and every connector leg of a pinned route.
+function routeSceneLeg(start: LegEnd, end: LegEnd, startBinding: boolean): Point[] {
+    const data = getElbowArrowData(
+        {
+            startShape: start.shape,
+            endShape: end.shape,
+            startGlobal: start.point,
+            endGlobal: end.point,
+            startArrowhead: start.arrowhead,
+            endArrowhead: end.arrowhead,
+            origStart: start.orig,
+            origEnd: end.orig,
+            startHeadingOverride: start.headingOverride,
+            endHeadingOverride: end.headingOverride,
+        },
+        startBinding,
+    );
+    return routeElbowArrow(data) ?? lRoute(start.point, end.point, data.startHeading);
+}
+
+// The pinned segments in SCENE space, degenerate ones dropped, ordered along the start→end chord. A pin
+// is a bare {a,b} vertex pair here — which end is the entry vs the exit is decided per pin in the stitch
+// loop by proximity to the incoming point, so a re-route can't misattribute it (no stored index).
+function scenePins(arrow: VectorArrowElement, startGlobal: Point, endGlobal: Point): { a: Point; b: Point }[] {
+    const segs = parseFixedSegments(arrow.fixedSegments);
+    if (segs.length === 0) return [];
+    const scene = segs
+        .map((s) => ({
+            a: linearLocalToScene(arrow, { x: s.start[0], y: s.start[1] }),
+            b: linearLocalToScene(arrow, { x: s.end[0], y: s.end[1] }),
+        }))
+        .filter((p) => p.a.x !== p.b.x || p.a.y !== p.b.y);
+    const vx = endGlobal.x - startGlobal.x;
+    const vy = endGlobal.y - startGlobal.y;
+    const len2 = vx * vx + vy * vy || 1;
+    const t = (p: { a: Point; b: Point }): number =>
+        (((p.a.x + p.b.x) / 2 - startGlobal.x) * vx + ((p.a.y + p.b.y) / 2 - startGlobal.y) * vy) / len2;
+    return scene
+        .map((p) => ({ p, t: t(p) }))
+        .sort((m, n) => m.t - n.t)
+        .map(({ p }) => p);
+}
+
+// Stitch the full route: connector leg → pinned segment → connector leg → … Each pinned segment is kept
+// verbatim (its two vertices); the leg before it is forced to arrive travelling along the pin's axis, and
+// the leg after it to leave along the same axis, so the joints stay orthogonal.
+function pinnedRoute(pins: { a: Point; b: Point }[], startEnd: LegEnd, endEnd: LegEnd, startBinding: boolean): Point[] {
+    const full: Point[] = [];
+    let prev = startEnd;
+    let prevBinding = startBinding;
+
+    for (const pin of pins) {
+        const entryIsA = manhattan(prev.point, pin.a) <= manhattan(prev.point, pin.b);
+        const entry = entryIsA ? pin.a : pin.b;
+        const exit = entryIsA ? pin.b : pin.a;
+        const axis = axisHeading(entry, exit);
+        appendLeg(full, routeSceneLeg(prev, virtualEnd(entry, axis), prevBinding));
+        full.push(exit);
+        prev = virtualEnd(exit, axis);
+        prevBinding = false;
+    }
+
+    appendLeg(full, routeSceneLeg(prev, endEnd, prevBinding));
+    return full;
+}
+
+// A virtual leg end at a pinned vertex: no shape, heading forced to the pin axis.
+function virtualEnd(point: Point, heading: Heading): LegEnd {
+    return { point, shape: null, headingOverride: heading, arrowhead: false, orig: point };
+}
+
+// Append a leg, dropping its first point when it repeats the running route's last (every leg starts where
+// the previous pinned vertex left off).
+function appendLeg(full: Point[], leg: Point[]): void {
+    const skip = full.length > 0 && leg.length > 0 && samePoint(full[full.length - 1], leg[0]) ? 1 : 0;
+    for (let i = skip; i < leg.length; i++) full.push(leg[i]);
+}
+
+function samePoint(a: Point, b: Point): boolean {
+    return a.x === b.x && a.y === b.y;
+}
+
+// The orthogonal heading from `from` to `to` — the pinned segment's own axis direction.
+function axisHeading(from: Point, to: Point): Heading {
+    if (from.x === to.x) return to.y > from.y ? HEADING_DOWN : HEADING_UP;
+    return to.x > from.x ? HEADING_RIGHT : HEADING_LEFT;
 }
 
 // The polyline an arrow draws/hits as: the derived orthogonal route for an elbow arrow (undefined without
@@ -120,6 +228,10 @@ type RouteInputs = {
     // The pre-dock scene point per end for the heading distance-gate (D6); equals the stored global at rest.
     origStart: Point;
     origEnd: Point;
+    // Forced exit/entry heading for a VIRTUAL endpoint — a pinned-segment vertex has no shape, so its
+    // heading is the pin's own axis (EP-U5), not the cone or the toward-other-end default. null ⇒ derive.
+    startHeadingOverride?: Heading | null;
+    endHeadingOverride?: Heading | null;
 };
 
 type ElbowArrowData = {
@@ -146,8 +258,11 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
         ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
         : null;
     const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
-    const startHeading = getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart);
-    const endHeading = getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd);
+    const startHeading =
+        input.startHeadingOverride ??
+        getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart);
+    const endHeading =
+        input.endHeadingOverride ?? getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd);
 
     const startPointBounds = pointBounds(startGlobal);
     const endPointBounds = pointBounds(endGlobal);

@@ -7,6 +7,7 @@
 // claims Escape mid-resize.
 
 import {
+    arrowRoute,
     type Box,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
@@ -19,18 +20,20 @@ import {
     normalizeLinear,
     type Point,
     parsePoints,
+    shiftFixedSegments,
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
-import { createElement, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
+import { createElement, Fragment, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import type { VectorTool } from '../hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
 import { FocusIndicators, SnapDots } from './arrow-affordances';
 import { bindArrow, bindElbowEnd, bindingCandidate, bindingOutlineElement, followOtherEnd } from './binding';
+import { ElbowPinHandles } from './elbow-pin-handles';
 import { markErase } from './eraser';
 import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from './freedraw';
 import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDraft } from './line';
@@ -89,6 +92,16 @@ function arrowElement(origin: Point, points: Point[], seed: number): VectorArrow
         fontSize: DEFAULT_TEXT_PROPS.fontSize,
         fontFamily: DEFAULT_TEXT_PROPS.fontFamily,
     };
+}
+
+// normalizeLinear for a reshape, co-shifting an elbow arrow's pinned segments with the re-origin so they
+// hold their scene position (EP-U5). Lines and unpinned arrows return the plain normalize — no extra field.
+function reshapeLinear(el: VectorLinearElement | VectorArrowElement, points: Point[]) {
+    const norm = normalizeLinear(el, points);
+    if (el.type === 'arrow' && el.elbow && el.fixedSegments !== '') {
+        return { ...norm, fixedSegments: shiftFixedSegments(el.fixedSegments, el.x - norm.x, el.y - norm.y) };
+    }
+    return norm;
 }
 
 type DrawingToolsParams = {
@@ -543,7 +556,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         if (selectedLine.type === 'arrow' && isEndpoint(index, points.length)) {
             const arrow = selectedLine;
             const end = index === 0 ? 'start' : 'end';
-            const reshaped = { ...arrow, ...normalizeLinear(arrow, points) };
+            const reshaped = { ...arrow, ...reshapeLinear(arrow, points) };
             setDragEnd(end);
             const endScene = linearLocalToScene(arrow, points[index]);
             if (arrow.elbow) {
@@ -584,7 +597,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         }
         undoManager?.stopCapturing();
         if (selectedLine.type === 'arrow') {
-            const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
+            const reshaped = { ...selectedLine, ...reshapeLinear(selectedLine, points) };
             if (selectedLine.elbow && isEndpoint(index, points.length)) {
                 // Replay the last preview frame's cached dock — never re-run the candidate search from the
                 // release cursor (D4). Recompute only in the degenerate no-move case (no preview frame ran).
@@ -613,7 +626,33 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         setPointDraft(null);
     };
 
-    const handles = selectedLine
+    // Elbow segment-pin (fixedSegments) preview/commit (EP-U5). The preview stores the tentative pins on a
+    // draft element so its DERIVED route — the same elbowRoute the commit reads — is exactly what release
+    // writes (preview===commit). The commit changes only `fixedSegments`; the endpoints don't move.
+    const onElbowPinPreview = (fixedSegments: string | null) => {
+        if (fixedSegments === null || selectedLine?.type !== 'arrow') {
+            setPointDraft(null);
+            return;
+        }
+        setPointDraft({ id: selectedLine.id, el: { ...selectedLine, fixedSegments } });
+    };
+    const onElbowPinCommit = (fixedSegments: string) => {
+        if (selectedLine?.type !== 'arrow') return;
+        undoManager?.stopCapturing();
+        updateElement(selectedLine.id, { fixedSegments });
+        setPointDraft(null);
+    };
+
+    // The elbow arrow whose route the pin dots sit on: the live preview draft while a pin drags (so the
+    // dots track the re-routing snake), else the committed selection.
+    const elbowForPins =
+        selectedLine?.type === 'arrow' && selectedLine.elbow
+            ? pointDraft?.el.type === 'arrow' && pointDraft.el.id === selectedLine.id && pointDraft.el.elbow
+                ? pointDraft.el
+                : selectedLine
+            : null;
+
+    const linePointHandles = selectedLine
         ? createElement(LinePointHandles, {
               line: selectedLine,
               zoom,
@@ -626,6 +665,23 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
               onSelect: setSelectedPointIndex,
           })
         : null;
+
+    // Endpoint dots (every line/arrow) plus, for an elbow arrow, the segment-pin dots on its derived route.
+    const elbowPinHandles = elbowForPins
+        ? createElement(ElbowPinHandles, {
+              key: 'elbow-pins',
+              arrow: elbowForPins,
+              route: arrowRoute(elbowForPins, byId) ?? [],
+              zoom,
+              boxToStyle,
+              clientToScene,
+              frozenRef,
+              onPreview: onElbowPinPreview,
+              onCommit: onElbowPinCommit,
+          })
+        : null;
+    const handles =
+        linePointHandles || elbowPinHandles ? createElement(Fragment, null, linePointHandles, elbowPinHandles) : null;
 
     // The shape-following outline over the shape a dragged/hovered arrow endpoint reaches (creation, a
     // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: `elementToSvg`

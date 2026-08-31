@@ -101,7 +101,16 @@ export function bindArrow(
     ordered: VectorElement[],
     zoom: number,
     suppressed: boolean,
-): { startBinding: string; endBinding: string; x: number; y: number; width: number; height: number; points: string } {
+): {
+    startBinding: string;
+    endBinding: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    points: string;
+    fixedSegments: string;
+} {
     const points = parsePoints(arrow.points);
     const startScene = linearLocalToScene(arrow, points[0]);
     const endScene = linearLocalToScene(arrow, points[points.length - 1]);
@@ -115,6 +124,7 @@ export function bindArrow(
         width: arrow.width,
         height: arrow.height,
         points: arrow.points,
+        fixedSegments: arrow.fixedSegments,
     };
     return { startBinding, endBinding, ...geom };
 }
@@ -127,6 +137,7 @@ type BoundGeom = {
     width: number;
     height: number;
     points: string;
+    fixedSegments: string;
 };
 
 function followedGeom(
@@ -140,6 +151,7 @@ function followedGeom(
             width: arrow.width,
             height: arrow.height,
             points: arrow.points,
+            fixedSegments: arrow.fixedSegments,
         }
     );
 }

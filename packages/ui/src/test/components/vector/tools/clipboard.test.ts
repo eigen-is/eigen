@@ -91,6 +91,7 @@ describe('buildSelectionData', () => {
             roundness: 'sharp',
             points: '[[0,0],[100,80]]',
             elbow: true,
+            fixedSegments: '',
             startArrowhead: 'none',
             endArrowhead: 'arrow',
             startBinding: '',

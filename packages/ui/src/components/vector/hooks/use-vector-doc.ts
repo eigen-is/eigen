@@ -129,6 +129,9 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
         arrowMap.set('width', next.width);
         arrowMap.set('height', next.height);
         arrowMap.set('points', next.points);
+        // Pinned segments co-shift with the re-normalized origin so they hold their scene position while
+        // the bound endpoint follows the shape (EP-U5). '' for every non-pinned arrow.
+        arrowMap.set('fixedSegments', next.fixedSegments);
     }
 }
 

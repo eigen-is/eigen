@@ -87,6 +87,14 @@ export type VectorArrowElement = VectorElementBase & {
     // route is DERIVED on every read/render (elbowRoute), never stored. An elbow arrow pins angle 0 (its
     // route lives in the unrotated local frame — the reader forces it). `roundness` is ignored while true.
     elbow: boolean;
+    // Pinned route segments (Excalidraw's fixedSegments), a JSON `[{start,end},…]` string or '' when
+    // none (parseFixedSegments/serializeFixedSegments). Each entry is one axis-aligned segment the router
+    // must keep where the user dragged it, in the arrow's LOCAL frame (same as points; elbow pins angle 0
+    // so it's a pure translation). Excalidraw keys a pin by its INDEX into the stored full polyline; we
+    // store no polyline (the route is derived every read), so an index would be meaningless across a
+    // re-route — we store the pin's two vertices instead and order them geometrically at route time
+    // (elbow-route). Ignored on a straight (non-elbow) arrow. Empty for old data ⇒ reads back unchanged.
+    fixedSegments: string;
     startArrowhead: Arrowhead;
     endArrowhead: Arrowhead;
     startBinding: string;
@@ -107,6 +115,12 @@ export type VectorElement =
 // A forward binding: an anchor as a proportion (fixedPoint) of the target shape's local w/h, so the
 // anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
 export type Binding = { elementId: string; fixedPoint: [number, number] };
+
+// One pinned route segment: its two endpoints in the arrow's LOCAL frame (like points). Always
+// axis-aligned — start and end share exactly one coordinate (a horizontal OR vertical segment) — which
+// is the invariant the router relies on to keep the pin on its axis. No index: order is re-derived from
+// geometry at route time, so a re-route that changes the segment count can't misattribute a pin.
+export type FixedSegment = { start: [number, number]; end: [number, number] };
 
 export type VectorMeta = { background: string; gridSize: number };
 
@@ -145,6 +159,7 @@ export const ELEMENT_FIELDS = [
     'startBinding',
     'endBinding',
     'elbow',
+    'fixedSegments',
     'labelWidth',
 ] as const;
 
@@ -187,10 +202,11 @@ export const DEFAULT_ARROW_PROPS = {
     startBinding: '',
     endBinding: '',
     elbow: false,
+    fixedSegments: '',
     labelWidth: 0,
 } satisfies Pick<
     VectorArrowElement,
-    'startArrowhead' | 'endArrowhead' | 'startBinding' | 'endBinding' | 'elbow' | 'labelWidth'
+    'startArrowhead' | 'endArrowhead' | 'startBinding' | 'endBinding' | 'elbow' | 'fixedSegments' | 'labelWidth'
 >;
 
 // Shared line-width presets — the ONE source for the thin/medium/bold vocabulary, consumed by both
@@ -250,6 +266,51 @@ export function parseBinding(s: string): Binding | null {
 
 export function serializeBinding(b: Binding): string {
     return JSON.stringify({ elementId: b.elementId, fixedPoint: b.fixedPoint });
+}
+
+// Pinned segments materialize from their JSON string, dropping anything malformed: an entry must be a
+// finite axis-aligned segment (start/end sharing exactly one coordinate, and not a degenerate point).
+// A '' or all-invalid string ⇒ no pins. Lenient like parseBinding — one corrupt entry can't wedge the
+// arrow; the whole scene never throws over a bad peer write.
+export function parseFixedSegments(s: string): FixedSegment[] {
+    if (s === '') return [];
+    let raw: unknown;
+    try {
+        raw = JSON.parse(s);
+    } catch {
+        return [];
+    }
+    if (!Array.isArray(raw)) return [];
+    const out: FixedSegment[] = [];
+    for (const entry of raw) {
+        const seg = fixedSegmentOf(entry);
+        if (seg) out.push(seg);
+    }
+    return out;
+}
+
+function fixedSegmentOf(entry: unknown): FixedSegment | null {
+    if (typeof entry !== 'object' || entry === null) return null;
+    const { start, end } = entry as { start?: unknown; end?: unknown };
+    const s = pairOf(start);
+    const e = pairOf(end);
+    if (!s || !e) return null;
+    const horizontal = s[1] === e[1];
+    const vertical = s[0] === e[0];
+    // Exactly one axis shared, and the segment has length (a point is not a segment).
+    if (horizontal === vertical) return null;
+    return { start: s, end: e };
+}
+
+function pairOf(v: unknown): [number, number] | null {
+    if (!Array.isArray(v) || v.length !== 2) return null;
+    const [a, b] = v;
+    if (typeof a !== 'number' || typeof b !== 'number' || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+    return [a, b];
+}
+
+export function serializeFixedSegments(segments: FixedSegment[]): string {
+    return segments.length === 0 ? '' : JSON.stringify(segments.map((s) => ({ start: s.start, end: s.end })));
 }
 
 // The reverse index the forward bindings imply: shape id → the arrows bound to it, either end. Derived

@@ -818,6 +818,7 @@ export function VectorCanvas({
                         partial.startArrowhead = meta.startArrowhead;
                         partial.endArrowhead = meta.endArrowhead;
                         partial.elbow = meta.elbow;
+                        partial.fixedSegments = meta.fixedSegments;
                         partial.text = meta.text;
                         partial.fontSize = meta.fontSize;
                         partial.fontFamily = meta.fontFamily;

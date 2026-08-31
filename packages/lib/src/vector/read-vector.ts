@@ -18,9 +18,11 @@ import {
     isBindable,
     isVectorElementType,
     parseBinding,
+    parseFixedSegments,
     ROUNDNESS,
     STROKE_STYLES,
     serializeBinding,
+    serializeFixedSegments,
     TEXT_ALIGNS,
     type VectorElement,
     type VectorElementBase,
@@ -138,6 +140,10 @@ function readElement(value: unknown): VectorElement | null {
                 roundness: oneOf(value.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
                 points: serializePoints(clamped),
                 elbow,
+                // Pinned route segments live only on an elbow arrow — a straight arrow ignores them (its
+                // route is the raw chord). Re-serialized through the canonical form: garbage and non
+                // axis-aligned entries drop, coords clamp like the endpoints, '' when none remain.
+                fixedSegments: elbow ? fixedSegments(value.get('fixedSegments')) : '',
                 startArrowhead: oneOf(value.get('startArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.startArrowhead),
                 endArrowhead: oneOf(value.get('endArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.endArrowhead),
                 startBinding: binding(value.get('startBinding')),
@@ -162,6 +168,18 @@ function readElement(value: unknown): VectorElement | null {
 function binding(v: unknown): string {
     const parsed = parseBinding(str(v, ''));
     return parsed ? serializeBinding(parsed) : '';
+}
+
+// Pinned segments to canonical form: drop malformed/non-axis-aligned entries (parseFixedSegments), clamp
+// each coordinate like a spatial field so one corrupt peer write can't blow the shared viewBox, then
+// re-serialize (or '' when nothing survives).
+function fixedSegments(v: unknown): string {
+    const parsed = parseFixedSegments(str(v, ''));
+    const clamped = parsed.map((s) => ({
+        start: [clampCoord(s.start[0]), clampCoord(s.start[1])] as [number, number],
+        end: [clampCoord(s.end[0]), clampCoord(s.end[1])] as [number, number],
+    }));
+    return serializeFixedSegments(clamped);
 }
 
 // Second pass: a binding whose target no longer exists — or is no longer a bindable shape — is

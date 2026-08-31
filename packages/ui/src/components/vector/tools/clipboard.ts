@@ -45,6 +45,7 @@ export type VectorClipMeta = {
     startBinding?: string;
     endBinding?: string;
     elbow?: boolean;
+    fixedSegments?: string;
     text?: string;
     fontSize?: number;
     fontFamily?: string;
@@ -120,6 +121,7 @@ export function buildElementClipboardItem(
         vector.startBinding = el.startBinding;
         vector.endBinding = el.endBinding;
         vector.elbow = el.elbow;
+        vector.fixedSegments = el.fixedSegments;
         vector.text = el.text;
         vector.fontSize = el.fontSize;
         vector.fontFamily = el.fontFamily;

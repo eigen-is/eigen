@@ -49,6 +49,7 @@ const elbowArrow = (start: Point, end: Point, endBinding: string): VectorArrowEl
     index: 'a0',
     roundness: 'sharp',
     elbow: true,
+    fixedSegments: '',
     startArrowhead: 'none',
     endArrowhead: 'arrow',
     startBinding: '',
