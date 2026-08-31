@@ -173,6 +173,9 @@ export const DEFAULT_FONT_FAMILY = 'Excalifont';
 export const DEFAULT_SHAPE_ROUNDNESS: Roundness = 'round';
 // A drawn line/freedraw is straight by default; the reader falls back to this for a linear element.
 export const DEFAULT_LINEAR_ROUNDNESS: Roundness = 'sharp';
+// Arrows curve by default (Excalidraw parity); the read fallback stays sharp so stored
+// arrows keep their meaning.
+export const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
 // Canvas-level defaults (the `meta` root).
 export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', gridSize: 20 };
@@ -209,9 +212,17 @@ export const DEFAULT_ARROW_PROPS = {
     elbow: false,
     fixedSegments: '',
     labelWidth: 0,
+    roundness: DEFAULT_ARROW_ROUNDNESS,
 } satisfies Pick<
     VectorArrowElement,
-    'startArrowhead' | 'endArrowhead' | 'startBinding' | 'endBinding' | 'elbow' | 'fixedSegments' | 'labelWidth'
+    | 'startArrowhead'
+    | 'endArrowhead'
+    | 'startBinding'
+    | 'endBinding'
+    | 'elbow'
+    | 'fixedSegments'
+    | 'labelWidth'
+    | 'roundness'
 >;
 
 // Shared line-width presets — the ONE source for the thin/medium/bold vocabulary, consumed by both

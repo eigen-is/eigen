@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     arrowShapeFields,
     arrowShapeOf,
+    DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
     parseFixedSegments,
     serializeFixedSegments,
@@ -78,4 +79,12 @@ describe('parseFixedSegments / serializeFixedSegments', () => {
             ).segments,
         ).toEqual([{ index: 5, start: [2, 0], end: [2, 9] }]);
     });
+});
+
+// Both creation paths (use-vector-doc's elementDefaults, use-drawing-tools' arrowElement) spread
+// DEFAULT_ARROW_PROPS last, so this IS the shipped default: a new arrow draws curved, like
+// Excalidraw. Lines and freedraw stay sharp, and the read fallback stays sharp so stored arrows
+// keep their meaning.
+test('a new arrow is curved by default', () => {
+    expect(arrowShapeOf(arrow({ ...DEFAULT_ARROW_PROPS }))).toBe('curved');
 });

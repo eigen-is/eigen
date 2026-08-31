@@ -57,7 +57,6 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
     if (type === 'arrow')
         return {
             ...base,
-            roundness: DEFAULT_LINEAR_ROUNDNESS,
             points: '[]',
             text: DEFAULT_TEXT_PROPS.text,
             fontSize: DEFAULT_TEXT_PROPS.fontSize,
