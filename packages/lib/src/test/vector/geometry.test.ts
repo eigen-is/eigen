@@ -936,14 +936,14 @@ describe('hitTestElement — arrow', () => {
 // route is passed into hit-testing and bounds so both track the snake. followBindings still moves the two
 // stored endpoints, and a shape move re-routes through it.
 describe('elbow arrows — derived-route consumption', () => {
-    // Unbound diagonal elbow: elbowRoute yields the Z [(0,0),(60,0),(60,80),(100,80)].
+    // Unbound diagonal elbow: elbowRoute yields the Z [(0,0),(50,0),(50,80),(100,80)].
     const elbow = arrowEl({ points: '[[0,0],[100,80]]', elbow: true, width: 100, height: 80 });
     const route = elbowRoute(elbow, new Map([[elbow.id, elbow]]));
 
     test('hitTestElement grabs a routed segment only when the route is supplied', () => {
-        // (60,0) sits on the route's first horizontal arm but ~48 units off the straight endpoint line.
-        expect(hitTestElement(elbow, { x: 60, y: 0 }, 2, route)).toBe(true);
-        expect(hitTestElement(elbow, { x: 60, y: 0 }, 2)).toBe(false);
+        // (30,0) sits on the route's first horizontal arm but ~19 units off the straight endpoint line.
+        expect(hitTestElement(elbow, { x: 30, y: 0 }, 2, route)).toBe(true);
+        expect(hitTestElement(elbow, { x: 30, y: 0 }, 2)).toBe(false);
         // Clear of every routed arm.
         expect(hitTestElement(elbow, { x: 30, y: 60 }, 2, route)).toBe(false);
     });
