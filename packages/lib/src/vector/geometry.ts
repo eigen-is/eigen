@@ -666,7 +666,7 @@ export function outlineIntersections(shape: VectorShapeElement, a: Point, b: Poi
 }
 
 // A bound endpoint's scene position: snap the anchor to the shape outline along the segment from the
-// other end, with Excalidraw's guard — if that would make the arrow shorter than 10 units, sit on the
+// adjacent vertex, with Excalidraw's guard — if that would make the arrow shorter than 10 units, sit on the
 // anchor instead (a degenerate arrow would otherwise flip inside the shape).
 export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', shape: VectorShapeElement): Point {
     const points = parsePoints(arrow.points);
@@ -678,7 +678,11 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
     // end never enters — so it can't change side when the other end moves. Straight ends keep the chord
     // orbit below (that IS Excalidraw parity, and U4 adds the anchor UX around it).
     if (arrow.elbow) return elbowAnchorScene(shape, binding.fixedPoint);
-    const otherScene = linearLocalToScene(arrow, end === 'start' ? points[points.length - 1] : points[0]);
+    // Excalidraw aims the chord from the ADJACENT vertex (updateBoundPoint, index 1 / -2), so a dragged
+    // mid point slides the attachment along the outline to face it. Same point as the far end for 2-point
+    // arrows. The visible curve still crosses the outline slightly off this chord — curve-exact
+    // intersection is a ROADMAP item Excalidraw doesn't do either.
+    const otherScene = linearLocalToScene(arrow, end === 'start' ? points[1] : points[points.length - 2]);
     const anchor = anchorToScene(shape, binding.fixedPoint);
     const endpoint = outlinePoint(shape, otherScene, anchor, bindingGap(shape));
     if (Math.hypot(endpoint.x - otherScene.x, endpoint.y - otherScene.y) <= BASE_ARROW_MIN_LENGTH) return anchor;

@@ -758,6 +758,26 @@ describe('boundEndpoint', () => {
         expect(boundEndpoint(arrow, 'end', shape)).toEqual({ x: 25, y: 0 });
     });
 
+    // Excalidraw's updateBoundPoint aims the chord from the ADJACENT vertex (index 1 / -2), not the far
+    // endpoint — for a multi-point arrow the attachment must face the neighbouring vertex, so dragging a
+    // mid point around the shape slides the endpoint along the outline. Identical for 2-point arrows.
+    test('a multi-point end aims the chord from the adjacent vertex, not the far end', () => {
+        // scene: start (-30,0), mid (-10,40), end near the rect; anchor = rect centre (25,0).
+        // From the mid vertex the chord crosses the inflated outline on the TOP edge (2.25, 26);
+        // from the far end it would cross the left edge at (-1, 0).
+        const arrow = arrowEl({
+            points: '[[0,0],[20,40],[36,0]]',
+            x: -30,
+            y: 0,
+            width: 66,
+            height: 40,
+            endBinding: bind(shape, [0.5, 0.5]),
+        });
+        const p = boundEndpoint(arrow, 'end', shape);
+        expect(p.x).toBeCloseTo(2.25);
+        expect(p.y).toBeCloseTo(26);
+    });
+
     // D1: an elbow end derives from the fixedPoint alone — no chord, the other end never enters — so the
     // stored fixedPoint's own side is authoritative. A straight end keeps the chord orbit above (unchanged).
     test('elbow end resolves the fixedPoint dock on its own side, ignoring the other end', () => {
