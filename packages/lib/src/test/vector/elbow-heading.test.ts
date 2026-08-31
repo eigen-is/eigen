@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { elbowBindPoint } from '../../vector/elbow-heading';
+import { elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
 import {
     bindingAnchor,
@@ -13,6 +13,7 @@ import {
 } from '../../vector/geometry';
 import {
     DEFAULT_ELEMENT_PROPS,
+    parseBinding,
     serializeBinding,
     type VectorArrowElement,
     type VectorElement,
@@ -194,5 +195,42 @@ describe('elbow bind → resolve round-trip (D3/D4 commit pin)', () => {
         const rawStore = normalizeFixedPoint(bindingAnchor(rect, cursor));
         expect(elbowAnchorScene(rect, rawStore).x).toBeCloseTo(cursor.x); // -50 — at the cursor, off the shape
         expect(elbowAnchorScene(rect, rawStore).x).not.toBeCloseTo(dock.x); // ≠ the -6 outline dock
+    });
+});
+
+// EP-U3 fix: the panel's to-elbow switch must re-dock a bound end whose fixedPoint was stored for the STRAIGHT
+// read (bindingAnchor's raw ratio). The elbow read (elbowAnchorScene) maps that ratio straight onto the box, so
+// without re-docking the endpoint floats INSIDE the shape (the create-then-toggle drift). redockBindingsForElbow
+// converts each bound end's fixedPoint to the outline dock via elbowBindPoint; followBindings then re-glues.
+describe('redockBindingsForElbow — to-elbow re-docks a raw-cursor bound end', () => {
+    const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, strokeWidth: 2 });
+    // A cursor INSIDE the rect, near its left side.
+    const inside = { x: 20, y: 50 };
+
+    test('the raw inside ratio becomes the outline dock; boundEndpoint then rests on the outline+gap', () => {
+        const rawFixed = normalizeFixedPoint(bindingAnchor(rect, inside));
+        const arrow = elbowArrow(
+            { x: -80, y: 50 },
+            inside,
+            serializeBinding({ elementId: rect.id, fixedPoint: rawFixed }),
+        );
+        const byId = new Map<string, VectorElement>([[rect.id, rect]]);
+
+        // Before: the elbow read of the stored raw ratio floats the endpoint back inside, at the cursor.
+        expect(elbowAnchorScene(rect, rawFixed).x).toBeCloseTo(inside.x);
+
+        const { endBinding } = redockBindingsForElbow(arrow, byId);
+        expect(parseBinding(endBinding)).not.toBeNull();
+        // After: boundEndpoint rests on the left outline + gap(6), off the (20,50) inside point.
+        const rest = boundEndpoint({ ...arrow, endBinding }, 'end', rect);
+        expect(rest.x).toBeCloseTo(-6);
+        expect(rest.x).not.toBeCloseTo(inside.x);
+    });
+
+    test('an unbound end is left untouched', () => {
+        const arrow = elbowArrow({ x: -80, y: 50 }, inside, '');
+        const { startBinding, endBinding } = redockBindingsForElbow(arrow, new Map([[rect.id, rect]]));
+        expect(startBinding).toBe('');
+        expect(endBinding).toBe('');
     });
 });

@@ -253,10 +253,10 @@ function renderArrowhead(
     const geo = arrowheadGeometry(el, points, position, head);
     if (!geo) return '';
     if (geo.kind === 'circle') {
-        return drawableToSvg(gen.circle(geo.center.x, geo.center.y, geo.diameter, headOptions(el, true)));
+        return drawableToSvg(gen.circle(geo.center.x, geo.center.y, geo.diameter, headOptions(el, true, 0.5)));
     }
     if (head === 'triangle') {
-        const options = headOptions(el, true);
+        const options = headOptions(el, true, 1);
         return drawableToSvg(
             gen.polygon(
                 [
@@ -268,7 +268,7 @@ function renderArrowhead(
             ),
         );
     }
-    const options = headOptions(el, false);
+    const options = headOptions(el, false, 1);
     if (head === 'bar') {
         return drawableToSvg(gen.line(geo.barb1.x, geo.barb1.y, geo.barb2.x, geo.barb2.y, options));
     }
@@ -279,10 +279,13 @@ function renderArrowhead(
     );
 }
 
-// Head options mirror the shaft's (seed/roughness/stroke), preserveVertices on so a small head stays
-// crisp; solid heads (triangle/circle) fill with strokeColor.
-function headOptions(el: VectorArrowElement, solidFill: boolean): Options {
+// Head options mirror the shaft's (seed/stroke), preserveVertices on so a small head stays crisp, and cap
+// roughness like Excalidraw's getArrowheadLineOptions — barbs at 1, the circle disc at 0.5 — so a rough head
+// docks cleanly on the (now pinned) shaft end instead of forking off it. Solid heads (triangle/circle) fill
+// with strokeColor.
+function headOptions(el: VectorArrowElement, solidFill: boolean, roughnessCap: number): Options {
     const options = baseRoughOptions(el, true);
+    options.roughness = Math.min(roughnessCap, options.roughness ?? 0);
     if (solidFill) {
         options.fillStyle = 'solid';
         options.fill = el.strokeColor;
@@ -455,7 +458,11 @@ function baseRoughOptions(
         hachureGap: el.strokeWidth * 4,
         roughness: adjustRoughness(el),
         stroke: el.strokeColor,
-        preserveVertices: continuousPath || el.roughness < 2,
+        // Deliberate drift from Excalidraw (crisper): a line/arrow SHAFT preserves its vertices at every
+        // roughness, so cartoon-roughness (r≥2) endpoints sit exactly on the stored points instead of
+        // wandering ~3px off. Shapes keep Excalidraw's roughness<2 rule; freedraw's roughjs FILL is
+        // untouched (its stroke is perfect-freehand, never roughjs).
+        preserveVertices: continuousPath || el.roughness < 2 || el.type === 'line' || el.type === 'arrow',
     };
 }
 

@@ -23,6 +23,7 @@ import {
     normalizeLinear,
     parsePoints,
     type Roundness,
+    redockBindingsForElbow,
     resizeLinear,
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
@@ -179,13 +180,20 @@ export function VectorPropertiesPanel({
     const applyArrowShape = (shape: ArrowShape) => {
         if (!arrowEls.length) return;
         const base = arrowShapeFields(shape);
+        const allById = new Map(elements.map((el) => [el.id, el]));
         undoManager?.stopCapturing();
         updateElements(
             arrowEls.map((el) => {
                 if (shape !== 'elbow') return { id: el.id, fields: base };
                 const pts = parsePoints(el.points);
                 const collapsed = pts.length >= 2 ? [pts[0], pts[pts.length - 1]] : pts;
-                return { id: el.id, fields: { ...base, angle: 0, ...normalizeLinear({ ...el, angle: 0 }, collapsed) } };
+                // A bound end's fixedPoint was stored for the straight read; re-dock it for the elbow read so
+                // the endpoint sits on the outline, not inside the shape. followBindings re-glues after.
+                const redocked = redockBindingsForElbow(el, allById);
+                return {
+                    id: el.id,
+                    fields: { ...base, ...redocked, angle: 0, ...normalizeLinear({ ...el, angle: 0 }, collapsed) },
+                };
             }),
         );
         undoManager?.stopCapturing();
@@ -445,15 +453,28 @@ export function VectorPropertiesPanel({
                                 options={ROUGHNESS_OPTIONS}
                             />
                         </PropertyRow>
-                        {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines & shapes keep Edges. */}
+                        {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines & shapes keep Edges. An
+                            elbow reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is
+                            always orthogonal, so roundness is free to mean the corners. */}
                         {allArrow ? (
-                            <PropertyRow label="Type">
-                                <MergedSelect
-                                    value={arrowShape}
-                                    onChange={applyArrowShape}
-                                    options={ARROW_SHAPE_OPTIONS}
-                                />
-                            </PropertyRow>
+                            <>
+                                <PropertyRow label="Type">
+                                    <MergedSelect
+                                        value={arrowShape}
+                                        onChange={applyArrowShape}
+                                        options={ARROW_SHAPE_OPTIONS}
+                                    />
+                                </PropertyRow>
+                                {allElbow && (
+                                    <PropertyRow label="Edges">
+                                        <MergedSelect
+                                            value={roundness}
+                                            onChange={(v) => applyToAll({ roundness: v })}
+                                            options={EDGES_OPTIONS}
+                                        />
+                                    </PropertyRow>
+                                )}
+                            </>
                         ) : (
                             allEdged && (
                                 <PropertyRow label="Edges">

@@ -11,12 +11,21 @@ import {
     boxCenter,
     elbowAnchorScene,
     getElementBounds,
+    linearLocalToScene,
     normalizeFixedPoint,
     outlineIntersections,
     type Point,
+    parsePoints,
     rotatePoint,
 } from './geometry';
-import type { VectorShapeElement } from './types';
+import {
+    isBindable,
+    parseBinding,
+    serializeBinding,
+    type VectorArrowElement,
+    type VectorElement,
+    type VectorShapeElement,
+} from './types';
 
 // A unit orthogonal direction. Compared by value (compareHeading), never by reference.
 export type Heading = { x: number; y: number };
@@ -273,6 +282,31 @@ export function elbowBindPoint(shape: VectorShapeElement, point: Point): { dock:
     }
     const dock = elbowDock(shape, point);
     return { dock, fixedPoint: normalizeFixedPoint(bindingAnchor(shape, dock)) };
+}
+
+// When an arrow with shape bindings gains the elbow flag (the panel's to-elbow switch), each bound end's
+// fixedPoint was stored for the STRAIGHT read — bindingAnchor's raw ratio, which anchorToScene chord-orbits
+// onto the outline. The elbow read (elbowAnchorScene) maps that ratio straight onto the box with no chord, so
+// it would rest the endpoint INSIDE the shape (the create-then-toggle drift). Re-dock each bound end from its
+// current scene endpoint through elbowBindPoint so the stored fixedPoint is the outline+gap dock; followBindings
+// (run after the patch) then re-glues both ends on the elbow path.
+export function redockBindingsForElbow(
+    arrow: VectorArrowElement,
+    byId: Map<string, VectorElement>,
+): { startBinding: string; endBinding: string } {
+    const points = parsePoints(arrow.points);
+    const redock = (binding: string, endLocal: Point | undefined): string => {
+        const b = parseBinding(binding);
+        if (!b || !endLocal) return binding;
+        const shape = byId.get(b.elementId);
+        if (!shape || !isBindable(shape)) return binding;
+        const scene = linearLocalToScene(arrow, endLocal);
+        return serializeBinding({ elementId: b.elementId, fixedPoint: elbowBindPoint(shape, scene).fixedPoint });
+    };
+    return {
+        startBinding: redock(arrow.startBinding, points[0]),
+        endBinding: redock(arrow.endBinding, points[points.length - 1]),
+    };
 }
 
 // The outline dock for a raw point: push it off a rectangle corner (avoidRectangularCorner), snap it toward

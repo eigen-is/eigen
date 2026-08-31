@@ -675,6 +675,8 @@
    set in JSX). Elbow arrows show none (their route is derived). */
 .eigen-midpoint-handle {
     @apply absolute h-3 w-3 bg-background border border-selection-handle rounded-full opacity-40;
+    /* Contain the ::before halo's negative z-index so it sits behind the dot but above the scene. */
+    isolation: isolate;
 }
 
 .eigen-midpoint-handle:hover {

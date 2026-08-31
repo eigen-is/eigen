@@ -276,10 +276,12 @@ export function arrowShapeOf(el: VectorArrowElement): ArrowShape {
     return el.elbow ? 'elbow' : el.roundness === 'round' ? 'curved' : 'sharp';
 }
 
-// The stored fields a chosen shape writes back (UA4b): 'elbow' sets the flag (shaft roundness moot, kept
-// sharp); 'curved'/'sharp' clear it and pick the shaft roundness. One owner so the panel never re-derives.
-export function arrowShapeFields(shape: ArrowShape): { elbow: boolean; roundness: Roundness } {
-    if (shape === 'elbow') return { elbow: true, roundness: 'sharp' };
+// The stored fields a chosen shape writes back (UA4b): 'elbow' sets only the flag and leaves roundness
+// untouched — for an elbow it is the CORNER style (sharp bends vs radius-16 arcs), a separate Edges row,
+// not the shaft curve — so the write must preserve whatever corner style the element already carries;
+// 'curved'/'sharp' clear the flag and pick the shaft roundness. One owner so the panel never re-derives.
+export function arrowShapeFields(shape: ArrowShape): { elbow: boolean; roundness?: Roundness } {
+    if (shape === 'elbow') return { elbow: true };
     return { elbow: false, roundness: shape === 'curved' ? 'round' : 'sharp' };
 }
 

@@ -1,5 +1,5 @@
 export * from './arrange';
-export { elbowBindPoint } from './elbow-heading';
+export { elbowBindPoint, redockBindingsForElbow } from './elbow-heading';
 export { arrowRoute, elbowRoute } from './elbow-route';
 export * from './font-metrics';
 export * from './fractional-index';
