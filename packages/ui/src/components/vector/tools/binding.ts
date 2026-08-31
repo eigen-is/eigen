@@ -123,9 +123,16 @@ function bindingFor(
     if (!shape || !isBindable(shape)) return '';
     // Straight arrows aim the stored ratio through a natural line — project the raw endpoint onto the shape's
     // diagonals / centre lines (or snap to a side midpoint), Excalidraw's bind-time nicety that makes fresh
-    // arrows point through the middle rather than at wherever the cursor landed. Elbow arrows keep the raw
-    // anchor (their outline dock is resolved separately, never a diagonal).
-    const focus = arrow.elbow ? scene : (projectFixedPointOntoDiagonal(shape, scene, otherEnd, arrow, zoom) ?? scene);
+    // arrows point through the middle rather than at wherever the cursor landed. But that projection is the
+    // "orbit" strategy — it applies ONLY when the endpoint lands OUTSIDE the shape's fill. A drop INSIDE the
+    // fill is the "inside" strategy and stores the RAW cursor ratio verbatim (Excalidraw's getBindingStrategy*
+    // → calculateFixedPointForNonElbowArrowBinding, gated on isPointInElement). Re-projecting an inside drop
+    // would fling the anchor off the release point onto the diagonal, toward the centre (the EP-U4 regression).
+    // Elbow arrows keep the raw anchor too (their outline dock is resolved separately, never a diagonal).
+    const focus =
+        arrow.elbow || pointInsideShape(shape, scene)
+            ? scene
+            : (projectFixedPointOntoDiagonal(shape, scene, otherEnd, arrow, zoom) ?? scene);
     return serializeBinding({ elementId: id, fixedPoint: bindingAnchor(shape, focus) });
 }
 
