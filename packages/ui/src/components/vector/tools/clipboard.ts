@@ -66,7 +66,7 @@ export function toVectorTextAlign(v: string | undefined): TextAlign {
 // linear elements → a text-item carrier rebuilt from meta.vector on a vector→vector paste. Every item
 // also carries the element's scene x/y (+ vector-private fields) under meta.vector. Returns null when
 // an image's media can't be resolved to a portable path (a still-pending upload).
-export function buildElementClipboardItem(
+function buildElementClipboardItem(
     el: VectorElement,
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): EigenClipboardItem | null {

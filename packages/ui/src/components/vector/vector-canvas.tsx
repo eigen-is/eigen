@@ -132,6 +132,9 @@ type Gesture = { pointerId: number } & (
           originals: Record<string, { x: number; y: number }>;
           ids: string[];
           moved: boolean;
+          // The selected elements, snapshotted here (committed geometry is invariant for the gesture —
+          // only previews move), so the move tick reads them instead of re-scanning the scene per frame.
+          selById: Map<string, VectorElement>;
           // Snap targets = every OTHER element's edges/centre, invariant for the gesture (only
           // previews move; committed elements don't), so compute once here instead of per tick.
           snapTargets: SnapTargets;
@@ -1183,9 +1186,13 @@ export function VectorCanvas({
             const ids = selectedIds.includes(hitId) ? selectedIds : [hitId];
             if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
             const originals: Record<string, { x: number; y: number }> = {};
+            const selById = new Map<string, VectorElement>();
             for (const id of ids) {
                 const el = ordered.find((x) => x.id === id);
-                if (el) originals[id] = { x: el.x, y: el.y };
+                if (el) {
+                    originals[id] = { x: el.x, y: el.y };
+                    selById.set(id, el);
+                }
             }
             frozenRef.current = true;
             undoManager?.stopCapturing();
@@ -1197,6 +1204,7 @@ export function VectorCanvas({
                 originals,
                 ids,
                 moved: false,
+                selById,
                 snapTargets: buildSnapTargets(new Set(ids)),
             };
             return;
@@ -1264,10 +1272,8 @@ export function VectorCanvas({
             }
             if (dx !== 0 || dy !== 0) g.moved = true;
 
-            const selEls = g.ids
-                .map((id) => elementsRef.current.find((el) => el.id === id))
-                .filter((el): el is VectorElement => !!el);
-            const selById = new Map(selEls.map((el) => [el.id, el]));
+            const selById = g.selById;
+            const selEls = [...selById.values()];
             // Snap the selection's AABB to the other elements (centre-only if any member is rotated —
             // Override-24), then apply the snap correction to every moved element. Empty lines = no snap.
             // A Shift-locked axis (the zeroed one) is passed to snap as lockAxis so it never produces a

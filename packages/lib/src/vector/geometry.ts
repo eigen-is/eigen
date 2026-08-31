@@ -351,7 +351,7 @@ function hitTestArrow(el: VectorArrowElement, point: Point, threshold: number, r
 
 // Point-to-segment distance (Excalidraw's distanceToLineSegment): project onto the segment, clamp the
 // parameter to [0,1], measure to the clamped foot.
-function distanceToSegment(p: Point, a: Point, b: Point): number {
+export function distanceToSegment(p: Point, a: Point, b: Point): number {
     const cx = b.x - a.x;
     const cy = b.y - a.y;
     const lenSq = cx * cx + cy * cy;
@@ -745,7 +745,7 @@ export function followBindings(
     return { ...result, fixedSegments: '' };
 }
 
-function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {
+export function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {
     const b = parseBinding(binding);
     if (!b) return null;
     const el = byId.get(b.elementId);

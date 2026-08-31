@@ -9,6 +9,7 @@ import {
     bindingAnchor,
     bindingGap,
     boxCenter,
+    distanceToSegment,
     elbowAnchorScene,
     getElementBounds,
     linearLocalToScene,
@@ -247,14 +248,6 @@ function triangleIncludesPoint(a: Point, b: Point, c: Point, p: Point): boolean 
     const hasNeg = d1 < 0 || d2 < 0 || d3 < 0;
     const hasPos = d1 > 0 || d2 > 0 || d3 > 0;
     return !(hasNeg && hasPos);
-}
-
-function distanceToSegment(p: Point, a: Point, b: Point): number {
-    const cx = b.x - a.x;
-    const cy = b.y - a.y;
-    const lenSq = cx * cx + cy * cy;
-    const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * cx + (p.y - a.y) * cy) / lenSq));
-    return Math.hypot(p.x - (a.x + t * cx), p.y - (a.y + t * cy));
 }
 
 // --- elbow bind-time dock (Excalidraw's bindPointToSnapToElementOutline elbow branch + snapToMid +

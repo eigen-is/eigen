@@ -28,14 +28,8 @@ import {
     headingIsHorizontal,
     vectorToHeading,
 } from './elbow-heading';
-import { linearLocalToScene, linearSceneToLocal, type Point, parsePoints } from './geometry';
-import {
-    isBindable,
-    parseBinding,
-    type VectorArrowElement,
-    type VectorElement,
-    type VectorShapeElement,
-} from './types';
+import { boundShape, linearLocalToScene, linearSceneToLocal, type Point, parsePoints } from './geometry';
+import type { VectorArrowElement, VectorElement, VectorShapeElement } from './types';
 
 // Excalidraw's BASE_PADDING / BASE_BINDING_GAP_ELBOW / DEDUP_TRESHOLD.
 const BASE_PADDING = 40;
@@ -133,13 +127,6 @@ export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>)
     if (el.fixedSegments !== '') return parsePoints(el.points);
     // DERIVED: route the two endpoints (needs scene context for bound obstacles/headings).
     return byId ? elbowRoute(el, byId) : undefined;
-}
-
-function boundShape(binding: string, byId: Map<string, VectorElement>): VectorShapeElement | null {
-    const b = parseBinding(binding);
-    if (!b) return null;
-    const el = byId.get(b.elementId);
-    return el && isBindable(el) ? el : null;
 }
 
 // --- routing data (Excalidraw's getElbowArrowData, at-rest branch) ---------------------

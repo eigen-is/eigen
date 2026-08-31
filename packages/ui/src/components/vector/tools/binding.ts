@@ -170,15 +170,7 @@ export function bindArrow(
         : arrow.endBinding;
     const bound = { ...arrow, startBinding, endBinding };
     const byId = new Map(ordered.map((el) => [el.id, el]));
-    const geom = followBindings(bound, byId) ?? {
-        x: arrow.x,
-        y: arrow.y,
-        width: arrow.width,
-        height: arrow.height,
-        points: arrow.points,
-        fixedSegments: arrow.fixedSegments,
-    };
-    return { startBinding, endBinding, ...geom };
+    return { startBinding, endBinding, ...followedGeom(bound, byId) };
 }
 
 type BoundGeom = {

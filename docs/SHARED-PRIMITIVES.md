@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1144 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1146 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -740,7 +740,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (440)
+## Utilities & constants (442)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1045,6 +1045,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `bindingDistance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `bindingGap` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boundEndpoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
@@ -1061,6 +1062,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_SHAPE_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `distanceToSegment` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `DUPLICATE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `EIGEN_MEDIA_SCHEME` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `eigenMediaHref` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
