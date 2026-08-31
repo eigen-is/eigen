@@ -11,13 +11,13 @@ import {
     type Box,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_LINE_ROUNDNESS,
     DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
     elbowBindPoint,
     elementToSvg,
     isBindable,
     linearLocalToScene,
-    moveEndpoints,
     normalizeLinear,
     type PinPatch,
     type Point,
@@ -42,6 +42,7 @@ import {
     bindFocusPoint,
     bindingCandidate,
     bindingOutlineElement,
+    bindPinnedElbowEnd,
     followOtherEnd,
 } from './binding';
 import { ElbowPinHandles } from './elbow-pin-handles';
@@ -87,7 +88,12 @@ function linearBase(origin: Point, points: Point[], seed: number) {
 }
 
 function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[], seed: number): VectorLinearElement {
-    return { ...linearBase(origin, points, seed), type };
+    // linearBase is sharp (freedraw's default, and arrowElement overrides it); a new line curves by default.
+    return {
+        ...linearBase(origin, points, seed),
+        type,
+        roundness: type === 'line' ? DEFAULT_LINE_ROUNDNESS : DEFAULT_LINEAR_ROUNDNESS,
+    };
 }
 
 // An arrow preview/commit template — the line geometry plus the default heads and an empty binding/label
@@ -133,6 +139,8 @@ type DrawingToolsParams = {
 export type DrawingTools = {
     // A freehand/line/eraser gesture is in flight (chrome is suppressed for it, like create/marquee).
     active: boolean;
+    // A multi-point line/arrow draft is collecting clicks — drives the finish hint.
+    multiPointDraft: boolean;
     // The in-progress preview element (draw draft or point-edit draft), rendered in the scene group.
     previewElement: VectorElement | null;
     // The committed element hidden while its vertices are being dragged (the preview stands in for it).
@@ -198,6 +206,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const [selectedPinIndex, setSelectedPinIndex] = useState<number | null>(null);
 
     const [activeKind, setActiveKind] = useState<'freedraw' | 'line' | 'eraser' | null>(null);
+    // True once a line/arrow draft is collecting clicks (mode 'multi') — drives the finish hint. A
+    // press-drag-release line never enters multi, so the hint stays hidden for it.
+    const [multiPointDraft, setMultiPointDraft] = useState(false);
     const [previewEl, setPreviewEl] = useState<VectorElement | null>(null);
     const [erasing, setErasing] = useState<Set<string>>(EMPTY_IDS);
     const [pointDraft, setPointDraft] = useState<{ id: string; el: VectorLinearElement | VectorArrowElement } | null>(
@@ -292,6 +303,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         pointerIdRef.current = null;
         frozenRef.current = false;
         setActiveKind(null);
+        setMultiPointDraft(false);
         setPreviewEl(null);
         setBindHint(null);
     };
@@ -517,6 +529,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 } else {
                     // A click with no drag → switch to a multi-point line whose trailing follows.
                     draft.mode = 'multi';
+                    setMultiPointDraft(true);
                     pointerIdRef.current = null;
                     frozenRef.current = false;
                 }
@@ -568,14 +581,20 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             isEndpoint(index, points.length)
         ) {
             // A PINNED elbow endpoint drag (P6): keep the interior polyline + every pin verbatim, re-drop
-            // only this end's connector (moveEndpoints). The binding rides along unchanged (no re-dock, v1).
+            // only this end's connector (moveEndpoints) — but thread the dock like the unpinned branch, so a
+            // bound end attaches at its outline dock at release instead of hanging on the raw cursor until the
+            // shape next moves. The decision is cached for the commit to replay verbatim (D3/D4).
             const arrow = selectedLine;
             const end = index === 0 ? 'start' : 'end';
-            const scene = linearLocalToScene(arrow, points[index]);
-            const patch = moveEndpoints(arrow, end === 'start' ? scene : null, end === 'end' ? scene : null);
-            elbowDragRef.current = null;
+            const endScene = linearLocalToScene(arrow, points[index]);
+            const { candidate, fixedPoint, shape } = elbowBindFor(endScene);
+            elbowDragRef.current = { end, candidate, fixedPoint };
             setDragEnd(end);
-            setPointDraft({ id: arrow.id, el: { ...arrow, ...patch } });
+            setPointDraft({
+                id: arrow.id,
+                el: { ...arrow, ...bindPinnedElbowEnd(arrow, end, candidate, fixedPoint, endScene, byId) },
+            });
+            setBindShape(shape, endScene, true);
             return;
         }
         if (selectedLine.type === 'arrow' && isEndpoint(index, points.length)) {
@@ -627,12 +646,25 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             selectedLine.fixedSegments !== '' &&
             isEndpoint(index, points.length)
         ) {
-            // Pinned elbow endpoint commit (P6): moveEndpoints then the P7 renormalization, one sealed write.
+            // Pinned elbow endpoint commit (P6): thread the dock (bindPinnedElbowEnd, replaying the cached
+            // preview frame so release === last frame, D4) then the P7 renormalization, one sealed write. When
+            // the endpoint collapses back to derived (fixedSegments ''), skip the renormalize wrap so the
+            // canonical origin survives (4a); the binding fields ride through either way.
             const arrow = selectedLine;
             const end = index === 0 ? 'start' : 'end';
-            const scene = linearLocalToScene(arrow, points[index]);
-            const moved = moveEndpoints(arrow, end === 'start' ? scene : null, end === 'end' ? scene : null);
-            updateElement(arrow.id, renormalize({ ...arrow, ...moved }));
+            const endScene = linearLocalToScene(arrow, points[index]);
+            const frame = cached && cached.end === end ? cached : elbowBindFor(endScene);
+            const bound = bindPinnedElbowEnd(arrow, end, frame.candidate, frame.fixedPoint, endScene, byId);
+            updateElement(
+                arrow.id,
+                bound.fixedSegments === ''
+                    ? bound
+                    : {
+                          ...renormalize({ ...arrow, ...bound }),
+                          startBinding: bound.startBinding,
+                          endBinding: bound.endBinding,
+                      },
+            );
         } else if (selectedLine.type === 'arrow') {
             const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
             if (selectedLine.elbow && isEndpoint(index, points.length)) {
@@ -677,7 +709,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const onElbowPinCommit = (patch: PinPatch) => {
         if (selectedLine?.type !== 'arrow') return;
         undoManager?.stopCapturing();
-        updateElement(selectedLine.id, renormalize({ ...selectedLine, ...patch }));
+        // Unpinning the last pin returns the arrow to derived mode with a canonical origin — skip the P7
+        // renormalize wrap there (4a), which would re-run it over a now-derived 2-point arrow.
+        updateElement(selectedLine.id, patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }));
         setSelectedPinIndex(null);
         setPointDraft(null);
     };
@@ -880,9 +914,12 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 selectedLine.fixedSegments !== ''
             ) {
                 undoManager?.stopCapturing();
+                // Dropping the last pin returns to derived mode with a canonical origin — skip the P7
+                // renormalize wrap there (4a) so that origin survives.
+                const patch = unpinSegment(selectedLine, selectedPinIndex);
                 updateElement(
                     selectedLine.id,
-                    renormalize({ ...selectedLine, ...unpinSegment(selectedLine, selectedPinIndex) }),
+                    patch.fixedSegments === '' ? patch : renormalize({ ...selectedLine, ...patch }),
                 );
                 setSelectedPinIndex(null);
                 return true;
@@ -971,6 +1008,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
 
     return {
         active: activeKind !== null,
+        multiPointDraft,
         previewElement: pointDraft?.el ?? previewEl,
         hiddenId: pointDraft?.id ?? null,
         erasingIds: erasing,

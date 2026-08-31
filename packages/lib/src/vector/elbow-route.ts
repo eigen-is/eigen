@@ -78,14 +78,12 @@ export function elbowRoute(
     const startEnd: LegEnd = {
         point: startGlobal,
         shape: startShape,
-        headingOverride: null,
         arrowhead: startArrowhead,
         orig: origPoints?.start ?? startGlobal,
     };
     const endEnd: LegEnd = {
         point: endGlobal,
         shape: endShape,
-        headingOverride: null,
         arrowhead: endArrowhead,
         orig: origPoints?.end ?? endGlobal,
     };
@@ -96,12 +94,11 @@ export function elbowRoute(
     return local.length >= 2 ? local : [linearSceneToLocal(arrow, startGlobal), linearSceneToLocal(arrow, endGlobal)];
 }
 
-// One end of a routing leg — a real bound shape (heading from the cone) or a virtual pinned-segment
-// vertex (heading forced to the pin's axis, no obstacle beyond its ±2 point box).
+// One end of a routing leg — a real bound shape (heading from the cone) or a free endpoint (heading toward
+// the other end). A pinned arrow never routes here (P1: its stored polyline is returned verbatim).
 type LegEnd = {
     point: Point;
     shape: VectorShapeElement | null;
-    headingOverride: Heading | null;
     arrowhead: boolean;
     orig: Point;
 };
@@ -119,8 +116,6 @@ function routeSceneLeg(start: LegEnd, end: LegEnd, startBinding: boolean): Point
             endArrowhead: end.arrowhead,
             origStart: start.orig,
             origEnd: end.orig,
-            startHeadingOverride: start.headingOverride,
-            endHeadingOverride: end.headingOverride,
         },
         startBinding,
     );
@@ -159,10 +154,6 @@ type RouteInputs = {
     // The pre-dock scene point per end for the heading distance-gate (D6); equals the stored global at rest.
     origStart: Point;
     origEnd: Point;
-    // Forced exit/entry heading for a VIRTUAL endpoint — a pinned-segment vertex has no shape, so its
-    // heading is the pin's own axis (EP-U5), not the cone or the toward-other-end default. null ⇒ derive.
-    startHeadingOverride?: Heading | null;
-    endHeadingOverride?: Heading | null;
 };
 
 type ElbowArrowData = {
@@ -189,11 +180,8 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
         ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
         : null;
     const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
-    const startHeading =
-        input.startHeadingOverride ??
-        getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart);
-    const endHeading =
-        input.endHeadingOverride ?? getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd);
+    const startHeading = getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart);
+    const endHeading = getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd);
 
     const startPointBounds = pointBounds(startGlobal);
     const endPointBounds = pointBounds(endGlobal);

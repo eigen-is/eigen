@@ -141,8 +141,8 @@ function moveFixedSegment(arrow: VectorArrowElement, index: number, cursorScene:
 
 // Excalidraw's handleSegmentMove (interior path): overwrite the dragged pin's two vertices, stretch each
 // neighbour's far endpoint along the neighbour's own axis (so no new corner appears), and weld any
-// adjacent pinned segment to the moved vertex. The first/last-segment jog branch is ported but dormant in
-// v1 (dots are interior-only). `movedIndex` is the pin the caller just dragged.
+// adjacent pinned segment to the moved vertex. Excalidraw's first/last-segment jog branch is OMITTED — v1
+// pins are interior-only, so a first/last segment is never dragged. `movedIndex` is the pin the caller just dragged.
 function handleSegmentMove(arrow: VectorArrowElement, segments: FixedSegment[], movedIndex: number): PinPatch {
     const newPoints: Point[] = parsePoints(arrow.points).map((p) => ({ x: arrow.x + p.x, y: arrow.y + p.y }));
     const nextSegments: WorkingSegment[] = segments.map((s) => ({
@@ -245,7 +245,10 @@ export function renormalize(arrow: VectorArrowElement): PinPatch {
         for (const s of segments) if (s.index > i) s.index -= 1;
     }
 
-    // Pass 2: drop interior segments shorter than the dedup threshold.
+    // Pass 2: drop interior segments shorter than the dedup threshold. Fidelity delta vs Excalidraw:
+    // upstream removes the short segment's TWO points in one step (pin reindex −2) and re-aligns the merged
+    // vertex; we drop one point per iteration (reindex −1). The loop converges on the same polyline, not the
+    // same intermediate step — acceptable because renormalize only runs as the sealed commit, never mid-frame.
     for (let i = points.length - 2; i >= 1; i--) {
         if (Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y) >= DEDUP_THRESHOLD) continue;
         const onIt = segments.findIndex((s) => s.index === i);

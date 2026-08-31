@@ -171,8 +171,12 @@ export const ELEMENT_FIELDS = [
 export const DEFAULT_FONT_SIZE = 20;
 export const DEFAULT_FONT_FAMILY = 'Excalifont';
 export const DEFAULT_SHAPE_ROUNDNESS: Roundness = 'round';
-// A drawn line/freedraw is straight by default; the reader falls back to this for a linear element.
+// Freedraw draws sharp (Excalidraw stores freedraw roundness null); the reader also falls back to this
+// for any linear element (line/arrow) missing the field, so stored elements keep their meaning.
 export const DEFAULT_LINEAR_ROUNDNESS: Roundness = 'sharp';
+// A new line curves by default (Excalidraw's currentItemRoundness defaults to 'round', and newLinearElement
+// reads it) — distinct from freedraw's sharp default, hence its own constant.
+export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 // Arrows curve by default (Excalidraw parity); the read fallback stays sharp so stored
 // arrows keep their meaning.
 export const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';

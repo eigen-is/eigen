@@ -1585,6 +1585,13 @@ export function VectorCanvas({
             {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
                 hook stays enabled even when it wouldn't — see above). */}
             <FileDropOverlay visible={isDragging && imagesEnabled} label="Drop images to add" icon={ImageIcon} />
+            {/* Finish hint for a multi-point line/arrow draft: the finish triggers aren't discoverable, so
+                surface them while collecting clicks. Tokens resolve light inside .eigen-paper. */}
+            {drawing.multiPointDraft && (
+                <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-md border bg-popover px-2.5 py-1 text-xs text-muted-foreground shadow-sm">
+                    Enter or double-click to finish · Esc to cancel
+                </div>
+            )}
             <VectorObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}

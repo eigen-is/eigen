@@ -3,6 +3,7 @@ import {
     arrowsBoundTo,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_LINE_ROUNDNESS,
     DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_SCENE_META,
     DEFAULT_SHAPE_ROUNDNESS,
@@ -51,8 +52,9 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
     const base = { x: 0, y: 0, width: 0, height: 0, angle: 0, ...DEFAULT_ELEMENT_PROPS };
     if (type === 'text') return { ...base, ...DEFAULT_TEXT_PROPS };
     if (type === 'image') return { ...base, mediaName: '' };
-    // Linear elements draw straight by default and always arrive with real points from the gesture.
-    if (type === 'freedraw' || type === 'line') return { ...base, roundness: DEFAULT_LINEAR_ROUNDNESS, points: '[]' };
+    // Both arrive with real points from the gesture. Freedraw is sharp; a new line curves (Excalidraw parity).
+    if (type === 'freedraw') return { ...base, roundness: DEFAULT_LINEAR_ROUNDNESS, points: '[]' };
+    if (type === 'line') return { ...base, roundness: DEFAULT_LINE_ROUNDNESS, points: '[]' };
     // An arrow is a line plus heads, forward bindings and an optional label (text/fontSize/fontFamily).
     if (type === 'arrow')
         return {

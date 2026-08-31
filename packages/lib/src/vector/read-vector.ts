@@ -16,6 +16,7 @@ import {
     DEFAULT_SHAPE_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
     FILL_STYLES,
+    type FixedSegment,
     isBindable,
     isVectorElementType,
     parseBinding,
@@ -180,13 +181,13 @@ function fixedSegments(v: unknown, points: { x: number; y: number }[]): string {
     const parsed = parseFixedSegments(str(v, ''));
     if (parsed.segments.length === 0) return '';
     if (points.length < 4 || !validateElbowPoints(points)) return '';
-    const kept = [];
+    const kept: FixedSegment[] = [];
     for (const seg of parsed.segments) {
         if (seg.index < 2 || seg.index > points.length - 2) continue;
         kept.push({
             index: seg.index,
-            start: [points[seg.index - 1].x, points[seg.index - 1].y] as [number, number],
-            end: [points[seg.index].x, points[seg.index].y] as [number, number],
+            start: [points[seg.index - 1].x, points[seg.index - 1].y],
+            end: [points[seg.index].x, points[seg.index].y],
         });
     }
     if (kept.length === 0) return '';

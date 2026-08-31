@@ -9,6 +9,7 @@ import {
     type Box,
     bindingAnchor,
     bindingDistance,
+    elbowAnchorScene,
     followBindings,
     hitTestBox,
     hitTestDiamond,
@@ -16,6 +17,8 @@ import {
     isBindable,
     isTransparent,
     linearLocalToScene,
+    moveEndpoints,
+    type PinPatch,
     type Point,
     parseBinding,
     parsePoints,
@@ -223,6 +226,28 @@ export function bindElbowEnd(
     const startBinding = end === 'start' ? binding : arrow.startBinding;
     const endBinding = end === 'end' ? binding : arrow.endBinding;
     return { startBinding, endBinding, ...followedGeom({ ...arrow, startBinding, endBinding }, byId) };
+}
+
+// The PINNED analog of bindElbowEnd (P6): bind (or unbind) a dragged pinned-elbow endpoint from a
+// pre-computed dock ratio, but keep the interior polyline + every pin VERBATIM (moveEndpoints) rather than
+// re-deriving the whole route. When bound, the endpoint docks where followBindings will later rest it
+// (elbowAnchorScene(fixedPoint)), so release === the shape's next move — no raw-cursor detach; an unbound
+// end keeps its raw dragged point. Run renormalize on the result for the sealed commit (unless derived).
+export function bindPinnedElbowEnd(
+    arrow: VectorArrowElement,
+    end: 'start' | 'end',
+    candidate: string | null,
+    fixedPoint: [number, number] | null,
+    rawScene: Point,
+    byId: Map<string, VectorElement>,
+): PinPatch & { startBinding: string; endBinding: string } {
+    const binding = candidate && fixedPoint ? serializeBinding({ elementId: candidate, fixedPoint }) : '';
+    const startBinding = end === 'start' ? binding : arrow.startBinding;
+    const endBinding = end === 'end' ? binding : arrow.endBinding;
+    const shape = candidate ? byId.get(candidate) : undefined;
+    const dock = shape && isBindable(shape) && fixedPoint ? elbowAnchorScene(shape, fixedPoint) : rawScene;
+    const moved = moveEndpoints(arrow, end === 'start' ? dock : null, end === 'end' ? dock : null);
+    return { ...moved, startBinding, endBinding };
 }
 
 // Re-aim a straight arrow's already-bound end to a NEW fixedPoint dragged on its focus dot (D5). The bound
