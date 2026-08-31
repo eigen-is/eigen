@@ -817,6 +817,7 @@ export function VectorCanvas({
                     if (meta.type === 'arrow') {
                         partial.startArrowhead = meta.startArrowhead;
                         partial.endArrowhead = meta.endArrowhead;
+                        partial.elbow = meta.elbow;
                         partial.text = meta.text;
                         partial.fontSize = meta.fontSize;
                         partial.fontFamily = meta.fontFamily;

@@ -24,7 +24,7 @@ import {
 // relative layout before it is re-anchored on the viewport. `type` present ⇒ restore a shape or a
 // linear element (which then also carries `points` + `roundness`), else a text element. `id` is the
 // element's own id so a paste can remap arrow bindings across the pasted set (R3.11); an arrow also
-// carries its heads, bindings and label.
+// carries its heads, bindings, label and elbow flag.
 export type VectorClipMeta = {
     x: number;
     y: number;
@@ -43,6 +43,7 @@ export type VectorClipMeta = {
     endArrowhead?: Arrowhead;
     startBinding?: string;
     endBinding?: string;
+    elbow?: boolean;
     text?: string;
     fontSize?: number;
     fontFamily?: string;
@@ -117,6 +118,7 @@ export function buildElementClipboardItem(
         vector.endArrowhead = el.endArrowhead;
         vector.startBinding = el.startBinding;
         vector.endBinding = el.endBinding;
+        vector.elbow = el.elbow;
         vector.text = el.text;
         vector.fontSize = el.fontSize;
         vector.fontFamily = el.fontFamily;

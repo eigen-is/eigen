@@ -478,6 +478,30 @@ export function buildGoldenVectorScene(): VectorScene {
             index: 'a6',
             mediaName: GOLDEN_MEDIA_NAME,
         },
+        // A bound elbow arrow (no label) — its orthogonal route is DERIVED at render time, so preview
+        // and export exercise the server-side elbowRoute path end-to-end.
+        {
+            ...base,
+            id: 'v-elbow',
+            type: 'arrow',
+            elbow: true,
+            x: 50,
+            y: 66,
+            width: 130,
+            height: 20,
+            seed: 8,
+            index: 'a7',
+            roundness: 'sharp',
+            points: '[[0,0],[130,20]]',
+            startArrowhead: 'none',
+            endArrowhead: 'arrow',
+            startBinding: '{"elementId":"v-rect","fixedPoint":[0.5,1]}',
+            endBinding: '{"elementId":"v-ellipse","fixedPoint":[0.5,1]}',
+            text: '',
+            fontSize: 20,
+            fontFamily: 'Excalifont',
+            labelWidth: 0,
+        },
     ];
     return { elements, meta: { background: 'transparent', gridSize: 20 } };
 }

@@ -59,4 +59,35 @@ describe('buildSelectionData', () => {
         expect(data.items).toHaveLength(2);
         expect(data.svg).toBeUndefined();
     });
+
+    test('an elbow arrow carries its elbow flag in meta.vector, through the svg round-trip too', () => {
+        const arrow: VectorElement = {
+            ...DEFAULT_ELEMENT_PROPS,
+            id: 'a1',
+            type: 'arrow',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 80,
+            angle: 0,
+            seed: 3,
+            index: 'a0',
+            roundness: 'sharp',
+            points: '[[0,0],[100,80]]',
+            elbow: true,
+            startArrowhead: 'none',
+            endArrowhead: 'arrow',
+            startBinding: '',
+            endBinding: '',
+            text: '',
+            fontSize: 20,
+            fontFamily: 'Excalifont',
+            labelWidth: 0,
+        };
+        const data = buildSelectionData([arrow], ['a1'], meta, () => undefined);
+        const vector = data.items[0]?.meta?.vector as { elbow?: boolean };
+        expect(vector.elbow).toBe(true);
+        const restored = extractClipboardSvgMetadata(data.svg ?? '')?.items[0]?.meta?.vector as { elbow?: boolean };
+        expect(restored.elbow).toBe(true);
+    });
 });
