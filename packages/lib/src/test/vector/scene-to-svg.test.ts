@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { eigenMediaHref } from '../../vector/media-refs';
 import { sceneToSvg } from '../../vector/scene-to-svg';
 import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorScene } from '../../vector/types';
 
@@ -268,6 +269,27 @@ describe('sceneToSvg', () => {
         expect(resolved).toContain('<image');
         expect(resolved).toContain('href="data:image/png;base64,AAA"');
         expect(sceneToSvg(scene([img]))).not.toContain('<image');
+    });
+
+    test('an eigen-media ref href survives escapeXml unchanged (R1)', () => {
+        const img: VectorElement = {
+            ...DEFAULT_ELEMENT_PROPS,
+            id: 'img',
+            type: 'image',
+            x: 0,
+            y: 0,
+            width: 40,
+            height: 40,
+            angle: 0,
+            seed: 1,
+            index: 'a0',
+            mediaName: "Bob's photo.png",
+        };
+        const href = eigenMediaHref(img.mediaName);
+        const out = sceneToSvg(scene([img]), { resolveMedia: (name) => eigenMediaHref(name) });
+        // The stored token equals eigenMediaHref exactly — escapeXml is a no-op on it, so the copy
+        // path's rewrite/strip (media-refs) find it by exact-token match.
+        expect(out).toContain(`href="${href}"`);
     });
 
     test('paints in fractional-index order regardless of input order', () => {
