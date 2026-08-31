@@ -128,11 +128,16 @@ function readElement(value: unknown): VectorElement | null {
             const points = parsePoints(str(value.get('points'), ''));
             if (points.length === 0) return null;
             const clamped = points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) }));
+            const elbow = bool(value.get('elbow'), DEFAULT_ARROW_PROPS.elbow);
             return {
                 ...base,
                 type: 'arrow',
+                // An elbow arrow's route is derived in the unrotated local frame, so it pins angle 0 (the
+                // panel hides rotation for it) — the reader forces it regardless of what a peer stored.
+                angle: elbow ? 0 : base.angle,
                 roundness: oneOf(value.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
                 points: serializePoints(clamped),
+                elbow,
                 startArrowhead: oneOf(value.get('startArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.startArrowhead),
                 endArrowhead: oneOf(value.get('endArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.endArrowhead),
                 startBinding: binding(value.get('startBinding')),

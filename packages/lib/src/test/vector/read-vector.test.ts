@@ -442,7 +442,9 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         y: 3,
         width: 90,
         height: 20,
-        angle: 18,
+        // angle 0 because this is an elbow arrow (elbow: true) and the reader pins angle 0 for elbows;
+        // non-zero angles are exercised by the rect/text/line drift cases.
+        angle: 0,
         strokeColor: '#aabbcc',
         backgroundColor: '#ddeeff',
         fillStyle: 'solid',
@@ -459,6 +461,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         endArrowhead: 'triangle',
         startBinding: '',
         endBinding: '',
+        elbow: true,
         text: 'label',
         fontSize: 13,
         fontFamily: 'Inter',
@@ -480,6 +483,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
                 'endArrowhead',
                 'startBinding',
                 'endBinding',
+                'elbow',
                 'text',
                 'fontSize',
                 'fontFamily',

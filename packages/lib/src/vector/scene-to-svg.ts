@@ -7,6 +7,7 @@ import { getStroke } from 'perfect-freehand';
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../constants/fonts';
+import { elbowRoute } from './elbow-route';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
 import type { Box, Point } from './geometry';
@@ -56,9 +57,12 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     }
 
     const padding = opts.padding ?? DEFAULT_PADDING;
+    // byId feeds the derived elbow route (its bends spill past the stored 2-endpoint box, and depend on the
+    // bound shapes) to both bounds and rendering.
+    const byId = new Map(scene.elements.map((el) => [el.id, el]));
     // elementBounds unions an arrow's label rect (R3.6), so a wide label on a short arrow isn't clipped
-    // by the viewBox; for every other element it's the plain box AABB (unchanged from getElementsBounds).
-    const bounds = ordered.map(elementBounds).reduce(unionBounds);
+    // by the viewBox; for an elbow arrow it's the derived route's bbox, else the plain box AABB.
+    const bounds = ordered.map((el) => elementBounds(el, arrowRoute(el, byId))).reduce(unionBounds);
     const minX = round(bounds.minX - padding);
     const minY = round(bounds.minY - padding);
     const width = round(bounds.maxX - bounds.minX + padding * 2);
@@ -69,7 +73,7 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
         body += `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="${escapeXml(scene.meta.background)}"/>`;
     }
     for (const el of ordered) {
-        body += elementToSvg(el, opts);
+        body += elementToSvg(el, opts, byId);
     }
 
     return `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}">${body}</svg>`;
@@ -79,7 +83,13 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
 // runs. The live canvas (packages/ui) reuses this so its per-element nodes are byte-for-byte
 // what previews/embeds/export produce. Shapes get a fresh RoughGenerator — seeded roughjs
 // output depends only on el.seed, not generator identity, so the golden output is unchanged.
-export function elementToSvg(el: VectorElement, opts: SceneToSvgOptions = {}): string {
+// `byId` lets an elbow arrow resolve its bound shapes to derive its route; omit it (no scene context)
+// and an elbow arrow falls back to its straight stored endpoints.
+export function elementToSvg(
+    el: VectorElement,
+    opts: SceneToSvgOptions = {},
+    byId?: Map<string, VectorElement>,
+): string {
     switch (el.type) {
         case 'rectangle':
         case 'diamond':
@@ -94,8 +104,16 @@ export function elementToSvg(el: VectorElement, opts: SceneToSvgOptions = {}): s
         case 'line':
             return renderLine(new RoughGenerator(), el);
         case 'arrow':
-            return renderArrow(new RoughGenerator(), el);
+            return renderArrow(new RoughGenerator(), el, arrowRoute(el, byId));
     }
+}
+
+// The polyline an arrow draws/hits as: the derived orthogonal route for an elbow arrow (undefined without
+// scene context, so callers fall back to the stored points), or undefined for a straight arrow. Kept
+// undefined rather than parsePoints for a straight arrow so bounds/hit-test/label keep their stored-points
+// path unchanged.
+function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>): Point[] | undefined {
+    return el.type === 'arrow' && el.elbow && byId ? elbowRoute(el, byId) : undefined;
 }
 
 function renderShape(gen: RoughGenerator, el: VectorShapeElement): string {
@@ -151,15 +169,17 @@ function renderLine(gen: RoughGenerator, el: VectorLinearElement): string {
 // end and an optional label. The label rect (+5px padding) is cut out of the shaft with an even-odd
 // clip hole so the shaft shows nothing under the text; heads and label draw on top, unclipped. All
 // coordinates are the arrow's local frame — the group transform rotates the whole arrow, label and all.
-function renderArrow(gen: RoughGenerator, el: VectorArrowElement): string {
-    const points = parsePoints(el.points);
+function renderArrow(gen: RoughGenerator, el: VectorArrowElement, route?: Point[]): string {
+    const points = route ?? parsePoints(el.points);
     if (points.length === 0) return `${groupOpen(el, ' stroke-linecap="round"')}</g>`;
     const coords = points.map((p): [number, number] => [p.x, p.y]);
     const options = baseRoughOptions(el, false);
-    const shaftDrawable = el.roundness === 'round' ? gen.curve(coords, options) : gen.linearPath(coords, options);
+    // An elbow shaft is always a sharp orthogonal linearPath through its derived route (roundness is moot).
+    const shaftDrawable =
+        !el.elbow && el.roundness === 'round' ? gen.curve(coords, options) : gen.linearPath(coords, options);
     const shaftPaths = drawableToSvg(shaftDrawable);
 
-    const label = arrowLabelBox(el);
+    const label = arrowLabelBox(el, route);
     let shaft = shaftPaths;
     let defs = '';
     if (label) {

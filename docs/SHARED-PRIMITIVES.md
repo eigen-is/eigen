@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1108 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1113 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -430,7 +430,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (301)
+## Types (302)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -653,6 +653,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ArrangePatch` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `Arrowhead` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ArrowheadGeometry` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `ArrowShape` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Binding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Bounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Box` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -736,7 +737,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (408)
+## Utilities & constants (412)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1025,11 +1026,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `anchorToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `applyResize` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrangeBoundingBox` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
+| `ARROW_SHAPES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `arrowheadGeometry` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ARROWHEADS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `arrowLabelBox` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrowLabelCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrowsBoundTo` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `arrowShapeFields` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `arrowShapeOf` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `BASE_62_DIGITS` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `bindingAnchor` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `bindingDistance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1050,6 +1054,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `DUPLICATE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `elbowRoute` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `elementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |

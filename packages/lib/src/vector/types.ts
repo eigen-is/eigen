@@ -14,12 +14,19 @@ export const TEXT_ALIGNS = ['left', 'center', 'right'] as const;
 // Arrowhead vocabulary (both ends), Excalidraw's trimmed to the shapes we draw. read-vector validates
 // against this array; the panel's start/end selects list it (U3c).
 export const ARROWHEADS = ['none', 'arrow', 'triangle', 'bar', 'circle'] as const;
+// The 3-way arrow-shape vocabulary the panel offers (UA4). It is a DERIVED UI concept, not a stored field:
+// 'sharp'/'curved' are the existing `roundness` (sharp linearPath vs round curve shaft), and 'elbow' is the
+// one new stored boolean below. Keeping roundness as the single owner of shaft curvature (shared with
+// line/freedraw) means existing arrows — which carry only `roundness` — read back unchanged (elbow ⇒ false),
+// so there is no reader BC break and no second field answering "how curved is the shaft".
+export const ARROW_SHAPES = ['sharp', 'curved', 'elbow'] as const;
 
 export type FillStyle = (typeof FILL_STYLES)[number];
 export type StrokeStyle = (typeof STROKE_STYLES)[number];
 export type Roundness = (typeof ROUNDNESS)[number];
 export type TextAlign = (typeof TEXT_ALIGNS)[number];
 export type Arrowhead = (typeof ARROWHEADS)[number];
+export type ArrowShape = (typeof ARROW_SHAPES)[number];
 
 export type VectorElementBase = {
     id: string;
@@ -76,6 +83,10 @@ export type VectorArrowElement = VectorElementBase & {
     type: 'arrow';
     points: string;
     roundness: Roundness;
+    // Elbow ("snake") arrow: store only this flag + the two endpoints (points) + bindings; the orthogonal
+    // route is DERIVED on every read/render (elbowRoute), never stored. An elbow arrow pins angle 0 (its
+    // route lives in the unrotated local frame — the reader forces it). `roundness` is ignored while true.
+    elbow: boolean;
     startArrowhead: Arrowhead;
     endArrowhead: Arrowhead;
     startBinding: string;
@@ -133,6 +144,7 @@ export const ELEMENT_FIELDS = [
     'endArrowhead',
     'startBinding',
     'endBinding',
+    'elbow',
     'labelWidth',
 ] as const;
 
@@ -174,8 +186,12 @@ export const DEFAULT_ARROW_PROPS = {
     endArrowhead: 'arrow',
     startBinding: '',
     endBinding: '',
+    elbow: false,
     labelWidth: 0,
-} satisfies Pick<VectorArrowElement, 'startArrowhead' | 'endArrowhead' | 'startBinding' | 'endBinding' | 'labelWidth'>;
+} satisfies Pick<
+    VectorArrowElement,
+    'startArrowhead' | 'endArrowhead' | 'startBinding' | 'endBinding' | 'elbow' | 'labelWidth'
+>;
 
 // Shared line-width presets — the ONE source for the thin/medium/bold vocabulary, consumed by both
 // the vector panel (strokeWidth, scene-px) and the slides panel (borderWidth, slide-units ≡ scene-px).
@@ -252,6 +268,19 @@ export function arrowsBoundTo(elements: VectorElement[]): Map<string, string[]> 
         }
     }
     return map;
+}
+
+// The 3-way shape a panel shows for an arrow, derived from its stored `elbow` + `roundness` (UA4b, the
+// UI unit's Arrow-type row). elbow wins; otherwise round shaft ⇒ 'curved', sharp shaft ⇒ 'sharp'.
+export function arrowShapeOf(el: VectorArrowElement): ArrowShape {
+    return el.elbow ? 'elbow' : el.roundness === 'round' ? 'curved' : 'sharp';
+}
+
+// The stored fields a chosen shape writes back (UA4b): 'elbow' sets the flag (shaft roundness moot, kept
+// sharp); 'curved'/'sharp' clear it and pick the shaft roundness. One owner so the panel never re-derives.
+export function arrowShapeFields(shape: ArrowShape): { elbow: boolean; roundness: Roundness } {
+    if (shape === 'elbow') return { elbow: true, roundness: 'sharp' };
+    return { elbow: false, roundness: shape === 'curved' ? 'round' : 'sharp' };
 }
 
 // A fill is absent when the color is empty or the 'transparent' sentinel (the slides

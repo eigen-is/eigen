@@ -109,11 +109,12 @@ export function getElementsBounds(boxes: Box[]): Bounds {
 
 // Element bounds, arrow-aware: an arrow unions its rotated label rect into the box bounds (R3.6), so a
 // wide label on a short arrow is not clipped by the viewBox nor missed by marquee/ring. Every other
-// element is exactly its box AABB.
-export function elementBounds(el: VectorElement): Bounds {
-    const base = getElementBounds(el);
-    if (el.type !== 'arrow') return base;
-    const label = arrowLabelBox(el);
+// element is exactly its box AABB. `arrowRoute` (the derived elbow polyline) replaces the stored box for an
+// elbow arrow, whose bends spill outside the 2-endpoint box.
+export function elementBounds(el: VectorElement, arrowRoute?: Point[]): Bounds {
+    if (el.type !== 'arrow') return getElementBounds(el);
+    const base = arrowRoute ? pointsBounds(arrowRoute.map((p) => linearLocalToScene(el, p))) : getElementBounds(el);
+    const label = arrowLabelBox(el, arrowRoute);
     if (!label) return base;
     const hw = label.width / 2;
     const hh = label.height / 2;
@@ -279,7 +280,9 @@ export function isClosedPath(points: Point[]): boolean {
     return Math.hypot(first.x - last.x, first.y - last.y) <= CLOSE_PATH_THRESHOLD;
 }
 
-export function hitTestElement(element: VectorElement, point: Point, threshold: number): boolean {
+// `arrowRoute` is the derived elbow polyline (local frame); pass it for an elbow arrow so the hit-test runs
+// against the routed segments, not the straight 2-point line. Ignored for every other element.
+export function hitTestElement(element: VectorElement, point: Point, threshold: number, arrowRoute?: Point[]): boolean {
     switch (element.type) {
         case 'ellipse':
             return hitTestEllipse(element, point);
@@ -293,7 +296,7 @@ export function hitTestElement(element: VectorElement, point: Point, threshold: 
         case 'line':
             return hitTestLinear(element, point, threshold);
         case 'arrow':
-            return hitTestArrow(element, point, threshold);
+            return hitTestArrow(element, point, threshold, arrowRoute);
     }
 }
 
@@ -325,13 +328,14 @@ function hitTestLinear(element: VectorLinearElement, point: Point, threshold: nu
 
 // An arrow is hit on its polyline (like a line) OR inside its label rect — both measured in the arrow's
 // local frame (the label rotates with the arrow), so a wide label on a short arrow is still selectable.
-function hitTestArrow(el: VectorArrowElement, point: Point, threshold: number): boolean {
-    const points = parsePoints(el.points);
+// `route` is the derived elbow polyline; when given the hit runs against it instead of the stored points.
+function hitTestArrow(el: VectorArrowElement, point: Point, threshold: number, route?: Point[]): boolean {
+    const points = route ?? parsePoints(el.points);
     if (points.length === 0) return false;
     const p = linearSceneToLocal(el, point);
     if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1))
         return true;
-    const label = arrowLabelBox(el);
+    const label = arrowLabelBox(el, route);
     return (
         label !== null &&
         Math.abs(p.x - label.center.x) <= label.width / 2 &&
@@ -546,10 +550,14 @@ export function arrowheadGeometry(
 // The label's center (arrow local frame) and box: centered on the polyline's index-midpoint (odd → the
 // middle vertex, even → the middle segment's midpoint — scout §5), width client-measured (labelWidth),
 // height = line count × the font's line height. null when the arrow has no label. Shared by hit-testing,
-// bounds, and the renderer so the three agree.
-export function arrowLabelBox(el: VectorArrowElement): { center: Point; width: number; height: number } | null {
+// bounds, and the renderer so the three agree. `route` overrides the stored points for an elbow arrow (its
+// label rides the derived route's midpoint).
+export function arrowLabelBox(
+    el: VectorArrowElement,
+    route?: Point[],
+): { center: Point; width: number; height: number } | null {
     if (el.text === '') return null;
-    const center = arrowLabelCenter(el);
+    const center = arrowLabelCenter(el, route);
     if (!center) return null;
     const lines = el.text.replace(/\r\n?/g, '\n').split('\n').length;
     return {
@@ -561,9 +569,10 @@ export function arrowLabelBox(el: VectorArrowElement): { center: Point; width: n
 
 // The label anchor in the arrow's local frame: the polyline's index-midpoint (odd → the middle vertex,
 // even → the middle segment's midpoint — scout §5). null for a degenerate arrow (< 2 points). Text-free
-// so the editor can center an empty label on the same anchor a committed one would render at.
-export function arrowLabelCenter(el: VectorArrowElement): Point | null {
-    const points = parsePoints(el.points);
+// so the editor can center an empty label on the same anchor a committed one would render at. `route` (the
+// derived elbow polyline) overrides the stored points when given.
+export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point | null {
+    const points = route ?? parsePoints(el.points);
     if (points.length < 2) return null;
     const n = points.length;
     if (n % 2 === 1) return points[(n - 1) / 2];

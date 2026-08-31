@@ -1,4 +1,5 @@
 export * from './arrange';
+export { elbowRoute } from './elbow-route';
 export * from './font-metrics';
 export * from './fractional-index';
 export * from './geometry';
