@@ -1,4 +1,6 @@
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
+import { getFontFaceCSSForFamilies } from '../export/fonts';
 import type { Mount } from '../mount';
 
 // Serve-time media inliner for image-bearing vector SVGs (SVG-IMAGE-PASTE-PLAN R4). A stored .svg
@@ -31,6 +33,12 @@ export const MAX_SVG_INLINE_DEPTH = 3;
 // Sniffed on the raw bytes so a plain drawing with no refs never pays a utf8 decode.
 const SNIFF = Buffer.from(EIGEN_MEDIA_SCHEME);
 
+// Font sniffs, also byte-level. `font-family` gates the whole font pass; `@font-face` means faces are
+// already inlined (an export path injected them, or this is our own cached output) — skip re-injecting
+// so the block is never doubled.
+const FONT_FAMILY_SNIFF = Buffer.from('font-family');
+const FONT_FACE_SNIFF = Buffer.from('@font-face');
+
 // Thrown when the running output would exceed the ceiling; caught at the top to serve a stripped svg.
 class OutputTooLargeError extends Error {}
 
@@ -38,19 +46,25 @@ class OutputTooLargeError extends Error {}
 // any depth is caught before the giant string is materialised.
 type Budget = { remaining: number };
 
-// Inline every resolvable `eigen-media:` ref in `svgBytes` into a `data:` URI, resolving siblings by
-// name in `parentId`. Returns the served bytes: the original buffer byte-identical when there are no
-// refs, the inlined svg when they resolve, or the svg with all refs stripped when the output ceiling
-// is breached.
+// Serve-time transform for a media svg: inline every resolvable `eigen-media:` ref into a `data:` URI
+// (resolving siblings by name in `parentId`) AND inject the @font-face blocks its <text> names, so an
+// <img>-hosted drawing renders both its images and its EIGEN-font text without reaching outside itself.
+// Returns the served bytes: the original buffer byte-identical when there is nothing to inline, the
+// transformed svg otherwise, or the svg with all media refs stripped when the output ceiling is breached.
 export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgBytes: Buffer): Promise<Buffer> {
-    // Cheap byte-level sniff: a drawing with no name-refs takes today's path, byte-identical.
-    if (!svgBytes.includes(SNIFF)) return svgBytes;
+    const hasMedia = svgBytes.includes(SNIFF);
+    const needsFonts = svgBytes.includes(FONT_FAMILY_SNIFF) && !svgBytes.includes(FONT_FACE_SNIFF);
+    // Cheap byte-level sniff: a drawing with no name-refs and no fonts to inject takes today's path,
+    // byte-identical (no utf8 round-trip).
+    if (!hasMedia && !needsFonts) return svgBytes;
 
     const original = svgBytes.toString('utf8');
     const budget: Budget = { remaining: SVG_INLINE_MAX_BYTES - Buffer.byteLength(original) };
     try {
-        const inlined = await resolveSvgRefs(mount, parentId, original, 0, budget);
-        const out = Buffer.from(inlined, 'utf8');
+        let result = hasMedia ? await resolveSvgRefs(mount, parentId, original, 0, budget) : original;
+        if (needsFonts) result = injectFontFaces(result, budget);
+        if (result === original) return svgBytes; // nothing changed → byte-identical
+        const out = Buffer.from(result, 'utf8');
         // Multibyte counting can undershoot the char-based budget; the byte length is the real gate.
         if (out.byteLength > SVG_INLINE_MAX_BYTES) return stripAll(original);
         return out;
@@ -58,6 +72,40 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
         if (err instanceof OutputTooLargeError) return stripAll(original);
         throw err;
     }
+}
+
+// Inject a <defs><style> of @font-face blocks for the EIGEN fonts the svg's text names, right after the
+// opening <svg> tag (sceneToSvg emits no top-level <defs>) — mirrors export/vector/transform.ts. The
+// faces are data: URIs (from getFontFaceCSSForFamilies), so sanitizeExportHtml keeps them and the
+// sandbox CSP allows them; faces are static per build, so a cached result never goes stale. Charges the
+// css against the shared output budget before splicing; a breach degrades to no faces (text falls back
+// to a system font, the svg still serves) rather than discarding the media already inlined.
+function injectFontFaces(svg: string, budget: Budget): string {
+    const faceCSS = getFontFaceCSSForFamilies(usedEigenFonts(svg));
+    if (faceCSS === '') return svg;
+    const defs = `<defs><style>${faceCSS}</style></defs>`;
+    budget.remaining -= Buffer.byteLength(defs);
+    if (budget.remaining < 0) return svg;
+    const tagEnd = svg.indexOf('>') + 1;
+    if (tagEnd === 0) return svg; // no opening tag — leave the bytes untouched
+    return `${svg.slice(0, tagEnd)}${defs}${svg.slice(tagEnd)}`;
+}
+
+// The EIGEN fonts the svg's text uses: match EIGEN_FONTS NAMES as substrings of every font-family value
+// (attribute or style property). The svg stores the full family STACK from getFontFamily (e.g.
+// "&apos;Excalifont&apos;, cursive"), so a name is a plain substring regardless of quote-entity
+// escaping. Scoping to font-family values — not the whole svg — keeps a name like "Inter" from matching
+// prose elsewhere. An unrecognized family contributes nothing (getFontFaceCSSForFamilies ignores it).
+const FONT_FAMILY_RE = /font-family\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|([^;">]+))/gi;
+function usedEigenFonts(svg: string): Set<string> {
+    const used = new Set<string>();
+    for (const m of svg.matchAll(FONT_FAMILY_RE)) {
+        const value = m[1] ?? m[2] ?? m[3] ?? '';
+        for (const font of EIGEN_FONTS) {
+            if (value.includes(font.name)) used.add(font.name);
+        }
+    }
+    return used;
 }
 
 // Serve the drawing with every ref stripped — images render blank, but the svg stays small and safe.
