@@ -119,6 +119,71 @@ export function bindArrow(
     return { startBinding, endBinding, ...geom };
 }
 
+type BoundGeom = {
+    startBinding: string;
+    endBinding: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    points: string;
+};
+
+function followedGeom(
+    arrow: VectorArrowElement,
+    byId: Map<string, VectorElement>,
+): Omit<BoundGeom, 'startBinding' | 'endBinding'> {
+    return (
+        followBindings(arrow, byId) ?? {
+            x: arrow.x,
+            y: arrow.y,
+            width: arrow.width,
+            height: arrow.height,
+            points: arrow.points,
+        }
+    );
+}
+
+// Bind (or unbind, when `fixedPoint` is null) a dragged/creating ELBOW endpoint from a PRE-COMPUTED dock
+// ratio — elbowBindPoint's fixedPoint for the hovered candidate — never re-derived from the release cursor
+// (D3/D4). The end's binding is set from that ratio, then followBindings re-glues every bound end onto its
+// shape: for an elbow end that is elbowAnchorScene(fixedPoint) = the dock, so the stored endpoint lands
+// exactly where the preview showed, and the OTHER bound end re-docks too. The preview and the commit call
+// this identically, so pointer-up is a visual no-op (ELBOW-PARITY-SPEC acceptance criterion #1). An unbound
+// end keeps its raw dragged point (followBindings never touches a cleared end).
+export function bindElbowEnd(
+    arrow: VectorArrowElement,
+    end: 'start' | 'end',
+    candidate: string | null,
+    fixedPoint: [number, number] | null,
+    byId: Map<string, VectorElement>,
+): BoundGeom {
+    const binding = candidate && fixedPoint ? serializeBinding({ elementId: candidate, fixedPoint }) : '';
+    const startBinding = end === 'start' ? binding : arrow.startBinding;
+    const endBinding = end === 'end' ? binding : arrow.endBinding;
+    return { startBinding, endBinding, ...followedGeom({ ...arrow, startBinding, endBinding }, byId) };
+}
+
+// Live-follow the OTHER bound end while a straight arrow's endpoint is dragged (D7): re-glue only the end
+// that isn't `dragged` so it re-orbits toward the moving cursor exactly as release will, while the dragged
+// end keeps its raw cursor position (its binding is cleared for the follow, so followBindings leaves it
+// alone). Returns the element unchanged when the other end isn't bound / nothing moved.
+export function followOtherEnd(
+    arrow: VectorArrowElement,
+    dragged: 'start' | 'end',
+    byId: Map<string, VectorElement>,
+): { x: number; y: number; width: number; height: number; points: string } {
+    const cleared = dragged === 'start' ? { startBinding: '' } : { endBinding: '' };
+    return followedGeom({ ...arrow, ...cleared }, byId);
+}
+
+// Whether a scene point sits within a shape's exact outline (no reach band) — the deep-inside test B2 uses
+// to suppress the side-midpoint snap dots for a NON-elbow arrow (Excalidraw shows them only around the
+// outline, not when the cursor is buried inside the shape).
+export function pointInsideShape(shape: VectorShapeElement, point: Point): boolean {
+    return insideShape(shape, point, 0);
+}
+
 // The map every follow reads, with each previewed element carrying its live preview box, so a bound arrow
 // tracks a shape that is mid-drag/resize. Only the shape entries matter (arrows aren't bindable).
 export function buildPreviewById(ordered: VectorElement[], previews: Record<string, Box>): Map<string, VectorElement> {

@@ -12,6 +12,7 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
+    elbowBindPoint,
     elementToSvg,
     isBindable,
     linearLocalToScene,
@@ -21,13 +22,15 @@ import {
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
+    type VectorShapeElement,
 } from '@workspace/lib/vector';
 import { createElement, type MutableRefObject, type ReactNode, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import type { VectorTool } from '../hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
-import { bindArrow, bindingCandidate, bindingOutlineElement } from './binding';
+import { FocusIndicators, SnapDots } from './arrow-affordances';
+import { bindArrow, bindElbowEnd, bindingCandidate, bindingOutlineElement, followOtherEnd } from './binding';
 import { markErase } from './eraser';
 import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from './freedraw';
 import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDraft } from './line';
@@ -127,6 +130,10 @@ export type DrawingTools = {
     // A shape-following outline over the bindable shape a dragged (or hovered) arrow endpoint would bind
     // to — an SVG `<g>` for the scene group (null otherwise).
     bindingOutline: ReactNode;
+    // Side-midpoint snap dots over the reached shape (B2), and the straight-arrow focus point (B4/D5) — both
+    // SVG for the scene group, drawn next to the outline (null otherwise).
+    snapDots: ReactNode;
+    focusIndicators: ReactNode;
     onPointerDown: (e: React.PointerEvent, scene: Point) => boolean;
     onPointerMove: (e: React.PointerEvent) => boolean;
     onPointerUp: (e: React.PointerEvent) => boolean;
@@ -180,8 +187,36 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const [pointDraft, setPointDraft] = useState<{ id: string; el: VectorLinearElement | VectorArrowElement } | null>(
         null,
     );
-    // The bindable shape a dragged arrow endpoint currently reaches — the canvas rings it (R3.8).
-    const [bindCandidate, setBindCandidate] = useState<string | null>(null);
+    // The bindable shape a dragged/hovered arrow endpoint currently reaches, plus the pointer that reaches
+    // it and whether the arrow is elbow — the canvas rings the shape (R3.8) and draws the side-midpoint snap
+    // dots (B2) from this. null when nothing reaches.
+    const [bindHint, setBindHint] = useState<{ shapeId: string; pointer: Point; elbow: boolean } | null>(null);
+    // The last preview frame's elbow bind decision, consumed verbatim on commit so pointer-up is a visual
+    // no-op — zero release-time recompute (D3/D4). Null between elbow-endpoint drags.
+    const elbowDragRef = useRef<{
+        end: 'start' | 'end';
+        candidate: string | null;
+        fixedPoint: [number, number] | null;
+    } | null>(null);
+    // Which arrow endpoint is mid-drag (null when idle) — the focus indicator hides that end (B4).
+    const [draggedEnd, setDragEnd] = useState<'start' | 'end' | null>(null);
+
+    const setBindShape = (shape: VectorShapeElement | undefined, pointer: Point, elbow: boolean) =>
+        setBindHint(shape ? { shapeId: shape.id, pointer, elbow } : null);
+    // The bindable shape an endpoint at `scene` reaches (null when nothing reaches / binding is suppressed).
+    const candidateShape = (scene: Point, suppressed: boolean): VectorShapeElement | undefined => {
+        const id = bindingCandidate(ordered, scene, zoom, suppressed);
+        const shape = id ? ordered.find((el) => el.id === id) : undefined;
+        return shape && isBindable(shape) ? shape : undefined;
+    };
+    // The elbow dock ratio to store at an endpoint (the point-handle path, event-less → reads suppressRef).
+    const elbowBindFor = (
+        scene: Point,
+    ): { candidate: string | null; fixedPoint: [number, number] | null; shape: VectorShapeElement | undefined } => {
+        const shape = candidateShape(scene, suppressRef.current);
+        if (!shape) return { candidate: null, fixedPoint: null, shape: undefined };
+        return { candidate: shape.id, fixedPoint: elbowBindPoint(shape, scene).fixedPoint, shape };
+    };
 
     useEffect(() => {
         const track = (e: KeyboardEvent) => {
@@ -239,7 +274,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         frozenRef.current = false;
         setActiveKind(null);
         setPreviewEl(null);
-        setBindCandidate(null);
+        setBindHint(null);
     };
 
     // Write the draft as one element. < 2 distinct points is not a line — write nothing. An arrow also
@@ -420,7 +455,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             // still read suppressRef.
             if (draft.type === 'arrow') {
                 const tip = { x: draft.origin.x + draft.trailing.x, y: draft.origin.y + draft.trailing.y };
-                setBindCandidate(bindingCandidate(ordered, tip, zoom, e.ctrlKey || e.metaKey));
+                // A creation draft is always straight (the elbow flag is applied later via the panel), so the
+                // snap dots read elbow:false; the dock lands on commit through bindArrow.
+                setBindShape(candidateShape(tip, e.ctrlKey || e.metaKey), tip, false);
             }
             linePreview(draft);
             return true;
@@ -429,7 +466,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         // target is visible before the first click (R3.8). Doesn't consume the move. Ctrl/Cmd suppresses.
         if (tool === 'arrow' && !busy) {
             const scene = clientToScene(e.clientX, e.clientY);
-            setBindCandidate(bindingCandidate(ordered, scene, zoom, e.ctrlKey || e.metaKey));
+            setBindShape(candidateShape(scene, e.ctrlKey || e.metaKey), scene, false);
         }
         return false;
     };
@@ -437,7 +474,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // The pointer left the canvas → clear the pre-click hover highlight, but never a live draft's tip
     // candidate (a multi-point draft leaves the surface unfrozen, so the pointer can roam off it).
     const onPointerLeave = () => {
-        if (!lineRef.current) setBindCandidate(null);
+        if (!lineRef.current) setBindHint(null);
     };
 
     const onPointerUp = (e: React.PointerEvent): boolean => {
@@ -485,7 +522,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     useEffect(() => {
         if (!selectedLineId) {
             setPointDraft(null);
-            setBindCandidate(null);
+            setBindHint(null);
+            elbowDragRef.current = null;
+            setDragEnd(null);
         }
         // Drop any point selection that no longer resolves: the element deselected/changed, or a remote
         // peer shrank its point count below the selected index — leaving the filled dot gone while Delete
@@ -496,37 +535,77 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const onPointPreview = (points: Point[] | null, index: number) => {
         if (!points || !selectedLine) {
             setPointDraft(null);
-            setBindCandidate(null);
+            setBindHint(null);
+            elbowDragRef.current = null;
+            setDragEnd(null);
             return;
         }
+        if (selectedLine.type === 'arrow' && isEndpoint(index, points.length)) {
+            const arrow = selectedLine;
+            const end = index === 0 ? 'start' : 'end';
+            const reshaped = { ...arrow, ...normalizeLinear(arrow, points) };
+            setDragEnd(end);
+            const endScene = linearLocalToScene(arrow, points[index]);
+            if (arrow.elbow) {
+                // The endpoint glides on the outline dock (E14/B1): the preview element carries the DOCKED
+                // endpoint and the live candidate as its binding — post-commit form — so its derived route
+                // (elbowRoute off this element) is exactly what release stores (acceptance criterion #1). The
+                // decision is cached for the commit to replay verbatim (D3/D4, zero release-time recompute).
+                const { candidate, fixedPoint, shape } = elbowBindFor(endScene);
+                elbowDragRef.current = { end, candidate, fixedPoint };
+                const bound = bindElbowEnd(reshaped, end, candidate, fixedPoint, byId);
+                setPointDraft({ id: arrow.id, el: { ...reshaped, ...bound } });
+                setBindShape(shape, endScene, true);
+            } else {
+                // Straight: the dragged end follows the raw cursor (docked on release via bindArrow, B7); the
+                // OTHER bound end re-orbits live so it too matches post-release (D7).
+                elbowDragRef.current = null;
+                const followed = followOtherEnd(reshaped, end, byId);
+                setPointDraft({ id: arrow.id, el: { ...reshaped, ...followed } });
+                setBindShape(candidateShape(endScene, suppressRef.current), endScene, false);
+            }
+            return;
+        }
+        // A line, or a middle vertex of an arrow — a plain reshape, no binding.
+        elbowDragRef.current = null;
+        setDragEnd(null);
         setPointDraft({ id: selectedLine.id, el: { ...selectedLine, ...normalizeLinear(selectedLine, points) } });
-        // Highlight the shape an arrow's dragged ENDPOINT would bind to (a middle vertex never binds).
-        setBindCandidate(
-            selectedLine.type === 'arrow' && isEndpoint(index, points.length)
-                ? bindingCandidate(ordered, linearLocalToScene(selectedLine, points[index]), zoom, suppressRef.current)
-                : null,
-        );
+        setBindHint(null);
     };
 
     const onPointCommit = (points: Point[], index: number) => {
-        setBindCandidate(null);
+        setBindHint(null);
+        const cached = elbowDragRef.current;
+        elbowDragRef.current = null;
+        setDragEnd(null);
         if (!selectedLine) {
             setPointDraft(null);
             return;
         }
         undoManager?.stopCapturing();
         if (selectedLine.type === 'arrow') {
-            // The dragged endpoint (re)binds/unbinds; the other end keeps its binding, and every bound end
-            // re-snaps to its shape through bindArrow (R3.10).
             const reshaped = { ...selectedLine, ...normalizeLinear(selectedLine, points) };
-            const bound = bindArrow(
-                reshaped,
-                { start: index === 0, end: index === points.length - 1 },
-                ordered,
-                zoom,
-                suppressRef.current,
-            );
-            updateElement(selectedLine.id, bound);
+            if (selectedLine.elbow && isEndpoint(index, points.length)) {
+                // Replay the last preview frame's cached dock — never re-run the candidate search from the
+                // release cursor (D4). Recompute only in the degenerate no-move case (no preview frame ran).
+                const end = index === 0 ? 'start' : 'end';
+                const frame =
+                    cached && cached.end === end
+                        ? cached
+                        : elbowBindFor(linearLocalToScene(selectedLine, points[index]));
+                updateElement(selectedLine.id, bindElbowEnd(reshaped, end, frame.candidate, frame.fixedPoint, byId));
+            } else {
+                // Straight (or a middle vertex): the dragged endpoint (re)binds/unbinds via the chord model,
+                // the other end keeps its binding, every bound end re-snaps through bindArrow (R3.10).
+                const bound = bindArrow(
+                    reshaped,
+                    { start: index === 0, end: index === points.length - 1 },
+                    ordered,
+                    zoom,
+                    suppressRef.current,
+                );
+                updateElement(selectedLine.id, bound);
+            }
         } else {
             updateElement(selectedLine.id, normalizeLinear(selectedLine, points));
         }
@@ -537,6 +616,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const handles = selectedLine
         ? createElement(LinePointHandles, {
               line: selectedLine,
+              zoom,
               boxToStyle,
               clientToScene,
               frozenRef,
@@ -551,13 +631,30 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: `elementToSvg`
     // re-strokes the shape's own geometry in the selection colour (`currentColor`, tinted by the
     // `text-selection-handle` group), so no shape math is duplicated here.
-    const candidate = bindCandidate ? ordered.find((el) => el.id === bindCandidate) : undefined;
+    const candidate = bindHint ? ordered.find((el) => el.id === bindHint.shapeId) : undefined;
     const bindingOutline =
         candidate && isBindable(candidate)
             ? createElement('g', {
                   className: 'text-selection-handle',
                   dangerouslySetInnerHTML: { __html: elementToSvg(bindingOutlineElement(candidate, zoom)) },
               })
+            : null;
+
+    // Side-midpoint snap dots over the reached shape (B2) — the visual face of snapToMid, so the dock lands
+    // on the highlighted dot. Scene-group SVG, drawn next to the outline.
+    const snapDots =
+        bindHint && candidate && isBindable(candidate)
+            ? createElement(SnapDots, { shape: candidate, pointer: bindHint.pointer, zoom, elbow: bindHint.elbow })
+            : null;
+
+    // The straight-arrow focus point (B4/D5): shown for a single selected bound arrow, and during its
+    // endpoint drag for the OTHER end (the dragged end is hidden). Reads the live preview element while
+    // dragging so the un-dragged end reflects its re-orbit (D7).
+    const focusArrow =
+        pointDraft?.el.type === 'arrow' ? pointDraft.el : selectedLine?.type === 'arrow' ? selectedLine : null;
+    const focusIndicators =
+        focusArrow && !focusArrow.elbow && !activeKind
+            ? createElement(FocusIndicators, { arrow: focusArrow, byId, zoom, hideEnd: draggedEnd })
             : null;
 
     // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
@@ -684,7 +781,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         if (lineRef.current && lineRef.current.type !== tool) commitLine(lineRef.current.committed);
         if (tool !== 'eraser' && eraserRef.current) cancelEraser();
         // Leaving the arrow tool drops any lingering pre-click hover highlight (no draft in flight).
-        if (tool !== 'arrow' && !lineRef.current) setBindCandidate(null);
+        if (tool !== 'arrow' && !lineRef.current) setBindHint(null);
     };
     useEffect(() => {
         abandonRef.current();
@@ -697,6 +794,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         erasingIds: erasing,
         handles,
         bindingOutline,
+        snapDots,
+        focusIndicators,
         onPointerDown,
         onPointerMove,
         onPointerUp,

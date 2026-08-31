@@ -24,16 +24,23 @@ import {
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-// Screen diameter of a vertex/midpoint dot (Excalidraw's POINT_HANDLE_SIZE), overriding the 12px ring grip.
-const POINT_HANDLE_SCREEN_PX = 10;
 // A midpoint drag only inserts once the pointer travels past this many CLIENT px — below it the gesture
 // is a plain click that adds nothing (Excalidraw's DRAG_THRESHOLD for the midpoint handle).
 const MIDPOINT_DRAG_THRESHOLD_PX = 2;
+// A midpoint dot is hidden when its segment is shorter than this on SCREEN, so short segments don't
+// clutter (Excalidraw's POINT_HANDLE_SIZE·4). The dot size itself lives in one place — the .eigen-*-handle
+// CSS token (D9(e)); the JSX only positions it.
+const MIDPOINT_MIN_SEGMENT_SCREEN_PX = 40;
+// Two adjacent vertices this close on SCREEN render as ONE (doubled) dot instead of z-fighting; a click
+// then prefers the higher index (the top-most DOM node, which we keep). Excalidraw's coincident-point merge.
+const OVERLAP_MERGE_SCREEN_PX = 2;
 
 type LinePointHandlesProps = {
     // A line or an arrow — both carry `points`; an arrow's endpoint drag additionally (re)binds (R3.10),
     // which the host resolves from the dragged vertex index.
     line: VectorLinearElement | VectorArrowElement;
+    // Screen scale — gates the midpoint-length and overlap-merge thresholds to constant on-screen distances.
+    zoom: number;
     boxToStyle: (box: Box) => React.CSSProperties;
     clientToScene: (clientX: number, clientY: number) => Point;
     frozenRef: MutableRefObject<boolean>;
@@ -53,6 +60,7 @@ type LinePointHandlesProps = {
 
 export function LinePointHandles({
     line,
+    zoom,
     boxToStyle,
     clientToScene,
     frozenRef,
@@ -140,39 +148,53 @@ export function LinePointHandles({
     // stored points. Midpoint dots are hidden mid-drag so they never sit on a stale segment.
     const vertices = drag ? drag.base : points;
 
-    // Position a POINT_HANDLE_SCREEN_PX dot centred on a local point, in the host's screen frame.
+    // Position a dot centred on a local point, in the host's screen frame — its 22px hit area / 20px hover
+    // halo / dot size all come from the .eigen-*-handle CSS token (D9), so the JSX only places it.
     const dotStyle = (local: Point): React.CSSProperties => {
         const scene = linearLocalToScene(line, local);
         const { left, top } = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
-        return {
-            left,
-            top,
-            width: POINT_HANDLE_SCREEN_PX,
-            height: POINT_HANDLE_SCREEN_PX,
-            transform: 'translate(-50%, -50%)',
-        };
+        return { left, top, transform: 'translate(-50%, -50%)' };
     };
+
+    // The vertex position a dot renders at (its live drag position for the grabbed one).
+    const vertexLocal = (i: number, p: Point) => (drag?.index === i ? drag.local : p);
+    // Overlap merge (D9(d)): a vertex within OVERLAP_MERGE_SCREEN_PX of a HIGHER-index neighbour is hidden
+    // into it, and that neighbour draws doubled — so coincident points read as one dot and a click resolves
+    // to the higher (top-most) index. Suppressed mid-drag, where the grabbed vertex has left its neighbours.
+    const mergeGap = OVERLAP_MERGE_SCREEN_PX / zoom;
+    const hiddenVertex = (i: number): boolean =>
+        !drag &&
+        i < vertices.length - 1 &&
+        Math.hypot(
+            vertexLocal(i, vertices[i]).x - vertices[i + 1].x,
+            vertexLocal(i, vertices[i]).y - vertices[i + 1].y,
+        ) <= mergeGap;
+    const doubledVertex = (i: number): boolean => !drag && i > 0 && hiddenVertex(i - 1);
 
     return (
         <>
-            {vertices.map((p, i) => (
-                <div
-                    key={`v${i}`}
-                    className={`eigen-vertex-handle pointer-events-auto touch-none cursor-pointer${
-                        selectedIndex === i ? ' eigen-vertex-handle-selected' : ''
-                    }`}
-                    style={dotStyle(drag?.index === i ? drag.local : p)}
-                    // Click selects THIS point (a following drag reshapes it and keeps it selected).
-                    onPointerDown={(e) => {
-                        onSelect(i);
-                        startDrag(e, points, i, false);
-                    }}
-                />
-            ))}
+            {vertices.map((p, i) =>
+                hiddenVertex(i) ? null : (
+                    <div
+                        key={`v${i}`}
+                        className={`eigen-vertex-handle pointer-events-auto touch-none cursor-pointer${
+                            selectedIndex === i ? ' eigen-vertex-handle-selected' : ''
+                        }${doubledVertex(i) ? ' eigen-point-handle-doubled' : ''}${drag ? ' eigen-point-handle-no-halo' : ''}`}
+                        style={dotStyle(vertexLocal(i, p))}
+                        // Click selects THIS point (a following drag reshapes it and keeps it selected).
+                        onPointerDown={(e) => {
+                            onSelect(i);
+                            startDrag(e, points, i, false);
+                        }}
+                    />
+                ),
+            )}
             {!drag &&
                 !isElbow &&
                 points.slice(0, -1).map((p, i) => {
                     const next = points[i + 1];
+                    // Hide the midpoint dot on a segment too short to be worth one (D9(c)) — screen length.
+                    if (Math.hypot(next.x - p.x, next.y - p.y) * zoom < MIDPOINT_MIN_SEGMENT_SCREEN_PX) return null;
                     const mid = { x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 };
                     // The vertex this dot would insert, at index i+1 between its two neighbours.
                     const base = [...points.slice(0, i + 1), mid, ...points.slice(i + 1)];

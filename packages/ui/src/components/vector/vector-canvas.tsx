@@ -1454,8 +1454,10 @@ export function VectorCanvas({
                     {/* Live freehand/line draft, or a point-edit reshape — the SAME elementToSvg path. */}
                     {drawing.previewElement && node(drawing.previewElement)}
                     <SnapGuides lines={snapLines} />
-                    {/* Shape-following bind-target outline (R3.8) — SVG in the scene group, so it rides rotation/roundness. */}
+                    {/* Bind-target chrome (R3.8, B2, B4/D5) — SVG in the scene group, so it rides rotation/roundness/zoom. */}
                     {drawing.bindingOutline}
+                    {drawing.snapDots}
+                    {drawing.focusIndicators}
                 </g>
             </svg>
             <div className="pointer-events-none absolute inset-0">
