@@ -56,6 +56,7 @@ import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
+import { arrowRouteOf } from './arrow-route';
 import { pointerCursor } from './cursor';
 import { ElementNode } from './element-node';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
@@ -249,6 +250,10 @@ export function VectorCanvas({
 
     const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
 
+    // All elements by id (committed scene) — the map an elbow arrow reads (arrowRouteOf) to resolve its
+    // bound shapes and derive its route. Hit/marquee/label paths use it; the render path overlays previews.
+    const committedById = useMemo(() => new Map(ordered.map((el) => [el.id, el])), [ordered]);
+
     // Element boxes by id for the shared CursorLayer's remote selection rings — rebuilt only when the
     // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
     const cursorBoxes = useMemo(() => {
@@ -267,6 +272,7 @@ export function VectorCanvas({
         canWrite,
         zoom,
         ordered,
+        byId: committedById,
         selectedIds,
         busy: Object.keys(previews).length > 0 || !!creating || !!marquee || !!editing,
         containerRef,
@@ -289,6 +295,9 @@ export function VectorCanvas({
         () => (hasPreviews && hasArrows ? buildPreviewById(ordered, previews) : null),
         [hasPreviews, hasArrows, ordered, previews],
     );
+    // The map the render path feeds an elbow arrow's route: preview boxes when a shape is mid-drag (the
+    // snake follows live), else the committed scene — its per-frame identity is the ElementNode memo's cue.
+    const renderById = previewById ?? committedById;
 
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
     // no preview → same object identity, so the memo skips it. A linear element's resize/rotate derives
@@ -429,7 +438,7 @@ export function VectorCanvas({
     };
 
     const openEditArrowLabel = (el: VectorArrowElement) => {
-        const ed = arrowLabelEditing(el);
+        const ed = arrowLabelEditing(el, arrowRouteOf(el, committedById));
         if (!ed) return; // a degenerate arrow (< 2 points) has no label anchor
         setSelectedIds([el.id]);
         setEditing(ed);
@@ -1025,7 +1034,7 @@ export function VectorCanvas({
         // frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's openNewText); else edit the hit text/arrow label.
         if (!canWrite || tool !== 'select' || editing || frozenRef.current) return;
         const p = clientToScene(e.clientX, e.clientY);
-        const hit = hitTestTopmost(ordered, p, zoom);
+        const hit = hitTestTopmost(ordered, p, zoom, committedById);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'text') openEditExisting(hitEl);
         else if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
@@ -1040,7 +1049,7 @@ export function VectorCanvas({
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
         if (!canWrite || editing || frozenRef.current) return;
         const p = clientToScene(e.clientX, e.clientY);
-        const hitId = hitTestTopmost(ordered, p, zoom);
+        const hitId = hitTestTopmost(ordered, p, zoom, committedById);
         if (!hitId) return;
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
         objectContextMenu.handleContextMenu(e, hitId);
@@ -1122,7 +1131,7 @@ export function VectorCanvas({
             // discards the empty session instantly (intermittent dead clicks). Canceling also
             // keeps mousedown's caret-placement from destroying the select-all on existing text.
             e.preventDefault();
-            const hit = hitTestTopmost(ordered, p, zoom);
+            const hit = hitTestTopmost(ordered, p, zoom, committedById);
             const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
             if (hitEl?.type === 'text') openEditExisting(hitEl);
             else openNewText(p.x, p.y);
@@ -1147,7 +1156,7 @@ export function VectorCanvas({
         }
 
         // Select tool.
-        const hitId = hitTestTopmost(ordered, p, zoom);
+        const hitId = hitTestTopmost(ordered, p, zoom, committedById);
         if (hitId) {
             if (e.shiftKey) {
                 toggle(hitId); // shift-click toggles membership, no move
@@ -1210,7 +1219,7 @@ export function VectorCanvas({
         if (drawing.onPointerMove(e)) return;
         // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
         if (!g && tool === 'select' && !editing) {
-            const over = hitTestTopmost(ordered, scene, zoom) !== null;
+            const over = hitTestTopmost(ordered, scene, zoom, committedById) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
         }
         if (!g || e.pointerId !== g.pointerId) return;
@@ -1285,7 +1294,7 @@ export function VectorCanvas({
         const box = normalizeRect(g.startX, g.startY, p.x, p.y);
         const mode = marqueeMode(g.startX, p.x);
         setMarquee({ box, mode });
-        const hits = marqueeSelect(ordered, boxToBounds(box), mode);
+        const hits = marqueeSelect(ordered, boxToBounds(box), mode, committedById);
         setSelectedIds(g.additive ? [...new Set([...g.base, ...hits])] : hits);
     };
 
@@ -1375,10 +1384,13 @@ export function VectorCanvas({
 
     const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
-    // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang (R3.6).
+    // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang (R3.6) and an
+    // elbow arrow's routed bends (arrowRouteOf, preview-aware via renderById).
     const unionBox =
         selectedRender.length >= 1
-            ? boundsToBox(selectedRender.map((el) => elementBounds(el)).reduce(unionBounds))
+            ? boundsToBox(
+                  selectedRender.map((el) => elementBounds(el, arrowRouteOf(el, renderById))).reduce(unionBounds),
+              )
             : null;
     // A single 2-point line/arrow shows no ObjectTransform (no ring/grips/rotate grip) — the round vertex
     // handles below are its whole affordance, rotation via the panel Angle input. 3+-point linears keep the box.
@@ -1393,6 +1405,12 @@ export function VectorCanvas({
 
     const cursor = pointerCursor({ panning, spaceHeld, tool, hoveringSelectable });
     const background = isTransparent(meta.background) ? undefined : meta.background;
+
+    // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
+    // threaded in one place, not per callsite.
+    const node = (el: VectorElement) => (
+        <ElementNode key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} />
+    );
 
     return (
         // eigen-paper: the drawing surface always renders light, in dark mode too (globals.css). Its
@@ -1428,24 +1446,14 @@ export function VectorCanvas({
                         // The element under edit is drawn only by the overlay textarea (WYSIWYG). An
                         // arrow keeps its shaft/heads and hides just the label (render text='').
                         if (editing?.id === el.id) {
-                            if (editing.kind === 'arrow' && el.type === 'arrow') {
-                                return (
-                                    <ElementNode
-                                        key={el.id}
-                                        el={renderEl({ ...el, text: '' })}
-                                        resolveMedia={resolveMediaUrl}
-                                    />
-                                );
-                            }
-                            return null;
+                            const isArrow = editing.kind === 'arrow' && el.type === 'arrow';
+                            return isArrow ? node(renderEl({ ...el, text: '' })) : null;
                         }
-                        return <ElementNode key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} />;
+                        return node(renderEl(el));
                     })}
-                    {creating && <ElementNode el={creatingElement(creating)} resolveMedia={resolveMediaUrl} />}
+                    {creating && node(creatingElement(creating))}
                     {/* Live freehand/line draft, or a point-edit reshape — the SAME elementToSvg path. */}
-                    {drawing.previewElement && (
-                        <ElementNode el={drawing.previewElement} resolveMedia={resolveMediaUrl} />
-                    )}
+                    {drawing.previewElement && node(drawing.previewElement)}
                     <SnapGuides lines={snapLines} />
                     {/* Shape-following bind-target outline (R3.8) — SVG in the scene group, so it rides rotation/roundness. */}
                     {drawing.bindingOutline}

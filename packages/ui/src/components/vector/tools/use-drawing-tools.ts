@@ -96,6 +96,8 @@ type DrawingToolsParams = {
     canWrite: boolean;
     zoom: number;
     ordered: VectorElement[];
+    // The committed scene by id — lets the eraser hit-test an elbow arrow on its DERIVED route.
+    byId: Map<string, VectorElement>;
     selectedIds: string[];
     // True while a canvas gesture (create/marquee/move/resize) or overlay owns the surface — point
     // handles hide so they don't fight a resize, matching Excalidraw.
@@ -140,6 +142,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         canWrite,
         zoom,
         ordered,
+        byId,
         selectedIds,
         busy,
         containerRef,
@@ -332,7 +335,16 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             frozenRef.current = true;
             pointerIdRef.current = e.pointerId;
             const marked = new Set<string>();
-            markErase(ordered, scene, scene, HIT_THRESHOLD_SCREEN / zoom, ERASER_STEP_SCREEN / zoom, e.altKey, marked);
+            markErase(
+                ordered,
+                scene,
+                scene,
+                HIT_THRESHOLD_SCREEN / zoom,
+                ERASER_STEP_SCREEN / zoom,
+                e.altKey,
+                marked,
+                byId,
+            );
             eraserRef.current = { marked, last: scene };
             setErasing(new Set(marked));
             setActiveKind('eraser');
@@ -384,6 +396,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 ERASER_STEP_SCREEN / zoom,
                 e.altKey,
                 er.marked,
+                byId,
             );
             er.last = scene;
             if (changed) setErasing(new Set(er.marked));
@@ -573,29 +586,29 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             finishLineWith(lineRef.current.committed);
             return true;
         },
-        // Delete/Backspace with a vertex handle hovered acts on THAT vertex, winning over the keyboard
-        // hook's delete-selection. While a handle is hovered the key is ABSORBED here — it never deletes
-        // the whole element out from under the pointer: an interior vertex of a 3+-point linear is
-        // removed (one sealed step), an endpoint (index 0/last, where an arrow's bindings ride) or a
-        // 2-pointer no-ops. Elbow arrows are the exception: their route is derived, they have no editable
-        // vertex, so we DON'T consume and Delete falls through to removing the whole arrow.
+        // Delete/Backspace with a vertex handle hovered removes THAT interior vertex (one sealed step),
+        // winning over the keyboard hook's delete-selection — and ONLY then is the key absorbed. Over an
+        // ENDPOINT dot (index 0/last, where an arrow's bindings ride) there is no removable vertex, so we
+        // do NOT consume: the key falls through to selection-delete and removes the whole element, which
+        // is what the user expects — absorbing it there would trap the element on screen. Elbow arrows
+        // fall through the same way: their route is derived, they have no editable vertex.
         deleteVertex: () => {
             const index = hoveredVertexRef.current;
             if (index === null || !selectedLine) return false;
             if (selectedLine.type === 'arrow' && selectedLine.elbow) return false;
             const pts = parsePoints(selectedLine.points);
-            if (index > 0 && index < pts.length - 1 && pts.length > 2) {
-                undoManager?.stopCapturing();
-                updateElement(
-                    selectedLine.id,
-                    normalizeLinear(
-                        selectedLine,
-                        pts.filter((_, i) => i !== index),
-                    ),
-                );
-                undoManager?.stopCapturing();
-                hoveredVertexRef.current = null;
-            }
+            const interior = index > 0 && index < pts.length - 1;
+            if (!interior) return false;
+            undoManager?.stopCapturing();
+            updateElement(
+                selectedLine.id,
+                normalizeLinear(
+                    selectedLine,
+                    pts.filter((_, i) => i !== index),
+                ),
+            );
+            undoManager?.stopCapturing();
+            hoveredVertexRef.current = null;
             return true;
         },
         // Focus loss can swallow the pointerup (alt-tab mid-gesture) — commit like ObjectTransform does
@@ -622,10 +635,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 e.stopPropagation();
                 return;
             }
-            // A hovered vertex claims Delete/Backspace before the keyboard hook's delete-selection (which
-            // binds on document in the bubble phase) — stopping propagation here keeps that from also
-            // firing. Falls through when no vertex is hovered (or an elbow arrow), so selection delete
-            // still works normally.
+            // A hovered INTERIOR vertex claims Delete/Backspace before the keyboard hook's delete-selection
+            // (which binds on document in the bubble phase) — stopping propagation here keeps that from also
+            // firing. Falls through when no vertex is hovered, an endpoint is hovered, or an elbow arrow, so
+            // selection delete still removes the whole element normally.
             if ((e.key === 'Delete' || e.key === 'Backspace') && apiRef.current.deleteVertex()) {
                 e.preventDefault();
                 e.stopPropagation();

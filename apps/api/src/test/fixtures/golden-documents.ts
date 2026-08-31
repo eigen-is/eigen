@@ -448,6 +448,7 @@ export function buildGoldenVectorScene(): VectorScene {
             ...base,
             id: 'v-arrow',
             type: 'arrow',
+            elbow: false,
             x: 0,
             y: 260,
             width: 120,

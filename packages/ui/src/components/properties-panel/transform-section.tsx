@@ -35,6 +35,8 @@ type TransformSectionProps = {
     // util is the sole dim writer). The aspect checkbox is hidden with them: locking W↔H is
     // meaningless when neither is editable, and it must never override text's forced 'aspect' mode.
     sizeDisabled?: boolean;
+    // Disables ONLY the angle input, W/H untouched (an elbow arrow pins angle 0 — its rotation is moot).
+    angleDisabled?: boolean;
     // Disables EVERY input (read-only viewers): a visible read-out whose fields can't be edited.
     disabled?: boolean;
     // Aspect-ratio checkbox. Controlled by the host; omit `onAspectLockChange` to hide it entirely.
@@ -50,6 +52,7 @@ export function TransformSection({
     angle,
     onChange,
     sizeDisabled = false,
+    angleDisabled = false,
     disabled = false,
     aspectLocked = false,
     onAspectLockChange,
@@ -107,7 +110,7 @@ export function TransformSection({
                     step={1}
                     min={0}
                     max={360}
-                    disabled={disabled}
+                    disabled={disabled || angleDisabled}
                 />
             </PropertyRow>
         </PropertySection>

@@ -7,8 +7,12 @@
 // strokeColor doubles as the text color.
 
 import {
+    ARROW_SHAPES,
     type ArrangeOp,
     type Arrowhead,
+    type ArrowShape,
+    arrowShapeFields,
+    arrowShapeOf,
     type Box,
     computeArrange,
     DEFAULT_FONT_FAMILY,
@@ -16,6 +20,7 @@ import {
     isClosedPath,
     isLinearElement,
     isTransparent,
+    normalizeLinear,
     parsePoints,
     type Roundness,
     resizeLinear,
@@ -72,6 +77,12 @@ const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
     { value: 'sharp', label: 'Sharp' },
     { value: 'round', label: 'Rounded' },
 ];
+// The arrow-type row (UA4b) — derived from the canonical ARROW_SHAPES vocabulary so the two never drift.
+const ARROW_SHAPE_LABELS: Record<ArrowShape, string> = { sharp: 'Sharp', curved: 'Curved', elbow: 'Elbow' };
+const ARROW_SHAPE_OPTIONS: { value: ArrowShape; label: string }[] = ARROW_SHAPES.map((value) => ({
+    value,
+    label: ARROW_SHAPE_LABELS[value],
+}));
 const STROKE_STYLE_OPTIONS: { value: StrokeStyle; label: string }[] = [
     { value: 'solid', label: 'Solid' },
     { value: 'dashed', label: 'Dashed' },
@@ -146,6 +157,9 @@ export function VectorPropertiesPanel({
     // Arrowheads apply to arrows only (both ends selectable per selection).
     const arrowEls = selectedElements.filter((el): el is VectorArrowElement => el.type === 'arrow');
     const allArrow = has && arrowEls.length === selectedElements.length;
+    // An elbow arrow pins angle 0 (its route lives in the unrotated local frame), so a pure-elbow
+    // selection disables the panel Angle input.
+    const allElbow = allArrow && arrowEls.every((el) => el.elbow);
     // A Text section (font + size only — the label is always centered, its colour comes from Stroke)
     // shows for arrows once every one carries a label (R3.12); an empty label has no font to tune.
     const allArrowLabeled = allArrow && arrowEls.every((el) => el.text !== '');
@@ -155,6 +169,25 @@ export function VectorPropertiesPanel({
         if (!selectedIds.length) return;
         undoManager?.stopCapturing();
         updateElements(selectedIds.map((id) => ({ id, fields })));
+        undoManager?.stopCapturing();
+    };
+
+    // The arrow-type row (UA4b). arrowShapeFields owns the stored fields each shape writes back. Switching
+    // TO elbow first collapses the arrow to its two endpoints — an elbow route is DERIVED from them, so
+    // interior vertices would only linger as stray endpoint handles — and pins angle 0, all in the one
+    // sealed transact. Switching AWAY keeps the two endpoints (nothing to restore). One undo step.
+    const applyArrowShape = (shape: ArrowShape) => {
+        if (!arrowEls.length) return;
+        const base = arrowShapeFields(shape);
+        undoManager?.stopCapturing();
+        updateElements(
+            arrowEls.map((el) => {
+                if (shape !== 'elbow') return { id: el.id, fields: base };
+                const pts = parsePoints(el.points);
+                const collapsed = pts.length >= 2 ? [pts[0], pts[pts.length - 1]] : pts;
+                return { id: el.id, fields: { ...base, angle: 0, ...normalizeLinear({ ...el, angle: 0 }, collapsed) } };
+            }),
+        );
         undoManager?.stopCapturing();
     };
 
@@ -268,6 +301,7 @@ export function VectorPropertiesPanel({
     const fontFamily = getMergedValue(textEls, (el) => el.fontFamily);
     const fontSize = getMergedValue(textEls, (el) => el.fontSize);
     const textAlign = getMergedValue(textEls, (el) => el.textAlign);
+    const arrowShape = getMergedValue(arrowEls, (el) => arrowShapeOf(el));
     const startArrowhead = getMergedValue(arrowEls, (el) => el.startArrowhead);
     const endArrowhead = getMergedValue(arrowEls, (el) => el.endArrowhead);
     const arrowFontFamily = getMergedValue(arrowEls, (el) => el.fontFamily);
@@ -294,6 +328,9 @@ export function VectorPropertiesPanel({
                 // ANY text in the selection disables W/H: the write reaches every selected element,
                 // and text dims are derived (measurement util is the sole writer).
                 sizeDisabled={textEls.length > 0}
+                // An elbow arrow's route lives in the unrotated local frame, so it pins angle 0 — the
+                // Angle input is disabled for a pure-elbow selection (W/H stay editable).
+                angleDisabled={allElbow}
                 aspectLocked={aspectLocked}
                 onAspectLockChange={onAspectLockChange}
             />
@@ -408,14 +445,25 @@ export function VectorPropertiesPanel({
                                 options={ROUGHNESS_OPTIONS}
                             />
                         </PropertyRow>
-                        {allEdged && (
-                            <PropertyRow label="Edges">
+                        {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines & shapes keep Edges. */}
+                        {allArrow ? (
+                            <PropertyRow label="Type">
                                 <MergedSelect
-                                    value={roundness}
-                                    onChange={(v) => applyToAll({ roundness: v })}
-                                    options={EDGES_OPTIONS}
+                                    value={arrowShape}
+                                    onChange={applyArrowShape}
+                                    options={ARROW_SHAPE_OPTIONS}
                                 />
                             </PropertyRow>
+                        ) : (
+                            allEdged && (
+                                <PropertyRow label="Edges">
+                                    <MergedSelect
+                                        value={roundness}
+                                        onChange={(v) => applyToAll({ roundness: v })}
+                                        options={EDGES_OPTIONS}
+                                    />
+                                </PropertyRow>
+                            )
                         )}
                     </PropertySection>
                 </>

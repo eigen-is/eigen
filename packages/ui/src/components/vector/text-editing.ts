@@ -14,6 +14,7 @@ import {
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
     linearLocalToScene,
+    type Point,
     type TextAlign,
     type VectorArrowElement,
     type VectorTextElement,
@@ -76,12 +77,13 @@ export function textEditing(el: VectorTextElement): EditingState {
 // An arrow's label (select-tool double-click), centered on the label anchor — the polyline's
 // index-midpoint in the arrow's local frame, mapped to the scene (R3.12). The box is the committed
 // label rect (empty when the arrow has no label yet), so the overlay rotates with the arrow exactly as
-// the rendered label does. The label is always centered, so no textAlign choice. null for a degenerate
-// arrow (< 2 points) with no label anchor.
-export function arrowLabelEditing(el: VectorArrowElement): EditingState | null {
-    const center = arrowLabelCenter(el);
+// the rendered label does. The label is always centered, so no textAlign choice. `route` (the derived
+// elbow polyline) overrides the stored endpoints so an elbow arrow's overlay opens on its routed
+// midpoint. null for a degenerate arrow (< 2 points) with no label anchor.
+export function arrowLabelEditing(el: VectorArrowElement, route?: Point[]): EditingState | null {
+    const center = arrowLabelCenter(el, route);
     if (!center) return null;
-    const label = arrowLabelBox(el); // null until the arrow carries a label
+    const label = arrowLabelBox(el, route); // null until the arrow carries a label
     const width = label?.width ?? 0;
     const height = label?.height ?? 0;
     const scene = linearLocalToScene(el, center);

@@ -213,6 +213,8 @@ function reconstruct(node: Node): Point[] {
 
 // Fallback when A* finds no grid route: a single right-angle turn between the dongles, first segment along
 // the start heading's axis. simplify() collapses it to a straight segment when the dongles already align.
+// This L may cut straight through an obstacle AABB — by design: a guaranteed-drawn route beats none when
+// the grid search is boxed in.
 function lRoute(a: Point, b: Point, startHeading: Heading): Point[] {
     const corner: Point = isHorizontal(startHeading) ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
     return [a, corner, b];

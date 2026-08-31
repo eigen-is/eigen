@@ -109,8 +109,13 @@ export function LinePointHandles({
             if (pe.pointerId !== pointerId) return;
             teardown();
             // A midpoint click that never travelled leaves `latest` null → nothing is inserted.
-            if (latest) onCommit(latest, index);
-            else onPreview(null, index);
+            if (latest) {
+                onCommit(latest, index);
+                // The pointer still rests on the vertex it just dragged, but the drag cleared the hover
+                // (frozen). Re-arm it so a Delete pressed immediately after acts on THIS vertex, not —
+                // via a null hover ref — the whole element.
+                onVertexHover(index);
+            } else onPreview(null, index);
         };
         const onKey = (ke: KeyboardEvent) => {
             if (ke.key !== 'Escape') return;
