@@ -37,6 +37,9 @@ const SNIFF = Buffer.from(EIGEN_MEDIA_SCHEME);
 // already inlined (an export path injected them, or this is our own cached output) — skip re-injecting
 // so the block is never doubled.
 const FONT_FAMILY_SNIFF = Buffer.from('font-family');
+// Accepted limitation: this is a whole-file sniff, so a foreign svg that carries its OWN @font-face
+// while also naming an EIGEN family gets no faces injected for that eigen family. Our own pasted
+// vectors never embed faces, so in practice this only defers to an svg that already declares its fonts.
 const FONT_FACE_SNIFF = Buffer.from('@font-face');
 
 // Thrown when the running output would exceed the ceiling; caught at the top to serve a stripped svg.
@@ -91,18 +94,20 @@ function injectFontFaces(svg: string, budget: Budget): string {
     return `${svg.slice(0, tagEnd)}${defs}${svg.slice(tagEnd)}`;
 }
 
-// The EIGEN fonts the svg's text uses: match EIGEN_FONTS NAMES as substrings of every font-family value
-// (attribute or style property). The svg stores the full family STACK from getFontFamily (e.g.
-// "&apos;Excalifont&apos;, cursive"), so a name is a plain substring regardless of quote-entity
-// escaping. Scoping to font-family values — not the whole svg — keeps a name like "Inter" from matching
-// prose elsewhere. An unrecognized family contributes nothing (getFontFaceCSSForFamilies ignores it).
+// The EIGEN fonts the svg's text uses. The svg stores the full family STACK from getFontFamily (e.g.
+// "&apos;Excalifont&apos;, cursive"); split each font-family value into comma-separated tokens and match
+// a token EXACTLY (quotes/entities stripped, trimmed) against an EIGEN_FONTS name — a substring test
+// would let "Interstate" pull in the Inter face. Scoping to font-family values, not the whole svg,
+// keeps a family name from matching prose elsewhere. An unrecognized family contributes nothing.
 const FONT_FAMILY_RE = /font-family\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|([^;">]+))/gi;
+const FONT_NAMES = new Set(EIGEN_FONTS.map((font) => font.name));
 function usedEigenFonts(svg: string): Set<string> {
     const used = new Set<string>();
     for (const m of svg.matchAll(FONT_FAMILY_RE)) {
         const value = m[1] ?? m[2] ?? m[3] ?? '';
-        for (const font of EIGEN_FONTS) {
-            if (value.includes(font.name)) used.add(font.name);
+        for (const token of value.split(',')) {
+            const name = token.replace(/&apos;|&quot;|['"]/g, '').trim();
+            if (FONT_NAMES.has(name)) used.add(name);
         }
     }
     return used;

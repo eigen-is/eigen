@@ -183,6 +183,17 @@ describe('inlineSvgMediaRefs font injection', () => {
         expect(out).not.toContain('font-family: "Inter"');
     });
 
+    test('a family whose name merely contains an EIGEN name is not matched', async () => {
+        // "Interstate" contains "Inter" — a substring test would wrongly inject the Inter face. Token
+        // matching (comma-split, exact) rejects it, so the svg serves byte-identical.
+        const svg = Buffer.from(
+            '<svg xmlns="http://www.w3.org/2000/svg"><text font-family="Interstate, sans-serif">x</text></svg>',
+        );
+        const out = await inlineSvgMediaRefs(mount, folderId, svg);
+        expect(out.equals(svg)).toBe(true);
+        expect(out.toString('utf8')).not.toContain('@font-face');
+    });
+
     test('an svg with no text is returned byte-identical', async () => {
         const plain = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>');
         const out = await inlineSvgMediaRefs(mount, folderId, plain);
