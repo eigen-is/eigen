@@ -269,7 +269,7 @@ Eigenvector (`.eigenvector`) drawings export as SVG and PDF via the same route:
 
 | Format | Pipeline |
 |--------|----------|
-| `svg`  | `sceneToSvg` (the shared `packages/lib/src/vector` serializer — byte-identical to previews/embeds), media as `data:` URIs, the used `@font-face` blocks spliced into `<defs><style>`, then `sanitizeExportHtml` |
+| `svg`  | `sceneToSvg` (the shared `packages/lib/src/vector` serializer previews/embeds also use), media as `data:` URIs, the used `@font-face` blocks spliced into `<defs><style>`, then `sanitizeExportHtml` |
 | `pdf`  | The same SVG (fonts in the wrapping page's `<style>` instead) on a minimal white page sized `@page` to the drawing → WeasyPrint. An empty drawing is a 400 |
 
 `renderEigenvectorExport` lives in `export/vector/transform.ts` and runs in the document-transform Worker like the other types; `collectExportMedia` prepares the media on the main thread. Media previews serve SVG bytes as-is, so `prepareMedia` (`export/media.ts`) passes `image/svg+xml` media through `sanitizeExportHtml` before it is embedded — a nested `<image href>` inside an SVG data: URI reaches WeasyPrint's fetcher, the same SSRF the assembled document already closes. A transparent drawing keeps its transparency in the SVG download and exports on white paper for PDF.

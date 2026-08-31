@@ -1,5 +1,6 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
+import { spliceAfterSvgOpenTag } from '../document/media';
 import { getFontFaceCSSForFamilies } from '../export/fonts';
 import type { Mount } from '../mount';
 
@@ -89,9 +90,7 @@ function injectFontFaces(svg: string, budget: Budget): string {
     const defs = `<defs><style>${faceCSS}</style></defs>`;
     budget.remaining -= Buffer.byteLength(defs);
     if (budget.remaining < 0) return svg;
-    const tagEnd = svg.indexOf('>') + 1;
-    if (tagEnd === 0) return svg; // no opening tag — leave the bytes untouched
-    return `${svg.slice(0, tagEnd)}${defs}${svg.slice(tagEnd)}`;
+    return spliceAfterSvgOpenTag(svg, defs);
 }
 
 // The EIGEN fonts the svg's text uses. The svg stores the full family STACK from getFontFamily (e.g.
@@ -169,9 +168,12 @@ async function resolveRef(
 
     if (child.mimeType === 'image/svg+xml') {
         // A sibling svg may carry its own name-refs — inline them first, then embed the whole thing.
-        // The recursion charges its own leaves; the byte size is bounded by the depth cap, so the svg
-        // data URI is built (small, capped at depth 3) and only then charged.
+        // The recursion charges its own leaves; the final URI is charged after the nested resolve.
         if (depth + 1 > MAX_SVG_INLINE_DEPTH) return null;
+        // Peek before pulling the sibling into memory: its declared size alone must fit the remaining
+        // budget (the final URI is only charged after the nested resolve, but a too-big sibling should
+        // degrade the pass without ever being read — mirrors the non-svg charge-before-read below).
+        if (base64Len(child.size) > budget.remaining) throw new OutputTooLargeError();
         const file = await mount.readFile(child.id);
         if (!file) return null;
         const bytes = Buffer.from(await file.arrayBuffer());

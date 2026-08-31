@@ -175,6 +175,18 @@ describe('inlineSvgMediaRefs font injection', () => {
         expect(out.indexOf('<defs>')).toBeLessThan(out.indexOf('<text'));
     });
 
+    test('an svg with an XML prolog keeps it ahead of the root — the defs land inside <svg>', async () => {
+        // The splice anchors on the `<svg …>` open tag, not the document's first `>`: a prolog (or
+        // DOCTYPE/comment) before the root must survive, or the served svg stops being well-formed.
+        const prolog = '<?xml version="1.0" encoding="UTF-8"?>';
+        const out = (
+            await inlineSvgMediaRefs(mount, folderId, Buffer.from(prolog + svgWithText('Excalifont')))
+        ).toString('utf8');
+        expect(out.startsWith(prolog)).toBe(true);
+        expect(out.indexOf('<defs>')).toBeGreaterThan(out.indexOf('<svg'));
+        expect(out.indexOf('<defs>')).toBeLessThan(out.indexOf('<text'));
+    });
+
     test('only the named family is injected, not every bundled face', async () => {
         const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svgWithText('Excalifont')))).toString(
             'utf8',

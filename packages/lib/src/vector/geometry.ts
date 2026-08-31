@@ -182,6 +182,11 @@ const CLOSE_PATH_THRESHOLD = 8;
 // and half the drawn ink width plus 0.1. Replaces an additive threshold+ink that grew both together.
 const LINEAR_HIT_SCREEN_FACTOR = 0.85;
 
+// Hit tolerance in screen px (Excalidraw's DEFAULT_COLLISION_THRESHOLD); hosts divide by zoom so an
+// element's grab radius is a constant on-screen distance at any zoom. One source so hover/hit-testing
+// and the eraser can never drift apart.
+export const HIT_THRESHOLD_SCREEN = 8;
+
 export function parsePoints(points: string): Point[] {
     let raw: unknown;
     try {

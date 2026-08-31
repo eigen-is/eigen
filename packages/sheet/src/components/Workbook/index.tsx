@@ -652,7 +652,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             );
                             const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
                             const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
-                            if (onPasteSvgFile && svgImageItems.length > 0) {
+                            if (onPasteSvgFile) {
+                                // Always materialize (even with no image items) so a forged/dangling
+                                // eigen-media ref is stripped before the svg is stored — same as docs/slides.
                                 e.preventDefault();
                                 onPasteSvgFile(svgPayload.svg, svgImageItems);
                                 return;

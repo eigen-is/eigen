@@ -6,6 +6,7 @@ import {
     arrowRoute,
     type Bounds,
     elementBounds,
+    HIT_THRESHOLD_SCREEN,
     hitTestElement,
     type MarqueeMode,
     marqueeHits,
@@ -13,10 +14,6 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import { useCallback, useState } from 'react';
-
-// Hit tolerance in screen px (Excalidraw's DEFAULT_COLLISION_THRESHOLD); divided by zoom so a line's
-// grab radius is a constant on-screen distance at any zoom.
-const HIT_THRESHOLD_SCREEN = 8;
 
 // Top-most element under a scene point — `ordered` is back-to-front, so scan in reverse. `byId` lets an
 // elbow arrow be hit on its DERIVED route (its bends spill past the stored 2-endpoint line), not the

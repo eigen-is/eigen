@@ -117,7 +117,7 @@ describe('readVectorFromDoc', () => {
                 x: -1e15,
                 y: 2e9,
                 width: 1e12,
-                height: Number.NaN,
+                height: -50, // a size is floored at 0, never negative (invalid in SVG)
                 opacity: 250,
             });
         });

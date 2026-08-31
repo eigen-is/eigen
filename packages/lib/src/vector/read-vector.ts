@@ -74,8 +74,8 @@ function readElement(value: unknown): VectorElement | null {
         type,
         x: coord(value.get('x')),
         y: coord(value.get('y')),
-        width: coord(value.get('width')),
-        height: coord(value.get('height')),
+        width: size(value.get('width')),
+        height: size(value.get('height')),
         angle: num(value.get('angle'), 0),
         strokeColor: color(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
         backgroundColor: color(value.get('backgroundColor'), DEFAULT_ELEMENT_PROPS.backgroundColor),
@@ -230,6 +230,12 @@ function num(v: unknown, fallback: number): number {
 
 function coord(v: unknown): number {
     return clampCoord(num(v, 0));
+}
+
+// Extents are additionally floored at 0 — the model never stores a negative size, and a hostile
+// negative width/height would reach SVG as an invalid attribute.
+function size(v: unknown): number {
+    return Math.max(0, coord(v));
 }
 
 function fontSize(v: unknown): number {

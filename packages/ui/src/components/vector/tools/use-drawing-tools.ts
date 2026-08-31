@@ -16,6 +16,7 @@ import {
     DEFAULT_TEXT_PROPS,
     elbowBindPoint,
     elementToSvg,
+    HIT_THRESHOLD_SCREEN,
     isBindable,
     linearLocalToScene,
     normalizeLinear,
@@ -51,11 +52,10 @@ import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from '
 import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDraft } from './line';
 import { LinePointHandles } from './point-handles';
 
-// Screen-px thresholds (÷ zoom → constant on-screen distance): hit tolerance and eraser sample step
-// (Excalidraw's DEFAULT_COLLISION_THRESHOLD / eraser trail), the freehand minimum sample spacing that
-// thins sub-pixel points, the multi-point line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the
-// drag-vs-click threshold that splits a 2-point line from a multi-point one.
-const HIT_THRESHOLD_SCREEN = 8;
+// Screen-px thresholds (÷ zoom → constant on-screen distance): the eraser sample step (Excalidraw's
+// eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the multi-point
+// line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that splits a
+// 2-point line from a multi-point one. Hit tolerance is the shared HIT_THRESHOLD_SCREEN.
 const ERASER_STEP_SCREEN = 4;
 const FREEDRAW_MIN_STEP_SCREEN = 1;
 const LINE_CONFIRM_SCREEN = 8;

@@ -12,7 +12,7 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { ApiError } from '../../lib/core/errors';
 import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../../lib/document/doc';
-import { buildPreviewUrlMap } from '../../lib/document/media';
+import { buildEigenMediaRefMap, buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import {
@@ -975,7 +975,7 @@ describe('document transform (eigenvector)', () => {
 
     test('Worker preview equals the main thread, and the route serves it as an SVG image', async () => {
         const { mount, path } = golden;
-        const mediaUrls = await buildPreviewUrlMap(mount, path);
+        const mediaUrls = await buildEigenMediaRefMap(mount, path);
         // Main-thread execution of the exact Worker pipeline against the Worker run.
         const persisted = await readPersistedDoc(mount, path);
         const direct = renderEigenvectorPreview(persisted, mediaUrls);
@@ -990,22 +990,27 @@ describe('document transform (eigenvector)', () => {
         expect(response.ok && response.warnings).toEqual(direct.warnings);
 
         // The body is the drawing's own SVG — no rasterisation, no HTML wrapper, no
-        // truncated-block sanitizer. The image element's href resolves to the preview
-        // URL map entry, and hostile text is XML-escaped by the serializer itself.
+        // truncated-block sanitizer. The image element rides its `eigen-media:` name ref
+        // (inlined at serve time), and hostile text is XML-escaped by the serializer itself.
         expect(body.startsWith('<svg')).toBe(true);
         expect(body).toContain('Vector &lt;sketch&gt;');
         expect(body).not.toContain('<sketch>');
-        expect(body).toMatch(/<image[^>]+href="http:\/\/localhost\/drive\/[^"]+\/preview"/);
+        expect(body).toMatch(/<image[^>]+href="eigen-media:pixel\.png"/);
 
-        // The /preview route serves exactly those bytes with the SVG content type
-        // (getScreenPreview), never the { body, mode } text-preview envelope.
+        // The /preview route serves those bytes through the same svg-media-inline pass a stored
+        // .svg takes (getScreenPreview): the eigen-media ref becomes the sibling's data: URI and
+        // the Excalifont face is injected — an <img>-hosted SVG never fetches external URLs.
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/drive/${ctx.alice.user.id}/${mountId}/file/${path.id}/preview`,
         );
         expect(res.status).toBe(200);
         expect(res.headers.get('content-type')).toContain('image/svg+xml');
-        expect(await res.text()).toBe(body);
+        const served = await res.text();
+        expect(served).toContain('Vector &lt;sketch&gt;');
+        expect(served).toMatch(/<image[^>]+href="data:image\//);
+        expect(served).not.toContain('eigen-media:');
+        expect(served).toContain('font-family: "Excalifont"');
     }, 120_000);
 
     test('getScreenPreview caches and serves the drawing as an image/svg+xml buffer', async () => {

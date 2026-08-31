@@ -257,14 +257,21 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
     // served as-is on the same SVG-as-image path — the internal preview pipeline keeps
     // SVGs unrasterized. The text-preview registry is untouched: this is an image, not an
     // HTML body. Generation may throw the runner's 503 under overload, which the route
-    // surfaces so the client retries — nothing is cached on failure.
+    // surfaces so the client retries — nothing is cached on failure. The rendered SVG
+    // references its images by `eigen-media:` name (an <img> SVG never fetches external
+    // URLs), so it takes the same inline pass as a stored .svg above — resolved against
+    // the container's own media/ folder, fonts injected, same staleness trade-off.
     if (mime === DRIVE_MIME_VECTOR) {
         return getOrCacheImage(
             mount.previewsDir,
             drivePath.id,
             screenCacheName(drivePath, 'svg'),
             'image/svg+xml',
-            async () => Buffer.from(await generateDocumentPreview('eigenvector', mount, drivePath)),
+            async () => {
+                const body = Buffer.from(await generateDocumentPreview('eigenvector', mount, drivePath));
+                const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
+                return mediaFolder ? inlineSvgMediaRefs(mount, mediaFolder.id, body) : body;
+            },
         );
     }
 

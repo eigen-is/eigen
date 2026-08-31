@@ -2,7 +2,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import { isTransparent, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
-import { toDataUriMap } from '../../document/media';
+import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
 import {
     type TransformMedia,
     type TransformWarning,
@@ -60,9 +60,7 @@ function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>, opt
     const faceCSS = getFontFaceCSSForFamilies(usedFontFamilies(scene));
     if (!faceCSS) return svg;
 
-    const defs = `<defs><style>${faceCSS}</style></defs>`;
-    const tagEnd = svg.indexOf('>') + 1;
-    return `${svg.slice(0, tagEnd)}${defs}${svg.slice(tagEnd)}`;
+    return spliceAfterSvgOpenTag(svg, `<defs><style>${faceCSS}</style></defs>`);
 }
 
 // The EIGEN_FONTS families the drawing's text actually uses — text elements and the labels

@@ -1060,6 +1060,12 @@ export function VectorCanvas({
     const onContextMenu = (e: React.MouseEvent) => {
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
         if (!canWrite || editing || frozenRef.current) return;
+        // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
+        // mid-draft — the draft keeps floating and the next left click keeps placing points.
+        if (drawing.multiPointDraft) {
+            e.preventDefault();
+            return;
+        }
         const p = clientToScene(e.clientX, e.clientY);
         const hitId = hitTestTopmost(ordered, p, zoom, committedById);
         if (!hitId) return;

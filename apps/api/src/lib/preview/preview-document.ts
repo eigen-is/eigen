@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { buildPreviewUrlMap } from '../document/media';
+import { buildEigenMediaRefMap, buildPreviewUrlMap } from '../document/media';
 import type { PreviewTransformJob } from '../document/transform/protocol';
 import { runTransformToText } from '../document/transform/run-transform';
 import type { TransformPriority } from '../document/transform/runner';
@@ -21,7 +21,12 @@ export async function generateDocumentPreview(
     }
 
     const prepStart = performance.now();
-    const mediaUrls = await buildPreviewUrlMap(mount, drivePath);
+    // A vector preview is an SVG rendered inside an <img>, which never fetches external URLs —
+    // its images ride `eigen-media:` name refs that preview-cache inlines at cache time.
+    const mediaUrls =
+        documentType === 'eigenvector'
+            ? await buildEigenMediaRefMap(mount, drivePath)
+            : await buildPreviewUrlMap(mount, drivePath);
     const job = { kind: 'preview', documentType, mediaUrls } as const;
     return runTransformToText(mount, drivePath, job, { priority, prepMs: performance.now() - prepStart });
 }
