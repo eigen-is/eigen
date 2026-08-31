@@ -9,6 +9,7 @@ import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
+import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
@@ -230,7 +231,13 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
         return { type: 'redirect', url: embedUrl };
     }
 
-    // SVG → serve as-is (no rasterisation to WebP), cached locally for S3 mounts
+    // SVG → serve as-is (no rasterisation to WebP), cached locally for S3 mounts. An image-bearing
+    // vector drawing (SVG-IMAGE-PASTE-PLAN R4) references its images by name via `eigen-media:` hrefs;
+    // inline each sibling's bytes as a data: URI at serve time so <img> renders them (an <img> SVG
+    // never fetches external refs). The inlined result rides this same versioned cache key — a sibling
+    // edit does not bump the svg's updatedAt, so a stale sibling can outlive the cached preview until
+    // the svg itself changes (accepted; a media rename already breaks name refs everywhere today). The
+    // content type stays image/svg+xml, so the route keeps serving it under the sandbox CSP.
     if (mime === 'image/svg+xml') {
         return getOrCacheImage(
             mount.previewsDir,
@@ -239,7 +246,9 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
             'image/svg+xml',
             async () => {
                 const file = await mount.readFile(drivePath.id);
-                return file ? Buffer.from(await file.arrayBuffer()) : null;
+                if (!file) return null;
+                const bytes = Buffer.from(await file.arrayBuffer());
+                return drivePath.parentId ? inlineSvgMediaRefs(mount, drivePath.parentId, bytes) : bytes;
             },
         );
     }
