@@ -2,10 +2,12 @@ import { describe, expect, test } from 'bun:test';
 import { elbowBindPoint } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
 import {
+    bindingAnchor,
     boundEndpoint,
     elbowAnchorScene,
     followBindings,
     linearLocalToScene,
+    normalizeFixedPoint,
     type Point,
     parsePoints,
 } from '../../vector/geometry';
@@ -158,5 +160,39 @@ describe('elbowRoute — D6 pre-dock origPoint seam', () => {
         // Sanity: both still begin exactly on the stored start (EP-U1 invariant, unchanged).
         expect(atRest[0]).toEqual(start);
         expect(preDock[0]).toEqual(start);
+    });
+});
+
+// The commit→resolve round-trip the EP-U2 review asked to pin end-to-end: the elbow bind path
+// (bindingFor → elbowBindPoint) must store the DOCKED fixedPoint (the outline+gap ratio), and boundEndpoint's
+// elbow branch must resolve that stored ratio back to the very same outline point. The two halves are a pair —
+// if a commit stored the raw cursor ratio instead of the dock, or the read stopped honouring the fixedPoint,
+// the endpoint would float at the cursor instead of sitting on the outline. Nothing pinned that pairing before.
+describe('elbow bind → resolve round-trip (D3/D4 commit pin)', () => {
+    const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, strokeWidth: 2 });
+    // A cursor well OUTSIDE the left edge, off the vertical centre so no 0.5 dodge blurs the round-trip.
+    const cursor = { x: -50, y: 70 };
+
+    test('the stored fixedPoint is the dock, and boundEndpoint resolves it back to that same outline point', () => {
+        const { dock, fixedPoint } = elbowBindPoint(rect, cursor);
+        // What the commit stores. A start-bound elbow arrow with a free far end.
+        const arrow: VectorArrowElement = {
+            ...elbowArrow(dock, { x: 400, y: 70 }, ''),
+            startBinding: serializeBinding({ elementId: rect.id, fixedPoint }),
+        };
+
+        // Read half: boundEndpoint returns the docked outline point, exactly — the write+read round-trip closes.
+        const resolved = boundEndpoint(arrow, 'start', rect);
+        expect(resolved.x).toBeCloseTo(dock.x);
+        expect(resolved.y).toBeCloseTo(dock.y);
+        // The dock sits on the left outline + gap(6), NOT out at the -50 cursor.
+        expect(dock.x).toBeCloseTo(-6);
+        expect(resolved.x).toBeCloseTo(-6);
+
+        // Why the DOCK (not the raw cursor ratio) is load-bearing: had the commit stored the straight-anchor
+        // ratio of the raw cursor, the elbow read would float the endpoint back at the cursor, off the outline.
+        const rawStore = normalizeFixedPoint(bindingAnchor(rect, cursor));
+        expect(elbowAnchorScene(rect, rawStore).x).toBeCloseTo(cursor.x); // -50 — at the cursor, off the shape
+        expect(elbowAnchorScene(rect, rawStore).x).not.toBeCloseTo(dock.x); // ≠ the -6 outline dock
     });
 });
