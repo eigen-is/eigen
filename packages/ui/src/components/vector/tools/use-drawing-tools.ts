@@ -481,15 +481,17 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     // before its pointerup — its preview element and binding highlight would otherwise linger. Drop them
     // the moment the selection stops resolving to a line/arrow (also a plain deselect: harmless there).
     const selectedLineId = selectedLine?.id;
+    const selectedPointCount = selectedLine ? parsePoints(selectedLine.points).length : 0;
     useEffect(() => {
         if (!selectedLineId) {
             setPointDraft(null);
             setBindCandidate(null);
         }
-        // Deselecting the element, switching to another, or a remote delete of it also drops any point
-        // selection (it only ever refers to the current line's vertices).
-        setSelectedPointIndex(null);
-    }, [selectedLineId]);
+        // Drop any point selection that no longer resolves: the element deselected/changed, or a remote
+        // peer shrank its point count below the selected index — leaving the filled dot gone while Delete
+        // stayed a consumed no-op. Keep an in-range index untouched; the updater skips a no-op set.
+        setSelectedPointIndex((i) => (i !== null && i < selectedPointCount ? i : null));
+    }, [selectedLineId, selectedPointCount]);
 
     const onPointPreview = (points: Point[] | null, index: number) => {
         if (!points || !selectedLine) {
