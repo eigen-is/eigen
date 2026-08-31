@@ -134,9 +134,13 @@ export function VectorPropertiesPanel({
     const showFill = has && selectedElements.every((el) => isShape(el.type) || isClosedLinear(el));
     // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
     const anyFreedraw = selectedElements.some((el) => el.type === 'freedraw');
-    // Edges (roundness) apply to rectangles/diamonds and lines (round curve vs sharp), never freedraw.
+    // Edges (roundness) apply to rectangles/diamonds and lines/arrows (round curve vs sharp shaft),
+    // never freedraw.
     const allEdged =
-        has && selectedElements.every((el) => el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line');
+        has &&
+        selectedElements.every(
+            (el) => el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line' || el.type === 'arrow',
+        );
     const textEls = selectedElements.filter((el): el is VectorTextElement => el.type === 'text');
     const allText = has && textEls.length === selectedElements.length;
     // Arrowheads apply to arrows only (both ends selectable per selection).
@@ -256,7 +260,9 @@ export function VectorPropertiesPanel({
     const fillStyle = getMergedValue(selectedElements, (el) => el.fillStyle);
     const roughness = getMergedValue(selectedElements, (el) => el.roughness);
     const roundness = getMergedValue(selectedElements, (el) =>
-        el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line' ? el.roundness : undefined,
+        el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line' || el.type === 'arrow'
+            ? el.roundness
+            : undefined,
     );
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
     const fontFamily = getMergedValue(textEls, (el) => el.fontFamily);

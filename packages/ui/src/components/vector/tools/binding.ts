@@ -66,6 +66,23 @@ export function bindingCandidate(
     return best ? best.id : null;
 }
 
+// The shape-following highlight over a bindable target (R3.8): the shape re-stroked in the selection
+// colour with a clean 2px screen line and no fill, reusing the SAME per-shape geometry the renderer uses
+// (rect roundness / diamond / ellipse, rotated), so no shape math is duplicated here. `currentColor`
+// lets the caller tint it via a `text-selection-handle` group; strokeWidth ÷ zoom keeps it 2px on screen
+// at any zoom (the scene group scales). Rendered through elementToSvg like every other scene node.
+export function bindingOutlineElement(shape: VectorShapeElement, zoom: number): VectorShapeElement {
+    return {
+        ...shape,
+        strokeColor: 'currentColor',
+        strokeWidth: 2 / zoom,
+        strokeStyle: 'solid',
+        backgroundColor: 'transparent',
+        roughness: 0,
+        opacity: 100,
+    };
+}
+
 function bindingFor(ordered: VectorElement[], scene: Point, zoom: number, suppressed: boolean): string {
     const id = bindingCandidate(ordered, scene, zoom, suppressed);
     if (!id) return '';

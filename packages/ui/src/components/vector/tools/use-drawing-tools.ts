@@ -12,6 +12,8 @@ import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
+    elementToSvg,
+    isBindable,
     linearLocalToScene,
     normalizeLinear,
     type Point,
@@ -24,7 +26,7 @@ import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import type { VectorTool } from '../hooks/use-tool';
 import type { NewVectorElement, VectorElementPatch } from '../hooks/use-vector-doc';
-import { bindArrow, bindingCandidate } from './binding';
+import { bindArrow, bindingCandidate, bindingOutlineElement } from './binding';
 import { markErase } from './eraser';
 import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from './freedraw';
 import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDraft } from './line';
@@ -119,11 +121,14 @@ export type DrawingTools = {
     erasingIds: Set<string>;
     // Screen-space vertex handles for a single selected line/arrow (null otherwise).
     handles: ReactNode;
-    // A dashed ring over the bindable shape a dragged arrow endpoint would bind to (null otherwise).
-    bindingHighlight: ReactNode;
+    // A shape-following outline over the bindable shape a dragged (or hovered) arrow endpoint would bind
+    // to — an SVG `<g>` for the scene group (null otherwise).
+    bindingOutline: ReactNode;
     onPointerDown: (e: React.PointerEvent, scene: Point) => boolean;
     onPointerMove: (e: React.PointerEvent) => boolean;
     onPointerUp: (e: React.PointerEvent) => boolean;
+    // The pointer left the canvas → drop the pre-click hover highlight (no active draft).
+    onPointerLeave: () => void;
 };
 
 export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
@@ -398,7 +403,19 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             linePreview(draft);
             return true;
         }
+        // Pre-click hover (arrow tool, no draft): ring the bindable shape the cursor reaches so the bind
+        // target is visible before the first click (R3.8). Doesn't consume the move. Ctrl/Cmd suppresses.
+        if (tool === 'arrow' && !busy) {
+            const scene = clientToScene(e.clientX, e.clientY);
+            setBindCandidate(bindingCandidate(ordered, scene, zoom, e.ctrlKey || e.metaKey));
+        }
         return false;
+    };
+
+    // The pointer left the canvas → clear the pre-click hover highlight, but never a live draft's tip
+    // candidate (a multi-point draft leaves the surface unfrozen, so the pointer can roam off it).
+    const onPointerLeave = () => {
+        if (!lineRef.current) setBindCandidate(null);
     };
 
     const onPointerUp = (e: React.PointerEvent): boolean => {
@@ -490,14 +507,18 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
           })
         : null;
 
-    // The dashed ring over the shape a dragged arrow endpoint reaches (creation or a point-handle drag).
+    // The shape-following outline over the shape a dragged/hovered arrow endpoint reaches (creation, a
+    // point-handle drag, or the pre-click hover). An SVG `<g>` for the scene group: `elementToSvg`
+    // re-strokes the shape's own geometry in the selection colour (`currentColor`, tinted by the
+    // `text-selection-handle` group), so no shape math is duplicated here.
     const candidate = bindCandidate ? ordered.find((el) => el.id === bindCandidate) : undefined;
-    const bindingHighlight = candidate
-        ? createElement('div', {
-              className: 'eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute',
-              style: boxToStyle(candidate),
-          })
-        : null;
+    const bindingOutline =
+        candidate && isBindable(candidate)
+            ? createElement('g', {
+                  className: 'text-selection-handle',
+                  dangerouslySetInnerHTML: { __html: elementToSvg(bindingOutlineElement(candidate, zoom)) },
+              })
+            : null;
 
     // --- Escape / Enter / double-click / blur (capture phase, latest closures via a ref) ----------
     const apiRef = useRef<{ escape: () => boolean; finish: () => boolean; blur: () => void }>({
@@ -572,6 +593,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         if (tool !== 'freedraw' && strokeRef.current) cancelFreedraw();
         if (lineRef.current && lineRef.current.type !== tool) commitLine(lineRef.current.committed);
         if (tool !== 'eraser' && eraserRef.current) cancelEraser();
+        // Leaving the arrow tool drops any lingering pre-click hover highlight (no draft in flight).
+        if (tool !== 'arrow' && !lineRef.current) setBindCandidate(null);
     };
     useEffect(() => {
         abandonRef.current();
@@ -583,9 +606,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         hiddenId: pointDraft?.id ?? null,
         erasingIds: erasing,
         handles,
-        bindingHighlight,
+        bindingOutline,
         onPointerDown,
         onPointerMove,
         onPointerUp,
+        onPointerLeave,
     };
 }

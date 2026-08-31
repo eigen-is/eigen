@@ -29,6 +29,7 @@ import {
     type MarqueeMode,
     marqueeMode,
     orderByFractionalIndex,
+    parsePoints,
     resizeLinear,
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
@@ -55,6 +56,7 @@ import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
+import { pointerCursor } from './cursor';
 import { ElementNode } from './element-node';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
@@ -1375,25 +1377,21 @@ export function VectorCanvas({
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
     // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang (R3.6).
     const unionBox =
-        selectedRender.length >= 1 ? boundsToBox(selectedRender.map(elementBounds).reduce(unionBounds)) : null;
-    // Chrome is suppressed while a create/marquee drag is in flight (grip flicker) or while a text
-    // overlay is open; move keeps it (the ring follows the moving element). Single + write → full
-    // transform; everything else → a plain translate-only union ring (multi-select never mounts
-    // ObjectTransform, UX-RULING 7).
-    const showChrome = !creating && !marquee && !editing && !drawing.active;
-    const showTransform = showChrome && canWrite && single !== null;
+        selectedRender.length >= 1
+            ? boundsToBox(selectedRender.map((el) => elementBounds(el)).reduce(unionBounds))
+            : null;
+    // A single 2-point line/arrow shows no ObjectTransform (no ring/grips/rotate grip) — the round vertex
+    // handles below are its whole affordance, rotation via the panel Angle input. 3+-point linears keep the box.
+    const singleLinear2pt =
+        single !== null &&
+        (single.type === 'line' || single.type === 'arrow') &&
+        parsePoints(single.points).length <= 2;
+    // Chrome is suppressed during a create/marquee drag (grip flicker), a vertex drag (drawing.hiddenId —
+    // else a stale box lingers over the reshaping point draft), or a text overlay; a move keeps it.
+    const showChrome = !creating && !marquee && !editing && !drawing.active && !drawing.hiddenId;
+    const showTransform = showChrome && canWrite && single !== null && !singleLinear2pt;
 
-    const cursor = panning
-        ? 'grabbing'
-        : spaceHeld
-          ? 'grab'
-          : tool === 'text'
-            ? 'text'
-            : tool !== 'select'
-              ? 'crosshair'
-              : hoveringSelectable
-                ? 'move'
-                : 'default';
+    const cursor = pointerCursor({ panning, spaceHeld, tool, hoveringSelectable });
     const background = isTransparent(meta.background) ? undefined : meta.background;
 
     return (
@@ -1414,6 +1412,7 @@ export function VectorCanvas({
                 if (!gestureRef.current) {
                     publishCursor(null);
                     setHoveringSelectable(false);
+                    drawing.onPointerLeave();
                 }
             }}
             onDoubleClick={onDoubleClick}
@@ -1448,6 +1447,8 @@ export function VectorCanvas({
                         <ElementNode el={drawing.previewElement} resolveMedia={resolveMediaUrl} />
                     )}
                     <SnapGuides lines={snapLines} />
+                    {/* Shape-following bind-target outline (R3.8) — SVG in the scene group, so it rides rotation/roundness. */}
+                    {drawing.bindingOutline}
                 </g>
             </svg>
             <div className="pointer-events-none absolute inset-0">
@@ -1518,11 +1519,10 @@ export function VectorCanvas({
                         }}
                     />
                 )}
-                {/* Vertex handles for a single selected line/arrow, over the ObjectTransform ring (R2.13). */}
+                {/* Round vertex handles: over the box for a 3+-point linear, the sole chrome for a 2-point one (R2.13). */}
                 {drawing.handles}
-                {/* Dashed ring over the shape a dragged arrow endpoint would bind to (R3.8). */}
-                {drawing.bindingHighlight}
-                {showChrome && !showTransform && unionBox && (
+                {/* Dashed union ring for multi-select + read-only single selections; a writable 2-point line/arrow shows only its handles. */}
+                {showChrome && !showTransform && unionBox && !(singleLinear2pt && canWrite) && (
                     <div
                         className="eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute"
                         style={boxToStyle(unionBox)}

@@ -1,8 +1,10 @@
-// Draggable vertex handles for a single selected line (R2.13) — square `.eigen-selection-handle`
-// chrome, one per point, on top of the ObjectTransform ring. Dragging a vertex reshapes the line
-// through normalizeLinear as one sealed undo step; there is no add/remove in v1. Self-contained like
-// ObjectTransform: it owns its drag lifecycle (document listeners under an AbortController) and reports
-// the live points via `onPreview`, committing once on release. Freedraw shows no handles.
+// Draggable vertex handles for a single selected line/arrow (R2.13) — round `.eigen-vertex-handle`
+// dots, one per point, visually distinct from the square resize grips (a 2-point line/arrow shows
+// these ONLY, with no ObjectTransform box). Dragging a vertex reshapes the line through normalizeLinear
+// as one sealed undo step; there is no vertex add/remove in v1 (midpoint drag-to-add is UA3, so no
+// dead midpoint dot is drawn). Self-contained like ObjectTransform: it owns its drag lifecycle
+// (document listeners under an AbortController) and reports the live points via `onPreview`, committing
+// once on release. Freedraw shows no handles.
 
 import {
     type Box,
@@ -16,7 +18,7 @@ import {
 import type { MutableRefObject } from 'react';
 import { useRef, useState } from 'react';
 
-// Screen size of a handle square (Excalidraw's POINT_HANDLE_SIZE), overriding the 12px ring grip.
+// Screen diameter of a vertex dot (Excalidraw's POINT_HANDLE_SIZE), overriding the 12px ring grip.
 const POINT_HANDLE_SCREEN_PX = 10;
 
 type LinePointHandlesProps = {
@@ -102,7 +104,7 @@ export function LinePointHandles({
                 return (
                     <div
                         key={i}
-                        className="eigen-selection-handle pointer-events-auto touch-none"
+                        className="eigen-vertex-handle pointer-events-auto touch-none cursor-pointer"
                         style={{
                             left: style.left,
                             top: style.top,
