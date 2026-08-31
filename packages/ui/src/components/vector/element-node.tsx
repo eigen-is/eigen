@@ -3,6 +3,7 @@
 // vector-canvas.tsx (the canvas only dispatches; per-node rendering lives here).
 
 import {
+    arrowRoute,
     ELEMENT_FIELDS,
     elementToSvg,
     type MediaResolver,
@@ -10,7 +11,6 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import { memo } from 'react';
-import { arrowRouteOf } from './arrow-route';
 
 // Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
 // a Yjs tick materializes fresh objects through readVectorFromDoc, so those need the field compare —
@@ -58,6 +58,6 @@ export const ElementNode = memo(
         // Only when the map changes identity might an elbow arrow need re-routing though its OWN fields
         // are unchanged (a BOUND SHAPE moved) — fall to comparing the derived route so it re-renders then.
         if (prev.byId === next.byId) return true;
-        return samePoints(arrowRouteOf(prev.el, prev.byId), arrowRouteOf(next.el, next.byId));
+        return samePoints(arrowRoute(prev.el, prev.byId), arrowRoute(next.el, next.byId));
     },
 );

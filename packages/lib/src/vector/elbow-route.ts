@@ -108,6 +108,14 @@ export function elbowRoute(arrow: VectorArrowElement, byId: Map<string, VectorEl
     return route.length >= 2 ? route : [start, end];
 }
 
+// The polyline an arrow draws/hits as: the derived orthogonal route for an elbow arrow (undefined without
+// scene context, so callers fall back to the stored points), or undefined for a straight arrow. The single
+// gate for "when does an elbow arrow get a derived route" — every render path (live canvas, previews,
+// export) routes through here so none can silently degrade an elbow arrow back to a straight line.
+export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>): Point[] | undefined {
+    return el.type === 'arrow' && el.elbow && byId ? elbowRoute(el, byId) : undefined;
+}
+
 // --- grid + A* -------------------------------------------------------------------------
 
 type Node = {

@@ -3,6 +3,7 @@
 // from selectedIds; group move/nudge/delete apply to the whole set.
 
 import {
+    arrowRoute,
     type Bounds,
     elementBounds,
     hitTestElement,
@@ -12,7 +13,6 @@ import {
     type VectorElement,
 } from '@workspace/lib/vector';
 import { useCallback, useState } from 'react';
-import { arrowRouteOf } from '../arrow-route';
 
 // Hit tolerance in screen px (Excalidraw's DEFAULT_COLLISION_THRESHOLD); divided by zoom so a line's
 // grab radius is a constant on-screen distance at any zoom.
@@ -20,7 +20,7 @@ const HIT_THRESHOLD_SCREEN = 8;
 
 // Top-most element under a scene point — `ordered` is back-to-front, so scan in reverse. `byId` lets an
 // elbow arrow be hit on its DERIVED route (its bends spill past the stored 2-endpoint line), not the
-// straight segment; arrowRouteOf computes it only for elbow arrows.
+// straight segment; arrowRoute computes it only for elbow arrows.
 export function hitTestTopmost(
     ordered: VectorElement[],
     point: Point,
@@ -29,7 +29,7 @@ export function hitTestTopmost(
 ): string | null {
     const threshold = HIT_THRESHOLD_SCREEN / zoom;
     for (let i = ordered.length - 1; i >= 0; i--) {
-        if (hitTestElement(ordered[i], point, threshold, arrowRouteOf(ordered[i], byId))) return ordered[i].id;
+        if (hitTestElement(ordered[i], point, threshold, arrowRoute(ordered[i], byId))) return ordered[i].id;
     }
     return null;
 }
@@ -45,7 +45,7 @@ export function marqueeSelect(
 ): string[] {
     const ids: string[] = [];
     for (const el of ordered) {
-        if (marqueeHits(elementBounds(el, arrowRouteOf(el, byId)), marquee, mode)) ids.push(el.id);
+        if (marqueeHits(elementBounds(el, arrowRoute(el, byId)), marquee, mode)) ids.push(el.id);
     }
     return ids;
 }

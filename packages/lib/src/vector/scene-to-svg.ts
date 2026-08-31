@@ -7,7 +7,7 @@ import { getStroke } from 'perfect-freehand';
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../constants/fonts';
-import { elbowRoute } from './elbow-route';
+import { arrowRoute } from './elbow-route';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
 import type { Box, Point } from './geometry';
@@ -106,14 +106,6 @@ export function elementToSvg(
         case 'arrow':
             return renderArrow(new RoughGenerator(), el, arrowRoute(el, byId));
     }
-}
-
-// The polyline an arrow draws/hits as: the derived orthogonal route for an elbow arrow (undefined without
-// scene context, so callers fall back to the stored points), or undefined for a straight arrow. Kept
-// undefined rather than parsePoints for a straight arrow so bounds/hit-test/label keep their stored-points
-// path unchanged.
-function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>): Point[] | undefined {
-    return el.type === 'arrow' && el.elbow && byId ? elbowRoute(el, byId) : undefined;
 }
 
 function renderShape(gen: RoughGenerator, el: VectorShapeElement): string {

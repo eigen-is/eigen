@@ -16,6 +16,7 @@ import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom'
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
+    arrowRoute,
     type Bounds,
     type Box,
     computeSnapTargets,
@@ -56,7 +57,6 @@ import { useContextMenu } from '../context-menu';
 import { FileDropOverlay } from '../file-drop-overlay';
 import { readImageSize } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
-import { arrowRouteOf } from './arrow-route';
 import { pointerCursor } from './cursor';
 import { ElementNode } from './element-node';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
@@ -250,7 +250,7 @@ export function VectorCanvas({
 
     const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
 
-    // All elements by id (committed scene) — the map an elbow arrow reads (arrowRouteOf) to resolve its
+    // All elements by id (committed scene) — the map an elbow arrow reads (arrowRoute) to resolve its
     // bound shapes and derive its route. Hit/marquee/label paths use it; the render path overlays previews.
     const committedById = useMemo(() => new Map(ordered.map((el) => [el.id, el])), [ordered]);
 
@@ -438,7 +438,7 @@ export function VectorCanvas({
     };
 
     const openEditArrowLabel = (el: VectorArrowElement) => {
-        const ed = arrowLabelEditing(el, arrowRouteOf(el, committedById));
+        const ed = arrowLabelEditing(el, arrowRoute(el, committedById));
         if (!ed) return; // a degenerate arrow (< 2 points) has no label anchor
         setSelectedIds([el.id]);
         setEditing(ed);
@@ -1386,12 +1386,10 @@ export function VectorCanvas({
     const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
     // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang (R3.6) and an
-    // elbow arrow's routed bends (arrowRouteOf, preview-aware via renderById).
+    // elbow arrow's routed bends (arrowRoute, preview-aware via renderById).
     const unionBox =
         selectedRender.length >= 1
-            ? boundsToBox(
-                  selectedRender.map((el) => elementBounds(el, arrowRouteOf(el, renderById))).reduce(unionBounds),
-              )
+            ? boundsToBox(selectedRender.map((el) => elementBounds(el, arrowRoute(el, renderById))).reduce(unionBounds))
             : null;
     // A single 2-point line/arrow shows no ObjectTransform (no ring/grips/rotate grip) — the round vertex
     // handles below are its whole affordance, rotation via the panel Angle input. 3+-point linears keep the box.

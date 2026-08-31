@@ -135,49 +135,43 @@ export function LinePointHandles({
     // stored points. Midpoint dots are hidden mid-drag so they never sit on a stale segment.
     const vertices = drag ? drag.base : points;
 
+    // Position a POINT_HANDLE_SCREEN_PX dot centred on a local point, in the host's screen frame.
+    const dotStyle = (local: Point): React.CSSProperties => {
+        const scene = linearLocalToScene(line, local);
+        const { left, top } = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
+        return {
+            left,
+            top,
+            width: POINT_HANDLE_SCREEN_PX,
+            height: POINT_HANDLE_SCREEN_PX,
+            transform: 'translate(-50%, -50%)',
+        };
+    };
+
     return (
         <>
-            {vertices.map((p, i) => {
-                const local = drag?.index === i ? drag.local : p;
-                const scene = linearLocalToScene(line, local);
-                const style = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
-                return (
-                    <div
-                        key={`v${i}`}
-                        className="eigen-vertex-handle pointer-events-auto touch-none cursor-pointer"
-                        style={{
-                            left: style.left,
-                            top: style.top,
-                            width: POINT_HANDLE_SCREEN_PX,
-                            height: POINT_HANDLE_SCREEN_PX,
-                            transform: 'translate(-50%, -50%)',
-                        }}
-                        onPointerDown={(e) => startDrag(e, points, i, false)}
-                        onPointerEnter={() => onVertexHover(i)}
-                        onPointerLeave={() => onVertexHover(null)}
-                    />
-                );
-            })}
+            {vertices.map((p, i) => (
+                <div
+                    key={`v${i}`}
+                    className="eigen-vertex-handle pointer-events-auto touch-none cursor-pointer"
+                    style={dotStyle(drag?.index === i ? drag.local : p)}
+                    onPointerDown={(e) => startDrag(e, points, i, false)}
+                    onPointerEnter={() => onVertexHover(i)}
+                    onPointerLeave={() => onVertexHover(null)}
+                />
+            ))}
             {!drag &&
                 !isElbow &&
                 points.slice(0, -1).map((p, i) => {
                     const next = points[i + 1];
                     const mid = { x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 };
-                    const scene = linearLocalToScene(line, mid);
-                    const style = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
                     // The vertex this dot would insert, at index i+1 between its two neighbours.
                     const base = [...points.slice(0, i + 1), mid, ...points.slice(i + 1)];
                     return (
                         <div
                             key={`m${i}`}
                             className="eigen-midpoint-handle pointer-events-auto touch-none cursor-pointer"
-                            style={{
-                                left: style.left,
-                                top: style.top,
-                                width: POINT_HANDLE_SCREEN_PX,
-                                height: POINT_HANDLE_SCREEN_PX,
-                                transform: 'translate(-50%, -50%)',
-                            }}
+                            style={dotStyle(mid)}
                             onPointerDown={(e) => startDrag(e, base, i + 1, true)}
                         />
                     );
