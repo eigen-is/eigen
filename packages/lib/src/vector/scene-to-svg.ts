@@ -61,7 +61,7 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     // byId feeds the derived elbow route (its bends spill past the stored 2-endpoint box, and depend on the
     // bound shapes) to both bounds and rendering.
     const byId = new Map(scene.elements.map((el) => [el.id, el]));
-    // elementBounds unions an arrow's label rect (R3.6), so a wide label on a short arrow isn't clipped
+    // elementBounds unions an arrow's label rect, so a wide label on a short arrow isn't clipped
     // by the viewBox; for an elbow arrow it's the derived route's bbox, else the plain box AABB.
     const bounds = ordered.map((el) => elementBounds(el, arrowRoute(el, byId))).reduce(unionBounds);
     const minX = round(bounds.minX - padding);
@@ -242,7 +242,7 @@ function segmentLength(a: Point, b: Point): number {
 
 // One arrowhead's roughjs fragment in the arrow's local frame. Barbs (arrow/bar/triangle) share the
 // tip+base geometry: arrow = two lines, bar = one line through the tip, triangle = a solid polygon;
-// circle = a solid disc. All filled solids use strokeColor (R3.5). null when the head is 'none'.
+// circle = a solid disc. All filled solids use strokeColor. null when the head is 'none'.
 function renderArrowhead(
     gen: RoughGenerator,
     el: VectorArrowElement,
@@ -331,7 +331,7 @@ function labelClipPath(
 }
 
 // The label text, centered on the label rect in the arrow's local frame — the renderText baseline math
-// with text-anchor="middle" and colour = strokeColor (R3.6). Height/position come from arrowLabelBox.
+// with text-anchor="middle" and colour = strokeColor. Height/position come from arrowLabelBox.
 function renderArrowLabel(el: VectorArrowElement, label: { center: Point; width: number; height: number }): string {
     const lineHeightPx = getLineHeightPx(el.fontFamily, el.fontSize);
     const verticalOffset = getVerticalOffset(el.fontFamily, el.fontSize, lineHeightPx);

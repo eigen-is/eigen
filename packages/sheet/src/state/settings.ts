@@ -120,18 +120,18 @@ export type Hooks = {
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;
     // Resolve a floating image's mediaName to its portable DrivePath, so an image copy can carry a
-    // cross-mount source path (U5c produce). `undefined` when the media isn't resolvable yet (a
+    // cross-mount source path. `undefined` when the media isn't resolvable yet (a
     // still-pending upload) — the copy then falls through to the pending-cell path.
     resolveImagePath?: (mediaName: string) => DrivePath | undefined;
     // Insert a pasted eigen image item as a floating image at its TYPED size (never fit-to-pane),
-    // handling the cross-mount re-upload + pending→real mediaName swap app-side (U5c consume).
+    // handling the cross-mount re-upload + pending→real mediaName swap app-side.
     onPasteEigenImage?: (item: EigenClipboardImageItem) => void;
     // Paste of an OS image file (no eigen payload) — the app runs its fit-to-pane insert + upload
-    // (the same path as the Insert menu and OS-file drop) (U5c OS branch).
+    // (the same path as the Insert menu and OS-file drop).
     onPasteImageFile?: (file: File) => void;
     // Paste of a vector SVG whose images are name-referenced (eigen-media:) — the app materializes
     // each image into its media/ (re-uploading cross-container) and rewrites the svg's refs before
-    // inserting it as one floating image (SVG-IMAGE-PASTE-PLAN R3). `imageItems` is the re-upload
+    // inserting it as one floating image. `imageItems` is the re-upload
     // manifest; a pasted svg with no image items rides onPasteImageFile instead.
     onPasteSvgFile?: (svg: string, imageItems: EigenClipboardImageItem[]) => void;
     // Fired whenever the active floating image changes (selected, deselected, or its geometry
@@ -163,7 +163,7 @@ export type Settings = {
     hooks?: Hooks;
     currency?: string;
     fontList?: unknown[];
-    // Ephemeral aspect-lock state for the active image's ObjectTransform (U4b/D8c). The app owns it
+    // Ephemeral aspect-lock state for the active image's ObjectTransform. The app owns it
     // (via `useAspectLock`) so the same ON/OFF drives both the canvas handles and the panel checkbox;
     // never stored on an element.
     imageAspectLocked?: boolean;

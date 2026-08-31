@@ -278,7 +278,7 @@ export function buildGoldenScene(): VectorScene {
             fontFamily: 'Excalifont',
             labelWidth: 0,
         },
-        // A PINNED elbow arrow (EP-U5b): stored-polyline mode — `points` holds the full 4-point L and
+        // A PINNED elbow arrow: stored-polyline mode — `points` holds the full 4-point L and
         // `fixedSegments` pins its middle (vertical) segment at index 2. arrowRoute returns the polyline
         // VERBATIM (no router). Placed inside the existing bounds so it only APPENDS a fragment — every
         // fragment above stays byte-identical.

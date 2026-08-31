@@ -36,7 +36,7 @@ import {
 // fill cost scales with element area.
 const MAX_COORD = 1_000_000;
 
-// fontSize feeds line-height math (an arrow label's height = lines × line height, R3.6), so a hostile
+// fontSize feeds line-height math (an arrow label's height = lines × line height), so a hostile
 // value would blow the shared viewBox like an uncapped labelWidth; clamp to the canvas' own range.
 const MIN_FONT_SIZE = 4;
 const MAX_FONT_SIZE = 400;
@@ -51,7 +51,7 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
         if (el) elements.push(el);
     }
 
-    // Now that every element is known, unbind any arrow whose bound shape is gone (R3.2).
+    // Now that every element is known, unbind any arrow whose bound shape is gone.
     clearDanglingBindings(elements);
 
     // Order by z-index, then heal any collisions/invalid runs from concurrent inserts.
@@ -128,7 +128,7 @@ function readElement(value: unknown): VectorElement | null {
             // An arrow is a linear element plus heads, forward bindings and an optional label. Its points
             // obey the same skip/clamp rules as a line. Bindings are normalized to a canonical string here
             // (or '' when invalid); a binding whose target is absent/not bindable is cleared in a second
-            // pass over the whole scene (clearDanglingBindings) — the doc is left untouched (R3.2/R3.7).
+            // pass over the whole scene (clearDanglingBindings) — the doc is left untouched.
             const points = parsePoints(str(value.get('points'), ''));
             if (points.length === 0) return null;
             const clamped = points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) }));
@@ -172,7 +172,7 @@ function binding(v: unknown): string {
     return parsed ? serializeBinding(parsed) : '';
 }
 
-// Pinned segments to canonical form (P12). A pinned elbow arrow stores its full polyline in `points`, so
+// Pinned segments to canonical form. A pinned elbow arrow stores its full polyline in `points`, so
 // the pins are validated against it: the polyline must be a valid orthogonal run of >= 4 points, each pin
 // index must fall on an interior segment (2 .. len-2 — the first and last segment can't be fixed), and each
 // pin's start/end are REBUILT from the polyline at its index so the stored copies can never drift. Any
@@ -199,7 +199,7 @@ function fixedSegments(v: unknown, points: { x: number; y: number }[]): string {
 }
 
 // Second pass: a binding whose target no longer exists — or is no longer a bindable shape — is
-// unbound (R3.2). Mutates the freshly-materialized elements in place; the Y.Doc is never written, so
+// unbound. Mutates the freshly-materialized elements in place; the Y.Doc is never written, so
 // the next real write of that arrow is what persists the cleared value.
 function clearDanglingBindings(elements: VectorElement[]): void {
     const bindable = new Set<string>();

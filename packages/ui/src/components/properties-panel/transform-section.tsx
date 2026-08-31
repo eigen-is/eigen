@@ -1,4 +1,4 @@
-// The shared numeric X/Y/W/H/° cluster + keep-aspect-ratio checkbox (U4b). Extracted from slides'
+// The shared numeric X/Y/W/H/° cluster + keep-aspect-ratio checkbox. Extracted from slides'
 // Transform grid; vector adopts it as its first-ever numeric transform inputs. Presentational only:
 // the host passes already-MERGED values in canonical geometry names (Box fields) and its own units,
 // and owns the write transaction — every edit is one `onChange` call. An aspect-locked W or H edit

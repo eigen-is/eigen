@@ -2,7 +2,7 @@
 // SlidePropertiesPanel (non-empty selection + canWrite). It edits every selected element through
 // the shared MIXED conventions: '—' in number inputs / color swatches / select placeholders and a
 // data-mixed attribute on toggles. Each control change is one updateElements transact across the
-// selection (one undo step, stopCapturing sealed on both sides). Field scoping follows §A: fill /
+// selection (one undo step, stopCapturing sealed on both sides). Field scoping: fill /
 // fill style / sketch are shapes-only, edges rect+diamond-only, font controls text-only, and
 // strokeColor doubles as the text color.
 
@@ -67,7 +67,7 @@ const TYPE_LABELS: Record<VectorElementType, string> = {
     arrow: 'Arrow',
 };
 
-// Discrete presets, the Excalidraw constants (SCOUT §6): strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,
+// Discrete presets, the Excalidraw constants: strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,
 // shared from lib), roughness 0/1/2.
 const ROUGHNESS_OPTIONS: { value: string; label: string }[] = [
     { value: '0', label: 'Architect' },
@@ -78,7 +78,7 @@ const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
     { value: 'sharp', label: 'Sharp' },
     { value: 'round', label: 'Rounded' },
 ];
-// The arrow-type row (UA4b) — derived from the canonical ARROW_SHAPES vocabulary so the two never drift.
+// The arrow-type row — derived from the canonical ARROW_SHAPES vocabulary so the two never drift.
 const ARROW_SHAPE_LABELS: Record<ArrowShape, string> = { sharp: 'Sharp', curved: 'Curved', elbow: 'Elbow' };
 const ARROW_SHAPE_OPTIONS: { value: ArrowShape; label: string }[] = ARROW_SHAPES.map((value) => ({
     value,
@@ -103,7 +103,7 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
     { value: 'circle', label: 'Circle' },
 ];
 
-// A width/height change on a linear element must rescale its points through resizeLinear (R2.6), not
+// A width/height change on a linear element must rescale its points through resizeLinear, not
 // overwrite the box; the box fills each unset field from the element so x/y/angle-only changes pass through.
 function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Partial<Box>) {
     return resizeLinear(el, {
@@ -121,7 +121,7 @@ type VectorPropertiesPanelProps = {
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     undoManager: Y.UndoManager | null;
-    // Aspect lock (Override 3), owned by the editor so the panel checkbox and the canvas'
+    // Aspect lock, owned by the editor so the panel checkbox and the canvas'
     // ObjectTransform resizeMode share one ephemeral setting.
     aspectLocked: boolean;
     onAspectLockChange: (locked: boolean) => void;
@@ -162,7 +162,7 @@ export function VectorPropertiesPanel({
     // selection disables the panel Angle input.
     const allElbow = allArrow && arrowEls.every((el) => el.elbow);
     // A Text section (font + size only — the label is always centered, its colour comes from Stroke)
-    // shows for arrows once every one carries a label (R3.12); an empty label has no font to tune.
+    // shows for arrows once every one carries a label; an empty label has no font to tune.
     const allArrowLabeled = allArrow && arrowEls.every((el) => el.text !== '');
 
     // Same fields on every selected element — one transact, one undo step.
@@ -173,7 +173,7 @@ export function VectorPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
-    // The arrow-type row (UA4b). arrowShapeFields owns the stored fields each shape writes back. Switching
+    // The arrow-type row. arrowShapeFields owns the stored fields each shape writes back. Switching
     // TO elbow first collapses the arrow to its two endpoints — an elbow route is DERIVED from them, so
     // interior vertices would only linger as stray endpoint handles — and pins angle 0, all in the one
     // sealed transact. Switching AWAY keeps the two endpoints (nothing to restore). One undo step.
@@ -200,7 +200,7 @@ export function VectorPropertiesPanel({
     };
 
     // Numeric transform writes. A width/height change routes linear elements through resizeLinearTo so
-    // their points scale with the box (R2.6); x/y/angle-only changes pass straight through.
+    // their points scale with the box; x/y/angle-only changes pass straight through.
     const applyTransform = (fields: VectorElementPatch) => {
         if (!selectedIds.length) return;
         const resizesLinear = fields.width !== undefined || fields.height !== undefined;
@@ -236,7 +236,7 @@ export function VectorPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
-    // The arrow-label mirror of applyTextFont (R3.6): a font family / size change re-measures each
+    // The arrow-label mirror of applyTextFont: a font family / size change re-measures each
     // arrow's own label and writes `labelWidth` (the sole width source, height derives from the line
     // count) in the SAME transact as the font — after the face loads, or measureText reads fallback
     // metrics. Per-element widths (each label differs) in one undo step.
@@ -258,8 +258,8 @@ export function VectorPropertiesPanel({
 
     const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
 
-    // Align / distribute / match-size over the shared arrange math (U7a). One transact, one undo step
-    // (U6e seal). computeArrange no-ops below 2 (distribute below 3), so nothing to gate here.
+    // Align / distribute / match-size over the shared arrange math. One transact, one undo step.
+    // computeArrange no-ops below 2 (distribute below 3), so nothing to gate here.
     const handleAlign = (op: ArrangeOp) => {
         const patches = computeArrange(
             selectedElements.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
@@ -269,7 +269,7 @@ export function VectorPropertiesPanel({
         // Text dims are DERIVED from fontSize (the measurement util is the sole dim writer), so
         // match-size patches must never write width/height onto a text element; align/distribute
         // (x/y-only) still applies. A linear element's width/height goes through resizeLinearTo so its
-        // points scale with the box (R2.6).
+        // points scale with the box.
         undoManager?.stopCapturing();
         updateElements(
             patches.map((p) => {
@@ -284,7 +284,7 @@ export function VectorPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
-    // Numeric transform (U4b) — x/y/angle write straight through applyToAll; width/height are
+    // Numeric transform — x/y/angle write straight through applyToAll; width/height are
     // disabled for text (its dims are DERIVED from fontSize via the measurement util, the sole dim
     // writer), so applyToAll never receives them for a text selection.
     const tx = getMergedValue(selectedElements, (el) => Math.round(el.x));

@@ -1,5 +1,5 @@
 // Drag-time attach affordances for arrows, drawn in the scene group next to the bind-target outline
-// (B2 snap dots, B4/D5 straight-arrow focus point). Pulled out of vector-canvas.tsx and use-drawing-tools
+// (the snap dots and the straight-arrow focus point). Pulled out of vector-canvas.tsx and use-drawing-tools
 // (the canvas only dispatches; this unit owns its own render) so neither file grows. All geometry is SCENE
 // space — the group scales by zoom, so screen-constant sizes divide by zoom and stroke widths ride
 // `vectorEffect="non-scaling-stroke"`, exactly as SnapGuides does. Colours are ours (the selection-handle
@@ -50,7 +50,7 @@ function isBindableShape(el: VectorElement | undefined): el is VectorShapeElemen
     return el !== undefined && (el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse');
 }
 
-// The side-midpoint snap dots over a bind candidate (B2): all four rendered, the one nearest the pointer
+// The side-midpoint snap dots over a bind candidate: all four rendered, the one nearest the pointer
 // within bindingDistance + strokeWidth/2 filled in the accent, the rest ghosted. For a NON-elbow arrow the
 // dots are suppressed while the cursor is buried inside the shape (Excalidraw's !isPointInElement); for an
 // elbow arrow all four always show, even inside.
@@ -136,7 +136,7 @@ function focusEnds(
     return out;
 }
 
-// The focus-point affordance for a selected bound STRAIGHT arrow, per bound end (B4/D5): a solid dock dot on
+// The focus-point affordance for a selected bound STRAIGHT arrow, per bound end: a solid dock dot on
 // the shape outline (the endpoint) and a dashed line to the hollow anchor dot inside the shape, so the
 // distinction between "the anchor the arrow aims at" and "the endpoint on the outline" is visible and the
 // release orbit reads as intended rather than a jump. Never for elbow arrows (their endpoint IS the anchor).
@@ -190,7 +190,7 @@ export function FocusIndicators({
     );
 }
 
-// The draggable grab targets over each focus point (EP-U4/D5): a transparent ~22px DOM ring over the SVG
+// The draggable grab targets over each focus point: a transparent ~22px DOM ring over the SVG
 // hollow anchor dot, so the aim point can be grabbed with the same generous target as a vertex handle. Its
 // pointerdown claims the gesture BEFORE the canvas hit-test (capture + stopPropagation, exactly as the vertex
 // handles do) so grabbing the dot re-aims the binding rather than dragging the shape underneath. Dragging
@@ -248,7 +248,7 @@ export function FocusPointHandles({
 
         const update = (clientX: number, clientY: number, suppressed: boolean) => {
             const scene = clientToScene(clientX, clientY);
-            // EP-U5b eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
+            // Eigen extension: magnet the aim onto the shape's snap points (side midpoints + centre),
             // unless Ctrl/Cmd suppresses it — consistent with every other bind/snap here. The raw pointer is
             // still handed up so the host lights the SnapDots (the nearest side-midpoint highlights).
             const snapped = suppressed ? scene : (focusSnapPoint(shape, scene, zoom) ?? scene);

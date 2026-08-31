@@ -1,13 +1,13 @@
-// Line (poly-line) gesture — pure draft state + step functions. Two entry modes, both Excalidraw's
-// (R2.12): press-drag-release = a 2-point line; a click starts a multi-point line whose trailing
+// Line (poly-line) gesture — pure draft state + step functions. Two entry modes, both Excalidraw's:
+// press-drag-release = a 2-point line; a click starts a multi-point line whose trailing
 // point follows the cursor and each further click commits a point. The draft is written ONCE at
-// finish. Parameterized by `type` so U3b adds the arrow tool by starting the draft with
+// finish. Parameterized by `type` so the arrow tool starts the draft with
 // `type: 'arrow'` — no second implementation.
 
 import { type Point, snapAngle } from '@workspace/lib/vector';
 
-// The arrow tool reuses the whole line gesture, parameterized by `type` — no second implementation
-// (R3.8). The draft carries the type so a commit knows whether to write a line or a bindable arrow.
+// The arrow tool reuses the whole line gesture, parameterized by `type` — no second implementation.
+// The draft carries the type so a commit knows whether to write a line or a bindable arrow.
 export type LinearToolType = 'line' | 'arrow';
 
 // origin = the first scene point; committed/trailing are relative to it (first committed is [0,0]).

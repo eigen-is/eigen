@@ -683,7 +683,7 @@ describe('normalizeFixedPoint (Excalidraw bind-time bounds)', () => {
         expect(normalizeFixedPoint([50, -50])).toEqual([10, -10]);
     });
 
-    test('never returns exactly 0.5 on either axis (heading-cone stability, E11)', () => {
+    test('never returns exactly 0.5 on either axis (heading-cone stability)', () => {
         expect(normalizeFixedPoint([0.5, 0.5])).toEqual([0.5001, 0.5001]);
         // Only the near-0.5 axis is bumped; the other is left alone.
         expect(normalizeFixedPoint([0.5, 0.25])).toEqual([0.5001, 0.25]);
@@ -778,7 +778,7 @@ describe('boundEndpoint', () => {
         expect(p.y).toBeCloseTo(26);
     });
 
-    // D1: an elbow end derives from the fixedPoint alone — no chord, the other end never enters — so the
+    // An elbow end derives from the fixedPoint alone — no chord, the other end never enters — so the
     // stored fixedPoint's own side is authoritative. A straight end keeps the chord orbit above (unchanged).
     test('elbow end resolves the fixedPoint dock on its own side, ignoring the other end', () => {
         // 200×100 rect; a fixedPoint a gap OUTSIDE the left edge (-0.03) is the far-side dock.
@@ -968,7 +968,7 @@ describe('elementBounds', () => {
         expect(elementBounds(el)).toEqual(getElementBounds(el));
     });
 
-    test('an elbow with a STALE >2-point stored box uses the route bounds when the route is passed (EP-U5b)', () => {
+    test('an elbow with a STALE >2-point stored box uses the route bounds when the route is passed', () => {
         // A pinned/converted elbow whose stored box is stale-wide (200x160) but whose real polyline spans
         // only 80x60. The selection/union/ring path passes the route, so the box must track the route — a
         // stale stored frame (Reinder\'s below-right ghost box) must never leak.
@@ -1087,7 +1087,7 @@ describe('elbow arrows — derived-route consumption', () => {
     });
 });
 
-// --- projectFixedPointOntoDiagonal (D5 bind-time aim) ---------------------------------
+// --- projectFixedPointOntoDiagonal (bind-time aim) ---------------------------------
 // Excalidraw's projectFixedPointOntoDiagonal: a straight arrow's bind-time aim snaps to a side midpoint the
 // cursor is near, else projects onto the shape's diagonals (rect) / centre lines (ellipse/diamond) along the
 // ray from the other end, accepted only inside the shape; null → fall back to the raw cursor.
@@ -1200,7 +1200,7 @@ describe('shapeSideMidpoints', () => {
     });
 });
 
-describe('focusSnapPoint (EP-U5b eigen extension)', () => {
+describe('focusSnapPoint (eigen extension)', () => {
     const rect = () => shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
     // zoom 1 ⇒ bindingDistance 15 + strokeWidth/2 (1) = 16px magnet radius.
     test('snaps the aim to the nearest side midpoint within the band', () => {

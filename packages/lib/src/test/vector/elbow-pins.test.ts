@@ -42,7 +42,7 @@ const pinnedL = (): VectorArrowElement =>
 const scenePoints = (patch: { points: string; x: number; y: number }): [number, number][] =>
     parsePoints(patch.points).map((p) => [patch.x + p.x, patch.y + p.y]);
 
-describe('elbow-pins — P13 acceptance (interior segment drag)', () => {
+describe('elbow-pins — interior segment drag', () => {
     test('dragging the pinned middle segment right shifts the SAME L, zero extra corners, seamless joints', () => {
         const arrow = pinnedL();
         // Drag the index-2 (vertical) segment dot right by 20: cursor x = 60 in scene.
@@ -79,7 +79,7 @@ describe('elbow-pins — P13 acceptance (interior segment drag)', () => {
 });
 
 describe('elbow-pins — materialize + unpin', () => {
-    test('the first pin freezes the derived route into points and pins the dragged segment (P4)', () => {
+    test('the first pin freezes the derived route into points and pins the dragged segment', () => {
         // A straight 2-point elbow whose derived route is an L (the caller passes it in).
         const arrow = arrowEl({ points: '[[0,0],[80,60]]', width: 80, height: 60 });
         const route = parsePoints('[[0,0],[40,0],[40,60],[80,60]]');
@@ -93,14 +93,14 @@ describe('elbow-pins — materialize + unpin', () => {
         ]);
     });
 
-    test('unpinning the only pin returns to derived mode (2 points, fixedSegments empty) (P8)', () => {
+    test('unpinning the only pin returns to derived mode (2 points, fixedSegments empty)', () => {
         const patch = unpinSegment(pinnedL(), 2);
         expect(patch.fixedSegments).toBe('');
         expect(parsePoints(patch.points).length).toBe(2);
     });
 });
 
-describe('elbow-pins — P6 endpoint move keeps the interior verbatim', () => {
+describe('elbow-pins — endpoint move keeps the interior verbatim', () => {
     test('moving the end re-drops only the end connector; the pinned middle holds', () => {
         const arrow = pinnedL();
         // Move the end from (80,60) to (120,60).

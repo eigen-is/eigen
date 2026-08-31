@@ -12,9 +12,9 @@ export const STROKE_STYLES = ['solid', 'dashed', 'dotted'] as const;
 export const ROUNDNESS = ['sharp', 'round'] as const;
 export const TEXT_ALIGNS = ['left', 'center', 'right'] as const;
 // Arrowhead vocabulary (both ends), Excalidraw's trimmed to the shapes we draw. read-vector validates
-// against this array; the panel's start/end selects list it (U3c).
+// against this array; the panel's start/end selects list it.
 export const ARROWHEADS = ['none', 'arrow', 'triangle', 'bar', 'circle'] as const;
-// The 3-way arrow-shape vocabulary the panel offers (UA4). It is a DERIVED UI concept, not a stored field:
+// The 3-way arrow-shape vocabulary the panel offers. It is a DERIVED UI concept, not a stored field:
 // 'sharp'/'curved' are the existing `roundness` (sharp linearPath vs round curve shaft), and 'elbow' is the
 // one new stored boolean below. Keeping roundness as the single owner of shaft curvature (shared with
 // line/freedraw) means existing arrows — which carry only `roundness` — read back unchanged (elbow ⇒ false),
@@ -78,7 +78,7 @@ export type VectorLinearElement = VectorElementBase & {
 // An arrow is a line (points + roundness) plus heads, forward bindings, and an optional label. Its own
 // exclusive `type` keeps the discriminated union clean — `el.type === 'arrow'` narrows straight to the
 // arrow fields. `startBinding`/`endBinding` are a JSON `{"elementId","fixedPoint":[fx,fy]}` string or ''
-// when unbound (parseBinding/serializeBinding); the reverse index is derived, never stored (R3.2).
+// when unbound (parseBinding/serializeBinding); the reverse index is derived, never stored.
 export type VectorArrowElement = VectorElementBase & {
     type: 'arrow';
     points: string;
@@ -89,8 +89,8 @@ export type VectorArrowElement = VectorElementBase & {
     elbow: boolean;
     // Pinned route segments (Excalidraw's fixedSegments), '' when none. NON-empty flips the elbow arrow
     // into STORED-POLYLINE mode: `points` then holds the full routed polyline (not just the two endpoints)
-    // and the incremental editors in elbow-pins.ts mutate it — the A* router never runs on a pinned arrow
-    // (P1). The string is a JSON envelope `{"segments":[{index,start,end},…],"startIsSpecial","endIsSpecial"}`:
+    // and the incremental editors in elbow-pins.ts mutate it — the A* router never runs on a pinned arrow.
+    // The string is a JSON envelope `{"segments":[{index,start,end},…],"startIsSpecial","endIsSpecial"}`:
     // each pin keys `points[index-1]→points[index]` (Excalidraw's identity), start/end are LOCAL copies of
     // those two vertices (self-describing for validation/resize, always re-derived from the polyline), and
     // the isSpecial flags mark a synthetic L-jog point after start / before end. Ignored on a straight
@@ -123,7 +123,7 @@ export type Binding = { elementId: string; fixedPoint: [number, number] };
 // post-normalization polyline, so the copies never drift from the index.
 export type FixedSegment = { index: number; start: [number, number]; end: [number, number] };
 
-// The parsed fixedSegments envelope: the pins plus the two synthetic-point markers (P3). A pinned elbow
+// The parsed fixedSegments envelope: the pins plus the two synthetic-point markers. A pinned elbow
 // arrow's whole pin state, decoded from the one JSON scalar.
 export type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
@@ -259,7 +259,7 @@ export function isLinearElement(el: VectorElement): el is VectorLinearElement | 
     return el.type === 'freedraw' || el.type === 'line' || el.type === 'arrow';
 }
 
-// Bindable targets for an arrow endpoint: the closed shapes only (R3.2). One predicate so every
+// Bindable targets for an arrow endpoint: the closed shapes only. One predicate so every
 // consumer — the reader's dangling-binding pass, the follow math, the tool's candidate search — agrees.
 export function isBindable(el: VectorElement): el is VectorShapeElement {
     return el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse';
@@ -291,7 +291,7 @@ export function serializeBinding(b: Binding): string {
 // Decode the fixedSegments envelope, dropping anything malformed: each pin needs an integer index and a
 // finite axis-aligned start/end (sharing exactly one coordinate, not degenerate). A '' or unusable string
 // ⇒ no pins. Lenient like parseBinding — a corrupt entry can't wedge the arrow, and the scene never throws
-// over a bad peer write. Index-less legacy arrays (the deleted EP-U5 geometric keying) decode to no pins.
+// over a bad peer write. Index-less legacy arrays (the old geometric keying) decode to no pins.
 export function parseFixedSegments(s: string): ParsedFixedSegments {
     const empty: ParsedFixedSegments = { segments: [], startIsSpecial: false, endIsSpecial: false };
     if (s === '') return empty;
@@ -354,7 +354,7 @@ export function serializeFixedSegments(parsed: ParsedFixedSegments): string {
 }
 
 // The reverse index the forward bindings imply: shape id → the arrows bound to it, either end. Derived
-// in memory (never stored) so there is no two-element write to keep consistent (R3.2). An arrow bound to
+// in memory (never stored) so there is no two-element write to keep consistent. An arrow bound to
 // one shape at both ends lists once.
 export function arrowsBoundTo(elements: VectorElement[]): Map<string, string[]> {
     const map = new Map<string, string[]>();
@@ -371,13 +371,13 @@ export function arrowsBoundTo(elements: VectorElement[]): Map<string, string[]> 
     return map;
 }
 
-// The 3-way shape a panel shows for an arrow, derived from its stored `elbow` + `roundness` (UA4b, the
+// The 3-way shape a panel shows for an arrow, derived from its stored `elbow` + `roundness` (the
 // UI unit's Arrow-type row). elbow wins; otherwise round shaft ⇒ 'curved', sharp shaft ⇒ 'sharp'.
 export function arrowShapeOf(el: VectorArrowElement): ArrowShape {
     return el.elbow ? 'elbow' : el.roundness === 'round' ? 'curved' : 'sharp';
 }
 
-// The stored fields a chosen shape writes back (UA4b): 'elbow' sets only the flag and leaves roundness
+// The stored fields a chosen shape writes back: 'elbow' sets only the flag and leaves roundness
 // untouched — for an elbow it is the CORNER style (sharp bends vs radius-16 arcs), a separate Edges row,
 // not the shaft curve — so the write must preserve whatever corner style the element already carries;
 // 'curved'/'sharp' clear the flag and pick the shaft roundness. One owner so the panel never re-derives.

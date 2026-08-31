@@ -252,8 +252,8 @@ function triangleIncludesPoint(a: Point, b: Point, c: Point, p: Point): boolean 
 
 // --- elbow bind-time dock (Excalidraw's bindPointToSnapToElementOutline elbow branch + snapToMid +
 // avoidRectangularCorner) --------------------------------------------------------------------------------
-// D2: an elbow end's fixedPoint is stored from the DOCK — the point on the shape's outline+gap the endpoint
-// snaps to — not from the raw cursor, so the preview the user releases on is exactly what commits. EP-U3's
+// An elbow end's fixedPoint is stored from the DOCK — the point on the shape's outline+gap the endpoint
+// snaps to — not from the raw cursor, so the preview the user releases on is exactly what commits.
 // bindingFor calls elbowBindPoint per drag frame (dock = the previewed endpoint) and again on commit
 // (fixedPoint = the stored anchor); boundEndpoint then reproduces the same dock at rest via elbowAnchorScene.
 

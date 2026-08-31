@@ -1,6 +1,6 @@
 // Freehand (pencil) gesture — pure stroke state + step functions the canvas hook drives. A stroke
 // stays LOCAL (never Yjs) until pointer up, when the canvas writes ONE freedraw element through
-// normalizeLinear (R2.11). Points are kept relative to a fixed origin so the ink never jumps under
+// normalizeLinear. Points are kept relative to a fixed origin so the ink never jumps under
 // the cursor mid-draw; the origin is folded into x/y only at finish.
 
 import type { Point } from '@workspace/lib/vector';
@@ -15,7 +15,7 @@ export function startFreedrawStroke(origin: Point): FreedrawStroke {
 
 // Append each sampled scene point (relative to the origin), skipping any within `minDist` scene units
 // of the last kept point (≈1 screen px) — thins the sub-pixel samples coalesced events feed while a
-// fast scribble still keeps its shape (R2.11).
+// fast scribble still keeps its shape.
 export function extendFreedrawStroke(stroke: FreedrawStroke, scenePoints: Point[], minDist: number): void {
     for (const s of scenePoints) {
         const p = { x: s.x - stroke.origin.x, y: s.y - stroke.origin.y };

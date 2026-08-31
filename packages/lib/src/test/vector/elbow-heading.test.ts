@@ -67,7 +67,7 @@ const elbowArrow = (start: Point, end: Point, endBinding: string): VectorArrowEl
 // Reinder's exact scenario: a 200×100 rect, an elbow arrow whose free start sits far to the RIGHT and whose
 // end is dragged to the FAR (left) side. The commit must keep the end on the left and never chord-flip it to
 // the near (right) side when the other end moves.
-describe('elbowBindPoint — far-side dock (D1/D2)', () => {
+describe('elbowBindPoint — far-side dock', () => {
     const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 200, height: 100, strokeWidth: 2 });
 
     test('a cursor past the left edge docks on the left outline+gap, storing a far-side fixedPoint', () => {
@@ -139,9 +139,9 @@ describe('elbowBindPoint — rectangular corner avoidance', () => {
     });
 });
 
-// D6: elbowRoute takes an optional pre-dock origPoint per end for the heading DISTANCE-gate. At rest it
+// elbowRoute takes an optional pre-dock origPoint per end for the heading DISTANCE-gate. At rest it
 // defaults to the stored endpoint; a pre-dock point far from the shape switches the gate to the far branch.
-describe('elbowRoute — D6 pre-dock origPoint seam', () => {
+describe('elbowRoute — pre-dock origPoint seam', () => {
     test('a far origPoint flips the heading gate off the cone, changing the route', () => {
         // A WIDE rect: its heading cone widens UP/DOWN, so a point just above the top edge but off to the left
         // resolves to UP by the cone, yet to LEFT by the raw centre→point vector the far-distance branch uses —
@@ -159,18 +159,18 @@ describe('elbowRoute — D6 pre-dock origPoint seam', () => {
 
         // The seam is threaded: a far pre-dock point is accepted and steers the heading, so the routes differ.
         expect(preDock).not.toEqual(atRest);
-        // Sanity: both still begin exactly on the stored start (EP-U1 invariant, unchanged).
+        // Sanity: both still begin exactly on the stored start (unchanged).
         expect(atRest[0]).toEqual(start);
         expect(preDock[0]).toEqual(start);
     });
 });
 
-// The commit→resolve round-trip the EP-U2 review asked to pin end-to-end: the elbow bind path
+// The commit→resolve round-trip pinned end-to-end: the elbow bind path
 // (bindingFor → elbowBindPoint) must store the DOCKED fixedPoint (the outline+gap ratio), and boundEndpoint's
 // elbow branch must resolve that stored ratio back to the very same outline point. The two halves are a pair —
 // if a commit stored the raw cursor ratio instead of the dock, or the read stopped honouring the fixedPoint,
 // the endpoint would float at the cursor instead of sitting on the outline. Nothing pinned that pairing before.
-describe('elbow bind → resolve round-trip (D3/D4 commit pin)', () => {
+describe('elbow bind → resolve round-trip (commit pin)', () => {
     const rect = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, strokeWidth: 2 });
     // A cursor well OUTSIDE the left edge, off the vertical centre so no 0.5 dodge blurs the round-trip.
     const cursor = { x: -50, y: 70 };
@@ -199,7 +199,7 @@ describe('elbow bind → resolve round-trip (D3/D4 commit pin)', () => {
     });
 });
 
-// EP-U3 fix: the panel's to-elbow switch must re-dock a bound end whose fixedPoint was stored for the STRAIGHT
+// The panel's to-elbow switch must re-dock a bound end whose fixedPoint was stored for the STRAIGHT
 // read (bindingAnchor's raw ratio). The elbow read (elbowAnchorScene) maps that ratio straight onto the box, so
 // without re-docking the endpoint floats INSIDE the shape (the create-then-toggle drift). redockBindingsForElbow
 // converts each bound end's fixedPoint to the outline dock via elbowBindPoint; followBindings then re-glues.

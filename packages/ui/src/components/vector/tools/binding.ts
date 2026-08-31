@@ -1,6 +1,6 @@
 // Arrow binding lifecycle for the tools layer — the candidate search under a dragged endpoint, the
 // commit that stores each end's binding and snaps it to the shape outline, the live preview follow, the
-// unbind-on-drag rule, and the paste remap (R3.8–R3.11). All the geometry lives in lib (bindingAnchor,
+// unbind-on-drag rule, and the paste remap. All the geometry lives in lib (bindingAnchor,
 // boundEndpoint, followBindings, bindingDistance, remapBinding); this module is the thin UI glue the
 // canvas and the drawing hook call, so those files only dispatch.
 
@@ -47,7 +47,7 @@ function insideShape(shape: VectorShapeElement, point: Point, pad: number): bool
 }
 
 // Whether a dragged endpoint at `point` should bind to a shape: a filled shape binds anywhere inside or
-// within the reach band outside; a transparent one binds only in the band AROUND its outline (scout §2).
+// within the reach band outside; a transparent one binds only in the band AROUND its outline.
 function reaches(shape: VectorShapeElement, point: Point, distance: number): boolean {
     if (!isTransparent(shape.backgroundColor)) return insideShape(shape, point, distance);
     return insideShape(shape, point, distance) && !insideShape(shape, point, -distance);
@@ -71,7 +71,7 @@ export function bindingCandidate(
     return best ? best.id : null;
 }
 
-// The shape-following highlight over a bindable target (R3.8): the shape re-stroked in the selection
+// The shape-following highlight over a bindable target: the shape re-stroked in the selection
 // colour with a clean 2px screen line and no fill, reusing the SAME per-shape geometry the renderer uses
 // (rect roundness / diamond / ellipse, rotated), so no shape math is duplicated here. `currentColor`
 // lets the caller tint it via a `text-selection-handle` group; strokeWidth ÷ zoom keeps it 2px on screen
@@ -130,7 +130,7 @@ function bindingFor(
     // "orbit" strategy — it applies ONLY when the endpoint lands OUTSIDE the shape's fill. A drop INSIDE the
     // fill is the "inside" strategy and stores the RAW cursor ratio verbatim (Excalidraw's getBindingStrategy*
     // → calculateFixedPointForNonElbowArrowBinding, gated on isPointInElement). Re-projecting an inside drop
-    // would fling the anchor off the release point onto the diagonal, toward the centre (the EP-U4 regression).
+    // would fling the anchor off the release point onto the diagonal, toward the centre.
     // Elbow arrows keep the raw anchor too (their outline dock is resolved separately, never a diagonal).
     const focus =
         arrow.elbow || pointInsideShape(shape, scene)
@@ -201,11 +201,11 @@ function followedGeom(
 }
 
 // Bind (or unbind, when `fixedPoint` is null) a dragged/creating ELBOW endpoint from a PRE-COMPUTED dock
-// ratio — elbowBindPoint's fixedPoint for the hovered candidate — never re-derived from the release cursor
-// (D3/D4). The end's binding is set from that ratio, then followBindings re-glues every bound end onto its
+// ratio — elbowBindPoint's fixedPoint for the hovered candidate — never re-derived from the release cursor.
+// The end's binding is set from that ratio, then followBindings re-glues every bound end onto its
 // shape: for an elbow end that is elbowAnchorScene(fixedPoint) = the dock, so the stored endpoint lands
 // exactly where the preview showed, and the OTHER bound end re-docks too. The preview and the commit call
-// this identically, so pointer-up is a visual no-op (ELBOW-PARITY-SPEC acceptance criterion #1). An unbound
+// this identically, so pointer-up is a visual no-op. An unbound
 // end keeps its raw dragged point (followBindings never touches a cleared end).
 export function bindElbowEnd(
     arrow: VectorArrowElement,
@@ -220,7 +220,7 @@ export function bindElbowEnd(
     return { startBinding, endBinding, ...followedGeom({ ...arrow, startBinding, endBinding }, byId) };
 }
 
-// The PINNED analog of bindElbowEnd (P6): bind (or unbind) a dragged pinned-elbow endpoint from a
+// The PINNED analog of bindElbowEnd: bind (or unbind) a dragged pinned-elbow endpoint from a
 // pre-computed dock ratio, but keep the interior polyline + every pin VERBATIM (moveEndpoints) rather than
 // re-deriving the whole route. When bound, the endpoint docks where followBindings will later rest it
 // (elbowAnchorScene(fixedPoint)), so release === the shape's next move — no raw-cursor detach; an unbound
@@ -242,7 +242,7 @@ export function bindPinnedElbowEnd(
     return { ...moved, startBinding, endBinding };
 }
 
-// Re-aim a straight arrow's already-bound end to a NEW fixedPoint dragged on its focus dot (D5). The bound
+// Re-aim a straight arrow's already-bound end to a NEW fixedPoint dragged on its focus dot. The bound
 // SHAPE is unchanged — only the aim ratio moves — so there is no candidate search and no diagonal projection
 // (Excalidraw's handleFocusPointDrag stores the raw dragged ratio; the projection is a bind-time-only
 // nicety, and re-projecting here would fight the drag). followBindings re-derives the chord endpoint from the
@@ -261,7 +261,7 @@ export function bindFocusPoint(
     return { startBinding, endBinding, ...followedGeom({ ...arrow, startBinding, endBinding }, byId) };
 }
 
-// Live-follow the OTHER bound end while a straight arrow's endpoint is dragged (D7): re-glue only the end
+// Live-follow the OTHER bound end while a straight arrow's endpoint is dragged: re-glue only the end
 // that isn't `dragged` so it re-orbits toward the moving cursor exactly as release will, while the dragged
 // end keeps its raw cursor position (its binding is cleared for the follow, so followBindings leaves it
 // alone). Returns the element unchanged when the other end isn't bound / nothing moved.
@@ -274,7 +274,7 @@ export function followOtherEnd(
     return followedGeom({ ...arrow, ...cleared }, byId);
 }
 
-// Whether a scene point sits within a shape's exact outline (no reach band) — the deep-inside test B2 uses
+// Whether a scene point sits within a shape's exact outline (no reach band) — the deep-inside test used
 // to suppress the side-midpoint snap dots for a NON-elbow arrow (Excalidraw shows them only around the
 // outline, not when the cursor is buried inside the shape).
 export function pointInsideShape(shape: VectorShapeElement, point: Point): boolean {
@@ -312,7 +312,7 @@ export function followArrowPreview(
 
 // The binding fields to clear when a bound arrow is dragged: an end whose shape is NOT part of the same
 // drag unbinds (the endpoint moved off it); a shape dragged together with the arrow keeps its binding and
-// rode along rigidly (R3.10).
+// rode along rigidly.
 export function unbindDraggedArrow(
     arrow: VectorArrowElement,
     movedIds: Set<string>,
@@ -332,7 +332,7 @@ function boundOutside(binding: string, movedIds: Set<string>): boolean {
 export type PastedArrow = { index: number; startBinding: string; endBinding: string };
 
 // Remap each pasted arrow's bindings across the pasted set (ids in partial order): a target shape that was
-// pasted → its clone's id, a target outside the paste → cleared (R3.11). `cloneIds` maps each partial's
+// pasted → its clone's id, a target outside the paste → cleared. `cloneIds` maps each partial's
 // index to its source element id.
 export function remapPastedArrows(
     arrows: PastedArrow[],

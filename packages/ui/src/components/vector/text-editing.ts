@@ -75,7 +75,7 @@ export function textEditing(el: VectorTextElement): EditingState {
 }
 
 // An arrow's label (select-tool double-click), centered on the label anchor — the polyline's
-// index-midpoint in the arrow's local frame, mapped to the scene (R3.12). The box is the committed
+// index-midpoint in the arrow's local frame, mapped to the scene. The box is the committed
 // label rect (empty when the arrow has no label yet), so the overlay rotates with the arrow exactly as
 // the rendered label does. The label is always centered, so no textAlign choice. `route` (the derived
 // elbow polyline) overrides the stored endpoints so an elbow arrow's overlay opens on its routed

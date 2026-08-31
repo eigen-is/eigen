@@ -116,7 +116,7 @@ function normalizeElbowUpdate(
     };
 }
 
-// --- P5: segment move (moveFixedSegment + handleSegmentMove) ----------------------------
+// --- segment move (moveFixedSegment + handleSegmentMove) ----------------------------
 
 // Excalidraw's moveFixedSegment: upsert the pin at `index`, axis-locked — a horizontal segment keeps its
 // endpoints' x from the current polyline and takes the cursor's y, a vertical one mirrored. Returns the
@@ -197,16 +197,16 @@ function handleSegmentMove(arrow: VectorArrowElement, segments: FixedSegment[], 
     return normalizeElbowUpdate(newPoints, nextSegments, false, false);
 }
 
-// P5, one gesture step: move the pin at `index` to the cursor and rebuild the polyline. The UI calls this
-// per pointermove on an already-pinned arrow; the patch it returns is what release commits (after P7).
+// One gesture step: move the pin at `index` to the cursor and rebuild the polyline. The UI calls this
+// per pointermove on an already-pinned arrow; the patch it returns is what release commits (after renormalization).
 export function moveSegment(arrow: VectorArrowElement, index: number, cursorScene: Point): PinPatch {
     const segments = moveFixedSegment(arrow, index, cursorScene);
     return handleSegmentMove(arrow, segments, index);
 }
 
-// --- P4: first pin materializes the polyline --------------------------------------------
+// --- first pin materializes the polyline --------------------------------------------
 
-// Freeze a derived route into `points` and pin the dragged segment in ONE step (P4). `route` is the
+// Freeze a derived route into `points` and pin the dragged segment in ONE step. `route` is the
 // arrow's current derived polyline (elbowRoute output, LOCAL). Returns the patch that flips the arrow into
 // stored-polyline mode with its first pin.
 export function materializeFirstPin(
@@ -220,7 +220,7 @@ export function materializeFirstPin(
     return moveSegment(frozen, index, cursorScene);
 }
 
-// --- P7: renormalization on commit ------------------------------------------------------
+// --- renormalization on commit ------------------------------------------------------
 
 // Excalidraw's handleSegmentRenormalization: merge collinear neighbour segments (pin reindex −1), drop
 // sub-pixel segments (reindex −2), and drop any pin that ends up first/last. Run as the LAST step of every
@@ -262,7 +262,7 @@ export function renormalize(arrow: VectorArrowElement): PinPatch {
     return normalizeElbowUpdate(points, kept, kept.length > 0 && w.startIsSpecial, kept.length > 0 && w.endIsSpecial);
 }
 
-// --- P6: endpoint / bound-shape moves (handleEndpointDrag, else-branch) ------------------
+// --- endpoint / bound-shape moves (handleEndpointDrag, else-branch) ------------------
 
 // The 2-point DERIVED patch — used when the last pin dissolves and the arrow returns to derived mode
 // (bbox-min origin, matching normalizeLinear at angle 0). fixedSegments back to ''.
@@ -285,7 +285,7 @@ function derivedPatch(start: Point, end: Point): PinPatch {
 // Move a pinned arrow's endpoint(s) (Excalidraw's handleEndpointDrag, else-branch): the interior points —
 // and every pin — are kept VERBATIM; only the start pair and the end pair are recomputed so the connector
 // re-drops orthogonally onto the new endpoint. `null` keeps that endpoint. The heading-parallel L-jog
-// (startIsSpecial/endIsSpecial) is deferred with the interior-only dot policy (P10); renormalization on
+// (startIsSpecial/endIsSpecial) is deferred with the interior-only dot policy; renormalization on
 // commit cleans any degenerate joint the projection leaves. Returns a full patch (run renormalize after).
 export function moveEndpoints(arrow: VectorArrowElement, newStart: Point | null, newEnd: Point | null): PinPatch {
     const w = toWorking(arrow);
@@ -318,7 +318,7 @@ export function moveEndpoints(arrow: VectorArrowElement, newStart: Point | null,
     return normalizeElbowUpdate(points, w.segments, w.startIsSpecial, w.endIsSpecial);
 }
 
-// --- P8: unpin --------------------------------------------------------------------------
+// --- unpin --------------------------------------------------------------------------
 
 // Remove the pin at `index`. Removing the LAST pin returns the arrow to derived mode (points collapse to
 // the two endpoints, fixedSegments ''); the derived route takes over — visually what Excalidraw's release

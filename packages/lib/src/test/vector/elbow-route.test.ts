@@ -124,18 +124,16 @@ describe('elbowRoute', () => {
 
 // The parity contract: exact routes verified point-for-point against Excalidraw's own no-fixed-segments
 // pipeline (getElbowArrowData → routeElbowArrow → removeElbowArrowShortSegments → getElbowArrowCornerPoints)
-// run on the identical inputs (a faithful copy of that pipeline was used as the oracle). U1 routes from the
-// STORED endpoints — the same points the endpoint dot renders at — so every terminal below equals the arrow's
-// stored point exactly; U2 will make the stored point the fixedPoint-derived dock, closing the last gap to
-// Excalidraw's globalFixedPoint terminal. Where these differ from the hand-computed numbers in
-// ELBOW-PARITY-SPEC (E9's bend row, E10's "tight S"), the spec's arithmetic was the approximation.
+// run on the identical inputs (a faithful copy of that pipeline was used as the oracle). The router routes
+// from the STORED endpoints — the same points the endpoint dot renders at — so every terminal below equals
+// the arrow's stored point exactly, matching Excalidraw's globalFixedPoint terminal.
 // CAVEAT: these expected tuples are CAPTURED FROM OUR PORT of that pipeline, not from an independent
 // Excalidraw run — so they pin against regression, not against the source. The real check that the port
 // matches Excalidraw is line-level review of elbow-route.ts / elbow-heading.ts against the reference files.
 describe('elbowRoute — exact parity with Excalidraw', () => {
     const asPairs = (route: Point[]): [number, number][] => route.map((p) => [p.x, p.y]);
 
-    test('E9 — a fully-unbound Z bends at the ±2-box midline, not the endpoint stub', () => {
+    test('a fully-unbound Z bends at the ±2-box midline, not the endpoint stub', () => {
         const arrow = arrowEl({ points: '[[0,0],[10,200]]' });
         expect(asPairs(elbowRoute(arrow, byIdOf(arrow)))).toEqual([
             [0, 0],
@@ -145,7 +143,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
         ]);
     });
 
-    test('E2 — a close bound endpoint leaves through the search-cone side (UP), not the quadrant', () => {
+    test('a close bound endpoint leaves through the search-cone side (UP), not the quadrant', () => {
         // Rect 200×100 at (0,0); the start sits at (160,10) — |offset.x|>|offset.y| quadrant says RIGHT, but
         // the ×2 UP cone of the wide box claims it, so the first segment goes UP.
         const r = shapeEl({ id: 'R', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
@@ -158,7 +156,7 @@ describe('elbowRoute — exact parity with Excalidraw', () => {
         ]);
     });
 
-    test('E10 — two close rects route the tight S through the half-gap corridor', () => {
+    test('two close rects route the tight S through the half-gap corridor', () => {
         // A(0,0,100,100) and B(140,40,100,100), stroke 2 → gap 6; endpoints (106,50) and (134,90). Their padded
         // boxes overlap → obstacles collapse to the point boxes and A* threads the gap.
         const a = shapeEl({ id: 'A', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 });

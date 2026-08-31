@@ -27,7 +27,7 @@ export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 const DEG_TO_RAD = Math.PI / 180;
 
-// Canvas interaction steps shared by vector + slides (U6f), in scene/document units: arrow-key nudge
+// Canvas interaction steps shared by vector + slides, in scene/document units: arrow-key nudge
 // (Shift = large) and the duplicate/paste cascade offset. One source so the two apps' keymaps match.
 export const NUDGE_STEP = 1;
 export const NUDGE_STEP_LARGE = 5;
@@ -64,7 +64,7 @@ export function getElementBounds(box: Box): Bounds {
     return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
 }
 
-// Marquee (rubber-band) selection semantics, shared by slides + vector (U6c/D16). Drag direction
+// Marquee (rubber-band) selection semantics, shared by slides + vector. Drag direction
 // picks the mode — the AutoCAD/Figma convention — with slides' dashed border (intersect) vs solid
 // (contain) as the visual signal.
 export type MarqueeMode = 'contain' | 'intersect';
@@ -108,7 +108,7 @@ export function getElementsBounds(boxes: Box[]): Bounds {
     return boxes.map(getElementBounds).reduce(unionBounds);
 }
 
-// Element bounds, arrow-aware: an arrow unions its rotated label rect into the box bounds (R3.6), so a
+// Element bounds, arrow-aware: an arrow unions its rotated label rect into the box bounds, so a
 // wide label on a short arrow is not clipped by the viewBox nor missed by marquee/ring. Every other
 // element is exactly its box AABB. `arrowRoute` (the derived elbow polyline) replaces the stored box for an
 // elbow arrow, whose bends spill outside the 2-endpoint box.
@@ -390,7 +390,7 @@ function round2(n: number): number {
 }
 
 // --- Arrows: bindings, endpoints, heads, labels ---------------------------------------
-// Forward bindings only (R3.2): an arrow endpoint stores a fixedPoint anchor as a proportion of the
+// Forward bindings only: an arrow endpoint stores a fixedPoint anchor as a proportion of the
 // target shape's local w/h, so the anchor follows the shape's move/resize/rotate by construction. All
 // scene units; degrees at the boundary. Straight arrows only — no elbow, no `mode`, orbit is the rule.
 
@@ -399,7 +399,7 @@ const BASE_BINDING_DISTANCE = 15; // = max(BASE_BINDING_GAP, 15), Excalidraw's f
 const BASE_ARROW_MIN_LENGTH = 10; // below this the bound endpoint snaps to the anchor, not the outline
 // Excalidraw's normalizeFixedPoint bounds (binding.ts): a bind-time ratio is kept within ±10 of the box
 // and never exactly 0.5. The half-dodge exists because a precise 0.5 makes the heading cone flip on
-// floating-point noise (E11); the ±10 bound just stops a shrunk shape flinging an anchor to infinity while
+// floating-point noise; the ±10 bound just stops a shrunk shape flinging an anchor to infinity while
 // still allowing the outline+gap dock to sit a little outside [0,1].
 const FIXED_POINT_BOUND = 10;
 const FIXED_POINT_EPSILON = 0.0001;
@@ -440,7 +440,7 @@ function pointInShape(shape: VectorShapeElement, point: Point): boolean {
 // left/top edge midpoints (an ellipse's are its axis extremes); diamond → the midpoints of its four slanted
 // edges. Excalidraw's getSnapOutlineMidPoint order (right, bottom, left, top) so a bind-time midpoint snap
 // resolves the same side on a tie. The one owner of this geometry — both the snap-to-midpoint bind and the
-// B2 snap-dot overlay read it, so the dots sit exactly where the dock lands.
+// snap-dot overlay read it, so the dots sit exactly where the dock lands.
 export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
     const { x, y, width: w, height: h } = shape;
     const local: Point[] =
@@ -464,7 +464,7 @@ export function shapeSideMidpoints(shape: VectorShapeElement): Point[] {
 }
 
 // The nearest focus SNAP target for a dragged aim — one of the shape's four side midpoints or its centre,
-// within bindingDistance + strokeWidth/2, else null (EP-U5b eigen extension: Excalidraw's focus-point drag
+// within bindingDistance + strokeWidth/2, else null (eigen extension: Excalidraw's focus-point drag
 // stores the RAW pointer ratio and lights no dots — arrows/focus.ts handleFocusPointDrag; Reinder wants the
 // aim to snap to and light the shape's snap points, so this magnet mirrors SnapDots' side-midpoint set plus
 // the centre). Scene coordinates throughout; the caller suppresses it on Ctrl/Cmd like every other snap.
@@ -607,8 +607,8 @@ function clampUnit([fx, fy]: [number, number]): [number, number] {
 }
 
 // Excalidraw's normalizeFixedPoint (binding.ts:2716): keep a bind-time ratio within ±10 of the box and never
-// exactly 0.5 (a precise 0.5 makes the heading cone flip on FP noise — E11). Shared by both binds' write
-// path (elbow: elbowBindPoint; straight: U4's diagonal-projection upgrade) and by the elbow read
+// exactly 0.5 (a precise 0.5 makes the heading cone flip on FP noise). Shared by both binds' write
+// path (elbow: elbowBindPoint; straight: the diagonal-projection upgrade) and by the elbow read
 // (elbowAnchorScene), so preview → fixedPoint → rest-endpoint is one function composition in both directions.
 export function normalizeFixedPoint([fx, fy]: [number, number]): [number, number] {
     const cx = clamp(fx, -FIXED_POINT_BOUND, FIXED_POINT_BOUND);
@@ -637,7 +637,7 @@ export function elbowAnchorScene(shape: VectorShapeElement, fixedPoint: [number,
 }
 
 // Where the segment from → anchor crosses the shape's outline inflated by `gap`, nearest to `from`; the
-// anchor itself when it never crosses (scout §3). Everything happens in the shape's unrotated local
+// anchor itself when it never crosses. Everything happens in the shape's unrotated local
 // frame (rect: sharp inflated sides even for round rects — accepted drift; diamond: inflated edges;
 // ellipse: radii + gap), then the hit rotates back by the shape's angle.
 export function outlinePoint(shape: VectorShapeElement, from: Point, anchor: Point, gap: number): Point {
@@ -679,9 +679,9 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
     const thisLocal = end === 'start' ? points[0] : points[points.length - 1];
     const binding = parseBinding(end === 'start' ? arrow.startBinding : arrow.endBinding);
     if (!binding) return linearLocalToScene(arrow, thisLocal);
-    // D1: an elbow end resolves from the fixedPoint alone — the dock on its own side, no chord, the other
+    // An elbow end resolves from the fixedPoint alone — the dock on its own side, no chord, the other
     // end never enters — so it can't change side when the other end moves. Straight ends keep the chord
-    // orbit below (that IS Excalidraw parity, and U4 adds the anchor UX around it).
+    // orbit below (that IS Excalidraw parity, and the anchor UX is layered around it).
     if (arrow.elbow) return elbowAnchorScene(shape, binding.fixedPoint);
     // Excalidraw aims the chord from the ADJACENT vertex (updateBoundPoint, index 1 / -2), so a dragged
     // mid point slides the attachment along the outline to face it. Same point as the far end for 2-point
@@ -694,7 +694,7 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
     return endpoint;
 }
 
-// Recompute both bound endpoints from the CURRENT shapes and re-normalize (R2.3); null when nothing
+// Recompute both bound endpoints from the CURRENT shapes and re-normalize; null when nothing
 // changed (the caller then skips the write). Each new scene endpoint converts into the arrow's local
 // frame by unrotating about the arrow's OLD centre (linearSceneToLocal reads the current box), so a
 // rotated arrow's untouched vertices hold their place — never recompute the centre from the new bbox
@@ -708,7 +708,7 @@ export function followBindings(
     if (!start && !end) return null;
     const points = parsePoints(arrow.points);
     if (points.length < 2) return null;
-    // PINNED (P6): keep the interior polyline + pins verbatim, move only the bound endpoints and re-drop
+    // PINNED: keep the interior polyline + pins verbatim, move only the bound endpoints and re-drop
     // their connector pairs (moveEndpoints), then renormalize as the sealed write. The A* router never runs.
     if (arrow.fixedSegments !== '') {
         const newStart = start ? boundEndpoint(arrow, 'start', start) : null;
@@ -760,7 +760,7 @@ export function bindingDistance(zoom: number): number {
 }
 
 // Remap a binding's target through an old→new id map for duplicate/paste; a target outside the map (the
-// bound shape wasn't in the copied set) clears the binding (R3.11).
+// bound shape wasn't in the copied set) clears the binding.
 export function remapBinding(binding: string, idMap: Map<string, string>): string {
     const b = parseBinding(binding);
     if (!b) return '';
@@ -773,7 +773,7 @@ export type ArrowheadGeometry =
     | { kind: 'circle'; center: Point; diameter: number };
 
 // Head geometry in the arrow's local frame, from the raw last/first segment direction (we read the raw
-// segment, not Excalidraw's roughjs bezier op — accepted drift). Sizes/angles per R3.5; the head is
+// segment, not Excalidraw's roughjs bezier op — accepted drift). Sizes/angles are fixed constants; the head is
 // capped at half its segment so a short arrow's head shrinks instead of overrunning it. 'barbs' feeds
 // the arrow (two lines), bar (one line) and triangle (filled polygon); 'circle' a filled disc.
 export function arrowheadGeometry(
@@ -799,7 +799,7 @@ export function arrowheadGeometry(
 }
 
 // The label's center (arrow local frame) and box: centered on the polyline's index-midpoint (odd → the
-// middle vertex, even → the middle segment's midpoint — scout §5), width client-measured (labelWidth),
+// middle vertex, even → the middle segment's midpoint), width client-measured (labelWidth),
 // height = line count × the font's line height. null when the arrow has no label. Shared by hit-testing,
 // bounds, and the renderer so the three agree. `route` overrides the stored points for an elbow arrow (its
 // label rides the derived route's midpoint).
@@ -819,7 +819,7 @@ export function arrowLabelBox(
 }
 
 // The label anchor in the arrow's local frame: the polyline's index-midpoint (odd → the middle vertex,
-// even → the middle segment's midpoint — scout §5). null for a degenerate arrow (< 2 points). Text-free
+// even → the middle segment's midpoint). null for a degenerate arrow (< 2 points). Text-free
 // so the editor can center an empty label on the same anchor a committed one would render at. `route` (the
 // derived elbow polyline) overrides the stored points when given.
 export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point | null {
@@ -832,7 +832,7 @@ export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point
 }
 
 // Intersections of the query segment a→b with a shape's outline inflated outward by `gap`, in the
-// shape's unrotated local frame. Sharp corners throughout (accepted drift, R3.3).
+// shape's unrotated local frame. Sharp corners throughout (accepted drift).
 function outlineHits(shape: VectorShapeElement, a: Point, b: Point, gap: number): Point[] {
     const cx = shape.x + shape.width / 2;
     const cy = shape.y + shape.height / 2;

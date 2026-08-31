@@ -1,7 +1,7 @@
-// The `eigen-media:` ref codec for image-bearing vector SVGs (SVG-IMAGE-PASTE-PLAN R1). A copied
+// The `eigen-media:` ref codec for image-bearing vector SVGs. A copied
 // selection's SVG references each image BY NAME — `href="eigen-media:<encodeURIComponent(name)>"` —
 // never by bytes; the stored .svg keeps those refs so a container copy resolves them against the
-// copy's own media/ siblings, and the display path (API preview inliner, U-S4) swaps each ref for a
+// copy's own media/ siblings, and the display path (the API preview inliner) swaps each ref for a
 // `data:` URI at serve time. Pure string ops, no XML parsing.
 //
 // escapeXml invariance is the load-bearing property: sceneToSvg writes `href="${escapeXml(href)}"`,
@@ -17,15 +17,15 @@ export const EIGEN_MEDIA_SCHEME = 'eigen-media:';
 // quote, or angle bracket (all percent-encoded), so this matches ours exactly too.
 const REF_SCAN = /eigen-media:[^\s"'<>]*/g;
 
-// name → `eigen-media:<encoded>`. Called by U-S2's buildSelectionData resolveMedia (the copy path)
-// and by U-S4's preview inliner to rebuild a ref's exact search token.
+// name → `eigen-media:<encoded>`. Called by buildSelectionData's resolveMedia (the copy path)
+// and by the preview inliner to rebuild a ref's exact search token.
 export function eigenMediaHref(name: string): string {
     return EIGEN_MEDIA_SCHEME + encodeURIComponent(name).replace(/'/g, '%27');
 }
 
 // `eigen-media:<encoded>` → the decoded media name, or null when the href is not an eigen-media ref,
 // is malformed, or decodes to an unsafe name. Unsafe = contains `/`, `\`, or a control char — the
-// traversal/injection guard the preview inliner (U-S4) rides so a same-folder getChildByName lookup
+// traversal/injection guard the preview inliner rides so a same-folder getChildByName lookup
 // can never escape the container. The symmetric inverse of eigenMediaHref; backs listEigenMediaRefs.
 export function parseEigenMediaHref(href: string): string | null {
     if (!href.startsWith(EIGEN_MEDIA_SCHEME)) return null;
@@ -45,7 +45,7 @@ export function parseEigenMediaHref(href: string): string | null {
 }
 
 // The distinct, safe media names an SVG references, in first-seen order. Forged/unsafe refs are
-// dropped (parse returns null). Called by U-S4's preview inliner to enumerate the siblings to resolve.
+// dropped (parse returns null). Called by the preview inliner to enumerate the siblings to resolve.
 export function listEigenMediaRefs(svg: string): string[] {
     const names: string[] = [];
     const seen = new Set<string>();
@@ -61,7 +61,7 @@ export function listEigenMediaRefs(svg: string): string[] {
 
 // Rewrite each `eigen-media:` ref whose current name is a key of `renames` to its new name — one
 // swap-safe pass (a rename chain like a→b, b→a is applied once, not composed). A token absent from the
-// map is left untouched. Called by U-S2's materializeClipboardSvg after collision-renaming re-uploads.
+// map is left untouched. Called by materializeClipboardSvg after collision-renaming re-uploads.
 export function rewriteEigenMediaRefs(svg: string, renames: Map<string, string>): string {
     if (renames.size === 0) return svg;
     const tokens = new Map<string, string>();
@@ -70,7 +70,7 @@ export function rewriteEigenMediaRefs(svg: string, renames: Map<string, string>)
 }
 
 // Drop the `href` attribute of every `<image>` referencing one of `names`, so the element renders as
-// nothing (sceneToSvg's null-media contract). Called by U-S2's materializeClipboardSvg for images
+// nothing (sceneToSvg's null-media contract). Called by materializeClipboardSvg for images
 // whose re-upload failed — skip-on-failure, never abort the paste.
 export function stripEigenMediaRefs(svg: string, names: Iterable<string>): string {
     let out = svg;

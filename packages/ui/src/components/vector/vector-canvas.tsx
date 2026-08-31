@@ -89,7 +89,7 @@ import { useDrawingTools } from './tools/use-drawing-tools';
 import { VectorObjectMenu } from './vector-object-menu';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-// Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded (SCOUT §7).
+// Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
 // fontSize clamp for resize-scaling of text (a resize maps width ratio → fontSize).
@@ -102,7 +102,7 @@ const MAX_FONT_SIZE = 400;
 // natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
 const IMAGE_CASCADE_OFFSET = 20;
 // A bound arrow dragged alone unbinds only past this SCREEN distance, so a click-select never detaches it
-// (Excalidraw's DRAGGING_THRESHOLD, R3.10).
+// (Excalidraw's DRAGGING_THRESHOLD).
 const ARROW_UNBIND_SCREEN = 10;
 
 function elementBox(el: VectorElement): Box {
@@ -174,7 +174,7 @@ type VectorCanvasProps = {
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
     toggle: (id: string) => void;
-    // Aspect lock (Override 3), shared with the properties-panel checkbox. Non-text selections map
+    // Aspect lock, shared with the properties-panel checkbox. Non-text selections map
     // it to ObjectTransform's 'aspect-default'/'free' resizeMode; text stays forced 'aspect'.
     aspectLocked: boolean;
     // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
@@ -225,9 +225,9 @@ export function VectorCanvas({
     const [previews, setPreviews] = useState<Record<string, Box>>({});
     const [creating, setCreating] = useState<CreatingState | null>(null);
     // The marquee carries its direction mode so the render can signal it (solid = contain, dashed =
-    // intersect) — slides' visual convention, shared here (U6c).
+    // intersect) — slides' visual convention, shared here.
     const [marquee, setMarquee] = useState<{ box: Box; mode: MarqueeMode } | null>(null);
-    // Active snap guide lines (scene coords) while a move/resize gesture is snapping (U7a). Rendered as
+    // Active snap guide lines (scene coords) while a move/resize gesture is snapping. Rendered as
     // SVG lines in the scene group; cleared on gesture end.
     const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
     const spaceHeld = useSpaceHeld();
@@ -300,7 +300,7 @@ export function VectorCanvas({
     });
 
     // Elements with their live preview boxes applied — the map a bound arrow follows while its shape is
-    // mid-drag (R3.9). Built only while a preview is live AND the scene holds an arrow, so an arrow-free
+    // mid-drag. Built only while a preview is live AND the scene holds an arrow, so an arrow-free
     // drag doesn't reallocate it every frame.
     const hasPreviews = Object.keys(previews).length > 0;
     const hasArrows = ordered.some((el) => el.type === 'arrow');
@@ -314,7 +314,7 @@ export function VectorCanvas({
 
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
     // no preview → same object identity, so the memo skips it. A linear element's resize/rotate derives
-    // scaled points per frame through resizeLinear (R2.6); a bound arrow whose shape is being previewed
+    // scaled points per frame through resizeLinear; a bound arrow whose shape is being previewed
     // follows it per frame; an element marked for erasure dims to 20%.
     const renderEl = (el: VectorElement): VectorElement => {
         const p = previews[el.id];
@@ -478,7 +478,7 @@ export function VectorCanvas({
         [],
     );
 
-    // Resize-time snapping, fed to ObjectTransform's snapBox seam (the resize half of U7a; move snaps in
+    // Resize-time snapping, fed to ObjectTransform's snapBox seam (the resize half of snapping; move snaps in
     // the gesture loop above). Infers the moved edge by diffing the in-progress box against the element's
     // committed start box (stable during a local resize). Rotated boxes skip (axis-aligned edges lie),
     // mirroring slides. Records the matched guide lines for the SVG overlay.
@@ -574,7 +574,7 @@ export function VectorCanvas({
             const empty = text.trim().length === 0;
             if (ed.kind === 'arrow') {
                 // The arrow already exists — write the label in place: `text` + measured `labelWidth`
-                // (height derives from the line count, R3.6) in one sealed transact. An empty label
+                // (height derives from the line count) in one sealed transact. An empty label
                 // clears both to ''/0 and never deletes the arrow; a still-empty label is a no-op.
                 // updateElement no-ops on a Yjs map the arrow's remote deletion already removed.
                 if (!(ed.isNew && empty)) {
@@ -765,7 +765,7 @@ export function VectorCanvas({
             const textHeals: { index: number; text: string; fontSize: number; fontFamily: string }[] = [];
             const crossMount: { index: number; item: EigenClipboardImageItem }[] = [];
             // Each pasted element's partial index → its source id (for the remap map), and the arrows whose
-            // bindings are remapped across the pasted set once the clones have ids (R3.11).
+            // bindings are remapped across the pasted set once the clones have ids.
             const cloneIds = new Map<number, string>();
             const arrowRemaps: PastedArrow[] = [];
             let cascade = 0;
@@ -875,7 +875,7 @@ export function VectorCanvas({
             undoManager?.stopCapturing();
             const ids = addElements(partials); // ONE transact for all adds
             // Remap each pasted arrow's bindings now that the clones have ids — no stopCapturing between the
-            // add and this update, so the whole paste stays ONE undo step (R3.11).
+            // add and this update, so the whole paste stays ONE undo step.
             const remap = remapPastedArrows(arrowRemaps, cloneIds, ids);
             if (remap.length) updateElements(remap);
             undoManager?.stopCapturing();
@@ -1004,7 +1004,7 @@ export function VectorCanvas({
             }
             if (!cd) return;
             // A bare SVG on the clipboard: ours (element JSON in `<metadata>`) restores native elements;
-            // any other SVG inserts as an image via the media path (R4.7). OS files still fall through.
+            // any other SVG inserts as an image via the media path. OS files still fall through.
             const svg = readSvgClipboard(cd);
             if (svg) {
                 e.preventDefault();
@@ -1371,7 +1371,7 @@ export function VectorCanvas({
                     if (ids.length) setSelectedIds(ids);
                 } else {
                     // Past the unbind threshold, a dragged arrow detaches from any bound shape left behind
-                    // (a shape dragged along stays bound — updateElements re-snaps it) (R3.10).
+                    // (a shape dragged along stays bound — updateElements re-snaps it).
                     const movedIds = new Set(g.ids);
                     const farEnough = Math.hypot(dx, dy) * zoom >= ARROW_UNBIND_SCREEN;
                     const patches = g.ids
@@ -1408,7 +1408,7 @@ export function VectorCanvas({
 
     const selectedRender = ordered.filter((el) => selectedIds.includes(el.id)).map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
-    // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang (R3.6) and an
+    // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang and an
     // elbow arrow's routed bends (arrowRoute, preview-aware via renderById).
     const unionBox =
         selectedRender.length >= 1
@@ -1479,7 +1479,7 @@ export function VectorCanvas({
                     {/* Live freehand/line draft, or a point-edit reshape — the SAME elementToSvg path. */}
                     {drawing.previewElement && node(drawing.previewElement)}
                     <SnapGuides lines={snapLines} />
-                    {/* Bind-target chrome (R3.8, B2, B4/D5) — SVG in the scene group, so it rides rotation/roundness/zoom. */}
+                    {/* Bind-target chrome — SVG in the scene group, so it rides rotation/roundness/zoom. */}
                     {drawing.bindingOutline}
                     {drawing.snapDots}
                     {drawing.focusIndicators}
@@ -1529,8 +1529,8 @@ export function VectorCanvas({
                                     healTextDims(single.id, single.text, size, single.fontFamily);
                                 }
                             } else if (isLinearElement(single)) {
-                                // A linear element rescales its points to the new box through resizeLinear
-                                // (R2.6), reading the COMMITTED element so the total scale is exact.
+                                // A linear element rescales its points to the new box through resizeLinear,
+                                // reading the COMMITTED element so the total scale is exact.
                                 if (next.width !== start.width || next.height !== start.height) {
                                     const base = elementsRef.current.find((b) => b.id === single.id);
                                     if (base && isLinearElement(base)) {
@@ -1553,7 +1553,7 @@ export function VectorCanvas({
                         }}
                     />
                 )}
-                {/* Round vertex handles: over the box for a 3+-point linear, the sole chrome for a 2-point one (R2.13). */}
+                {/* Round vertex handles: over the box for a 3+-point linear, the sole chrome for a 2-point one. */}
                 {drawing.handles}
                 {/* Dashed union ring for multi-select + read-only single selections; a writable 2-point line/arrow shows only its handles. */}
                 {showChrome && !showTransform && unionBox && !(singleLinear2pt && canWrite) && (

@@ -4,7 +4,7 @@ import { spliceAfterSvgOpenTag } from '../document/media';
 import { getFontFaceCSSForFamilies } from '../export/fonts';
 import type { Mount } from '../mount';
 
-// Serve-time media inliner for image-bearing vector SVGs (SVG-IMAGE-PASTE-PLAN R4). A stored .svg
+// Serve-time media inliner for image-bearing vector SVGs. A stored .svg
 // references each image BY NAME — `href="eigen-media:<name>"` — never by bytes, so a container copy
 // resolves against the copy's own media/ siblings. An SVG rendered through <img> never fetches
 // external references (spec), so the ONLY place a name can become pixels is here: on the way out of

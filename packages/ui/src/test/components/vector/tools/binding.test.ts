@@ -21,7 +21,7 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// EP-U4/D5: a straight arrow's bind stores the DIAGONAL-PROJECTED aim (Excalidraw's
+// A straight arrow's bind stores the DIAGONAL-PROJECTED aim (Excalidraw's
 // projectFixedPointOntoDiagonal), while dragging its focus dot stores the RAW aim (handleFocusPointDrag).
 // Points are stored RELATIVE to (x,y) with the bbox min corner at (0,0) (normalizeLinear's invariant).
 
@@ -61,7 +61,7 @@ const arrow = (over: Partial<VectorArrowElement> & { points: string }): VectorAr
     ...over,
 });
 
-// EP-U4 regression (symptom A): a straight arrow's bind projects the raw endpoint onto a diagonal / centre
+// Regression: a straight arrow's bind projects the raw endpoint onto a diagonal / centre
 // line ONLY when the endpoint lands OUTSIDE the shape's fill (Excalidraw's "orbit" strategy). A drop INSIDE
 // the fill is the "inside" strategy and stores the RAW cursor ratio verbatim — re-projecting an inside drop
 // flung the stored anchor off the release point onto the diagonal (the hollow dot lands deep toward the
@@ -161,9 +161,9 @@ describe('bindArrow — outside side-midpoint drop snaps the anchor onto the dot
     }
 });
 
-// Symptom C trace (coordinator hypothesis of a start/end cross-link in the creation commit): DISPROVEN at
-// this layer. bindArrow resolves each end independently, so an end-only bind leaves the start unbound and
-// stationary, and two shapes yield two distinct bindings. These lock that in.
+// bindArrow resolves each end independently — no start/end cross-link in the creation commit: an
+// end-only bind leaves the start unbound and stationary, and two shapes yield two distinct bindings.
+// These lock that in.
 describe('bindArrow — multi-point ends bind independently (no cross-link)', () => {
     const shapeRight = rect({ id: 'right', x: 300, y: 0, width: 100, height: 100 });
 

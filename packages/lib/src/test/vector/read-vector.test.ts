@@ -514,7 +514,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     });
 });
 
-describe('readVectorFromDoc — pinned elbow validation (P12)', () => {
+describe('readVectorFromDoc — pinned elbow validation', () => {
     const arrowFields = (over: Record<string, unknown>) => ({
         type: 'arrow',
         elbow: true,

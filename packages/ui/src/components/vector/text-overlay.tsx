@@ -1,6 +1,6 @@
 // The in-canvas text editor: a raw <textarea> (not shadcn — its border/ring/min-height are wrong
 // for a canvas overlay) absolutely positioned over the element via the viewport transform, styled
-// so WYSIWYG holds against the committed SVG <text>. §A `text` is a PLAIN string with \n, so a
+// so WYSIWYG holds against the committed SVG <text>. `text` is a PLAIN string with \n, so a
 // contentEditable/Tiptap surface would smuggle HTML into a plain-string field — a textarea is
 // Excalidraw's own choice and the correct one here.
 //

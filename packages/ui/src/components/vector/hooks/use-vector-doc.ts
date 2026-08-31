@@ -82,7 +82,7 @@ function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
     return topmost;
 }
 
-// After a patch, re-run followBindings and write the geometry into the same transact (R3.9) for every
+// After a patch, re-run followBindings and write the geometry into the same transact for every
 // arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
 // arrow alone re-glues its endpoints to the stationary shape instead of leaving them detached until the
 // shape's next move teleports them (bound endpoints stay glued, Excalidraw's model; only a drag past the
@@ -131,7 +131,7 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
         arrowMap.set('height', next.height);
         arrowMap.set('points', next.points);
         // Pinned segments co-shift with the re-normalized origin so they hold their scene position while
-        // the bound endpoint follows the shape (EP-U5). '' for every non-pinned arrow.
+        // the bound endpoint follows the shape. '' for every non-pinned arrow.
         arrowMap.set('fixedSegments', next.fixedSegments);
     }
 }
@@ -199,7 +199,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         return id;
     }, []);
 
-    // Batch add — the whole set in ONE transact (paste's element ADDS: CONTRACT §A one gesture = one
+    // Batch add — the whole set in ONE transact (paste's element ADDS: one gesture = one
     // transact / one undo step). Consecutive fractional keys above the current top preserve the
     // callers' order as the pasted stack's relative z-order. Each element gets a fresh id + seed (or a
     // caller-supplied seed). Returns the new ids in input order so the caller reselects the paste.
@@ -234,7 +234,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
     }, []);
 
     // Batch update — the whole set in ONE transact, so a group move / nudge / z-order rewrite is a
-    // single undo step and a single broadcast (CONTRACT §A: one gesture = one transact). Missing ids
+    // single undo step and a single broadcast — one gesture = one transact. Missing ids
     // no-op (a peer may have deleted one mid-gesture).
     // `origin` defaults to null (tracked/undoable). Pass UNTRACKED_ORIGIN for a technical fixup the
     // user never undoes as their own step (the cross-mount pending→real swap) — still broadcast.
@@ -255,7 +255,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                     patchedIds.add(id);
                 }
                 // Arrows follow their bound shapes in the SAME transact (one undo step, one broadcast), so
-                // every caller — nudge, drag-commit, align, paste-move — gets it for free (R3.9).
+                // every caller — nudge, drag-commit, align, paste-move — gets it for free.
                 followBoundArrows(doc, elementsMap, patchedIds);
             }, origin);
         },
@@ -309,7 +309,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
             if (sources.length === 0) return;
             const keys = generateNKeysBetween(topmostIndex(elementsMap), null, sources.length);
             // Allocate every clone id FIRST, then remap bindings across the set: an arrow bound to a shape
-            // that was duplicated too points at its clone; a bound shape outside the set clears (R3.11).
+            // that was duplicated too points at its clone; a bound shape outside the set clears.
             const idMap = new Map<string, string>();
             for (const src of sources) {
                 const oldId = src.get('id');

@@ -66,7 +66,7 @@ type SlideCanvasProps = {
     // Lets the editor's layered Escape bail while an ObjectTransform grip drag is live (that gesture
     // owns Escape in the capture phase to cancel itself; the editor must not deselect underneath it).
     onTransformActiveChange?: (active: boolean) => void;
-    // Aspect lock (Override 3), shared with the properties-panel checkbox: maps to ObjectTransform's
+    // Aspect lock, shared with the properties-panel checkbox: maps to ObjectTransform's
     // 'aspect-default' resizeMode (Shift frees), else 'free'. Never 'aspect' — that kills single-axis
     // stretch, which slides images legitimately use with objectFit.
     aspectLocked?: boolean;

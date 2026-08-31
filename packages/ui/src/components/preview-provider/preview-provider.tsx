@@ -31,7 +31,7 @@ export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'fallba
 function getPreviewMode(path: DrivePath): PreviewMode {
     const mime = path.mimeType || '';
 
-    // A vector doc previews as the SVG the server renders, served as an image (R4.2).
+    // A vector doc previews as the SVG the server renders, served as an image.
     if (mime === DRIVE_MIME_VECTOR || mime.startsWith('image/') || isExiftoolExtension(path.name)) return 'image';
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';

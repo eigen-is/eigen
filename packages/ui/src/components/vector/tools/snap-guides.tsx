@@ -1,4 +1,4 @@
-// The snap guide lines drawn in the scene group while a move/resize gesture is snapping (U7a) — one
+// The snap guide lines drawn in the scene group while a move/resize gesture is snapping — one
 // full-viewport SVG line per matched edge/centre. Pulled out of vector-canvas.tsx (the canvas only
 // dispatches) so this unit can add its own render without the file growing.
 

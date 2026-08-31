@@ -1,4 +1,4 @@
-// Draggable vertex handles for a single selected line/arrow (R2.13, UA3, EP-PT) — round
+// Draggable vertex handles for a single selected line/arrow — round
 // `.eigen-vertex-handle` dots, one per point, visually distinct from the square resize grips (a 2-point
 // line/arrow shows these ONLY, with no ObjectTransform box). Clicking a vertex SELECTS that point (the
 // host fills the selected dot via `selectedIndex` and lets Delete remove it); a plain drag still reshapes
@@ -8,7 +8,7 @@
 // and continues as a normal vertex drag — the insert and the drag land in the single sealed write on
 // release, and the inserted vertex ends up selected; a plain click on it (no travel past a few screen px)
 // adds nothing, and Escape cancels the insert entirely. Elbow arrows derive their route from the two
-// endpoints, so they show no midpoint dots (UA4 owns the elbow UI). Self-contained like ObjectTransform:
+// endpoints, so they show no midpoint dots (the elbow arrow's own handles own that UI). Self-contained like ObjectTransform:
 // it owns its drag lifecycle (document listeners under an AbortController) and reports the live points
 // via `onPreview`, committing once on release. Freedraw shows no handles.
 
@@ -29,14 +29,14 @@ import { useEffect, useRef, useState } from 'react';
 const MIDPOINT_DRAG_THRESHOLD_PX = 2;
 // A midpoint dot is hidden when its segment is shorter than this on SCREEN, so short segments don't
 // clutter (Excalidraw's POINT_HANDLE_SIZE·4). The dot size itself lives in one place — the .eigen-*-handle
-// CSS token (D9(e)); the JSX only positions it.
+// CSS token; the JSX only positions it.
 const MIDPOINT_MIN_SEGMENT_SCREEN_PX = 40;
 // Two adjacent vertices this close on SCREEN render as ONE (doubled) dot instead of z-fighting; a click
 // then prefers the higher index (the top-most DOM node, which we keep). Excalidraw's coincident-point merge.
 const OVERLAP_MERGE_SCREEN_PX = 2;
 
 type LinePointHandlesProps = {
-    // A line or an arrow — both carry `points`; an arrow's endpoint drag additionally (re)binds (R3.10),
+    // A line or an arrow — both carry `points`; an arrow's endpoint drag additionally (re)binds,
     // which the host resolves from the dragged vertex index.
     line: VectorLinearElement | VectorArrowElement;
     // Screen scale — gates the midpoint-length and overlap-merge thresholds to constant on-screen distances.
@@ -149,7 +149,7 @@ export function LinePointHandles({
     const vertices = drag ? drag.base : points;
 
     // Position a dot centred on a local point, in the host's screen frame — its 22px hit area / 20px hover
-    // halo / dot size all come from the .eigen-*-handle CSS token (D9), so the JSX only places it.
+    // halo / dot size all come from the .eigen-*-handle CSS token, so the JSX only places it.
     const dotStyle = (local: Point): React.CSSProperties => {
         const scene = linearLocalToScene(line, local);
         const { left, top } = boxToStyle({ x: scene.x, y: scene.y, width: 0, height: 0, angle: 0 });
@@ -158,7 +158,7 @@ export function LinePointHandles({
 
     // The vertex position a dot renders at (its live drag position for the grabbed one).
     const vertexLocal = (i: number, p: Point) => (drag?.index === i ? drag.local : p);
-    // Overlap merge (D9(d)): a vertex within OVERLAP_MERGE_SCREEN_PX of a HIGHER-index neighbour is hidden
+    // Overlap merge: a vertex within OVERLAP_MERGE_SCREEN_PX of a HIGHER-index neighbour is hidden
     // into it, and that neighbour draws doubled — so coincident points read as one dot and a click resolves
     // to the higher (top-most) index. Suppressed mid-drag, where the grabbed vertex has left its neighbours.
     const mergeGap = OVERLAP_MERGE_SCREEN_PX / zoom;
@@ -195,7 +195,7 @@ export function LinePointHandles({
                 !isElbow &&
                 points.slice(0, -1).map((p, i) => {
                     const next = points[i + 1];
-                    // Hide the midpoint dot on a segment too short to be worth one (D9(c)) — screen length.
+                    // Hide the midpoint dot on a segment too short to be worth one — screen length.
                     if (Math.hypot(next.x - p.x, next.y - p.y) * zoom < MIDPOINT_MIN_SEGMENT_SCREEN_PX) return null;
                     const mid = { x: (p.x + next.x) / 2, y: (p.y + next.y) / 2 };
                     // The vertex this dot would insert, at index i+1 between its two neighbours.

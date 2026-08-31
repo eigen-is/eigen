@@ -1,6 +1,6 @@
 // Eraser gesture — pure marking step. A swipe marks every element the pointer passes over by
 // hit-testing at samples along the segment between moves (≈ 4 screen px apart) so a fast swipe has
-// no gaps (R2.14); Alt un-marks re-touched elements. Marks are a local preview set — the canvas
+// no gaps; Alt un-marks re-touched elements. Marks are a local preview set — the canvas
 // deletes them in ONE call on pointer up. No Yjs write happens here.
 
 import { arrowRoute, hitTestElement, type Point, type VectorElement } from '@workspace/lib/vector';

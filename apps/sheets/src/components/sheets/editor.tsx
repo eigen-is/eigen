@@ -75,7 +75,7 @@ function SheetEditorInner({
     const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     // The active floating image (surfaced from the workbook via onActiveImageChange) drives the
-    // right-side properties panel. Its aspect-lock — images default CHECKED (D8b) — feeds BOTH the
+    // right-side properties panel. Its aspect-lock — images default CHECKED — feeds BOTH the
     // panel checkbox and the canvas ObjectTransform, so it lives here, one level above both.
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
     const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
@@ -167,7 +167,7 @@ function SheetEditorInner({
     );
 
     // Consume a pasted eigen image item (from sheets/slides/vector/docs) as a floating image. The
-    // typed width/height/angle are AUTHORITATIVE — no fit-to-pane (U5c), no probing: the wire always
+    // typed width/height/angle are AUTHORITATIVE — no fit-to-pane, no probing: the wire always
     // carries both dims, so the image lands at its source box on the first paint. Cross-mount inserts
     // a pending placeholder at that same exact box, re-uploads into our media/, then swaps the name.
     const handlePasteEigenImage = useCallback(
@@ -200,7 +200,7 @@ function SheetEditorInner({
     // Consume a pasted vector SVG whose images are name-referenced (eigen-media:): materialize each
     // into our media/ (re-uploading cross-container via the same seam as handlePasteEigenImage) and
     // rewrite the svg's refs, then insert the rewritten svg as one floating image through the normal
-    // image path (SVG-IMAGE-PASTE-PLAN R3).
+    // image path.
     const handlePasteSvgFile = useCallback(
         async (svg: string, imageItems: EigenClipboardImageItem[]) => {
             if (!mediaFolderId) return;

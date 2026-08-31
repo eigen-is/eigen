@@ -24,7 +24,7 @@ import {
 // the typed contract fields, which forbid x/y) so a vector→vector paste preserves the selection's
 // relative layout before it is re-anchored on the viewport. `type` present ⇒ restore a shape or a
 // linear element (which then also carries `points` + `roundness`), else a text element. `id` is the
-// element's own id so a paste can remap arrow bindings across the pasted set (R3.11); an arrow also
+// element's own id so a paste can remap arrow bindings across the pasted set; an arrow also
 // carries its heads, bindings, label and elbow flag.
 export type VectorClipMeta = {
     x: number;
@@ -147,7 +147,7 @@ function buildSelectionItems(
 }
 
 // The full eigen payload for a selection: the typed items (vector→vector paste, unchanged) PLUS a
-// self-contained SVG of the same selection (R4.7) for hosts that can't place the typed carriers —
+// self-contained SVG of the same selection for hosts that can't place the typed carriers —
 // docs/sheets/slides render it as an image. The SVG carries the element JSON in a `<metadata>` block so
 // it round-trips back to native elements if pasted into vector without the eigen flavour. An
 // image-bearing selection's SVG references its images BY NAME — `href="eigen-media:<name>"`, never
@@ -174,7 +174,7 @@ export function buildSelectionData(
 }
 
 // Concatenated plain text of the selected TEXT elements — the only flavor written alongside eigen JSON
-// (D6: text copies carry text/plain, image/shape/linear copies carry neither). undefined when the
+// (text copies carry text/plain, image/shape/linear copies carry neither). undefined when the
 // selection has no text element.
 export function selectionPlainText(ordered: VectorElement[], selectedIds: string[]): string | undefined {
     const texts: string[] = [];

@@ -48,7 +48,7 @@ type SlidePropertiesPanelProps = {
     onAlign?: (op: ArrangeOp) => void;
     // Z-order (the "Arrange" section) — shares vector's ZOp vocabulary; wired to the Y.Array reorder.
     onZOrder?: (op: ZOp) => void;
-    // Ephemeral per-selection aspect lock (Override 3), owned by the editor so the same ON/OFF also
+    // Ephemeral per-selection aspect lock, owned by the editor so the same ON/OFF also
     // feeds SlideCanvas' ObjectTransform resizeMode.
     aspectLocked: boolean;
     onAspectLockChange: (locked: boolean) => void;

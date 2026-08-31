@@ -31,8 +31,8 @@ export function hitTestTopmost(
     return null;
 }
 
-// Marquee selection under the shared direction-mode rule (U6c): `mode` picks contain vs intersect;
-// each element's arrow-aware rotated AABB (a label overhang counts, R3.6; an elbow arrow's route bbox
+// Marquee selection under the shared direction-mode rule: `mode` picks contain vs intersect;
+// each element's arrow-aware rotated AABB (a label overhang counts; an elbow arrow's route bbox
 // via `byId`) is tested against the marquee bounds by the shared geometry helper.
 export function marqueeSelect(
     ordered: VectorElement[],

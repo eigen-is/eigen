@@ -1,4 +1,4 @@
-// Segment-pin handles for a selected ELBOW arrow (EP-U5b, Excalidraw's fixedSegments UX). The dots sit on
+// Segment-pin handles for a selected ELBOW arrow (Excalidraw's fixedSegments UX). The dots sit on
 // the interior segments of the arrow's route — the DERIVED route while unpinned, the stored polyline once
 // pinned. Dragging a dot pins that segment: past a 2px threshold the first drag materializes the polyline
 // (materializeFirstPin), later drags slide the segment in place (moveSegment) — axis-locked, zero new
@@ -21,7 +21,7 @@ import {
 import type { MutableRefObject } from 'react';
 import { useEffect, useRef } from 'react';
 
-// A pin drag stays inert until the pointer travels this many CLIENT px (P9.1 — a click never pins).
+// A pin drag stays inert until the pointer travels this many CLIENT px (a click never pins).
 const PIN_DRAG_THRESHOLD_PX = 2;
 // A segment shorter than this on SCREEN shows no dot (matches the line midpoint gate).
 const PIN_MIN_SEGMENT_SCREEN_PX = 40;
@@ -39,7 +39,7 @@ type ElbowPinHandlesProps = {
     onPreview: (patch: PinPatch | null) => void;
     // One sealed write of the geometry patch (a new/moved pin on drag, a removed pin on unpin).
     onCommit: (patch: PinPatch) => void;
-    // The pin (polyline index) the user has clicked to select — Delete on it unpins (P9.3).
+    // The pin (polyline index) the user has clicked to select — Delete on it unpins.
     selectedPinIndex: number | null;
     onSelectPin: (index: number | null) => void;
 };
@@ -118,7 +118,7 @@ export function ElbowPinHandles({
         document.addEventListener('keydown', onKey, { signal, capture: true });
     };
 
-    // Remove the pin at `index` (double-click or Delete on a selected pinned dot, P8/P9.3).
+    // Remove the pin at `index` (double-click or Delete on a selected pinned dot).
     const unpin = (index: number) => {
         if (!isPinned(index)) return;
         onSelectPin(null);

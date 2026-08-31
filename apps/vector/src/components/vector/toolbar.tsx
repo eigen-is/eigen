@@ -17,7 +17,7 @@ type ToolbarProps = {
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
     onAccessDialogOpen: () => void;
-    // Document-level comments + activity (the props U1 deliberately omitted until vector had a
+    // Document-level comments + activity (the props deliberately omitted until vector had a
     // comment lifecycle). Always offered when the panels are wired: desktop draws the side panel,
     // mobile the Column.
     onToggleCommentPanel: () => void;

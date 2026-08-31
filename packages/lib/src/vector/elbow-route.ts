@@ -8,7 +8,7 @@
 // non-uniform grid from the box + common-bounds edges, and A* dongle→dongle with a bend-count heuristic and a
 // binary heap. Post-passes drop sub-pixel segments and keep only true corners. Their null-route crash path
 // becomes our guaranteed-draw L fallback (the arrow must always render). `fixedSegments` and the drag-time
-// live-dock (getElbowArrowData's isDragging branch) are out of scope — see ELBOW-PARITY-SPEC Part A.
+// live-dock (getElbowArrowData's isDragging branch) are out of scope.
 //
 // Everything runs in SCENE coordinates (elbow arrows pin angle 0, so the derived local frame is a pure
 // translation) and is converted to the arrow's local frame once at the end.
@@ -40,9 +40,9 @@ const DEDUP_THRESHOLD = 1;
 // right-angled path routed between them. The route ALWAYS starts at points[0] and ends at points[last]
 // exactly — the endpoint dot and the shaft share that one value. Deterministic and pure; degenerate
 // (< 2 points) arrows pass through untouched. Obstacles are only the bound shapes.
-// `origPoints` (D6): the PRE-DOCK scene point per end, distinct from the stored/docked endpoint, used only to
+// `origPoints`: the PRE-DOCK scene point per end, distinct from the stored/docked endpoint, used only to
 // gate the heading cone by distance (getHeadingForElbowArrowSnap). At rest the stored point IS the dock, so
-// callers omit it and it defaults to the stored globals; during an endpoint drag EP-U3 passes the raw cursor
+// callers omit it and it defaults to the stored globals; during an endpoint drag the caller passes the raw cursor
 // so the exit side follows the anchor, not the gliding dock, exactly as Excalidraw does.
 export function elbowRoute(
     arrow: VectorArrowElement,
@@ -58,8 +58,8 @@ export function elbowRoute(
     // The drawn route MUST begin and end on the stored endpoints — the very points the endpoint dot renders
     // at (linearLocalToScene of points[0]/points[last]) — so the shaft and the dot never diverge (one source
     // of truth for where the arrow attaches). Excalidraw keeps its stored points in sync with the
-    // fixedPoint-derived dock and routes from that; here that sync is U2's job (boundEndpoint will write the
-    // dock into the stored point), so U1 routes from whatever endpoint is stored today and never overwrites
+    // fixedPoint-derived dock and routes from that; here that sync is boundEndpoint's job (it will write the
+    // dock into the stored point), so this router routes from whatever endpoint is stored today and never overwrites
     // it. These scene points are also the "original" point Excalidraw's heading test consumes.
     const startGlobal = linearLocalToScene(arrow, pts[0]);
     const endGlobal = linearLocalToScene(arrow, pts[pts.length - 1]);
@@ -68,7 +68,7 @@ export function elbowRoute(
     const endArrowhead = arrow.endArrowhead !== 'none';
 
     // The single derived route (DERIVED mode only — a pinned arrow never reaches here; arrowRoute returns
-    // its stored polyline verbatim, P1).
+    // its stored polyline verbatim).
     const startEnd: LegEnd = {
         point: startGlobal,
         shape: startShape,
@@ -89,7 +89,7 @@ export function elbowRoute(
 }
 
 // One end of a routing leg — a real bound shape (heading from the cone) or a free endpoint (heading toward
-// the other end). A pinned arrow never routes here (P1: its stored polyline is returned verbatim).
+// the other end). A pinned arrow never routes here — its stored polyline is returned verbatim.
 type LegEnd = {
     point: Point;
     shape: VectorShapeElement | null;
@@ -122,7 +122,7 @@ function routeSceneLeg(start: LegEnd, end: LegEnd, startBinding: boolean): Point
 // routes through here so none can silently degrade an elbow arrow back to a straight line.
 export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>): Point[] | undefined {
     if (el.type !== 'arrow' || !el.elbow) return undefined;
-    // PINNED (P1): the stored polyline IS the route — no router, no corner/short passes. The incremental
+    // PINNED: the stored polyline IS the route — no router, no corner/short passes. The incremental
     // editors (elbow-pins.ts) own it; every render path returns it verbatim so preview===commit holds.
     if (el.fixedSegments !== '') return parsePoints(el.points);
     // DERIVED: route the two endpoints (needs scene context for bound obstacles/headings).
@@ -138,7 +138,7 @@ type RouteInputs = {
     endGlobal: Point;
     startArrowhead: boolean;
     endArrowhead: boolean;
-    // The pre-dock scene point per end for the heading distance-gate (D6); equals the stored global at rest.
+    // The pre-dock scene point per end for the heading distance-gate; equals the stored global at rest.
     origStart: Point;
     origEnd: Point;
 };
@@ -161,7 +161,7 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
 
     // Heading cone AABB is the element inflated on all sides by the endpoint's distance to the outline. The
     // cone geometry keys on the rest/docked endpoint; the distance-GATE keys on the pre-dock original point
-    // (origStart/origEnd — equal to the stored endpoint at rest, D6), so a dragged dock gliding on the
+    // (origStart/origEnd — equal to the stored endpoint at rest), so a dragged dock gliding on the
     // outline doesn't flip the exit side under the anchor.
     const startConeAABB = startShape
         ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))

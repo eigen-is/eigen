@@ -1,8 +1,8 @@
-// Shared image-placement sizing. Vector's drop/paste fit logic is the reference (Reinder
-// Override 22): a placed image keeps its intrinsic aspect ratio and natural pixel size when it
+// Shared image-placement sizing. Vector's drop/paste fit logic is the reference: a placed image
+// keeps its intrinsic aspect ratio and natural pixel size when it
 // fits inside `fit`× the visible canvas, is scaled down uniformly when it doesn't, and is NEVER
 // upscaled. Pure math, BE-safe — the one source for vector/slides/sheets OS-file + upload inserts.
-// Typed-size clipboard consumers (U5) bypass this: they carry their own width/height.
+// Typed-size clipboard consumers bypass this: they carry their own width/height.
 
 export type ImageSize = { width: number; height: number };
 

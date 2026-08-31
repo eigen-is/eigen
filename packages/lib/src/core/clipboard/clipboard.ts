@@ -128,8 +128,8 @@ export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
 // The SVG a paste consumer should treat as an image: vector's copy flavour (the `svg` field on the
 // eigen payload) first, then a `text/plain` that is a whole SVG document (a foreign drawing). Null when
 // neither is present. eigen-aware hosts call this BEFORE consuming the typed items so a vector selection
-// lands as one image, not N shape carriers — and consuming the paste there is what keeps D6 (no
-// double-paste). The plain-text arm requires the SVG namespace on the root tag — every real SVG export
+// lands as one image, not N shape carriers — and consuming the paste there is what prevents a
+// double-paste. The plain-text arm requires the SVG namespace on the root tag — every real SVG export
 // (ours, Excalidraw's, an .svg file's text) carries it, while a hand-pasted `<svg>` code snippet
 // usually doesn't and must stay text.
 export function readSvgClipboard(clipboardData: DataTransfer): string | null {
@@ -281,8 +281,8 @@ export async function reUploadImage(
     return null;
 }
 
-// Materialize an image-bearing vector SVG (its images referenced BY NAME via `eigen-media:` hrefs,
-// SVG-IMAGE-PASTE-PLAN R3) into a File ready for the target container's normal image-upload path. For
+// Materialize an image-bearing vector SVG (its images referenced BY NAME via `eigen-media:` hrefs)
+// into a File ready for the target container's normal image-upload path. For
 // each ref, its typed image item is the fetch manifest: cross-container refs re-upload through the
 // existing credentialed `reUploadImage` seam (in parallel), same-folder refs keep their name, and the
 // stored SVG's refs are rewritten old→final (collision renames) or stripped for uploads that failed or
