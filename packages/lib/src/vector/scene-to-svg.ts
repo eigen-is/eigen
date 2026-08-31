@@ -7,6 +7,7 @@ import { getStroke } from 'perfect-freehand';
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../constants/fonts';
+import { headingIsHorizontal, vectorToHeading } from './elbow-heading';
 import { arrowRoute } from './elbow-route';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
@@ -166,9 +167,19 @@ function renderArrow(gen: RoughGenerator, el: VectorArrowElement, route?: Point[
     if (points.length === 0) return `${groupOpen(el, ' stroke-linecap="round"')}</g>`;
     const coords = points.map((p): [number, number] => [p.x, p.y]);
     const options = baseRoughOptions(el, false);
-    // An elbow shaft is always a sharp orthogonal linearPath through its derived route (roundness is moot).
-    const shaftDrawable =
-        !el.elbow && el.roundness === 'round' ? gen.curve(coords, options) : gen.linearPath(coords, options);
+    // A round elbow rounds each bend with a quadratic arc (Excalidraw's generateElbowArrowShape, radius 16),
+    // fed to roughjs as a path — first/last points and the final segment's direction are untouched, so heads
+    // and the raw-route label math are unaffected. A sharp elbow (and any elbow with no scene context) stays a
+    // linearPath; a non-elbow round arrow curves through its vertices.
+    let shaftDrawable: Drawable;
+    if (el.elbow) {
+        shaftDrawable =
+            el.roundness === 'round'
+                ? gen.path(elbowRoundedShaftPath(points), baseRoughOptions(el, true))
+                : gen.linearPath(coords, options);
+    } else {
+        shaftDrawable = el.roundness === 'round' ? gen.curve(coords, options) : gen.linearPath(coords, options);
+    }
     const shaftPaths = drawableToSvg(shaftDrawable);
 
     const label = arrowLabelBox(el, route);
@@ -185,6 +196,48 @@ function renderArrow(gen: RoughGenerator, el: VectorArrowElement, route?: Point[
         renderArrowhead(gen, el, points, 'end', el.endArrowhead);
     const text = label ? renderArrowLabel(el, label) : '';
     return `${groupOpen(el, ' stroke-linecap="round"')}${defs}${shaft}${heads}${text}</g>`;
+}
+
+// Ported from Excalidraw's generateElbowArrowShape (radius 16): each interior bend becomes an inset-before
+// point, a quadratic control at the raw corner, and an inset-after point, so the corner rounds without moving
+// the neighbouring vertices. The corner radius is min(16, half the shorter adjacent segment) so a short leg
+// never over-rounds. The first and last route points — and thus the final segment's direction the head reads —
+// are emitted verbatim. Full-precision numbers go to roughjs (like Excalidraw); rounding happens at serialize.
+function elbowRoundedShaftPath(points: Point[]): string {
+    const radius = 16;
+    // Per interior bend: [insetBefore, corner, insetAfter], three points feeding one L + one Q.
+    const sub: Point[] = [];
+    for (let i = 1; i < points.length - 1; i++) {
+        const prev = points[i - 1];
+        const point = points[i];
+        const next = points[i + 1];
+        const corner = Math.min(radius, segmentLength(point, prev) / 2, segmentLength(point, next) / 2);
+        sub.push(insetToward(point, prev, corner));
+        sub.push(point);
+        sub.push(insetToward(point, next, corner));
+    }
+
+    const first = points[0];
+    const parts = [`M ${first.x} ${first.y}`];
+    for (let i = 0; i < sub.length; i += 3) {
+        parts.push(`L ${sub[i].x} ${sub[i].y}`);
+        parts.push(`Q ${sub[i + 1].x} ${sub[i + 1].y}, ${sub[i + 2].x} ${sub[i + 2].y}`);
+    }
+    const last = points[points.length - 1];
+    parts.push(`L ${last.x} ${last.y}`);
+    return parts.join(' ');
+}
+
+// A point `corner` away from `point` along the (orthogonal) segment toward `neighbour`.
+function insetToward(point: Point, neighbour: Point, corner: number): Point {
+    if (headingIsHorizontal(vectorToHeading(point.x - neighbour.x, point.y - neighbour.y))) {
+        return { x: neighbour.x < point.x ? point.x - corner : point.x + corner, y: point.y };
+    }
+    return { x: point.x, y: neighbour.y < point.y ? point.y - corner : point.y + corner };
+}
+
+function segmentLength(a: Point, b: Point): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // One arrowhead's roughjs fragment in the arrow's local frame. Barbs (arrow/bar/triangle) share the
