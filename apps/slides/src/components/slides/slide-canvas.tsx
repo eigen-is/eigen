@@ -60,6 +60,9 @@ type SlideCanvasProps = {
     onCommentClick?: (cardId: string) => void;
     onCommentDelete?: (objId: string, cardId: string) => void;
     onDuplicateObjects?: (placements: { id: string; x: number; y: number }[]) => void;
+    // Double-click on empty canvas creates a text object centred at the click (slide units), mirroring
+    // vector's openNewText. The editor owns placement/selection/edit-state; the canvas only maps the point.
+    onCreateTextAt?: (x: number, y: number) => void;
     // Lets the editor's layered Escape bail while an ObjectTransform grip drag is live (that gesture
     // owns Escape in the capture phase to cancel itself; the editor must not deselect underneath it).
     onTransformActiveChange?: (active: boolean) => void;
@@ -100,6 +103,7 @@ export function SlideCanvas({
     onCommentClick,
     onCommentDelete,
     onDuplicateObjects,
+    onCreateTextAt,
     onTransformActiveChange,
     aspectLocked,
     searchActiveObjectId,
@@ -175,6 +179,22 @@ export function SlideCanvas({
             }
         },
         [onSelectObject, canWrite, startMarquee],
+    );
+
+    // Double-click on empty canvas (never an object — those sit in child nodes) opens a fresh text
+    // object at the point. The preceding mousedowns already deselected + ran a zero-area marquee that
+    // selected nothing, so this dblclick lands clean.
+    const handleCanvasDoubleClick = useCallback(
+        (e: React.MouseEvent) => {
+            if (!canWrite || !onCreateTextAt || e.target !== canvasRef.current) return;
+            const rect = canvasRef.current.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            onCreateTextAt(
+                ((e.clientX - rect.left) / rect.width) * SLIDE_BASE_WIDTH,
+                ((e.clientY - rect.top) / rect.height) * SLIDE_BASE_HEIGHT,
+            );
+        },
+        [canWrite, onCreateTextAt],
     );
 
     const handleBoundsMouseDown = useCallback(
@@ -368,6 +388,7 @@ export function SlideCanvas({
                     ...getBackgroundStyle(slide.background, resolveMediaUrl),
                 }}
                 onMouseDown={handleCanvasMouseDown}
+                onDoubleClick={handleCanvasDoubleClick}
                 onPointerEnter={refreshCanvasRect}
                 onPointerMove={publishPointer}
                 onPointerLeave={() => publishCursor?.(null)}

@@ -2,7 +2,7 @@ import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode } from '@workspace/lib/docs/eigendoc';
-import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
+import { useMediaResolver } from '@workspace/lib/drive';
 import type { Box } from '@workspace/lib/vector';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
@@ -31,7 +31,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     const caption = node.attrs.caption || '';
     const mediaName: string = node.attrs.mediaName ?? '';
     const src = resolveMediaUrl(mediaName) || node.attrs.src || '';
-    const showPlaceholder = !src && isPendingMediaName(mediaName);
+    const showPlaceholder = !src;
     const alt = node.attrs.alt || '';
     const isEditable = editor.isEditable;
     const layout = (node.attrs.layout || 'block') as FigureLayout;

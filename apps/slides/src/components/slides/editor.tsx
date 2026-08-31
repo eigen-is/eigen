@@ -765,6 +765,27 @@ function SlideEditorInner({
         addObject(activeSlideId, DEFAULT_TEXT_OBJECT);
     }, [activeSlideId, addObject]);
 
+    // Double-click on empty canvas: a new text object centred on the click, clamped on-slide, then
+    // selected and opened for editing immediately (vector's openNewText idiom). Sealed as its own
+    // undo step so it never merges into a preceding op; the first keystrokes coalesce into it.
+    const handleCreateTextAt = useCallback(
+        (x: number, y: number) => {
+            if (!activeSlideId || !canWrite) return;
+            const { width, height } = DEFAULT_TEXT_OBJECT;
+            undoManager?.stopCapturing();
+            const objId = addObject(activeSlideId, {
+                ...DEFAULT_TEXT_OBJECT,
+                x: Math.min(Math.max(x - width / 2, 0), SLIDE_BASE_WIDTH - width),
+                y: Math.min(Math.max(y - height / 2, 0), SLIDE_BASE_HEIGHT - height),
+            });
+            if (objId) {
+                setSelectedObjectIds([objId]);
+                setEditingObjectId(objId);
+            }
+        },
+        [activeSlideId, canWrite, addObject, undoManager],
+    );
+
     const handleStartEditing = useCallback((objId: string) => {
         setSelectedObjectIds([objId]);
         setEditingObjectId(objId);
@@ -1078,6 +1099,7 @@ function SlideEditorInner({
                                                 onStartEditing={handleStartEditing}
                                                 onUpdateObject={updateObject}
                                                 onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
+                                                onCreateTextAt={canWrite ? handleCreateTextAt : undefined}
                                                 onTransformActiveChange={setTransformActive}
                                                 aspectLocked={aspectLocked}
                                                 provider={provider}

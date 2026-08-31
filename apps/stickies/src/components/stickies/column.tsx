@@ -62,6 +62,13 @@ export const Column = memo(function Column({
     const columnWidth = isMobile ? 'w-[92vw] min-w-[92vw]' : 'w-[280px] min-w-[280px]';
     const columnMargin = isMobile ? 'mx-[4vw]' : 'mx-1.5';
 
+    // Double-click on a column's empty space adds a card (same flow as the + button). Guarded to the
+    // background container itself (e.target === currentTarget) so a double-click on a card bubbling up
+    // never fires — the card keeps its own single-click-to-open behaviour.
+    const handleEmptyDoubleClick = (e: React.MouseEvent) => {
+        if (canWrite && e.target === e.currentTarget) onAddCard(column.id);
+    };
+
     return (
         <div
             ref={setNodeRef}
@@ -109,9 +116,10 @@ export const Column = memo(function Column({
                     <div
                         className="flex-grow min-h-[150px] flex items-center justify-center"
                         data-column-id={column.id}
+                        onDoubleClick={handleEmptyDoubleClick}
                     />
                 ) : (
-                    <div className="flex-grow space-y-2">
+                    <div className="flex-grow space-y-2" onDoubleClick={handleEmptyDoubleClick}>
                         <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
                             {cards.map((card) => {
                                 const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;

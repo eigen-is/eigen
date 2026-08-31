@@ -311,16 +311,13 @@ function ImageProperties({
 }) {
     const objectFit = getMergedValue(objects, (o) => o.objectFit);
     const { resolveMediaUrl } = useMediaResolver();
+    const previewUrl = objects.length === 1 ? resolveMediaUrl(objects[0].mediaName) : null;
 
     return (
         <PropertySection title="Image">
-            {objects.length === 1 && (
+            {objects.length === 1 && previewUrl && (
                 <div className="border rounded overflow-hidden mb-2">
-                    <img
-                        src={resolveMediaUrl(objects[0].mediaName) || ''}
-                        alt=""
-                        className="max-h-24 mx-auto object-contain"
-                    />
+                    <img src={previewUrl} alt="" className="max-h-24 mx-auto object-contain" />
                 </div>
             )}
             <PropertyRow label="Fit">
