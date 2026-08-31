@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
 import { readVectorFromDoc } from '../../vector/read-vector';
-import { DEFAULT_ELEMENT_PROPS, ELEMENT_FIELDS } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META, ELEMENT_FIELDS } from '../../vector/types';
 
 function writeElement(map: Y.Map<unknown>, id: string, fields: Record<string, unknown>) {
     const m = new Y.Map();
@@ -117,7 +117,7 @@ describe('readVectorFromDoc', () => {
                 x: -1e15,
                 y: 2e9,
                 width: 1e12,
-                height: Number.NaN,
+                height: -50, // a size is floored at 0, never negative (invalid in SVG)
                 opacity: 250,
             });
         });
@@ -129,6 +129,200 @@ describe('readVectorFromDoc', () => {
         const scene = readVectorFromDoc(new Y.Doc());
         expect(scene.elements).toEqual([]);
         expect(scene.meta).toEqual({ background: 'transparent', gridSize: 20 });
+    });
+
+    test('materializes a linear element with points and roundness', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ln', {
+                type: 'line',
+                index: 'a0',
+                points: '[[0,0],[40,10],[80,-5]]',
+                roundness: 'round',
+            });
+            writeElement(elements, 'fd', { type: 'freedraw', index: 'a1', points: '[[0,0],[3,4]]' });
+        });
+        const [line, freedraw] = readVectorFromDoc(doc).elements;
+        expect(line).toMatchObject({ type: 'line', points: '[[0,0],[40,10],[80,-5]]', roundness: 'round' });
+        // freedraw ignores roundness but the reader still falls it back to the linear default
+        expect(freedraw).toMatchObject({ type: 'freedraw', points: '[[0,0],[3,4]]', roundness: 'sharp' });
+    });
+
+    test('skips a linear element whose points are missing, empty, or garbage', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ok', { type: 'line', index: 'a0', points: '[[0,0],[10,0]]' });
+            writeElement(elements, 'missing', { type: 'line', index: 'a1' });
+            writeElement(elements, 'empty', { type: 'freedraw', index: 'a2', points: '[]' });
+            writeElement(elements, 'garbage', { type: 'line', index: 'a3', points: '[[0,0],[1]]' });
+        });
+        expect(readVectorFromDoc(doc).elements.map((e) => e.id)).toEqual(['ok']);
+    });
+
+    test('clamps hostile point coordinates per axis', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'l', { type: 'line', index: 'a0', points: '[[0,0],[1e15,-2e9]]' });
+        });
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el).toMatchObject({ type: 'line', points: '[[0,0],[1000000,-1000000]]' });
+    });
+
+    test('keeps a linear element with one non-finite point by dropping just that point', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'l', { type: 'line', index: 'a0', points: '[[0,0],[1e400,0],[40,10]]' });
+        });
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el).toMatchObject({ type: 'line', points: '[[0,0],[40,10]]' });
+    });
+
+    test('accepts the new zigzag fill style', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'r', { type: 'rectangle', index: 'a0', fillStyle: 'zigzag' });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ fillStyle: 'zigzag' });
+    });
+
+    test('keeps a single-point linear element (a dot)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'dot', { type: 'freedraw', index: 'a0', points: '[[0,0]]' });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ type: 'freedraw', points: '[[0,0]]' });
+    });
+
+    test('strips XML-invalid control chars from text and fontFamily (keeps tab/newline)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 't', {
+                type: 'text',
+                index: 'a0',
+                text: `a\u0000b\u0007c\td\ne`,
+                fontFamily: `Ex\u001Fcalifont`,
+            });
+        });
+        // U+0000/U+0007/U+001F stripped; the tab and newline survive.
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ text: 'abc\td\ne', fontFamily: 'Excalifont' });
+    });
+
+    test('materializes an arrow: heads, canonical bindings, and label fields', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'rect', { type: 'rectangle', index: 'a0' });
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a1',
+                points: '[[0,0],[100,0]]',
+                startArrowhead: 'circle',
+                endArrowhead: 'triangle',
+                // a valid binding to the present rectangle survives; extra keys are dropped on re-serialize
+                startBinding: '{"elementId":"rect","fixedPoint":[0.5,1],"junk":9}',
+                text: 'hi\nthere',
+                fontSize: 18,
+                fontFamily: 'Inter',
+                labelWidth: 42,
+            });
+        });
+        const arrow = readVectorFromDoc(doc).elements.find((e) => e.id === 'ar');
+        expect(arrow).toMatchObject({
+            type: 'arrow',
+            startArrowhead: 'circle',
+            endArrowhead: 'triangle',
+            startBinding: '{"elementId":"rect","fixedPoint":[0.5,1]}',
+            endBinding: '',
+            text: 'hi\nthere',
+            fontSize: 18,
+            fontFamily: 'Inter',
+            labelWidth: 42,
+        });
+    });
+
+    test('falls back invalid heads and a malformed binding, and floors labelWidth at 0', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a0',
+                points: '[[0,0],[50,0]]',
+                startArrowhead: 'spiral',
+                endArrowhead: 42,
+                startBinding: 'not json',
+                endBinding: '{"fixedPoint":[0,0]}',
+                labelWidth: -5,
+            });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({
+            startArrowhead: 'none',
+            endArrowhead: 'arrow',
+            startBinding: '',
+            endBinding: '',
+            labelWidth: 0,
+        });
+    });
+
+    test('caps a hostile labelWidth at MAX_COORD (protects the shared viewBox)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', { type: 'arrow', index: 'a0', points: '[[0,0],[50,0]]', labelWidth: 1e9 });
+        });
+        expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ labelWidth: 1_000_000 });
+    });
+
+    test('clamps a hostile fontSize (a label height derives from it, like labelWidth)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a0',
+                points: '[[0,0],[50,0]]',
+                text: 'x',
+                fontSize: 1e12,
+            });
+            writeElement(elements, 'txt', { type: 'text', index: 'a1', text: 'x', fontSize: 0.001 });
+        });
+        const [ar, txt] = readVectorFromDoc(doc).elements;
+        expect(ar).toMatchObject({ fontSize: 400 });
+        expect(txt).toMatchObject({ fontSize: 4 });
+    });
+
+    test('clears a binding whose target is absent or not bindable (doc untouched)', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'txt', { type: 'text', index: 'a0', text: 'x' });
+            writeElement(elements, 'ar', {
+                type: 'arrow',
+                index: 'a1',
+                points: '[[0,0],[100,0]]',
+                // start → a shape that never existed; end → a text element (not bindable)
+                startBinding: '{"elementId":"ghost","fixedPoint":[0.5,0.5]}',
+                endBinding: '{"elementId":"txt","fixedPoint":[0,0]}',
+            });
+        });
+        const arrow = readVectorFromDoc(doc).elements.find((e) => e.id === 'ar');
+        expect(arrow).toMatchObject({ startBinding: '', endBinding: '' });
+        // the doc itself is left alone — nothing is written during a read
+        expect((doc.getMap('elements').get('ar') as Y.Map<unknown>).get('startBinding')).toBe(
+            '{"elementId":"ghost","fixedPoint":[0.5,0.5]}',
+        );
+    });
+
+    test('skips an arrow whose points are missing or empty', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ok', { type: 'arrow', index: 'a0', points: '[[0,0],[10,0]]' });
+            writeElement(elements, 'missing', { type: 'arrow', index: 'a1' });
+            writeElement(elements, 'empty', { type: 'arrow', index: 'a2', points: '[]' });
+        });
+        expect(readVectorFromDoc(doc).elements.map((e) => e.id)).toEqual(['ok']);
+    });
+
+    test('accepts only hex / transparent colours; anything else falls back (blocks url() smuggling)', () => {
+        const doc = docWith((elements, meta) => {
+            meta.set('background', 'url(#evil)');
+            writeElement(elements, 'a', {
+                type: 'rectangle',
+                index: 'a0',
+                strokeColor: '#abc',
+                backgroundColor: 'url(http://x/y.svg)',
+            });
+            writeElement(elements, 'b', { type: 'rectangle', index: 'a1', strokeColor: 'red' });
+        });
+        const scene = readVectorFromDoc(doc);
+        expect(scene.meta.background).toBe(DEFAULT_SCENE_META.background);
+        expect(scene.elements[0]).toMatchObject({
+            strokeColor: '#abc',
+            backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
+        });
+        expect(scene.elements[1].strokeColor).toBe(DEFAULT_ELEMENT_PROPS.strokeColor);
     });
 });
 
@@ -198,6 +392,27 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         index: 'a1',
         mediaName: 'photo.png',
     };
+    const line: Record<string, unknown> = {
+        id: 'line1',
+        type: 'line',
+        x: 3,
+        y: 4,
+        width: 80,
+        height: 15,
+        angle: 12,
+        strokeColor: '#334455',
+        backgroundColor: '#667788',
+        fillStyle: 'zigzag',
+        strokeWidth: 2,
+        strokeStyle: 'solid',
+        roughness: 0,
+        seed: 333,
+        opacity: 60,
+        locked: false,
+        index: 'a1',
+        roundness: 'round',
+        points: '[[0,0],[80,10],[40,-5]]',
+    };
 
     const BASE_FIELDS = [
         'id',
@@ -218,10 +433,66 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         'locked',
         'index',
     ];
+    // Unbound (startBinding/endBinding '') so the single-element doc's dangling-binding pass is a no-op
+    // and the values round-trip; real binding round-trips are covered by the dedicated arrow tests above.
+    const arrow: Record<string, unknown> = {
+        id: 'arrow1',
+        type: 'arrow',
+        x: 2,
+        y: 3,
+        width: 90,
+        height: 20,
+        // angle 0 because this is an elbow arrow (elbow: true) and the reader pins angle 0 for elbows;
+        // non-zero angles are exercised by the rect/text/line drift cases.
+        angle: 0,
+        strokeColor: '#aabbcc',
+        backgroundColor: '#ddeeff',
+        fillStyle: 'solid',
+        strokeWidth: 3,
+        strokeStyle: 'dashed',
+        roughness: 1,
+        seed: 444,
+        opacity: 75,
+        locked: false,
+        index: 'a1',
+        roundness: 'sharp',
+        points: '[[0,0],[45,0],[45,20],[90,20]]',
+        startArrowhead: 'circle',
+        endArrowhead: 'triangle',
+        startBinding: '',
+        endBinding: '',
+        elbow: true,
+        fixedSegments:
+            '{"segments":[{"index":2,"start":[45,0],"end":[45,20]}],"startIsSpecial":false,"endIsSpecial":false}',
+        text: 'label',
+        fontSize: 13,
+        fontFamily: 'Inter',
+        labelWidth: 77,
+    };
+
     const cases = [
         { record: rect, fields: [...BASE_FIELDS, 'roundness'] },
         { record: text, fields: [...BASE_FIELDS, 'text', 'fontSize', 'fontFamily', 'textAlign'] },
         { record: image, fields: [...BASE_FIELDS, 'mediaName'] },
+        { record: line, fields: [...BASE_FIELDS, 'roundness', 'points'] },
+        {
+            record: arrow,
+            fields: [
+                ...BASE_FIELDS,
+                'roundness',
+                'points',
+                'startArrowhead',
+                'endArrowhead',
+                'startBinding',
+                'endBinding',
+                'elbow',
+                'fixedSegments',
+                'text',
+                'fontSize',
+                'fontFamily',
+                'labelWidth',
+            ],
+        },
     ];
 
     test('the variant field map covers ELEMENT_FIELDS exactly', () => {
@@ -240,5 +511,65 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
                 expect(got[field]).toEqual(record[field]);
             }
         }
+    });
+});
+
+describe('readVectorFromDoc — pinned elbow validation', () => {
+    const arrowFields = (over: Record<string, unknown>) => ({
+        type: 'arrow',
+        elbow: true,
+        x: 0,
+        y: 0,
+        ...over,
+    });
+
+    test('a valid pinned polyline round-trips its pins (index rebuilt from the polyline)', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                arrowFields({
+                    points: '[[0,0],[40,0],[40,60],[80,60]]',
+                    fixedSegments:
+                        '{"segments":[{"index":2,"start":[40,0],"end":[40,60]}],"startIsSpecial":false,"endIsSpecial":false}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.fixedSegments).toBe(
+            '{"segments":[{"index":2,"start":[40,0],"end":[40,60]}],"startIsSpecial":false,"endIsSpecial":false}',
+        );
+    });
+
+    test('pins are DROPPED (arrow stays a derived elbow) when the polyline is too short for them', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                // Only two points — no interior segment can carry a pin.
+                arrowFields({
+                    points: '[[0,0],[80,60]]',
+                    fixedSegments: '{"segments":[{"index":2,"start":[40,0],"end":[40,60]}]}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.fixedSegments).toBe('');
+    });
+
+    test('an out-of-range / first-or-last index is dropped', () => {
+        const doc = docWith((elements) =>
+            writeElement(
+                elements,
+                'ar',
+                arrowFields({
+                    points: '[[0,0],[40,0],[40,60],[80,60]]',
+                    // index 3 is the LAST segment (points[2]→points[3]) — unfixable.
+                    fixedSegments: '{"segments":[{"index":3,"start":[40,60],"end":[80,60]}]}',
+                }),
+            ),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el.type === 'arrow' && el.fixedSegments).toBe('');
     });
 });

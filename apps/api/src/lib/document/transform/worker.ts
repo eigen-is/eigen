@@ -34,6 +34,10 @@ async function renderPreview(
             const { renderEigenslidesPreviewBody } = await import('../../preview/eigenslides-render');
             return renderEigenslidesPreviewBody(doc, request.mediaUrls);
         }
+        case 'eigenvector': {
+            const { renderEigenvectorPreview } = await import('../../preview/eigenvector-render');
+            return renderEigenvectorPreview(doc, request.mediaUrls);
+        }
     }
 }
 
@@ -53,6 +57,10 @@ async function renderExport(
         case 'eigenslides': {
             const { renderEigenslidesExport } = await import('../../export/slides/transform');
             return renderEigenslidesExport(doc, request.format, request.title, request.media);
+        }
+        case 'eigenvector': {
+            const { renderEigenvectorExport } = await import('../../export/vector/transform');
+            return renderEigenvectorExport(doc, request.format, request.title, request.media);
         }
     }
 }

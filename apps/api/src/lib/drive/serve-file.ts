@@ -1,7 +1,7 @@
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
-import { computeEtag, contentDisposition, etagMatches, parseByteRange } from '../core/http';
+import { computeEtag, contentDisposition, etagMatches, parseByteRange, scriptableInlineHeaders } from '../core/http';
 import type { Mount } from '../mount';
 
 // Header/range/CSP mechanics for serving a file body. Pure Mount function —
@@ -29,15 +29,9 @@ export async function serveFile(
         // re-downloading the whole file (notably from S3, where readRange issues a ranged GET).
         'Accept-Ranges': 'bytes',
     };
-    // /embed serves inline from the API's own origin, so a scriptable upload (HTML/SVG) could
-    // run script with the viewer's session. A sandbox CSP neutralises active content while
-    // still rendering the file; scoped to scriptable types so media/PDF previews are untouched.
-    if (disposition === 'inline') {
-        const baseMime = (mimeType.split(';')[0] ?? '').trim().toLowerCase();
-        if (baseMime === 'text/html' || baseMime === 'application/xhtml+xml' || baseMime === 'image/svg+xml') {
-            headers['Content-Security-Policy'] = "sandbox; default-src 'none'";
-        }
-    }
+    // /embed serves inline from the API's own origin, so a scriptable upload gets a sandbox CSP
+    // (scriptableInlineHeaders owns the scriptable-type set + CSP string; nosniff is already set above).
+    if (disposition === 'inline') Object.assign(headers, scriptableInlineHeaders(mimeType));
 
     // RFC 7232 §6: a matching conditional GET returns 304 regardless of Range.
     if (ifNoneMatch && etagMatches(ifNoneMatch, etag)) {

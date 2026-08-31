@@ -6,7 +6,7 @@ import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest, requireSelf } from '../lib/core/access';
-import { contentDisposition, setCacheHeaders } from '../lib/core/http';
+import { contentDisposition, scriptableInlineHeaders, setCacheHeaders } from '../lib/core/http';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
@@ -305,6 +305,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = result.contentType;
+            // SVG previews are served as-is (uploaded SVGs are user bytes) and rendered inline on the API
+            // origin, so a scriptable payload gets the same sandbox CSP as /embed (scriptableInlineHeaders).
+            Object.assign(set.headers, scriptableInlineHeaders(result.contentType));
             return result.data;
         },
         { auth: true },

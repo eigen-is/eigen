@@ -71,4 +71,9 @@ export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageIte
 export type EigenClipboardData = {
     version: 1;
     items: EigenClipboardItem[];
+    // Optional self-contained SVG of the copied selection (vector's copy flavour), the element JSON
+    // embedded in a `<metadata>` block. eigen-aware hosts that can't place the typed items (docs, sheets,
+    // slides) render it as an image; vector reads the typed `items` and ignores it. Image-bearing
+    // selections omit it. The producer policy and the Chromium-flavour reason live in CLIPBOARD.md.
+    svg?: string;
 };

@@ -2,7 +2,16 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
-import { buildGoldenDeck, buildGoldenDocJson, seedEigendoc, seedSlidesDoc } from '../fixtures/golden-documents';
+import {
+    buildGoldenDeck,
+    buildGoldenDocJson,
+    buildGoldenVectorScene,
+    GOLDEN_VECTOR_LABEL,
+    GOLDEN_VECTOR_TEXT,
+    seedEigendoc,
+    seedSlidesDoc,
+    seedVectorDoc,
+} from '../fixtures/golden-documents';
 import {
     buildGoldenOps,
     buildGoldenSheets,
@@ -63,6 +72,31 @@ describe('extractCollabText', () => {
         expect(text).not.toContain(String(GOLDEN_ROW1_TOTAL));
         // Every sheet is indexed, not just the first one the preview renders.
         expect(text).toContain('SHEET2-ONLY-CONTENT');
+        expect(warnings).toEqual([]);
+        doc.destroy();
+    });
+
+    test('eigenvector: text elements and arrow labels are indexed, media names are not', async () => {
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, buildGoldenVectorScene());
+
+        const { text, warnings } = await extractCollabText('eigenvector', doc);
+        expect(text).toContain(GOLDEN_VECTOR_TEXT);
+        expect(text).toContain(GOLDEN_VECTOR_LABEL);
+        // The text element sits before the arrow in z-order, joined by a newline.
+        expect(text).toBe(`${GOLDEN_VECTOR_TEXT}\n${GOLDEN_VECTOR_LABEL}`);
+        // The image element carries no words — its media name is not indexable text.
+        expect(text).not.toContain('pixel.png');
+        expect(warnings).toEqual([]);
+        doc.destroy();
+    });
+
+    test('eigenvector: an empty drawing extracts to the empty string', async () => {
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, { elements: [], meta: { background: 'transparent', gridSize: 20 } });
+
+        const { text, warnings } = await extractCollabText('eigenvector', doc);
+        expect(text).toBe('');
         expect(warnings).toEqual([]);
         doc.destroy();
     });

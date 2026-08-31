@@ -12,7 +12,7 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { ApiError } from '../../lib/core/errors';
 import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../../lib/document/doc';
-import { buildPreviewUrlMap } from '../../lib/document/media';
+import { buildEigenMediaRefMap, buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import {
@@ -34,16 +34,21 @@ import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
+import { renderEigenvectorPreview } from '../../lib/preview/eigenvector-render';
+import { getScreenPreview } from '../../lib/preview/preview-cache';
 import type { User } from '../../lib/user';
 import {
     buildGoldenDeck,
     buildGoldenDocJson,
+    buildGoldenVectorScene,
     editGoldenDeckTitle,
     GOLDEN_BEYOND_CAP,
     GOLDEN_MEDIA_NAME,
+    GOLDEN_VECTOR_TEXT,
     seedDocumentMedia,
     seedEigendoc,
     seedSlidesDoc,
+    seedVectorDoc,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
 import { buildGoldenOps, buildGoldenSheets, GOLDEN_ROW1_TOTAL, seedSheetsDoc } from '../fixtures/heavy-sheets';
@@ -937,6 +942,84 @@ describe('document transform (eigenslides)', () => {
         } finally {
             errorSpy.mockRestore();
         }
+    }, 120_000);
+});
+
+// Vector's preview is not an HTML body: the Worker renders the drawing's own SVG and it
+// is served as-is on the image-preview path, so this suite proves the SVG round-trip
+// (Worker == main thread), the resolved media href, and the SVG content type — not a
+// { body, mode } text envelope.
+async function seedGoldenVector(fileName: string): Promise<{ mount: Mount; path: DrivePath }> {
+    const created = await drivePost<DrivePath>(
+        ctx.alice.user.sessionToken,
+        ctx.alice.user.id,
+        mountId,
+        `folder/${rootId}/create/vector`,
+        { fileName },
+    );
+    const home = await getHome(ctx.alice.user.id);
+    const collab = await home.drive.getCollabDocument(mountId, created.id);
+    seedVectorDoc(collab.doc, buildGoldenVectorScene());
+
+    const resolved = await home.drive.resolveFile(mountId, created.id);
+    await seedDocumentMedia(resolved.mount, resolved.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
+    return resolved;
+}
+
+describe('document transform (eigenvector)', () => {
+    let golden: { mount: Mount; path: DrivePath };
+
+    beforeAll(async () => {
+        golden = await seedGoldenVector('golden-vector');
+    });
+
+    test('Worker preview equals the main thread, and the route serves it as an SVG image', async () => {
+        const { mount, path } = golden;
+        const mediaUrls = await buildEigenMediaRefMap(mount, path);
+        // Main-thread execution of the exact Worker pipeline against the Worker run.
+        const persisted = await readPersistedDoc(mount, path);
+        const direct = renderEigenvectorPreview(persisted, mediaUrls);
+        persisted.destroy();
+
+        const response = await documentTransformRunner.run(
+            { kind: 'preview', documentType: 'eigenvector', mediaUrls, source: await captureCollabSource(mount, path) },
+            PREVIEW_OPTIONS,
+        );
+        const body = previewBody(response);
+        expect(body).toBe(direct.body);
+        expect(response.ok && response.warnings).toEqual(direct.warnings);
+
+        // The body is the drawing's own SVG — no rasterisation, no HTML wrapper, no
+        // truncated-block sanitizer. The image element rides its `eigen-media:` name ref
+        // (inlined at serve time), and hostile text is XML-escaped by the serializer itself.
+        expect(body.startsWith('<svg')).toBe(true);
+        expect(body).toContain('Vector &lt;sketch&gt;');
+        expect(body).not.toContain('<sketch>');
+        expect(body).toMatch(/<image[^>]+href="eigen-media:pixel\.png"/);
+
+        // The /preview route serves those bytes through the same svg-media-inline pass a stored
+        // .svg takes (getScreenPreview): the eigen-media ref becomes the sibling's data: URI and
+        // the Excalifont face is injected — an <img>-hosted SVG never fetches external URLs.
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${path.id}/preview`,
+        );
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toContain('image/svg+xml');
+        const served = await res.text();
+        expect(served).toContain('Vector &lt;sketch&gt;');
+        expect(served).toMatch(/<image[^>]+href="data:image\//);
+        expect(served).not.toContain('eigen-media:');
+        expect(served).toContain('font-family: "Excalifont"');
+    }, 120_000);
+
+    test('getScreenPreview caches and serves the drawing as an image/svg+xml buffer', async () => {
+        const result = await getScreenPreview(golden.mount, golden.path, 'unused-embed');
+        if (result?.type !== 'image') throw new Error(`expected an image preview, got ${JSON.stringify(result)}`);
+        expect(result.contentType).toBe('image/svg+xml');
+        const svg = result.data.toString('utf-8');
+        expect(svg.startsWith('<svg')).toBe(true);
+        expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
     }, 120_000);
 });
 

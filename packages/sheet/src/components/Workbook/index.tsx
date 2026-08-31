@@ -3,6 +3,8 @@ import {
     buildTextClipboardItem,
     clipboardTextItemHasContent,
     readEigenClipboard,
+    readSvgClipboardWithItems,
+    svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
 import type {
@@ -582,7 +584,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onCopy = useCallback(
             (e: ClipboardEvent) => {
-                // A selected floating image takes precedence over the pending cell copy (U5c): its
+                // A selected floating image takes precedence over the pending cell copy: its
                 // copy is a pure image — eigen JSON only, no text/plain and no png (matching vector's
                 // v1 flavor; a native copy event can't await a media/ blob fetch, so png is dropped).
                 const activeImg = context.insertedImgs?.find((img) => img.id === context.activeImg);
@@ -591,7 +593,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (source) {
                         e.preventDefault();
                         // Drop any cell table the keyboard copy staged, so a later native-menu copy
-                        // with no image active can't emit this stale table (U5c gate).
+                        // with no image active can't emit this stale table.
                         consumePendingCopy();
                         const item = buildImageClipboardItem({
                             mediaName: activeImg.mediaName,
@@ -636,10 +638,38 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_MARKER);
 
                     if (!isInternalCopy) {
+                        // A vector SVG payload (or a pasted SVG document) becomes a floating image
+                        // through the app's exact image-file path — stored in media/, served as-is, rendered
+                        // by <image>. Ahead of the eigen-items split so a vector selection lands as one
+                        // image, not as empty shape carriers. An image-bearing selection's svg references its
+                        // images BY NAME (eigen-media:), so it rides onPasteSvgFile — the app materializes each
+                        // into its media/ before storing the svg; an image-free svg
+                        // (foreign drawing, or a vector selection with no images) rides onPasteImageFile as today.
+                        const svgPayload = readSvgClipboardWithItems(clipboardData);
+                        if (svgPayload) {
+                            const svgImageItems = svgPayload.items.filter(
+                                (item): item is EigenClipboardImageItem => item.type === 'image',
+                            );
+                            const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
+                            const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
+                            if (onPasteSvgFile) {
+                                // Always materialize (even with no image items) so a forged/dangling
+                                // eigen-media ref is stripped before the svg is stored — same as docs/slides.
+                                e.preventDefault();
+                                onPasteSvgFile(svgPayload.svg, svgImageItems);
+                                return;
+                            }
+                            if (onPasteImageFile) {
+                                e.preventDefault();
+                                onPasteImageFile(svgToImageFile(svgPayload.svg));
+                                return;
+                            }
+                        }
+
                         const eigenData = readEigenClipboard(clipboardData);
                         if (eigenData) {
                             // Mixed eigen payloads split by kind: image items become floating images,
-                            // text items land in cells. Both apply when both are present (U5c). The image
+                            // text items land in cells. Both apply when both are present. The image
                             // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
                             const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
                             const imageItems = onPasteEigenImage

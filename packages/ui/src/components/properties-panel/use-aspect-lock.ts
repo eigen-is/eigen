@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-// Ephemeral per-selection aspect-lock state for TransformSection (Override 3 / D8b/D8c). The same
+// Ephemeral per-selection aspect-lock state for TransformSection. The same
 // ON/OFF the checkbox shows is fed by the host into ObjectTransform's resizeMode, so it must live
 // ONE level up from both the panel and the canvas. It is NEVER stored on an element.
 //

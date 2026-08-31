@@ -46,6 +46,7 @@ const DOWNLOAD_LABELS: Record<string, string> = {
     html: 'Web Page (.html)',
     xlsx: 'Microsoft Excel (.xlsx)',
     csv: 'Comma Separated Values (.csv)',
+    svg: 'SVG image (.svg)',
 };
 
 export function formatDownloadLabel(format: string): string {

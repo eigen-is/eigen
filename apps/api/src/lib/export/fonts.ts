@@ -24,26 +24,35 @@ const FONT_FILES = [
 let _fontCSS: string | undefined;
 
 export function getFontCSS(): string {
-    return (_fontCSS ??= buildFontFaceCSS());
+    return (_fontCSS ??= buildFontFaceCSS(FONT_FILES));
 }
 
-function buildFontFaceCSS(): string {
-    return FONT_FILES.map((font) => {
-        try {
-            const buf = fs.readFileSync(font.path);
-            const dataUri = `data:font/woff2;base64,${buf.toString('base64')}`;
-            return `@font-face {
+// The @font-face blocks for just the given families (each an EIGEN_FONTS name, the same
+// value a vector text/label element stores in `fontFamily`). The SVG export inlines only
+// the whole faces its text actually uses; an unrecognized family contributes nothing.
+export function getFontFaceCSSForFamilies(families: Iterable<string>): string {
+    const wanted = new Set(families);
+    return buildFontFaceCSS(FONT_FILES.filter((font) => wanted.has(font.family)));
+}
+
+function buildFontFaceCSS(fonts: readonly (typeof FONT_FILES)[number][]): string {
+    return fonts
+        .map((font) => {
+            try {
+                const buf = fs.readFileSync(font.path);
+                const dataUri = `data:font/woff2;base64,${buf.toString('base64')}`;
+                return `@font-face {
     font-family: "${font.family}";
     src: url("${dataUri}") format("woff2");
     font-weight: ${font.weight};
     font-style: ${font.style};
     font-display: swap;
 }`;
-        } catch {
-            console.warn(`[export/fonts] Failed to read font: ${font.path}`);
-            return '';
-        }
-    })
+            } catch {
+                console.warn(`[export/fonts] Failed to read font: ${font.path}`);
+                return '';
+            }
+        })
         .filter(Boolean)
         .join('\n');
 }

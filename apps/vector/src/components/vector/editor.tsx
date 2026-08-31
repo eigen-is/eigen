@@ -31,8 +31,8 @@ type VectorEditorProps = {
 };
 
 // A document-level comment attaches to the whole vector document, not to any element (no
-// element anchoring — that would reintroduce the Y.Array field ELEMENT_FIELDS eliminated, spec §1
-// D14). So every card in the `comments` Y.Map is "active"; there are no orphans and no per-element
+// element anchoring — that would reintroduce the Y.Array field ELEMENT_FIELDS eliminated). So every
+// card in the `comments` Y.Map is "active"; there are no orphans and no per-element
 // anchor text.
 const EMPTY_ANCHOR_TEXTS: Map<string, string> = new Map();
 
@@ -50,7 +50,7 @@ export function VectorEditor({
     initialChatName,
 }: VectorEditorProps) {
     const doc = useVectorDoc(ownerId, path.mountId, path.id);
-    const { tool, setTool } = useTool();
+    const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
     // Awareness: publish this user's identity + selection, get a throttled cursor publisher for the
     // canvas. Selection is threaded from here (the editor owns selectedIds).
@@ -64,8 +64,8 @@ export function VectorEditor({
     );
     const showPanel = canWrite && selectedElements.length > 0;
 
-    // Aspect lock (Override 3), lifted here so the panel checkbox and the canvas' ObjectTransform
-    // resizeMode share one ephemeral setting. Default ON for image-only selections (D8b).
+    // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
+    // resizeMode share one ephemeral setting. Default ON for image-only selections.
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
 
@@ -175,6 +175,8 @@ export function VectorEditor({
                                 undoManager={doc.undoManager}
                                 tool={tool}
                                 setTool={setTool}
+                                toolLocked={toolLocked}
+                                setToolLocked={setToolLocked}
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onToggleCommentPanel={toggleComments}
                                 commentPanelOpen={commentPanelOpen}
@@ -195,6 +197,8 @@ export function VectorEditor({
                                         meta={doc.meta}
                                         tool={tool}
                                         setTool={setTool}
+                                        toolLocked={toolLocked}
+                                        setToolLocked={setToolLocked}
                                         canWrite={canWrite}
                                         ownerId={ownerId}
                                         mountId={path.mountId}

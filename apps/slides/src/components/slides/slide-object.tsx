@@ -1,6 +1,6 @@
 import { getBackgroundStyle } from '@workspace/lib/background';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import { isPendingMediaName, useMediaResolver } from '@workspace/lib/drive';
+import { useMediaResolver } from '@workspace/lib/drive';
 import { escapeHtml } from '@workspace/lib/html';
 import { LightEditor } from '@workspace/ui/components/editor';
 import { ImagePlaceholder } from '@workspace/ui/components/media/image-placeholder';
@@ -79,7 +79,7 @@ function buildTextHtml(obj: SlideObject & { type: 'text' }): string {
 }
 
 function SlideImage({ obj, url, className }: { obj: ImageObject; url: string | null; className: string }) {
-    if (!url && isPendingMediaName(obj.mediaName)) return <ImagePlaceholder />;
+    if (!url) return <ImagePlaceholder />;
     return (
         <img
             src={url || ''}

@@ -24,7 +24,7 @@ function measureCtx(): CanvasRenderingContext2D {
 // The canvas font shorthand that reproduces the SVG <text> output: weight 400 (the renderer
 // emits no font-weight, so the browser uses normal/400), px size, and the same family+fallback
 // chain getFontFamily emits. measureText advance width at this string is exactly what SVG
-// <text> lays out (Excalidraw's default CanvasTextMetricsProvider, SCOUT §5).
+// <text> lays out (Excalidraw's default CanvasTextMetricsProvider).
 export function vectorFontString(fontSize: number, fontFamily: string): string {
     return `400 ${fontSize}px ${getFontFamily(fontFamily)}`;
 }

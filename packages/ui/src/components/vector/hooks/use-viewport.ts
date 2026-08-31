@@ -40,7 +40,7 @@ export function useViewport() {
     );
 
     // Container-relative px position/size of a scene box's unrotated top-left + extent; the chrome
-    // overlay adds transform: rotate() itself, so this is position/size only (CONTRACT §D).
+    // overlay adds transform: rotate() itself, so this is position/size only.
     const boxToStyle = useCallback(
         (box: Box): React.CSSProperties => ({
             left: (box.x + scrollX) * zoom,

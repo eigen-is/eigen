@@ -1,16 +1,24 @@
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
+    arrowsBoundTo,
+    DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_LINE_ROUNDNESS,
+    DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_SCENE_META,
     DEFAULT_SHAPE_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
     ELEMENT_FIELDS,
+    followBindings,
     generateKeyBetween,
     generateNKeysBetween,
     isValidFractionalIndex,
     readVectorFromDoc,
+    remapBinding,
+    type VectorArrowElement,
     type VectorElementType,
     type VectorImageElement,
+    type VectorLinearElement,
     type VectorScene,
     type VectorShapeElement,
     type VectorTextElement,
@@ -31,7 +39,9 @@ const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
     Partial<Omit<VectorTextElement, 'id' | 'type'>> &
-    Partial<Omit<VectorImageElement, 'id' | 'type'>>;
+    Partial<Omit<VectorImageElement, 'id' | 'type'>> &
+    Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
+    Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
 
 // addElement input: the caller names a `type` and overrides whatever it likes; the hook fills
 // the rest from lib defaults and generates id/seed/index.
@@ -42,6 +52,19 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
     const base = { x: 0, y: 0, width: 0, height: 0, angle: 0, ...DEFAULT_ELEMENT_PROPS };
     if (type === 'text') return { ...base, ...DEFAULT_TEXT_PROPS };
     if (type === 'image') return { ...base, mediaName: '' };
+    // Both arrive with real points from the gesture. Freedraw is sharp; a new line curves (Excalidraw parity).
+    if (type === 'freedraw') return { ...base, roundness: DEFAULT_LINEAR_ROUNDNESS, points: '[]' };
+    if (type === 'line') return { ...base, roundness: DEFAULT_LINE_ROUNDNESS, points: '[]' };
+    // An arrow is a line plus heads, forward bindings and an optional label (text/fontSize/fontFamily).
+    if (type === 'arrow')
+        return {
+            ...base,
+            points: '[]',
+            text: DEFAULT_TEXT_PROPS.text,
+            fontSize: DEFAULT_TEXT_PROPS.fontSize,
+            fontFamily: DEFAULT_TEXT_PROPS.fontFamily,
+            ...DEFAULT_ARROW_PROPS,
+        };
     return { ...base, roundness: DEFAULT_SHAPE_ROUNDNESS };
 }
 
@@ -57,6 +80,60 @@ function topmostIndex(elementsMap: Y.Map<unknown>): string | null {
         if (topmost === null || idx > topmost) topmost = idx;
     }
     return topmost;
+}
+
+// After a patch, re-run followBindings and write the geometry into the same transact for every
+// arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
+// arrow alone re-glues its endpoints to the stationary shape instead of leaving them detached until the
+// shape's next move teleports them (bound endpoints stay glued, Excalidraw's model; only a drag past the
+// unbind threshold detaches). A shape+arrow moved rigidly no-ops via followBindings' null return.
+function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: Set<string>): void {
+    let touched = false;
+    for (const id of patchedIds) {
+        const m = elementsMap.get(id);
+        const t = m instanceof Y.Map ? m.get('type') : undefined;
+        if (t === 'rectangle' || t === 'diamond' || t === 'ellipse') touched = true;
+        else if (t === 'arrow' && m instanceof Y.Map && (m.get('startBinding') || m.get('endBinding'))) touched = true;
+        if (touched) break;
+    }
+    if (!touched) return;
+
+    // An arrow-free scene skips the full doc read a shape patch would otherwise pay on every gesture.
+    let hasArrow = false;
+    for (const value of elementsMap.values()) {
+        if (value instanceof Y.Map && value.get('type') === 'arrow') {
+            hasArrow = true;
+            break;
+        }
+    }
+    if (!hasArrow) return;
+
+    const elements = readVectorFromDoc(doc).elements;
+    const bound = arrowsBoundTo(elements);
+    const byId = new Map(elements.map((el) => [el.id, el]));
+    const arrowIds = new Set<string>();
+    for (const id of patchedIds) {
+        for (const aid of bound.get(id) ?? []) arrowIds.add(aid);
+        // A dangling binding reads as '' here, so only live-bound patched arrows re-follow.
+        const el = byId.get(id);
+        if (el?.type === 'arrow' && (el.startBinding !== '' || el.endBinding !== '')) arrowIds.add(id);
+    }
+    if (arrowIds.size === 0) return;
+    for (const aid of arrowIds) {
+        const arrow = byId.get(aid);
+        if (arrow?.type !== 'arrow') continue;
+        const next = followBindings(arrow, byId);
+        const arrowMap = elementsMap.get(aid);
+        if (!next || !(arrowMap instanceof Y.Map)) continue;
+        arrowMap.set('x', next.x);
+        arrowMap.set('y', next.y);
+        arrowMap.set('width', next.width);
+        arrowMap.set('height', next.height);
+        arrowMap.set('points', next.points);
+        // Pinned segments co-shift with the re-normalized origin so they hold their scene position while
+        // the bound endpoint follows the shape. '' for every non-pinned arrow.
+        arrowMap.set('fixedSegments', next.fixedSegments);
+    }
 }
 
 export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) => {
@@ -122,7 +199,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         return id;
     }, []);
 
-    // Batch add — the whole set in ONE transact (paste's element ADDS: CONTRACT §A one gesture = one
+    // Batch add — the whole set in ONE transact (paste's element ADDS: one gesture = one
     // transact / one undo step). Consecutive fractional keys above the current top preserve the
     // callers' order as the pasted stack's relative z-order. Each element gets a fresh id + seed (or a
     // caller-supplied seed). Returns the new ids in input order so the caller reselects the paste.
@@ -157,7 +234,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
     }, []);
 
     // Batch update — the whole set in ONE transact, so a group move / nudge / z-order rewrite is a
-    // single undo step and a single broadcast (CONTRACT §A: one gesture = one transact). Missing ids
+    // single undo step and a single broadcast — one gesture = one transact. Missing ids
     // no-op (a peer may have deleted one mid-gesture).
     // `origin` defaults to null (tracked/undoable). Pass UNTRACKED_ORIGIN for a technical fixup the
     // user never undoes as their own step (the cross-mount pending→real swap) — still broadcast.
@@ -167,6 +244,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
             if (!doc) return;
             doc.transact(() => {
                 const elementsMap = doc.getMap('elements');
+                const patchedIds = new Set<string>();
                 for (const { id, fields } of patches) {
                     const elMap = elementsMap.get(id);
                     if (!(elMap instanceof Y.Map)) continue;
@@ -174,7 +252,11 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                         if (k === 'id' || k === 'type' || v === undefined) continue;
                         if ((ELEMENT_FIELDS as readonly string[]).includes(k)) elMap.set(k, v);
                     }
+                    patchedIds.add(id);
                 }
+                // Arrows follow their bound shapes in the SAME transact (one undo step, one broadcast), so
+                // every caller — nudge, drag-commit, align, paste-move — gets it for free.
+                followBoundArrows(doc, elementsMap, patchedIds);
             }, origin);
         },
         [],
@@ -226,8 +308,17 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                 });
             if (sources.length === 0) return;
             const keys = generateNKeysBetween(topmostIndex(elementsMap), null, sources.length);
-            sources.forEach((src, i) => {
+            // Allocate every clone id FIRST, then remap bindings across the set: an arrow bound to a shape
+            // that was duplicated too points at its clone; a bound shape outside the set clears.
+            const idMap = new Map<string, string>();
+            for (const src of sources) {
+                const oldId = src.get('id');
                 const id = `el-${nanoid(10)}`;
+                if (typeof oldId === 'string') idMap.set(oldId, id);
+                newIds.push(id);
+            }
+            sources.forEach((src, i) => {
+                const id = newIds[i];
                 const clone = new Y.Map();
                 for (const field of ELEMENT_FIELDS) {
                     const v = src.get(field);
@@ -236,13 +327,18 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                 clone.set('id', id);
                 clone.set('seed', Math.floor(Math.random() * 2 ** 31));
                 clone.set('index', keys[i]);
+                if (src.get('type') === 'arrow') {
+                    const sb = src.get('startBinding');
+                    const eb = src.get('endBinding');
+                    clone.set('startBinding', remapBinding(typeof sb === 'string' ? sb : '', idMap));
+                    clone.set('endBinding', remapBinding(typeof eb === 'string' ? eb : '', idMap));
+                }
                 // Read x/y from the source map — the clone is not integrated into the doc yet
                 const x = src.get('x');
                 const y = src.get('y');
                 if (typeof x === 'number') clone.set('x', x + dx);
                 if (typeof y === 'number') clone.set('y', y + dy);
                 elementsMap.set(id, clone);
-                newIds.push(id);
             });
         });
         return newIds;

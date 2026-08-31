@@ -1,4 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { eigenMediaHref } from '@workspace/lib/vector';
 import type { Mount } from '../mount';
 import type { TransformMedia } from './transform/protocol';
 
@@ -39,6 +40,27 @@ export async function buildPreviewUrlMap(mount: Mount, drivePath: DrivePath): Pr
             `${PUBLIC_API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.id}/preview`,
         ]),
     );
+}
+
+// Splice a block right after the root `<svg …>` open tag (both svg font injectors use this).
+// Anchoring on the tag — not the document's first `>` — keeps an XML prolog, DOCTYPE, or comment
+// ahead of the root intact (an uploaded .svg may carry one; splicing before the root breaks it).
+// No open tag → the svg is returned untouched.
+export function spliceAfterSvgOpenTag(svg: string, block: string): string {
+    const start = svg.search(/<svg[\s>]/);
+    if (start === -1) return svg;
+    const end = svg.indexOf('>', start);
+    if (end === -1) return svg;
+    return svg.slice(0, end + 1) + block + svg.slice(end + 1);
+}
+
+// Vector preview media prep: name → `eigen-media:` ref. A vector preview is an SVG served to an
+// `<img>`, which never fetches external URLs — so unlike the HTML previews above, its images must
+// resolve by name and be inlined by the serve-side inliner (svg-media-inline), exactly like a
+// stored container .svg. Only names that exist in media/ get a ref; the rest render nothing.
+export async function buildEigenMediaRefMap(mount: Mount, drivePath: DrivePath): Promise<Map<string, string>> {
+    const media = await listDocumentMedia(mount, drivePath);
+    return new Map([...media.keys()].map((name) => [name, eigenMediaHref(name)]));
 }
 
 // The Worker side of export media: the transferred buffers become the data: URIs the

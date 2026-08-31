@@ -1,5 +1,5 @@
 // Shared selection/resize/rotate chrome — the one primitive slides, docs, sheets, and vector
-// converge on (CONTRACT §D). It owns the selection ring, the eight square resize grips, the
+// converge on. It owns the selection ring, the eight square resize grips, the
 // round rotate grip, the whole pointer lifecycle, and live Shift/Alt tracking. The host owns
 // only its coordinate space (`boxToStyle` + `screenDeltaToScene`) and the single commit.
 //
@@ -32,7 +32,7 @@ const RESIZE_HANDLES = [
 ] as const;
 
 // Below this on-screen size the 12px grips swallow the element, so the 4 side grips hide and
-// only the corners remain (SCOUT §2).
+// only the corners remain.
 const SIDE_GRIP_MIN_SCREEN_PX = 40;
 const DEFAULT_MIN_SIZE = 1;
 

@@ -17,9 +17,9 @@ type UseDragAndDropProps = {
     board: BoardData;
     cards: Record<string, CommentCard>;
     yjsDoc: Y.Doc | null;
-    // Seals the drag-end commit as its own undo step (U6e).
+    // Seals the drag-end commit as its own undo step.
     undoManager: Y.UndoManager | null;
-    // Alt-drag duplicate goes through the frozen createCard seam (Override 23): a fresh chatName, the
+    // Alt-drag duplicate goes through the frozen createCard seam: a fresh chatName, the
     // new card id anchored at the drop slot in ONE transact.
     createCard: (
         input: CreateCommentCardInput,
@@ -48,7 +48,7 @@ export const useDragAndDrop = ({
     });
 
     // dnd-kit's DragEndEvent carries no drop-time modifier state, so track Alt globally and read it at
-    // drop (Override 23: Alt held AT DROP → duplicate the card, original stays).
+    // drop (Alt held AT DROP → duplicate the card, original stays).
     const altHeldRef = useRef(false);
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => {
@@ -101,7 +101,7 @@ export const useDragAndDrop = ({
         const columnsMap = yjsDoc.getMap('columns');
         const columnOrderArray = yjsDoc.getArray('columnOrder');
 
-        // Alt-drag duplicate (Override 23): a COPY of the dragged CARD lands at the drop slot, the
+        // Alt-drag duplicate: a COPY of the dragged CARD lands at the drop slot, the
         // original stays put. It goes through the frozen createCard seam — a fresh chatName (a card's
         // chatName binds its own comment thread, never copied); title/description/color/attachments are
         // copied (attachments may reference the same media files, safe to share); the new id is anchored

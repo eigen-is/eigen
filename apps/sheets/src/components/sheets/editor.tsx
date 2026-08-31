@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
+import { materializeClipboardSvg, needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
 import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
 import {
@@ -75,7 +75,7 @@ function SheetEditorInner({
     const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     // The active floating image (surfaced from the workbook via onActiveImageChange) drives the
-    // right-side properties panel. Its aspect-lock — images default CHECKED (D8b) — feeds BOTH the
+    // right-side properties panel. Its aspect-lock — images default CHECKED — feeds BOTH the
     // panel checkbox and the canvas ObjectTransform, so it lives here, one level above both.
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
     const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
@@ -167,7 +167,7 @@ function SheetEditorInner({
     );
 
     // Consume a pasted eigen image item (from sheets/slides/vector/docs) as a floating image. The
-    // typed width/height/angle are AUTHORITATIVE — no fit-to-pane (U5c), no probing: the wire always
+    // typed width/height/angle are AUTHORITATIVE — no fit-to-pane, no probing: the wire always
     // carries both dims, so the image lands at its source box on the first paint. Cross-mount inserts
     // a pending placeholder at that same exact box, re-uploads into our media/, then swaps the name.
     const handlePasteEigenImage = useCallback(
@@ -195,6 +195,19 @@ function SheetEditorInner({
             workbookRef.current?.insertImage(item.mediaName, width, height, angle);
         },
         [mediaFolderId, uploadFile.mutateAsync],
+    );
+
+    // Consume a pasted vector SVG whose images are name-referenced (eigen-media:): materialize each
+    // into our media/ (re-uploading cross-container via the same seam as handlePasteEigenImage) and
+    // rewrite the svg's refs, then insert the rewritten svg as one floating image through the normal
+    // image path.
+    const handlePasteSvgFile = useCallback(
+        async (svg: string, imageItems: EigenClipboardImageItem[]) => {
+            if (!mediaFolderId) return;
+            const file = await materializeClipboardSvg(svg, imageItems, mediaFolderId, uploadFile.mutateAsync);
+            await handleImageFile(file);
+        },
+        [mediaFolderId, uploadFile.mutateAsync, handleImageFile],
     );
 
     // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot pending
@@ -371,6 +384,7 @@ function SheetEditorInner({
                                               onInsertImage: () => setImagePickerOpen(true),
                                               onPasteEigenImage: handlePasteEigenImage,
                                               onPasteImageFile: handleImageFile,
+                                              onPasteSvgFile: handlePasteSvgFile,
                                           }
                                         : {}),
                                     resolveImageUrl: resolveMediaUrl,

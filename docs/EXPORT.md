@@ -1,9 +1,10 @@
 # Document Export: DOCX, PDF, HTML
 
-> **TLDR**: One route exports eigendocs, slides and sheets. Each type renders standalone HTML with
-> embedded fonts and base64 images; PDF is that HTML through a WeasyPrint subprocess, DOCX through
-> `@turbodocx/html-to-docx`, XLSX straight from `Sheet[]` via ExcelJS. Every HTML body goes through
-> `sanitizeExportHtml` — DOMPurify plus a data-URI-only rule that closes SSRF against WeasyPrint.
+> **TLDR**: One route exports eigendocs, slides, sheets and vector drawings. Each type renders standalone
+> HTML (vector: its own SVG) with embedded fonts and base64 images; PDF is that document through a
+> WeasyPrint subprocess, DOCX through `@turbodocx/html-to-docx`, XLSX straight from `Sheet[]` via ExcelJS.
+> Every rendered body goes through `sanitizeExportHtml` — DOMPurify plus a data-URI-only rule that closes
+> SSRF against WeasyPrint — and SVG media bytes get the same pass before they are embedded.
 
 ## Overview
 
@@ -14,8 +15,8 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 - **DOCX**: HTML fed to `@turbodocx/html-to-docx`
 - **PDF**: HTML fed to WeasyPrint subprocess
 
-Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX) — see their
-sections below.
+Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX), and
+eigenvector exports its own SVG (PDF = that SVG on a WeasyPrint page) — see their sections below.
 
 Every eigendoc/eigenslides/eigensheets export runs its Yjs reconstruction, rendering and sanitization in the
 one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the
@@ -260,6 +261,24 @@ apps/api/src/lib/export/slides/
   render.ts      # Slide/object → HTML strings (SizeUnit abstraction), shared with the preview
   transform.ts   # Worker-side: materialized deck + media → standalone HTML bytes (screen or PDF mode)
 # content loader: apps/api/src/lib/document/slides.ts (readDeckFromDoc)
+```
+
+## Vector Export
+
+Eigenvector (`.eigenvector`) drawings export as SVG and PDF via the same route:
+
+| Format | Pipeline |
+|--------|----------|
+| `svg`  | `sceneToSvg` (the shared `packages/lib/src/vector` serializer previews/embeds also use), media as `data:` URIs, the used `@font-face` blocks spliced into `<defs><style>`, then `sanitizeExportHtml` |
+| `pdf`  | The same SVG (fonts in the wrapping page's `<style>` instead) on a minimal white page sized `@page` to the drawing → WeasyPrint. An empty drawing is a 400 |
+
+`renderEigenvectorExport` lives in `export/vector/transform.ts` and runs in the document-transform Worker like the other types; `collectExportMedia` prepares the media on the main thread. Media previews serve SVG bytes as-is, so `prepareMedia` (`export/media.ts`) passes `image/svg+xml` media through `sanitizeExportHtml` before it is embedded — a nested `<image href>` inside an SVG data: URI reaches WeasyPrint's fetcher, the same SSRF the assembled document already closes. A transparent drawing keeps its transparency in the SVG download and exports on white paper for PDF.
+
+```
+apps/api/src/lib/export/vector/
+  transform.ts   # Worker-side: materialized scene + media → SVG bytes, or the PDF wrapper HTML
+# serializer: packages/lib/src/vector/scene-to-svg.ts (sceneToSvg, shared FE/BE)
+# content loader: packages/lib/src/vector/read-vector.ts (readVectorFromDoc)
 ```
 
 ## Sheets Export

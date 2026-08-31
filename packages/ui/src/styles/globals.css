@@ -651,12 +651,129 @@
     @apply absolute h-3 w-3 bg-background border border-selection-handle rounded-sm;
 }
 
+/* A linear element's draggable vertex dot (line/arrow endpoints): the same token as the square
+   resize grip but ROUND, so a point-editable line reads as "a set of points" rather than a resize
+   box (Excalidraw's POINT_HANDLE). Rendered over the scene by point-handles.tsx. */
+.eigen-vertex-handle {
+    @apply absolute h-3 w-3 bg-background border border-selection-handle rounded-full;
+    /* Contain the ::before halo's negative z-index so it sits behind the dot but above the scene. */
+    isolation: isolate;
+}
+
+/* A vertex dot the user has clicked to SELECT (EP-PT): filled with the selection-handle accent
+   instead of hollow, cloning Excalidraw's selected-point look (filled vs the idle hollow dots) so
+   Delete/Backspace visibly targets THIS point rather than the whole element. Applied alongside
+   .eigen-vertex-handle; source order after it carries the fill (the print block below hides it too,
+   since the element still matches .eigen-vertex-handle). */
+.eigen-vertex-handle-selected {
+    @apply bg-selection-handle;
+}
+
+/* The translucent dot at each segment midpoint of a selected line/arrow: drag it to INSERT a vertex
+   there (point-handles.tsx, UA3). Same round token as the vertex dot but ghosted, so it reads as
+   "add a point here" rather than an existing one; hover brings it to full strength (pointer cursor
+   set in JSX). Elbow arrows show none (their route is derived). */
+.eigen-midpoint-handle {
+    @apply absolute h-3 w-3 bg-background border border-selection-handle rounded-full opacity-40;
+    /* Contain the ::before halo's negative z-index so it sits behind the dot but above the scene. */
+    isolation: isolate;
+}
+
+.eigen-midpoint-handle:hover {
+    @apply opacity-100;
+}
+
+/* D9 point-affordance geometry (shared by vertex + midpoint dots). The dot itself stays 12px; a 22px
+   invisible grab ring (::after, inset -5px) enlarges the hit target to ≈2× the visual radius, matching
+   Excalidraw's POINT_HANDLE_SIZE+1, and a 20px translucent hover halo (::before) rests behind the dot,
+   the soft affordance shown on hover — suppressed mid-drag via .eigen-point-handle-no-halo. Colours are
+   ours (the selection-handle accent), the sizes are Excalidraw's. */
+.eigen-vertex-handle::after,
+.eigen-midpoint-handle::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 9999px;
+}
+
+.eigen-vertex-handle::before,
+.eigen-midpoint-handle::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    background: var(--selection-handle);
+    opacity: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.eigen-vertex-handle:hover::before,
+.eigen-midpoint-handle:hover::before {
+    opacity: 0.4;
+}
+
+/* No halo while a point is mid-drag (the grabbed dot follows the cursor). Placed after the :hover rule so
+   equal specificity resolves in its favour. */
+.eigen-point-handle-no-halo::before {
+    opacity: 0;
+}
+
+/* Two coincident vertices merge into one dot drawn at 2× size (D9(d)). */
+.eigen-point-handle-doubled {
+    @apply h-6 w-6;
+}
+
+/* The draggable focus-point grab target (EP-U4/D5): a transparent 22px hit ring, centred over the SVG hollow
+   anchor dot that arrow-affordances draws in the scene group, so a straight arrow's aim point can be grabbed
+   with the same generous target as a vertex handle (Excalidraw's POINT_HANDLE_SIZE+1). The visible hollow dot
+   + dashed line + solid dock dot are SVG; this element is interaction only. A hover halo (::before) mirrors
+   the vertex dots' affordance, suppressed mid-drag via .eigen-point-handle-no-halo. */
+.eigen-focus-handle {
+    @apply absolute rounded-full;
+    width: 22px;
+    height: 22px;
+    transform: translate(-50%, -50%);
+    /* Contain the ::before halo's negative z-index so it sits behind the SVG dot but above the scene. */
+    isolation: isolate;
+}
+
+.eigen-focus-handle::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    border-radius: 9999px;
+    background: var(--selection-handle);
+    opacity: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+.eigen-focus-handle:hover::before {
+    opacity: 0.4;
+}
+
+.eigen-focus-handle.eigen-point-handle-no-halo::before {
+    opacity: 0;
+}
+
 /* Presence, selection, and in-document search chrome is screen-only; the print
    clone copies the live editor DOM, so strip it here. */
 @media print {
     .collaboration-cursor__caret,
     .collaboration-cursor__label,
-    .eigen-selection-handle {
+    .eigen-selection-handle,
+    .eigen-vertex-handle,
+    .eigen-midpoint-handle,
+    .eigen-focus-handle {
         display: none;
     }
 

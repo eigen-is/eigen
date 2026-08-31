@@ -3,8 +3,10 @@
 // from selectedIds; group move/nudge/delete apply to the whole set.
 
 import {
+    arrowRoute,
     type Bounds,
-    getElementBounds,
+    elementBounds,
+    HIT_THRESHOLD_SCREEN,
     hitTestElement,
     type MarqueeMode,
     marqueeHits,
@@ -13,20 +15,34 @@ import {
 } from '@workspace/lib/vector';
 import { useCallback, useState } from 'react';
 
-// Top-most element under a scene point — `ordered` is back-to-front, so scan in reverse.
-export function hitTestTopmost(ordered: VectorElement[], point: Point): string | null {
+// Top-most element under a scene point — `ordered` is back-to-front, so scan in reverse. `byId` lets an
+// elbow arrow be hit on its DERIVED route (its bends spill past the stored 2-endpoint line), not the
+// straight segment; arrowRoute computes it only for elbow arrows.
+export function hitTestTopmost(
+    ordered: VectorElement[],
+    point: Point,
+    zoom: number,
+    byId?: Map<string, VectorElement>,
+): string | null {
+    const threshold = HIT_THRESHOLD_SCREEN / zoom;
     for (let i = ordered.length - 1; i >= 0; i--) {
-        if (hitTestElement(ordered[i], point)) return ordered[i].id;
+        if (hitTestElement(ordered[i], point, threshold, arrowRoute(ordered[i], byId))) return ordered[i].id;
     }
     return null;
 }
 
-// Marquee selection under the shared direction-mode rule (U6c): `mode` picks contain vs intersect;
-// each element's rotated AABB is tested against the marquee bounds by the shared geometry helper.
-export function marqueeSelect(ordered: VectorElement[], marquee: Bounds, mode: MarqueeMode): string[] {
+// Marquee selection under the shared direction-mode rule: `mode` picks contain vs intersect;
+// each element's arrow-aware rotated AABB (a label overhang counts; an elbow arrow's route bbox
+// via `byId`) is tested against the marquee bounds by the shared geometry helper.
+export function marqueeSelect(
+    ordered: VectorElement[],
+    marquee: Bounds,
+    mode: MarqueeMode,
+    byId?: Map<string, VectorElement>,
+): string[] {
     const ids: string[] = [];
     for (const el of ordered) {
-        if (marqueeHits(getElementBounds(el), marquee, mode)) ids.push(el.id);
+        if (marqueeHits(elementBounds(el, arrowRoute(el, byId)), marquee, mode)) ids.push(el.id);
     }
     return ids;
 }

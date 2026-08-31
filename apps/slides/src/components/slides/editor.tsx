@@ -4,10 +4,12 @@ import { getBackgroundStyle } from '@workspace/lib/background';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
+    materializeClipboardSvg,
     needsReUpload,
     readClipboardBox,
     readEigenClipboard,
     readEigenClipboardAsync,
+    readSvgClipboardWithItems,
     reUploadImage,
     writeEigenClipboard,
     writeEigenClipboardAsync,
@@ -467,7 +469,7 @@ function SlideEditorInner({
             const objects = selectedObjectIds.map((id) => deck.objects[id]).filter(Boolean);
             const patches = computeArrange(objects, op);
             if (patches.length === 0) return;
-            // Arrange is a discrete op — seal it as its own undo step (U6e).
+            // Arrange is a discrete op — seal it as its own undo step.
             undoManager?.stopCapturing();
             yjsDoc.transact(() => {
                 const objectsMap = yjsDoc.getMap('objects');
@@ -580,7 +582,7 @@ function SlideEditorInner({
     );
 
     // Consume eigen clipboard items into new objects on the active slide — shared by the paste event
-    // listener and the object-menu Paste row (U6f). Text sanitises/escapes into LightEditor HTML;
+    // listener and the object-menu Paste row. Text sanitises/escapes into LightEditor HTML;
     // images place at the wire's exact box; cross-mount images re-upload, skip-on-failure.
     const pasteEigenData = useCallback(
         (data: EigenClipboardData) => {
@@ -656,6 +658,20 @@ function SlideEditorInner({
             if (imageFile) {
                 e.preventDefault();
                 handleImageFile(imageFile);
+                return;
+            }
+
+            // A vector SVG payload (or a pasted SVG document) becomes an image object through the
+            // exact image-file path — stored in media/, served as-is, rendered by <image>. Ahead of
+            // the eigen-items branch so a vector selection lands as one image, not its shape carriers. Its
+            // images are name-referenced (eigen-media:); materialize re-uploads each into our media/ and
+            // rewrites the svg's refs before it's stored.
+            const svgPayload = e.clipboardData ? readSvgClipboardWithItems(e.clipboardData) : null;
+            if (svgPayload && mediaFolderId) {
+                e.preventDefault();
+                materializeClipboardSvg(svgPayload.svg, svgPayload.items, mediaFolderId, uploadFile.mutateAsync)
+                    .then(handleImageFile)
+                    .catch(() => {});
                 return;
             }
 
@@ -749,6 +765,27 @@ function SlideEditorInner({
         addObject(activeSlideId, DEFAULT_TEXT_OBJECT);
     }, [activeSlideId, addObject]);
 
+    // Double-click on empty canvas: a new text object centred on the click, clamped on-slide, then
+    // selected and opened for editing immediately (vector's openNewText idiom). Sealed as its own
+    // undo step so it never merges into a preceding op; the first keystrokes coalesce into it.
+    const handleCreateTextAt = useCallback(
+        (x: number, y: number) => {
+            if (!activeSlideId || !canWrite) return;
+            const { width, height } = DEFAULT_TEXT_OBJECT;
+            undoManager?.stopCapturing();
+            const objId = addObject(activeSlideId, {
+                ...DEFAULT_TEXT_OBJECT,
+                x: Math.min(Math.max(x - width / 2, 0), SLIDE_BASE_WIDTH - width),
+                y: Math.min(Math.max(y - height / 2, 0), SLIDE_BASE_HEIGHT - height),
+            });
+            if (objId) {
+                setSelectedObjectIds([objId]);
+                setEditingObjectId(objId);
+            }
+        },
+        [activeSlideId, canWrite, addObject, undoManager],
+    );
+
     const handleStartEditing = useCallback((objId: string) => {
         setSelectedObjectIds([objId]);
         setEditingObjectId(objId);
@@ -786,7 +823,7 @@ function SlideEditorInner({
         [deleteObjects],
     );
 
-    // Object-menu clipboard rows (U6f menu parity). Copy/Cut act on the right-clicked object; Paste
+    // Object-menu clipboard rows, at parity with the keyboard handlers. Copy/Cut act on the right-clicked object; Paste
     // reads the async clipboard (a menu click carries no ClipboardEvent). Duplicate offsets by DUPLICATE_OFFSET.
     // Delete only after the async write resolves — a denied clipboard write must not destroy
     // content that would then exist nowhere but the undo stack (vector's cut discipline).
@@ -915,8 +952,8 @@ function SlideEditorInner({
         [selectedObjectIds, deck.objects],
     );
 
-    // Aspect lock (Override 3), lifted here so the panel checkbox and the canvas' ObjectTransform
-    // resizeMode share one ephemeral setting. Default ON for image-only selections (D8b).
+    // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
+    // resizeMode share one ephemeral setting. Default ON for image-only selections.
     const allImageSelected = selectedObjects.length > 0 && selectedObjects.every((o) => o.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedObjectIds.join(','), allImageSelected);
 
@@ -1062,6 +1099,7 @@ function SlideEditorInner({
                                                 onStartEditing={handleStartEditing}
                                                 onUpdateObject={updateObject}
                                                 onDuplicateObjects={canWrite ? handleDuplicateObjects : undefined}
+                                                onCreateTextAt={canWrite ? handleCreateTextAt : undefined}
                                                 onTransformActiveChange={setTransformActive}
                                                 aspectLocked={aspectLocked}
                                                 provider={provider}

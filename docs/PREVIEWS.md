@@ -65,6 +65,7 @@ stale content after an inline edit.
 | `eigendoc`     | Yjs blobs → transform Worker → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
 | `eigenslides`  | Yjs blobs → transform Worker → first 8 slides → positioned divs with container-query sizing |
 | `eigensheets`  | Yjs blobs → transform Worker → bounded first-sheet HTML table (`renderSheetsPreviewHtml`) |
+| `eigenvector`  | Yjs blobs → transform Worker → `sceneToSvg` (images as `eigen-media:` name refs) → the svg-media-inline pass (media as `data:` URIs, eigen font faces injected — an `<img>`-hosted SVG never fetches external URLs) → served as-is as `image/svg+xml` through the screen-preview image cache (sandbox CSP; no rasterizing, no HTML wrapper) |
 
 Plaintext is deliberately **not** `<pre>`: `eigen-prose` paints every `<pre>` as a dark, non-wrapping
 code block, and a `.txt` file should read like rendered markdown instead.

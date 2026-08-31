@@ -17,6 +17,7 @@
     "es-toolkit": "^1.46.0",
     "immer": "^9.0.12",
     "nanoid": "^5.1.5",
+    "perfect-freehand": "1.2.3",
     "roughjs": "4.6.4",
     "rrule": "^2.8.1",
     "y-websocket": "^3.0.0",

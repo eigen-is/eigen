@@ -4,6 +4,7 @@ import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DeckData, ImageObject, TextObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorScene } from '@workspace/lib/vector';
 import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
 import { writeEigendocToYjs } from '../../lib/document/doc';
@@ -360,8 +361,166 @@ export async function seedDocumentMedia(
     drivePath: DrivePath,
     name: string,
     bytes: Uint8Array,
+    mimeType = 'image/png',
 ): Promise<void> {
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
     if (!mediaFolder) throw new Error(`${drivePath.name}: media folder missing`);
-    await mount.createFile(mediaFolder.id, name, 'image/png', bytes.byteLength, bytes);
+    await mount.createFile(mediaFolder.id, name, mimeType, bytes.byteLength, bytes);
+}
+
+// Deterministic eigenvector fixture for the transform work (preview round-trip and
+// search extraction). Mirrors the deck fixture idiom: literal fields, fixed seeds and
+// fractional indices, one media reference, one text element plus a bound arrow with a
+// label — the two sources the extractor joins. Every type the serializer special-cases
+// appears once (shape, ellipse, text, freedraw, line, bound labelled arrow, image).
+export const GOLDEN_VECTOR_TEXT = 'Vector <sketch>';
+export const GOLDEN_VECTOR_LABEL = 'Bound label';
+
+export function buildGoldenVectorScene(): VectorScene {
+    const base = { ...DEFAULT_ELEMENT_PROPS, angle: 0 };
+    const elements: VectorElement[] = [
+        {
+            ...base,
+            id: 'v-rect',
+            type: 'rectangle',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 60,
+            seed: 1,
+            index: 'a0',
+            roundness: 'sharp',
+        },
+        {
+            ...base,
+            id: 'v-ellipse',
+            type: 'ellipse',
+            x: 140,
+            y: 0,
+            width: 80,
+            height: 80,
+            seed: 2,
+            index: 'a1',
+            roundness: 'round',
+        },
+        {
+            ...base,
+            id: 'v-text',
+            type: 'text',
+            x: 0,
+            y: 100,
+            width: 160,
+            height: 50,
+            seed: 3,
+            index: 'a2',
+            text: GOLDEN_VECTOR_TEXT,
+            fontSize: 20,
+            fontFamily: 'Excalifont',
+            textAlign: 'left',
+        },
+        {
+            ...base,
+            id: 'v-freedraw',
+            type: 'freedraw',
+            x: 0,
+            y: 180,
+            width: 60,
+            height: 20,
+            seed: 4,
+            index: 'a3',
+            roundness: 'sharp',
+            points: '[[0,0],[15,10],[30,4],[45,18],[60,8]]',
+        },
+        {
+            ...base,
+            id: 'v-line',
+            type: 'line',
+            x: 140,
+            y: 180,
+            width: 100,
+            height: 40,
+            seed: 5,
+            index: 'a4',
+            roundness: 'sharp',
+            points: '[[0,0],[100,0],[100,40]]',
+        },
+        {
+            ...base,
+            id: 'v-arrow',
+            type: 'arrow',
+            elbow: false,
+            fixedSegments: '',
+            x: 0,
+            y: 260,
+            width: 120,
+            height: 0,
+            seed: 6,
+            index: 'a5',
+            roundness: 'sharp',
+            points: '[[0,0],[120,0]]',
+            startArrowhead: 'none',
+            endArrowhead: 'triangle',
+            startBinding: '{"elementId":"v-rect","fixedPoint":[1,0.5]}',
+            endBinding: '{"elementId":"v-ellipse","fixedPoint":[0,0.5]}',
+            text: GOLDEN_VECTOR_LABEL,
+            fontSize: 20,
+            fontFamily: 'Excalifont',
+            labelWidth: 90,
+        },
+        {
+            ...base,
+            id: 'v-image',
+            type: 'image',
+            x: 0,
+            y: 340,
+            width: 120,
+            height: 120,
+            seed: 7,
+            index: 'a6',
+            mediaName: GOLDEN_MEDIA_NAME,
+        },
+        // A bound elbow arrow (no label) — its orthogonal route is DERIVED at render time, so preview
+        // and export exercise the server-side elbowRoute path end-to-end.
+        {
+            ...base,
+            id: 'v-elbow',
+            type: 'arrow',
+            elbow: true,
+            fixedSegments: '',
+            x: 50,
+            y: 66,
+            width: 130,
+            height: 20,
+            seed: 8,
+            index: 'a7',
+            roundness: 'sharp',
+            points: '[[0,0],[130,20]]',
+            startArrowhead: 'none',
+            endArrowhead: 'arrow',
+            startBinding: '{"elementId":"v-rect","fixedPoint":[0.5,1]}',
+            endBinding: '{"elementId":"v-ellipse","fixedPoint":[0.5,1]}',
+            text: '',
+            fontSize: 20,
+            fontFamily: 'Excalifont',
+            labelWidth: 0,
+        },
+    ];
+    return { elements, meta: { background: 'transparent', gridSize: 20 } };
+}
+
+// Write a VectorScene into a Y.Doc the way use-vector-doc.ts persists one: a per-element
+// Y.Map under the `elements` root plus the `meta` root. read-vector reads only the
+// ELEMENT_FIELDS keys, so setting every own field is safe.
+export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
+    doc.transact(() => {
+        const elementsMap = doc.getMap('elements');
+        const metaMap = doc.getMap('meta');
+        for (const element of scene.elements) {
+            const yElement = new Y.Map<unknown>();
+            for (const [field, value] of Object.entries(element)) yElement.set(field, value);
+            elementsMap.set(element.id, yElement);
+        }
+        metaMap.set('background', scene.meta.background);
+        metaMap.set('gridSize', scene.meta.gridSize);
+    });
 }

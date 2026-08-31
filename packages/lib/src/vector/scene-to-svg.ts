@@ -3,17 +3,32 @@
 // and text trusts client-measured width/height so the server never measures. Shared verbatim
 // by the frontend (previews/embeds/thumbnails/export) and the API transform Worker.
 
+import { getStroke } from 'perfect-freehand';
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../constants/fonts';
+import { headingIsHorizontal, vectorToHeading } from './elbow-heading';
+import { arrowRoute } from './elbow-route';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
-import type { Box } from './geometry';
-import { getElementsBounds } from './geometry';
+import type { Box, Point } from './geometry';
 import {
+    arrowheadGeometry,
+    arrowLabelBox,
+    elementBounds,
+    FREEDRAW_SIZE_FACTOR,
+    isClosedPath,
+    parsePoints,
+    unionBounds,
+} from './geometry';
+import {
+    type Arrowhead,
+    isLinearElement,
     isTransparent,
+    type VectorArrowElement,
     type VectorElement,
     type VectorImageElement,
+    type VectorLinearElement,
     type VectorScene,
     type VectorShapeElement,
     type VectorTextElement,
@@ -43,7 +58,12 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     }
 
     const padding = opts.padding ?? DEFAULT_PADDING;
-    const bounds = getElementsBounds(ordered);
+    // byId feeds the derived elbow route (its bends spill past the stored 2-endpoint box, and depend on the
+    // bound shapes) to both bounds and rendering.
+    const byId = new Map(scene.elements.map((el) => [el.id, el]));
+    // elementBounds unions an arrow's label rect, so a wide label on a short arrow isn't clipped
+    // by the viewBox; for an elbow arrow it's the derived route's bbox, else the plain box AABB.
+    const bounds = ordered.map((el) => elementBounds(el, arrowRoute(el, byId))).reduce(unionBounds);
     const minX = round(bounds.minX - padding);
     const minY = round(bounds.minY - padding);
     const width = round(bounds.maxX - bounds.minX + padding * 2);
@@ -54,7 +74,7 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
         body += `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="${escapeXml(scene.meta.background)}"/>`;
     }
     for (const el of ordered) {
-        body += elementToSvg(el, opts);
+        body += elementToSvg(el, opts, byId);
     }
 
     return `<svg xmlns="${SVG_NS}" width="${width}" height="${height}" viewBox="${minX} ${minY} ${width} ${height}">${body}</svg>`;
@@ -64,7 +84,13 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
 // runs. The live canvas (packages/ui) reuses this so its per-element nodes are byte-for-byte
 // what previews/embeds/export produce. Shapes get a fresh RoughGenerator — seeded roughjs
 // output depends only on el.seed, not generator identity, so the golden output is unchanged.
-export function elementToSvg(el: VectorElement, opts: SceneToSvgOptions = {}): string {
+// `byId` lets an elbow arrow resolve its bound shapes to derive its route; omit it (no scene context)
+// and an elbow arrow falls back to its straight stored endpoints.
+export function elementToSvg(
+    el: VectorElement,
+    opts: SceneToSvgOptions = {},
+    byId?: Map<string, VectorElement>,
+): string {
     switch (el.type) {
         case 'rectangle':
         case 'diamond':
@@ -74,12 +100,272 @@ export function elementToSvg(el: VectorElement, opts: SceneToSvgOptions = {}): s
             return renderText(el);
         case 'image':
             return renderImage(el, opts);
+        case 'freedraw':
+            return renderFreedraw(new RoughGenerator(), el);
+        case 'line':
+            return renderLine(new RoughGenerator(), el);
+        case 'arrow':
+            return renderArrow(new RoughGenerator(), el, arrowRoute(el, byId));
     }
 }
 
 function renderShape(gen: RoughGenerator, el: VectorShapeElement): string {
     const paths = drawableToSvg(shapeDrawable(gen, el));
     return `${groupOpen(el, ' stroke-linecap="round"')}${paths}</g>`;
+}
+
+// Freehand strokes are perfect-freehand, not roughjs: a filled outline `<path>` with no stroke.
+// roughness/seed/strokeStyle don't touch the stroke; only a closed freedraw's optional fill uses them.
+function renderFreedraw(gen: RoughGenerator, el: VectorLinearElement): string {
+    const points = parsePoints(el.points);
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
+
+    // Closed + filled: the roughjs fill of the raw polygon, layered under the stroke (Excalidraw's
+    // order). points-on-curve simplify isn't vendored — the raw points are the fill polygon.
+    let fill = '';
+    if (isClosedPath(points) && !isTransparent(el.backgroundColor)) {
+        const options = linearRoughOptions(el, points);
+        options.stroke = 'none';
+        fill = drawableToSvg(gen.polygon(coords, options));
+    }
+
+    const outline = getStroke(coords, {
+        simulatePressure: true,
+        size: el.strokeWidth * FREEDRAW_SIZE_FACTOR,
+        thinning: 0.6,
+        smoothing: 0.5,
+        streamline: 0.5,
+        easing: (t) => Math.sin((t * Math.PI) / 2),
+        last: true,
+    });
+    const d = getSvgPathFromStroke(outline);
+    const stroke = d ? `<path d="${d}" fill="${escapeXml(el.strokeColor)}" stroke="none"/>` : '';
+    return `${groupOpen(el)}${fill}${stroke}</g>`;
+}
+
+// Lines are roughjs: Excalidraw's line arm — rounded curves through the vertices, sharp linearPaths,
+// and (only when the path loops) a filled polygon/curve.
+function renderLine(gen: RoughGenerator, el: VectorLinearElement): string {
+    const points = parsePoints(el.points);
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
+    const options = linearRoughOptions(el, points);
+    const drawable =
+        el.roundness === 'round'
+            ? gen.curve(coords, options)
+            : options.fill
+              ? gen.polygon(coords, options)
+              : gen.linearPath(coords, options);
+    return `${groupOpen(el, ' stroke-linecap="round"')}${drawableToSvg(drawable)}</g>`;
+}
+
+// An arrow is a line shaft (sharp linearPath / round curve, never filled) plus roughjs heads on either
+// end and an optional label. The label rect (+5px padding) is cut out of the shaft with an even-odd
+// clip hole so the shaft shows nothing under the text; heads and label draw on top, unclipped. All
+// coordinates are the arrow's local frame — the group transform rotates the whole arrow, label and all.
+function renderArrow(gen: RoughGenerator, el: VectorArrowElement, route?: Point[]): string {
+    const points = route ?? parsePoints(el.points);
+    if (points.length === 0) return `${groupOpen(el, ' stroke-linecap="round"')}</g>`;
+    const coords = points.map((p): [number, number] => [p.x, p.y]);
+    const options = baseRoughOptions(el, false);
+    // A round elbow rounds each bend with a quadratic arc (Excalidraw's generateElbowArrowShape, radius 16),
+    // fed to roughjs as a path — first/last points and the final segment's direction are untouched, so heads
+    // and the raw-route label math are unaffected. A sharp elbow (and any elbow with no scene context) stays a
+    // linearPath; a non-elbow round arrow curves through its vertices.
+    let shaftDrawable: Drawable;
+    if (el.elbow) {
+        shaftDrawable =
+            el.roundness === 'round'
+                ? gen.path(elbowRoundedShaftPath(points), baseRoughOptions(el, true))
+                : gen.linearPath(coords, options);
+    } else {
+        shaftDrawable = el.roundness === 'round' ? gen.curve(coords, options) : gen.linearPath(coords, options);
+    }
+    const shaftPaths = drawableToSvg(shaftDrawable);
+
+    const label = arrowLabelBox(el, route);
+    let shaft = shaftPaths;
+    let defs = '';
+    if (label) {
+        const clipId = `arrow-label-clip-${el.id.replace(/[^A-Za-z0-9_-]/g, '')}`;
+        defs = `<clipPath id="${clipId}">${labelClipPath(points, label, el.strokeWidth)}</clipPath>`;
+        shaft = `<g clip-path="url(#${clipId})">${shaftPaths}</g>`;
+    }
+
+    const heads =
+        renderArrowhead(gen, el, points, 'start', el.startArrowhead) +
+        renderArrowhead(gen, el, points, 'end', el.endArrowhead);
+    const text = label ? renderArrowLabel(el, label) : '';
+    return `${groupOpen(el, ' stroke-linecap="round"')}${defs}${shaft}${heads}${text}</g>`;
+}
+
+// Ported from Excalidraw's generateElbowArrowShape (radius 16): each interior bend becomes an inset-before
+// point, a quadratic control at the raw corner, and an inset-after point, so the corner rounds without moving
+// the neighbouring vertices. The corner radius is min(16, half the shorter adjacent segment) so a short leg
+// never over-rounds. The first and last route points — and thus the final segment's direction the head reads —
+// are emitted verbatim. Full-precision numbers go to roughjs (like Excalidraw); rounding happens at serialize.
+function elbowRoundedShaftPath(points: Point[]): string {
+    const radius = 16;
+    // Per interior bend: [insetBefore, corner, insetAfter], three points feeding one L + one Q.
+    const sub: Point[] = [];
+    for (let i = 1; i < points.length - 1; i++) {
+        const prev = points[i - 1];
+        const point = points[i];
+        const next = points[i + 1];
+        const corner = Math.min(radius, segmentLength(point, prev) / 2, segmentLength(point, next) / 2);
+        sub.push(insetToward(point, prev, corner));
+        sub.push(point);
+        sub.push(insetToward(point, next, corner));
+    }
+
+    const first = points[0];
+    const parts = [`M ${first.x} ${first.y}`];
+    for (let i = 0; i < sub.length; i += 3) {
+        parts.push(`L ${sub[i].x} ${sub[i].y}`);
+        parts.push(`Q ${sub[i + 1].x} ${sub[i + 1].y}, ${sub[i + 2].x} ${sub[i + 2].y}`);
+    }
+    const last = points[points.length - 1];
+    parts.push(`L ${last.x} ${last.y}`);
+    return parts.join(' ');
+}
+
+// A point `corner` away from `point` along the (orthogonal) segment toward `neighbour`.
+function insetToward(point: Point, neighbour: Point, corner: number): Point {
+    if (headingIsHorizontal(vectorToHeading(point.x - neighbour.x, point.y - neighbour.y))) {
+        return { x: neighbour.x < point.x ? point.x - corner : point.x + corner, y: point.y };
+    }
+    return { x: point.x, y: neighbour.y < point.y ? point.y - corner : point.y + corner };
+}
+
+function segmentLength(a: Point, b: Point): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+// One arrowhead's roughjs fragment in the arrow's local frame. Barbs (arrow/bar/triangle) share the
+// tip+base geometry: arrow = two lines, bar = one line through the tip, triangle = a solid polygon;
+// circle = a solid disc. All filled solids use strokeColor. null when the head is 'none'.
+function renderArrowhead(
+    gen: RoughGenerator,
+    el: VectorArrowElement,
+    points: Point[],
+    position: 'start' | 'end',
+    head: Arrowhead,
+): string {
+    const geo = arrowheadGeometry(el, points, position, head);
+    if (!geo) return '';
+    if (geo.kind === 'circle') {
+        return drawableToSvg(gen.circle(geo.center.x, geo.center.y, geo.diameter, headOptions(el, true, 0.5)));
+    }
+    if (head === 'triangle') {
+        const options = headOptions(el, true, 1);
+        return drawableToSvg(
+            gen.polygon(
+                [
+                    [geo.barb1.x, geo.barb1.y],
+                    [geo.tip.x, geo.tip.y],
+                    [geo.barb2.x, geo.barb2.y],
+                ],
+                options,
+            ),
+        );
+    }
+    const options = headOptions(el, false, 1);
+    if (head === 'bar') {
+        return drawableToSvg(gen.line(geo.barb1.x, geo.barb1.y, geo.barb2.x, geo.barb2.y, options));
+    }
+    // 'arrow' — two barbs meeting at the tip
+    return (
+        drawableToSvg(gen.line(geo.barb1.x, geo.barb1.y, geo.tip.x, geo.tip.y, options)) +
+        drawableToSvg(gen.line(geo.tip.x, geo.tip.y, geo.barb2.x, geo.barb2.y, options))
+    );
+}
+
+// Head options mirror the shaft's (seed/stroke), preserveVertices on so a small head stays crisp, and cap
+// roughness like Excalidraw's getArrowheadLineOptions — barbs at 1, the circle disc at 0.5 — so a rough head
+// docks cleanly on the (now pinned) shaft end instead of forking off it. Solid heads (triangle/circle) fill
+// with strokeColor.
+function headOptions(el: VectorArrowElement, solidFill: boolean, roughnessCap: number): Options {
+    const options = baseRoughOptions(el, true);
+    options.roughness = Math.min(roughnessCap, options.roughness ?? 0);
+    if (solidFill) {
+        options.fillStyle = 'solid';
+        options.fill = el.strokeColor;
+    }
+    return options;
+}
+
+// The even-odd clip hole under a label: an outer rect minus the label rect + 5px padding, both as
+// rectangle subpaths of one path. Evenodd leaves the inner rect uncovered, so the shaft is cut there.
+// The clip HIDES anything outside the outer rect, so it must enclose the whole shaft — the point bounds
+// (and the hole) padded past roughjs jitter + the stroke half-width, never a fixed square (an arrow
+// larger than it would lose its shaft).
+function labelClipPath(
+    points: Point[],
+    label: { center: Point; width: number; height: number },
+    strokeWidth: number,
+): string {
+    const pad = 5;
+    const hx = label.center.x - label.width / 2 - pad;
+    const hy = label.center.y - label.height / 2 - pad;
+    const hw = label.width + pad * 2;
+    const hh = label.height + pad * 2;
+
+    let minX = hx;
+    let minY = hy;
+    let maxX = hx + hw;
+    let maxY = hy + hh;
+    for (const p of points) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+    }
+    const margin = 50 + strokeWidth;
+    const ox = round(minX - margin);
+    const oy = round(minY - margin);
+    const ow = round(maxX - minX + margin * 2);
+    const oh = round(maxY - minY + margin * 2);
+
+    const outer = `M${ox} ${oy} h${ow} v${oh} h${round(-ow)} Z`;
+    const hole = `M${round(hx)} ${round(hy)} h${round(hw)} v${round(hh)} h${round(-hw)} Z`;
+    return `<path clip-rule="evenodd" d="${outer} ${hole}"/>`;
+}
+
+// The label text, centered on the label rect in the arrow's local frame — the renderText baseline math
+// with text-anchor="middle" and colour = strokeColor. Height/position come from arrowLabelBox.
+function renderArrowLabel(el: VectorArrowElement, label: { center: Point; width: number; height: number }): string {
+    const lineHeightPx = getLineHeightPx(el.fontFamily, el.fontSize);
+    const verticalOffset = getVerticalOffset(el.fontFamily, el.fontSize, lineHeightPx);
+    const fontFamily = escapeXml(getFontFamily(el.fontFamily));
+    const fill = escapeXml(el.strokeColor);
+    const lines = el.text.replace(/\r\n?/g, '\n').split('\n');
+    const top = label.center.y - label.height / 2;
+    const cx = round(label.center.x);
+
+    let out = '';
+    for (let i = 0; i < lines.length; i++) {
+        const y = round(top + i * lineHeightPx + verticalOffset);
+        out += `<text x="${cx}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="middle" style="white-space: pre;">${escapeXml(lines[i])}</text>`;
+    }
+    return out;
+}
+
+// Ported from Excalidraw's getFreeDrawSvgPath: a chain of quadratic segments whose control points are
+// the outline vertices and whose on-curve points are the midpoints between them, closed with Z. Uses
+// our round() (2 decimals) in place of Excalidraw's TO_FIXED_PRECISION regex.
+function getSvgPathFromStroke(points: number[][]): string {
+    if (points.length === 0) return '';
+    const max = points.length - 1;
+    const parts: (number[] | string)[] = ['M', points[0], 'Q'];
+    for (let i = 0; i < points.length; i++) {
+        const point = points[i];
+        if (i === max) parts.push(point, med(point, points[0]), 'L', points[0], 'Z');
+        else parts.push(point, med(point, points[i + 1]));
+    }
+    return parts.map((part) => (typeof part === 'string' ? part : `${round(part[0])} ${round(part[1])}`)).join(' ');
+}
+
+function med(a: number[], b: number[]): number[] {
+    return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
 function renderText(el: VectorTextElement): string {
@@ -94,7 +380,7 @@ function renderText(el: VectorTextElement): string {
     let out = groupOpen(el);
     for (let i = 0; i < lines.length; i++) {
         const y = round(i * lineHeightPx + verticalOffset);
-        out += `<text x="${round(hx)}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="${anchor}" style="white-space: pre;" dominant-baseline="alphabetic">${escapeXml(lines[i])}</text>`;
+        out += `<text x="${round(hx)}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="${anchor}" style="white-space: pre;">${escapeXml(lines[i])}</text>`;
     }
     return `${out}</g>`;
 }
@@ -155,9 +441,13 @@ function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
 }
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
-// dark-mode filter. Determinism comes from the persisted per-element `seed`.
-function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
-    const options: Options = {
+// dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are
+// shared by shapes and linear elements; fill differs (shapes always, lines only when they loop).
+function baseRoughOptions(
+    el: VectorShapeElement | VectorLinearElement | VectorArrowElement,
+    continuousPath: boolean,
+): Options {
+    return {
         seed: el.seed,
         strokeLineDash: dashArray(el.strokeStyle, el.strokeWidth),
         disableMultiStroke: el.strokeStyle !== 'solid',
@@ -168,20 +458,44 @@ function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options 
         hachureGap: el.strokeWidth * 4,
         roughness: adjustRoughness(el),
         stroke: el.strokeColor,
-        preserveVertices: continuousPath || el.roughness < 2,
-        fillStyle: el.fillStyle,
-        fill: isTransparent(el.backgroundColor) ? undefined : el.backgroundColor,
+        // Deliberate drift from Excalidraw (crisper): a line/arrow SHAFT preserves its vertices at every
+        // roughness, so cartoon-roughness (r≥2) endpoints sit exactly on the stored points instead of
+        // wandering ~3px off. Shapes keep Excalidraw's roughness<2 rule; freedraw's roughjs FILL is
+        // untouched (its stroke is perfect-freehand, never roughjs).
+        preserveVertices: continuousPath || el.roughness < 2 || el.type === 'line' || el.type === 'arrow',
     };
+}
+
+function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
+    const options = baseRoughOptions(el, continuousPath);
+    options.fillStyle = el.fillStyle;
+    options.fill = isTransparent(el.backgroundColor) ? undefined : el.backgroundColor;
     if (el.type === 'ellipse') options.curveFitting = 1;
     return options;
 }
 
-// Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule).
-function adjustRoughness(el: VectorShapeElement): number {
+// A line/freedraw fills only when its path loops (Excalidraw's generateRoughOptions line arm).
+function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
+    const options = baseRoughOptions(el, false);
+    if (isClosedPath(points) && !isTransparent(el.backgroundColor)) {
+        options.fillStyle = el.fillStyle;
+        options.fill = el.backgroundColor;
+    }
+    return options;
+}
+
+// Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule); a relatively
+// long linear element is spared too, so a straight line doesn't wobble.
+function adjustRoughness(el: VectorShapeElement | VectorLinearElement | VectorArrowElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);
     const roundable = el.type === 'rectangle' || el.type === 'diamond';
-    if ((minSize >= 20 && maxSize >= 50) || (minSize >= 15 && el.roundness === 'round' && roundable)) {
+    const linear = isLinearElement(el);
+    if (
+        (minSize >= 20 && maxSize >= 50) ||
+        (minSize >= 15 && el.roundness === 'round' && roundable) ||
+        (linear && maxSize >= 50)
+    ) {
         return el.roughness;
     }
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);

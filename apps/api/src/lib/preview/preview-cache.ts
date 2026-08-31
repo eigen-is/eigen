@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getTextPreviewMode } from '@workspace/lib/constants';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_VECTOR, type DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import { COLLAB_DOCUMENT_TYPES } from '../document/collab-types';
 import type { TransformPriority } from '../document/transform/runner';
@@ -9,6 +9,7 @@ import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateDocumentPreview } from './preview-document';
+import { inlineSvgMediaRefs } from './svg-media-inline';
 import { generateTextPreview, type TextPreviewResult } from './text-preview';
 
 type ImagePreview = { type: 'image'; data: Buffer; contentType: string };
@@ -230,7 +231,13 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
         return { type: 'redirect', url: embedUrl };
     }
 
-    // SVG → serve as-is (no rasterisation to WebP), cached locally for S3 mounts
+    // SVG → serve as-is (no rasterisation to WebP), cached locally for S3 mounts. An image-bearing
+    // vector drawing references its images by name via `eigen-media:` hrefs;
+    // inline each sibling's bytes as a data: URI at serve time so <img> renders them (an <img> SVG
+    // never fetches external refs). The inlined result rides this same versioned cache key — a sibling
+    // edit does not bump the svg's updatedAt, so a stale sibling can outlive the cached preview until
+    // the svg itself changes (accepted; a media rename already breaks name refs everywhere today). The
+    // content type stays image/svg+xml, so the route keeps serving it under the sandbox CSP.
     if (mime === 'image/svg+xml') {
         return getOrCacheImage(
             mount.previewsDir,
@@ -239,7 +246,31 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
             'image/svg+xml',
             async () => {
                 const file = await mount.readFile(drivePath.id);
-                return file ? Buffer.from(await file.arrayBuffer()) : null;
+                if (!file) return null;
+                const bytes = Buffer.from(await file.arrayBuffer());
+                return drivePath.parentId ? inlineSvgMediaRefs(mount, drivePath.parentId, bytes) : bytes;
+            },
+        );
+    }
+
+    // Eigen-native vector drawings render to an SVG in the transform Worker and are then
+    // served as-is on the same SVG-as-image path — the internal preview pipeline keeps
+    // SVGs unrasterized. The text-preview registry is untouched: this is an image, not an
+    // HTML body. Generation may throw the runner's 503 under overload, which the route
+    // surfaces so the client retries — nothing is cached on failure. The rendered SVG
+    // references its images by `eigen-media:` name (an <img> SVG never fetches external
+    // URLs), so it takes the same inline pass as a stored .svg above — resolved against
+    // the container's own media/ folder, fonts injected, same staleness trade-off.
+    if (mime === DRIVE_MIME_VECTOR) {
+        return getOrCacheImage(
+            mount.previewsDir,
+            drivePath.id,
+            screenCacheName(drivePath, 'svg'),
+            'image/svg+xml',
+            async () => {
+                const body = Buffer.from(await generateDocumentPreview('eigenvector', mount, drivePath));
+                const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
+                return mediaFolder ? inlineSvgMediaRefs(mount, mediaFolder.id, body) : body;
             },
         );
     }
@@ -293,7 +324,10 @@ async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<S
 
 async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
     const documentType = COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '');
-    if (!documentType) return null;
+    // getTextPreview only routes doc/slides/sheets here, so eigenvector never occurs at
+    // runtime — but the map still carries it (search extraction shares the list), and it is
+    // not a TextPreviewResult['mode'], so exclude it to keep the text-preview envelope typed.
+    if (!documentType || documentType === 'eigenvector') return null;
     return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
         generateDocumentPreview(documentType, mount, drivePath, priority),
     );

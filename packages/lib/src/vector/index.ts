@@ -1,8 +1,12 @@
 export * from './arrange';
+export { elbowBindPoint, redockBindingsForElbow } from './elbow-heading';
+export * from './elbow-pins';
+export { arrowRoute, elbowRoute } from './elbow-route';
 export * from './font-metrics';
 export * from './fractional-index';
 export * from './geometry';
 export * from './image-fit';
+export * from './media-refs';
 export * from './read-vector';
 export type { MediaResolver, SceneToSvgOptions } from './scene-to-svg';
 export { elementToSvg, sceneToSvg } from './scene-to-svg';
