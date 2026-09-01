@@ -10,6 +10,7 @@ import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildImageClipboardItem,
     classifyPaste,
+    hasRichHtmlBeyondMarker,
     materializeClipboardSvg,
     needsReUpload,
     readClipboardBox,
@@ -457,15 +458,15 @@ const TiptapEditor = ({
                         return true;
                     }
 
-                    if (paste.eigen && paste.eigen.data.items.length > 0) {
+                    if (paste.eigen && paste.eigen.items.length > 0) {
                         // Image payloads MUST take the eigen path (the cross-mount re-upload seam). A
                         // text-only payload is consumed directly only when text/html is marker-only
                         // (slides — PM fallthrough there pastes nothing); a rich-HTML producer (sheets
                         // tables) is left to PM so its <table> parses as a real docs table.
-                        const hasImage = paste.eigen.data.items.some((i) => i.type === 'image');
-                        if (hasImage || !paste.eigen.hasRichHtml) {
+                        const hasImage = paste.eigen.items.some((i) => i.type === 'image');
+                        if (hasImage || !hasRichHtmlBeyondMarker(event.clipboardData)) {
                             event.preventDefault();
-                            handleEigenItemsPaste(paste.eigen.data.items).catch(() => {});
+                            handleEigenItemsPaste(paste.eigen.items).catch(() => {});
                             return true;
                         }
                     }

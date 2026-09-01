@@ -200,25 +200,14 @@ export async function inlineClipboardSvgMedia(
     return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
 }
 
-// The SVG a paste consumer should treat as an image: vector's copy flavour (the `svg` field on the
-// eigen payload) first, then a `text/plain` that is a whole SVG document (a foreign drawing). Null when
-// neither is present. eigen-aware hosts call this BEFORE consuming the typed items so a vector selection
-// lands as one image, not N shape carriers — and consuming the paste there is what prevents a
-// double-paste. The plain-text arm requires the SVG namespace on the root tag — every real SVG export
-// (ours, Excalidraw's, an .svg file's text) carries it, while a hand-pasted `<svg>` code snippet
-// usually doesn't and must stay text.
-export function readSvgClipboard(clipboardData: DataTransfer): string | null {
-    return readSvgClipboardWithItems(clipboardData)?.svg ?? null;
-}
-
 // The SVG a paste consumer should materialize, together with the typed items that back its
 // `eigen-media:` refs — the re-upload manifest `materializeClipboardSvg` fetches from. One read for
-// the host, so it never parses the payload twice (readSvgClipboard delegates here). Mirrors that
-// function's two arms: a vector copy's `svg` field arrives with its image items; a foreign SVG on
-// text/plain has none. Null when there's no SVG to paste. The plain-text arm requires the SVG
-// namespace on the root tag (a hand-pasted `<svg>` snippet without it stays text). `eigen` may be
-// supplied by a caller that already read the payload (classifyPaste) so it is parsed only once;
-// omit it and this reads the payload itself.
+// the host, so it never parses the payload twice. Two arms: a vector copy's `svg` field arrives with
+// its image items; a foreign SVG on text/plain has none. Null when there's no SVG to paste. The
+// plain-text arm requires the SVG namespace on the root tag — every real SVG export (ours,
+// Excalidraw's, an .svg file's text) carries it, while a hand-pasted `<svg>` code snippet usually
+// doesn't and must stay text. `eigen` may be supplied by a caller that already read the payload
+// (classifyPaste) so it is parsed only once; omit it and this reads the payload itself.
 export function readSvgClipboardWithItems(
     clipboardData: DataTransfer,
     eigen: EigenClipboardData | null = readEigenClipboard(clipboardData),

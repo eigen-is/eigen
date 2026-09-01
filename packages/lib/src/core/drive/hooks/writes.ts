@@ -200,13 +200,13 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
                     return response.data;
                 }),
             );
-            const { copied, failedCount, totalFailure } = partitionCopyResults(results);
+            const { copied, failedCount } = partitionCopyResults(results);
             if (copied.length > 0) {
                 invalidateItemCreated(queryClient, ownerId, mountId, mediaFolderId);
             }
             // Total failure throws so onMutationError toasts and card-attachments' Save-abort stays intact;
             // a partial failure keeps the successes and only warns about the ones that dropped.
-            if (totalFailure) throw new Error('Failed to copy files');
+            if (failedCount > 0 && copied.length === 0) throw new Error('Failed to copy files');
             if (failedCount > 0) {
                 toast.error(`${failedCount} file${failedCount === 1 ? '' : 's'} could not be copied`);
             }

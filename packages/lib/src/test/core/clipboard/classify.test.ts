@@ -1,15 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
 import { classifyPaste } from '../../../core/clipboard/classify';
-import { EIGEN_CLIPBOARD_RENDER_ATTR, embedClipboardSvgMetadata } from '../../../core/clipboard/clipboard';
+import { embedClipboardSvgMetadata } from '../../../core/clipboard/clipboard';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardTextItem } from '../../../types/clipboard';
-
-// classifyPaste precomputes hasRichHtmlBeyondMarker, which parses text/html with DOMParser — install
-// happy-dom at module scope the way the sheet's DOM-needing tests do.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const win = new Window();
-g.DOMParser = win.DOMParser;
 
 const EIGEN_MIME = 'application/eigen-clipboard';
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10"/></svg>';
@@ -50,11 +42,10 @@ const pngFile = (name = 'a.png'): File => new File(['x'], name, { type: 'image/p
 const textFile = (name = 'a.txt'): File => new File(['x'], name, { type: 'text/plain' });
 
 describe('classifyPaste', () => {
-    test('eigen-only payload → eigen present, svg absent, hasRichHtml false (marker-only html)', () => {
+    test('eigen-only payload → eigen present, svg absent', () => {
         const data: EigenClipboardData = { version: 1, items: [textItem()] };
         const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data), 'text/html': markerHtml(data) }));
-        expect(c.eigen?.data.items).toEqual(data.items);
-        expect(c.eigen?.hasRichHtml).toBe(false);
+        expect(c.eigen?.items).toEqual(data.items);
         expect(c.svg).toBeUndefined();
     });
 
@@ -65,7 +56,7 @@ describe('classifyPaste', () => {
         const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data) }));
         expect(c.svg?.svg).toBe(svg);
         expect(c.svg?.items).toEqual(items);
-        expect(c.eigen?.data.items).toEqual(items);
+        expect(c.eigen?.items).toEqual(items);
     });
 
     test('eigen + svg + extra html <img> (unit-4 shape) → eigen/svg still returned, html must not suppress them', () => {
@@ -74,27 +65,9 @@ describe('classifyPaste', () => {
         const data: EigenClipboardData = { version: 1, items, svg };
         const html = markerHtml(data, '<img src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=">');
         const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data), 'text/html': html }));
-        expect(c.eigen?.data.items).toEqual(items);
+        // The extra <img> is real HTML beyond the marker, but it must NOT suppress the eigen/svg flavours.
+        expect(c.eigen?.items).toEqual(items);
         expect(c.svg?.svg).toBe(svg);
-        // The extra <img> is real HTML beyond the marker — surfaced, but it does NOT suppress the flavours.
-        expect(c.eigen?.hasRichHtml).toBe(true);
-    });
-
-    test('eigen + svg + our render-marked <img> → hasRichHtml false (the vector render img is ignored)', () => {
-        // Vector's foreign-consumable copy appends an <img data-eigen-clipboard-render> after the marker.
-        // That img must NOT read as rich HTML, or docs' eigen-rung gate rejects a shape-only vector copy
-        // and the base64 SVG lands as a persisted figure.
-        const items = [imageItem()];
-        const svg = embedClipboardSvgMetadata(SVG, { version: 1, items });
-        const data: EigenClipboardData = { version: 1, items, svg };
-        const html = markerHtml(
-            data,
-            `<img ${EIGEN_CLIPBOARD_RENDER_ATTR}="" src="data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=">`,
-        );
-        const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data), 'text/html': html }));
-        expect(c.eigen?.data.items).toEqual(items);
-        expect(c.svg?.svg).toBe(svg);
-        expect(c.eigen?.hasRichHtml).toBe(false);
     });
 
     test('foreign whole-svg document on text/plain → svg present, items []', () => {
@@ -117,12 +90,6 @@ describe('classifyPaste', () => {
         expect(c.svg).toBeUndefined();
         expect(c.html).toBe('<p>pasted prose</p>');
         expect(c.text).toBe('pasted prose');
-    });
-
-    test('html containing ONLY the eigen marker → hasRichHtml false', () => {
-        const data: EigenClipboardData = { version: 1, items: [textItem()] };
-        const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data), 'text/html': markerHtml(data) }));
-        expect(c.eigen?.hasRichHtml).toBe(false);
     });
 
     test('OS image file only → imageFiles length 1, files length 1, no eigen/svg', () => {
@@ -174,13 +141,13 @@ describe('classifyPaste', () => {
         const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data) }), {
             internalMarkerText: SHEET_MARKER,
         });
-        expect(c.eigen?.data.items).toEqual(data.items);
+        expect(c.eigen?.items).toEqual(data.items);
     });
 
     test('forged non-finite dims → items dropped through the classifier', () => {
         const data = { version: 1, items: [{ type: 'text', text: 'x', width: Number.NaN, height: 5 }] };
         const c = classifyPaste(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data) }));
-        expect(c.eigen?.data.items).toEqual([]);
+        expect(c.eigen?.items).toEqual([]);
     });
 
     test('empty clipboard → all-empty struct', () => {

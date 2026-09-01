@@ -7,7 +7,6 @@ import {
     hasRichHtmlBeyondMarker,
     inlineClipboardSvgMedia,
     materializeClipboardSvg,
-    readSvgClipboard,
     readSvgClipboardWithItems,
     svgToImageDataUri,
     svgToImageFile,
@@ -79,30 +78,6 @@ describe('embedClipboardSvgMetadata / extractClipboardSvgMetadata', () => {
             items: [{ type: 'text', text: 'x', width: Number.NaN, height: 5 }],
         });
         expect(extractClipboardSvgMetadata(forged)?.items).toEqual([]);
-    });
-});
-
-describe('readSvgClipboard', () => {
-    test('returns the eigen payload svg field first', () => {
-        const data: EigenClipboardData = { version: 1, items: [], svg: SVG };
-        const svg = readSvgClipboard(stubClipboard({ [EIGEN_MIME]: JSON.stringify(data) }));
-        expect(svg).toBe(SVG);
-    });
-
-    test('falls back to an <svg-leading text/plain (a foreign SVG)', () => {
-        expect(readSvgClipboard(stubClipboard({ 'text/plain': SVG }))).toBe(SVG);
-    });
-
-    test('tolerates (and trims) leading whitespace before <svg', () => {
-        expect(readSvgClipboard(stubClipboard({ 'text/plain': `\n  ${SVG}` }))).toBe(SVG);
-    });
-
-    test('returns null for non-svg text with no eigen payload', () => {
-        expect(readSvgClipboard(stubClipboard({ 'text/plain': 'just some text' }))).toBeNull();
-    });
-
-    test('an <svg snippet without the SVG namespace stays text', () => {
-        expect(readSvgClipboard(stubClipboard({ 'text/plain': '<svg width="10"><rect/></svg>' }))).toBeNull();
     });
 });
 

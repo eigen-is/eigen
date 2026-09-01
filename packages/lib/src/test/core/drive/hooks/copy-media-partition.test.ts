@@ -28,35 +28,27 @@ const fulfilled = (id: string): PromiseSettledResult<DrivePath> => ({ status: 'f
 const rejected = (): PromiseSettledResult<DrivePath> => ({ status: 'rejected', reason: new Error('nope') });
 
 describe('partitionCopyResults', () => {
-    test('all fulfilled → every path returned, nothing failed, not a total failure', () => {
-        const { copied, failedCount, totalFailure } = partitionCopyResults([fulfilled('a'), fulfilled('b')]);
+    test('all fulfilled → every path returned, nothing failed', () => {
+        const { copied, failedCount } = partitionCopyResults([fulfilled('a'), fulfilled('b')]);
         expect(copied.map((p) => p.id)).toEqual(['a', 'b']);
         expect(failedCount).toBe(0);
-        expect(totalFailure).toBe(false);
     });
 
-    test('mixed → successes returned, failure count surfaced, not a total failure', () => {
-        const { copied, failedCount, totalFailure } = partitionCopyResults([
-            fulfilled('a'),
-            rejected(),
-            fulfilled('c'),
-        ]);
+    test('mixed → successes returned, failure count surfaced', () => {
+        const { copied, failedCount } = partitionCopyResults([fulfilled('a'), rejected(), fulfilled('c')]);
         expect(copied.map((p) => p.id)).toEqual(['a', 'c']);
         expect(failedCount).toBe(1);
-        expect(totalFailure).toBe(false);
     });
 
-    test('all rejected → nothing copied, total-failure signal set', () => {
-        const { copied, failedCount, totalFailure } = partitionCopyResults([rejected(), rejected()]);
+    test('all rejected → nothing copied, every result counted as failed', () => {
+        const { copied, failedCount } = partitionCopyResults([rejected(), rejected()]);
         expect(copied).toEqual([]);
         expect(failedCount).toBe(2);
-        expect(totalFailure).toBe(true);
     });
 
-    test('empty input → not a total failure', () => {
-        const { copied, failedCount, totalFailure } = partitionCopyResults([]);
+    test('empty input → nothing copied, no failures', () => {
+        const { copied, failedCount } = partitionCopyResults([]);
         expect(copied).toEqual([]);
         expect(failedCount).toBe(0);
-        expect(totalFailure).toBe(false);
     });
 });

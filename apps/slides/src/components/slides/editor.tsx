@@ -677,7 +677,7 @@ function SlideEditorInner({
 
             if (paste.eigen) {
                 e.preventDefault();
-                pasteEigenData(paste.eigen.data);
+                pasteEigenData(paste.eigen);
                 return;
             }
 

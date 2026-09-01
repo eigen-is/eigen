@@ -674,14 +674,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
                         const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
                         const imageItems = onPasteEigenImage
-                            ? paste.eigen.data.items.filter(
-                                  (item): item is EigenClipboardImageItem => item.type === 'image',
-                              )
+                            ? paste.eigen.items.filter((item): item is EigenClipboardImageItem => item.type === 'image')
                             : [];
                         // Extract text from eigen clipboard items and paste as plain text. Empty
                         // carriers (vector shapes ride as empty text items) must not paste as blank
                         // cells over existing content.
-                        const textParts = paste.eigen.data.items
+                        const textParts = paste.eigen.items
                             .filter(
                                 (item): item is EigenClipboardTextItem =>
                                     item.type === 'text' && clipboardTextItemHasContent(item),

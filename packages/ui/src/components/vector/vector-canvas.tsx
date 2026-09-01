@@ -1117,7 +1117,7 @@ export function VectorCanvas({
             if (paste.eigen) {
                 e.preventDefault();
                 e.stopPropagation();
-                pasteEigenItems(paste.eigen.data.items);
+                pasteEigenItems(paste.eigen.items);
                 return;
             }
             // A bare SVG on the clipboard: ours (element JSON in `<metadata>`) restores native elements;
