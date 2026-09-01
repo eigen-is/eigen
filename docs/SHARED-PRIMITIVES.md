@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1155 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1162 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -184,7 +184,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (242)
+## Hooks (244)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -199,6 +199,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCreateUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
+| `useHardenSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useIsAdmin` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-is-admin.ts |
 | `useMembers` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useRejectWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
@@ -373,6 +374,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDocCommentSearchHalf` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-doc-comment-search.ts |
 | `useSearchQuery` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
+| `useHardenS3Bucket` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `useServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
 | `useUpdateServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
@@ -431,7 +433,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (304)
+## Types (306)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -597,6 +599,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `S3HardenResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `S3LifecycleState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SearchResponse` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SearchSource` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -740,7 +744,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (451)
+## Utilities & constants (454)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -911,6 +915,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
+| `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
+| `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
