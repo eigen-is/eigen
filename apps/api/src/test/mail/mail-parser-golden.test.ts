@@ -19,7 +19,7 @@ function projectAttachment(att: ParsedMail['attachments'][number]): unknown {
         filename: att.filename,
         calendarMethod: att.calendarMethod,
         sha256: hasher.digest('hex'),
-        size: att.content.length,
+        size: att.size,
     };
 }
 
@@ -51,7 +51,7 @@ for (const name of emls) {
         const mail = parseMail(readFileSync(join(CORPUS_DIR, name)));
         const goldenPath = join(CORPUS_DIR, name.replace(/\.eml$/, '.golden.json'));
         if (UPDATE) {
-            writeFileSync(goldenPath, `${JSON.stringify(project(mail), null, 4)}\n`);
+            writeFileSync(goldenPath, `${JSON.stringify(project(mail), null, 2)}\n`);
             return;
         }
         const projection = JSON.parse(JSON.stringify(project(mail)));

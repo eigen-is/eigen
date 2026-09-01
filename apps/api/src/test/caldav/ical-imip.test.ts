@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment } from '@workspace/lib/types/mail';
 import { parseIcs } from '../../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../../lib/caldav/ical-serialize';
@@ -1256,19 +1256,19 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
             'END:VCALENDAR',
         ].join('\r\n');
 
-    const icsMail = (ics: string, method: string, from = ORG): { attachments: Attachment[]; from: AddressObject } => ({
+    const icsMail = (
+        ics: string,
+        method: ImipMethod,
+        from = ORG,
+    ): { attachments: Attachment[]; from: AddressObject } => ({
         attachments: [
             {
-                type: 'attachment',
-                content: ics,
-                contentType: `text/calendar; method=${method}`,
-                contentDisposition: 'attachment',
-                headers: new Map(),
-                headerLines: [],
-                checksum: '',
+                contentType: 'text/calendar',
+                filename: 'invite.ics',
+                content: Buffer.from(ics),
                 size: ics.length,
-                related: false,
-            } as unknown as Attachment,
+                calendarMethod: method,
+            },
         ],
         from: { value: [{ address: from, name: 'Ext Org' }], text: '' },
     });

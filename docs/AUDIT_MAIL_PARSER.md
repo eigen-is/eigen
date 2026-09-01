@@ -2,7 +2,7 @@
 
 > **TLDR**: `apps/api/src/lib/mail/mail-parser/` + `mail-split/` are a 2381-line hand-port of nodemailer's streaming `mailparser` + `mailsplit`. Eigen has exactly one production entry, `simpleParser(Buffer, {})`, so every option branch is dead, the whole two-Transform streaming/backpressure machine only ever processes one already-buffered chunk, and the 81 + 23 `as` casts collapse to two untyped seams (splitter → parser node handoff, loose record → `ParsedMail`). The output contract is far narrower than the type: the `headers` Map serializes to `{}` on the wire, `headerLines`/`priority`/`checksum`/`related`/`cid`/`AddressObject.html` are read by nobody, and `mail.db` persists only the `EmailSummary` subset. Plan: pin a golden `.eml` corpus first, then replace the trio with a ~540-line non-streaming, cast-free parser typed at the header seam, tighten the shared types to what is consumed, and drop three dependencies.
 
-Audit date 2026-09-01, branch `mail-parser-audit`. Scope from [ROADMAP.md](ROADMAP.md) § Focused audits. The 2026-07 deep-dive findings (#14 bare-CR boundary, #11 htmlToText cap, #24 dead encode half) are shipped with tests and are not re-reported.
+Historical: the TLDR and findings describe the parser before the 2026-09-01 rewrite; see § Status at the end. Audit date 2026-09-01, branch `mail-parser-audit`. Scope from [ROADMAP.md](ROADMAP.md) § Focused audits. The 2026-07 deep-dive findings (#14 bare-CR boundary, #11 htmlToText cap, #24 dead encode half) are shipped with tests and are not re-reported.
 
 ## Findings
 
@@ -69,9 +69,9 @@ Duplicate `'to'` in both header-key copy lists (`simple-parser.ts:113,115`, `mai
 | 2 | Switch the two callers, delete `mail-split/` and the old files, tighten `packages/lib/src/types/mail.ts`, remove the two `as unknown as` draft casts, drop the three dependencies and stale ambient types, update MAIL.md / IMAP.md, remove the ROADMAP row | `bun run check` green |
 | 3 | Simplify pass, then a cold Fable review of every touched file | Review clean, `bun run check` green |
 
-## Status (2026-09-01)
+## Status (2026-09-02)
 
-Units 0–2 shipped on branch `mail-parser-audit`. Two corrections to the audit above surfaced during the build. `Attachment.size` **is** consumed — `apps/mail` `use-draft.ts` reads it for attachment reconciliation — so it stays on the type. Removing `AddressObject.html` needed one-line deletions in `apps/mail`'s `use-draft.ts`/`use-mail-actions.ts` and in `routes/mail.ts`'s `AddressObjectSchema` (the audit predicted no FE changes).
+Units 0–3 shipped on branch `mail-parser-audit`: two cold reviews (an Opus recall-biased pass on the rewrite, a Fable pre-merge pass over every touched file) and a four-angle simplify pass, all findings applied; the one open item they surfaced is the pre-existing linkify-it quadratic on address-heavy plain text, recorded as a ROADMAP row for a product call. `bun run check` is green. Two corrections to the audit above surfaced during the build. `Attachment.size` **is** consumed — `apps/mail` `use-draft.ts` reads it for attachment reconciliation — so it stays on the type. Removing `AddressObject.html` needed one-line deletions in `apps/mail`'s `use-draft.ts`/`use-mail-actions.ts` and in `routes/mail.ts`'s `AddressObjectSchema` (the audit predicted no FE changes).
 
 Deliberate behaviour deviations from the old parser, each pinned by the golden corpus:
 
@@ -80,6 +80,7 @@ Deliberate behaviour deviations from the old parser, each pinned by the golden c
 - a header block cut short by a boundary line is never a part (old emitted a 0-byte attachment on a closing delimiter)
 - a body of exactly one line break is stripped like any other
 - a bare-CR closing boundary at EOF with no final LF is recognised
+- base64 bodies are decoded by `Buffer` directly (URL-safe `-`/`_` decode as alphabet characters; the old code stripped them)
 - QP bodies are decoded from latin1 bytes (old ran a UTF-8 decode first, corrupting raw 8-bit bytes) and raw 8-bit header values are decoded as UTF-8 uniformly
 - encoded-word-only group names keep their members
 - `method` is read from the first Content-Type header

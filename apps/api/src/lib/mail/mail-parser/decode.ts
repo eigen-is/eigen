@@ -23,9 +23,7 @@ export function decodeText(body: Buffer, headers: PartHeaders): string {
 function decodeCharset(bytes: Buffer, charset: string): string {
     const label = charset.trim().toLowerCase();
     if (['ascii', 'usascii', 'utf8'].includes(label.replace(/[^a-z0-9]+/g, ''))) return bytes.toString();
-    // iconv-lite lacks the JIS family; Bun's TextDecoder covers it.
-    if (/^jis|^iso-?2022-?jp|^eucjp/.test(label)) {
-        return new TextDecoder(label.startsWith('eucjp') ? 'euc-jp' : 'iso-2022-jp').decode(bytes);
-    }
+    // iconv-lite lacks iso-2022-jp; Bun's TextDecoder covers it.
+    if (/^jis|^iso-?2022-?jp/.test(label)) return new TextDecoder('iso-2022-jp').decode(bytes);
     return iconv.encodingExists(label) ? iconv.decode(bytes, label) : bytes.toString();
 }
