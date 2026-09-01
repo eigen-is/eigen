@@ -7,7 +7,7 @@ import {
 } from '@workspace/lib/constants/s3';
 import { isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
+import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { cn } from '@workspace/ui/lib/utils';
 import { AlertTriangle, CheckCircle2, Copy, Loader2, ShieldCheck, Wifi } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
@@ -63,17 +63,8 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
     };
 
     const handleHarden = async () => {
-        let next: S3HardenResult;
-        try {
-            next = await onHarden(value, days);
-        } catch {
-            next = {
-                ok: false,
-                message: 'Could not update the bucket',
-                applied: { versioning: false, lifecycle: false },
-                reason: 'error',
-            };
-        }
+        // A refused request comes back as an ok:false result, so there is nothing to catch here.
+        const next = await onHarden(value, days);
         setHarden(next);
         // The harden result carries the re-read bucket state, so the panel flips to what was measured.
         if (next.versioning) {
@@ -225,22 +216,16 @@ function BucketSafetyPanel({
     days: number;
     onEnable: () => void;
 }) {
-    const { versioning, lifecycle } = result;
+    // Both fields are optional — a check that never got as far as the bucket settings leaves them
+    // out — and for the panel that reads the same as unreadable.
+    const versioning = result.versioning ?? 'unknown';
+    const lifecycle = result.lifecycle ?? 'unknown';
     const lifecycleDays = typeof lifecycle === 'object' ? lifecycle.noncurrentDays : null;
-    const versioningReadable = versioning !== undefined && versioning !== 'unknown';
     // A key that can't read bucket settings can't write them either, and a foreign lifecycle config is
     // never rewritten — so the button only shows where a PUT can actually change something.
-    const canApply = versioningReadable && (versioning !== 'enabled' || lifecycle === 'none');
+    const canApply = versioning !== 'unknown' && (versioning !== 'enabled' || lifecycle === 'none');
     const showManualSteps =
-        !versioningReadable || lifecycle === 'foreign' || lifecycle === 'unknown' || !!harden?.reason;
-
-    const needVersioning = versioning !== 'enabled';
-    const needLifecycle = lifecycleDays === null;
-    const nothingLeft = !needVersioning && !needLifecycle;
-    const commands = manualSnippet(config, days, {
-        versioning: needVersioning || nothingLeft,
-        lifecycle: needLifecycle || nothingLeft,
-    });
+        versioning === 'unknown' || lifecycle === 'foreign' || lifecycle === 'unknown' || !!harden?.reason;
 
     return (
         <div className="space-y-2 rounded-md border p-3">
@@ -258,53 +243,77 @@ function BucketSafetyPanel({
                 {versioning === 'enabled' && 'Versioning: on'}
                 {versioning === 'disabled' && 'Versioning: off. Overwrites are permanent.'}
                 {versioning === 'suspended' && 'Versioning: suspended. New overwrites are permanent.'}
-                {(versioning === 'unknown' || versioning === undefined) &&
-                    'Versioning: cannot be read with this access key.'}
+                {versioning === 'unknown' && 'Versioning: cannot be read with this access key.'}
             </SafetyLine>
 
             <SafetyLine ok={lifecycleDays !== null}>
                 {lifecycleDays !== null && `Old-version cleanup: expires versions after ${lifecycleDays} days`}
                 {lifecycle === 'none' && 'Old-version cleanup: no rule. Old versions grow forever.'}
                 {lifecycle === 'foreign' && 'Old-version cleanup: another lifecycle rule is in place.'}
-                {(lifecycle === 'unknown' || lifecycle === undefined) &&
-                    'Old-version cleanup: cannot be read with this access key.'}
+                {lifecycle === 'unknown' && 'Old-version cleanup: cannot be read with this access key.'}
             </SafetyLine>
 
             {harden && <p className={cn('text-sm', harden.ok ? 'text-success' : 'text-warning')}>{harden.message}</p>}
 
             {showManualSteps && (
-                <div className="space-y-2">
-                    <p className="text-sm text-muted-foreground">
-                        {nothingLeft && 'The same settings by hand, for a key without bucket-settings permission:'}
-                        {!nothingLeft &&
-                            needVersioning &&
-                            needLifecycle &&
-                            "Eigen can't change this bucket from here. Apply these settings in your S3 provider:"}
-                        {!needVersioning &&
-                            needLifecycle &&
-                            'Versioning is on. The old-version cleanup rule still has to be set in your S3 provider:'}
-                        {needVersioning &&
-                            !needLifecycle &&
-                            'Old-version cleanup is set. Versioning still has to be turned on in your S3 provider:'}
-                    </p>
-                    {lifecycle === 'foreign' && needLifecycle && (
-                        <p className="text-sm text-muted-foreground">
-                            This command replaces the bucket's whole lifecycle configuration, so add the rules that are
-                            already there to it first.
-                        </p>
-                    )}
-                    <pre className="text-xs bg-muted rounded p-2 overflow-x-auto">{commands}</pre>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard(commands, 'Commands copied to clipboard')}
-                    >
-                        <Copy className="h-4 w-4 mr-1" />
-                        Copy commands
-                    </Button>
-                </div>
+                <ManualSteps config={config} days={days} versioning={versioning} lifecycle={lifecycle} />
             )}
+        </div>
+    );
+}
+
+// What the button would have done, as aws CLI commands — for the buckets Eigen may not change from
+// here, and as a reference once everything is already set.
+function ManualSteps({
+    config,
+    days,
+    versioning,
+    lifecycle,
+}: {
+    config: S3Config;
+    days: number;
+    versioning: S3VersioningState;
+    lifecycle: S3LifecycleState;
+}) {
+    const needVersioning = versioning !== 'enabled';
+    const needLifecycle = typeof lifecycle !== 'object';
+    const nothingLeft = !needVersioning && !needLifecycle;
+
+    let intro: string;
+    if (nothingLeft) {
+        intro = 'The same settings by hand, for a key without bucket-settings permission:';
+    } else if (needVersioning && needLifecycle) {
+        intro = "Eigen can't change this bucket from here. Apply these settings in your S3 provider:";
+    } else if (needLifecycle) {
+        intro = 'Versioning is on. The old-version cleanup rule still has to be set in your S3 provider:';
+    } else {
+        intro = 'Old-version cleanup is set. Versioning still has to be turned on in your S3 provider:';
+    }
+
+    const commands = manualSnippet(config, days, {
+        versioning: needVersioning || nothingLeft,
+        lifecycle: needLifecycle || nothingLeft,
+    });
+
+    return (
+        <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">{intro}</p>
+            {lifecycle === 'foreign' && (
+                <p className="text-sm text-muted-foreground">
+                    This command replaces the bucket's whole lifecycle configuration, so add the rules that are already
+                    there to it first.
+                </p>
+            )}
+            <pre className="text-xs bg-muted rounded p-2 overflow-x-auto">{commands}</pre>
+            <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => copyToClipboard(commands, 'Commands copied to clipboard')}
+            >
+                <Copy className="h-4 w-4 mr-1" />
+                Copy commands
+            </Button>
         </div>
     );
 }

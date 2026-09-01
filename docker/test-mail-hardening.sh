@@ -28,24 +28,12 @@
 
 set -euo pipefail
 
+# Counters, log helpers, the dc() compose wrapper and the Result summary.
+. "$(dirname "$0")/probe-lib.sh"
+
 cd "$(dirname "$0")/.."
 
-PASS=0
-FAIL=0
-SKIP=0
-FAIL_LINES=()
-
-log()    { printf '  %s\n' "$*"; }
-header() { printf '\n=== %s ===\n' "$*"; }
-ok()     { log "✓ $*"; PASS=$((PASS+1)); }
-fail()   { log "✗ $*"; FAIL=$((FAIL+1)); FAIL_LINES+=("$*"); }
-skip()   { log "– skipped: $*"; SKIP=$((SKIP+1)); }
-
 oneline() { printf '%s' "$1" | tr '\r\n' '  '; }
-
-dc() {
-    docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production "$@"
-}
 
 # Only run the probes named in PROBES (default: all).
 should_run() {
@@ -122,29 +110,12 @@ auth_once() {
 }
 
 # Postfix caps AUTH commands per client IP per 60s (smtpd_client_auth_rate_limit=20), and every
-# connection here comes from the same host address, so probe 9's run of failures holds itself to 18
+# connection here comes from the same host address, so the AUTH dialogs below hold themselves to 18
 # per window. Measured on the clock, so the dialogs' own duration counts toward the window and only
 # the shortfall is slept off.
 ANVIL_BUDGET=18
 anvil_window_start=$SECONDS
 anvil_sent=0
-
-anvil_pace() {
-    anvil_sent=$((anvil_sent + 1))
-    if [ "$anvil_sent" -lt "$ANVIL_BUDGET" ]; then return 0; fi
-    local elapsed=$((SECONDS - anvil_window_start))
-    if [ "$elapsed" -lt 62 ]; then
-        log "  $1 sent; waiting $((62 - elapsed))s out of the anvil window..."
-        sleep $((62 - elapsed))
-    fi
-    anvil_window_start=$SECONDS
-    anvil_sent=0
-}
-
-anvil_reset() {
-    anvil_window_start=$SECONDS
-    anvil_sent=0
-}
 
 # Make room for N more AUTH commands in the current window, sleeping out its remainder only when
 # the budget would otherwise be exceeded. Probe 10 runs right after probe 9 has spent most of a
@@ -187,6 +158,23 @@ probe_submission() {
     else
         fail "$desc — expected 553 sender rejection: $(oneline "$transcript")"
     fi
+}
+
+# Fill one address's failure bucket over HTTP and echo the attempt at which the limiter first
+# answered 429 (0 = it never did). One unique email per post, so the per-email bucket (cap 10) can
+# never be what refuses anything. Runs inside eigen-api because the route is localhost-only.
+fill_ip_bucket() {
+    dc exec -T -e PROBE_IP="$1" eigen-api sh -c '
+i=0
+while [ $i -lt 70 ]; do
+    i=$((i + 1))
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+        -d "{\"email\":\"ipfill-$i-$$@probe.invalid\",\"password\":\"wrong\",\"ip\":\"$PROBE_IP\"}" \
+        http://localhost:8000/internal/auth/verify)
+    if [ "$code" = "429" ]; then echo "$i"; exit 0; fi
+done
+echo 0
+' | tr -dc '0-9'
 }
 
 # --- prerequisites ---------------------------------------------------------------------------
@@ -401,20 +389,11 @@ header "Probe 8 — per-IP SASL failure lockout"
 # The route-level half of the story: drive it with a synthetic IP so the lockout is observable
 # without locking this host out. Probe 10 proves the real SMTP path actually delivers a client IP.
 if should_run 8; then
-    code=$(dc exec -T eigen-api sh -c '
-for i in $(seq 1 50); do
-    curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
-        -d "{\"email\":\"spray-$i@probe.invalid\",\"password\":\"wrongpassword\",\"ip\":\"198.51.100.10\"}" \
-        http://localhost:8000/internal/auth/verify
-done
-curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
-    -d "{\"email\":\"spray-51@probe.invalid\",\"password\":\"wrongpassword\",\"ip\":\"198.51.100.10\"}" \
-    http://localhost:8000/internal/auth/verify
-' | tr -d '\r')
-    if [ "$code" = "429" ]; then
+    filled=$(fill_ip_bucket 198.51.100.10)
+    if [ "${filled:-0}" -eq 51 ]; then
         ok "51st failure from one IP → 429 (per-IP bucket engaged)"
     else
-        fail "expected 429 after 50 failures from one IP, got $code"
+        fail "expected the 429 on failure 51 from one IP, the limiter answered at ${filled:-0} (0 = never)"
     fi
 else
     skip "probe 8 not selected"
@@ -431,13 +410,14 @@ header "Probe 9 — repeated bad AUTH locks the account's password path"
 if should_run 9 && [ "$HAVE_LOGIN" = 1 ]; then
     log "waiting 60s for the anvil auth-rate window to roll over..."
     sleep 60
-    anvil_reset
+    anvil_window_start=$SECONDS
+    anvil_sent=0
     bad=$(auth_plain "$ALICE_EMAIL" "definitely-not-the-password")
     delivered=0
     for _ in $(seq 1 12); do
+        anvil_reserve 1
         attempt=$(auth_once "$bad")
         printf '%s\n' "$attempt" | grep -q '^535' && delivered=$((delivered + 1))
-        anvil_pace "$delivered failures"
     done
     good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
     transcript=$(auth_once "$good")
@@ -504,19 +484,8 @@ if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
     else
         log "dovecot sees this client as $client_ip"
 
-        # 2. Fill that address's bucket over HTTP, one unique email per post so no per-email bucket
-        # (cap 10) can be what refuses anything later. Stop as soon as the limiter says 429.
-        filled=$(dc exec -T -e PROBE_IP="$client_ip" eigen-api sh -c '
-i=0
-while [ $i -lt 70 ]; do
-    i=$((i + 1))
-    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
-        -d "{\"email\":\"ipfill-$i-$$@probe.invalid\",\"password\":\"wrong\",\"ip\":\"$PROBE_IP\"}" \
-        http://localhost:8000/internal/auth/verify)
-    if [ "$code" = "429" ]; then echo "$i"; exit 0; fi
-done
-echo 0
-' | tr -dc '0-9')
+        # 2. Fill that address's bucket over HTTP, up to the point where the limiter says 429.
+        filled=$(fill_ip_bucket "$client_ip")
 
         # 3. One real SMTP AUTH with the correct password. Only the per-IP bucket can refuse it.
         good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
@@ -556,11 +525,5 @@ if [ "$FAIL" -eq 0 ] && [ "$PASS" -eq 0 ]; then
     # Green with nothing asserted is the worst outcome: it reads as a pass.
     printf '✗ NOTHING RAN (%d probes skipped) — check PROBES and ALICE_EMAIL/ALICE_PASSWORD\n' "$SKIP"
     exit 1
-elif [ "$FAIL" -eq 0 ]; then
-    printf '✓ ALL OK (%d checks passed, %d skipped)\n' "$PASS" "$SKIP"
-    exit 0
-else
-    printf '✗ %d FAILURES (%d passed, %d skipped)\n' "$FAIL" "$PASS" "$SKIP"
-    for line in "${FAIL_LINES[@]}"; do printf '  - %s\n' "$line"; done
-    exit 1
 fi
+probe_summary

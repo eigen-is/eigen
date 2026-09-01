@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
@@ -161,7 +162,7 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
         expect(result.applied).toEqual({ versioning: true, lifecycle: true });
         expect(result.versioning).toBe('enabled');
         expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
-        expect(await readLifecycleXml(config)).toContain('eigen-expire-noncurrent');
+        expect(await readLifecycleXml(config)).toContain(S3_LIFECYCLE_RULE_ID);
     });
 
     test('hardening again with the same retention applies nothing', async () => {
@@ -194,7 +195,7 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
     test('our own rule is repaired when someone disabled it', async () => {
         const config = await createThrowawayBucket();
         const disabled =
-            '<LifecycleConfiguration><Rule><ID>eigen-expire-noncurrent</ID><Filter></Filter>' +
+            `<LifecycleConfiguration><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID><Filter></Filter>` +
             '<Status>Disabled</Status><NoncurrentVersionExpiration><NoncurrentDays>99</NoncurrentDays>' +
             '</NoncurrentVersionExpiration></Rule></LifecycleConfiguration>';
         expect((await signedS3Request(config, { method: 'PUT', query: 'lifecycle', body: disabled })).ok).toBe(true);
@@ -222,7 +223,7 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
 
         const xml = await readLifecycleXml(config);
         expect(xml).toContain('ops-archive');
-        expect(xml).not.toContain('eigen-expire-noncurrent');
+        expect(xml).not.toContain(S3_LIFECYCLE_RULE_ID);
     });
 });
 

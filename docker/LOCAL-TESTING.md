@@ -248,6 +248,10 @@ locally too — the dev compose hardcodes `localhost`, so you don't need real DN
 
 ### Smoke-test the deployment shapes
 
+The three scripts below share `docker/probe-lib.sh`: the pass/fail counters, the log helpers, the
+compose wrapper, the HTTP/SMTP/IMAPS probes, and the `Result` summary. A new probe script sources it
+first and adds only its own probes.
+
 ```bash
 ./docker/test-deployments.sh
 ```

@@ -300,22 +300,24 @@ One stolen account password is enough to turn a mail server into a spam relay. I
 
 Both counters are per client IP, so one abusive address cannot spend another client's budget.
 
-**The queue is watched.** `docker/postfix/queue-monitor.sh` counts the queue every `QUEUE_CHECK_INTERVAL` seconds (default 300). Above `QUEUE_ALERT_THRESHOLD` messages (default 200) it notifies the instance owner in the web UI. Set either variable in `.env.production` to tune it. Raise the threshold if your instance legitimately queues a few hundred messages. It repeats the alert at most every 6 hours and re-arms once the queue drains. It is a notification and not an email, because an email about a jammed queue would sit in that queue. The 17k backlog above went unnoticed for a day.
+**The queue is watched.** `docker/postfix/queue-monitor.sh` counts the queue every `QUEUE_CHECK_INTERVAL` seconds (default 300). Above `QUEUE_ALERT_THRESHOLD` messages (default 200) it notifies the instance owner in the web UI. Set any of these in `.env.production` to tune it. Raise the threshold if your instance legitimately queues a few hundred messages. While the backlog lasts it repeats the alert at most every `QUEUE_ALERT_COOLDOWN` seconds (default 21600, six hours), and it re-arms once the queue drains. It is a notification and not an email, because an email about a jammed queue would sit in that queue. The 17k backlog above went unnoticed for a day.
 
-**fail2ban (opt-in).** The layers above limit the damage but still accept the connections. To drop the traffic at the firewall, install the shipped jail. It bans an IP after five failed SASL logins in ten minutes:
+**fail2ban (opt-in).** The layers above limit the damage but still accept the connections. To drop the traffic at the firewall, install the shipped jails. There are two, one for Postfix's submission ports and one for Dovecot's IMAPS, because a botnet that gets nowhere on 465 starts guessing on 993 and that traffic is in the dovecot log only. Each bans an IP after five failed logins in ten minutes:
 
 ```bash
 apt-get install fail2ban
-cp /opt/eigen/docker/fail2ban/filter.d/eigen-postfix-sasl.conf /etc/fail2ban/filter.d/
-cp /opt/eigen/docker/fail2ban/jail.d/eigen-postfix-sasl.conf   /etc/fail2ban/jail.d/
+cp /opt/eigen/docker/fail2ban/filter.d/eigen-postfix-sasl.conf  /etc/fail2ban/filter.d/
+cp /opt/eigen/docker/fail2ban/filter.d/eigen-dovecot-auth.conf  /etc/fail2ban/filter.d/
+cp /opt/eigen/docker/fail2ban/jail.d/eigen-mail-sasl.conf       /etc/fail2ban/jail.d/
 systemctl enable --now fail2ban
 systemctl restart fail2ban
 fail2ban-client status eigen-postfix-sasl
+fail2ban-client status eigen-dovecot-auth
 ```
 
 It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
 
-The postfix log is the record of an abuse run, and what fail2ban reads, so it keeps 10 files of 50 MB where the other containers keep 3 of 10 MB. During the incident the old 3x10 MB rotated away in about two hours and took the start of the run with it.
+The postfix and dovecot logs are the record of an abuse run, and what fail2ban reads, so they keep 10 files of 50 MB where the other containers keep 3 of 10 MB. During the incident the old 3x10 MB rotated away in about two hours and took the start of the run with it.
 
 ### Troubleshooting
 

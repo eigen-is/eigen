@@ -12,24 +12,24 @@ INTERVAL="${QUEUE_CHECK_INTERVAL:-300}"
 THRESHOLD="${QUEUE_ALERT_THRESHOLD:-200}"
 COOLDOWN="${QUEUE_ALERT_COOLDOWN:-21600}"
 
-alerted=0
+# Timestamp of the last alert we got through; 0 means armed, so the next crossing alerts at once.
 last_alert=0
 
 while true; do
     sleep "$INTERVAL"
 
+    # `wc -l` pads its count with spaces on some platforms, and the JSON body below wants a bare number.
     queued=$(find /var/spool/postfix/incoming /var/spool/postfix/active /var/spool/postfix/deferred \
-        -type f 2>/dev/null | wc -l)
-    queued=$((queued))
+        -type f 2>/dev/null | wc -l | tr -d ' ')
     now=$(date +%s)
 
     if [ "$queued" -lt "$THRESHOLD" ]; then
         # Recovered (or never crossed) — re-arm so the next crossing alerts straight away.
-        alerted=0
+        last_alert=0
         continue
     fi
 
-    if [ "$alerted" -eq 1 ] && [ $((now - last_alert)) -lt "$COOLDOWN" ]; then
+    if [ "$last_alert" -ne 0 ] && [ $((now - last_alert)) -lt "$COOLDOWN" ]; then
         continue
     fi
 
@@ -39,7 +39,6 @@ while true; do
     if curl -sf -m 10 -X POST -H "Content-Type: application/json" \
         -d "{\"queued\":${queued}}" \
         "http://eigen-api:8000/internal/mail/queue-alert" >/dev/null 2>&1; then
-        alerted=1
         last_alert="$now"
     else
         echo "queue-monitor: alert POST failed — retrying at the next interval"

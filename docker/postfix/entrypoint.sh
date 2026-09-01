@@ -96,7 +96,7 @@ else
 fi
 
 # Queue-backlog alerting — the API can't see the queue itself, so the probe runs here.
-echo "Starting queue monitor (alert above ${QUEUE_ALERT_THRESHOLD:-200} queued, every ${QUEUE_CHECK_INTERVAL:-300}s)..."
+echo "Starting queue monitor (tune with QUEUE_CHECK_INTERVAL, QUEUE_ALERT_THRESHOLD, QUEUE_ALERT_COOLDOWN)..."
 /usr/local/bin/queue-monitor.sh &
 
 echo "Starting Postfix..."

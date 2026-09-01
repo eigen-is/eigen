@@ -143,6 +143,7 @@ services:
       # queue-monitor.sh: notify the org owner when the queue backs up (spam-run early warning).
       QUEUE_CHECK_INTERVAL: ${QUEUE_CHECK_INTERVAL:-300}
       QUEUE_ALERT_THRESHOLD: ${QUEUE_ALERT_THRESHOLD:-200}
+      QUEUE_ALERT_COOLDOWN: ${QUEUE_ALERT_COOLDOWN:-21600}
     depends_on:
       eigen-api:
         condition: service_healthy
@@ -176,9 +177,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
+    # Same size as postfix keeps, and for the same reason: dovecot's log is where an IMAP
+    # password-guessing run shows up, and what the host-side fail2ban jail reads.
     logging:
       driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+      options: { max-size: "50m", max-file: "10" }
 
 volumes:
   postfix-queue:

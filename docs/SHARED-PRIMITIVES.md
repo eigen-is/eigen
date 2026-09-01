@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1163 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1165 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -433,7 +433,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (306)
+## Types (307)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -601,6 +601,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `S3HardenResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3LifecycleState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `S3VersioningState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SearchResponse` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SearchSource` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -744,7 +745,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (455)
+## Utilities & constants (456)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -968,6 +969,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `loadPagefind` | `@workspace/lib/search` | packages/lib/src/core/search/pagefind.ts |
+| `hardenFailure` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `BORDER_SIDE_CSS` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `BORDER_STYLES` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `borderInfoExtent` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |

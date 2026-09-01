@@ -1,8 +1,9 @@
 import { createHash, createHmac } from 'node:crypto';
 import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
-import type { S3CheckResult, S3HardenResult, S3LifecycleState } from '@workspace/lib/types/settings';
+import type { S3CheckResult, S3HardenResult, S3LifecycleState, S3VersioningState } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
+import { escapeXml } from '../shared/xml';
 import type { S3Config, StorageBackend } from './types';
 
 export async function checkS3Connection(config: S3Config): Promise<S3CheckResult> {
@@ -16,20 +17,25 @@ export async function checkS3Connection(config: S3Config): Promise<S3CheckResult
         });
         const testKey = config.prefix ? `${config.prefix}/.eigen-connection-test` : '.eigen-connection-test';
         const testFile = client.file(testKey);
+        // Started before the write probe so all three requests overlap: the two bucket-config GETs
+        // swallow their own errors into 'unknown', so this never rejects and a failing probe below
+        // can throw straight past it.
+        const bucketConfig = Promise.all([checkS3Versioning(config), checkS3Lifecycle(config)]);
         await testFile.write('ok');
         const exists = await testFile.exists();
         await testFile.delete();
         if (!exists) throw new Error('Write verification failed');
-        // In parallel so the two bucket-config GETs cost one timeout, not two.
-        const [versioning, lifecycle] = await Promise.all([checkS3Versioning(config), checkS3Lifecycle(config)]);
+        const [versioning, lifecycle] = await bucketConfig;
         return { ok: true, message: 'Connection successful', versioning, lifecycle };
     } catch (err) {
         return { ok: false, message: err instanceof Error ? err.message : 'Connection failed' };
     }
 }
 
-// Turn on versioning, then expire noncurrent versions, then read both back so the caller reports
-// measured state instead of intent. Partial application is an outcome, not a failure.
+// Turn on versioning, then expire noncurrent versions — in that order, because some backends refuse
+// a noncurrent-version rule on a bucket that is not versioned yet. Each half is read back when its
+// PUT ran, so the caller reports measured state instead of intent. Partial application is an
+// outcome, not a failure.
 export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): Promise<S3HardenResult> {
     const applied = { versioning: false, lifecycle: false };
     let reason: S3HardenResult['reason'];
@@ -71,9 +77,11 @@ export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): 
             }
         }
 
+        // Re-read only the half a PUT actually changed; the other half's pre-read is still what the
+        // bucket says.
         const [versioningAfter, lifecycleAfter] = await Promise.all([
-            checkS3Versioning(config),
-            checkS3Lifecycle(config),
+            applied.versioning ? checkS3Versioning(config) : versioning,
+            applied.lifecycle ? checkS3Lifecycle(config) : lifecycle,
         ]);
         return {
             ok: !reason,
@@ -144,7 +152,7 @@ export async function signedS3Request(
     });
 }
 
-async function checkS3Versioning(config: S3Config): Promise<'enabled' | 'suspended' | 'disabled' | 'unknown'> {
+async function checkS3Versioning(config: S3Config): Promise<S3VersioningState> {
     try {
         const res = await signedS3Request(config, { method: 'GET', query: 'versioning' });
         if (!res.ok) return 'unknown';
@@ -165,18 +173,20 @@ async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
         if (!res.ok) return 'unknown';
         const body = await res.text();
         const rules = body.split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
-        if (rules.length === 0) return 'none';
-        // One rule we didn't author makes the whole configuration foreign, because
-        // PutBucketLifecycleConfiguration replaces all of it. A configuration that is only ours stays
-        // ours even when hand-edited, so harden can repair it.
-        if (!rules.every((rule) => OUR_LIFECYCLE_RULE.test(rule))) return 'foreign';
-        const ours = rules.find(
-            (rule) => /<Status>\s*Enabled\s*<\/Status>/.test(rule) && /<NoncurrentDays>\s*\d+\s*</.test(rule),
-        );
-        // Disabled or missing its expiry, our own rule cleans up nothing — report it as no rule so it gets re-PUT.
-        if (!ours) return 'none';
-        const days = ours.match(/<NoncurrentDays>\s*(\d+)\s*<\/NoncurrentDays>/);
-        return days?.[1] ? { noncurrentDays: Number(days[1]) } : 'none';
+        let noncurrentDays: number | null = null;
+        for (const rule of rules) {
+            // One rule we didn't author makes the whole configuration foreign, because
+            // PutBucketLifecycleConfiguration replaces all of it. A configuration that is only ours
+            // stays ours even when hand-edited, so harden can repair it.
+            if (!OUR_LIFECYCLE_RULE.test(rule)) return 'foreign';
+            const days = rule.match(/<NoncurrentDays>\s*(\d+)\s*<\/NoncurrentDays>/);
+            if (noncurrentDays === null && days && /<Status>\s*Enabled\s*<\/Status>/.test(rule)) {
+                noncurrentDays = Number(days[1]);
+            }
+        }
+        // No rules, or ours disabled or missing its expiry: it cleans up nothing, so report it as no
+        // rule and let harden re-PUT it.
+        return noncurrentDays === null ? 'none' : { noncurrentDays };
     } catch {
         return 'unknown';
     }
@@ -192,9 +202,7 @@ function setS3Versioning(config: S3Config): Promise<Response> {
 
 function setS3LifecycleRule(config: S3Config, noncurrentDays: number): Promise<Response> {
     // Prefix-scoped when the mount has one, so Eigen never expires another tenant's versions.
-    const prefix = config.prefix
-        ? `<Prefix>${config.prefix.replace(/&/g, '&amp;').replace(/</g, '&lt;')}/</Prefix>`
-        : '';
+    const prefix = config.prefix ? `<Prefix>${escapeXml(config.prefix)}/</Prefix>` : '';
     const body =
         `<LifecycleConfiguration><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID>` +
         `<Filter>${prefix}</Filter><Status>Enabled</Status>` +

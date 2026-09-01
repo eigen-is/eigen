@@ -15,18 +15,16 @@ export function useCheckS3Connection() {
     });
 }
 
+// A failed request is a harden result like any other: nothing was applied, and the panel says why.
+export function hardenFailure(message: string): S3HardenResult {
+    return { ok: false, message, applied: { versioning: false, lifecycle: false }, reason: 'error' };
+}
+
 export function useHardenS3Bucket() {
     return useMutation({
         mutationFn: async (input: S3Config & { noncurrentDays: number }): Promise<S3HardenResult> => {
             const res = await settingsApi.s3harden.post(input);
-            if (res.error) {
-                return {
-                    ok: false,
-                    message: new AppError(res).message,
-                    applied: { versioning: false, lifecycle: false },
-                    reason: 'error',
-                };
-            }
+            if (res.error) return hardenFailure(new AppError(res).message);
             return res.data;
         },
         onError: onMutationError,
