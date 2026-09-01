@@ -157,22 +157,20 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
         // exceljs constituents share the master's style object, so a merge's perimeter is
         // written once through the master; per-constituent writes would clobber each other.
         // Bound the fold to the bordered extent so a merge beyond it is skipped, not expanded.
-        const borderKeys = Object.keys(config.borderInfo ?? {});
-        if (borderKeys.length > 0) {
-            let borderMaxRow = 0;
-            let borderMaxCol = 0;
-            for (const key of borderKeys) {
-                const [r, c] = parseCellKey(key);
-                if (r > borderMaxRow) borderMaxRow = r;
-                if (c > borderMaxCol) borderMaxCol = c;
-            }
-            const folded = mergedBorderSides(config.borderInfo, config.merge, [0, borderMaxRow, 0, borderMaxCol]);
-            for (const [key, sides] of Object.entries(folded)) {
-                const border = toBorder(sides);
-                if (!border) continue;
-                const [r, c] = parseCellKey(key);
-                worksheet.getCell(r + 1, c + 1).border = border;
-            }
+        // mergedBorderSides bails on an empty map, so no length guard is needed here.
+        let borderMaxRow = 0;
+        let borderMaxCol = 0;
+        for (const key of Object.keys(config.borderInfo ?? {})) {
+            const [r, c] = parseCellKey(key);
+            if (r > borderMaxRow) borderMaxRow = r;
+            if (c > borderMaxCol) borderMaxCol = c;
+        }
+        const folded = mergedBorderSides(config.borderInfo, config.merge, [0, borderMaxRow, 0, borderMaxCol]);
+        for (const [key, sides] of Object.entries(folded)) {
+            const border = toBorder(sides);
+            if (!border) continue;
+            const [r, c] = parseCellKey(key);
+            worksheet.getCell(r + 1, c + 1).border = border;
         }
 
         if (sheet.filterRange) {

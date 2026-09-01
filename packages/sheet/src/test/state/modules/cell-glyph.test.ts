@@ -68,4 +68,15 @@ describe('cellGlyphAt', () => {
         ctx.sheets[0].dataVerification = { '0_0': NUMBER_RULE };
         expect(cellGlyphAt(ctx, 1, 5)).toBeUndefined();
     });
+
+    test('the forced-string triangle in the top-left corner, which the painter also draws there', () => {
+        const ctx = contextFactory({ selections: [] }) as Context;
+        // qp === 1 marks a number stored as text; the painter draws a green corner triangle. A
+        // press on it must belong to the cell, not fall through to the drag handle in that corner.
+        ctx.sheets[0].data![0][0] = { v: '00123', m: '00123', qp: 1 };
+        expect(cellGlyphAt(ctx, 1, 5)).toBe('forced-string');
+        // A plain numeric cell in the same corner has no triangle.
+        ctx.sheets[0].data![0][0] = { v: 123, m: '123' };
+        expect(cellGlyphAt(ctx, 1, 5)).toBeUndefined();
+    });
 });

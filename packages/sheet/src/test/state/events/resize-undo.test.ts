@@ -26,7 +26,7 @@ function undo(ctx: Context, recipe: (draft: Context) => void): Context {
 }
 
 // Start positions are page coordinates now, so movement is just the difference:
-// rows start at 100 and move +33 (20 -> 53), columns start at 200 and move +53 (100 -> 153).
+// rows start at 100 and move +33 (rowlen 40 -> 73), columns start at 200 and move +53 (100 -> 153).
 const dragResize = mouseUpAt(253, 133);
 
 describe('a resize round-trips through undo', () => {
@@ -54,7 +54,7 @@ describe('a resize round-trips through undo', () => {
             ctx.rowsResizeStart = [100, 2];
             dragResize(ctx);
         });
-        expect(resized.sheets[0].config?.rowlen?.[2]).toBe(53);
+        expect(resized.sheets[0].config?.rowlen?.[2]).toBe(73);
 
         const afterUndo = undo(base, (ctx: Context) => {
             ctx.rowsResizing = true;

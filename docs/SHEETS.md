@@ -60,7 +60,7 @@ current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, besi
   collection that does not exist yet ships the entire collection and last-writer-wins over a peer. Every collection is
   therefore materialized by `normalizeSheetConfig` (`engine/replay-ops.ts`) wherever a sheet enters any consumer —
   `initSheetData`, the replay base, `addSheet` ops, `createDefaultSheets`, and the Workbook seeding effect. Its
-  `SHEET_CONFIG_COLLECTIONS` list `satisfies keyof ExtendedSheetConfig`, so a new collection fails the build rather
+  `SHEET_CONFIG_COLLECTIONS` list `satisfies keyof ExtendedSheetConfig` for membership, and a companion exhaustiveness assert (`Exclude<collection keys, listed> extends never`) makes a new collection fail the build rather
   than silently reopening the hole. This mirrors the row/column grid materialization in `engine/defaults.ts`, and for
   the same reason: **a base that is less materialized than the writer makes granular patches fail to resolve**, and
   `replaySheetsOps` then rolls back the whole batch — the edit is lost, not degraded.

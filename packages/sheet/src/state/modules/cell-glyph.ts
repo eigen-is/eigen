@@ -1,5 +1,5 @@
 import { type Context, getFlowdata } from '../context';
-import { getRealCellValue, mergeBorder } from './cell';
+import { getRealCellValue, isForcedStringNumber, mergeBorder } from './cell';
 import {
     type CellGlyphRect,
     cellTextBox,
@@ -16,7 +16,7 @@ import { colLocation, rowLocation } from './location';
 // to the selection's drag handles, whose DOM hit targets straddle the same
 // corners. cellGlyphAt is the one predicate the mousedown path (OverlayVisuals)
 // and the hover path (events/mouse-drag.ts) consult before a handle gets its say.
-export type CellGlyph = 'dropdown' | 'checkbox' | 'comment' | 'invalid';
+export type CellGlyph = 'dropdown' | 'checkbox' | 'comment' | 'invalid' | 'forced-string';
 
 // Corner indicators: a comment top-right, an invalid value or a forced string
 // top-left. One size for all three so they read as one family of marks.
@@ -51,17 +51,15 @@ export function cellGlyphAt(ctx: Context, x: number, y: number): CellGlyph | und
     if (cell?.commentCardIds?.length && inGlyph(cellIndicatorRect('right', colPre, rowPre, col), x, y)) {
         return 'comment';
     }
-    // Same condition the painter draws the mark under: a rule, a value to judge.
-    const rule = getCellDataVerification(ctx, r, c);
+    // The invalid and forced-string triangles share the top-left corner, and the painter draws
+    // both only through cellRender — which phases.ts reaches only for a cell with a non-empty
+    // value (an empty cell goes to nullCellRender, which draws neither). Mirror that gate here so
+    // the hit test claims a corner exactly when a triangle is painted in it.
     const value = cell ? getRealCellValue(r, c, d) : null;
-    if (
-        rule &&
-        value != null &&
-        value.toString().length > 0 &&
-        !validateCellData(ctx, rule, value) &&
-        inGlyph(cellIndicatorRect('left', colPre, rowPre, col), x, y)
-    ) {
-        return 'invalid';
+    if (value != null && value.toString().length > 0 && inGlyph(cellIndicatorRect('left', colPre, rowPre, col), x, y)) {
+        const rule = getCellDataVerification(ctx, r, c);
+        if (rule && !validateCellData(ctx, rule, value)) return 'invalid';
+        if (isForcedStringNumber(cell)) return 'forced-string';
     }
     return undefined;
 }

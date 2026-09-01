@@ -691,10 +691,6 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     // formula, and each evaluation sees the cells pasted before it.
     const resolver = createContextResolver(ctx);
 
-    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
-    cfg.merge ??= {};
-    cfg.borderInfo ??= {};
-
     // copy range
     const copyHasMC = copyRange.HasMC;
     const copySheetIndex = copyRange.dataSheetId;
@@ -777,14 +773,14 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     }
 
     // warn if the apply range contains partially merged cells
-    let has_PartMC = false;
-    if (!isNil(cfg.merge)) {
-        has_PartMC = hasPartMC(ctx, minh, maxh, minc, maxc);
-    }
-
-    if (has_PartMC) {
+    if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
         return;
     }
+
+    // Seeded only once the copy-paste is certain — see pasteHandler above.
+    const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
+    cfg.merge ??= {};
+    cfg.borderInfo ??= {};
 
     const timesH = (maxh - minh + 1) / copyh;
     const timesC = (maxc - minc + 1) / copyc;

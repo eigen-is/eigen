@@ -11,7 +11,7 @@ import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 // The border-style vocabulary is owned by BORDER_STYLES (@workspace/lib/sheets), keyed by the
 // same ordinals in `text`. Only the SVG preview geometry is local — double (7) and slantDashDot
 // (12) are intentionally absent, they have no single-stroke preview.
-const BORDER_STYLES = [
+const BORDER_STYLE_PREVIEWS = [
     { text: '1', strokeDasharray: '1,0', strokeWidth: '1' },
     { text: '2', strokeDasharray: '1,5', strokeWidth: '1' },
     { text: '3', strokeDasharray: '2,5', strokeWidth: '2' },
@@ -55,11 +55,14 @@ export function CustomBorder({ onPick }: Props) {
                             <g
                                 fill="none"
                                 stroke="currentColor"
-                                strokeWidth={BORDER_STYLES.find((s) => s.text === changeStyle)?.strokeWidth ?? '1'}
+                                strokeWidth={
+                                    BORDER_STYLE_PREVIEWS.find((s) => s.text === changeStyle)?.strokeWidth ?? '1'
+                                }
                             >
                                 <path
                                     strokeDasharray={
-                                        BORDER_STYLES.find((s) => s.text === changeStyle)?.strokeDasharray ?? '1,0'
+                                        BORDER_STYLE_PREVIEWS.find((s) => s.text === changeStyle)?.strokeDasharray ??
+                                        '1,0'
                                     }
                                     d="M0 3 l50 0"
                                 />
@@ -77,7 +80,7 @@ export function CustomBorder({ onPick }: Props) {
                     >
                         {border.borderDefault ?? 'Default'}
                     </DropdownMenuItem>
-                    {BORDER_STYLES.map((item) => (
+                    {BORDER_STYLE_PREVIEWS.map((item) => (
                         <DropdownMenuItem
                             key={item.text}
                             onSelect={(e) => e.preventDefault()}

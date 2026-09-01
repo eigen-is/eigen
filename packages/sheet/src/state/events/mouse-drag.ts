@@ -463,32 +463,32 @@ export function handleOverlayMouseUp(
         const maxY = winH - 20 + scrollTop;
         if (y > maxY) delta -= y - maxY;
 
-        // No movement is a click, not a resize: bail before writing, or every stray click on
-        // a boundary ships an op to peers and takes a step of the user's undo history.
-        if (delta === 0) return;
-
+        // No movement is a click, not a resize: skip the write (a stray boundary click must not
+        // ship an op or take an undo step), but let the rest of mouseup run — a freeze-drag end
+        // below shares this handler and a bare `return` here would swallow it.
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
+        if (delta !== 0 && idx != null) {
+            const row = ctx.rowsResizeStart[1];
+            // Read the stored height directly; visibledatarow carries the +1px row separator.
+            const rowlen = ctx.sheets[idx].config?.rowlen;
+            const size = Math.max((rowlen?.[row] || ctx.defaultrowlen) + delta, 10);
 
-        const row = ctx.rowsResizeStart[1];
-        const current = ctx.visibledatarow[row] - (ctx.visibledatarow[row - 1] || 0);
-        const size = Math.max((current || ctx.defaultrowlen) + delta, 10);
+            const cfg = (ctx.sheets[idx].config ??= {});
+            cfg.rowlen ??= {};
+            cfg.customHeight ??= {};
+            cfg.customHeight[row] = 1;
 
-        const cfg = (ctx.sheets[idx].config ??= {});
-        cfg.rowlen ??= {};
-        cfg.customHeight ??= {};
-        cfg.customHeight[row] = 1;
-
-        // Dragging one boundary resizes every selected row, not just the one grabbed.
-        const rowSelects = ctx.selections?.filter((select) => select.row_select) ?? [];
-        if (rowSelects.some((s) => row >= s.row[0] && row <= s.row[1])) {
-            for (const select of rowSelects) {
-                for (let r = select.row[0]; r <= select.row[1]; r += 1) {
-                    cfg.rowlen[r] = Math.ceil(size);
+            // Dragging one boundary resizes every selected row, not just the one grabbed.
+            const rowSelects = ctx.selections?.filter((select) => select.row_select) ?? [];
+            if (rowSelects.some((s) => row >= s.row[0] && row <= s.row[1])) {
+                for (const select of rowSelects) {
+                    for (let r = select.row[0]; r <= select.row[1]; r += 1) {
+                        cfg.rowlen[r] = Math.ceil(size);
+                    }
                 }
+            } else {
+                cfg.rowlen[row] = Math.ceil(size);
             }
-        } else {
-            cfg.rowlen[row] = Math.ceil(size);
         }
     }
 
@@ -508,30 +508,28 @@ export function handleOverlayMouseUp(
         if (x > maxX) delta -= x - maxX;
 
         // No movement is a click, not a resize — see the row axis above.
-        if (delta === 0) return;
-
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
-        const columnlen = ctx.sheets[idx].config?.columnlen;
+        if (delta !== 0 && idx != null) {
+            const columnlen = ctx.sheets[idx].config?.columnlen;
+            const size = Math.max((columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta, 10);
 
-        const size = Math.max((columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta, 10);
+            const cfg = (ctx.sheets[idx].config ??= {});
+            cfg.columnlen ??= {};
+            cfg.customWidth ??= {};
+            cfg.customWidth[ctx.colsResizeStart[1]] = 1;
 
-        const cfg = (ctx.sheets[idx].config ??= {});
-        cfg.columnlen ??= {};
-        cfg.customWidth ??= {};
-        cfg.customWidth[ctx.colsResizeStart[1]] = 1;
-
-        // Dragging one boundary resizes every selected column, not just the one grabbed.
-        const changeColumnIndex = ctx.colsResizeStart[1];
-        const columnSelects = ctx.selections?.filter((select) => select.column_select) ?? [];
-        if (columnSelects.some((s) => changeColumnIndex >= s.column[0] && changeColumnIndex <= s.column[1])) {
-            for (const select of columnSelects) {
-                for (let c = select.column[0]; c <= select.column[1]; c += 1) {
-                    cfg.columnlen[c] = Math.ceil(size);
+            // Dragging one boundary resizes every selected column, not just the one grabbed.
+            const changeColumnIndex = ctx.colsResizeStart[1];
+            const columnSelects = ctx.selections?.filter((select) => select.column_select) ?? [];
+            if (columnSelects.some((s) => changeColumnIndex >= s.column[0] && changeColumnIndex <= s.column[1])) {
+                for (const select of columnSelects) {
+                    for (let c = select.column[0]; c <= select.column[1]; c += 1) {
+                        cfg.columnlen[c] = Math.ceil(size);
+                    }
                 }
+            } else {
+                cfg.columnlen[changeColumnIndex] = Math.ceil(size);
             }
-        } else {
-            cfg.columnlen[changeColumnIndex] = Math.ceil(size);
         }
     }
 

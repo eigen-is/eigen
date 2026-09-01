@@ -52,7 +52,7 @@ describe('two clients editing different keys of one config', () => {
         const final = receiveOps(receiveOps(base, emitOps(base, mergeTwoCells)), emitOps(base, dragRowTaller));
 
         expect(final.sheets[0].config?.merge).toEqual({ '1_1': { r: 1, c: 1, rs: 1, cs: 2 } });
-        expect(final.sheets[0].config?.rowlen?.[2]).toBe(53);
+        expect(final.sheets[0].config?.rowlen?.[2]).toBe(73);
     });
 
     test('a row resize survives a peer merging cells', () => {
@@ -60,7 +60,7 @@ describe('two clients editing different keys of one config', () => {
         const final = receiveOps(receiveOps(base, emitOps(base, dragRowTaller)), emitOps(base, mergeTwoCells));
 
         expect(final.sheets[0].config?.merge).toEqual({ '1_1': { r: 1, c: 1, rs: 1, cs: 2 } });
-        expect(final.sheets[0].config?.rowlen?.[2]).toBe(53);
+        expect(final.sheets[0].config?.rowlen?.[2]).toBe(73);
     });
 });
 

@@ -360,6 +360,13 @@ export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: 
     return value;
 }
 
+// A number stored as text (qp === 1) that still reads as a number. The painter marks it with a
+// green corner triangle; the glyph hit-test claims that same corner. One predicate so the two
+// never drift over what "forced string" means.
+export function isForcedStringNumber(cell: Cell | null | undefined): boolean {
+    return cell?.qp === 1 && !Number.isNaN(Number(cell.v));
+}
+
 export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_index: number) {
     if (!d?.[row_index]) {
         return null;

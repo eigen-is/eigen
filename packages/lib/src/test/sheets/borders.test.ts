@@ -43,6 +43,13 @@ describe('mergedBorderSides', () => {
         });
     });
 
+    test('empty borderInfo returns empty without expanding a window-crossing merge', () => {
+        // A1:A1000000 crossing the range: with no borders there is nothing to fold, so the
+        // merge must never be expanded. Any walk of its extent would show up as a slow test.
+        const merge = { '0_0': { r: 0, c: 0, rs: 1_000_000, cs: 1 } };
+        expect(mergedBorderSides({}, merge, [0, 0, 0, 0])).toEqual({});
+    });
+
     test('a huge merge outside the range contributes nothing and is not expanded', () => {
         // A1:A1000000 — a rangeless call expanded it into a million-entry map; the range must skip it.
         const merge = { '0_0': { r: 0, c: 0, rs: 1_000_000, cs: 1 } };

@@ -6,8 +6,6 @@ import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type * as Y from 'yjs';
 
-const LOAD_FAILED_TOAST = 'sheet-load-failed';
-
 export function useSheet(
     ownerId: string,
     mountId: string,
@@ -18,6 +16,10 @@ export function useSheet(
     const [snapshotVersion, setSnapshotVersion] = useState(0);
     // The workbook shows the defaults fallback; the consumer renders it read-only and says so.
     const [loadFailed, setLoadFailed] = useState(false);
+
+    // Per-doc toast id: a global id lets one open sheet's successful load dismiss another's
+    // still-standing load-failed toast.
+    const loadFailedToastId = `sheet-load-failed-${pathId}`;
 
     const isLocalOpRef = useRef(false);
     const isLocalSnapshotRef = useRef(false);
@@ -45,10 +47,10 @@ export function useSheet(
         loadedRef.current = loaded;
         latestDataRef.current = data;
         setLoadFailed(!loaded);
-        if (loaded) toast.dismiss(LOAD_FAILED_TOAST);
+        if (loaded) toast.dismiss(loadFailedToastId);
         else {
             toast.error('This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.', {
-                id: LOAD_FAILED_TOAST,
+                id: loadFailedToastId,
                 duration: Infinity,
             });
         }
@@ -134,7 +136,7 @@ export function useSheet(
                 // provider/doc, so a WS message racing teardown can't fire against a destroyed doc.
                 opsArray.unobserve(handleOps);
                 stateMap.unobserve(handleState);
-                toast.dismiss(LOAD_FAILED_TOAST);
+                toast.dismiss(loadFailedToastId);
             };
         },
         onSync: ({ doc }, isSynced) => {

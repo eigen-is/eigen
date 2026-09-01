@@ -92,6 +92,13 @@ export function mergedBorderSides(
 ): Record<string, CellBorderSides> {
     const folded: Record<string, CellBorderSides> = {};
     if (!borderInfo) return folded;
+    // Nothing to fold onto a master from an empty map — bail before walking the merges' full extent.
+    let empty = true;
+    for (const _ in borderInfo) {
+        empty = false;
+        break;
+    }
+    if (empty) return folded;
     const [rowSt, rowEd, colSt, colEd] = range;
     const mergeAt = new Map<string, MergeCell>();
     for (const key in merge) {

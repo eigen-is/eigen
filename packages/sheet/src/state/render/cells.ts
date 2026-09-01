@@ -2,7 +2,7 @@
 // checkbox, data bar, text and grid lines. Text layout itself lives in
 // modules/text.ts.
 
-import { normalizedAttr } from '../modules/cell';
+import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
 import {
@@ -26,10 +26,6 @@ import { defaultStyle } from './types';
 
 // Unlike the engine's stricter isRealNum, this accepts anything Number() can
 // coerce (null, '', booleans); it only gates the forced-string indicator.
-function coercesToNumber(val: unknown) {
-    return !Number.isNaN(Number(val));
-}
-
 // Data-verification tick box. Hardcoded light like every other canvas color —
 // the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
 // § Theming) — and grey rather than black, the way Google draws the box.
@@ -349,7 +345,7 @@ export function cellRender(
     }
 
     // Forced-string indicator (green triangle top-left)
-    if (cell?.qp === 1 && coercesToNumber(cell?.v)) {
+    if (isForcedStringNumber(cell)) {
         drawCellIndicator(
             renderCtx,
             'left',

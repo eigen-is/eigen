@@ -5,7 +5,7 @@
 // and defaultContext derive from these; never re-list the numbers inline.
 
 import type { Sheet } from '@workspace/lib/sheets';
-import { normalizeSheetConfig } from './replay-ops';
+import { normalizeSheetConfig } from './sheet-config';
 
 export const DEFAULT_SHEET_ROW_COUNT = 100;
 export const DEFAULT_SHEET_COLUMN_COUNT = 26;
