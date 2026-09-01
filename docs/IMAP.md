@@ -198,6 +198,13 @@ falls back to primary password (rejected if 2FA is enabled). The container set a
 `docker/`; [CONTRIBUTING.md § Docker](CONTRIBUTING.md#option-2-docker-full-stack) covers running the full stack
 locally.
 
+The exit code carries the difference between "wrong password" and "server trouble", so the script reads the
+HTTP status rather than relying on `curl -f` (which exits the same way for a 401 as for a 500). A 401, 403 or
+429 is exit 1, dovecot's "auth failed", which reaches the client as `535` and makes it ask for a password. A
+connection failure or any other status is exit 111, dovecot's "temporary failure", which Postfix answers with
+`454 4.7.0` and clients treat as an outage worth retrying. Mapping a refused password to 111 also loses
+failures: dovecot re-runs or abandons the helper, so some attempts never reach the limiter at all.
+
 The script also sends the client's address as `ip`, taken from `TCPREMOTEIP`, the DJB-interface variable
 Dovecot exports to a checkpassword process. Use that name and not Dovecot's `IP`, which carries the **local**
 address for compatibility with old `checkpassword-reply` builds. For an IMAP login the client is the mail

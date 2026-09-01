@@ -14,5 +14,8 @@ node_modules
 # (data/home alone is >1GB and would ship to the daemon on every build).
 data/
 apps/api/data
+# Caddy's local state (certs, OCSP cache). Bind-mounted, and its churn made every `up --build`
+# see a changed context and recreate containers.
+caddy-data/
 # The image runs the API from source; never ship a stale local bundle.
 apps/api/build

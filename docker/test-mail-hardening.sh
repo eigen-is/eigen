@@ -22,8 +22,9 @@
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
-# Runtime is about 8 minutes. Probes 9 and 10 pace themselves under Postfix's anvil AUTH cap, and
-# probe 7 waits for the queue monitor's next interval.
+# Runtime is about 9 minutes. Probes 9 and 10 pace themselves under Postfix's anvil AUTH cap, and
+# probe 7 waits for the queue monitor's next interval. A PROBES subset that names any login probe
+# also runs probe 1, which is what proves the credentials.
 
 set -euo pipefail
 
@@ -76,6 +77,18 @@ wait_api() {
     return 1
 }
 
+# Postfix has no healthcheck, so `up --wait` returns while it is still starting and the first
+# dialog would land on a closed port. Wait for the real banner instead.
+wait_smtps() {
+    local banner
+    for _ in $(seq 1 60); do
+        banner=$(printf 'QUIT\n' | openssl s_client -connect localhost:465 -quiet -crlf 2>/dev/null | head -1 || true)
+        printf '%s' "$banner" | grep -q '^220 ' && return 0
+        sleep 1
+    done
+    return 1
+}
+
 HELO_NAME=probe.eigen.local
 RCPT_PROBE=rcpt-probe@example.com
 
@@ -86,7 +99,7 @@ probe_submission() {
     local desc="$1" login="$2" password="$3" sender="$4" expect="$5"
     local auth transcript
     auth=$(auth_plain "$login" "$password")
-    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $auth\nMAIL FROM:<$sender>\nRCPT TO:<$RCPT_PROBE>\nQUIT\n")
+    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $auth\nMAIL FROM:<$sender>\nRCPT TO:<$RCPT_PROBE>\nQUIT\n") || true
 
     if ! printf '%s\n' "$transcript" | grep -q '^235'; then
         fail "$desc — AUTH itself failed (no 235): $(oneline "$transcript")"
@@ -147,12 +160,26 @@ COMPOSE_PROFILES=edge,mail dc up -d --build --wait >/dev/null 2>&1 || {
 }
 STACK_UP=1
 log "up (queue alert threshold $QUEUE_ALERT_THRESHOLD, checked every ${QUEUE_CHECK_INTERVAL}s)"
+if wait_smtps; then
+    log "postfix is answering on :465"
+else
+    log "✗ postfix never answered on :465 within 60s; look at: dc logs postfix"
+    exit 1
+fi
+
+# Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional
+# when one of these is selected: excluding it would skip every login probe and still print green.
+LOGIN_PROBES="2 3 4 5 9 10"
+NEEDS_LOGIN=0
+for p in $LOGIN_PROBES; do
+    if should_run "$p"; then NEEDS_LOGIN=1; fi
+done
 
 ##############################################################################
 header "Probe 1 — credential sanity (/internal/auth/verify)"
 ##############################################################################
 HAVE_LOGIN=0
-if ! should_run 1; then
+if ! should_run 1 && [ "$NEEDS_LOGIN" = 0 ]; then
     skip "probe 1 not in PROBES"
 elif [ -z "$ALICE_EMAIL" ] || [ -z "$ALICE_PASSWORD" ]; then
     skip "ALICE_EMAIL / ALICE_PASSWORD not set — every login probe will be skipped"
@@ -223,7 +250,7 @@ header "Probe 6 — inbound port 25 never rejects a foreign sender"
 # recipient restrictions, so a leak would show up as a 553 first either way.
 if should_run 6; then
     postfix_domain=$(dc exec -T postfix postconf -h mydomain | tr -d '\r')
-    transcript=$(smtp25 "EHLO $HELO_NAME\nMAIL FROM:<$SENDER_FOREIGN>\nRCPT TO:<probe@$postfix_domain>\nQUIT\n")
+    transcript=$(smtp25 "EHLO $HELO_NAME\nMAIL FROM:<$SENDER_FOREIGN>\nRCPT TO:<probe@$postfix_domain>\nQUIT\n") || true
     if printf '%s\n' "$transcript" | grep -q '^553'; then
         fail "inbound MAIL FROM <$SENDER_FOREIGN> got a 553 sender rejection: $(oneline "$transcript")"
     elif printf '%s\n' "$transcript" | grep -q '^250 2\.1\.5'; then
@@ -336,7 +363,7 @@ if should_run 9 && [ "$HAVE_LOGIN" = 1 ]; then
         smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $bad\nQUIT\n" >/dev/null || true
     done
     good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
-    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $good\nQUIT\n")
+    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $good\nQUIT\n") || true
     if printf '%s\n' "$transcript" | grep -q '^235'; then
         fail "the correct password still authenticated after 11 failures, so the limiter did not engage"
     elif printf '%s\n' "$transcript" | grep -q '^535'; then
@@ -358,12 +385,14 @@ header "Probe 10 — the client IP reaches the limiter through real SMTP AUTH"
 # The one probe that proves the whole chain: postfix reports the SMTP client as `rip`, dovecot
 # exports it as TCPREMOTEIP, eigen-checkpassword forwards it as `ip`, and verifyProtocolAuth keys
 # its per-IP bucket on it. Every connection from this host arrives from one bridge address, so the
-# failures are spread across 26 addresses at 2 each: no address comes near its own cap of 10, and
-# 52 failures cross the per-IP cap of 50. A lockout in that shape can only be the per-IP bucket.
-# The final assertion uses the CORRECT password on an address with a clean bucket: if the client IP
-# never reached the API, that login simply succeeds.
-# Paced under postfix's own anvil cap (20 AUTH commands per client IP per 60s), so this takes ~3
+# failures are spread across 30 addresses at 2 each: no address comes near its own cap of 10, and
+# 60 failures clear the per-IP cap of 50 with room for a few attempts to go missing. A lockout in
+# that shape can only be the per-IP bucket. The final assertion uses the CORRECT password on an
+# address with a clean bucket: if the client IP never reached the API, that login simply succeeds.
+# Paced under postfix's own anvil cap (20 AUTH commands per client IP per 60s), so this takes ~4
 # minutes. Two AUTHs per connection stays under smtpd_hard_error_limit=5.
+SPRAY_ADDRESSES=30
+SPRAY_PER_WINDOW=9
 if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
     log "restarting eigen-api for a clean failure-bucket baseline..."
     dc restart eigen-api >/dev/null 2>&1
@@ -371,26 +400,26 @@ if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
 
     rate_limited=0
     sent=0
-    log "spraying 52 failed logins across 26 addresses..."
-    for i in $(seq 1 26); do
+    log "spraying $((SPRAY_ADDRESSES * 2)) failed logins across $SPRAY_ADDRESSES addresses..."
+    for i in $(seq 1 "$SPRAY_ADDRESSES"); do
         bad=$(auth_plain "ip-spray-$i@probe.invalid" "wrongpassword")
-        spray=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $bad\nAUTH PLAIN $bad\nQUIT\n")
+        spray=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $bad\nAUTH PLAIN $bad\nQUIT\n") || true
         printf '%s\n' "$spray" | grep -q '^450' && rate_limited=1
         sent=$((sent + 2))
-        if [ $((i % 9)) -eq 0 ] && [ "$i" -lt 26 ]; then
+        if [ $((i % SPRAY_PER_WINDOW)) -eq 0 ] && [ "$i" -lt "$SPRAY_ADDRESSES" ]; then
             log "  $sent failures sent; waiting out the anvil window..."
             sleep 62
         fi
     done
 
     good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
-    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $good\nQUIT\n")
+    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $good\nQUIT\n") || true
     if [ "$rate_limited" = 1 ]; then
         fail "postfix answered 450 during the spray, so those failures never reached the API — widen the pacing"
     elif printf '%s\n' "$transcript" | grep -q '^235'; then
         fail "a correct password still authenticated after $sent failures from this IP: the client address is not reaching the limiter (postfix rip → dovecot TCPREMOTEIP → checkpassword ip)"
     elif printf '%s\n' "$transcript" | grep -q '^535'; then
-        ok "$sent failures across 26 addresses locked this client IP out, end to end"
+        ok "$sent failures across $SPRAY_ADDRESSES addresses locked this client IP out, end to end"
     else
         fail "expected a 535 from the per-IP lockout: $(oneline "$transcript")"
     fi
@@ -405,7 +434,11 @@ fi
 ##############################################################################
 header "Result"
 ##############################################################################
-if [ "$FAIL" -eq 0 ]; then
+if [ "$FAIL" -eq 0 ] && [ "$PASS" -eq 0 ]; then
+    # Green with nothing asserted is the worst outcome: it reads as a pass.
+    printf '✗ NOTHING RAN (%d probes skipped) — check PROBES and ALICE_EMAIL/ALICE_PASSWORD\n' "$SKIP"
+    exit 1
+elif [ "$FAIL" -eq 0 ]; then
     printf '✓ ALL OK (%d checks passed, %d skipped)\n' "$PASS" "$SKIP"
     exit 0
 else
