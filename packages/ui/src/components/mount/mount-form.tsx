@@ -1,6 +1,6 @@
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { S3CheckResult } from '@workspace/lib/types/settings';
+import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { useState } from 'react';
 import { Button } from '../button';
 import { DialogFooter } from '../dialog';
@@ -24,6 +24,7 @@ type MountFormProps = {
     onSubmit: (values: MountFormValues) => void | Promise<void>;
     onCancel?: () => void;
     onS3Check: (config: S3Config) => Promise<S3CheckResult>;
+    onS3Harden: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
     submitLabel?: string;
     isEdit?: boolean;
 };
@@ -36,6 +37,7 @@ export function MountForm({
     onSubmit,
     onCancel,
     onS3Check,
+    onS3Harden,
     submitLabel = 'Create Mount',
     isEdit = false,
 }: MountFormProps) {
@@ -107,7 +109,15 @@ export function MountForm({
                 />
             </div>
 
-            {isS3 && <S3ConfigCard value={s3Config} onChange={setS3Config} onCheck={onS3Check} isEdit={isEdit} />}
+            {isS3 && (
+                <S3ConfigCard
+                    value={s3Config}
+                    onChange={setS3Config}
+                    onCheck={onS3Check}
+                    onHarden={onS3Harden}
+                    isEdit={isEdit}
+                />
+            )}
 
             <DialogFooter>
                 {onCancel && (
