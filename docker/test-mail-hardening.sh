@@ -9,9 +9,9 @@
 #   KEEP_STACK=1 ...                                                                # leave it up
 #
 # Needs:  docker, openssl, nc, and a `.env.production` whose MAIL_DOMAIN matches the accounts
-#         already in ./data. The script never creates accounts, it logs in as a real one. Stop any
-#         host-side API on :8000 first. Without ALICE_EMAIL/ALICE_PASSWORD the probes that need a
-#         login are skipped and the rest still run.
+#         already in ./data. The script never creates accounts, it logs in as a real one. A host
+#         dev API on :8000 is fine to leave running: eigen-api has no host port binding. Without
+#         ALICE_EMAIL/ALICE_PASSWORD the probes that need a login are skipped and the rest still run.
 #
 # The dev overlay pins postfix and dovecot to MAIL_DOMAIN=localhost, so Postfix's own mail domain
 # can differ from the account's domain. The sender/login binding does not care: it compares the
