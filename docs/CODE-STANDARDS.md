@@ -179,8 +179,11 @@ Elysia route handler return type → Eden Treaty infers response type → hook e
 
 - **English everywhere** — code, comments, docs, commit messages
 - **No JSDoc** — code should be self-documenting. Comments only where logic isn't obvious
-- **Comments explain WHY, never WHAT** — `// Walk parentId chain to find outermost container` is good.
-  `// Set the variable to true` is noise. Most code needs zero comments
+- **Comments are only for high-complexity code, or functions whose use wouldn't be obvious to a
+  maintainer of this repo** — and they explain WHY, never WHAT. Write them in simplified technical
+  English and favor concision over grammar: `// Walk parentId chain to find outermost container` is
+  good, `// Set the variable to true` is noise. Most code needs zero comments, and no comment is
+  better than slop — reviewers should flag comment slop the same as dead code
 - **Backend errors use `ApiError`** — `throw new ApiError(status, message)` for user-facing HTTP errors,
   never `throw new Error()`. Exception: internal invariants (db not open, missing config) may use
   `throw new Error()` since an HTTP status code wouldn't be semantically correct
