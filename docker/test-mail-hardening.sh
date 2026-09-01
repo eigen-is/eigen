@@ -22,7 +22,7 @@
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
-# Runtime is about 9 minutes. Probes 9 and 10 pace themselves under Postfix's anvil AUTH cap, and
+# Runtime is about 10 minutes. Probes 9 and 10 pace themselves under Postfix's anvil AUTH cap, and
 # probe 7 waits for the queue monitor's next interval. A PROBES subset that names any login probe
 # also runs probe 1, which is what proves the credentials.
 
@@ -91,6 +91,48 @@ wait_smtps() {
 
 HELO_NAME=probe.eigen.local
 RCPT_PROBE=rcpt-probe@example.com
+
+# One AUTH per connection, and QUIT only goes out after the reply has had time to arrive. Writing
+# the whole dialog in one shot (AUTH then QUIT, no pause) disconnects while the dovecot request is
+# still in flight, and postfix abandons it: dovecot logs "auth client disconnected with 1 pending
+# requests: EOF" and the attempt never reaches the API. Measured 15 of 60 lost that way, and the
+# loss scales with the spray, so no larger spray fixes it. The generator subshell holds the pipe
+# open across the pause; callers then count the 535s they actually got, so a lost attempt is
+# reported rather than quietly shrinking the spray. (A read-driven dialog would need `coproc`,
+# which macOS's stock bash 3.2 does not have.)
+auth_once() {
+    local auth="$1"
+    {
+        printf 'EHLO %s\n' "$HELO_NAME"
+        printf 'AUTH PLAIN %s\n' "$auth"
+        sleep 2
+        printf 'QUIT\n'
+    } | openssl s_client -connect localhost:465 -quiet -crlf 2>/dev/null || true
+}
+
+# Postfix caps AUTH commands per client IP per 60s (smtpd_client_auth_rate_limit=20), and every
+# connection here comes from the same host address. Hold the spray to 18 per window, measured on
+# the clock so the dialogs' own duration counts toward it and only the shortfall is slept off.
+ANVIL_BUDGET=18
+anvil_window_start=$SECONDS
+anvil_sent=0
+
+anvil_pace() {
+    anvil_sent=$((anvil_sent + 1))
+    if [ "$anvil_sent" -lt "$ANVIL_BUDGET" ]; then return 0; fi
+    local elapsed=$((SECONDS - anvil_window_start))
+    if [ "$elapsed" -lt 62 ]; then
+        log "  $1 sent; waiting $((62 - elapsed))s out of the anvil window..."
+        sleep $((62 - elapsed))
+    fi
+    anvil_window_start=$SECONDS
+    anvil_sent=0
+}
+
+anvil_reset() {
+    anvil_window_start=$SECONDS
+    anvil_sent=0
+}
 
 # One authenticated submission dialog, asserting whether the envelope sender is accepted.
 # `smtpd_delay_reject = yes` defers sender restrictions to RCPT TO, so the 553 lands on the RCPT
@@ -352,22 +394,34 @@ fi
 ##############################################################################
 header "Probe 9 — repeated bad AUTH locks the account's password path"
 ##############################################################################
-# Runs LAST: it saturates the per-email failure bucket, so the correct password stays refused for
-# 15 minutes (or until eigen-api restarts, which this probe does at the end).
-# One AUTH per connection — smtpd_hard_error_limit=5 drops a session that keeps failing.
+# Saturates the per-email failure bucket (cap 10), so the correct password stays refused for 15
+# minutes, or until eigen-api restarts — which this probe does at the end.
+# Same delivery discipline as probe 10: one AUTH per connection, reply read before QUIT, and the
+# 535s counted, because an abandoned attempt would leave the bucket one short and read as a
+# regression in the limiter.
 if should_run 9 && [ "$HAVE_LOGIN" = 1 ]; then
     log "waiting 60s for the anvil auth-rate window to roll over..."
     sleep 60
+    anvil_reset
     bad=$(auth_plain "$ALICE_EMAIL" "definitely-not-the-password")
-    for _ in $(seq 1 11); do
-        smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $bad\nQUIT\n" >/dev/null || true
+    delivered=0
+    for _ in $(seq 1 12); do
+        attempt=$(auth_once "$bad")
+        printf '%s\n' "$attempt" | grep -q '^535' && delivered=$((delivered + 1))
+        anvil_pace "$delivered failures"
     done
     good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
-    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $good\nQUIT\n") || true
-    if printf '%s\n' "$transcript" | grep -q '^235'; then
-        fail "the correct password still authenticated after 11 failures, so the limiter did not engage"
+    transcript=$(auth_once "$good")
+    if printf '%s\n' "$transcript" | grep -q '^454'; then
+        log "  454 on the first attempt (postfix's cached SASL connection); retrying once"
+        transcript=$(auth_once "$good")
+    fi
+    if [ "$delivered" -lt 10 ]; then
+        fail "only $delivered of 12 failures reached the API, short of the per-email cap of 10 — the spray, not the limiter, is what failed"
+    elif printf '%s\n' "$transcript" | grep -q '^235'; then
+        fail "the correct password still authenticated after $delivered failures, so the limiter did not engage"
     elif printf '%s\n' "$transcript" | grep -q '^535'; then
-        ok "the correct password is refused while the failure bucket is saturated"
+        ok "the correct password is refused while the failure bucket is saturated ($delivered failures)"
     else
         # A 450 here means postfix's own anvil AUTH rate limit answered first, not the limiter.
         fail "expected a 535 on the correct password: $(oneline "$transcript")"
@@ -385,41 +439,49 @@ header "Probe 10 — the client IP reaches the limiter through real SMTP AUTH"
 # The one probe that proves the whole chain: postfix reports the SMTP client as `rip`, dovecot
 # exports it as TCPREMOTEIP, eigen-checkpassword forwards it as `ip`, and verifyProtocolAuth keys
 # its per-IP bucket on it. Every connection from this host arrives from one bridge address, so the
-# failures are spread across 30 addresses at 2 each: no address comes near its own cap of 10, and
-# 60 failures clear the per-IP cap of 50 with room for a few attempts to go missing. A lockout in
-# that shape can only be the per-IP bucket. The final assertion uses the CORRECT password on an
-# address with a clean bucket: if the client IP never reached the API, that login simply succeeds.
-# Paced under postfix's own anvil cap (20 AUTH commands per client IP per 60s), so this takes ~4
-# minutes. Two AUTHs per connection stays under smtpd_hard_error_limit=5.
-SPRAY_ADDRESSES=30
-SPRAY_PER_WINDOW=9
+# failures are spread over 60 addresses, one AUTH each: no address gets anywhere near its own cap of
+# 10, and 60 failures clear the per-IP cap of 50 with margin. A lockout in that shape can only be
+# the per-IP bucket. The final assertion uses the CORRECT password on an address with a clean
+# bucket: if the client IP never reached the API, that login simply succeeds.
+# Each 535 is counted, so an attempt postfix never completed cannot silently shrink the spray.
+# Paced under postfix's anvil cap (20 AUTH per client IP per 60s), so this takes ~4 minutes.
+SPRAY_ADDRESSES=60
 if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
     log "restarting eigen-api for a clean failure-bucket baseline..."
     dc restart eigen-api >/dev/null 2>&1
     wait_api || fail "eigen-api did not come back healthy"
 
-    rate_limited=0
-    sent=0
-    log "spraying $((SPRAY_ADDRESSES * 2)) failed logins across $SPRAY_ADDRESSES addresses..."
+    delivered=0
+    lost=0
+    anvil_reset
+    log "spraying $SPRAY_ADDRESSES failed logins, one per address and one per connection..."
     for i in $(seq 1 "$SPRAY_ADDRESSES"); do
         bad=$(auth_plain "ip-spray-$i@probe.invalid" "wrongpassword")
-        spray=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $bad\nAUTH PLAIN $bad\nQUIT\n") || true
-        printf '%s\n' "$spray" | grep -q '^450' && rate_limited=1
-        sent=$((sent + 2))
-        if [ $((i % SPRAY_PER_WINDOW)) -eq 0 ] && [ "$i" -lt "$SPRAY_ADDRESSES" ]; then
-            log "  $sent failures sent; waiting out the anvil window..."
-            sleep 62
+        spray=$(auth_once "$bad")
+        if printf '%s\n' "$spray" | grep -q '^535'; then
+            delivered=$((delivered + 1))
+        else
+            lost=$((lost + 1))
+            [ "$lost" = 1 ] && log "  first non-535 reply: $(oneline "$spray")"
         fi
+        anvil_pace "$delivered failures"
     done
+    log "$delivered of $SPRAY_ADDRESSES failures reached the API ($lost without a 535 reply)"
 
     good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
-    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $good\nQUIT\n") || true
-    if [ "$rate_limited" = 1 ]; then
-        fail "postfix answered 450 during the spray, so those failures never reached the API — widen the pacing"
+    transcript=$(auth_once "$good")
+    if printf '%s\n' "$transcript" | grep -q '^454'; then
+        # Pre-existing quirk, unrelated to this branch: the first AUTH after an auth-server restart
+        # hits postfix's stale cached SASL connection, and postfix reconnects on the next attempt.
+        log "  454 on the first attempt (postfix's cached SASL connection); retrying once"
+        transcript=$(auth_once "$good")
+    fi
+    if [ "$delivered" -lt 51 ]; then
+        fail "only $delivered of $SPRAY_ADDRESSES failures were delivered, short of the per-IP cap of 50 — the spray, not the limiter, is what failed"
     elif printf '%s\n' "$transcript" | grep -q '^235'; then
-        fail "a correct password still authenticated after $sent failures from this IP: the client address is not reaching the limiter (postfix rip → dovecot TCPREMOTEIP → checkpassword ip)"
+        fail "a correct password still authenticated after $delivered failures from this IP: the client address is not reaching the limiter (postfix rip → dovecot TCPREMOTEIP → checkpassword ip)"
     elif printf '%s\n' "$transcript" | grep -q '^535'; then
-        ok "$sent failures across $SPRAY_ADDRESSES addresses locked this client IP out, end to end"
+        ok "$delivered failures across $SPRAY_ADDRESSES addresses locked this client IP out, end to end"
     else
         fail "expected a 535 from the per-IP lockout: $(oneline "$transcript")"
     fi
