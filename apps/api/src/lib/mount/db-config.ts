@@ -186,6 +186,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 for (const f of files) {
                     if (isSearchableTextFile(f.mimeType, f.name)) mark.run(f.id);
                 }
+                mark.finalize();
             },
         },
         {
@@ -273,6 +274,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                         }
                     }
                 }
+                rename.finalize();
 
                 // A2 — the partial unique index. LOWER(name) + non-trashed scope match getChildByName /
                 // assertUniqueName exactly; trashed rows are excluded so a trashed item doesn't block

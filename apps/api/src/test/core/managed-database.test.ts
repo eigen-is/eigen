@@ -2,8 +2,9 @@ import { Database as BunDatabase } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
+import { type DatabaseConfig, ManagedDatabase, withAutoFinalize } from '../../lib/core';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-managed-db-${Date.now()}`);
@@ -289,13 +290,37 @@ describe('ManagedDatabase close teardown', () => {
     });
 });
 
+describe('ManagedDatabase statement finalization', () => {
+    test('drizzle statements are finalized as they run, so the raw handle closes strictly', () => {
+        // Drizzle prepares one bun:sqlite statement per execution and leaves it to GC; sqlite refuses
+        // a strict close (SQLITE_BUSY) while any survive — including a collected wrapper whose native
+        // handle hasn't been swept yet, which no amount of Bun.gc() can force. Every execution path
+        // drizzle has (run/all/get/values, transactions, savepoints, relational queries) must leave
+        // nothing behind.
+        const raw = new BunDatabase(nextDbPath(), { create: true });
+        raw.run('CREATE TABLE items (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)');
+        const db = drizzle(withAutoFinalize(raw), { schema: { items } });
+
+        db.insert(items).values({ v: 'a' }).run();
+        db.transaction((tx) => {
+            tx.insert(items).values({ v: 'b' }).run();
+            tx.transaction((inner) => inner.insert(items).values({ v: 'c' }).run());
+        });
+        expect(db.select().from(items).all()).toHaveLength(3);
+        expect(db.select().from(items).get()?.v).toBe('a');
+        expect(db.query.items.findMany().sync()).toHaveLength(3);
+        expect(db.select({ v: items.v }).from(items).all()[2]?.v).toBe('c');
+
+        expect(() => raw.close(true)).not.toThrow();
+    });
+});
+
 describe('ManagedDatabase close releases the file (no zombie close)', () => {
     test('close → reopen of the SAME path works', async () => {
-        // Drizzle leaves its prepared statements to GC, so a plain rawDb.close() degrades to a
-        // LAZY close that keeps the file + -shm mapped; deleteJournalFiles then unlinks -shm
-        // under that zombie, poisoning the inode's shm node — the next open of the same file
-        // fails with SQLITE_IOERR_VNODE (macOS; Linux tolerates the unlink). Every local-key
-        // reopen takes exactly this path.
+        // A lazy close keeps the file + -shm mapped; deleteJournalFiles then unlinks -shm under
+        // that zombie, poisoning the inode's shm node — the next open of the same file fails with
+        // SQLITE_IOERR_VNODE (macOS; Linux tolerates the unlink). Every local-key reopen takes
+        // exactly this path, so close() must be strict (statements finalized, see above).
         const dbPath = nextDbPath();
         const db = new ManagedDatabase(makeConfig(1000), dbPath, { onSync: async () => {} });
         await db.open(0);

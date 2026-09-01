@@ -1,5 +1,5 @@
 import type Database from 'bun:sqlite';
-import { Database as BunDatabase } from 'bun:sqlite';
+import { Database as BunDatabase, type Statement } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
@@ -121,7 +121,7 @@ export class ManagedDatabase<S extends SchemaType> {
             throw e;
         }
 
-        this.drizzleDb = drizzle(this.rawDb, { schema: this.config.schema }) as BunSQLiteDatabase<S>;
+        this.drizzleDb = drizzle(withAutoFinalize(this.rawDb), { schema: this.config.schema }) as BunSQLiteDatabase<S>;
         this.lastSyncedChanges = 0;
         this.closed = false;
 
@@ -294,25 +294,19 @@ export class ManagedDatabase<S extends SchemaType> {
                         console.error(`[${this.config.name}] close snapshot failed:`, err),
                     );
                 }
-                // Strict close, GC-assisted: drizzle leaves its prepared statements to GC, and
-                // sqlite refuses to close over them (SQLITE_BUSY) — a plain close() degrades to a
-                // LAZY close that keeps the file + -shm mapped until GC finalizes them. Collect the
-                // dropped statements and retry so the close is real. If it is STILL lazy (a
-                // genuinely live statement), keep the journals: unlinking -shm under the zombie
-                // poisons sqlite's per-inode shm node and the next open of the SAME file (every
-                // local-key reopen) fails with SQLITE_IOERR_VNODE.
+                // Strict close. Statements are finalized as they run (withAutoFinalize), so this
+                // succeeds; should one still be live, keep the journals — a lazy close keeps the
+                // file + -shm mapped, and unlinking -shm under that zombie poisons sqlite's per-inode
+                // shm node so the next open of the SAME file (every local-key reopen) fails with
+                // SQLITE_IOERR_VNODE.
                 let cleanClose = true;
                 if (this.rawDb) {
                     try {
                         this.rawDb.close(true);
-                    } catch {
-                        Bun.gc(true);
-                        try {
-                            this.rawDb.close(true);
-                        } catch {
-                            cleanClose = false;
-                            this.rawDb.close();
-                        }
+                    } catch (err) {
+                        cleanClose = false;
+                        console.warn(`[${this.config.name}] lazy close, keeping journals:`, err);
+                        this.rawDb.close();
                     }
                 }
                 this.rawDb = null;
@@ -340,6 +334,42 @@ export class ManagedDatabase<S extends SchemaType> {
         if (!this.drizzleDb) throw new Error('Database not open');
         return this.drizzleDb;
     }
+}
+
+// Drizzle prepares one bun:sqlite statement per execution and leaves it to GC. sqlite refuses a
+// strict close while any survive (SQLITE_BUSY) — and a collected wrapper whose native handle
+// hasn't been swept yet still counts, which no Bun.gc() retry can force. Finalize each statement
+// right after its single execution instead. Migrations get the raw handle (they reuse statements
+// in loops) and finalize their own.
+export function withAutoFinalize(db: BunDatabase): BunDatabase {
+    return new Proxy(db, {
+        get(target, prop) {
+            if (prop === 'prepare') {
+                return (...args: Parameters<BunDatabase['prepare']>) => finalizeAfterRun(target.prepare(...args));
+            }
+            const value = Reflect.get(target, prop, target);
+            return typeof value === 'function' ? value.bind(target) : value;
+        },
+    });
+}
+
+const STATEMENT_RUNNERS = new Set<string | symbol>(['run', 'all', 'get', 'values']);
+
+function finalizeAfterRun(stmt: Statement): Statement {
+    return new Proxy(stmt, {
+        get(target, prop) {
+            const value = Reflect.get(target, prop, target);
+            if (typeof value !== 'function') return value;
+            if (!STATEMENT_RUNNERS.has(prop)) return value.bind(target);
+            return (...args: unknown[]) => {
+                try {
+                    return value.apply(target, args);
+                } finally {
+                    target.finalize();
+                }
+            };
+        },
+    });
 }
 
 export async function openLocalDatabase<S extends SchemaType>(

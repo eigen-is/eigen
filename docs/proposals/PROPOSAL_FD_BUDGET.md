@@ -218,13 +218,12 @@ what they already cover:
   migration closes and nulls `rawDb` before the error propagates (AUDIT_STORAGE item 8). The
   retry wrapper therefore only classifies, evicts, and re-calls `openCold`; it must NOT add
   its own handle cleanup (double-close hazard).
-- **Error classification is now unambiguous.** The strict GC-assisted close eliminated the
+- **Error classification is now unambiguous.** The strict close (drizzle statements finalized as they run) eliminated the
   zombie-close→`SQLITE_IOERR_VNODE` reopen bug (a lazy close unlinking `-shm` under a live
   statement poisoned the next open of the same file). Before that fix, `SQLITE_IOERR_VNODE`
   at open could mean either fd exhaustion or the zombie-shm bug — and the valve would have
   masked the latter by evicting an innocent home. Now it is an exhaustion signal, so
-  evict-and-retry is the right recovery, not a band-aid over a reopen bug. (The rare
-  `Bun.gc(true)` inside `close()` fires only on its fallback path, so eviction stays cheap.)
+  evict-and-retry is the right recovery, not a band-aid over a reopen bug.
 
 ### Choosing N
 

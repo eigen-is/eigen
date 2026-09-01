@@ -54,7 +54,7 @@ type DatabaseConfig<S extends SchemaType> = {
 
 1. `open(autoSyncMs)` — opens DB, runs pending migrations, starts sync timer (default 30s)
 2. `sync()` — runs `onSync` callback + `PRAGMA wal_checkpoint(PASSIVE)` (non-blocking). Skips if not dirty
-3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB, deletes WAL/SHM journal files
+3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB, deletes WAL/SHM journal files. The close is strict: drizzle's statements are finalized as they run (`withAutoFinalize`), because a lazy close leaves `-shm` mapped and unlinking it under that zombie makes the next open of the same file fail with `SQLITE_IOERR_VNODE`
 
 ### Migrations
 
