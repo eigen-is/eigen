@@ -1,16 +1,9 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
-import { Button } from '@workspace/ui/components/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuShortcut,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut } from '@workspace/ui/components/dropdown-menu';
 import { Redo, Search, TextSearch, Undo } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useFindBarRefocus } from '../../search/find-in-document-button';
+import { ToolbarMenu } from './toolbar-menu';
 
 type EditMenuProps = {
     // Gates the undo/redo section — pass the same condition the surface used for its icon
@@ -32,48 +25,43 @@ export function EditMenu({ canEdit, canUndo, canRedo, onUndo, onRedo, children }
     const { docSearchBar, focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost">Edit</Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" onCloseAutoFocus={onCloseAutoFocus}>
-                {canEdit && (
-                    <>
-                        <DropdownMenuItem onClick={onUndo} disabled={!canUndo}>
-                            <Undo className="h-4 w-4 mr-2" /> Undo
-                            <DropdownMenuShortcut>{formatForDisplay('Mod+Z')}</DropdownMenuShortcut>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={onRedo} disabled={!canRedo}>
-                            <Redo className="h-4 w-4 mr-2" /> Redo
-                            <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+Z')}</DropdownMenuShortcut>
-                        </DropdownMenuItem>
-                        {children}
-                        {docSearchBar && <DropdownMenuSeparator />}
-                    </>
-                )}
-                {docSearchBar && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            focusFindBarRef.current = true;
-                            docSearchBar.open();
-                        }}
-                    >
-                        <Search className="h-4 w-4 mr-2" /> Find
-                        <DropdownMenuShortcut>{formatForDisplay('Mod+F')}</DropdownMenuShortcut>
+        <ToolbarMenu label="Edit" onCloseAutoFocus={onCloseAutoFocus}>
+            {canEdit && (
+                <>
+                    <DropdownMenuItem onClick={onUndo} disabled={!canUndo}>
+                        <Undo className="h-4 w-4 mr-2" /> Undo
+                        <DropdownMenuShortcut>{formatForDisplay('Mod+Z')}</DropdownMenuShortcut>
                     </DropdownMenuItem>
-                )}
-                {docSearchBar?.canReplace && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            focusFindBarRef.current = true;
-                            docSearchBar.openReplace();
-                        }}
-                    >
-                        <TextSearch className="h-4 w-4 mr-2" /> Find and replace
-                        <DropdownMenuShortcut>{formatForDisplay('Mod+Alt+F')}</DropdownMenuShortcut>
+                    <DropdownMenuItem onClick={onRedo} disabled={!canRedo}>
+                        <Redo className="h-4 w-4 mr-2" /> Redo
+                        <DropdownMenuShortcut>{formatForDisplay('Mod+Shift+Z')}</DropdownMenuShortcut>
                     </DropdownMenuItem>
-                )}
-            </DropdownMenuContent>
-        </DropdownMenu>
+                    {children}
+                    {docSearchBar && <DropdownMenuSeparator />}
+                </>
+            )}
+            {docSearchBar && (
+                <DropdownMenuItem
+                    onClick={() => {
+                        focusFindBarRef.current = true;
+                        docSearchBar.open();
+                    }}
+                >
+                    <Search className="h-4 w-4 mr-2" /> Find
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+F')}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+            )}
+            {docSearchBar?.canReplace && (
+                <DropdownMenuItem
+                    onClick={() => {
+                        focusFindBarRef.current = true;
+                        docSearchBar.openReplace();
+                    }}
+                >
+                    <TextSearch className="h-4 w-4 mr-2" /> Find and replace
+                    <DropdownMenuShortcut>{formatForDisplay('Mod+Alt+F')}</DropdownMenuShortcut>
+                </DropdownMenuItem>
+            )}
+        </ToolbarMenu>
     );
 }

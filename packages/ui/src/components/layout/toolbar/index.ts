@@ -4,6 +4,7 @@ export * from './edit-menu';
 export * from './file-menu';
 export * from './kebab-trigger';
 export * from './toolbar';
+export * from './toolbar-menu';
 export * from './toolbar-separator';
 export * from './toolbar-title';
 export * from './tooltip-button';

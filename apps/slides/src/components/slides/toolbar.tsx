@@ -1,15 +1,17 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, TooltipButton, useLayout } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
-import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+    CenteredToolbar,
+    DocumentShareCluster,
+    EditMenu,
+    FileMenu,
+    ToolbarMenu,
+    TooltipButton,
+    useLayout,
+} from '@workspace/ui';
+import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { ImagePlus, Play, Plus, Presentation, Type } from 'lucide-react';
 import type * as Y from 'yjs';
 
@@ -71,22 +73,17 @@ export function Toolbar({
                         <EditMenu canEdit={canEdit} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo} />
 
                         {canEdit && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost">Insert</Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                    <DropdownMenuItem onClick={onAddSlide}>
-                                        <Plus className="h-4 w-4 mr-2" /> Slide
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={onAddText}>
-                                        <Type className="h-4 w-4 mr-2" /> Text
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={onAddImage}>
-                                        <ImagePlus className="h-4 w-4 mr-2" /> Image
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            <ToolbarMenu label="Insert">
+                                <DropdownMenuItem onClick={onAddSlide}>
+                                    <Plus className="h-4 w-4 mr-2" /> Slide
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={onAddText}>
+                                    <Type className="h-4 w-4 mr-2" /> Text
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={onAddImage}>
+                                    <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                </DropdownMenuItem>
+                            </ToolbarMenu>
                         )}
                     </div>
                 }
