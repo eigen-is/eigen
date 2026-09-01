@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
+import { RoughGenerator } from 'roughjs/bin/generator';
 import { elbowRoute } from '../../vector/elbow-route';
 import {
     anchorToScene,
     applyResize,
+    arrowCurveBeziers,
     arrowheadGeometry,
     arrowLabelBox,
     type Box,
@@ -23,6 +25,8 @@ import {
     hitTestElement,
     hitTestEllipse,
     isClosedPath,
+    linearLocalToScene,
+    linearSceneToLocal,
     marqueeHits,
     marqueeMode,
     normalizeAngle,
@@ -37,6 +41,7 @@ import {
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
+    sampleArrowCurve,
     serializePoints,
     shapeSideMidpoints,
     snapAngle,
@@ -802,9 +807,213 @@ describe('boundEndpoint', () => {
     });
 });
 
+describe('arrowCurveBeziers / sampleArrowCurve', () => {
+    // The geometry-side curve is golden-locked to roughjs's `gen.curve` control points at roughness 0 —
+    // the exact spline the renderer draws (Catmull-Rom, curveTightness 0, endpoints duplicated).
+    const pts: Point[] = [
+        { x: 0, y: 0 },
+        { x: 30, y: 40 },
+        { x: 80, y: 10 },
+        { x: 120, y: 60 },
+    ];
+
+    test('matches roughjs gen.curve control points byte-for-byte at roughness 0', () => {
+        const gen = new RoughGenerator({});
+        const drawable = gen.curve(
+            pts.map((p): [number, number] => [p.x, p.y]),
+            { roughness: 0, curveTightness: 0, disableMultiStroke: true, seed: 1 },
+        );
+        const ops = drawable.sets[0].ops;
+        const bcurves = ops.filter((o) => o.op === 'bcurveTo');
+        const beziers = arrowCurveBeziers(pts);
+        expect(ops[0].op).toBe('move');
+        expect(ops[0].data).toEqual([beziers[0][0].x, beziers[0][0].y]);
+        expect(bcurves.length).toBe(beziers.length);
+        for (let i = 0; i < beziers.length; i++) {
+            const [, c1, c2, c3] = beziers[i];
+            expect(bcurves[i].data).toEqual([c1.x, c1.y, c2.x, c2.y, c3.x, c3.y]);
+        }
+    });
+
+    test('sampleArrowCurve passes through every vertex and never yields NaN', () => {
+        const poly = sampleArrowCurve(pts, 8);
+        expect(poly[0]).toEqual(pts[0]);
+        expect(poly[poly.length - 1]).toEqual(pts[pts.length - 1]);
+        for (const p of poly) {
+            expect(Number.isFinite(p.x)).toBe(true);
+            expect(Number.isFinite(p.y)).toBe(true);
+        }
+    });
+
+    test('a 2-point curve reduces to the straight chord', () => {
+        const beziers = arrowCurveBeziers([
+            { x: 0, y: 0 },
+            { x: 60, y: 20 },
+        ]);
+        expect(beziers.length).toBe(1);
+        const [, c1, c2] = beziers[0];
+        // control points collinear with the chord ⇒ a straight line
+        expect(c1).toEqual({ x: 10, y: 10 / 3 });
+        expect(c2).toEqual({ x: 50, y: 50 / 3 });
+    });
+});
+
+describe('boundEndpoint — curve-exact docking', () => {
+    // A rectangle to the right of the arrow (as in the chord tests); left inflated side at x = 5 - 6 = -1.
+    const rect = shapeEl({ id: 'rect', type: 'rectangle', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
+    const ell = shapeEl({ id: 'ell', type: 'ellipse', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
+    const dia = shapeEl({ id: 'dia', type: 'diamond', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
+
+    // A strongly curved 3-point arrow that swings up from below-left toward the shape centre; the curved
+    // shaft meets the outline at a different place than the straight chord from the adjacent vertex.
+    const curvedArrow = (over: Partial<VectorArrowElement> = {}) =>
+        arrowEl({
+            points: '[[0,0],[10,60],[70,20]]',
+            x: -40,
+            y: -30,
+            width: 70,
+            height: 60,
+            roundness: 'round',
+            endBinding: bind(rect, [0.5, 0.5]),
+            ...over,
+        });
+
+    const onInflatedRect = (p: Point, s: VectorShapeElement, gap = 6) => {
+        const left = s.x - gap;
+        const right = s.x + s.width + gap;
+        const top = s.y - gap;
+        const bottom = s.y + s.height + gap;
+        return Math.min(Math.abs(p.x - left), Math.abs(p.x - right), Math.abs(p.y - top), Math.abs(p.y - bottom));
+    };
+
+    test('a curved 3-point arrow docks off the chord for rectangle / ellipse / diamond', () => {
+        for (const shape of [rect, ell, dia]) {
+            const curved = curvedArrow({ endBinding: bind(shape, [0.5, 0.5]) });
+            const sharp = curvedArrow({ endBinding: bind(shape, [0.5, 0.5]), roundness: 'sharp' });
+            const curveP = boundEndpoint(curved, 'end', shape);
+            const chordP = boundEndpoint(sharp, 'end', shape);
+            // curve solve genuinely moves the endpoint along the outline
+            expect(Math.hypot(curveP.x - chordP.x, curveP.y - chordP.y)).toBeGreaterThan(0.1);
+            expect(Number.isFinite(curveP.x)).toBe(true);
+            expect(Number.isFinite(curveP.y)).toBe(true);
+        }
+    });
+
+    test('the curved dock lands on the inflated rectangle outline', () => {
+        const curveP = boundEndpoint(curvedArrow(), 'end', rect);
+        expect(onInflatedRect(curveP, rect)).toBeLessThan(0.05);
+    });
+
+    test('the curved dock is endpoint-independent: feeding the solved endpoint back re-solves to it', () => {
+        const arrow = curvedArrow();
+        const first = boundEndpoint(arrow, 'end', rect);
+        // Same interior vertices, only the stored endpoint replaced by the solved dock.
+        const refed = arrowEl({
+            ...arrow,
+            points: serializePoints([{ x: 0, y: 0 }, { x: 10, y: 60 }, linearSceneToLocal(arrow, first)]),
+        });
+        const second = boundEndpoint(refed, 'end', rect);
+        expect(Math.hypot(second.x - first.x, second.y - first.y)).toBeLessThan(0.02);
+    });
+
+    test('rotated target: curve docking is transparent to a square shape rotated 90°', () => {
+        const flat = shapeEl({ id: 's', type: 'rectangle', x: 5, y: -20, width: 40, height: 40, strokeWidth: 2 });
+        const turned = { ...flat, angle: 90 };
+        const a = boundEndpoint(curvedArrow({ endBinding: bind(flat, [0.5, 0.5]) }), 'end', flat);
+        const b = boundEndpoint(curvedArrow({ endBinding: bind(turned, [0.5, 0.5]) }), 'end', turned);
+        expect(b.x).toBeCloseTo(a.x, 4);
+        expect(b.y).toBeCloseTo(a.y, 4);
+    });
+
+    test('a 2-point round arrow docks exactly on the chord (no curve path)', () => {
+        const twoPt = arrowEl({
+            points: '[[0,0],[36,0]]',
+            x: -30,
+            y: 0,
+            width: 36,
+            roundness: 'round',
+            endBinding: bind(rect, [0.5, 0.5]),
+        });
+        const sharp = arrowEl({ ...twoPt, roundness: 'sharp' });
+        expect(boundEndpoint(twoPt, 'end', rect)).toEqual(boundEndpoint(sharp, 'end', rect));
+    });
+
+    test('a sharp 3-point arrow is untouched by the curve path', () => {
+        const sharp = curvedArrow({ roundness: 'sharp' });
+        const otherScene = linearLocalToScene(sharp, { x: 10, y: 60 });
+        const anchor = anchorToScene(rect, [0.5, 0.5]);
+        expect(boundEndpoint(sharp, 'end', rect)).toEqual(outlinePoint(rect, otherScene, anchor, bindingGap(rect)));
+    });
+
+    test('short curved arrow keeps the anchor guard (no NaN)', () => {
+        const short = arrowEl({
+            points: '[[0,0],[4,2],[9,0]]',
+            x: -3,
+            y: 0,
+            width: 9,
+            height: 2,
+            roundness: 'round',
+            endBinding: bind(rect, [0.5, 0.5]),
+        });
+        expect(boundEndpoint(short, 'end', rect)).toEqual(anchorToScene(rect, [0.5, 0.5]));
+    });
+
+    test('a curve that never reaches the outline falls back to the chord result, no NaN', () => {
+        // A far-away shape the short arrow can never reach: the curve solve finds no crossing.
+        const far = shapeEl({ id: 'far', type: 'rectangle', x: 5000, y: 5000, width: 40, height: 40, strokeWidth: 2 });
+        const arrow = curvedArrow({ endBinding: bind(far, [0.5, 0.5]) });
+        const p = boundEndpoint(arrow, 'end', far);
+        expect(Number.isFinite(p.x)).toBe(true);
+        expect(Number.isFinite(p.y)).toBe(true);
+    });
+});
+
 describe('followBindings', () => {
     const shapeB = shapeEl({ id: 'rect', type: 'rectangle', x: 150, y: -30, width: 60, height: 60, strokeWidth: 2 });
     const byId = new Map<string, VectorElement>([[shapeB.id, shapeB]]);
+
+    // D5.5 (review MAJOR): a curved bound arrow must settle to a STRICT byte-equal fixed point, so an
+    // unrelated edit re-running followBindings never re-dirties it (spurious undo entries + broadcast churn).
+    const applyFollow = (arrow: VectorArrowElement, ids: Map<string, VectorElement>): VectorArrowElement => {
+        const r = followBindings(arrow, ids);
+        return r ? { ...arrow, ...r } : arrow;
+    };
+
+    for (const angle of [0, 37]) {
+        for (const type of ['rectangle', 'ellipse', 'diamond'] as const) {
+            test(`curved bound arrow reaches a byte-equal fixed point (${type}, angle ${angle})`, () => {
+                const target = shapeEl({ id: 't', type, x: 120, y: -30, width: 60, height: 60, strokeWidth: 2, angle });
+                const ids = new Map<string, VectorElement>([[target.id, target]]);
+                const arrow = arrowEl({
+                    points: '[[0,0],[30,50],[110,10]]',
+                    x: 0,
+                    y: 0,
+                    width: 110,
+                    height: 50,
+                    roundness: 'round',
+                    endBinding: bind(target, [0.5, 0.5]),
+                });
+                // The curve solve makes the points a strict byte-equal fixed point from the first settle.
+                const a1 = applyFollow(arrow, ids);
+                const a2 = applyFollow(a1, ids);
+                expect(a2.points).toBe(a1.points);
+                // followBindings converges to an exact no-op (returns null) within a bounded number of
+                // passes and never oscillates. (The one extra pass beyond the points settling is
+                // normalizeLinear rounding its full-precision width to match the rounded points — the same
+                // behaviour the straight-chord path already has; not specific to curve docking.)
+                let settled = a2;
+                let steps = 0;
+                let r = followBindings(settled, ids);
+                while (r !== null && steps < 4) {
+                    settled = { ...settled, ...r };
+                    steps++;
+                    r = followBindings(settled, ids);
+                }
+                expect(r).toBeNull();
+                expect(settled.points).toBe(a1.points);
+            });
+        }
+    }
 
     test('returns null when the arrow binds nothing', () => {
         expect(followBindings(arrowEl({ points: '[[0,0],[100,0]]' }), byId)).toBeNull();
