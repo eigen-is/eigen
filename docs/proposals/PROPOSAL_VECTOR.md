@@ -247,12 +247,9 @@ Mirror the eigenslides worker modules. All Worker-imported modules stay pure (no
 | Format | How |
 |---|---|
 | `svg` | returned as-is |
-| `png` | **main-thread** `sharp(Buffer.from(svg)).png()` — mirrors WeasyPrint's main-thread pattern; keeps `sharp` out of the Worker bundle |
 | `pdf` | wrap SVG in an HTML doc → main-thread WeasyPrint `htmlToPdf()` |
 
-**Limits:** `sceneToSvg` is string building — comfortably inside the `preview` kind's 30s kill deadline, unlike a rasterization step that could be killed on large scenes (the bug that once stopped sheets recalc in previews). The export-menu format branch goes in `drive-item-menu.tsx` (`vector → ['svg','png','pdf']`).
-
-**Verification item:** the deployed Docker libvips must be built with librsvg for `sharp` SVG input — confirmed on dev, unconfirmed against `../../docker/api/Dockerfile`.
+**Limits:** `sceneToSvg` is string building — comfortably inside the `preview` kind's 30s kill deadline, unlike a rasterization step that could be killed on large scenes (the bug that once stopped sheets recalc in previews). The export-menu format branch goes in `drive-item-menu.tsx` (`vector → ['svg','pdf']`).
 
 ### Fonts
 
@@ -303,7 +300,7 @@ Already solved — no new assets. The four Eigen fonts (`EIGEN_FONTS` in `../../
 | `../../apps/api/src/lib/document/transform/protocol.ts` | `'eigenvector'` union arms |
 | `../../apps/api/src/lib/document/transform/worker.ts` | `case 'eigenvector'` in preview/export |
 | `../../apps/api/src/lib/preview/preview-cache.ts` | include `vector`; bump `TEXT_FORMAT` |
-| `../../apps/api/src/lib/export/export-document.ts` | `DRIVE_MIME_VECTOR` branch + `svg`/`png` envelopes |
+| `../../apps/api/src/lib/export/export-document.ts` | `DRIVE_MIME_VECTOR` branch + `svg` envelope |
 | `apps/api/src/lib/search/{extract-text,extract-render}.ts` | mime case + Worker arm |
 | `../../apps/api/src/lib/core/mail-template.ts` | share deep-link case |
 | `../../vite.shared.config.ts`, `Caddyfile`, `../../docker/static/Caddyfile`, `.env.development`, `../../scripts/generate-env.sh` | port 3014, `import app vector`, env URLs |
@@ -318,12 +315,12 @@ Honest estimates — this is a multi-month program. The first 80% (model, shapes
 | **1 — Standalone app + core interaction** (3–4 wk) | `../../apps/vector` + full `.eigenvector` registration. `VectorCanvas`, pan/zoom viewport, select/move/**resize/rotate via the new shared `ObjectTransform`**, shape + text tools (HTML overlay editing), `use-vector-doc` Yjs, properties panel, snap lines, `Y.UndoManager`, rubber-band multi-select, shortcuts. | Usable single-user + collab drawing of shapes and text. |
 | **2 — Freehand + styles + awareness** (2–3 wk) | perfect-freehand draw tool (canvas overlay input, RDP simplify before commit), line + eraser tools, stroke/fill styles, remote awareness cursors/selections. | Whiteboarding feel; multi-user cursors. |
 | **3 — Arrows + bindings** (3–4 wk) | Arrow tool, snap-to-element connection points, reactive endpoint recalculation on bound-element move/resize/delete, arrow labels. **Straight arrows only.** | Diagramming. Flagged rabbit-hole (see Risks). |
-| **4 — Pipeline** (2 wk) | Preview (`eigenvector-render`), export (svg/png/pdf), search extraction — the full server checklist. | Drive previews, export, search parity. |
+| **4 — Pipeline** (2 wk) | Preview (`eigenvector-render`), export (svg/pdf), search extraction — the full server checklist. | Drive previews, export, search parity. |
 | **5 — Docs embedding** (2–3 wk) | `drawings/` sub-resource creation, Tiptap `vectorDrawing` node, static `VectorRenderer` display, modal editor holding the one WS. | Drawings inside documents. |
 | **6 — Slides + sheets embedding + `ObjectTransform` adoption** (2–3 wk) | `drawing` slide-object type + sheet floating embed, both via the shared transform; migrate docs `ImageResizeHandles` and sheets image grips onto `ObjectTransform`. | Drawings everywhere; one transform component across the suite. |
-| **7 — Polish backlog** (ongoing) | Grouping/ungrouping, minimap, elbowed arrow routing, SVG import (simple shapes only), library/flowchart shapes, touch/stylus tuning. | Incremental. |
+| **7 — Polish backlog** (ongoing) | Grouping/ungrouping, elbowed arrow routing, SVG import (simple shapes only), touch/stylus tuning. | Incremental. |
 
-**Explicitly out (maybe-never):** re-rendering slides on the vector engine. Shapes reach slides via embedding (Phases 5–6), not by rewriting a working renderer.
+**Explicitly out (maybe-never):** re-rendering slides on the vector engine — shapes reach slides via embedding (Phases 5–6), not by rewriting a working renderer. Ruled out forever (2026-09-01): minimap, library/flowchart shapes, PNG export (librsvg needs system fonts; SVG + PDF cover the need).
 
 ## Risks and caveats
 
@@ -332,7 +329,6 @@ Honest estimates — this is a multi-month program. The first 80% (model, shapes
 - **Text editing is an HTML overlay, not `foreignObject`.** `<textarea>` in `<foreignObject>` behaves differently for focus/blur, key propagation, and cursor position across Chrome/Firefox/Safari. Render text as SVG `<text>` for display; edit via an absolutely-positioned HTML overlay aligned in JS (the Excalidraw/tldraw approach; the slides app sidesteps SVG entirely with DOM text).
 - **The jsdom-free rendering assumption must be pressure-tested.** Everything in `sceneToSvg` must render from *stored* dimensions — the moment a code path measures text at render time, the server breaks. Text width/height are client-measured and stored; the Worker never measures. Verify with a golden-SVG test that runs under the Worker environment.
 - **roughjs determinism.** Sketchiness must be reproducible across renders and peers or an embed's static SVG won't match the live editor. Pin the roughjs version; store `seed` + `roughness` per element (their exact mechanism). A version bump that changes roughjs output invalidates cached previews — bump `TEXT_FORMAT` when it happens.
-- **Docker libvips SVG support.** `sharp` PNG rasterization needs librsvg-built libvips in production; confirmed on dev only. Verify against `../../docker/api/Dockerfile` before relying on PNG export.
 - **Freehand payload size.** A complex stroke is hundreds of points; multiple users drawing grows the doc fast. Ramer–Douglas–Peucker simplify to ~20–50 points before the Yjs commit (the old proposal's correct call).
 - **Embed snapshot staleness.** A static SVG embed must learn when its drawing changed. Proposed: the host re-renders an embed when the `drawings/` child's `updatedAt` bumps, driven off a drive SSE — but the exact signal (does editing a nested collab doc emit a drive file-update event the host is subscribed to?) is unverified. Marked open.
 - **Bundle size.** The engine is our own code plus perfect-freehand (~3KB) and roughjs (small). `vector-renderer` (read-only) is tree-shakeable from the interaction code, so doc embeds don't pull in tools.
