@@ -1,11 +1,9 @@
 import {
+    classifyPaste,
     clipboardTextItemHasContent,
-    extractClipboardSvgMetadata,
     needsReUpload,
     readClipboardBox,
-    readEigenClipboard,
     readEigenClipboardAsync,
-    readSvgClipboard,
     reUploadImage,
     svgToImageFile,
     writeEigenClipboard,
@@ -1077,30 +1075,30 @@ export function VectorCanvas({
         const onPasteEvent = (e: ClipboardEvent) => {
             if (isTypingTarget() || !canWrite || editingRef.current) return;
             const cd = e.clipboardData;
-            const data = cd ? readEigenClipboard(cd) : null;
-            if (data) {
+            if (!cd) return;
+            const paste = classifyPaste(cd);
+            // Eigen items are consumed FIRST (before the SVG rung) so a vector→vector paste restores
+            // native elements instead of landing as one flat image.
+            if (paste.eigen) {
                 e.preventDefault();
                 e.stopPropagation();
-                pasteEigenItems(data.items);
+                pasteEigenItems(paste.eigen.data.items);
                 return;
             }
-            if (!cd) return;
             // A bare SVG on the clipboard: ours (element JSON in `<metadata>`) restores native elements;
             // any other SVG inserts as an image via the media path. OS files still fall through.
-            const svg = readSvgClipboard(cd);
-            if (svg) {
+            if (paste.svg) {
                 e.preventDefault();
                 e.stopPropagation();
-                const restored = extractClipboardSvgMetadata(svg);
-                if (restored) pasteEigenItems(restored.items);
-                else void insertImageFiles([svgToImageFile(svg)], viewportCenterScene());
+                if (paste.svg.restored) pasteEigenItems(paste.svg.restored.items);
+                else void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
                 return;
             }
             // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
-            if (cd.files.length > 0) return;
+            if (paste.files.length > 0) return;
             // Plain text (or the text of pasted HTML) → a new text element; only claim the event when
             // content is actually consumed, else it falls through to the OS-file path.
-            if (pasteNonEigenText(cd.getData('text/html'), cd.getData('text/plain'))) {
+            if (pasteNonEigenText(paste.html, paste.text)) {
                 e.preventDefault();
                 e.stopPropagation();
             }
