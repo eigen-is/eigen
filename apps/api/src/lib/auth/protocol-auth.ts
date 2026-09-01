@@ -31,8 +31,13 @@ export async function authenticateBasic(request: Request): Promise<User> {
     return verifyProtocolAuth(email, password, clientIpKey(request, null));
 }
 
-// `ip` is omitted by the IMAP path (routes/internal.ts → one internal Dovecot source IP): keying
-// on it would let a shared bridge IP self-lock, so that path relies on the email bucket alone.
+// `ip` is the client's address, not the caller's. The /dav + /webdav routes read Caddy's
+// X-Real-IP; the SASL path (postfix → dovecot → eigen-checkpassword → routes/internal.ts) forwards
+// dovecot's `IP`, which for a submission login is the SMTP client postfix reported as `rip`. It
+// stays optional because dovecot leaves `IP` unset for internal sessions such as doveadm, and then
+// only the email bucket fills. Where Docker's port publishing hides the source behind the bridge
+// gateway, a whole port shares one bucket. That only gates the primary-password path (a valid app
+// password is checked first), which is why the per-IP cap sits as high as 50.
 export async function verifyProtocolAuth(email: string, password: string, ip?: string): Promise<User> {
     const user = await getUserByEmail(email);
 

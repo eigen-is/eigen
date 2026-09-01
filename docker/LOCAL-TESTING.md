@@ -270,6 +270,18 @@ snippets `setup.ts` generates. Probes the same SPA / API / WebSocket set through
 proxy. Verifies the host-webserver path — the part `test-deployments.sh` can't cover
 without a real host webserver.
 
+```bash
+ALICE_EMAIL=admin@eigen.local ALICE_PASSWORD='your-password' ./docker/test-mail-hardening.sh
+```
+
+Brings up `edge,mail` and checks the mail hardening described in [SETUP-GUIDE.md § Mail abuse hardening](SETUP-GUIDE.md#mail-abuse-hardening). Nine numbered probes: a login sending as itself (250), the same login sending as another local address and as a foreign address (553 both), a mixed-case login sending as its own lowercase address (250), unauthenticated inbound on port 25 with a foreign sender (accepted), the queue-backlog notification, and both SASL failure limiters. `PROBES=2,3,4` runs a subset, `KEEP_STACK=1` leaves the stack up.
+
+The script logs in as a real account, so it needs `ALICE_EMAIL` and `ALICE_PASSWORD` for an account that already exists in `./data`, and `MAIL_DOMAIN` in `.env.production` must match that address (`MAIL_DOMAIN=eigen.is` if your `./data` came from the real instance). Without them the login probes skip and the rest still run. Stop any host API on `:8000` first. Nothing is ever delivered: the dialogs stop at RCPT TO. The dev overlay pins postfix and dovecot to `MAIL_DOMAIN=localhost`, so Postfix's own mail domain can differ from the account's; sender binding compares the login with the envelope sender and does not care about the domain.
+
+Two side effects, so keep it on a local stack. Probe 7 parks mail in the queue with `defer_transports=smtp` and deletes the whole Postfix queue on exit. Probe 9 fills the account's failure bucket, then restarts `eigen-api` to clear it.
+
+Every rejection also shows up with its reason in `docker compose ... logs postfix`.
+
 ### Test scenario B by hand (bundled static container, no bundled Caddy)
 
 ```bash

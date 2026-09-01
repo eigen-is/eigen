@@ -95,5 +95,9 @@ else
     sed -i '/milter/d' /etc/postfix/main.cf
 fi
 
+# Queue-backlog alerting — the API can't see the queue itself, so the probe runs here.
+echo "Starting queue monitor (alert above ${QUEUE_ALERT_THRESHOLD:-200} queued, every ${QUEUE_CHECK_INTERVAL:-300}s)..."
+/usr/local/bin/queue-monitor.sh &
+
 echo "Starting Postfix..."
 exec postfix start-fg

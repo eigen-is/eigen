@@ -15,7 +15,8 @@ export type NotificationType =
     | 'comment-reply'
     | 'assigned'
     | 'access-request'
-    | 'file-event';
+    | 'file-event'
+    | 'admin-alert';
 
 export type NotificationDetailsMap = {
     mail: { mailId: string; snippet?: string };
