@@ -13,6 +13,7 @@ import {
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
+import { partitionCopyResults } from './copy-media-partition';
 import { invalidateItemCreated, invalidateItemDeleted, invalidatePathMoved, invalidatePathRenamed } from './keys';
 
 // CREATE FOLDER — owner/mount come per call so one instance serves any target drive.
@@ -199,21 +200,17 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
                     return response.data;
                 }),
             );
-            const succeeded = results
-                .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
-                .map((r) => r.value);
-            if (succeeded.length > 0) {
+            const { copied, failedCount, totalFailure } = partitionCopyResults(results);
+            if (copied.length > 0) {
                 invalidateItemCreated(queryClient, ownerId, mountId, mediaFolderId);
             }
-            const failedCount = results.length - succeeded.length;
+            // Total failure throws so onMutationError toasts and card-attachments' Save-abort stays intact;
+            // a partial failure keeps the successes and only warns about the ones that dropped.
+            if (totalFailure) throw new Error('Failed to copy files');
             if (failedCount > 0) {
-                throw new Error(
-                    failedCount === results.length
-                        ? 'Failed to copy files'
-                        : `Failed to copy ${failedCount} of ${results.length} files`,
-                );
+                toast.error(`${failedCount} file${failedCount === 1 ? '' : 's'} could not be copied`);
             }
-            return succeeded;
+            return copied;
         },
         onError: onMutationError,
     });
