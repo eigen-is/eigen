@@ -1,9 +1,8 @@
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
+    classifyPaste,
     clipboardTextItemHasContent,
-    readEigenClipboard,
-    readSvgClipboardWithItems,
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
@@ -637,84 +636,80 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const { clipboardData } = e;
                     if (!clipboardData) return;
 
-                    // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)
-                    // but only if this is NOT an internal sheet→sheet copy (which uses HTML with sheet-copy-action-table)
-                    const htmlData = clipboardData.getData('text/html');
-                    const isInternalCopy = htmlData?.includes(COPY_ACTION_TABLE_MARKER);
+                    // A same-tab sheet→sheet copy tags text/html with COPY_ACTION_TABLE_MARKER and is
+                    // served from ctx.copyState (formulas/formats), not the eigen wire — the classifier
+                    // suppresses the eigen + svg flavours for it, so those rungs skip and we fall through
+                    // to the native table paste below. Every other producer flows through the rungs.
+                    const paste = classifyPaste(clipboardData, { internalMarkerText: COPY_ACTION_TABLE_MARKER });
 
-                    if (!isInternalCopy) {
-                        // A vector SVG payload (or a pasted SVG document) becomes a floating image
-                        // through the app's exact image-file path — stored in media/, served as-is, rendered
-                        // by <image>. Ahead of the eigen-items split so a vector selection lands as one
-                        // image, not as empty shape carriers. An image-bearing selection's svg references its
-                        // images BY NAME (eigen-media:), so it rides onPasteSvgFile — the app materializes each
-                        // into its media/ before storing the svg; an image-free svg
-                        // (foreign drawing, or a vector selection with no images) rides onPasteImageFile as today.
-                        const svgPayload = readSvgClipboardWithItems(clipboardData);
-                        if (svgPayload) {
-                            const svgImageItems = svgPayload.items.filter(
-                                (item): item is EigenClipboardImageItem => item.type === 'image',
-                            );
-                            const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
-                            const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
-                            if (onPasteSvgFile) {
-                                // Always materialize (even with no image items) so a forged/dangling
-                                // eigen-media ref is stripped before the svg is stored — same as docs/slides.
-                                e.preventDefault();
-                                onPasteSvgFile(svgPayload.svg, svgImageItems);
-                                return;
-                            }
-                            if (onPasteImageFile) {
-                                e.preventDefault();
-                                onPasteImageFile(svgToImageFile(svgPayload.svg));
-                                return;
-                            }
+                    // A vector SVG payload (or a pasted SVG document) becomes a floating image through the
+                    // app's exact image-file path — stored in media/, served as-is, rendered by <image>.
+                    // Ahead of the eigen-items split so a vector selection lands as one image, not as empty
+                    // shape carriers. An image-bearing selection's svg references its images BY NAME
+                    // (eigen-media:), so it rides onPasteSvgFile — the app materializes each into its media/
+                    // before storing the svg; an image-free svg rides onPasteImageFile as today.
+                    if (paste.svg) {
+                        const svgImageItems = paste.svg.items.filter(
+                            (item): item is EigenClipboardImageItem => item.type === 'image',
+                        );
+                        const onPasteSvgFile = mergedSettings.hooks?.onPasteSvgFile;
+                        const onPasteImageFile = mergedSettings.hooks?.onPasteImageFile;
+                        if (onPasteSvgFile) {
+                            // Always materialize (even with no image items) so a forged/dangling
+                            // eigen-media ref is stripped before the svg is stored — same as docs/slides.
+                            e.preventDefault();
+                            onPasteSvgFile(paste.svg.svg, svgImageItems);
+                            return;
                         }
-
-                        const eigenData = readEigenClipboard(clipboardData);
-                        if (eigenData) {
-                            // Mixed eigen payloads split by kind: image items become floating images,
-                            // text items land in cells. Both apply when both are present. The image
-                            // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
-                            const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
-                            const imageItems = onPasteEigenImage
-                                ? eigenData.items.filter(
-                                      (item): item is EigenClipboardImageItem => item.type === 'image',
-                                  )
-                                : [];
-                            // Extract text from eigen clipboard items and paste as plain text. Empty
-                            // carriers (vector shapes ride as empty text items) must not paste as blank
-                            // cells over existing content.
-                            const textParts = eigenData.items
-                                .filter(
-                                    (item): item is EigenClipboardTextItem =>
-                                        item.type === 'text' && clipboardTextItemHasContent(item),
-                                )
-                                .map((item) => item.text);
-                            if (imageItems.length > 0 || textParts.length > 0) {
-                                e.preventDefault();
-                                for (const item of imageItems) onPasteEigenImage?.(item);
-                                if (textParts.length > 0) {
-                                    // Create a synthetic paste with the text — let handlePaste process it
-                                    const syntheticTransfer = new DataTransfer();
-                                    syntheticTransfer.setData('text/plain', textParts.join('\n'));
-                                    const syntheticEvent = new ClipboardEvent('paste', {
-                                        clipboardData: syntheticTransfer,
-                                    });
-                                    setContextWithProduce((draftCtx) => {
-                                        try {
-                                            handlePaste(draftCtx, syntheticEvent);
-                                        } catch (err) {
-                                            console.error(err);
-                                        }
-                                    });
-                                }
-                                return;
-                            }
+                        if (onPasteImageFile) {
+                            e.preventDefault();
+                            onPasteImageFile(svgToImageFile(paste.svg.svg));
+                            return;
                         }
                     }
 
-                    const txtdata = htmlData || clipboardData.getData('text/plain');
+                    if (paste.eigen) {
+                        // Mixed eigen payloads split by kind: image items become floating images,
+                        // text items land in cells. Both apply when both are present. The image
+                        // insert is app-owned (typed size + cross-mount re-upload), gated on its hook.
+                        const onPasteEigenImage = mergedSettings.hooks?.onPasteEigenImage;
+                        const imageItems = onPasteEigenImage
+                            ? paste.eigen.data.items.filter(
+                                  (item): item is EigenClipboardImageItem => item.type === 'image',
+                              )
+                            : [];
+                        // Extract text from eigen clipboard items and paste as plain text. Empty
+                        // carriers (vector shapes ride as empty text items) must not paste as blank
+                        // cells over existing content.
+                        const textParts = paste.eigen.data.items
+                            .filter(
+                                (item): item is EigenClipboardTextItem =>
+                                    item.type === 'text' && clipboardTextItemHasContent(item),
+                            )
+                            .map((item) => item.text);
+                        if (imageItems.length > 0 || textParts.length > 0) {
+                            e.preventDefault();
+                            for (const item of imageItems) onPasteEigenImage?.(item);
+                            if (textParts.length > 0) {
+                                // Create a synthetic paste with the text — let handlePaste process it
+                                const syntheticTransfer = new DataTransfer();
+                                syntheticTransfer.setData('text/plain', textParts.join('\n'));
+                                const syntheticEvent = new ClipboardEvent('paste', {
+                                    clipboardData: syntheticTransfer,
+                                });
+                                setContextWithProduce((draftCtx) => {
+                                    try {
+                                        handlePaste(draftCtx, syntheticEvent);
+                                    } catch (err) {
+                                        console.error(err);
+                                    }
+                                });
+                            }
+                            return;
+                        }
+                    }
+
+                    const txtdata = paste.html || paste.text;
                     const ele = document.createElement('div');
                     ele.innerHTML = txtdata;
 
