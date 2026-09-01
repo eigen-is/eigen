@@ -1,6 +1,6 @@
 # Audit: mail parser (ported nodemailer mailparser/mailsplit)
 
-> **TLDR**: `apps/api/src/lib/mail/mail-parser/` + `mail-split/` are a 2381-line hand-port of nodemailer's streaming `mailparser` + `mailsplit`. Eigen has exactly one production entry, `simpleParser(Buffer, {})`, so every option branch is dead, the whole two-Transform streaming/backpressure machine only ever processes one already-buffered chunk, and the 81 + 23 `as` casts collapse to two untyped seams (splitter → parser node handoff, loose record → `ParsedMail`). The output contract is far narrower than the type: the `headers` Map serializes to `{}` on the wire, `headerLines`/`priority`/`checksum`/`related`/`cid`/`AddressObject.html` are read by nobody, and `mail.db` persists only the `EmailSummary` subset. Plan: pin a golden `.eml` corpus first, then replace the trio with a ~700-line non-streaming, cast-free parser typed at the header seam, tighten the shared types to what is consumed, and drop five dependencies.
+> **TLDR**: `apps/api/src/lib/mail/mail-parser/` + `mail-split/` are a 2381-line hand-port of nodemailer's streaming `mailparser` + `mailsplit`. Eigen has exactly one production entry, `simpleParser(Buffer, {})`, so every option branch is dead, the whole two-Transform streaming/backpressure machine only ever processes one already-buffered chunk, and the 81 + 23 `as` casts collapse to two untyped seams (splitter → parser node handoff, loose record → `ParsedMail`). The output contract is far narrower than the type: the `headers` Map serializes to `{}` on the wire, `headerLines`/`priority`/`checksum`/`related`/`cid`/`AddressObject.html` are read by nobody, and `mail.db` persists only the `EmailSummary` subset. Plan: pin a golden `.eml` corpus first, then replace the trio with a ~540-line non-streaming, cast-free parser typed at the header seam, tighten the shared types to what is consumed, and drop three dependencies.
 
 Audit date 2026-09-01, branch `mail-parser-audit`. Scope from [ROADMAP.md](ROADMAP.md) § Focused audits. The 2026-07 deep-dive findings (#14 bare-CR boundary, #11 htmlToText cap, #24 dead encode half) are shipped with tests and are not re-reported.
 
@@ -65,6 +65,22 @@ Duplicate `'to'` in both header-key copy lists (`simple-parser.ts:113,115`, `mai
 | Unit | Content | Gate |
 |---|---|---|
 | 0 | Golden corpus: ~25 `.eml` files under `apps/api/src/test/fixtures/mail-corpus/` covering every shape in §5 plus the pinned behaviours in Decisions, and `mail-parser-golden.test.ts` that parses each and compares a consumed-field projection (attachment bytes as SHA-256) with a committed `.golden.json`. Goldens generated from the **old** parser | Golden test green on the old parser |
-| 1 | New parser in `apps/api/src/lib/mail/mail-parser/`: `parse.ts` (entry + assembly), `split.ts` (non-streaming MIME tree, byte-exact bodies), `headers.ts` (unfold + typed decode), `decode.ts` (transfer + charset + flowed), `html.ts` (htmlToText, textAsHtml linkify, cid inlining). Zero `as` casts | Golden test + `mail-parser.test.ts` + fuzz test green on the new parser |
+| 1 | New parser in `apps/api/src/lib/mail/mail-parser/` (~540 lines, six files): `parse.ts` (entry + assembly), `split.ts` (non-streaming MIME tree, byte-exact bodies), `headers.ts` (unfold + typed decode), `decode.ts` (transfer + charset + flowed), `html.ts` (htmlToText, textAsHtml linkify, cid inlining), `index.ts` (barrel). Zero `as` casts | Golden test + `mail-parser.test.ts` + fuzz test green on the new parser |
 | 2 | Switch the two callers, delete `mail-split/` and the old files, tighten `packages/lib/src/types/mail.ts`, remove the two `as unknown as` draft casts, drop the three dependencies and stale ambient types, update MAIL.md / IMAP.md, remove the ROADMAP row | `bun run check` green |
 | 3 | Simplify pass, then a cold Fable review of every touched file | Review clean, `bun run check` green |
+
+## Status (2026-09-01)
+
+Units 0–2 shipped on branch `mail-parser-audit`. Two corrections to the audit above surfaced during the build. `Attachment.size` **is** consumed — `apps/mail` `use-draft.ts` reads it for attachment reconciliation — so it stays on the type. Removing `AddressObject.html` needed one-line deletions in `apps/mail`'s `use-draft.ts`/`use-mail-actions.ts` and in `routes/mail.ts`'s `AddressObjectSchema` (the audit predicted no FE changes).
+
+Deliberate behaviour deviations from the old parser, each pinned by the golden corpus:
+
+- inline `message/rfc822` meta table closes its `</td>`/`</table>` tags (upstream typo)
+- empty `References:` → `undefined` (was `null`)
+- a header block cut short by a boundary line is never a part (old emitted a 0-byte attachment on a closing delimiter)
+- a body of exactly one line break is stripped like any other
+- a bare-CR closing boundary at EOF with no final LF is recognised
+- QP bodies are decoded from latin1 bytes (old ran a UTF-8 decode first, corrupting raw 8-bit bytes) and raw 8-bit header values are decoded as UTF-8 uniformly
+- encoded-word-only group names keep their members
+- `method` is read from the first Content-Type header
+- `MAX_CHILD_NODES` throws on the 1001st node
