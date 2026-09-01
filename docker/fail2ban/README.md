@@ -38,5 +38,5 @@ fail2ban-client set eigen-postfix-sasl unbanip 203.0.113.9
 
 ## Files
 
-- `filter.d/eigen-postfix-sasl.conf` matches Postfix's `warning: unknown[<ip>]: SASL LOGIN authentication failed` lines inside the Docker json-file log. The distro's `postfix-sasl` filter misses them, because these lines carry no `client=` field.
+- `filter.d/eigen-postfix-sasl.conf` matches Postfix's `warning: <host>[<ip>]: SASL LOGIN authentication failed` lines inside the Docker json-file log, where `<host>` is the client's rDNS name or `unknown` when it has none. It exists because the json wrapper breaks the syslog line anchor and the date position the distro's postfix filter expects; the failure pattern itself is the distro's.
 - `jail.d/eigen-postfix-sasl.conf` is the jail: log glob, thresholds, and the DOCKER-USER ban action.

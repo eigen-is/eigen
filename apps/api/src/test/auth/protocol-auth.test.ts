@@ -210,7 +210,8 @@ describe('Protocol Auth', () => {
         });
 
         // The SASL path (postfix → dovecot → eigen-checkpassword → /internal/auth/verify) forwards
-        // dovecot's `IP`, so a botnet spraying one submission port lands on the per-IP bucket.
+        // dovecot's `TCPREMOTEIP`, so a botnet spraying one submission port lands on the per-IP
+        // bucket. Whether the shell script actually sends it is probe 10 of test-mail-hardening.sh.
         test('the internal verify endpoint threads its ip into the per-IP bucket', async () => {
             const attackerIp = '198.51.100.10';
             const verify = (email: string, password: string, ip?: string) =>

@@ -198,10 +198,12 @@ falls back to primary password (rejected if 2FA is enabled). The container set a
 `docker/`; [CONTRIBUTING.md § Docker](CONTRIBUTING.md#option-2-docker-full-stack) covers running the full stack
 locally.
 
-The script also sends the client's address as `ip`, taken from the `IP` variable Dovecot exports to a
-checkpassword process. For an IMAP login that is the mail client; for an SMTP submission login it is the SMTP
-client, which Postfix hands to Dovecot as `rip`. The API keys its per-IP failure limiter on it. Dovecot leaves
-`IP` unset for internal sessions such as `doveadm`, and then the field is left out.
+The script also sends the client's address as `ip`, taken from `TCPREMOTEIP`, the DJB-interface variable
+Dovecot exports to a checkpassword process. Use that name and not Dovecot's `IP`, which carries the **local**
+address for compatibility with old `checkpassword-reply` builds. For an IMAP login the client is the mail
+client; for an SMTP submission login it is the SMTP client, which Postfix hands to Dovecot as `rip`. The API
+keys its per-IP failure limiter on it. The variable is unset for internal sessions such as `doveadm`, and then
+the field is left out.
 
 **Files:** `docker/dovecot/dovecot.conf`, `docker/dovecot/eigen-checkpassword`
 

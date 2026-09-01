@@ -21,6 +21,9 @@
 # Postfix queue afterwards. Never point this at a production stack.
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
+#
+# Runtime is about 8 minutes. Probes 9 and 10 pace themselves under Postfix's anvil AUTH cap, and
+# probe 7 waits for the queue monitor's next interval.
 
 set -euo pipefail
 
@@ -61,6 +64,16 @@ smtp25() {
 
 auth_plain() {
     printf '\000%s\000%s' "$1" "$2" | base64 | tr -d '\n'
+}
+
+# The failure limiter is in-memory, so the probes below restart eigen-api to reset it. Wait for it
+# to serve again before continuing, or the next dialog fails for the wrong reason.
+wait_api() {
+    for _ in $(seq 1 30); do
+        dc exec -T eigen-api curl -sf http://localhost:8000/health >/dev/null 2>&1 && return 0
+        sleep 1
+    done
+    return 1
 }
 
 HELO_NAME=probe.eigen.local
@@ -114,7 +127,9 @@ export QUEUE_ALERT_THRESHOLD="${QUEUE_ALERT_THRESHOLD:-3}"
 export QUEUE_CHECK_INTERVAL="${QUEUE_CHECK_INTERVAL:-10}"
 
 cleanup() {
-    if [ "${STACK_UP:-0}" = 1 ]; then
+    # Only undo what probe 7 did. Without the flag a PROBES=2,3 run would wipe a queue it never
+    # touched.
+    if [ "${STACK_UP:-0}" = 1 ] && [ "${QUEUE_PROBE_RAN:-0}" = 1 ]; then
         dc exec -T postfix sh -c 'postconf -e defer_transports= && postfix reload && postsuper -d ALL' \
             >/dev/null 2>&1 || true
     fi
@@ -246,6 +261,7 @@ console.log(newest);
 }
 
 if should_run 7; then
+    QUEUE_PROBE_RAN=1
     before=$(admin_alert_stamp)
     # Restart postfix so queue-monitor.sh starts fresh: it holds its alert cooldown in memory, and
     # a rerun against a kept stack would otherwise still be inside that 6 hour window.
@@ -284,8 +300,8 @@ fi
 ##############################################################################
 header "Probe 8 — per-IP SASL failure lockout"
 ##############################################################################
-# The limiter only sees a client IP because eigen-checkpassword forwards dovecot's `IP`. Drive it
-# straight at the route with a synthetic IP so the lockout is observable without banning the host.
+# The route-level half of the story: drive it with a synthetic IP so the lockout is observable
+# without locking this host out. Probe 10 proves the real SMTP path actually delivers a client IP.
 if should_run 8; then
     code=$(dc exec -T eigen-api sh -c '
 for i in $(seq 1 50); do
@@ -331,8 +347,59 @@ if should_run 9 && [ "$HAVE_LOGIN" = 1 ]; then
     fi
     log "restarting eigen-api to clear the in-memory failure buckets..."
     dc restart eigen-api >/dev/null 2>&1
+    wait_api || fail "eigen-api did not come back healthy after the restart"
 else
     skip "probe 9 (needs a working login)"
+fi
+
+##############################################################################
+header "Probe 10 — the client IP reaches the limiter through real SMTP AUTH"
+##############################################################################
+# The one probe that proves the whole chain: postfix reports the SMTP client as `rip`, dovecot
+# exports it as TCPREMOTEIP, eigen-checkpassword forwards it as `ip`, and verifyProtocolAuth keys
+# its per-IP bucket on it. Every connection from this host arrives from one bridge address, so the
+# failures are spread across 26 addresses at 2 each: no address comes near its own cap of 10, and
+# 52 failures cross the per-IP cap of 50. A lockout in that shape can only be the per-IP bucket.
+# The final assertion uses the CORRECT password on an address with a clean bucket: if the client IP
+# never reached the API, that login simply succeeds.
+# Paced under postfix's own anvil cap (20 AUTH commands per client IP per 60s), so this takes ~3
+# minutes. Two AUTHs per connection stays under smtpd_hard_error_limit=5.
+if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
+    log "restarting eigen-api for a clean failure-bucket baseline..."
+    dc restart eigen-api >/dev/null 2>&1
+    wait_api || fail "eigen-api did not come back healthy"
+
+    rate_limited=0
+    sent=0
+    log "spraying 52 failed logins across 26 addresses..."
+    for i in $(seq 1 26); do
+        bad=$(auth_plain "ip-spray-$i@probe.invalid" "wrongpassword")
+        spray=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $bad\nAUTH PLAIN $bad\nQUIT\n")
+        printf '%s\n' "$spray" | grep -q '^450' && rate_limited=1
+        sent=$((sent + 2))
+        if [ $((i % 9)) -eq 0 ] && [ "$i" -lt 26 ]; then
+            log "  $sent failures sent; waiting out the anvil window..."
+            sleep 62
+        fi
+    done
+
+    good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
+    transcript=$(smtp465 "EHLO $HELO_NAME\nAUTH PLAIN $good\nQUIT\n")
+    if [ "$rate_limited" = 1 ]; then
+        fail "postfix answered 450 during the spray, so those failures never reached the API — widen the pacing"
+    elif printf '%s\n' "$transcript" | grep -q '^235'; then
+        fail "a correct password still authenticated after $sent failures from this IP: the client address is not reaching the limiter (postfix rip → dovecot TCPREMOTEIP → checkpassword ip)"
+    elif printf '%s\n' "$transcript" | grep -q '^535'; then
+        ok "$sent failures across 26 addresses locked this client IP out, end to end"
+    else
+        fail "expected a 535 from the per-IP lockout: $(oneline "$transcript")"
+    fi
+
+    log "restarting eigen-api to clear the in-memory failure buckets..."
+    dc restart eigen-api >/dev/null 2>&1
+    wait_api || fail "eigen-api did not come back healthy after the restart"
+else
+    skip "probe 10 (needs a working login)"
 fi
 
 ##############################################################################
