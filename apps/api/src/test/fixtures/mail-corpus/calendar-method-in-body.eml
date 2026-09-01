@@ -1,0 +1,26 @@
+From: organizer@example.com
+To: attendee@example.com
+Subject: Invitation: Body method
+MIME-Version: 1.0
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: multipart/mixed; boundary="cal2"
+
+--cal2
+Content-Type: text/plain
+
+Invite with method only in the body.
+--cal2
+Content-Type: text/calendar; charset=utf-8
+Content-Disposition: attachment; filename="invite.ics"
+
+BEGIN:VCALENDAR
+VERSION:2.0
+METHOD:CANCEL
+BEGIN:VEVENT
+UID:cal-2@example.com
+SUMMARY:Cancelled
+DTSTART:20260415T100000Z
+DTEND:20260415T110000Z
+END:VEVENT
+END:VCALENDAR
+--cal2--

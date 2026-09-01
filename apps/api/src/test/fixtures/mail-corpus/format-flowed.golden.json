@@ -1,0 +1,26 @@
+{
+  "subject": "Format flowed",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "This is a flowed paragraph that continues on the next line and wraps softly.\nThis is a fixed line.",
+  "html": null,
+  "textAsHtml": "<p>This is a flowed paragraph that continues on the next line and wraps softly.<br/>This is a fixed line.</p>",
+  "attachments": []
+}

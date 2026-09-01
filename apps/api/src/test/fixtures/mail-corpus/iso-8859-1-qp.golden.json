@@ -1,0 +1,26 @@
+{
+  "subject": "Latin-1 QP",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Français: à la carte, ça va? £10\n",
+  "html": null,
+  "textAsHtml": "<p>Fran&ccedil;ais: &agrave; la carte, &ccedil;a va? &pound;10</p>",
+  "attachments": []
+}

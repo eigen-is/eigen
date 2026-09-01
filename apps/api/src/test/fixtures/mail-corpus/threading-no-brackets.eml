@@ -1,0 +1,10 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Re: Threaded bare
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Message-ID: bare-3@example.com
+In-Reply-To: bare-2@example.com
+References: bare-1@example.com bare-2@example.com
+Content-Type: text/plain; charset=utf-8
+
+Threading ids without angle brackets.

@@ -1,0 +1,33 @@
+{
+  "subject": "Nested mixed/alternative",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Nested plain body.",
+  "html": "<p>Nested <b>html</b> body.</p>",
+  "textAsHtml": "<p>Nested plain body.</p>",
+  "attachments": [
+    {
+      "contentType": "application/octet-stream",
+      "filename": "data.bin",
+      "sha256": "6449f9076cb5c3dd2872940ed9c9e7d6d2339ae30ec7b5a8c9eff9ca0f4ed4e2",
+      "size": 23
+    }
+  ]
+}

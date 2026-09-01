@@ -1,0 +1,32 @@
+{
+  "subject": "Undelivered Mail Returned to Sender",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "MAILER-DAEMON@example.com",
+        "name": ""
+      }
+    ],
+    "text": "MAILER-DAEMON@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "text": "Delivery to the following recipient failed permanently.\nReporting-MTA: dns; mail.example.com\n\nFinal-Recipient: rfc822; nobody@invalid.example\nAction: failed\nStatus: 5.1.1",
+  "html": null,
+  "textAsHtml": "<p>Delivery to the following recipient failed permanently.</p><br/>\n<p>Reporting-MTA: dns; <a href=\"http://mail.example.com\">mail.example.com</a></p><p>Final-Recipient: rfc822; nobody@invalid.example<br/>Action: failed<br/>Status: 5.1.1</p>",
+  "attachments": [
+    {
+      "contentType": "message/rfc822",
+      "sha256": "185fd20e8bc5c4e775d97362af6fdaf1c9c2a0ccaeb308d0c8e9b8e8605c2715",
+      "size": 162
+    }
+  ]
+}

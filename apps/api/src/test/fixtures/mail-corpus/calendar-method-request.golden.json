@@ -1,0 +1,34 @@
+{
+  "subject": "Invitation: Meeting",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "organizer@example.com",
+        "name": ""
+      }
+    ],
+    "text": "organizer@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "attendee@example.com",
+        "name": ""
+      }
+    ],
+    "text": "attendee@example.com"
+  },
+  "text": "You are invited.",
+  "html": null,
+  "textAsHtml": "<p>You are invited.</p>",
+  "attachments": [
+    {
+      "contentType": "text/calendar",
+      "filename": "invite.ics",
+      "calendarMethod": "REQUEST",
+      "sha256": "7ec79dccdae1121db91b61fc268fb1e4928b0d83f17ecb5b9a3e7d8394d97408",
+      "size": 175
+    }
+  ]
+}

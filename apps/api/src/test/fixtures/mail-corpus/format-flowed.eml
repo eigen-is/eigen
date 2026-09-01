@@ -1,0 +1,11 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Format flowed
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8; format=flowed
+
+This is a flowed paragraph that 
+continues on the next line and 
+wraps softly.
+This is a fixed line.

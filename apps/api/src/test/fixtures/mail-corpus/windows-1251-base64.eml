@@ -1,0 +1,9 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Cyrillic 1251
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=windows-1251
+Content-Transfer-Encoding: base64
+
+z/Do4uXyLCDq4Oog5OXr4D8=

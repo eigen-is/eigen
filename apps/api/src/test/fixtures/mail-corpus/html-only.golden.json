@@ -1,0 +1,26 @@
+{
+  "subject": "HTML only",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Hello World",
+  "html": "<html><body><p>Hello <b>World</b></p></body></html>\n",
+  "textAsHtml": "<p>Hello World</p>",
+  "attachments": []
+}

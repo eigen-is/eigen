@@ -1,0 +1,33 @@
+{
+  "subject": "Encoded-word filename",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Attachment name is an encoded word.",
+  "html": null,
+  "textAsHtml": "<p>Attachment name is an encoded word.</p>",
+  "attachments": [
+    {
+      "contentType": "text/plain",
+      "filename": "účet.txt",
+      "sha256": "7bc8a3af08e53e7c8c6e9e445d81f33032f0951108f4668a8cb64051c715a299",
+      "size": 15
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "subject": "Attachment without filename",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Body text.",
+  "html": null,
+  "textAsHtml": "<p>Body text.</p>",
+  "attachments": [
+    {
+      "contentType": "image/png",
+      "sha256": "f587f1dd3e1a538113e8f96a810f819f6eded5e5c3db08896f7e49aa329dd4c1",
+      "size": 48
+    }
+  ]
+}

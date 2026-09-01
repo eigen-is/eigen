@@ -1,0 +1,26 @@
+{
+  "subject": "GB2312 body",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "这是简体中文正文。",
+  "html": null,
+  "textAsHtml": "<p>&#x8FD9;&#x662F;&#x7B80;&#x4F53;&#x4E2D;&#x6587;&#x6B63;&#x6587;&#x3002;</p>",
+  "attachments": []
+}

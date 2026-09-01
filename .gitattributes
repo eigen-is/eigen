@@ -1,2 +1,5 @@
 # Force LF on all text files so Windows checkouts don't churn the working tree.
 * text=auto eol=lf
+
+# Mail parser corpus: byte-exact RFC 5322 fixtures, CRLF and bare CR are the test subject.
+apps/api/src/test/fixtures/mail-corpus/*.eml -text

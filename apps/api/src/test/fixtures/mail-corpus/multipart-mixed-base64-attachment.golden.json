@@ -1,0 +1,33 @@
+{
+  "subject": "Mixed with binary attachment",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "See the attached image.",
+  "html": null,
+  "textAsHtml": "<p>See the attached image.</p>",
+  "attachments": [
+    {
+      "contentType": "image/png",
+      "filename": "pic.png",
+      "sha256": "f587f1dd3e1a538113e8f96a810f819f6eded5e5c3db08896f7e49aa329dd4c1",
+      "size": 48
+    }
+  ]
+}

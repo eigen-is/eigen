@@ -1,0 +1,33 @@
+{
+  "subject": "Invitation: Body method",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "organizer@example.com",
+        "name": ""
+      }
+    ],
+    "text": "organizer@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "attendee@example.com",
+        "name": ""
+      }
+    ],
+    "text": "attendee@example.com"
+  },
+  "text": "Invite with method only in the body.",
+  "html": null,
+  "textAsHtml": "<p>Invite with method only in the body.</p>",
+  "attachments": [
+    {
+      "contentType": "text/calendar",
+      "filename": "invite.ics",
+      "sha256": "4975c6516e4c0c28c2bef6625556b163139271c1f40ab07ce7fa71754476af16",
+      "size": 176
+    }
+  ]
+}

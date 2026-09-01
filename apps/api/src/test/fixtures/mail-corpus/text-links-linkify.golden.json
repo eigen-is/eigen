@@ -1,0 +1,26 @@
+{
+  "subject": "Links",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Visit https://example.com/path?q=1 or email us at hello@example.com.\nFollow @reinder.bsky.social on Bluesky.\n",
+  "html": null,
+  "textAsHtml": "<p>Visit <a href=\"https://example.com/path?q=1\">https://example.com/path?q=1</a> or email us at <a href=\"mailto:hello@example.com\">hello@example.com</a>.<br/>Follow <a href=\"https://bsky.app/profile/reinder.bsky.social\">@reinder.bsky.social</a> on Bluesky.</p>",
+  "attachments": []
+}

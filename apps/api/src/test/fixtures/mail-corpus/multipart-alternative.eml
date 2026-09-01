@@ -1,0 +1,16 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Alternative
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+Plain version of the body.
+--alt
+Content-Type: text/html; charset=utf-8
+
+<p>HTML version of the <i>body</i>.</p>
+--alt--

@@ -1,0 +1,29 @@
+From: MAILER-DAEMON@example.com
+To: sender@example.com
+Subject: Undelivered Mail Returned to Sender
+MIME-Version: 1.0
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: multipart/report; report-type=delivery-status; boundary="bnc"
+
+--bnc
+Content-Type: text/plain; charset=utf-8
+
+Delivery to the following recipient failed permanently.
+--bnc
+Content-Type: message/delivery-status
+
+Reporting-MTA: dns; mail.example.com
+
+Final-Recipient: rfc822; nobody@invalid.example
+Action: failed
+Status: 5.1.1
+--bnc
+Content-Type: message/rfc822
+
+From: sender@example.com
+To: nobody@invalid.example
+Subject: Original that bounced
+Content-Type: text/plain; charset=utf-8
+
+Body of the message that bounced.
+--bnc--
