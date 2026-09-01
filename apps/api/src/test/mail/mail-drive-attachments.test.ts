@@ -377,7 +377,6 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
                             to: {
                                 value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                                 text: 'Bob <bob@test.eigen.is>',
-                                html: '',
                             },
                             text: 'see attached doc',
                             html: '<p>see attached doc</p>',
@@ -423,7 +422,6 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
                             to: {
                                 value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                                 text: 'Bob <bob@test.eigen.is>',
-                                html: '',
                             },
                             text: 'see ref',
                             html: '<p>see ref</p>',

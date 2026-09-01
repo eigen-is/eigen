@@ -6,7 +6,7 @@ import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AddressObject, ParsedMail } from '@workspace/lib/types/mail';
-import { simpleParser } from '../../lib/mail/mail-parser';
+import { parseMail } from '../../lib/mail/mail-parser';
 
 const CORPUS_DIR = join(import.meta.dir, '../fixtures/mail-corpus');
 const UPDATE = process.env['UPDATE_GOLDEN'] === '1';
@@ -21,16 +21,14 @@ function projectAddresses(a: AddressObject | AddressObject[] | undefined): unkno
 }
 
 function projectAttachment(att: ParsedMail['attachments'][number]): unknown {
-    const content = att.content;
-    if (!Buffer.isBuffer(content)) throw new Error(`attachment content is not a Buffer: ${att.filename}`);
     const hasher = new Bun.CryptoHasher('sha256');
-    hasher.update(content);
+    hasher.update(att.content);
     return {
         contentType: att.contentType,
         filename: att.filename,
         calendarMethod: att.calendarMethod,
         sha256: hasher.digest('hex'),
-        size: content.length,
+        size: att.content.length,
     };
 }
 
@@ -58,8 +56,8 @@ const emls = readdirSync(CORPUS_DIR)
     .sort();
 
 for (const name of emls) {
-    test(name, async () => {
-        const mail = await simpleParser(readFileSync(join(CORPUS_DIR, name)), {});
+    test(name, () => {
+        const mail = parseMail(readFileSync(join(CORPUS_DIR, name)));
         const goldenPath = join(CORPUS_DIR, name.replace(/\.eml$/, '.golden.json'));
         if (UPDATE) {
             writeFileSync(goldenPath, `${JSON.stringify(project(mail), null, 4)}\n`);
@@ -71,7 +69,7 @@ for (const name of emls) {
     });
 }
 
-test('unparseable Date header falls back to ~now', async () => {
+test('unparseable Date header falls back to ~now', () => {
     const eml = [
         'From: sender@example.com',
         'To: recipient@example.com',
@@ -81,7 +79,7 @@ test('unparseable Date header falls back to ~now', async () => {
         '',
         'Body.',
     ].join('\r\n');
-    const mail = await simpleParser(eml, {});
+    const mail = parseMail(Buffer.from(eml));
     expect(mail.date).toBeInstanceOf(Date);
-    expect(Math.abs(Date.now() - (mail.date as Date).getTime())).toBeLessThan(5000);
+    expect(Math.abs(Date.now() - (mail.date?.getTime() ?? 0))).toBeLessThan(5000);
 });

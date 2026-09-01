@@ -1,0 +1,32 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Subject: Fwd: inline forward
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: multipart/alternative; boundary="alt"
+
+--alt
+Content-Type: text/plain; charset=utf-8
+
+See the forwarded message below.
+--alt
+Content-Type: text/html; charset=utf-8
+
+<p>See the <b>forwarded</b> message below.</p>
+--alt--
+--outer
+Content-Type: message/rfc822
+Content-Disposition: inline
+
+From: Carol <carol@example.com>
+To: Alice <alice@example.com>
+Cc: Dave <dave@example.com>
+Subject: Original message
+Date: Sun, 31 Dec 2023 09:30:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+This is the original text.
+--outer--

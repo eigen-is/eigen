@@ -1,9 +1,9 @@
-// Hostile-input fuzz net for the vendored mail parser (mail-split + mail-parser forks), from the
-// mailparser audit deep-dive. Deterministic — every message is seeded by its index, no wall-clock
-// randomness. A rejected parse is FINE (malformed input); the pinned contract is no hang, no crash,
-// bounded time: simpleParser runs on the shared event loop against attacker-controlled bytes.
+// Hostile-input fuzz net for the mail parser, from the mailparser audit deep-dive. Deterministic — every
+// message is seeded by its index, no wall-clock randomness. A rejected parse is FINE (malformed input);
+// the pinned contract is no hang, no crash, bounded time: parseMail runs on the shared event loop against
+// attacker-controlled bytes.
 import { describe, expect, test } from 'bun:test';
-import { simpleParser } from '../../lib/mail/mail-parser';
+import { parseMail } from '../../lib/mail/mail-parser';
 
 // --- deterministic PRNG (mulberry32) -------------------------------------------------
 function rng(seed: number): () => number {
@@ -112,23 +112,21 @@ function hostile(i: number): { name: string; bytes: Buffer } {
     return { name, bytes: Buffer.from(env + s, 'binary') };
 }
 
-async function parseWithTimeout(bytes: Buffer, ms: number): Promise<{ ok: boolean; err?: string; timedOut?: boolean }> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<{ ok: boolean; timedOut: boolean }>((res) => {
-        timer = setTimeout(() => res({ ok: false, timedOut: true }), ms);
-    });
+// parseMail is synchronous, so a hang can't be raced against a timer: a run past `ms` counts as one.
+function parseWithTimeout(bytes: Buffer, ms: number): { ok: boolean; err?: string; timedOut?: boolean } {
+    const t0 = performance.now();
+    let result: { ok: boolean; err?: string };
     try {
-        const parse = simpleParser(bytes)
-            .then(() => ({ ok: true }))
-            .catch((e: Error) => ({ ok: false, err: e?.message ?? String(e) }));
-        return await Promise.race([parse, timeout]);
-    } finally {
-        if (timer) clearTimeout(timer);
+        parseMail(bytes);
+        result = { ok: true };
+    } catch (e) {
+        result = { ok: false, err: e instanceof Error ? e.message : String(e) };
     }
+    return performance.now() - t0 > ms ? { ...result, timedOut: true } : result;
 }
 
 describe('mail parser fuzzing (hostile input)', () => {
-    test('500 deterministic hostile messages: no crash / no hang / bounded', async () => {
+    test('500 deterministic hostile messages: no crash / no hang / bounded', () => {
         const N = 500;
         const PER_INPUT_TIMEOUT = 4000;
         const rss0 = process.memoryUsage().rss;
@@ -139,7 +137,7 @@ describe('mail parser fuzzing (hostile input)', () => {
         for (let i = 0; i < N; i++) {
             const { name, bytes } = hostile(i);
             const t0 = performance.now();
-            const res = await parseWithTimeout(bytes, PER_INPUT_TIMEOUT);
+            const res = parseWithTimeout(bytes, PER_INPUT_TIMEOUT);
             const ms = performance.now() - t0;
             if (res.timedOut) hangs.push({ i, name });
             if (ms > 200) slow.push({ i, name, ms });
@@ -158,13 +156,13 @@ describe('mail parser fuzzing (hostile input)', () => {
         expect(hangs.length).toBe(0);
     }, 60_000);
 
-    test('extreme nested-multipart depth (5000) is bounded, does not hang/stack-overflow', async () => {
+    test('extreme nested-multipart depth (5000) is bounded, does not hang/stack-overflow', () => {
         let s = 'From: a@b.com\r\n';
         const depth = 5000;
         for (let k = 0; k < depth; k++) s += `Content-Type: multipart/mixed; boundary="L${k}"\r\n\r\n--L${k}\r\n`;
         s += 'Content-Type: text/plain\r\n\r\nleaf\r\n';
         const t0 = performance.now();
-        const res = await parseWithTimeout(Buffer.from(s, 'binary'), 5000);
+        const res = parseWithTimeout(Buffer.from(s, 'binary'), 5000);
         console.log(
             `[fuzz] nested-5000 depth: ${(performance.now() - t0).toFixed(0)}ms, timedOut=${res.timedOut ?? false}, err=${res.err ?? 'none'}`,
         );

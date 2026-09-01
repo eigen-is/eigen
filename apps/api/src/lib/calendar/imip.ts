@@ -157,9 +157,7 @@ export function extractCalendarAttachment(mail: {
     const attachment = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
     if (!attachment) return null;
 
-    const content = attachment.content;
-    const ics =
-        typeof content === 'string' ? content : content instanceof Buffer ? content.toString('utf-8') : String(content);
+    const ics = Buffer.from(attachment.content).toString();
 
     // Extract method from Content-Type header parameter (e.g. "text/calendar; method=REQUEST")
     const methodMatch = attachment.contentType.match(/method=(\w+)/i);

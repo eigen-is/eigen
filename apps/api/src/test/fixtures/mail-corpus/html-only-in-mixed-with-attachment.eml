@@ -1,0 +1,18 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Subject: HTML only plus attachment
+Content-Type: multipart/mixed; boundary="b4"
+
+--b4
+Content-Type: text/html; charset=utf-8
+
+<p>Only <i>html</i> here, see attachment.</p>
+--b4
+Content-Type: text/csv
+Content-Disposition: attachment; filename="data.csv"
+
+a,b
+1,2
+--b4--

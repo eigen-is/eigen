@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1182 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1178 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -434,7 +434,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (311)
+## Types (307)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -569,8 +569,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FreeBusyBlock` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `FullOrganization` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
-| `HeaderLines` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `HeaderValue` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `HelpSearchDoc` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `HomeSizeResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -579,7 +577,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Label` | `@workspace/lib/types` | packages/lib/src/types/label.ts |
 | `LandingLink` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `MaildirMailbox` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
-| `MailHeaders` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `MountConfig` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MountInfo` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MountResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
@@ -622,7 +619,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEventNotificationCreated` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventSpace` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventTeam` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
-| `StructuredHeader` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `TeamSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `UpdateCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
 | `UpdateContactInput` | `@workspace/lib/types` | packages/lib/src/types/contact.ts |

@@ -1,0 +1,17 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Subject: HTML as attachment
+Content-Type: multipart/mixed; boundary="b1"
+
+--b1
+Content-Type: text/plain; charset=utf-8
+
+The page is attached.
+--b1
+Content-Type: text/html; charset=utf-8
+Content-Disposition: attachment; filename="page.html"
+
+<html><body><h1>Attached page</h1></body></html>
+--b1--

@@ -78,7 +78,7 @@ function stringToAddressObject(text: string): AddressObject | undefined {
         if (match) return { name: match[1].trim(), address: match[2].trim() };
         return { name: '', address: trimmed };
     });
-    return { value, html: text, text };
+    return { value, text };
 }
 
 // Canonical empty paragraph — matches TipTap's normalized form so the seeded body survives
@@ -186,7 +186,6 @@ function fieldsToDraft(f: DraftFields, user: AuthUser | null | undefined): NewDr
         id: f.id,
         from: {
             value: [{ name: user?.name || '', address: user?.email || '' }],
-            html: '',
             text: '',
         },
         to: stringToAddressObject(f.to),

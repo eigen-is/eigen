@@ -1,0 +1,12 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Subject: Re: refs on two lines
+Message-ID: <m4@example.com>
+References: <m1@example.com> <m2@example.com>
+References: <m3@example.com>
+In-Reply-To: <m3@example.com>
+Content-Type: text/plain; charset=utf-8
+
+Two References header lines.

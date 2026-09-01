@@ -30,7 +30,7 @@ function addr(list: string): AddressObject {
         .map((s) => s.trim())
         .filter(Boolean)
         .map((address) => ({ address, name: '' }));
-    return { value, html: '', text: list };
+    return { value, text: list };
 }
 
 function makeRef(id: string): AttachmentReference {
@@ -308,7 +308,6 @@ describe.skipIf(isWindows)('Mail — per-recipient send copies', () => {
                     ],
                 },
             ],
-            html: '',
             text: 'Team: alpha@x.com, beta@x.com;',
         };
         const res = await sendMailBody({ subject: 'Group send', to: groupTo, text: 'hi team', html: '<p>hi team</p>' });

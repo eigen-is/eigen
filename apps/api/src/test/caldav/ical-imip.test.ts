@@ -1270,7 +1270,7 @@ describe('iMIP inbound single-occurrence scoping (audit #A/#B)', () => {
                 related: false,
             } as unknown as Attachment,
         ],
-        from: { value: [{ address: from, name: 'Ext Org' }], html: '', text: '' },
+        from: { value: [{ address: from, name: 'Ext Org' }], text: '' },
     });
 
     beforeAll(async () => {

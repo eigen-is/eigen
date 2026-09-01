@@ -1,7 +1,7 @@
 import type { Email } from '@workspace/lib/types/mail';
 import type { BunFile } from 'bun';
 import DOMPurify from 'isomorphic-dompurify';
-import { simpleParser } from './mail-parser';
+import { parseMail } from './mail-parser';
 import { buildRecipientSummary } from './mailutils';
 
 // Throws on a genuine parse/read fault (unreadable .eml, disk EIO, malformed MIME). Callers
@@ -15,7 +15,7 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
 // Same parse over in-memory bytes — lets the draft hot path skip the disk read-back (the bytes it
 // writes are exactly what parseEml would read back). `size` is the byte length of those bytes.
 export async function parseEmlBytes(messageId: string, mailbox: string, bytes: Buffer, size: number): Promise<Email> {
-    const parsedMail = await simpleParser(bytes, {});
+    const parsedMail = parseMail(bytes);
 
     if (parsedMail.html) {
         // ADD_ATTR keeps `target` on anchors so eigen-doc attachment pills (and any other
@@ -28,6 +28,8 @@ export async function parseEmlBytes(messageId: string, mailbox: string, bytes: B
 
     return {
         ...parsedMail,
+        subject: parsedMail.subject ?? '',
+        date: parsedMail.date ?? new Date(),
         id: messageId,
         filename: '',
         mailbox,
@@ -43,5 +45,5 @@ export async function parseEmlBytes(messageId: string, mailbox: string, bytes: B
         toAddress,
         recipientsAll,
         textShort: parsedMail.text || '',
-    } as Email;
+    };
 }

@@ -78,7 +78,7 @@ describe('draftToOutboundMail', () => {
             id: 'draft-1',
             subject: 's',
             text: 't',
-            to: { value: [{ name: 'Team', group: [{ name: 'A', address: 'a@x.com' }] }], html: '', text: '' },
+            to: { value: [{ name: 'Team', group: [{ name: 'A', address: 'a@x.com' }] }], text: '' },
             inReplyTo: '<parent@x.com>',
             references: '<r1@x.com>',
         } as unknown as EmailDraft;

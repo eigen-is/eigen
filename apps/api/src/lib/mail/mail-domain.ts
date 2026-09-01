@@ -22,7 +22,7 @@ import type { Home } from '../home';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '../multipart';
 import type { StorageFile } from '../storage';
 import { grantAccessForReferences } from './access-grants';
-import { simpleParser } from './mail-parser';
+import { parseMail } from './mail-parser';
 import type { MailSearchOptions, MailStore } from './mail-store';
 import { createEmlContent, type EmlAttachment } from './mailfile';
 import { buildRecipientSummary, createUniqueMessageId } from './mailutils';
@@ -143,7 +143,7 @@ export class Mail {
 
         // Process iMIP calendar attachments (blocking so event exists before client queries)
         try {
-            const parsed = await simpleParser(message);
+            const parsed = parseMail(message);
             const hasCalendar = parsed.attachments.some((a) => a.contentType.startsWith('text/calendar'));
             if (hasCalendar) {
                 processInboundImip(this.home, parsed);
@@ -330,16 +330,10 @@ export class Mail {
 
         const user = this.home.user;
         const attachments = meta.attachments.map((a) => ({
-            type: 'attachment' as const,
-            content: Buffer.alloc(0),
             contentType: a.contentType,
-            contentDisposition: 'attachment',
             filename: a.filename,
-            headers: new Map() as Email['headers'],
-            headerLines: [] as unknown as Email['headerLines'],
-            checksum: '',
+            content: Buffer.alloc(0),
             size: a.size,
-            related: false,
         }));
 
         return {
@@ -348,8 +342,6 @@ export class Mail {
             textShort,
             hasAttachments: attachments.length > 0,
             attachments,
-            headers: new Map() as Email['headers'],
-            headerLines: [] as unknown as Email['headerLines'],
             html: meta.html,
             text: meta.text,
             to: email.to,
@@ -357,14 +349,13 @@ export class Mail {
             bcc: email.bcc,
             from: {
                 value: [{ address: user.email, name: user.name }],
-                html: user.email,
                 text: user.email,
             },
             messageId: 'messageId' in email ? email.messageId : undefined,
             inReplyTo: 'inReplyTo' in email ? email.inReplyTo : undefined,
             references: 'references' in email ? email.references : undefined,
             driveReferences: driveReferences ?? [],
-        } as EmailDraft;
+        };
     }
 
     private async draftFullSave(
@@ -406,15 +397,9 @@ export class Mail {
                 const a = attachments[i];
                 if (!a.filename || a.contentType.startsWith('text/calendar')) continue;
                 if (keepSet && !keepSet.has(i)) continue;
-                if (!(a.content instanceof Uint8Array)) {
-                    console.warn(
-                        `draft ${existingId}: skipping attachment ${a.filename} (unexpected content type ${typeof a.content})`,
-                    );
-                    continue;
-                }
                 existingAttachments.push({
                     filename: a.filename,
-                    content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(a.content),
+                    content: Buffer.from(a.content),
                     contentType: a.contentType,
                 });
             }
@@ -432,7 +417,6 @@ export class Mail {
 
         const from: AddressObject = {
             value: [{ address: user.email, name: user.name }],
-            html: user.email,
             text: user.email,
         };
 

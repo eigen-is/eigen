@@ -1,0 +1,26 @@
+{
+  "subject": "Latin-9 euro",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "Alice",
+        "address": "alice@example.com"
+      }
+    ],
+    "text": "\"Alice\" <alice@example.com>"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "Bob",
+        "address": "bob@example.com"
+      }
+    ],
+    "text": "\"Bob\" <bob@example.com>"
+  },
+  "text": "Price: 5 € (five euro).\nŒuvre.\n",
+  "html": null,
+  "textAsHtml": "<p>Price: 5 &euro; (five euro).<br/>&OElig;uvre.</p>",
+  "attachments": []
+}
