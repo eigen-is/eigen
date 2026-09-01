@@ -209,7 +209,7 @@ describe('internal copy/paste — styles and merges', () => {
             d[2][1] = { mc: { r: 1, c: 1 } };
             d[2][2] = { mc: { r: 1, c: 1 } };
         });
-        ctx.config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
+        ctx.sheets[0].config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
 
         copyThenPaste(ctx, rangeSel(1, 2, 1, 2), single(4, 4));
 
@@ -230,34 +230,38 @@ describe('internal copy/paste — styles and merges', () => {
         const ctx = makeCtx(8, 8, (d) => {
             d[1][1] = { v: 'B', m: 'B' };
         });
-        ctx.config = {
-            borderInfo: [
-                {
-                    rangeType: 'cell',
-                    value: { row_index: 1, col_index: 1, l: side, r: side, t: side, b: side },
-                },
-            ],
-        };
-        // getBorderInfoCompute reads the source sheet's config, which in the live
-        // app aliases ctx.config for the current sheet (storeSheetParamALL)
-        ctx.sheets[0].config = ctx.config;
+        const sides = { l: side, r: side, t: side, b: side };
+        ctx.sheets[0].config = { borderInfo: { '1_1': sides } };
 
         copyThenPaste(ctx, single(1, 1), single(4, 4));
 
-        // the paste pushes a new cell entry at the destination with the sides
-        // computed from the source (getBorderInfoCompute -> paste seam into C1)
-        const pushed = ctx.sheets[0].config!.borderInfo!.find(
-            (e) => e.rangeType === 'cell' && e.value.row_index === 4 && e.value.col_index === 4,
-        );
-        expect(pushed).toEqual({
-            rangeType: 'cell',
-            value: { row_index: 4, col_index: 4, l: side, r: side, t: side, b: side },
+        // the paste writes the destination key with the sides computed from the source
+        // (getBorderInfoCompute -> paste seam into C1); the source entry is untouched by a copy
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({ '1_1': sides, '4_4': sides });
+    });
+
+    it('a plain-text paste keeps the destination border (only the HTML path carries borders)', () => {
+        const side = { color: '#0000ff', style: 1 };
+        const ctx = makeCtx();
+        const sides = { l: side, r: side, t: side, b: side };
+        ctx.sheets[0].config = { borderInfo: { '0_0': sides } };
+
+        handlePasteByClick(ctx, '1\t2\n3\t4');
+
+        expect(ctx.sheets[0].data![0][0]?.v).toBe(1);
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({ '0_0': sides });
+    });
+
+    it('pasting a borderless cell clears the destination border', () => {
+        const side = { color: '#0000ff', style: 1 };
+        const ctx = makeCtx(8, 8, (d) => {
+            d[1][1] = { v: 'B', m: 'B' };
         });
-        // the source entry is untouched by a copy
-        expect(ctx.sheets[0].config!.borderInfo![0]).toEqual({
-            rangeType: 'cell',
-            value: { row_index: 1, col_index: 1, l: side, r: side, t: side, b: side },
-        });
+        ctx.sheets[0].config = { borderInfo: { '4_4': { l: side, r: side, t: side, b: side } } };
+
+        copyThenPaste(ctx, single(1, 1), single(4, 4));
+
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({});
     });
 
     it('tiles the copy block across a destination that is an integer multiple', () => {
@@ -300,7 +304,7 @@ describe('cut/paste — cross-range move', () => {
             d[2][1] = { mc: { r: 1, c: 1 } };
             d[2][2] = { mc: { r: 1, c: 1 } };
         });
-        ctx.config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
+        ctx.sheets[0].config = { merge: { '1_1': { r: 1, c: 1, rs: 2, cs: 2 } } };
 
         copyThenPaste(ctx, rangeSel(1, 2, 1, 2), single(4, 4), {
             cut: true,
@@ -330,7 +334,6 @@ describe('cut/paste — cross-range move', () => {
         copy(ctx);
         ctx.pasteIsCut = true;
         ctx.currentSheetId = 'id_1';
-        ctx.config = {};
         ctx.selections = single(2, 2);
         handlePasteByClick(ctx, 'internal');
 
@@ -372,7 +375,7 @@ describe('conditional-format migration on cut/paste (cfSplitRange contract)', ()
 describe('partial-merge guard (hasPartMC)', () => {
     it('refuses a plain-text paste that would split a merged cell', () => {
         const ctx = makeCtx(6, 6);
-        ctx.config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
         // paste a 2x1 block starting inside the merge and crossing its bottom edge
         ctx.selections = single(1, 0);
         handlePasteByClick(ctx, '9\n8');

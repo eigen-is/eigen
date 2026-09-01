@@ -26,7 +26,7 @@ import {
 } from '..';
 import { en } from '../locale/en';
 import type { Rect } from '../types';
-import { replaceHtml } from '../utils';
+import { clipToUsedExtent, replaceHtml } from '../utils';
 
 // The rule-type and condition words the hint sentences slot in, widened once:
 // `type`/`type2` are free-form strings, the locale object is not.
@@ -456,38 +456,19 @@ export function applyDataVerification(ctx: Context, range: SingleRange, item: Da
 }
 
 // Insert -> Tick box: Google's one-click entry, no dialog. There is nowhere to
-// reconsider the selection, and a click on the column header hands over every
-// row the sheet has (events/mouse-header.ts) — the rules are keyed per cell, so
-// 130k rows is 130k snapshot keys and a quarter of a million immer patches for
-// the collab layer to turn into Yjs ops. A whole column is therefore bounded to
-// the rows that hold something; past the used extent a tick box marks nothing.
-// A range the user dragged out is applied as selected, so a checklist can still
-// be laid over empty cells. Data -> Data verification keeps the dialog.
+// reconsider the selection, so a header click is bounded to the used extent
+// (clipToUsedExtent) — past it a tick box marks nothing — while a range the user
+// dragged out can still lay a checklist over empty cells. Data -> Data
+// verification keeps the dialog.
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;
-    const d = getFlowdata(ctx);
-    if (!d) return;
-    let endRow = selection.row[1];
-    if (selection.row[0] === 0 && endRow >= ctx.visibledatarow.length - 1) {
-        endRow = 0;
-        for (let r = d.length - 1; r > 0; r -= 1) {
-            if (d[r]?.some((cell) => cell != null)) {
-                endRow = r;
-                break;
-            }
-        }
-    }
-    applyDataVerification(
-        ctx,
-        { row: [selection.row[0], endRow], column: selection.column },
-        {
-            type: 'checkbox',
-            type2: '',
-            value1: CHECKBOX_CHECKED_VALUE,
-            value2: CHECKBOX_UNCHECKED_VALUE,
-        },
-    );
+    applyDataVerification(ctx, clipToUsedExtent(ctx, [selection])[0], {
+        type: 'checkbox',
+        type2: '',
+        value1: CHECKBOX_CHECKED_VALUE,
+        value2: CHECKBOX_UNCHECKED_VALUE,
+    });
 }
 
 // --- The in-grid validation card -------------------------------------------

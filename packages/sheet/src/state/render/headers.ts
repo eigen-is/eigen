@@ -1,7 +1,7 @@
 // Row and column header strips: white cell backgrounds, sequence labels, and
 // the separator lines (hidden rows/columns get a doubled separator).
 
-import type { Context } from '../context';
+import { type Context, getSheetConfig } from '../context';
 import { defaultFont, getMeasureText } from '../modules/text';
 import { indexToColumnChar } from '../utils';
 import { colEndX, colStartX, HALF_PIXEL, headerVisibleRange, rowEndY, rowStartY } from './geometry';
@@ -33,6 +33,7 @@ export function drawRowHeader(
     renderCtx.rect(0, offsetTop - 1, sheetCtx.rowHeaderWidth - 1, drawHeight - 2);
     renderCtx.clip();
 
+    const rowhidden = getSheetConfig(sheetCtx)?.rowhidden;
     let prevEndY: number | undefined;
     for (let r = rowStart; r <= rowEnd; r += 1) {
         const startY = rowStartY(sheetCtx.visibledatarow, r, scrollHeight);
@@ -54,7 +55,7 @@ export function drawRowHeader(
             continue;
         }
 
-        if (sheetCtx.config?.rowhidden?.[r] == null) {
+        if (rowhidden?.[r] == null) {
             renderCtx.fillStyle = '#ffffff';
             renderCtx.fillRect(
                 0,
@@ -84,17 +85,13 @@ export function drawRowHeader(
         renderCtx.closePath();
 
         // Row header horizontal line
-        if (
-            sheetCtx.config.rowhidden &&
-            sheetCtx.config.rowhidden[r] == null &&
-            sheetCtx.config.rowhidden[r + 1] != null
-        ) {
+        if (rowhidden && rowhidden[r] == null && rowhidden[r + 1] != null) {
             renderCtx.beginPath();
             renderCtx.moveTo(-1, endY + offsetTop - 4 + HALF_PIXEL);
             renderCtx.lineTo(sheetCtx.rowHeaderWidth - 1, endY + offsetTop - 4 + HALF_PIXEL);
             renderCtx.closePath();
             renderCtx.stroke();
-        } else if (sheetCtx.config.rowhidden == null || sheetCtx.config.rowhidden[r] == null) {
+        } else if (rowhidden == null || rowhidden[r] == null) {
             renderCtx.beginPath();
             renderCtx.moveTo(-1, endY + offsetTop - 2 + HALF_PIXEL);
             renderCtx.lineTo(sheetCtx.rowHeaderWidth - 1, endY + offsetTop - 2 + HALF_PIXEL);
@@ -103,7 +100,7 @@ export function drawRowHeader(
             renderCtx.stroke();
         }
 
-        if (sheetCtx.config?.rowhidden?.[r - 1] != null && prevEndY !== undefined) {
+        if (rowhidden?.[r - 1] != null && prevEndY !== undefined) {
             renderCtx.beginPath();
             renderCtx.moveTo(-1, prevEndY + offsetTop + HALF_PIXEL);
             renderCtx.lineTo(sheetCtx.rowHeaderWidth - 1, prevEndY + offsetTop + HALF_PIXEL);
@@ -152,6 +149,7 @@ export function drawColumnHeader(
     renderCtx.rect(offsetLeft - 1, 0, drawWidth, sheetCtx.columnHeaderHeight - 1);
     renderCtx.clip();
 
+    const colhidden = getSheetConfig(sheetCtx)?.colhidden;
     let prevEndX: number | undefined;
     for (let c = colStart; c <= colEnd; c += 1) {
         const startX = colStartX(sheetCtx.visibledatacolumn, c, scrollWidth);
@@ -172,7 +170,7 @@ export function drawColumnHeader(
             continue;
         }
 
-        if (sheetCtx.config?.colhidden?.[c] == null) {
+        if (colhidden?.[c] == null) {
             renderCtx.fillStyle = '#ffffff';
             renderCtx.fillRect(startX + offsetLeft - 1, 0, endX - startX, sheetCtx.columnHeaderHeight - 1);
             renderCtx.fillStyle = '#000000';
@@ -187,11 +185,7 @@ export function drawColumnHeader(
         }
 
         // Column header vertical line
-        if (
-            sheetCtx.config.colhidden &&
-            sheetCtx.config.colhidden[c] != null &&
-            sheetCtx.config.colhidden[c + 1] != null
-        ) {
+        if (colhidden && colhidden[c] != null && colhidden[c + 1] != null) {
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 4 + HALF_PIXEL, 0);
             renderCtx.lineTo(endX + offsetLeft - 4 + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);
@@ -199,7 +193,7 @@ export function drawColumnHeader(
             renderCtx.strokeStyle = defaultStyle.strokeStyle;
             renderCtx.closePath();
             renderCtx.stroke();
-        } else if (sheetCtx.config.colhidden == null || sheetCtx.config.colhidden[c] == null) {
+        } else if (colhidden == null || colhidden[c] == null) {
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 2 + HALF_PIXEL, 0);
             renderCtx.lineTo(endX + offsetLeft - 2 + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);
@@ -210,7 +204,7 @@ export function drawColumnHeader(
             renderCtx.stroke();
         }
 
-        if (sheetCtx.config?.colhidden?.[c - 1] != null && prevEndX !== undefined) {
+        if (colhidden?.[c - 1] != null && prevEndX !== undefined) {
             renderCtx.beginPath();
             renderCtx.moveTo(prevEndX + offsetLeft + HALF_PIXEL, 0);
             renderCtx.lineTo(prevEndX + offsetLeft + HALF_PIXEL, sheetCtx.columnHeaderHeight - 2);

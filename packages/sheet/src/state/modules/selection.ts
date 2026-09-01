@@ -1,13 +1,19 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { BorderSide, CellBorderInfo, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import {
+    borderSidesToCss,
+    type CellBorderSides,
+    type ConditionalFormatRule,
+    type DataVerificationRule,
+    mergedBorderSides,
+} from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { update } from '../../engine/format';
-import { type Context, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
-import { BORDER_STYLE_NAMES, type ComputedBorderEntry, getBorderInfoCompute } from './border';
+import { carrySides, getBorderInfoCompute } from './border';
 import {
     getCellValue,
     getDataBySelectionNoCopy,
@@ -24,43 +30,9 @@ export const selectionCache = {
     isPasteAction: false,
 };
 
-// HTML copy-export builds a histogram of border colors and line styles along
-// each side of a merged cell so it can pick the dominant value (>= half the
-// edge length) for the rendered `<td>` border.
-type BorderEdgeHistogram = { color: Record<string, number>; style: Record<string, number> };
-
-function bumpHistogram(hist: BorderEdgeHistogram, side: BorderSide) {
-    hist.style[side.style] = (hist.style[side.style] ?? 0) + 1;
-    hist.color[side.color] = (hist.color[side.color] ?? 0) + 1;
-}
-
-// Pick the dominant color and line-style along one merged-cell edge — each must
-// appear on at least half the edge's cells — and render it as a CSS declaration.
-// An empty histogram serializes to exactly 23 chars, so `> 23` means "saw a border".
-function dominantBorderSideCss(hist: BorderEdgeHistogram, edgeLen: number, cssSide: string): string {
-    if (JSON.stringify(hist).length <= 23) return '';
-
-    let color: string | null = null;
-    let style: string | null = null;
-    for (const key of Object.keys(hist.color)) {
-        if (hist.color[key] >= edgeLen / 2) color = key;
-    }
-    for (const key of Object.keys(hist.style)) {
-        if (hist.style[key] >= edgeLen / 2) style = key;
-    }
-
-    if (!isNil(color) && !isNil(style)) {
-        return `border-${cssSide}:${getHtmlBorderStyle(style, color)}`;
-    }
-    return '';
-}
-
-function cellBorderCss(border: ComputedBorderEntry): string {
+function cellBorderCss(border: CellBorderSides): string {
     let css = '';
-    if (border.l) css += `border-left:${getHtmlBorderStyle(border.l.style, border.l.color)}`;
-    if (border.r) css += `border-right:${getHtmlBorderStyle(border.r.style, border.r.color)}`;
-    if (border.b) css += `border-bottom:${getHtmlBorderStyle(border.b.style, border.b.color)}`;
-    if (border.t) css += `border-top:${getHtmlBorderStyle(border.t.style, border.t.color)}`;
+    for (const decl of borderSidesToCss(border)) css += `${decl};`;
     return css;
 }
 
@@ -265,10 +237,8 @@ export function selectTitlesRange(map: Record<string, number>) {
 }
 
 export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
-    const cfg = ctx.config;
-    if (cfg.merge == null) {
-        cfg.merge = {};
-    }
+    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (sheetIndex == null) return;
 
     if (!copyRange) return;
     // Copy range
@@ -297,12 +267,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
 
     if (minh === maxh && minc === maxc) {
         // Apply range is a single cell; automatically expand to the copy range size (if the expanded range partially overlaps a merged cell, show a warning)
-        let has_PartMC = false;
-        if (cfg.merge != null) {
-            has_PartMC = hasPartMC(ctx, minh, minh + copyh - 1, minc, minc + copyc - 1);
-        }
-
-        if (has_PartMC) {
+        if (hasPartMC(ctx, minh, minh + copyh - 1, minc, minc + copyc - 1)) {
             return;
         }
 
@@ -318,7 +283,13 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     const cellMaxLength = flowdata[0].length;
     const rowMaxLength = flowdata.length;
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
+    // Seeded only once the paste is certain — a syncable write above the bail-outs would
+    // ship a no-op op to peers and take the user's next undo.
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
+    cfg.merge ??= {};
+    cfg.borderInfo ??= {};
+
+    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex, [c_r1, c_r2, c_c1, c_c2]);
     const c_dataVerification = cloneDeep(ctx.sheets[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
     let dataVerification: Record<string, DataVerificationRule> | undefined;
 
@@ -351,44 +322,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
                 const x: (Cell | null)[] = flowdata[h];
 
                 for (let c = mtc; c < maxcellCahe; c += 1) {
-                    const computeEntry = borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
-                    if (computeEntry) {
-                        const bd_obj: CellBorderInfo = {
-                            rangeType: 'cell',
-                            value: {
-                                row_index: h,
-                                col_index: c,
-                                l: computeEntry.l,
-                                r: computeEntry.r,
-                                t: computeEntry.t,
-                                b: computeEntry.b,
-                            },
-                        };
-
-                        if (cfg.borderInfo == null) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
-                    } else if (borderInfoCompute[`${h}_${c}`]) {
-                        const bd_obj: CellBorderInfo = {
-                            rangeType: 'cell',
-                            value: {
-                                row_index: h,
-                                col_index: c,
-                                l: null,
-                                r: null,
-                                t: null,
-                                b: null,
-                            },
-                        };
-
-                        if (cfg.borderInfo == null) {
-                            cfg.borderInfo = [];
-                        }
-
-                        cfg.borderInfo.push(bd_obj);
-                    }
+                    carrySides(cfg.borderInfo, h, c, borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]);
 
                     // Data validation copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
@@ -499,8 +433,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         }
     }
 
-    const currFile = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
-    currFile.config = cfg;
+    const currFile = ctx.sheets[sheetIndex];
     currFile.dataVerification = dataVerification;
 
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
@@ -546,9 +479,10 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return false;
+    const merge = getSheetConfig(ctx)?.merge;
     for (let r = r1; r <= r2; r += 1) {
         const cell = flowData[r]?.[c];
-        if (!isNil(ctx.config.merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
+        if (!isNil(merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
             hasMerged = true;
             break;
         }
@@ -560,14 +494,15 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
 export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number) {
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return [null, null];
+    const merge = getSheetConfig(ctx)?.merge;
     const r2 = flowData.length - 1;
     let str = null;
     if (rIndex > 0) {
         for (let r = rIndex; r >= 0; r -= 1) {
             for (let c = c1; c <= c2; c += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(ctx.config.merge)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(merge)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(str) || mc.r < str) {
                         str = mc.r;
                     }
@@ -587,8 +522,8 @@ export function getRowMerge(ctx: Context, rIndex: number, c1: number, c2: number
         for (let r = rIndex; r <= r2; r += 1) {
             for (let c = c1; c <= c2; c += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(ctx.config.merge)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(cell) && !isNil(cell.mc) && 'mc' in cell && !isNil(merge)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(end) || mc.r + mc.rs - 1 > end) {
                         end = mc.r + mc.rs - 1;
                     }
@@ -611,14 +546,15 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
     if (isNil(flowData)) {
         return [null, null];
     }
+    const merge = getSheetConfig(ctx)?.merge;
     const c2 = flowData[0].length - 1;
     let str = null;
     if (cIndex > 0) {
         for (let c = cIndex; c >= 0; c -= 1) {
             for (let r = r1; r <= r2; r += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(ctx.config.merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(str) || mc.c < str) {
                         str = mc.c;
                     }
@@ -638,8 +574,8 @@ export function getColMerge(ctx: Context, cIndex: number, r1: number, r2: number
         for (let c = cIndex; c <= c2; c += 1) {
             for (let r = r1; r <= r2; r += 1) {
                 const cell = flowData[r][c];
-                if (!isNil(ctx.config.merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
-                    const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
+                if (!isNil(merge) && !isNil(cell) && 'mc' in cell && !isNil(cell.mc)) {
+                    const mc = merge[`${cell.mc.r}_${cell.mc.c}`];
                     if (isNil(end) || mc.c + mc.cs - 1 > end) {
                         end = mc.c + mc.cs - 1;
                     }
@@ -1255,35 +1191,6 @@ export function moveHighlightRange(
     }
 }
 
-function getHtmlBorderStyle(type: string | number, color: string) {
-    let style = '';
-    type = BORDER_STYLE_NAMES[type.toString()];
-
-    if (type.indexOf('Medium') > -1) {
-        style += '1pt ';
-    } else if (type === 'Thick') {
-        style += '1.5pt ';
-    } else {
-        style += '0.5pt ';
-    }
-
-    if (type === 'Hair') {
-        style += 'double ';
-    } else if (type.indexOf('DashDotDot') > -1) {
-        style += 'dotted ';
-    } else if (type.indexOf('DashDot') > -1) {
-        style += 'dashed ';
-    } else if (type.indexOf('Dotted') > -1) {
-        style += 'dotted ';
-    } else if (type.indexOf('Dashed') > -1) {
-        style += 'dashed ';
-    } else {
-        style += 'solid ';
-    }
-
-    return `${style + color};`;
-}
-
 // The marker that says "this clipboard HTML came from a sheet": written by the copy path,
 // matched by every paste reader.
 export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
@@ -1298,6 +1205,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
     // Set-based dedupe: includes() per cell turns large copies quadratic.
     const rowIndexSet = new Set<number>();
     const colIndexSet = new Set<number>();
+    const rect: [number, number, number, number] = [Infinity, -Infinity, Infinity, -Infinity];
 
     for (let s = 0; s < (ranges?.length ?? 0); s += 1) {
         const range = ranges![s];
@@ -1306,6 +1214,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         const r2 = range.row[1];
         const c1 = range.column[0];
         const c2 = range.column[1];
+        rect[0] = Math.min(rect[0], r1);
+        rect[1] = Math.max(rect[1], r2);
+        rect[2] = Math.min(rect[2], c1);
+        rect[3] = Math.max(rect[3], c2);
 
         for (let copyR = r1; copyR <= r2; copyR += 1) {
             if (!rowIndexSet.has(copyR)) {
@@ -1322,10 +1234,8 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         }
     }
 
-    let borderInfoCompute: ReturnType<typeof getBorderInfoCompute> | undefined;
-    if (sheet.config?.borderInfo && sheet.config.borderInfo.length > 0) {
-        borderInfoCompute = getBorderInfoCompute(ctx, sheetId);
-    }
+    // A td spans its merge, so the perimeter is read off the master.
+    const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
 
     let cpdata = '';
     const d = sheet.data;
@@ -1392,57 +1302,11 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 style += escapeHtml(styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute)));
 
                 if (cell.mc) {
-                    if ('rs' in cell.mc) {
-                        span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
-
-                        // Border
-                        if (borderInfoCompute?.[`${r}_${c}`]) {
-                            // Per-side histograms: count how many cells along the merged
-                            // edge share each border color / line-style. The winning side
-                            // (>= half the edge length) drives the merged cell's HTML
-                            // border below.
-                            const bl_obj: BorderEdgeHistogram = { color: {}, style: {} };
-                            const br_obj: BorderEdgeHistogram = { color: {}, style: {} };
-                            const bt_obj: BorderEdgeHistogram = { color: {}, style: {} };
-                            const bb_obj: BorderEdgeHistogram = { color: {}, style: {} };
-
-                            for (let bd_r = r; bd_r < r + cell.mc.rs!; bd_r += 1) {
-                                for (let bd_c = c; bd_c < c + cell.mc.cs!; bd_c += 1) {
-                                    const cellBorder = borderInfoCompute[`${bd_r}_${bd_c}`];
-                                    if (!cellBorder) continue;
-
-                                    if (bd_r === r && cellBorder.t) {
-                                        bumpHistogram(bt_obj, cellBorder.t);
-                                    }
-                                    if (bd_r === r + cell.mc.rs! - 1 && cellBorder.b) {
-                                        bumpHistogram(bb_obj, cellBorder.b);
-                                    }
-                                    if (bd_c === c && cellBorder.l) {
-                                        bumpHistogram(bl_obj, cellBorder.l);
-                                    }
-                                    if (bd_c === c + cell.mc.cs! - 1 && cellBorder.r) {
-                                        bumpHistogram(br_obj, cellBorder.r);
-                                    }
-                                }
-                            }
-
-                            const rowlen = cell.mc.rs!;
-                            const collen = cell.mc.cs!;
-
-                            style += dominantBorderSideCss(bl_obj, rowlen, 'left');
-                            style += dominantBorderSideCss(br_obj, rowlen, 'right');
-                            style += dominantBorderSideCss(bt_obj, collen, 'top');
-                            style += dominantBorderSideCss(bb_obj, collen, 'bottom');
-                        }
-                    } else {
-                        continue;
-                    }
-                } else {
-                    const cellBorder = borderInfoCompute?.[`${r}_${c}`];
-                    if (cellBorder) {
-                        style += cellBorderCss(cellBorder);
-                    }
+                    if (!('rs' in cell.mc)) continue;
+                    span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
                 }
+                const cellBorder = borderInfoCompute[`${r}_${c}`];
+                if (cellBorder) style += cellBorderCss(cellBorder);
 
                 column = replaceHtml(column, { style, span });
 
@@ -1458,12 +1322,8 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
             } else {
                 let style = '';
 
-                const cellBorder = borderInfoCompute?.[`${r}_${c}`];
-                if (cellBorder) {
-                    style += cellBorderCss(cellBorder);
-                }
-
-                column += '';
+                const cellBorder = borderInfoCompute[`${r}_${c}`];
+                if (cellBorder) style += cellBorderCss(cellBorder);
 
                 if (r === rowIndexArr[0]) {
                     if (
@@ -1501,6 +1361,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 
 export function copy(ctx: Context) {
     const flowdata = getFlowdata(ctx);
+    const cfg = getSheetConfig(ctx);
 
     ctx.formulaRangeSelections = [];
     // Copy range
@@ -1517,16 +1378,16 @@ export function copy(ctx: Context) {
         const c2 = range.column[1];
 
         for (let copyR = r1; copyR <= r2; copyR += 1) {
-            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[copyR])) {
+            if (!isNil(cfg?.rowhidden) && !isNil(cfg.rowhidden[copyR])) {
                 continue;
             }
 
-            if (!isNil(ctx.config.rowlen) && copyR in ctx.config.rowlen) {
+            if (!isNil(cfg?.rowlen) && copyR in cfg.rowlen) {
                 RowlChange = true;
             }
 
             for (let copyC = c1; copyC <= c2; copyC += 1) {
-                if (!isNil(ctx.config.colhidden) && !isNil(ctx.config.colhidden[copyC])) {
+                if (!isNil(cfg?.colhidden) && !isNil(cfg.colhidden[copyC])) {
                     continue;
                 }
 

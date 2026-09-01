@@ -2,7 +2,7 @@
 // columns (cell.tb === '1'), and the per-row cache shared across passes.
 
 import { isEmpty } from 'es-toolkit/compat';
-import { type Context, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { normalizedAttr } from '../modules/cell';
 import { isInlineStringCell } from '../modules/inline-string';
 import { getCellTextInfo } from '../modules/text';
@@ -33,6 +33,7 @@ export function computeCellOverflowMap(
     if (!flowdata) {
         return map;
     }
+    const colhidden = getSheetConfig(sheetCtx)?.colhidden;
 
     for (let r = rowStart; r <= rowEnd; r += 1) {
         if (flowdata[r] == null) {
@@ -55,7 +56,7 @@ export function computeCellOverflowMap(
         for (let c = scanStart; c <= scanEnd; c += 1) {
             const cell = flowdata[r][c];
 
-            if (sheetCtx.config?.colhidden?.[c] != null) {
+            if (colhidden?.[c] != null) {
                 continue;
             }
 

@@ -1,11 +1,8 @@
-// Raising a range's font size auto-grows the rows it no longer fits. The grown height has
-// to land on both halves of the config mirror: updateFormatCell wrote
-// `sheets[i].config.rowlen` sheet-only and never re-pointed `ctx.config`, so calcRowColSize
-// kept measuring the old height AND the next writer that hand-rolls the pair mirror-first —
-// the resize drag still does — assigned the stale mirror back over the sheet as a
-// whole-object config replace, discarding the grown rows, persisted and broadcast.
-// Driving the handlers through produceWithPatches is what exposes this: outside a recipe
-// the two halves are the same object, so any write appears to reach both.
+// Raising a range's font size auto-grows the rows it no longer fits. The grown height has to
+// survive the next config writer: a writer that replaces the whole config object rather than
+// the one key it changes discards the grown rows, persisted and broadcast. Driving the
+// handlers through produceWithPatches is what exposes this — one recipe's writes only collide
+// when they go through separate drafts.
 
 import { describe, expect, test } from 'bun:test';
 import { Window } from 'happy-dom';
@@ -71,14 +68,13 @@ function cellInput(): HTMLDivElement {
 }
 
 describe('state/modules/toolbar — font-size auto-height', () => {
-    test('the grown row height reaches the config mirror the grid measures from', () => {
+    test('the grown row height lands on the sheet the grid measures from', () => {
         clearMeasureTextCache();
         const [grown] = produceWithPatches(sizedContext(), (ctx: Context) => {
             handleTextSize(ctx, cellInput(), 36, measuringCanvas());
         });
 
         expect(grown.sheets[0].config?.rowlen?.[0]).toBeGreaterThan(19);
-        expect(grown.config.rowlen?.[0]).toBe(grown.sheets[0].config?.rowlen?.[0]);
     });
 
     test('a following column resize does not discard it', () => {
@@ -93,6 +89,5 @@ describe('state/modules/toolbar — font-size auto-height', () => {
         });
 
         expect(resized.sheets[0].config?.rowlen?.[0]).toBe(grownHeight);
-        expect(resized.config.rowlen?.[0]).toBe(grownHeight);
     });
 });

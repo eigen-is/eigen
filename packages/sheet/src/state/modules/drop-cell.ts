@@ -1,14 +1,13 @@
-import type { CellBorderInfo } from '@workspace/lib/sheets';
 import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
-import { type Context, editableConfig, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
-import { getBorderInfoCompute } from './border';
+import { carrySides, getBorderInfoCompute } from './border';
 import { createContextResolver } from './formula-cache';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
@@ -1895,8 +1894,8 @@ export function updateDropCell(ctx: Context) {
     // filled formula cell.
     const resolver = createContextResolver(ctx);
 
-    const cfg = editableConfig(ctx, file);
-    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
+    const cfg = (file.config ??= {});
+    cfg.borderInfo ??= {};
     // Live map, not a clone: the copy and apply ranges are disjoint, so reading a source
     // rule while writing the filled ones is safe — and the write has to land on the sheet
     // to sync and undo (Excel and Google both carry validation on a fill).
@@ -1913,6 +1912,12 @@ export function updateDropCell(ctx: Context) {
     const copy_str_c = copyRange.column[0];
     const copy_end_c = copyRange.column[1];
     const copyData = getCopyData(d, copy_str_r, copy_end_r, copy_str_c, copy_end_c, direction);
+    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId, [
+        copy_str_r,
+        copy_end_r,
+        copy_str_c,
+        copy_end_c,
+    ]);
 
     const csLen =
         direction === 'down' || direction === 'up' ? copy_end_r - copy_str_r + 1 : copy_end_c - copy_str_c + 1;
@@ -2004,36 +2009,7 @@ export function updateDropCell(ctx: Context) {
             const bd_r = axisIsRow ? bd_axis : outer;
             const bd_c = axisIsRow ? outer : bd_axis;
 
-            const computeEntry = borderInfoCompute[`${bd_r}_${bd_c}`];
-            if (computeEntry) {
-                const bd_obj: CellBorderInfo = {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: row,
-                        col_index: col,
-                        l: computeEntry.l,
-                        r: computeEntry.r,
-                        t: computeEntry.t,
-                        b: computeEntry.b,
-                    },
-                };
-
-                (cfg.borderInfo ??= []).push(bd_obj);
-            } else if (borderInfoCompute[`${row}_${col}`]) {
-                const bd_obj: CellBorderInfo = {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: row,
-                        col_index: col,
-                        l: null,
-                        r: null,
-                        t: null,
-                        b: null,
-                    },
-                };
-
-                (cfg.borderInfo ??= []).push(bd_obj);
-            }
+            carrySides(cfg.borderInfo, row, col, borderInfoCompute[`${bd_r}_${bd_c}`]);
 
             // data validation
             if (dataVerification?.[`${bd_r}_${bd_c}`]) {
@@ -2189,7 +2165,7 @@ export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTML
         const flowdata = getFlowdata(ctx);
         if (flowdata == null) return;
 
-        if (ctx.config.merge != null) {
+        if (getSheetConfig(ctx)?.merge != null) {
             let HasMC = false;
 
             for (let r = last.row[0]; r <= last.row[1]; r += 1) {

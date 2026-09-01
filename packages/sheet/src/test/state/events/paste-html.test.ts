@@ -12,7 +12,6 @@
 // never assert on internal call sequences.
 
 import { describe, expect, it } from 'bun:test';
-import type { CellBorderInfo } from '@workspace/lib/sheets';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -273,25 +272,27 @@ describe('HTML-table paste — merges, borders, row height', () => {
         expect(ctx.sheets[0].config!.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
     });
 
-    it('decomposes an inline td border into a cfg.borderInfo cell entry via getQKBorder', () => {
+    it('decomposes an inline td border into a cfg.borderInfo entry via getQKBorder', () => {
         const ctx = makeCtx();
         pasteHtml(ctx, '<table><tr><td style="border:1px solid #0000ff">B</td></tr></table>');
 
-        const pushed = ctx.sheets[0].config!.borderInfo!.find(
-            (e) => e.rangeType === 'cell' && e.value.row_index === 0 && e.value.col_index === 0,
-        );
         // 1px solid -> getQKBorder style 1; colour passes through verbatim
-        expect(pushed).toEqual({
-            rangeType: 'cell',
-            value: {
-                row_index: 0,
-                col_index: 0,
-                l: { style: 1, color: '#0000ff' },
-                r: { style: 1, color: '#0000ff' },
-                t: { style: 1, color: '#0000ff' },
-                b: { style: 1, color: '#0000ff' },
-            },
+        expect(ctx.sheets[0].config!.borderInfo!['0_0']).toEqual({
+            l: { style: 1, color: '#0000ff' },
+            r: { style: 1, color: '#0000ff' },
+            t: { style: 1, color: '#0000ff' },
+            b: { style: 1, color: '#0000ff' },
         });
+    });
+
+    it('a td without a border clears the border the destination cell had (paste with formatting)', () => {
+        const ctx = makeCtx();
+        const side = { style: 1, color: '#0000ff' };
+        ctx.sheets[0].config = { borderInfo: { '0_0': { l: side, r: side, t: side, b: side }, '5_5': { l: side } } };
+        pasteHtml(ctx, '<table><tr><td>plain</td></tr></table>');
+
+        expect(ctx.sheets[0].data![0][0]?.v).toBe('plain');
+        expect(ctx.sheets[0].config!.borderInfo).toEqual({ '5_5': { l: side } });
     });
 
     it('keys merges and borders correctly at a non-origin anchor (absolute vs relative coordinates)', () => {
@@ -317,17 +318,13 @@ describe('HTML-table paste — merges, borders, row height', () => {
 
         // outer edges of the merged 2x2 block, at absolute row/col indices
         const side = { style: 1, color: '#0000ff' };
-        const entry = (r: number, c: number) =>
-            ctx.sheets[0].config!.borderInfo!.find(
-                (e): e is CellBorderInfo =>
-                    e.rangeType === 'cell' && e.value.row_index === r && e.value.col_index === c,
-            );
-        expect(entry(3, 2)?.value.t).toEqual(side);
-        expect(entry(3, 2)?.value.l).toEqual(side);
-        expect(entry(3, 2)?.value.b).toBeUndefined();
-        expect(entry(4, 3)?.value.b).toEqual(side);
-        expect(entry(4, 3)?.value.r).toEqual(side);
-        expect(entry(4, 3)?.value.t).toBeUndefined();
+        const borderInfo = ctx.sheets[0].config!.borderInfo!;
+        expect(borderInfo['3_2']?.t).toEqual(side);
+        expect(borderInfo['3_2']?.l).toEqual(side);
+        expect(borderInfo['3_2']?.b).toBeUndefined();
+        expect(borderInfo['4_3']?.b).toEqual(side);
+        expect(borderInfo['4_3']?.r).toEqual(side);
+        expect(borderInfo['4_3']?.t).toBeUndefined();
     });
 
     it('writes a tr height attribute into cfg.rowlen at the target row', () => {
@@ -342,11 +339,7 @@ describe('HTML-table paste — merges, borders, row height', () => {
     it('leaves cfg.rowlen untouched for a tr with no height attribute', () => {
         const ctx = makeCtx();
         ctx.selections = single(2, 1);
-        // ctx.config aliases the current sheet's config in the live app (see the
-        // hasPartMC test below) and setRowHeight writes through that mirror, so a
-        // sheet-only config here would be a fixture the app never produces.
-        ctx.config = { rowlen: { 2: 42 } };
-        ctx.sheets[0].config = ctx.config;
+        ctx.sheets[0].config = { rowlen: { 2: 42 } };
         pasteHtml(ctx, '<table><tr><td>a</td></tr><tr><td>b</td></tr></table>');
 
         const rowlen = ctx.sheets[0].config!.rowlen!;
@@ -357,12 +350,7 @@ describe('HTML-table paste — merges, borders, row height', () => {
 
     it('refuses a paste that would partially cover an existing merge (hasPartMC guard)', () => {
         const ctx = makeCtx(6, 6);
-        ctx.config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
-        // In the live app ctx.config aliases the current sheet's config
-        // (storeSheetParamALL). Mirror that: the branch's setRowHeight reassigns
-        // ctx.config = sheet.config, so without the alias the merge would be orphaned
-        // before hasPartMC runs and the guard would spuriously pass.
-        ctx.sheets[0].config = ctx.config;
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } } };
         // paste a 2x1 table starting inside the merge and crossing its bottom edge
         ctx.selections = single(1, 0);
         pasteHtml(ctx, '<table><tr><td>9</td></tr><tr><td>8</td></tr></table>');

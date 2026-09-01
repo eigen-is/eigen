@@ -34,7 +34,7 @@ state/render/
 ├── cell-text.ts    # Text painter + overflow-span variant (layout stays in modules/text.ts)
 ├── data-bar.ts     # Conditional-format data bar
 ├── overflow.ts     # Text-spill map + trace + the shared per-row cache (cleared via the facade's idle timer)
-├── borders.ts      # config.borderInfo pass + dash patterns
+├── borders.ts      # config.borderInfo pass (viewport walk + merge-edge filter) + dash patterns
 └── filter-ui.ts    # Autofilter range border + buttons (lazy Path2D glyphs — module eval is DOM-free)
 ```
 
@@ -52,6 +52,29 @@ again — `apps/sheets` hides the workbook rather than unmounting it for the mob
 **Why op-based**: Full JSON snapshots cause overwrite conflicts. Ops are granular — concurrent edits on different cells
 merge cleanly.
 
+**One route to a sheet's config, and its collections always exist.** There is no `ctx.config` shortcut — read the
+current sheet's config with `getSheetConfig(ctx, id?)` (`state/context.ts`, beside `getFlowdata`) and write through
+`ctx.sheets[i].config`. Two things depend on this and are easy to break:
+
+- immer records the **creation** of a key as one `add` carrying the whole new value, so a write to a config
+  collection that does not exist yet ships the entire collection and last-writer-wins over a peer. Every collection is
+  therefore materialized by `normalizeSheetConfig` (`engine/replay-ops.ts`) wherever a sheet enters any consumer —
+  `initSheetData`, the replay base, `addSheet` ops, `createDefaultSheets`, and the Workbook seeding effect. Its
+  `SHEET_CONFIG_COLLECTIONS` list `satisfies keyof ExtendedSheetConfig` for membership, and a companion exhaustiveness assert (`Exclude<collection keys, listed> extends never`) makes a new collection fail the build rather
+  than silently reopening the hole. This mirrors the row/column grid materialization in `engine/defaults.ts`, and for
+  the same reason: **a base that is less materialized than the writer makes granular patches fail to resolve**, and
+  `replaySheetsOps` then rolls back the whole batch — the edit is lost, not degraded.
+- a write on a path that then rejects the operation still costs the user an undo entry and ships an op. Because the
+  collections already exist, no writer needs to create one, so this cannot happen by accident; `src/test/state/rejected-writes.test.ts`
+  is the table-driven gate that keeps it that way. Add a row to it when you add a writer.
+
+**`config.borderInfo` is a map of each cell's own sides, keyed `"r_c"` like `merge`.** Toolbar layouts are expanded per cell at write time (`applyBorder`, `state/modules/border.ts`); `border-none` and every carry tombstone delete the key; a shared edge never *creates* the neighbour's key (that would be one whole-object `add`, the first-write clobber above), but a neighbour entry that already exists gets its facing side overridden on apply — and removed by `border-none` — so the freshly drawn edge wins on screen. When two neighbours disagree on a shared edge (A1's right vs B1's left, common after an xlsx import that writes both), the canvas paints it deterministically — the higher-index neighbour's facing side wins (B1.l over A1.r, B2.t over B1.b) — so the color can't flip with the viewport's border walk mode. A whole-column/row header click clips to the used extent (`clipToUsedExtent`, scanning only the selected axis) — one menu click cannot write ~1M keys — with the accepted divergence from Excel/Google that cells filled in later rows show no border. Merges are a read-time filter over raw storage — `mergeEdgeSides` in `packages/lib/src/sheets/borders.ts` is the one predicate the canvas, xlsx and HTML export share — and only the canvas pass skips hidden rows and columns. Order carries nothing, so two clients bordering different cells converge (`src/test/state/modules/border-convergence.test.ts`); two clients bordering the *same* cell still do not, because each applies its own op optimistically — see [PROPOSAL_SHEETS_YJS_CONFIG.md](proposals/PROPOSAL_SHEETS_YJS_CONFIG.md).
+
+**Resize measures page coordinates.** Mousedown stores `e.pageX`/`e.pageY`; mouseup subtracts it. Mousedown and
+mouseup measure from different elements (the header vs the overlay container), so anything element-relative needs a
+fudge factor to bridge them — there used to be a hand-tuned `3` doing exactly that. No movement is a click, any
+movement is a resize.
+
 **Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render).
 
 **Snapshot**: Saved on `beforeunload` (flushes latest data to `state.snapshot` and clears the ops array). New joiners
@@ -59,9 +82,9 @@ load from the snapshot, then replay any pending ops that arrived during initial 
 `replaySheetsOps(sheets, opBatches)` from `@workspace/sheet/engine` — the same function the BE document
 reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
 
-**`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`), and
-`use-sheet.ts` strips it from the snapshot on both write and read (older docs may still carry one baked in;
-a persisted cursor resurfaced on open as phantom stats-bar values for a selection nobody made).
+**`selections` never persists**: it's a per-client cursor — the ops path drops it (`filterPatch`) and the
+snapshot encoder strips it (`snapshot-codec.ts`; a persisted cursor once resurfaced on open as phantom
+stats-bar values for a selection nobody made).
 
 ## Snapshot format (v2)
 
@@ -78,23 +101,35 @@ the op format and `replaySheetsOps` are untouched.
   `m === String(v)` (rehydrated on decode); style-only cells carry no content slot. The
   dense `data` matrix folds into the cell list at encode (editor flushes carry authoritative
   `data` over stale `celldata`) and is never persisted; `selections` never persists either.
-- `config.borderInfo`'s per-cell entries become `[r, c, borderIdx]` in an order-preserving
-  list (later entries override); other rangeTypes ride verbatim.
+- `config.borderInfo`'s `"r_c"` entries become `[r, c, borderIdx]` tuples over an interned
+  `borders` dictionary (order carries nothing; the map is rebuilt on decode).
 - `calcChain` is never persisted. `computed: true` (importer post-recalc, every editor
   flush) makes the decoder seed it from the `f` cells — which is exactly the signal
   `sheetsNeedRecalc` keys off, so the § Server-side recalc gate is unchanged: an
   uncomputed snapshot (recalc-failed import) decodes without a chain and exports recalc.
-- **Legacy**: a snapshot starting with `[` is v1 `Sheet[]` JSON and passes through
-  `JSON.parse` unchanged — every pre-v2 doc keeps opening. (The FE read seam additionally
-  strips `selections` to heal v1 snapshots that baked a cursor in; the codec itself never
-  writes one.) Any other non-v2 input throws `Unknown sheets snapshot format` — corrupt
-  envelopes fail crisp instead of decoding a half-empty workbook.
+- Any input that is not a v2 envelope — a v1 `[`-snapshot, a corrupt envelope, a future tag — throws `Unknown sheets snapshot format`, as does a `borderCells` entry that is not a `[r, c, idx]` tuple (the pre-N2 toolbar-range shape) or a `borderCells`/cell entry whose dictionary index points past the `borders`/`styles` table. How the editor reacts depends on **when** the decode fails (`use-sheet.ts` `loadSnapshot`): on the **initial** load it opens read-only on blank defaults and never persists (the `loadedRef` gate); on a **mid-session** peer flush it can't decode (version skew, corruption) it **keeps the populated workbook already on screen** — no remount, no defaults — and only arms the same read-only lock + persistent in-editor banner (`editor.tsx`, gated on `loadFailed`), because local state may now diverge from the truth on the wire. The signal is a banner, not a toast: a toast dismissed on click, leaving a blank read-only sheet indistinguishable from data loss. A pre-N2 v2 snapshot whose borders are all cell entries decodes benignly — those were already `[r, c, idx]` tuples, and decode drops their obsolete `null` sides.
 - `readSheetsFromDoc` materializes the dense `data` matrix for every sheet after replay
   (`withMaterializedData`): v2 snapshots are celldata-only, but the renderers'
   conditional-format pass and the cross-sheet formula resolver read `data`. Accepted bound:
   the matrix spans the celldata extent, so one far-flung cell (think `XFD1048576`) makes a
   preview/extract read allocate a huge dense grid — bounded by the one-shot Worker's
   deadline/death, same class as the editor's own `initSheetData`.
+
+## Where each cell-bound property lives
+
+Two storage patterns, deliberately. Everything that IS the cell — value, formula, number format, bg/font color, bold/italic, rotation, rich-text runs — lives on the `Cell` object in the matrix and travels with it: overwrite the cell and you overwrite all of it, one op. Everything that is bound to the grid *position* rather than the cell's content lives in an `"r_c"`-keyed map beside the matrix, with its own carry rules:
+
+| Property | Home | Why not on the cell |
+|---|---|---|
+| Borders | `config.borderInfo` | A border survives content deletion, and a cell op replaces the whole `Cell` — border-on-cell would make "A types a value, B draws a border" a whole-cell clobber. The side map keeps the two edits on different keys, which is what makes them converge (§ Yjs Sync) |
+| Merges | `config.merge` | Spans cells by definition |
+| Data validation | `sheet.dataVerification` | Rule outlives the value it validates |
+| Hyperlinks | `sheet.hyperlink` | Link outlives edits to the display text |
+| Row/col geometry | `config.rowlen` / `columnlen` / `rowhidden` / `colhidden` / `customHeight` / `customWidth` | Axis-keyed, not cell-keyed |
+
+Since N2 (2026-08-30) every `"r_c"` map is the same shape and shares the same machinery: `parseCellKey` (`packages/lib/src/sheets/borders.ts`) is the one key parser, `shiftCellKeyedForInsert/Delete` (`engine/rowcol.ts`) the one row/column re-keyer (borderInfo shifts in the engine with the other config collections; dataVerification and hyperlink through the same helper state-side), and `normalizeSheetConfig` materializes every config collection on every base. **`borderInfo` was the one exception until N2** — an append-only command log replayed at render time, whose order was semantic and could not converge; [SHEETS-TODO.md § N2](SHEETS-TODO.md) records the reshape.
+
+Two arrays remain, on purpose: `conditionalFormatRules` and `alternateFormatRules` are ordered because order IS the rule priority (Excel's model, exported as explicit xlsx priorities). They share a much smaller cousin of the old border defect — two clients appending a rule at the same moment can disagree about priority order, visible only where rules overlap — which belongs to the same same-slot family as concurrent same-cell edits; see [PROPOSAL_SHEETS_YJS_CONFIG.md](proposals/PROPOSAL_SHEETS_YJS_CONFIG.md).
 
 ## Mount-time Bootstrap
 
@@ -223,11 +258,27 @@ value in it fails the rule — why. Both render through one React card,
 ## Cell corner indicators
 
 Three marks can sit in a cell's corners: a comment (top-right), an invalid value and a forced string
-(top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one size,
-`CELL_INDICATOR_SIZE` — they used to be 11px, 5px and 6px of inline magic numbers, with the comment
-block copied verbatim between `nullCellRender` and `cellRender`. Unlike the tick box and the list
-chevron, no hit test reads this geometry, so it stays in the render module rather than the state one.
-Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
+(top-left). One painter, `drawCellIndicator` in `state/render/cells.ts`, and one geometry,
+`cellIndicatorRect` / `CELL_INDICATOR_SIZE` in `state/modules/cell-glyph.ts` — they used to be 11px, 5px
+and 6px of inline magic numbers, with the comment block copied verbatim between `nullCellRender` and
+`cellRender`. Colours are hardcoded light like every other canvas colour (RENDERING.md § Theming).
+
+## Cell glyphs outrank the drag handles
+
+The selection box carries two invisible DOM hit targets over the canvas — the drag-to-move band
+straddling its border and the fill handle's grab at its bottom-right corner (see the CSS pinned by
+`test/components/SheetOverlay/selection-hit-targets.test.ts`). A painted glyph in the same corner used to
+lose to them: a press on the list chevron at the fill corner started a fill drag, a press on a comment
+or invalid-value triangle under the band started a move. `cellGlyphAt` (`state/modules/cell-glyph.ts`)
+is the one predicate that says which glyph — `dropdown`, `checkbox`, `comment`, `invalid` — sits under a
+sheet-space point, from the same rects the painter draws (`dropdownChevronRect`, `checkboxRect`,
+`cellIndicatorRect`). Both handle mousedowns in `OverlayVisuals` ask `cellGlyphAtPointer` first and, on
+a hit, neither stop propagation nor start a drag: the press bubbles to the cell area, whose
+`handleCellAreaMouseDown` opens the list, toggles the box or selects the marked cell as it always did.
+The hover path (`updateCanvasHover` in `events/mouse-drag.ts`) writes the same answer to
+`context.cellGlyphHover`, which sets the cell area's cursor (pointer on a chevron or tick box) and, via
+`data-glyph-hover`, stands the handles' own `move`/`crosshair` cursors down so the affordance matches
+what a press will do. Row and column resize never compete — those handles live in the headers.
 
 ## Headless Formula Engine
 
@@ -296,8 +347,7 @@ never opened in an editor, and crash/race divergence between formula text and ca
 `recalcSheets` therefore fires only when `sheetsNeedRecalc` sees a sheet with `f` cells but no populated
 `calcChain`. The chain itself is never persisted (§ Snapshot format v2): for v2 snapshots the decoder
 seeds it exactly when the envelope says `computed: true` (every editor flush, every recalc-successful
-import), while legacy v1 snapshots still carry whatever chain the editor baked in — either way the gate
-sees the same signal it always keyed off. Any recalc failure falls back to the replayed
+import), so the gate sees the same signal it always keyed off. Any recalc failure falls back to the replayed
 stale-but-valid `Sheet[]` — an export must never 500 because recalc hiccuped. The xlsx importer
 (`import/sheets/transform.ts`, in the same Worker) also runs `recalcSheets` once at import and encodes
 with `computed: true`, so the read gate never fires for imported docs (a recalc-failed import encodes

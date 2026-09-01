@@ -314,6 +314,14 @@
     inset: var(--sheet-fill-grab-inner) -2px -2px var(--sheet-fill-grab-inner);
 }
 
+/* A painted cell glyph under the pointer outranks both handles — OverlayVisuals
+   leaves that press to the cell area — so their cursors stand down with it and
+   the cell area's own (pointer on a chevron or tick box) shows through. */
+.sheet-cell-area[data-glyph-hover] .sheet-cs-draghandle,
+.sheet-cell-area[data-glyph-hover] .sheet-cs-fillhandle {
+    cursor: inherit;
+}
+
 /* Invisible grab band for drag-to-move; the selection's own 1px border is the
    visual. Nothing is painted here, an empty box hit-tests all the same. */
 .sheet-cs-draghandle {

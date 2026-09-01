@@ -1,15 +1,13 @@
-import type {
-    BorderInfo,
-    CellBorderInfo,
-    DataVerificationRule,
-    MergeCell,
-    RangeBorderInfo,
-    SingleRange,
-} from '@workspace/lib/sheets';
+import type { MergeCell, SingleRange } from '@workspace/lib/sheets';
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
-import { type Context, updateContextWithSheetConfig } from '../context';
-import type { FilterEntry, FormulaCell, Sheet, SheetConfig } from '../types';
+import {
+    applySheetsDeleteRowCol,
+    applySheetsInsertRowCol,
+    shiftCellKeyedForDelete,
+    shiftCellKeyedForInsert,
+} from '../../engine/rowcol';
+import { type Context, getSheetConfig } from '../context';
+import type { FilterEntry, FormulaCell, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 
 type FilterObj = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
@@ -201,97 +199,9 @@ function shiftStateOnlyFieldsForInsert(
         }
     }
 
-    // Data validation config update — re-key entries without inspecting shape.
-    const { dataVerification } = file;
-    const newDataVerification: Record<string, DataVerificationRule> = {};
-    if (dataVerification != null) {
-        forEach(dataVerification, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = dataVerification[key];
-
-            if (type === 'row') {
-                if (index < r) {
-                    newDataVerification[`${r + count}_${c}`] = item;
-                } else if (index === r) {
-                    if (direction === 'lefttop') {
-                        newDataVerification[`${r + count}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r + i}_${c}`] = item;
-                        }
-                    } else {
-                        newDataVerification[`${r}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r + i + 1}_${c}`] = item;
-                        }
-                    }
-                } else {
-                    newDataVerification[`${r}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (index < c) {
-                    newDataVerification[`${r}_${c + count}`] = item;
-                } else if (index === c) {
-                    if (direction === 'lefttop') {
-                        newDataVerification[`${r}_${c + count}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r}_${c + i}`] = item;
-                        }
-                    } else {
-                        newDataVerification[`${r}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r}_${c + i + 1}`] = item;
-                        }
-                    }
-                } else {
-                    newDataVerification[`${r}_${c}`] = item;
-                }
-            }
-        });
-    }
-    file.dataVerification = newDataVerification;
-
-    // Hyperlink config update
-    const { hyperlink } = file;
-    const newHyperlink: Record<string, { linkType: string; linkAddress: string }> = {};
-    if (hyperlink != null) {
-        forEach(hyperlink, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = hyperlink[key];
-
-            if (type === 'row') {
-                if (index < r) {
-                    newHyperlink[`${r + count}_${c}`] = item;
-                } else if (index === r) {
-                    if (direction === 'lefttop') {
-                        newHyperlink[`${r + count}_${c}`] = item;
-                    } else {
-                        newHyperlink[`${r}_${c}`] = item;
-                    }
-                } else {
-                    newHyperlink[`${r}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (index < c) {
-                    newHyperlink[`${r}_${c + count}`] = item;
-                } else if (index === c) {
-                    if (direction === 'lefttop') {
-                        newHyperlink[`${r}_${c + count}`] = item;
-                    } else {
-                        newHyperlink[`${r}_${c}`] = item;
-                    }
-                } else {
-                    newHyperlink[`${r}_${c}`] = item;
-                }
-            }
-        });
-    }
-    file.hyperlink = newHyperlink;
+    // Inserted rows/columns clone the template's validation rules, not its hyperlinks.
+    file.dataVerification = shiftCellKeyedForInsert(file.dataVerification, type, index, count, direction, cloneDeep);
+    file.hyperlink = shiftCellKeyedForInsert(file.hyperlink, type, index, count, direction);
 }
 
 function shiftStateOnlyFieldsForDelete(
@@ -485,57 +395,8 @@ function shiftStateOnlyFieldsForDelete(
         }
     }
 
-    // Data validation config update — re-key entries on delete (mirror of insert).
-    const { dataVerification } = file;
-    const newDataVerification: Record<string, DataVerificationRule> = {};
-    if (dataVerification != null) {
-        forEach(dataVerification, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = dataVerification[key];
-
-            if (type === 'row') {
-                if (r < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newDataVerification[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (c < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newDataVerification[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
-    }
-    file.dataVerification = newDataVerification;
-
-    // Hyperlink config update
-    const { hyperlink } = file;
-    const newHyperlink: Record<string, { linkType: string; linkAddress: string }> = {};
-    if (hyperlink != null) {
-        forEach(hyperlink, (_v, key) => {
-            const r = Number(key.split('_')[0]);
-            const c = Number(key.split('_')[1]);
-            const item = hyperlink[key];
-
-            if (type === 'row') {
-                if (r < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newHyperlink[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === 'column') {
-                if (c < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newHyperlink[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
-    }
-    file.hyperlink = newHyperlink;
+    file.dataVerification = shiftCellKeyedForDelete(file.dataVerification, type, start, end);
+    file.hyperlink = shiftCellKeyedForDelete(file.hyperlink, type, start, end);
 }
 
 function adjustSelectionForInsert(
@@ -692,191 +553,6 @@ export function insertRowCol(
         }
     }
 
-    // Border config update
-    if (type === 'row') {
-        const cellBorderConfig: CellBorderInfo[] = [];
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const entry = cfg.borderInfo[i];
-
-                if (entry.rangeType === 'range') {
-                    const emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        let bd_r1 = entry.range[j].row[0];
-                        let bd_r2 = entry.range[j].row[1];
-
-                        if (direction === 'lefttop') {
-                            if (index <= bd_r1) {
-                                bd_r1 += count;
-                                bd_r2 += count;
-                            } else if (index <= bd_r2) {
-                                bd_r2 += count;
-                            }
-                        } else {
-                            if (index < bd_r1) {
-                                bd_r1 += count;
-                                bd_r2 += count;
-                            } else if (index < bd_r2) {
-                                bd_r2 += count;
-                            }
-                        }
-
-                        if (bd_r2 >= bd_r1) {
-                            emptyRange.push({
-                                row: [bd_r1, bd_r2],
-                                column: entry.range[j].column,
-                            });
-                        }
-                    }
-
-                    if (emptyRange.length > 0) {
-                        const bd_obj: RangeBorderInfo = {
-                            rangeType: 'range',
-                            borderType: entry.borderType,
-                            style: entry.style,
-                            color: entry.color,
-                            range: emptyRange,
-                        };
-
-                        borderInfo.push(bd_obj);
-                    }
-                } else {
-                    let { row_index } = entry.value;
-                    // Cache border config at the same position
-                    if (row_index === index) {
-                        cellBorderConfig.push(cloneDeep(entry));
-                    }
-
-                    if (direction === 'lefttop') {
-                        if (index <= row_index) {
-                            row_index += count;
-                        }
-                    } else {
-                        if (index < row_index) {
-                            row_index += count;
-                        }
-                    }
-
-                    entry.value.row_index = row_index;
-                    borderInfo.push(entry);
-                }
-            }
-
-            cfg.borderInfo = borderInfo;
-        }
-
-        // Copy cell-type borders for inserted rows
-        if (cellBorderConfig.length) {
-            for (let r = 0; r < count; r += 1) {
-                const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
-                for (const item of cellBorderConfigCopy) {
-                    if (direction === 'rightbottom') {
-                        // Insert below: increment from template row position
-                        item.value.row_index += r + 1;
-                    } else if (direction === 'lefttop') {
-                        // Insert above: target row shifts down, new rows inserted before it (increment from 0)
-                        item.value.row_index += r;
-                    }
-                }
-                cfg.borderInfo?.push(...cellBorderConfigCopy);
-            }
-        }
-    } else {
-        const cellBorderConfig: CellBorderInfo[] = [];
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const entry = cfg.borderInfo[i];
-
-                if (entry.rangeType === 'range') {
-                    const emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        let bd_c1 = entry.range[j].column[0];
-                        let bd_c2 = entry.range[j].column[1];
-
-                        if (direction === 'lefttop') {
-                            if (index <= bd_c1) {
-                                bd_c1 += count;
-                                bd_c2 += count;
-                            } else if (index <= bd_c2) {
-                                bd_c2 += count;
-                            }
-                        } else {
-                            if (index < bd_c1) {
-                                bd_c1 += count;
-                                bd_c2 += count;
-                            } else if (index < bd_c2) {
-                                bd_c2 += count;
-                            }
-                        }
-
-                        if (bd_c2 >= bd_c1) {
-                            emptyRange.push({
-                                row: entry.range[j].row,
-                                column: [bd_c1, bd_c2],
-                            });
-                        }
-                    }
-
-                    if (emptyRange.length > 0) {
-                        const bd_obj: RangeBorderInfo = {
-                            rangeType: 'range',
-                            borderType: entry.borderType,
-                            style: entry.style,
-                            color: entry.color,
-                            range: emptyRange,
-                        };
-
-                        borderInfo.push(bd_obj);
-                    }
-                } else {
-                    let { col_index } = entry.value;
-                    // Cache border config at the same position
-                    if (col_index === index) {
-                        cellBorderConfig.push(cloneDeep(entry));
-                    }
-
-                    if (direction === 'lefttop') {
-                        if (index <= col_index) {
-                            col_index += count;
-                        }
-                    } else {
-                        if (index < col_index) {
-                            col_index += count;
-                        }
-                    }
-
-                    entry.value.col_index = col_index;
-                    borderInfo.push(entry);
-                }
-            }
-
-            cfg.borderInfo = borderInfo;
-        }
-
-        // Copy cell-type borders for inserted columns
-        if (cellBorderConfig.length) {
-            for (let i = 0; i < count; i += 1) {
-                const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
-                for (const item of cellBorderConfigCopy) {
-                    if (direction === 'rightbottom') {
-                        // Insert right: increment from template column position
-                        item.value.col_index += i + 1;
-                    } else if (direction === 'lefttop') {
-                        // Insert left: target column shifts right, new columns inserted before it (increment from 0)
-                        item.value.col_index += i;
-                    }
-                }
-                cfg.borderInfo?.push(...cellBorderConfigCopy);
-            }
-        }
-    }
-
     file.alternateFormatRules = newAFarr;
     file.config = cfg;
 
@@ -886,7 +562,6 @@ export function insertRowCol(
     const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
 
-    if (id === ctx.currentSheetId) updateContextWithSheetConfig(ctx);
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
@@ -1012,121 +687,6 @@ export function deleteRowCol(
         }
     }
 
-    // Border config update
-    if (type === 'row') {
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const entry = cfg.borderInfo[i];
-
-                if (entry.rangeType === 'range') {
-                    const emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        let bd_r1 = entry.range[j].row[0];
-                        let bd_r2 = entry.range[j].row[1];
-
-                        for (let r = start; r <= end; r += 1) {
-                            if (r < entry.range[j].row[0]) {
-                                bd_r1 -= 1;
-                                bd_r2 -= 1;
-                            } else if (r <= entry.range[j].row[1]) {
-                                bd_r2 -= 1;
-                            }
-                        }
-
-                        if (bd_r2 >= bd_r1) {
-                            emptyRange.push({
-                                row: [bd_r1, bd_r2],
-                                column: entry.range[j].column,
-                            });
-                        }
-                    }
-
-                    if (emptyRange.length > 0) {
-                        const bd_obj: RangeBorderInfo = {
-                            rangeType: 'range',
-                            borderType: entry.borderType,
-                            style: entry.style,
-                            color: entry.color,
-                            range: emptyRange,
-                        };
-
-                        borderInfo.push(bd_obj);
-                    }
-                } else {
-                    const { row_index } = entry.value;
-
-                    if (row_index < start) {
-                        borderInfo.push(entry);
-                    } else if (row_index > end) {
-                        entry.value.row_index = row_index - (end - start + 1);
-                        borderInfo.push(entry);
-                    }
-                }
-            }
-
-            cfg.borderInfo = borderInfo;
-        }
-    } else {
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const entry = cfg.borderInfo[i];
-
-                if (entry.rangeType === 'range') {
-                    const emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        let bd_c1 = entry.range[j].column[0];
-                        let bd_c2 = entry.range[j].column[1];
-
-                        for (let c = start; c <= end; c += 1) {
-                            if (c < entry.range[j].column[0]) {
-                                bd_c1 -= 1;
-                                bd_c2 -= 1;
-                            } else if (c <= entry.range[j].column[1]) {
-                                bd_c2 -= 1;
-                            }
-                        }
-
-                        if (bd_c2 >= bd_c1) {
-                            emptyRange.push({
-                                row: entry.range[j].row,
-                                column: [bd_c1, bd_c2],
-                            });
-                        }
-                    }
-
-                    if (emptyRange.length > 0) {
-                        const bd_obj: RangeBorderInfo = {
-                            rangeType: 'range',
-                            borderType: entry.borderType,
-                            style: entry.style,
-                            color: entry.color,
-                            range: emptyRange,
-                        };
-
-                        borderInfo.push(bd_obj);
-                    }
-                } else {
-                    const { col_index } = entry.value;
-
-                    if (col_index < start) {
-                        borderInfo.push(entry);
-                    } else if (col_index > end) {
-                        entry.value.col_index = col_index - (end - start + 1);
-                        borderInfo.push(entry);
-                    }
-                }
-            }
-
-            cfg.borderInfo = borderInfo;
-        }
-    }
-
     file.alternateFormatRules = newAFarr;
     file.config = cfg;
 
@@ -1136,40 +696,14 @@ export function deleteRowCol(
     const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
 
-    if (id === ctx.currentSheetId) updateContextWithSheetConfig(ctx);
     ctx.formulaCache.formulaCellInfoMap = null;
-}
-
-// Compute cumulative row height array
-export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: SheetConfig) {
-    const rowlenArr = [];
-    let rh_height = 0;
-
-    for (let i = 0; i < rowHeight; i += 1) {
-        let rowlen = ctx.defaultrowlen;
-
-        if (cfg.rowlen != null && cfg.rowlen[i] != null) {
-            rowlen = cfg.rowlen[i];
-        }
-
-        if (cfg.rowhidden != null && cfg.rowhidden[i] != null) {
-            rowlen = cfg.rowhidden[i];
-            rowlenArr.push(rh_height);
-            continue;
-        } else {
-            rh_height += rowlen + 1;
-        }
-
-        rowlenArr.push(rh_height); // Cumulative row height distribution
-    }
-
-    return rowlenArr;
 }
 
 // Hide selected rows/columns
 export function hideSelected(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const cfg = (ctx.sheets[index].config ??= {});
     // Hide rows
     if (type === 'row') {
         /* TODO: Sheet protection check
@@ -1178,25 +712,12 @@ export function hideSelected(ctx: Context, type: string) {
         ) {
           return ;
         } */
-        const rowhidden = ctx.config.rowhidden ?? {};
-        const r1 = ctx.selections[0].row[0];
-        const r2 = ctx.selections[0].row[1];
+        const rowhidden = (cfg.rowhidden ??= {});
+        const [r1, r2] = ctx.selections[0].row;
         const rowhiddenNumber = r2;
         for (let r = r1; r <= r2; r += 1) {
             rowhidden[r] = 0;
         }
-        /* Undo/redo save. In Luckysheet this was done as follows, but in this project no extra handling is needed.
-          if(Store.clearjfundo){
-            let redo = {};
-            redo["type"] = "showHidRows";
-            redo["sheetIndex"] = Store.currentSheetIndex;
-            redo["config"] = $.extend(true, {}, Store.config);
-            redo["curconfig"] = cfg;
-
-            Store.jfundo.length  = 0;
-            Store.jfredo.push(redo);
-        } */
-        ctx.config.rowhidden = rowhidden;
         const rowLen = ctx.sheets[index].data!.length;
         const isEndRow =
             rowLen - 1 === rowhiddenNumber ||
@@ -1210,14 +731,13 @@ export function hideSelected(ctx: Context, type: string) {
         }
     } else if (type === 'column') {
         // Hide columns
-        const colhidden = ctx.config.colhidden ?? {};
+        const colhidden = (cfg.colhidden ??= {});
         const c1 = ctx.selections[0].column[0];
         const c2 = ctx.selections[0].column[1];
         const colhiddenNumber = c2;
         for (let c = c1; c <= c2; c += 1) {
             colhidden[c] = 0;
         }
-        ctx.config.colhidden = colhidden;
         const columnLen = ctx.sheets[index].data![0].length;
         // Check if the column to hide is the last column
         const isEndColumn =
@@ -1231,55 +751,48 @@ export function hideSelected(ctx: Context, type: string) {
             ctx.selections[0].column[1] += 1;
         }
     }
-    ctx.sheets[index].config = ctx.config;
     return '';
 }
 
 // Show (unhide) selected rows/columns
 export function showSelected(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    // Unhide rows
-    if (type === 'row') {
-        const rowhidden = ctx.config.rowhidden ?? {};
-        const r1 = ctx.selections[0].row[0];
-        const r2 = ctx.selections[0].row[1];
+    // Unhiding cannot create hidden state, so it must not seed the map: on a sheet with
+    // nothing hidden that would ship an op to peers and take an undo entry for a no-op.
+    const cfg = getSheetConfig(ctx);
+    if (type === 'row' && cfg?.rowhidden) {
+        const [r1, r2] = ctx.selections[0].row;
         for (let r = r1; r <= r2; r += 1) {
-            delete rowhidden[r];
+            delete cfg.rowhidden[r];
         }
-        ctx.config.rowhidden = rowhidden;
-    } else if (type === 'column') {
-        // Unhide columns
-        const colhidden = ctx.config.colhidden ?? {};
-        const c1 = ctx.selections[0].column[0];
-        const c2 = ctx.selections[0].column[1];
+    } else if (type === 'column' && cfg?.colhidden) {
+        const [c1, c2] = ctx.selections[0].column;
         for (let c = c1; c <= c2; c += 1) {
-            delete colhidden[c];
+            delete cfg.colhidden[c];
         }
-        ctx.config.colhidden = colhidden;
     }
-    ctx.sheets[index].config = ctx.config;
     return '';
 }
 
 // Check if the current selection is on a hidden row/column
 export function isShowHidenCR(ctx: Context): boolean {
-    if (!ctx.selections || (!ctx.config.colhidden && !ctx.config.rowhidden)) return false;
+    const cfg = getSheetConfig(ctx);
+    if (!ctx.selections || (!cfg?.colhidden && !cfg?.rowhidden)) return false;
     // If the current selection is on a hidden row/column, it is not editable
-    if (ctx.config.colhidden && size(ctx.config.colhidden) >= 1) {
+    if (cfg?.colhidden && size(cfg.colhidden) >= 1) {
         const ctxColumn = ctx.selections[0]?.column?.[0];
         const isHidenColumn =
-            Object.keys(ctx.config.colhidden).findIndex((o) => {
+            Object.keys(cfg.colhidden).findIndex((o) => {
                 return ctxColumn === parseInt(o, 10);
             }) >= 0;
         if (isHidenColumn) {
             return true;
         }
     }
-    if (ctx.config.rowhidden && size(ctx.config.rowhidden) >= 1) {
+    if (cfg?.rowhidden && size(cfg.rowhidden) >= 1) {
         const ctxRow = ctx.selections[0]?.row?.[0];
         const isHidenRow =
-            Object.keys(ctx.config.rowhidden).findIndex((o) => {
+            Object.keys(cfg.rowhidden).findIndex((o) => {
                 return ctxRow === parseInt(o, 10);
             }) >= 0;
         if (isHidenRow) {
@@ -1294,8 +807,9 @@ export function hideCRCount(ctx: Context, type: string): number {
     let count = 1;
     if (!ctx.selections) return 0;
     const section = ctx.selections[0];
-    const rowhidden = ctx.config.rowhidden ?? {};
-    const colhidden = ctx.config.colhidden ?? {};
+    const cfg = getSheetConfig(ctx);
+    const rowhidden = cfg?.rowhidden ?? {};
+    const colhidden = cfg?.colhidden ?? {};
     if (type === 'ArrowUp' || type === 'ArrowDown') {
         const rowArr = Object.keys(rowhidden);
         if (type === 'ArrowUp') {

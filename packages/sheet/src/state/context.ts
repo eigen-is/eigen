@@ -1,8 +1,8 @@
 import { isNil, sortBy } from 'es-toolkit/compat';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from '../engine/defaults';
 import type { Cell, CellMatrix } from '../engine/types';
-import type { SheetConfig } from '.';
 import { FormulaCache } from './modules';
+import type { CellGlyph } from './modules/cell-glyph';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
@@ -19,6 +19,7 @@ import type {
     SearchHighlight,
     Selection,
     Sheet,
+    SingleRange,
 } from './types';
 import { getSheetIndex } from './utils';
 
@@ -82,8 +83,6 @@ export type Context = {
 
     currentSheetId: string;
     calculateSheetId: string;
-    // Derived mirror of the current sheet's config — never write one half alone; use editableConfig.
-    config: SheetConfig;
 
     visibledatarow: number[];
     visibledatacolumn: number[];
@@ -119,13 +118,13 @@ export type Context = {
             scrollTop: number;
             selectionActive: boolean;
             selections: Sheet['selections'];
-            formulaRangeSelections: Sheet['formulaRangeSelections'];
+            formulaRangeSelections: SingleRange[];
         }
     >;
 
     selectionActive: boolean;
     selections: Sheet['selections'];
-    formulaRangeSelections: Sheet['formulaRangeSelections'];
+    formulaRangeSelections: SingleRange[];
     formulaRangeHighlight: ({
         rangeIndex: number;
         backgroundColor: string;
@@ -148,6 +147,8 @@ export type Context = {
     filter: Record<string, FilterEntry>;
     // Transient hover column for the canvas-drawn filter buttons.
     filterButtonHover?: number;
+    // Transient hover for the painted cell glyphs (list chevron, tick box, corner marks).
+    cellGlyphHover?: CellGlyph;
 
     sheetTabDragging: boolean;
     sheetTabDragData: unknown[];
@@ -225,7 +226,6 @@ export function defaultContext(refs: RefValues): Context {
 
         currentSheetId: '',
         calculateSheetId: '',
-        config: {},
         // warning dialog
         warnDialog: undefined,
         currency: '€',
@@ -383,18 +383,29 @@ export function getFlowdata(ctx?: Context, id?: string | null) {
     return ctx.sheets?.[i]?.data;
 }
 
+export function getSheetConfig(ctx?: Context, id?: string | null) {
+    if (!ctx) return undefined;
+    const i = getSheetIndex(ctx, id || ctx.currentSheetId);
+    if (isNil(i)) {
+        return undefined;
+    }
+    return ctx.sheets?.[i]?.config;
+}
+
 function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
+    const cfg = getSheetConfig(ctx);
+
     ctx.visibledatarow = [];
     ctx.rh_height = 0;
 
     for (let r = 0; r < rowCount; r += 1) {
         let rowlen: number | string = ctx.defaultrowlen;
 
-        if (ctx.config.rowlen?.[r]) {
-            rowlen = ctx.config?.rowlen?.[r];
+        if (cfg?.rowlen?.[r]) {
+            rowlen = cfg.rowlen[r];
         }
 
-        if (ctx.config?.rowhidden?.[r] != null) {
+        if (cfg?.rowhidden?.[r] != null) {
             ctx.visibledatarow.push(ctx.rh_height);
             continue;
         }
@@ -415,27 +426,16 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
     for (let c = 0; c < colCount; c += 1) {
         let firstcolumnlen: number | string = ctx.defaultcollen;
 
-        if (ctx.config?.columnlen?.[c]) {
-            firstcolumnlen = ctx.config.columnlen[c];
-        } else {
-            if (flowdata?.[0]?.[c]) {
-                if (firstcolumnlen > 300) {
-                    firstcolumnlen = 300;
-                } else if (firstcolumnlen < ctx.defaultcollen) {
-                    firstcolumnlen = ctx.defaultcollen;
-                }
-
-                if (firstcolumnlen !== ctx.defaultcollen) {
-                    if (!ctx.config?.columnlen) {
-                        ctx.config.columnlen = {};
-                    }
-
-                    ctx.config.columnlen[c] = firstcolumnlen;
-                }
-            }
+        if (cfg?.columnlen?.[c]) {
+            firstcolumnlen = cfg.columnlen[c];
+        } else if (flowdata?.[0]?.[c] && firstcolumnlen > 300) {
+            // Clamp a very wide imported default column width for layout only. This is a
+            // geometry recompute — persisting the clamp would ship an op and take an undo
+            // entry from a render pass, on every client independently.
+            firstcolumnlen = 300;
         }
 
-        if (ctx.config?.colhidden?.[c] != null) {
+        if (cfg?.colhidden?.[c] != null) {
             ctx.visibledatacolumn.push(ctx.ch_width);
             continue;
         }
@@ -489,29 +489,6 @@ export function initSheetIndex(ctx: Context) {
             break;
         }
     }
-}
-
-// ctx.config mirrors the current sheet's config, and every geometry read goes through
-// the mirror (calcRowColSize above, the Sheet recompute effect). Patches applied from
-// outside the Workbook seeding effect — undo, redo, a peer's op — only write the sheet,
-// so re-point the mirror at it or the grid keeps painting the old sizes.
-export function updateContextWithSheetConfig(ctx: Context) {
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-    ctx.config = ctx.sheets[index].config ?? {};
-}
-
-// The one way to write a sheet's config. The returned draft must be the one reached through
-// `sheets[i]`: immer attributes a shared child's patches to whichever root key it reaches first,
-// and `sheets` precedes `config` in Context, so writing through the mirror instead emits one
-// `['sheets', i, 'config']` replace of the whole object — last-writer-wins on the wire and in undo,
-// where the granular paths would have merged. The mirror is re-pointed at the same draft so the
-// renderer, which reads `ctx.config`, sees the writes.
-export function editableConfig(ctx: Context, sheet: Sheet): SheetConfig {
-    const cfg = sheet.config ?? {};
-    sheet.config = cfg;
-    if (sheet.id === ctx.currentSheetId) ctx.config = cfg;
-    return cfg;
 }
 
 export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {

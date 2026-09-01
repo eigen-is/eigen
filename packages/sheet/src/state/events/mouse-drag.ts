@@ -10,6 +10,7 @@ import {
     rangeDrag,
 } from '../modules';
 import { mergeMoveMain } from '../modules/cell';
+import { type CellGlyph, cellGlyphAt } from '../modules/cell-glyph';
 import { onDropCellSelect, onDropCellSelectEnd } from '../modules/drop-cell';
 import { getFilterButtonAtPosition } from '../modules/filter';
 import { handleFormulaInput } from '../modules/formula-editor';
@@ -343,29 +344,28 @@ function mouseRender(
 // Exported handlers
 // ---------------------------------------------------------------------------
 
-// Track which canvas-drawn filter button the pointer is over; written only on
-// change so idle mousemoves stay redraw-free. The matching pointer cursor and
-// hover fill read ctx.filterButtonHover.
-function updateFilterButtonHover(ctx: Context, globalCache: GlobalCache, e: MouseEvent, scrollEl: HTMLDivElement) {
-    const setHover = (col: number | undefined) => {
+// Track which canvas-drawn affordance the pointer is over — a filter button, a
+// cell glyph; written only on change so idle mousemoves stay redraw-free. The
+// cursor reads both (SheetOverlay), the filter hover fill ctx.filterButtonHover;
+// a hovered glyph also stands the drag handles' cursors down, since a press on
+// it goes to the cell, not the handle (cellGlyphAtPointer).
+function updateCanvasHover(ctx: Context, globalCache: GlobalCache, e: MouseEvent, scrollEl: HTMLDivElement) {
+    const setHover = (col: number | undefined, glyph: CellGlyph | undefined) => {
         if (ctx.filterButtonHover !== col) ctx.filterButtonHover = col;
+        if (ctx.cellGlyphHover !== glyph) ctx.cellGlyphHover = glyph;
     };
-    if (ctx.filterOptions == null) {
-        setHover(undefined);
-        return;
-    }
     const rect = scrollEl.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;
     const mouseY = e.pageY - rect.top - window.scrollY;
     // Document-level listener: outside the cell area the scroll-shifted sheet
     // coordinates below would be meaningless and could phantom-hit a button.
     if (mouseX < 0 || mouseY < 0 || mouseX >= rect.width || mouseY >= rect.height) {
-        setHover(undefined);
+        setHover(undefined, undefined);
         return;
     }
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
     const { x, y } = fixPositionOnFrozenCells(freeze, mouseX + ctx.scrollLeft, mouseY + ctx.scrollTop, mouseX, mouseY);
-    setHover(getFilterButtonAtPosition(ctx, x, y)?.col);
+    setHover(ctx.filterOptions == null ? undefined : getFilterButtonAtPosition(ctx, x, y)?.col, cellGlyphAt(ctx, x, y));
 }
 
 export function handleOverlayMouseMove(
@@ -381,7 +381,7 @@ export function handleOverlayMouseMove(
     onCellsMove(ctx, globalCache, e, scrollEl, container);
 
     if (!ctx.selectionActive && !ctx.scrolling) {
-        updateFilterButtonHover(ctx, globalCache, e, scrollEl);
+        updateCanvasHover(ctx, globalCache, e, scrollEl);
     }
 
     if (
@@ -455,63 +455,41 @@ export function handleOverlayMouseUp(
         const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
         const winH = rect.height;
 
-        let delta = y + 3 - ctx.rowsResizeStart[0];
+        // Movement is the difference of two page coordinates, so it needs no element, no
+        // scroll and no offset — mousedown and mouseup measure from different elements.
+        let delta = e.pageY - ctx.rowsResizeStart[0];
 
-        if (y >= winH - 20 + scrollTop) {
-            delta = winH - 20 - ctx.rowsResizeStart[0] + scrollTop;
-        }
+        // Don't let the row boundary be dragged past the bottom of the view.
+        const maxY = winH - 20 + scrollTop;
+        if (y > maxY) delta -= y - maxY;
 
-        const cfg = ctx.config;
-        if (cfg.rowlen == null) {
-            cfg.rowlen = {};
-        }
-
-        if (cfg.customHeight == null) {
-            cfg.customHeight = {};
-        }
-
-        let size = ctx.defaultrowlen;
-
-        if (ctx.visibledatarow[ctx.rowsResizeStart[1]] != null) {
-            size = ctx.visibledatarow[ctx.rowsResizeStart[1]] - (ctx.visibledatarow[ctx.rowsResizeStart[1] - 1] || 0);
-        }
-
-        size += delta;
-
-        if (size < 10) {
-            size = 10;
-        }
-
-        cfg.customHeight[ctx.rowsResizeStart[1]] = 1;
-
-        const changeRowIndex = ctx.rowsResizeStart[1];
-        let changeRowSelected = false;
-        if ((ctx.selections?.length ?? 0) > 0) {
-            ctx.selections
-                ?.filter((select) => select.row_select)
-                ?.some((select) => {
-                    if (changeRowIndex >= select.row[0] && changeRowIndex <= select.row[1]) {
-                        changeRowSelected = true;
-                    }
-                    return changeRowSelected;
-                });
-        }
-        if (changeRowSelected) {
-            cfg.rowlen ||= {};
-            for (const select of ctx.selections?.filter((select) => select.row_select) ?? []) {
-                for (let r = select.row[0]; r <= select.row[1]; r += 1) {
-                    cfg.rowlen![r] = Math.ceil(size);
-                }
-            }
-        } else {
-            cfg.rowlen[ctx.rowsResizeStart[1]] = Math.ceil(size);
-        }
-
-        // config
-        ctx.config = cfg;
+        // No movement is a click, not a resize: skip the write (a stray boundary click must not
+        // ship an op or take an undo step), but let the rest of mouseup run — a freeze-drag end
+        // below shares this handler and a bare `return` here would swallow it.
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
-        ctx.sheets[idx].config = ctx.config;
+        if (delta !== 0 && idx != null) {
+            const row = ctx.rowsResizeStart[1];
+            // Read the stored height directly; visibledatarow carries the +1px row separator.
+            const rowlen = ctx.sheets[idx].config?.rowlen;
+            const size = Math.max((rowlen?.[row] || ctx.defaultrowlen) + delta, 10);
+
+            const cfg = (ctx.sheets[idx].config ??= {});
+            cfg.rowlen ??= {};
+            cfg.customHeight ??= {};
+            cfg.customHeight[row] = 1;
+
+            // Dragging one boundary resizes every selected row, not just the one grabbed.
+            const rowSelects = ctx.selections?.filter((select) => select.row_select) ?? [];
+            if (rowSelects.some((s) => row >= s.row[0] && row <= s.row[1])) {
+                for (const select of rowSelects) {
+                    for (let r = select.row[0]; r <= select.row[1]; r += 1) {
+                        cfg.rowlen[r] = Math.ceil(size);
+                    }
+                }
+            } else {
+                cfg.rowlen[row] = Math.ceil(size);
+            }
+        }
     }
 
     // Change column width
@@ -522,65 +500,37 @@ export function handleOverlayMouseUp(
         const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
         const winW = rect.width;
 
-        let delta = x + 3 - ctx.colsResizeStart[0];
+        // Same as the row axis: page coordinates, so no element or offset is involved.
+        let delta = e.pageX - ctx.colsResizeStart[0];
 
-        if (x >= winW - 100 + scrollLeft) {
-            delta = winW - 100 - ctx.colsResizeStart[0] + scrollLeft;
-        }
+        // Don't let the column boundary be dragged past the right edge of the view.
+        const maxX = winW - 100 + scrollLeft;
+        if (x > maxX) delta -= x - maxX;
 
-        const cfg = ctx.config;
-        if (cfg.columnlen == null) {
-            cfg.columnlen = {};
-        }
-
-        if (cfg.customWidth == null) {
-            cfg.customWidth = {};
-        }
-
-        let firstcolumnlen = ctx.defaultcollen;
-        if (ctx.config.columnlen != null && ctx.config.columnlen[ctx.colsResizeStart[1]] != null) {
-            firstcolumnlen = ctx.config.columnlen[ctx.colsResizeStart[1]];
-        }
-
-        let size = (cfg.columnlen[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta;
-
-        if (Math.abs(size - firstcolumnlen) < 3) {
-            return;
-        }
-        if (size < 10) {
-            size = 10;
-        }
-
-        cfg.customWidth[ctx.colsResizeStart[1]] = 1;
-
-        const changeColumnIndex = ctx.colsResizeStart[1];
-        let changeColumnSelected = false;
-        if ((ctx.selections?.length ?? 0) > 0) {
-            ctx.selections
-                ?.filter((select) => select.column_select)
-                ?.some((select) => {
-                    if (changeColumnIndex >= select.column[0] && changeColumnIndex <= select.column[1]) {
-                        changeColumnSelected = true;
-                    }
-                    return changeColumnSelected;
-                });
-        }
-        if (changeColumnSelected) {
-            cfg.columnlen ||= {};
-            for (const select of ctx.selections?.filter((select) => select.column_select) ?? []) {
-                for (let r = select.column[0]; r <= select.column[1]; r += 1) {
-                    cfg.columnlen![r] = Math.ceil(size);
-                }
-            }
-        } else {
-            cfg.columnlen[ctx.colsResizeStart[1]] = Math.ceil(size);
-        }
-
-        // config
-        ctx.config = cfg;
+        // No movement is a click, not a resize — see the row axis above.
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
-        if (idx == null) return;
-        ctx.sheets[idx].config = ctx.config;
+        if (delta !== 0 && idx != null) {
+            const columnlen = ctx.sheets[idx].config?.columnlen;
+            const size = Math.max((columnlen?.[ctx.colsResizeStart[1]] || ctx.defaultcollen) + delta, 10);
+
+            const cfg = (ctx.sheets[idx].config ??= {});
+            cfg.columnlen ??= {};
+            cfg.customWidth ??= {};
+            cfg.customWidth[ctx.colsResizeStart[1]] = 1;
+
+            // Dragging one boundary resizes every selected column, not just the one grabbed.
+            const changeColumnIndex = ctx.colsResizeStart[1];
+            const columnSelects = ctx.selections?.filter((select) => select.column_select) ?? [];
+            if (columnSelects.some((s) => changeColumnIndex >= s.column[0] && changeColumnIndex <= s.column[1])) {
+                for (const select of columnSelects) {
+                    for (let c = select.column[0]; c <= select.column[1]; c += 1) {
+                        cfg.columnlen[c] = Math.ceil(size);
+                    }
+                }
+            } else {
+                cfg.columnlen[changeColumnIndex] = Math.ceil(size);
+            }
+        }
     }
 
     // Column freeze drag end

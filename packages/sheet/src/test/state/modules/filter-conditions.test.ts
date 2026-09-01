@@ -259,7 +259,6 @@ describe('saveFilter with a condition', () => {
         const hidden = getFilterConditionHiddenRows(ctx, 0, 0, 4, 0, byCondition);
         saveFilter(ctx, true, hidden, byCondition, 0, 4, 0, 0, 1);
 
-        expect(ctx.config.rowhidden).toEqual({ 1: 0, 4: 0 });
         expect(ctx.sheets[0].config?.rowhidden).toEqual({ 1: 0, 4: 0 });
         expect(ctx.filter[0]?.byCondition).toEqual(byCondition);
         expect(ctx.sheets[0].filter?.[0]?.byCondition).toEqual(byCondition);
@@ -274,7 +273,7 @@ describe('saveFilter with a condition', () => {
         const hidden = getFilterConditionHiddenRows(ctx, 0, 0, 4, 0, byCondition);
         saveFilter(ctx, true, hidden, byCondition, 0, 4, 0, 0, 1);
 
-        expect(ctx.config.rowhidden).toEqual({ 1: 0, 3: 0, 4: 0 });
+        expect(ctx.sheets[0].config?.rowhidden).toEqual({ 1: 0, 3: 0, 4: 0 });
         expect(ctx.sheets[0].filter?.[1]?.byCondition).toBeUndefined();
         expect(ctx.sheets[0].filter?.[0]?.byCondition).toEqual(byCondition);
     });
@@ -286,7 +285,7 @@ describe('saveFilter with a condition', () => {
         saveFilter(ctx, true, hidden, byCondition, 0, 4, 0, 0, 1);
 
         clearFilter(ctx);
-        expect(ctx.config.rowhidden).toEqual({});
+        expect(ctx.sheets[0].config?.rowhidden).toEqual({});
         expect(ctx.filter).toEqual({});
         expect(ctx.sheets[0].filter).toBeUndefined();
     });

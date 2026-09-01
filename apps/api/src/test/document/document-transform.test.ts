@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { decodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
 import type { ImageObject, TextObject } from '@workspace/lib/slides';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
@@ -242,7 +242,7 @@ describe('document transform (eigensheets preview)', () => {
                     ],
                 },
             ];
-            doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
 
             // Default read (the export path) attempts recalc and falls back.
             const fromDoc = readSheetsFromDoc(doc);
@@ -276,7 +276,7 @@ describe('document transform (eigensheets preview)', () => {
                 celldata: [{ r: 0, c: 0, v: { v: huge, m: huge, ct: { fa: 'General', t: 'g' } } }],
             },
         ];
-        doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+        doc.getMap('state').set('snapshot', encodeSheetsSnapshot(sheets, { computed: false }));
 
         const { body, warnings } = renderEigensheetsPreviewBody(doc);
         expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);

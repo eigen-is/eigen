@@ -1,7 +1,7 @@
-import { cloneDeep, find, flatten, omit, reduce, size } from 'es-toolkit/compat';
+import { cloneDeep, find, flatten, reduce, size } from 'es-toolkit/compat';
 import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { en } from '../locale/en';
 import type { FilterCondition, FilterConditionName, Selection } from '../types';
 import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
@@ -176,10 +176,11 @@ export function createFilterOptions(
         items: [] as { col: number; left: number; top: number }[],
     };
 
+    const colhidden = getSheetConfig(ctx)?.colhidden;
     for (let c = c1; c <= c2; c += 1) {
         // A hidden column is zero-width, so its button rect coincides with the previous visible
         // column's — and the last-match hit-test would hand it every click on that shared rect.
-        if (ctx.config?.colhidden?.[c] != null) {
+        if (colhidden?.[c] != null) {
             continue;
         }
 
@@ -206,15 +207,19 @@ export function clearFilter(ctx: Context) {
     if (!allowEdit) return;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const hiddenRows = reduce(ctx.filter, (pre, curr) => Object.assign(pre, curr?.rowhidden || {}), {});
-    ctx.config.rowhidden = omit(ctx.config.rowhidden, Object.keys(hiddenRows));
     ctx.filterRange = undefined;
     ctx.filterOptions = undefined;
     ctx.filterContextMenu = undefined;
     ctx.filter = {};
     if (sheetIndex != null) {
+        // Delete in place: `omit` returns a fresh object, so assigning it replaced the whole
+        // rowhidden map on the wire even when the filter had hidden nothing.
+        const rowhidden = ctx.sheets[sheetIndex].config?.rowhidden;
+        if (rowhidden) {
+            for (const r of Object.keys(hiddenRows)) delete rowhidden[r];
+        }
         ctx.sheets[sheetIndex].filter = undefined;
         ctx.sheets[sheetIndex].filterRange = undefined;
-        ctx.sheets[sheetIndex].config = cloneDeep(ctx.config);
     }
 }
 
@@ -626,6 +631,7 @@ export function getFilterColumnColors(ctx: Context, col: number, startRow: numbe
     const cf_compute = getComputeMap(ctx);
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return { bgColors: [], fcColors: [] };
+    const rowhidden = getSheetConfig(ctx)?.rowhidden || {};
 
     for (let r = startRow + 1; r <= endRow; r += 1) {
         const cell = flowdata[r][col];
@@ -665,7 +671,7 @@ export function getFilterColumnColors(ctx: Context, col: number, startRow: numbe
             }
         }
 
-        const isRowHidden = r in (ctx.config?.rowhidden || {});
+        const isRowHidden = r in rowhidden;
         const bgData = bgMap.get(bg);
         if (bgData != null) {
             bgData.rows.push(r);
@@ -707,13 +713,16 @@ export function saveFilter(
 
     labelFilterOptionState(ctx, optionState, hiddenRows, byCondition, st_r, ed_r, cindex, st_c, ed_c, true);
 
-    const cfg = cloneDeep(ctx.config);
-    cfg.rowhidden = rowHiddenAll;
-
-    ctx.config = cfg;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) {
         return;
     }
-    ctx.sheets[sheetIndex].config = cfg;
+    // Reconcile in place rather than assigning `rowHiddenAll`: a fresh object replaces the
+    // whole rowhidden map on the wire, so applying a filter would clobber a peer's manual
+    // row hide. Same reasoning as clearFilter above.
+    const rowhidden = ((ctx.sheets[sheetIndex].config ??= {}).rowhidden ??= {});
+    for (const r of Object.keys(rowhidden)) {
+        if (!(r in rowHiddenAll)) delete rowhidden[r];
+    }
+    Object.assign(rowhidden, rowHiddenAll);
 }

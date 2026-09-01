@@ -2,7 +2,8 @@
 // checkbox, data bar, text and grid lines. Text layout itself lives in
 // modules/text.ts.
 
-import { normalizedAttr } from '../modules/cell';
+import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
+import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
 import {
     type CellGlyphRect,
@@ -23,40 +24,29 @@ import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
 import { defaultStyle } from './types';
 
-// Unlike the engine's stricter isRealNum, this accepts anything Number() can
-// coerce (null, '', booleans); it only gates the forced-string indicator.
-function coercesToNumber(val: unknown) {
-    return !Number.isNaN(Number(val));
-}
-
 // Data-verification tick box. Hardcoded light like every other canvas color —
 // the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
 // § Theming) — and grey rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
 
-// Corner indicators: a comment top-right, an invalid value or a forced string
-// top-left. One size for all three so they read as one family of marks — they
-// used to be 11px, 5px and 6px. No hit test anywhere reads these, so unlike
-// the tick box and the list chevron the geometry stays here with the painter.
-export const CELL_INDICATOR_SIZE = 11;
 // One red for both attention marks: the invalid-value triangle, and the comment
 // triangle's fallback when its card carries no colour of its own.
 const INDICATOR_RED = '#FC6666';
 const FORCED_STRING_INDICATOR_COLOR = '#487f1e';
 
-// A right-angled triangle in the cell's top-left or top-right corner, anchored
-// on the corner itself: one leg along the top edge, one down the side.
+// A right-angled triangle filling half of its cellIndicatorRect, anchored on
+// the cell corner: one leg along the top edge, one down the side.
 export function drawCellIndicator(
     renderCtx: CanvasRenderingContext2D,
     corner: 'left' | 'right',
-    x: number,
-    y: number,
+    rect: CellGlyphRect,
     color: string,
 ) {
+    const x = corner === 'left' ? rect.x : rect.x + rect.size;
     renderCtx.beginPath();
-    renderCtx.moveTo(x, y);
-    renderCtx.lineTo(corner === 'left' ? x + CELL_INDICATOR_SIZE : x - CELL_INDICATOR_SIZE, y);
-    renderCtx.lineTo(x, y + CELL_INDICATOR_SIZE);
+    renderCtx.moveTo(x, rect.y);
+    renderCtx.lineTo(corner === 'left' ? x + rect.size : x - rect.size, rect.y);
+    renderCtx.lineTo(x, rect.y + rect.size);
     renderCtx.fillStyle = color;
     renderCtx.fill();
     renderCtx.closePath();
@@ -68,7 +58,7 @@ function drawCommentIndicator(pass: RenderPass, r: number, c: number, startY: nu
     const { renderCtx, sheetCtx, offsetLeft, offsetTop } = pass;
     const commentInfo = sheetCtx.hooks.getCommentInfo?.(r, c);
     const color = commentInfo?.indicatorColor ?? commentInfo?.card.color ?? INDICATOR_RED;
-    drawCellIndicator(renderCtx, 'right', endX + offsetLeft - 1, startY + offsetTop, color);
+    drawCellIndicator(renderCtx, 'right', cellIndicatorRect('right', 0, startY + offsetTop, endX + offsetLeft), color);
 }
 
 function drawTickBox(renderCtx: CanvasRenderingContext2D, rect: CellGlyphRect, checked: boolean) {
@@ -339,7 +329,12 @@ export function cellRender(
 
     // Invalid-value indicator (red triangle top-left)
     if (rule && !validateCellData(sheetCtx, rule, value)) {
-        drawCellIndicator(renderCtx, 'left', startX + offsetLeft - 1, startY + offsetTop, INDICATOR_RED);
+        drawCellIndicator(
+            renderCtx,
+            'left',
+            cellIndicatorRect('left', startX + offsetLeft, startY + offsetTop, 0),
+            INDICATOR_RED,
+        );
     }
 
     // Comment indicator triangle
@@ -348,12 +343,11 @@ export function cellRender(
     }
 
     // Forced-string indicator (green triangle top-left)
-    if (cell?.qp === 1 && coercesToNumber(cell?.v)) {
+    if (isForcedStringNumber(cell)) {
         drawCellIndicator(
             renderCtx,
             'left',
-            startX + offsetLeft - 1,
-            startY + offsetTop,
+            cellIndicatorRect('left', startX + offsetLeft, startY + offsetTop, 0),
             FORCED_STRING_INDICATOR_COLOR,
         );
     }

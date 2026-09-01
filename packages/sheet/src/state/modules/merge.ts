@@ -1,5 +1,5 @@
 import { cloneDeep, isEmpty } from 'es-toolkit/compat';
-import { type Context, editableConfig } from '../context';
+import type { Context } from '../context';
 import type { Cell, CellMatrix, MergeCell, Range } from '../types';
 import { getSheetIndex } from '../utils';
 import { isInlineStringCT } from './inline-string';
@@ -43,7 +43,7 @@ export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: s
 
     const sheet = ctx.sheets[idx];
 
-    const cfg = editableConfig(ctx, sheet);
+    const cfg = (sheet.config ??= {});
     if (cfg.merge == null) {
         cfg.merge = {};
     }

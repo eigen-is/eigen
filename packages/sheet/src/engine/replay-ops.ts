@@ -4,6 +4,11 @@ import { applyPatches, enablePatches } from 'immer';
 import { celldataToData, dataToCelldata } from './celldata';
 import { DEFAULT_SHEET_COLUMN_COUNT, DEFAULT_SHEET_ROW_COUNT } from './defaults';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from './rowcol';
+import { normalizeSheetConfig } from './sheet-config';
+
+// normalizeSheetConfig lives in the sheet-config leaf so defaults.ts can use it without cycling;
+// re-exported here because most callers reach it through the replay module.
+export { normalizeSheetConfig };
 
 // immer's patch plugin is a global, idempotent enable. Calling here means any
 // consumer of replaySheetsOps gets it transitively without a separate bootstrap.
@@ -46,7 +51,14 @@ function asSheet(v: unknown): Sheet | null {
 // through unchanged. The editor (initSheetData) expands sheets without a
 // usable row/column to the default grid, so replay must materialize the same
 // grid — ops were recorded against it, and a smaller base makes patches
-// beyond the celldata extent fail to resolve.
+// beyond the celldata extent fail to resolve. The config-collection normalization
+// that the same reasoning demands lives in `./sheet-config` (normalizeSheetConfig).
+function withNormalizedConfig(s: Sheet): Sheet {
+    const next = { ...s, config: { ...s.config } };
+    normalizeSheetConfig(next);
+    return next;
+}
+
 export function withMaterializedData(s: Sheet): Sheet {
     if (s.data) return s;
     const row = s.row != null && s.row > 0 ? s.row : DEFAULT_SHEET_ROW_COUNT;
@@ -86,7 +98,9 @@ function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
 }
 
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
-    let result = sheets;
+    // Every base sheet carries its config collections before a single op is applied, so the
+    // granular config patches the editor emits resolve here as well as they do in the editor.
+    let result = sheets.map(withNormalizedConfig);
     for (const batch of opBatches) {
         // One poisoned batch must never make the whole doc unreadable: on an
         // unexpected failure, roll back to the pre-batch state, warn, and keep
@@ -107,7 +121,7 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                         console.warn('[sheets] addSheet op has malformed value', op.value);
                         continue;
                     }
-                    result = [...result, newSheet];
+                    result = [...result, withNormalizedConfig(newSheet)];
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = result.filter((s) => s.id !== op.id);
                 } else if (op.op === 'insertRowCol' && op.id) {

@@ -92,7 +92,7 @@ export function FxEditor() {
                 refs.globalCache.doNotFocus = true;
             });
         }
-    }, [context.config, context.selections, context.sheets, context.currentSheetId, refs.globalCache, setContext]);
+    }, [context.selections, context.sheets, context.currentSheetId, refs.globalCache, setContext]);
 
     const formulaAutocomplete = useFormulaAutocomplete({ targetRef: refs.fxInput, enabled: focused });
 
@@ -212,7 +212,7 @@ export function FxEditor() {
             return false;
         }
         return true;
-    }, [context.config, context.selections, context.sheets, context.currentSheetId, isHidenRC]);
+    }, [context.selections, context.sheets, context.currentSheetId, isHidenRC]);
 
     return (
         // eigen-paper: the formula bar reads like the grid — light in dark mode too (globals.css)

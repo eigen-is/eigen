@@ -128,6 +128,13 @@ function additionalCellOps(
     return cellOps;
 }
 
+// `Sheet` fields that are per-client UI state and must never reach a peer. Both places that
+// decide what goes on the wire — filterPatch and sheetMetadataOps — read this one list, so a
+// new per-client field is a single decision rather than a leak through whichever of the two
+// was not updated. Typed against `keyof Sheet` so a field that is renamed or deleted fails
+// the build instead of silently no longer matching.
+const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['selections']);
+
 // The row/col reducers replace the whole target sheet object, so immer hands us a
 // single sheet-sized replace patch instead of granular ones. Shipping that patch
 // copies the entire sheet (its `data` matrix above all) into every collab update —
@@ -159,23 +166,17 @@ function sheetMetadataOps(ctx: Context, id: string, includeCalcChain: boolean): 
     const sheet = ctx.sheets[index];
     const metaOps: Op[] = [];
     for (const field of Object.keys(sheet) as (keyof Sheet)[]) {
-        if (field === 'data' || field === 'selections') continue;
+        if (field === 'data' || PER_CLIENT_SHEET_FIELDS.has(field)) continue;
         if (field === 'calcChain' && !includeCalcChain) continue;
         metaOps.push({ op: 'replace', id, path: [field], value: sheet[field] });
     }
     return metaOps;
 }
 
-// `ctx.config` is a derived mirror of the current sheet's config, so only the `sheets[*]` half
-// belongs on the wire: a top-level `['config', …]` patch would reach patchToOp with no sheet id
-// and poison the collab stream. Config writers go through editableConfig, which hands back the
-// draft reached through `sheets[i]` — immer attributes a shared child's patches to whichever root
-// key it reaches first, and `sheets` precedes `config` in the Context, so the granular
-// `['sheets', i, 'config', …]` patch this filter keeps is the one that gets emitted. The dropped
-// mirror patch is re-derived instead: handleUndo/handleRedo/applyOp call
-// updateContextWithSheetConfig after applying patches.
+// Only `sheets[*]` belongs on the wire — the rest of the Context is per-client UI state
+// (scroll position, hover, dialogs) that patchToOp could not give a sheet id anyway.
 export function filterPatch(patches: Patch[]) {
-    return patches.filter((p) => p.path[0] === 'sheets' && p.path[2] !== 'selections');
+    return patches.filter((p) => p.path[0] === 'sheets' && !PER_CLIENT_SHEET_FIELDS.has(p.path[2]));
 }
 
 export function patchToOp(ctx: Context, patches: Patch[], options?: PatchOptions, undo: boolean = false): Op[] {

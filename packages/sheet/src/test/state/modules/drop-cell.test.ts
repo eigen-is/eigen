@@ -11,7 +11,7 @@ import { describe, expect, it } from 'bun:test';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { autoFillCell } from '../../../state/api/cell';
 import type { Context } from '../../../state/context';
-import type { BorderInfo, Cell, DataVerificationRule, SheetConfig, SingleRange } from '../../../state/types';
+import type { Cell, DataVerificationRule, SingleRange } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
 
@@ -105,43 +105,56 @@ describe('drag-fill keeps the number format in every direction', () => {
 });
 
 // The fill also carries the source cell's borders. updateDropCell built those entries on a
-// cloneDeep of ctx.config and dropped the clone on the floor — the carried borders reached
-// neither the mirror the renderer paints from nor the sheet half that syncs, so dragging a
-// bordered cell produced no border at all. Driven through produceWithPatches so the two
-// halves are the independent drafts they are in the app, not one aliased object.
+// cloneDeep of the config and dropped the clone on the floor, so dragging a bordered cell
+// produced no border at all. Driven through produceWithPatches so a write that never lands
+// on the sheet shows up as a missing entry rather than an aliased one.
 describe('drag-fill carries the source cell borders', () => {
     const SIDE = { style: 1, color: '#000' };
-    const sourceBorder: BorderInfo = {
-        rangeType: 'cell',
-        value: { row_index: 0, col_index: 0, l: SIDE, r: SIDE, t: SIDE, b: SIDE },
-    };
+    const sourceBorder = { l: SIDE, r: SIDE, t: SIDE, b: SIDE };
 
-    // The Workbook seeding effect assigns `draftCtx.config = sheet.config`, so the mirror and
-    // the sheet's config start as the same object — reproduce that, not two clones.
     function borderedContext(): Context {
-        const config: SheetConfig = { borderInfo: [sourceBorder] };
         const src: SingleRange = { row: [0, 0], column: [0, 0] };
         const ctx = makeCtx((d) => {
             d[0][0] = { v: 1, m: '1', ct: { fa: 'General', t: 'n' } };
         }, src);
-        ctx.config = config;
-        ctx.sheets[0].config = config;
+        ctx.sheets[0].config = { borderInfo: { '0_0': sourceBorder } };
         return ctx;
     }
 
-    function borderedCells(config: SheetConfig | undefined) {
-        return (config?.borderInfo ?? [])
-            .filter((entry) => entry.rangeType === 'cell')
-            .map((entry) => `${entry.value.row_index}_${entry.value.col_index}`);
-    }
-
-    it('lands the carried border on both halves of the config mirror', () => {
+    it('lands the carried border on the sheet config', () => {
         const [filled] = produceWithPatches(borderedContext(), (ctx: Context) => {
             autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
         });
 
-        expect(borderedCells(filled.sheets[0].config)).toEqual(['0_0', '1_0']);
-        expect(borderedCells(filled.config)).toEqual(['0_0', '1_0']);
+        expect(filled.sheets[0].config!.borderInfo).toEqual({ '0_0': sourceBorder, '1_0': sourceBorder });
+    });
+
+    it('a hidden source row is filled with its border, like its value', () => {
+        const src: SingleRange = { row: [0, 1], column: [0, 0] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = { v: 'a', m: 'a' };
+            d[1][0] = { v: 'b', m: 'b' };
+        }, src);
+        ctx.sheets[0].config = { rowhidden: { 1: 0 }, borderInfo: { '1_0': sourceBorder } };
+        const [filled] = produceWithPatches(ctx, (draft: Context) => {
+            autoFillCell(draft, src, { row: [2, 3], column: [0, 0] }, 'down');
+        });
+
+        expect(filled.sheets[0].data![3][0]?.v).toBe('b');
+        expect(filled.sheets[0].config!.borderInfo).toEqual({ '1_0': sourceBorder, '3_0': sourceBorder });
+    });
+
+    it('clears a filled cell whose source has no border', () => {
+        const src: SingleRange = { row: [0, 0], column: [0, 0] };
+        const ctx = makeCtx((d) => {
+            d[0][0] = { v: 1, m: '1', ct: { fa: 'General', t: 'n' } };
+        }, src);
+        ctx.sheets[0].config = { borderInfo: { '1_0': sourceBorder } };
+        const [filled] = produceWithPatches(ctx, (draft: Context) => {
+            autoFillCell(draft, { row: [0, 0], column: [0, 0] }, { row: [1, 1], column: [0, 0] }, 'down');
+        });
+
+        expect(filled.sheets[0].config!.borderInfo).toEqual({});
     });
 });
 

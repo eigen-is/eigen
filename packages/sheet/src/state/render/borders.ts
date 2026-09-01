@@ -1,38 +1,30 @@
 // Cell borders from config.borderInfo, drawn over the finished cells.
 
-import { BORDER_STYLE_NAMES, getBorderInfoComputeRange } from '../modules/border';
+import { BORDER_STYLES, parseCellKey } from '@workspace/lib/sheets';
+import { getSheetConfig } from '../context';
+import { getBorderInfoCompute } from '../modules/border';
 import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
 
+// Fallback paint for an unknown border ordinal: a plain 1px solid line.
+const DEFAULT_DASH = { dash: [0], lineWidth: 1 };
+
 function setLineDash(
     canvasborder: CanvasRenderingContext2D,
-    type: number | string,
+    type: number,
     hv: string,
     moveX: number,
     moveY: number,
     toX: number,
     toY: number,
 ) {
-    const typeName = BORDER_STYLE_NAMES[type.toString()] ?? '';
-
-    if (typeName === 'Hair') {
-        canvasborder.setLineDash([1, 2]);
-    } else if (typeName.includes('DashDotDot')) {
-        canvasborder.setLineDash([2, 2, 5, 2, 2]);
-    } else if (typeName.includes('DashDot')) {
-        canvasborder.setLineDash([2, 5, 2]);
-    } else if (typeName.includes('Dotted')) {
-        canvasborder.setLineDash([2]);
-    } else if (typeName.includes('Dashed')) {
-        canvasborder.setLineDash([3]);
-    } else {
-        canvasborder.setLineDash([0]);
-    }
-
+    const { dash, lineWidth } = BORDER_STYLES[type] ?? DEFAULT_DASH;
+    canvasborder.setLineDash(dash);
     canvasborder.beginPath();
 
-    if (typeName.includes('Medium')) {
+    // `medium` (lineWidth 2) nudges the stroke half a pixel across its own axis for a crisp line.
+    if (lineWidth === 2) {
         if (hv === 'h') {
             canvasborder.moveTo(moveX, moveY - 0.5);
             canvasborder.lineTo(toX, toY - 0.5);
@@ -40,24 +32,16 @@ function setLineDash(
             canvasborder.moveTo(moveX - 0.5, moveY);
             canvasborder.lineTo(toX - 0.5, toY);
         }
-
-        canvasborder.lineWidth = 2;
-    } else if (typeName === 'Thick') {
-        canvasborder.moveTo(moveX, moveY);
-        canvasborder.lineTo(toX, toY);
-        canvasborder.lineWidth = 3;
     } else {
         canvasborder.moveTo(moveX, moveY);
         canvasborder.lineTo(toX, toY);
-        canvasborder.lineWidth = 1;
     }
+    canvasborder.lineWidth = lineWidth;
 }
 
 export function drawCellBorders(pass: RenderPass) {
     const { sheetCtx } = pass;
-    if ((sheetCtx.config?.borderInfo?.length ?? 0) === 0) {
-        return;
-    }
+    const cfg = getSheetConfig(sheetCtx);
 
     const {
         renderCtx,
@@ -72,7 +56,7 @@ export function drawCellBorders(pass: RenderPass) {
     } = pass;
 
     const renderBorder = (
-        style: number | string,
+        style: number,
         color: string,
         dir: string,
         moveX: number,
@@ -88,18 +72,16 @@ export function drawCellBorders(pass: RenderPass) {
         renderCtx.restore();
     };
 
-    const borderInfoCompute = getBorderInfoComputeRange(sheetCtx, rowStart, rowEnd, colStart, colEnd);
+    const borderInfoCompute = getBorderInfoCompute(sheetCtx, sheetCtx.currentSheetId, [
+        rowStart,
+        rowEnd,
+        colStart,
+        colEnd,
+    ]);
 
     for (const [x, bdInfo] of Object.entries(borderInfoCompute)) {
-        const sepIdx = x.indexOf('_');
-        const bdRow = Number(x.substring(0, sepIdx));
-        const bdCol = Number(x.substring(sepIdx + 1));
-
-        // Same membership the per-pass rect map used to pin: inside the pass's
-        // visible range (the compute already clamps to it) and not hidden —
-        // hidden rows/columns never produced a cell rect.
-        if (bdRow < rowStart || bdRow > rowEnd || bdCol < colStart || bdCol > colEnd) continue;
-        if (sheetCtx.config?.rowhidden?.[bdRow] != null || sheetCtx.config?.colhidden?.[bdCol] != null) continue;
+        const [bdRow, bdCol] = parseCellKey(x);
+        if (cfg?.rowhidden?.[bdRow] != null || cfg?.colhidden?.[bdCol] != null) continue;
 
         const startY = rowStartY(sheetCtx.visibledatarow, bdRow, scrollHeight);
         const startX = colStartX(sheetCtx.visibledatacolumn, bdCol, scrollWidth);
@@ -116,7 +98,7 @@ export function drawCellBorders(pass: RenderPass) {
         const notOverflowOrFirst = !overflowInfo.colIn || overflowInfo.stc === bdCol;
 
         if (bdInfo.s && notOverflowOrFirst) {
-            const mergeMap = sheetCtx.config.merge;
+            const mergeMap = cfg?.merge;
             const mergeCell = mergeMap?.[x];
             let slashEndX = rightX;
             let slashEndY = bottomY;
@@ -133,7 +115,17 @@ export function drawCellBorders(pass: RenderPass) {
             renderBorder(bdInfo.l.style, bdInfo.l.color, 'v', leftX, topY - 1, leftX, bottomY);
         }
 
-        if (bdInfo.r && (!overflowInfo.colIn || overflowInfo.colLast)) {
+        // Two neighbours can each declare the shared edge (A1.r vs B1.l) with different styles —
+        // common after xlsx import. Both paint the same pixel line, so the last stroke wins, and
+        // forEachInRect's walk mode (row-major vs key order) flips which is last as the viewport
+        // changes — the edge changes color on zoom. Deterministic rule: the higher-index
+        // neighbour's facing side wins, so skip this cell's right/bottom when the neighbour past
+        // it declares its opposite (its left/top).
+        if (
+            bdInfo.r &&
+            (!overflowInfo.colIn || overflowInfo.colLast) &&
+            !borderInfoCompute[`${bdRow}_${bdCol + 1}`]?.l
+        ) {
             renderBorder(bdInfo.r.style, bdInfo.r.color, 'v', rightX, topY - 1, rightX, bottomY);
         }
 
@@ -142,7 +134,7 @@ export function drawCellBorders(pass: RenderPass) {
             renderBorder(bdInfo.t.style, bdInfo.t.color, 'h', leftX, tY, rightX, tY);
         }
 
-        if (bdInfo.b) {
+        if (bdInfo.b && !borderInfoCompute[`${bdRow + 1}_${bdCol}`]?.t) {
             renderBorder(bdInfo.b.style, bdInfo.b.color, 'h', leftX, bottomY, rightX, bottomY);
         }
     }

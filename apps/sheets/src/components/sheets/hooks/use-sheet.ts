@@ -5,14 +5,6 @@ import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 
-// selections is a per-client cursor — the ops path already drops it (filterPatch)
-// and the snapshot encoder never writes it. Reads still strip, to heal legacy
-// snapshots that already carry one (which showed phantom stats-bar values for an
-// invisible selection on open).
-function stripSelections(sheets: Sheet[]): Sheet[] {
-    return sheets.map(({ selections: _selections, ...sheet }) => sheet);
-}
-
 export function useSheet(
     ownerId: string,
     mountId: string,
@@ -21,11 +13,49 @@ export function useSheet(
 ) {
     const [initialData, setInitialData] = useState<Sheet[] | null>(null);
     const [snapshotVersion, setSnapshotVersion] = useState(0);
+    // The workbook shows the defaults fallback; the consumer renders it read-only and says so.
+    const [loadFailed, setLoadFailed] = useState(false);
 
     const isLocalOpRef = useRef(false);
     const isLocalSnapshotRef = useRef(false);
     const readyForOpsRef = useRef(false);
+    // Same fact for the callbacks: a fallback workbook must never be flushed over state.snapshot.
+    const loadedRef = useRef(false);
     const latestDataRef = useRef<Sheet[] | null>(null);
+
+    // Decodes state.snapshot with the pending ops replayed on top (browser A flushes while B
+    // has unflushed local ops: B's edits survive the Yjs merge and must be reapplied). A failure
+    // disarms persistence: what this client shows must never be flushed over a snapshot it
+    // could not read — and the doc must still open, a throw escaping the Yjs handler kills the app.
+    // Returns whether the on-screen view was (re)seeded, so the mid-session caller knows whether
+    // to remount. `keepViewOnFailure` distinguishes the two failure paths: the initial load shows
+    // the blank defaults fallback (nothing on screen yet); a peer's undecodable mid-session flush
+    // keeps the populated workbook already on screen — replacing it with defaults would wipe the
+    // user's view — and only arms the read-only lock + banner.
+    const loadSnapshot = (doc: Y.Doc, keepViewOnFailure = false): boolean => {
+        const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
+        const pending = doc.getArray('ops').toArray() as Op[][];
+        let data = createDefaultSheets();
+        let loaded = true;
+        try {
+            if (snapshot) data = decodeSheetsSnapshot(snapshot);
+            if (pending.length > 0) data = replaySheetsOps(data, pending);
+        } catch (e) {
+            loaded = false;
+            console.error('[sheet] Failed to load the snapshot, opening read-only without persistence:', e);
+        }
+        // Read-only lock either way: local state may now diverge from the truth on the wire, so
+        // writes must stop (loadedRef gates flushSnapshot + handleOp; loadFailed gates allowEdit).
+        loadedRef.current = loaded;
+        // The read-only lock plus a persistent in-editor banner (editor.tsx, gated on loadFailed)
+        // surface the failure. A toast was wrong here: it dismissed on click, leaving a blank
+        // read-only sheet indistinguishable from data loss.
+        setLoadFailed(!loaded);
+        if (!loaded && keepViewOnFailure) return false;
+        latestDataRef.current = data;
+        setInitialData(data);
+        return true;
+    };
 
     // useCollabDoc owns the doc/provider lifecycle; sheets layers its op-log + snapshot protocol on
     // top via onInit/onSync. No UndoManager — the sheet engine's own op stack owns undo. The op-log
@@ -37,6 +67,7 @@ export function useSheet(
         pathId,
         onInit: ({ doc }) => {
             readyForOpsRef.current = false;
+            loadedRef.current = false;
             latestDataRef.current = null;
 
             const stateMap = doc.getMap('state');
@@ -44,7 +75,7 @@ export function useSheet(
 
             const flushSnapshot = () => {
                 const data = latestDataRef.current;
-                if (!data) return;
+                if (!loadedRef.current || !data) return;
                 let json: string;
                 try {
                     // computed: true — the client recomputes dependents inside the op-emitting produce.
@@ -89,21 +120,9 @@ export function useSheet(
                     isLocalSnapshotRef.current = false;
                     return;
                 }
-                const snapshot = stateMap.get('snapshot') as string | undefined;
-                if (!snapshot) return;
-                try {
-                    // Replay any pending ops on top of the remote snapshot. When browser
-                    // A flushes while B has unflushed local ops, B's edits survive Yjs
-                    // merge and must be reapplied here or they're lost on next render.
-                    const initial = stripSelections(decodeSheetsSnapshot(snapshot));
-                    const pending = opsArray.toArray() as Op[][];
-                    const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
-                    latestDataRef.current = data;
-                    setInitialData(data);
-                    setSnapshotVersion((v) => v + 1);
-                } catch (e) {
-                    console.error('[sheet] Failed to apply remote snapshot:', e);
-                }
+                // Mid-session: a decodable flush reseeds initialData and remounts the workbook to
+                // it; an undecodable one keeps the current view (no remount) and only locks it.
+                if (loadSnapshot(doc, true)) setSnapshotVersion((v) => v + 1);
             };
             stateMap.observe(handleState);
 
@@ -122,31 +141,7 @@ export function useSheet(
         },
         onSync: ({ doc }, isSynced) => {
             if (!isSynced) return;
-            const stateMap = doc.getMap('state');
-            const opsArray = doc.getArray('ops');
-            const snapshot = stateMap.get('snapshot') as string | undefined;
-            let initial: Sheet[] = createDefaultSheets();
-            if (snapshot) {
-                try {
-                    initial = stripSelections(decodeSheetsSnapshot(snapshot));
-                } catch (e) {
-                    console.warn('[sheet] Failed to parse initial snapshot, falling back to defaults:', e);
-                }
-            }
-            const pending = opsArray.toArray() as Op[][];
-            let data = initial;
-            if (pending.length > 0) {
-                // The doc must still open if the pending ops can't be replayed —
-                // fall back to the snapshot (or defaults) rather than letting the
-                // throw escape the Yjs sync handler and kill the app.
-                try {
-                    data = replaySheetsOps(initial, pending);
-                } catch (e) {
-                    console.error('[sheet] Failed to replay pending ops, opening without them:', e);
-                }
-            }
-            latestDataRef.current = data;
-            setInitialData(data);
+            loadSnapshot(doc);
             readyForOpsRef.current = true;
         },
     });
@@ -154,7 +149,8 @@ export function useSheet(
     const handleOp = useCallback(
         (ops: Op[]) => {
             const doc = docRef.current;
-            if (!doc || ops.length === 0) return;
+            // Same gate as flushSnapshot: ops built against the fallback workbook must not reach peers.
+            if (!doc || !loadedRef.current || ops.length === 0) return;
             isLocalOpRef.current = true;
             try {
                 doc.transact(() => {
@@ -175,6 +171,7 @@ export function useSheet(
     return {
         initialData,
         snapshotVersion,
+        loadFailed,
         synced,
         handleOp,
         onDataChange,

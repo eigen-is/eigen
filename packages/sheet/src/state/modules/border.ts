@@ -1,852 +1,160 @@
-import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
-import type { Cell, CellMatrix } from '../../engine/types';
-import { type Context, getFlowdata } from '../context';
-import type { SheetConfig } from '../types';
+import {
+    type BorderSide,
+    type BorderType,
+    type CellBorderSides,
+    cloneSides,
+    forEachInRect,
+    type MergeCell,
+    mergeEdgeSides,
+} from '@workspace/lib/sheets';
+import type { Context } from '../context';
+import type { Selection, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-// Resolved per-cell border map keyed by `${row}_${col}`. Each side may be:
-//   undefined → no border ever set on this side
-//   null      → border explicitly cleared (preserved across serialize)
-//   BorderSide→ active border
-// Producers (paste/dropCell/moveCells/selection) write entries back into
-// `CellBorderInfo.value` whose sides are typed the same way, so the shapes
-// line up without per-call coercion.
-export type ComputedBorderEntry = {
-    s?: BorderSide | null;
-    l?: BorderSide | null;
-    r?: BorderSide | null;
-    t?: BorderSide | null;
-    b?: BorderSide | null;
-};
-export type ComputedBorderMap = Record<string, ComputedBorderEntry>;
+type BorderSideKey = keyof CellBorderSides;
 
-// The xlsx border-style ordinal → style name; consumed by the canvas border
-// pass (dash pattern / line width) and the copy-as-HTML serializer.
-export const BORDER_STYLE_NAMES: Record<string, string> = {
-    '0': 'none',
-    '1': 'Thin',
-    '2': 'Hair',
-    '3': 'Dotted',
-    '4': 'Dashed',
-    '5': 'DashDot',
-    '6': 'DashDotDot',
-    '7': 'Double',
-    '8': 'Medium',
-    '9': 'MediumDashed',
-    '10': 'MediumDashDot',
-    '11': 'MediumDashDotDot',
-    '12': 'SlantedDashDot',
-    '13': 'Thick',
-};
-
-type BorderSideKey = keyof ComputedBorderEntry;
-type PropagableSide = 'l' | 'r' | 't' | 'b';
-
-// Ensure `${r}_${c}` has an entry, creating it (empty) only on first touch — same
-// `=== undefined` guard the branches used inline, so key insertion order is
-// unchanged.
-function ensureEntry(map: ComputedBorderMap, r: number, c: number): ComputedBorderEntry {
-    const key = `${r}_${c}`;
-    let entry = map[key];
-    if (entry === undefined) {
-        entry = {};
-        map[key] = entry;
-    }
-    return entry;
-}
-
-// Stamp one side of (r, c) with a fresh border object (the branches always wrote a
-// new `{ color, style }` literal, never a shared reference — preserved here).
-function setSide(
-    map: ComputedBorderMap,
-    r: number,
-    c: number,
-    side: BorderSideKey,
-    color: string,
-    style: number,
-): void {
-    ensureEntry(map, r, c)[side] = { color, style };
-}
-
-// Merge-aware neighbour geometry. A border on `side` of the source cell also lands
-// on the OPPOSITE side of the adjacent cell across that side. When that neighbour is
-// merged, only the merge edge that touches the source may receive it.
-const NEIGHBOUR: Record<
-    PropagableSide,
-    {
-        opposite: PropagableSide;
-        dr: number;
-        dc: number;
-        inBounds: (data: CellMatrix, r: number, c: number) => boolean;
-        onMergeEdge: (mc: MergeCell, r: number, c: number) => boolean;
-    }
-> = {
-    l: {
-        opposite: 'r',
-        dr: 0,
-        dc: -1,
-        inBounds: (_d, _r, c) => c >= 0,
-        onMergeEdge: (mc, _r, c) => mc.c + mc.cs - 1 === c,
-    },
-    r: { opposite: 'l', dr: 0, dc: 1, inBounds: (d, _r, c) => c < d[0].length, onMergeEdge: (mc, _r, c) => mc.c === c },
-    t: { opposite: 'b', dr: -1, dc: 0, inBounds: (_d, r) => r >= 0, onMergeEdge: (mc, r) => mc.r + mc.rs - 1 === r },
-    b: { opposite: 't', dr: 1, dc: 0, inBounds: (d, r) => r < d.length, onMergeEdge: (mc, r) => mc.r === r },
-};
-
-// Propagate a border across `side` to the merge-aware neighbour. Only writes when
-// that neighbour entry already exists — every original propagation block guarded on
-// the neighbour key being present, so this never creates keys.
-function propagateToNeighbour(
-    map: ComputedBorderMap,
-    data: CellMatrix,
-    merge: Record<string, MergeCell> | undefined,
-    r: number,
-    c: number,
-    side: PropagableSide,
-    color: string,
-    style: number,
-): void {
-    const dir = NEIGHBOUR[side];
-    const nr = r + dir.dr;
-    const nc = c + dir.dc;
-    if (!dir.inBounds(data, nr, nc)) return;
-
-    const entry = map[`${nr}_${nc}`];
-    if (!entry) return;
-
-    const neighbourCell = data[nr]?.[nc];
-    if (isPlainObject(neighbourCell) && !isNil(neighbourCell?.mc)) {
-        const mc = merge?.[`${neighbourCell?.mc?.r}_${neighbourCell?.mc?.c}`];
-        if (mc && dir.onMergeEdge(mc, nr, nc)) {
-            entry[dir.opposite] = { color, style };
-        }
-    } else {
-        entry[dir.opposite] = { color, style };
-    }
-}
-
-export function getBorderInfoComputeRange(
+// A cell's sides as every reader sees them: a merged constituent shows only the sides on the
+// merge's outer edge (storage stays raw so an unmerge shows them again), the diagonal is the
+// master's. Hidden rows and columns are kept — a carry must still move their borders; the
+// painter skips them itself.
+export function getBorderInfoCompute(
     ctx: Context,
-    dataset_row_st: number,
-    dataset_row_ed: number,
-    dataset_col_st: number,
-    dataset_col_ed: number,
-    sheetId?: string,
-): ComputedBorderMap {
-    const borderInfoCompute: ComputedBorderMap = {};
-    const flowdata = getFlowdata(ctx);
+    sheetId: string,
+    range: [rowSt: number, rowEd: number, colSt: number, colEd: number],
+): Record<string, CellBorderSides> {
+    const computed: Record<string, CellBorderSides> = {};
+    const index = getSheetIndex(ctx, sheetId);
+    if (index == null) return computed;
+    const { config: cfg, data } = ctx.sheets[index];
+    const map = cfg?.borderInfo;
+    if (!map || !data) return computed;
 
-    let cfg: SheetConfig | undefined;
-    let data: CellMatrix | null | undefined;
-    if (!sheetId) {
-        cfg = ctx.config;
-        data = flowdata;
-    } else {
-        const index = getSheetIndex(ctx, sheetId);
-        if (isNil(index)) return borderInfoCompute;
-        cfg = ctx.sheets[index].config;
-        data = ctx.sheets[index].data;
-    }
-    if (!data || !cfg) return borderInfoCompute;
+    forEachInRect(map, ...range, (key, r, c) => {
+        const anchor = data[r]?.[c]?.mc;
+        const mc: MergeCell | undefined = anchor && cfg.merge?.[`${anchor.r}_${anchor.c}`];
+        const sides = mc ? mergeEdgeSides(map[key], mc, r, c) : map[key];
+        if (sides) computed[key] = sides;
+    });
+    return computed;
+}
 
-    const borderInfo = cfg.borderInfo ?? [];
+function removeSide(map: Record<string, CellBorderSides>, r: number, c: number, key: BorderSideKey) {
+    const entry = map[`${r}_${c}`];
+    if (!entry) return;
+    delete entry[key];
+    if (Object.keys(entry).length === 0) delete map[`${r}_${c}`];
+}
 
-    if (isEmpty(borderInfo)) return borderInfoCompute;
+// Mirror of removeSide: overrides one side of an EXISTING neighbour entry, never creating one.
+function overrideSide(
+    map: Record<string, CellBorderSides>,
+    r: number,
+    c: number,
+    key: BorderSideKey,
+    side: BorderSide,
+) {
+    const entry = map[`${r}_${c}`];
+    if (entry) entry[key] = { style: side.style, color: side.color };
+}
 
-    // Hoisted once: recomputing Object.keys(cfg.merge) per bordered row/column
-    // made every border pass O(rows x merges).
-    const mergeCells = Object.values(cfg.merge || {});
+// Carries a source cell's computed sides onto a destination cell (paste, fill, move,
+// format painter): a source without sides clears the destination, so a plain cell
+// pasted over a bordered one leaves it plain.
+export function carrySides(map: Record<string, CellBorderSides>, r: number, c: number, sides?: CellBorderSides) {
+    if (sides) map[`${r}_${c}`] = cloneSides(sides);
+    else delete map[`${r}_${c}`];
+}
 
-    for (let i = 0; i < borderInfo.length; i += 1) {
-        const entry = borderInfo[i];
+export function clearSides(
+    map: Record<string, CellBorderSides> | undefined,
+    rowSt: number,
+    rowEd: number,
+    colSt: number,
+    colEd: number,
+) {
+    if (map) forEachInRect(map, rowSt, rowEd, colSt, colEd, (key) => delete map[key]);
+}
 
-        if (entry.rangeType === 'range') {
-            const { borderType, color: borderColor, range: borderRange } = entry;
-            // RangeBorderInfo.style is `number | string` (toolbar pushes '1'..'13'
-            // as strings); coerce to number here so ComputedBorderEntry sides
-            // match the canonical BorderSide shape end-to-end.
-            const borderStyle = typeof entry.style === 'string' ? Number(entry.style) : entry.style;
-
-            for (let j = 0; j < borderRange.length; j += 1) {
-                let bd_r1 = borderRange[j].row[0];
-                let bd_r2 = borderRange[j].row[1];
-                let bd_c1 = borderRange[j].column[0];
-                let bd_c2 = borderRange[j].column[1];
-
-                if (bd_r1 < dataset_row_st) {
-                    bd_r1 = dataset_row_st;
-                }
-
-                if (bd_r2 > dataset_row_ed) {
-                    bd_r2 = dataset_row_ed;
-                }
-
-                if (bd_c1 < dataset_col_st) {
-                    bd_c1 = dataset_col_st;
-                }
-
-                if (bd_c2 > dataset_col_ed) {
-                    bd_c2 = dataset_col_ed;
-                }
-
-                if (borderType === 'border-slash') {
-                    const bd_r = borderRange[j].row_focus;
-                    const bd_c = borderRange[j].column_focus;
-                    if (bd_r == null || bd_c == null) continue;
-                    if (cfg.rowhidden?.[bd_r] != null) continue;
-                    if (bd_c < dataset_col_st || bd_c > dataset_col_ed) continue;
-                    if (bd_r < dataset_row_st || bd_r > dataset_row_ed) continue;
-                    setSide(borderInfoCompute, bd_r, bd_c, 's', borderColor, borderStyle);
-                }
-                if (borderType === 'border-left') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        setSide(borderInfoCompute, bd_r, bd_c1, 'l', borderColor, borderStyle);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c1,
-                            'l',
-                            borderColor,
-                            borderStyle,
-                        );
-
-                        for (const { c, r, cs, rs } of mergeCells) {
-                            if (bd_c1 <= c + cs - 1 && bd_c1 > c && bd_r >= r && bd_r <= r + rs - 1) {
-                                borderInfoCompute[`${bd_r}_${bd_c1}`].l = null;
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-right') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        setSide(borderInfoCompute, bd_r, bd_c2, 'r', borderColor, borderStyle);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c2,
-                            'r',
-                            borderColor,
-                            borderStyle,
-                        );
-
-                        for (const { c, r, cs, rs } of mergeCells) {
-                            if (bd_c2 < c + cs - 1 && bd_c2 >= c && bd_r >= r && bd_r <= r + rs - 1) {
-                                borderInfoCompute[`${bd_r}_${bd_c2}`].r = null;
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-top') {
-                    if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r1])) {
-                        continue;
-                    }
-
-                    for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                        setSide(borderInfoCompute, bd_r1, bd_c, 't', borderColor, borderStyle);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r1,
-                            bd_c,
-                            't',
-                            borderColor,
-                            borderStyle,
-                        );
-
-                        for (const { c, r, cs, rs } of mergeCells) {
-                            if (bd_r1 <= r + rs - 1 && bd_r1 > r && bd_c >= c && bd_c <= c + cs - 1) {
-                                borderInfoCompute[`${bd_r1}_${bd_c}`].t = null;
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-bottom') {
-                    if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r2])) {
-                        continue;
-                    }
-
-                    for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                        setSide(borderInfoCompute, bd_r2, bd_c, 'b', borderColor, borderStyle);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r2,
-                            bd_c,
-                            'b',
-                            borderColor,
-                            borderStyle,
-                        );
-
-                        for (const { c, r, cs, rs } of mergeCells) {
-                            if (bd_r2 < r + rs - 1 && bd_r2 >= r && bd_c >= c && bd_c <= c + cs - 1) {
-                                borderInfoCompute[`${bd_r2}_${bd_c}`].b = null;
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-all') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                            if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                const cell: Cell | null = data[bd_r][bd_c];
-
-                                const mc: MergeCell | undefined = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                if (mc?.r === bd_r) {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-
-                                if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
-                                }
-
-                                if (mc?.c === bd_c) {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                }
-
-                                if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
-                                }
-                            } else {
-                                setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
-                                setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
-                            }
-
-                            if (bd_r === bd_r1) {
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    't',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-
-                            if (bd_r === bd_r2) {
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    'b',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-
-                            if (bd_c === bd_c1) {
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    'l',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-
-                            if (bd_c === bd_c2) {
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    'r',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-outside') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                            if (!(bd_r === bd_r1 || bd_r === bd_r2 || bd_c === bd_c1 || bd_c === bd_c2)) {
-                                continue;
-                            }
-
-                            if (bd_r === bd_r1) {
-                                setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    't',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-
-                            if (bd_r === bd_r2) {
-                                setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    'b',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-
-                            if (bd_c === bd_c1) {
-                                setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    'l',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-
-                            if (bd_c === bd_c2) {
-                                setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
-                                propagateToNeighbour(
-                                    borderInfoCompute,
-                                    data,
-                                    cfg.merge,
-                                    bd_r,
-                                    bd_c,
-                                    'r',
-                                    borderColor,
-                                    borderStyle,
-                                );
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-inside') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                            if (bd_r === bd_r1 && bd_c === bd_c1) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    ensureEntry(borderInfoCompute, bd_r, bd_c);
-                                }
-                            } else if (bd_r === bd_r2 && bd_c === bd_c1) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-                            } else if (bd_r === bd_r1 && bd_c === bd_c2) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                }
-                            } else if (bd_r === bd_r2 && bd_c === bd_c2) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-                            } else if (bd_r === bd_r1) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                    const cell = data[bd_r][bd_c];
-
-                                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                    if (mc?.c === bd_c) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
-                                    }
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                }
-                            } else if (bd_r === bd_r2) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                    const cell = data[bd_r][bd_c];
-
-                                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                    if (mc?.c === bd_c) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
-                                    }
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-                            } else if (bd_c === bd_c1) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                    const cell = data[bd_r][bd_c];
-
-                                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                    if (mc?.r === bd_r) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                    } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
-                                    }
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-                            } else if (bd_c === bd_c2) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                    const cell = data[bd_r][bd_c];
-
-                                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                    if (mc?.r === bd_r) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                    } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
-                                    }
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-                            } else {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                    const cell = data[bd_r][bd_c];
-
-                                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                    if (mc?.r === bd_r) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                    } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
-                                    }
-
-                                    if (mc?.c === bd_c) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        ensureEntry(borderInfoCompute, bd_r, bd_c);
-                                    }
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-horizontal') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                            if (bd_r === bd_r1) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
-                                }
-                            } else if (bd_r === bd_r2) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                }
-                            } else {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                    const cell = data[bd_r][bd_c];
-
-                                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                    if (mc?.r === bd_r) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                    } else if (mc && mc.r + mc.rs - 1 === bd_r) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
-                                    }
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 't', borderColor, borderStyle);
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'b', borderColor, borderStyle);
-                                }
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-vertical') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                            if (bd_c === bd_c1) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
-                                }
-                            } else if (bd_c === bd_c2) {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                }
-                            } else {
-                                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                                    const cell = data[bd_r][bd_c];
-
-                                    const mc = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                                    if (mc?.c === bd_c) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    } else if (mc && mc.c + mc.cs - 1 === bd_c) {
-                                        setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
-                                    }
-                                } else {
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'l', borderColor, borderStyle);
-                                    setSide(borderInfoCompute, bd_r, bd_c, 'r', borderColor, borderStyle);
-                                }
-                            }
-                        }
-                    }
-                } else if (borderType === 'border-none') {
-                    for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
-                        if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                            continue;
-                        }
-
-                        for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                            if (!isNil(borderInfoCompute[`${bd_r}_${bd_c}`])) {
-                                delete borderInfoCompute[`${bd_r}_${bd_c}`];
-                            }
-
-                            if (bd_r === bd_r1) {
-                                const bd_r_top = bd_r1 - 1;
-
-                                if (bd_r_top >= 0 && borderInfoCompute[`${bd_r_top}_${bd_c}`]) {
-                                    delete borderInfoCompute[`${bd_r_top}_${bd_c}`].b;
-                                }
-                            }
-
-                            if (bd_r === bd_r2) {
-                                const bd_r_bottom = bd_r2 + 1;
-
-                                if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
-                                    delete borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t;
-                                }
-                            }
-
-                            if (bd_c === bd_c1) {
-                                const bd_c_left = bd_c1 - 1;
-
-                                if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
-                                    delete borderInfoCompute[`${bd_r}_${bd_c_left}`].r;
-                                }
-                            }
-
-                            if (bd_c === bd_c2) {
-                                const bd_c_right = bd_c2 + 1;
-
-                                if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
-                                    delete borderInfoCompute[`${bd_r}_${bd_c_right}`].l;
-                                }
-                            }
-                        }
-                    }
-                }
+// Expands a toolbar layout into the cells' own sides. A border belongs to the cell it was
+// drawn on — no neighbour key is ever created (that would clobber a peer's write to it), but
+// an EXISTING outside neighbour's facing side is overridden so a stale mirror can't repaint
+// the shared edge (border-none clears the same facing sides symmetrically).
+export function applyBorder(cfg: SheetConfig, type: BorderType, side: BorderSide, ranges: Selection[]) {
+    const map = (cfg.borderInfo ??= {});
+    for (const { row, column } of ranges) {
+        const [r1, r2] = row;
+        const [c1, c2] = column;
+        if (type === 'border-none') {
+            // The outside neighbours lose their facing side too, so the shared edges go fully blank.
+            clearSides(map, r1, r2, c1, c2);
+            for (let c = c1; c <= c2; c += 1) {
+                removeSide(map, r1 - 1, c, 'b');
+                removeSide(map, r2 + 1, c, 't');
             }
-        } else if (entry.rangeType === 'cell') {
-            const { value } = entry;
-
-            const bd_r = value.row_index;
-            const bd_c = value.col_index;
-
-            if (bd_r < dataset_row_st || bd_r > dataset_row_ed || bd_c < dataset_col_st || bd_c > dataset_col_ed) {
-                continue;
+            for (let r = r1; r <= r2; r += 1) {
+                removeSide(map, r, c1 - 1, 'r');
+                removeSide(map, r, c2 + 1, 'l');
             }
-
-            if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
-                continue;
-            }
-
-            if (!isNil(value.l) || !isNil(value.r) || !isNil(value.t) || !isNil(value.b)) {
-                ensureEntry(borderInfoCompute, bd_r, bd_c);
-
-                if (!isNil(data[bd_r]?.[bd_c]?.mc)) {
-                    const cell: Cell | null = data[bd_r][bd_c];
-                    const mc: MergeCell | undefined = cfg.merge?.[`${cell?.mc?.r}_${cell?.mc?.c}`];
-
-                    if (!isNil(value.l) && bd_c === mc?.c) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 'l', value.l.color, value.l.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            'l',
-                            value.l.color,
-                            value.l.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].l = null;
-                    }
-
-                    if (!isNil(value.r) && mc && bd_c === mc.c + mc.cs - 1) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 'r', value.r.color, value.r.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            'r',
-                            value.r.color,
-                            value.r.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].r = null;
-                    }
-
-                    if (!isNil(value.t) && bd_r === mc?.r) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 't', value.t.color, value.t.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            't',
-                            value.t.color,
-                            value.t.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].t = null;
-                    }
-
-                    if (!isNil(value.b) && mc && bd_r === mc.r + mc.rs - 1) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 'b', value.b.color, value.b.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            'b',
-                            value.b.color,
-                            value.b.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].b = null;
-                    }
-                } else {
-                    if (!isNil(value.l)) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 'l', value.l.color, value.l.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            'l',
-                            value.l.color,
-                            value.l.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].l = null;
-                    }
-
-                    if (!isNil(value.r)) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 'r', value.r.color, value.r.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            'r',
-                            value.r.color,
-                            value.r.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].r = null;
-                    }
-
-                    if (!isNil(value.t)) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 't', value.t.color, value.t.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            't',
-                            value.t.color,
-                            value.t.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].t = null;
-                    }
-
-                    if (!isNil(value.b)) {
-                        setSide(borderInfoCompute, bd_r, bd_c, 'b', value.b.color, value.b.style);
-                        propagateToNeighbour(
-                            borderInfoCompute,
-                            data,
-                            cfg.merge,
-                            bd_r,
-                            bd_c,
-                            'b',
-                            value.b.color,
-                            value.b.style,
-                        );
-                    } else {
-                        borderInfoCompute[`${bd_r}_${bd_c}`].b = null;
-                    }
+            continue;
+        }
+        for (let r = r1; r <= r2; r += 1) {
+            for (let c = c1; c <= c2; c += 1) {
+                // The key is created by the cell's first side only, so the sync patch stays
+                // granular and a cell that takes no side gets no entry; each side is a fresh object.
+                let entry: CellBorderSides | undefined;
+                const set = (key: BorderSideKey) => {
+                    (entry ??= map[`${r}_${c}`] ??= {})[key] = { style: side.style, color: side.color };
+                    // On the range's outer edge, override the facing side of an existing outside neighbour.
+                    if (key === 'l' && c === c1) overrideSide(map, r, c - 1, 'r', side);
+                    else if (key === 'r' && c === c2) overrideSide(map, r, c + 1, 'l', side);
+                    else if (key === 't' && r === r1) overrideSide(map, r - 1, c, 'b', side);
+                    else if (key === 'b' && r === r2) overrideSide(map, r + 1, c, 't', side);
+                };
+                switch (type) {
+                    case 'border-all':
+                        set('l');
+                        set('r');
+                        set('t');
+                        set('b');
+                        break;
+                    case 'border-slash':
+                        set('s');
+                        break;
+                    case 'border-outside':
+                        if (r === r1) set('t');
+                        if (r === r2) set('b');
+                        if (c === c1) set('l');
+                        if (c === c2) set('r');
+                        break;
+                    case 'border-inside':
+                        // Inner edges expressed once, as the top/left side of the cell below/right.
+                        if (r > r1) set('t');
+                        if (c > c1) set('l');
+                        break;
+                    case 'border-horizontal':
+                        // First row takes the edge below it, last row the edge above, inner rows
+                        // both — so a single-row range still gets a bottom edge.
+                        if (r !== r1) set('t');
+                        if (r === r1 || r !== r2) set('b');
+                        break;
+                    case 'border-vertical':
+                        if (c !== c1) set('l');
+                        if (c === c1 || c !== c2) set('r');
+                        break;
+                    case 'border-left':
+                        if (c === c1) set('l');
+                        break;
+                    case 'border-right':
+                        if (c === c2) set('r');
+                        break;
+                    case 'border-top':
+                        if (r === r1) set('t');
+                        break;
+                    case 'border-bottom':
+                        if (r === r2) set('b');
+                        break;
                 }
-            } else {
-                delete borderInfoCompute[`${bd_r}_${bd_c}`];
             }
         }
     }
-
-    return borderInfoCompute;
-}
-
-export function getBorderInfoCompute(ctx: Context, sheetId?: string): ComputedBorderMap {
-    const flowdata = getFlowdata(ctx);
-
-    let data: CellMatrix | null | undefined;
-    if (sheetId === undefined) {
-        data = flowdata;
-    } else {
-        const index = getSheetIndex(ctx, sheetId);
-        if (isNil(index)) return {};
-        data = ctx.sheets[index].data;
-    }
-
-    if (!data) return {};
-
-    return getBorderInfoComputeRange(ctx, 0, data.length, 0, data[0].length, sheetId);
 }

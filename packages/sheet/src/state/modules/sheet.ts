@@ -1,28 +1,20 @@
 import { cloneDeep, isNil, sortBy, times } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { normalizeSheetConfig } from '../../engine/replay-ops';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
-import { type Context, updateContextWithSheetConfig } from '../context';
+import type { Context } from '../context';
 import { en } from '../locale/en';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
 import { setFormulaCellInfo } from './formula-cache';
 
-function storeSheetParam(ctx: Context) {
+export function storeSheetSelections(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
     const file = ctx.sheets[index];
-    file.config = ctx.config;
     file.selections = ctx.selections;
-    file.formulaRangeSelections = ctx.formulaRangeSelections;
-}
-
-export function storeSheetParamALL(ctx: Context) {
-    storeSheetParam(ctx);
-    const index = getSheetIndex(ctx, ctx.currentSheetId);
-    if (index == null) return;
-    ctx.sheets[index].config = ctx.config;
 }
 
 export function changeSheet(ctx: Context, id: string) {
@@ -38,11 +30,10 @@ export function changeSheet(ctx: Context, id: string) {
         return;
     }
 
-    storeSheetParamALL(ctx);
+    storeSheetSelections(ctx);
 
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
-    updateContextWithSheetConfig(ctx); // the mirror follows the switch, not the next reseed
 
     if (ctx.hooks.afterActivateSheet) {
         setTimeout(() => {
@@ -84,6 +75,7 @@ export function addSheet(
               isPivotTable: !!isPivotTable,
           }
         : sheetData;
+    normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
     if (sheetconfig.id === undefined) sheetconfig.id = uuidv4();
     if (ctx.hooks.beforeAddSheet?.(sheetconfig) === false) {
@@ -133,7 +125,6 @@ export function deleteSheet(ctx: Context, id: string) {
         );
         const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
         ctx.currentSheetId = orderSheets?.[0]?.id as string;
-        updateContextWithSheetConfig(ctx); // else the mirror keeps the deleted sheet's config
     }
 
     if (ctx.hooks.afterDeleteSheet) {
@@ -179,7 +170,6 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             }
         }
     }
-    updateContextWithSheetConfig(ctx);
 }
 
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {

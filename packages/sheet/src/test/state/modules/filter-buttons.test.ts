@@ -129,7 +129,7 @@ describe('createFilterOptions hidden columns', () => {
     // shared rect — the hit-test returns the last match, which is what the draw loop paints on top.
     function ctxWithHiddenColumn2(): Context {
         const ctx = contextFactory() as Context;
-        ctx.config.colhidden = { 2: 0 };
+        ctx.sheets[0].config = { colhidden: { 2: 0 } };
         // column 2 hidden: its right edge is the same as column 1's
         ctx.visibledatacolumn = [74, 148, 148, 222, 296];
         return ctx;

@@ -217,14 +217,14 @@ describe('insertCheckbox', () => {
 
     test('bounds a whole-column selection to the last row that holds data', () => {
         const ctx = sheetWithRows(500, 2);
-        ctx.selections = [{ row: [0, 499], column: [0, 0], row_focus: 0, column_focus: 0 }];
+        ctx.selections = [{ row: [0, 499], column: [0, 0], row_focus: 0, column_focus: 0, column_select: true }];
         insertCheckbox(ctx);
         expect(Object.keys(ctx.sheets[0].dataVerification!)).toEqual(['0_0', '1_0', '2_0']);
     });
 
     test('a whole column of an empty sheet still ticks its first cell', () => {
         const ctx = sheetWithRows(500, -1);
-        ctx.selections = [{ row: [0, 499], column: [0, 0], row_focus: 0, column_focus: 0 }];
+        ctx.selections = [{ row: [0, 499], column: [0, 0], row_focus: 0, column_focus: 0, column_select: true }];
         insertCheckbox(ctx);
         expect(Object.keys(ctx.sheets[0].dataVerification!)).toEqual(['0_0']);
     });

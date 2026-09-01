@@ -6,8 +6,8 @@ import { booleanDisplay, genarate, update } from '../../engine/format';
 import { isFormula } from '../../engine/formula-engine';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
-import { type Context, editableConfig, getFlowdata } from '../context';
-import type { Range, RangeOrWholeAxis, Selection, SheetConfig } from '../types';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
+import type { Range, RangeOrWholeAxis, Selection } from '../types';
 import { getSheetIndex, indexToColumnChar, rgbToHex, styleObjectToCss } from '../utils';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, validateCellData } from './data-verification';
@@ -360,6 +360,13 @@ export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: 
     return value;
 }
 
+// A number stored as text (qp === 1) that still reads as a number. The painter marks it with a
+// green corner triangle; the glyph hit-test claims that same corner. One predicate so the two
+// never drift over what "forced string" means.
+export function isForcedStringNumber(cell: Cell | null | undefined): boolean {
+    return cell?.qp === 1 && !Number.isNaN(Number(cell.v));
+}
+
 export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_index: number) {
     if (!d?.[row_index]) {
         return null;
@@ -538,7 +545,7 @@ export function mergeMoveMain(
     left: number,
     width: number,
 ): [number[], number[], number, number, number, number] | null {
-    const mergesetting = ctx.config.merge;
+    const mergesetting = getSheetConfig(ctx)?.merge;
 
     if (!mergesetting) {
         return null;
@@ -798,7 +805,7 @@ export function updateCell(
         // Word wrap
         const { defaultrowlen } = ctx;
 
-        const cfg = editableConfig(ctx, ctx.sheets[index]);
+        const cfg = (ctx.sheets[index].config ??= {});
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
             const cellWidth = cfg.columnlen?.[c] || ctx.defaultcollen;
 
@@ -1205,15 +1212,8 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
     }
 
     // Fetch data
-    let d: CellMatrix | null | undefined;
-    let cfg: SheetConfig | undefined;
-    if (sheetId != null && sheetId !== ctx.currentSheetId) {
-        d = ctx.sheets[getSheetIndex(ctx, sheetId)!].data;
-        cfg = ctx.sheets[getSheetIndex(ctx, sheetId)!].config;
-    } else {
-        d = getFlowdata(ctx);
-        cfg = ctx.config;
-    }
+    const d = getFlowdata(ctx, sheetId);
+    const cfg = getSheetConfig(ctx, sheetId);
 
     const data = [];
     for (let r = range.row[0]; r <= range.row[1]; r += 1) {
@@ -1247,14 +1247,15 @@ export function getDataBySelectionNoCopy(ctx: Context, range: Selection) {
     const data = [];
     const flowData = getFlowdata(ctx);
     if (!flowData) return [];
+    const cfg = getSheetConfig(ctx);
     for (let r = range.row[0]; r <= range.row[1]; r += 1) {
         const row = [];
-        if (ctx.config.rowhidden != null && ctx.config.rowhidden[r] != null) {
+        if (cfg?.rowhidden?.[r] != null) {
             continue;
         }
         for (let c = range.column[0]; c <= range.column[1]; c += 1) {
             let value = null;
-            if (ctx.config.colhidden != null && ctx.config.colhidden[c] != null) {
+            if (cfg?.colhidden?.[c] != null) {
                 continue;
             }
             if (flowData[r] != null && flowData[r][c] != null) {

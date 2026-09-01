@@ -674,18 +674,30 @@ describe('Sheets xlsx conversion fidelity', () => {
             { a1: 'B1', value: 'no border' },
         ]);
         const sheets = await parseXlsx(buffer);
-        const bi = sheets[0].config?.borderInfo;
-        expect(bi).toBeDefined();
-        const a1Border = bi?.find((b) => b.rangeType === 'cell' && b.value.row_index === 0 && b.value.col_index === 0);
-        expect(a1Border).toBeDefined();
-        if (a1Border?.rangeType !== 'cell') throw new Error('expected cell-rangeType BorderInfo');
-        expect(a1Border.value.l).toEqual({ style: 1, color: '#000000' });
-        expect(a1Border.value.r).toEqual({ style: 1, color: '#000000' });
-        expect(a1Border.value.t).toEqual({ style: 1, color: '#000000' });
-        expect(a1Border.value.b).toEqual({ style: 1, color: '#000000' });
-        expect(
-            bi?.find((b) => b.rangeType === 'cell' && b.value.row_index === 0 && b.value.col_index === 1),
-        ).toBeUndefined();
+        const thin = { style: 1, color: '#000000' };
+        expect(sheets[0].config?.borderInfo).toEqual({ '0_0': { l: thin, r: thin, t: thin, b: thin } });
+    });
+
+    test('imports a diagonalDown border as the slash side, dropping diagonalUp', async () => {
+        const thinBorder = { style: 'thin' as const, color: { argb: 'FF000000' } };
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 'down', border: { diagonal: { ...thinBorder, down: true } } },
+            { a1: 'B1', value: 'up', border: { diagonal: { ...thinBorder, up: true } } },
+        ]);
+        const sheets = await parseXlsx(buffer);
+        // Our slash is top-left → bottom-right (diagonalDown); a diagonalUp-only border has no
+        // single-direction equivalent in our model and is dropped.
+        expect(sheets[0].config?.borderInfo).toEqual({ '0_0': { s: { style: 1, color: '#000000' } } });
+    });
+
+    test('convert imports the border of a value-less cell', async () => {
+        const thinBorder = { style: 'thin' as const, color: { argb: 'FF000000' } };
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Sheet1');
+        worksheet.getCell('A1').value = 'x';
+        worksheet.getCell('B1').border = { bottom: thinBorder };
+        const sheets = await parseWorkbook(workbook);
+        expect(sheets[0].config?.borderInfo).toEqual({ '0_1': { b: { style: 1, color: '#000000' } } });
     });
 
     test('convert right-aligns numbers without explicit alignment', async () => {

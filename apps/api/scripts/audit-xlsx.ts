@@ -177,14 +177,14 @@ function inspectSheet(sheet: Sheet): string {
     lines.push(`config keys: ${Object.keys(config).sort().join(', ') || '(none)'}`);
     lines.push(`celldata: ${sheet.celldata?.length ?? 0} cells`);
     const counts: Record<string, number> = {};
-    for (const key of ['rowhidden', 'colhidden', 'merge', 'columnlen', 'rowlen'] as const) {
+    for (const key of ['rowhidden', 'colhidden', 'merge', 'columnlen', 'rowlen', 'borderInfo'] as const) {
         const value = (config as Record<string, unknown>)[key];
         counts[key] = value && typeof value === 'object' ? Object.keys(value).length : 0;
     }
     lines.push(
         `config counts: ${Object.entries(counts)
             .map(([k, n]) => `${k}=${n}`)
-            .join(', ')}; borderInfo=${config.borderInfo?.length ?? 0}`,
+            .join(', ')}`,
     );
     for (const key of [
         'frozen',

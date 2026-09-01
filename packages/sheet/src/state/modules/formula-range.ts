@@ -1,5 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
-import type { Context } from '../context';
+import { type Context, getSheetConfig } from '../context';
 import type { RangeOrWholeAxis, Rect } from '../types';
 import { seletedHighlistByindex } from '.';
 import { getRangetxt, mergeMoveMain } from './cell';
@@ -87,7 +87,8 @@ export function rangeSetValue(
     let range = '';
     const rf = selected.row[0];
     const cf = selected.column[0];
-    if (rf !== null && cf !== null && ctx.config.merge != null && `${rf}_${cf}` in ctx.config.merge) {
+    const merge = getSheetConfig(ctx)?.merge;
+    if (rf !== null && cf !== null && merge != null && `${rf}_${cf}` in merge) {
         range = getRangetxt(
             ctx,
             ctx.currentSheetId,

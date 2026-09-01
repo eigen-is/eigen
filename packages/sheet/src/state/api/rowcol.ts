@@ -1,7 +1,6 @@
-import { forEach, isNumber, isPlainObject, isUndefined } from 'es-toolkit/compat';
-import { type Context, editableConfig } from '../context';
+import { forEach, isNumber, isPlainObject } from 'es-toolkit/compat';
+import type { Context } from '../context';
 import { deleteRowCol, insertRowCol } from '../modules';
-import { getSheetIndex } from '../utils';
 import { type CommonOptions, getSheet } from './common';
 import { invalidParams } from './errors';
 
@@ -71,18 +70,15 @@ export function hideRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
         throw invalidParams();
     }
 
-    if (!ctx?.config) return;
-
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const cfg = (getSheet(ctx).config ??= {});
 
     if (type === 'row') {
-        const rowhidden = (ctx.config.rowhidden ??= {});
+        const rowhidden = (cfg.rowhidden ??= {});
         for (const r of rowColInfo) rowhidden[r] = 0;
     } else {
-        const colhidden = (ctx.config.colhidden ??= {});
+        const colhidden = (cfg.colhidden ??= {});
         for (const r of rowColInfo) colhidden[r] = 0;
     }
-    ctx.sheets[index].config = ctx.config;
 }
 
 export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' | 'column') {
@@ -90,18 +86,15 @@ export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' 
         throw invalidParams();
     }
 
-    if (!ctx?.config) return;
+    // Unhiding cannot create hidden state, so it must not seed the map — that would ship an
+    // op to peers and take an undo entry for a no-op.
+    const cfg = getSheet(ctx).config;
 
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-
-    if (type === 'row') {
-        const rowhidden = (ctx.config.rowhidden ??= {});
-        for (const r of rowColInfo) delete rowhidden[r];
-    } else {
-        const colhidden = (ctx.config.colhidden ??= {});
-        for (const r of rowColInfo) delete colhidden[r];
+    if (type === 'row' && cfg?.rowhidden) {
+        for (const r of rowColInfo) delete cfg.rowhidden[r];
+    } else if (type === 'column' && cfg?.colhidden) {
+        for (const r of rowColInfo) delete cfg.colhidden[r];
     }
-    ctx.sheets[index].config = ctx.config;
 }
 
 export function setRowHeight(
@@ -116,21 +109,13 @@ export function setRowHeight(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = editableConfig(ctx, sheet);
-    if (cfg.rowlen == null) {
-        cfg.rowlen = {};
-    }
+    const cfg = (sheet.config ??= {});
+    const rowlen = (cfg.rowlen ??= {});
 
     forEach(rowInfo, (len, r) => {
-        if (Number(r) >= 0) {
-            if (Number(len) >= 0) {
-                cfg.rowlen![Number(r)] = Number(len);
-                if (custom && isUndefined(cfg.customHeight)) {
-                    cfg.customHeight = { [r]: 1 };
-                } else if (custom) {
-                    cfg.customHeight![r] = 1;
-                }
-            }
+        if (Number(r) >= 0 && Number(len) >= 0) {
+            rowlen[Number(r)] = Number(len);
+            if (custom) (cfg.customHeight ??= {})[r] = 1;
         }
     });
 }
@@ -147,21 +132,13 @@ export function setColumnWidth(
 
     const sheet = getSheet(ctx, options);
 
-    const cfg = editableConfig(ctx, sheet);
-    if (cfg.columnlen == null) {
-        cfg.columnlen = {};
-    }
+    const cfg = (sheet.config ??= {});
+    const columnlen = (cfg.columnlen ??= {});
 
     forEach(columnInfo, (len, c) => {
-        if (Number(c) >= 0) {
-            if (Number(len) >= 0) {
-                cfg.columnlen![Number(c)] = Number(len);
-                if (custom && isUndefined(cfg.customWidth)) {
-                    cfg.customWidth = { [c]: 1 };
-                } else if (custom) {
-                    cfg.customWidth![c] = 1;
-                }
-            }
+        if (Number(c) >= 0 && Number(len) >= 0) {
+            columnlen[Number(c)] = Number(len);
+            if (custom) (cfg.customWidth ??= {})[c] = 1;
         }
     });
 }

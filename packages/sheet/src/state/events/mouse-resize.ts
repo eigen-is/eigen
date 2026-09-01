@@ -68,10 +68,10 @@ export function handleColSizeHandleMouseDown(
         ele.style.height = `${cellArea.getBoundingClientRect().height + scrollTop}px`;
         ele.style.borderWidth = '0 1px 0 0';
         ele.style.top = '0';
-        ele.style.left = `${col - 3}px`;
+        ele.style.left = `${col}px`;
         ele.style.width = '1px';
     }
-    ctx.colsResizeStart = [_x, col_index];
+    ctx.colsResizeStart = [e.pageX, col_index];
     e.stopPropagation();
 }
 
@@ -113,11 +113,11 @@ export function handleRowSizeHandleMouseDown(
         const ele = changeSizeLine as HTMLDivElement;
         ele.style.width = `${cellArea.getBoundingClientRect().width + scrollLeft}px`;
         ele.style.borderWidth = '0 0 1px 0';
-        ele.style.top = `${row - 3}px`;
+        ele.style.top = `${row}px`;
         ele.style.left = '0';
         ele.style.height = '1px';
     }
-    ctx.rowsResizeStart = [_y, row_index];
+    ctx.rowsResizeStart = [e.pageY, row_index];
     e.stopPropagation();
 }
 
@@ -247,14 +247,11 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
 
     maxWidth = Math.ceil(maxWidth);
 
-    const cfg = ctx.config;
+    const idx = getSheetIndex(ctx, ctx.currentSheetId);
+    if (idx == null) return;
+    const cfg = (ctx.sheets[idx].config ??= {});
     cfg.columnlen ||= {};
     cfg.customWidth ||= {};
     cfg.columnlen[colIndex] = maxWidth;
     cfg.customWidth[colIndex] = 1;
-    ctx.config = cfg;
-
-    const idx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (idx == null) return;
-    ctx.sheets[idx].config = ctx.config;
 }

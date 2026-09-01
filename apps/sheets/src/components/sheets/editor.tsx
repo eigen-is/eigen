@@ -26,7 +26,7 @@ import { type TransformFields, useAspectLock } from '@workspace/ui/components/pr
 import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import { useFileDropTarget } from '@workspace/ui/hooks/use-file-drop-target';
 import { cn } from '@workspace/ui/lib/utils';
-import { Image as ImageIcon } from 'lucide-react';
+import { AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { usePresence } from './hooks/use-presence';
@@ -80,7 +80,7 @@ function SheetEditorInner({
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
     const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
 
-    const { initialData, snapshotVersion, synced, handleOp, onDataChange, docRef, provider } = useSheet(
+    const { initialData, snapshotVersion, loadFailed, synced, handleOp, onDataChange, docRef, provider } = useSheet(
         ownerId,
         path.mountId,
         path.id,
@@ -340,124 +340,136 @@ function SheetEditorInner({
                     accept="image/*"
                 />
             )}
-            <div className="flex h-full w-full overflow-hidden">
-                {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
-                <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'hidden')}>
-                    <DocSearchProvider
-                        controller={searchController}
-                        initialSearchTerm={initialSearchTerm}
-                        onOpenChange={onSearchOpenChange}
-                        barClassName="top-20"
-                        onUndo={() => workbookRef.current?.undo()}
-                        onRedo={() => workbookRef.current?.redo()}
-                    >
-                        <div ref={paneRef} className="relative h-full w-full" {...imageDropProps}>
-                            <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
-                            <Workbook
-                                key={snapshotVersion}
-                                ref={workbookRef}
-                                data={initialData}
-                                onChange={(data) => {
-                                    onDataChange(data);
-                                    setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
-                                }}
-                                onOp={handleOp}
-                                showToolbar={true}
-                                showFormulaBar={true}
-                                showSheetTabs={true}
-                                allowEdit={canWrite}
-                                toolbarLeftItems={leftItems}
-                                toolbarRightItems={rightItems}
-                                defaultRowHeight={20}
-                                defaultFontSize={10}
-                                defaultColWidth={100}
-                                imageAspectLocked={imageAspectLocked}
-                                hooks={{
-                                    afterSelectionChange: (sheetId, selection) => {
-                                        const r = selection.row_focus ?? selection.row?.[0];
-                                        const c = selection.column_focus ?? selection.column?.[0];
-                                        if (r != null && c != null) publishSelection(sheetId, r, c);
-                                    },
-                                    onActiveImageChange: setActiveImage,
-                                    ...(canWrite && mediaFolderId
-                                        ? {
-                                              onInsertImage: () => setImagePickerOpen(true),
-                                              onPasteEigenImage: handlePasteEigenImage,
-                                              onPasteImageFile: handleImageFile,
-                                              onPasteSvgFile: handlePasteSvgFile,
-                                          }
-                                        : {}),
-                                    resolveImageUrl: resolveMediaUrl,
-                                    resolveImagePath: resolveMediaPath,
-                                    ...(canWrite && chatFolderId
-                                        ? {
-                                              onAddComment: (r: number, c: number) => {
-                                                  addCommentRef.current?.(r, c);
-                                              },
-                                          }
-                                        : {}),
-                                    commentLifecycle: lifecycle,
-                                    ...(canWrite
-                                        ? {
-                                              onDeleteComment: (r: number, c: number) => {
-                                                  const fd = workbookRef.current?.getFlowdata();
-                                                  const cell = fd?.[r]?.[c];
-                                                  const cardId = cell?.commentCardIds?.[0];
-                                                  if (cardId && workbookRef.current) {
-                                                      workbookRef.current.setCellFormat(
-                                                          r,
-                                                          c,
-                                                          'commentCardIds',
-                                                          (cell.commentCardIds ?? []).filter((id) => id !== cardId),
-                                                      );
-                                                  }
-                                              },
-                                          }
-                                        : {}),
-                                    getCommentInfo: (r: number, c: number) => {
-                                        const fd = workbookRef.current?.getFlowdata();
-                                        const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
-                                        const card = cardId ? cards[cardId] : undefined;
-                                        if (!card) return null;
-                                        const entry = card.chatName
-                                            ? allComments.find((c) => c.chatName === card.chatName)
-                                            : undefined;
-                                        const indicatorColor = card.color
-                                            ? (EIGEN_STICKIES_INDICATOR_MAP.get(card.color) ?? card.color)
-                                            : null;
-                                        return { card, entry, indicatorColor };
-                                    },
-                                }}
-                            />
-                        </div>
-                    </DocSearchProvider>
+            <div className="flex h-full w-full flex-col overflow-hidden">
+                {/* Persistent read-only signal — a decode failure leaves a blank sheet otherwise
+                    indistinguishable from data loss (a dismissible toast was not enough). */}
+                {loadFailed && (
+                    <div className="flex shrink-0 items-center justify-center gap-2 border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                            This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.
+                        </span>
+                    </div>
+                )}
+                <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+                    {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
+                    <div className={cn('flex-1 overflow-hidden', mobilePanelOpen && 'hidden')}>
+                        <DocSearchProvider
+                            controller={searchController}
+                            initialSearchTerm={initialSearchTerm}
+                            onOpenChange={onSearchOpenChange}
+                            barClassName="top-20"
+                            onUndo={() => workbookRef.current?.undo()}
+                            onRedo={() => workbookRef.current?.redo()}
+                        >
+                            <div ref={paneRef} className="relative h-full w-full" {...imageDropProps}>
+                                <FileDropOverlay visible={isDragging} label="Drop images to add" icon={ImageIcon} />
+                                <Workbook
+                                    key={snapshotVersion}
+                                    ref={workbookRef}
+                                    data={initialData}
+                                    onChange={(data) => {
+                                        onDataChange(data);
+                                        setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
+                                    }}
+                                    onOp={handleOp}
+                                    showToolbar={true}
+                                    showFormulaBar={true}
+                                    showSheetTabs={true}
+                                    allowEdit={canWrite && !loadFailed}
+                                    toolbarLeftItems={leftItems}
+                                    toolbarRightItems={rightItems}
+                                    defaultRowHeight={20}
+                                    defaultFontSize={10}
+                                    defaultColWidth={100}
+                                    imageAspectLocked={imageAspectLocked}
+                                    hooks={{
+                                        afterSelectionChange: (sheetId, selection) => {
+                                            const r = selection.row_focus ?? selection.row?.[0];
+                                            const c = selection.column_focus ?? selection.column?.[0];
+                                            if (r != null && c != null) publishSelection(sheetId, r, c);
+                                        },
+                                        onActiveImageChange: setActiveImage,
+                                        ...(canWrite && mediaFolderId
+                                            ? {
+                                                  onInsertImage: () => setImagePickerOpen(true),
+                                                  onPasteEigenImage: handlePasteEigenImage,
+                                                  onPasteImageFile: handleImageFile,
+                                                  onPasteSvgFile: handlePasteSvgFile,
+                                              }
+                                            : {}),
+                                        resolveImageUrl: resolveMediaUrl,
+                                        resolveImagePath: resolveMediaPath,
+                                        ...(canWrite && chatFolderId
+                                            ? {
+                                                  onAddComment: (r: number, c: number) => {
+                                                      addCommentRef.current?.(r, c);
+                                                  },
+                                              }
+                                            : {}),
+                                        commentLifecycle: lifecycle,
+                                        ...(canWrite
+                                            ? {
+                                                  onDeleteComment: (r: number, c: number) => {
+                                                      const fd = workbookRef.current?.getFlowdata();
+                                                      const cell = fd?.[r]?.[c];
+                                                      const cardId = cell?.commentCardIds?.[0];
+                                                      if (cardId && workbookRef.current) {
+                                                          workbookRef.current.setCellFormat(
+                                                              r,
+                                                              c,
+                                                              'commentCardIds',
+                                                              (cell.commentCardIds ?? []).filter((id) => id !== cardId),
+                                                          );
+                                                      }
+                                                  },
+                                              }
+                                            : {}),
+                                        getCommentInfo: (r: number, c: number) => {
+                                            const fd = workbookRef.current?.getFlowdata();
+                                            const cardId = fd?.[r]?.[c]?.commentCardIds?.[0];
+                                            const card = cardId ? cards[cardId] : undefined;
+                                            if (!card) return null;
+                                            const entry = card.chatName
+                                                ? allComments.find((c) => c.chatName === card.chatName)
+                                                : undefined;
+                                            const indicatorColor = card.color
+                                                ? (EIGEN_STICKIES_INDICATOR_MAP.get(card.color) ?? card.color)
+                                                : null;
+                                            return { card, entry, indicatorColor };
+                                        },
+                                    }}
+                                />
+                            </div>
+                        </DocSearchProvider>
+                    </div>
+                    {panel && (
+                        <PanelColumn
+                            activePanel={panel}
+                            onClose={closePanels}
+                            path={path}
+                            cards={cards}
+                            entries={allComments}
+                            members={members}
+                            currentUserEmail={auth.user!.email}
+                            filter={commentFilter}
+                            activeComments={activeComments}
+                            commentContextMenu={commentContextMenu}
+                            onOpenCard={setOpenCardId}
+                        />
+                    )}
+                    {/* The comment/activity pane wins over the properties panel (the slides arrangement). */}
+                    {activeImage && !panel && (
+                        <ImagePropertiesPanel
+                            image={activeImage}
+                            canWrite={canWrite}
+                            aspectLocked={imageAspectLocked}
+                            onAspectLockChange={setImageAspectLocked}
+                            onChange={handleImageTransform}
+                            onDelete={() => workbookRef.current?.removeActiveImage()}
+                        />
+                    )}
                 </div>
-                {panel && (
-                    <PanelColumn
-                        activePanel={panel}
-                        onClose={closePanels}
-                        path={path}
-                        cards={cards}
-                        entries={allComments}
-                        members={members}
-                        currentUserEmail={auth.user!.email}
-                        filter={commentFilter}
-                        activeComments={activeComments}
-                        commentContextMenu={commentContextMenu}
-                        onOpenCard={setOpenCardId}
-                    />
-                )}
-                {/* The comment/activity pane wins over the properties panel (the slides arrangement). */}
-                {activeImage && !panel && (
-                    <ImagePropertiesPanel
-                        image={activeImage}
-                        canWrite={canWrite}
-                        aspectLocked={imageAspectLocked}
-                        onAspectLockChange={setImageAspectLocked}
-                        onChange={handleImageTransform}
-                        onDelete={() => workbookRef.current?.removeActiveImage()}
-                    />
-                )}
             </div>
 
             <CardFormDialog

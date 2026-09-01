@@ -1,4 +1,3 @@
-import type { BorderInfo, CellBorderInfo, RangeBorderInfo } from '@workspace/lib/sheets';
 import { cloneDeep, set } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine/conditional-format';
 import type { Cell, SingleRange } from '../../engine/types';
@@ -7,7 +6,7 @@ import { type Context, getFlowdata } from '../context';
 import { en } from '../locale/en';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
-import { getBorderInfoCompute } from './border';
+import { carrySides, clearSides, getBorderInfoCompute } from './border';
 import { getdatabyselection } from './cell';
 import { colLocation, colLocationByIndex, mousePosition, rowLocation, rowLocationByIndex } from './location';
 import { jfrefreshgrid } from './refresh';
@@ -199,13 +198,8 @@ export function onCellsMoveEnd(
 
     const data = cloneDeep(getdatabyselection(ctx, last, ctx.currentSheetId));
 
-    const cfg = ctx.config;
-    if (cfg.merge == null) {
-        cfg.merge = {};
-    }
-    if (cfg.rowlen == null) {
-        cfg.rowlen = {};
-    }
+    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
+    if (sheetIndex == null) return;
     const { drag: locale_drag } = en;
 
     // Selection contains partial cells
@@ -245,7 +239,19 @@ export function onCellsMoveEnd(
         return;
     }
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
+    // Seeded only once the move is certain: every config write is syncable now that the
+    // mirror is gone, so seeding above the guards would ship an op and burn an undo entry
+    // for a move the user was told could not happen.
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
+    cfg.merge ??= {};
+    cfg.borderInfo ??= {};
+
+    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId, [
+        last.row[0],
+        last.row[1],
+        last.column[0],
+        last.column[1],
+    ]);
 
     const hyperLinkList: Record<
         string,
@@ -275,92 +281,17 @@ export function onCellsMoveEnd(
             }
         }
     }
-    // Border. Three branches: non-slash range (rect-subtract via cfSplitRange),
-    // cell entry (point check), slash range (per-cell containment of range[0]).
-    // moveCells uses per-cell containment for slash because slash sits on a
-    // single anchor cell, not a rect — different from paste's cutPaste path
-    // (paste.ts:632-660) which passes slash through cfSplitRange anyway.
-    if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-        const borderInfo: BorderInfo[] = [];
-
-        for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-            const entry = cfg.borderInfo[i];
-
-            if (entry.rangeType === 'range' && entry.borderType !== 'border-slash') {
-                const bd_emptyRange: SingleRange[] = [];
-                for (let j = 0; j < entry.range.length; j += 1) {
-                    bd_emptyRange.push(
-                        ...cfSplitRange(
-                            entry.range[j],
-                            { row: last.row, column: last.column },
-                            { row: [row_s, row_e], column: [col_s, col_e] },
-                            'restPart',
-                        ),
-                    );
-                }
-
-                entry.range = bd_emptyRange;
-                borderInfo.push(entry);
-            } else if (entry.rangeType === 'cell') {
-                const bd_r = entry.value.row_index;
-                const bd_c = entry.value.col_index;
-
-                if (!(bd_r >= last.row[0] && bd_r <= last.row[1] && bd_c >= last.column[0] && bd_c <= last.column[1])) {
-                    borderInfo.push(entry);
-                }
-            } else if (
-                !(
-                    entry.range[0].row[0] >= last.row[0] &&
-                    entry.range[0].row[0] <= last.row[1] &&
-                    entry.range[0].column[0] >= last.column[0] &&
-                    entry.range[0].column[0] <= last.column[1]
-                )
-            ) {
-                // remaining slash range entries that fall outside the move's source rect
-                borderInfo.push(entry);
-            }
-        }
-
-        cfg.borderInfo = borderInfo;
-    }
+    clearSides(cfg.borderInfo, last.row[0], last.row[1], last.column[0], last.column[1]);
     // Replacement position data update
     const offsetMC: Record<string, [number, number]> = {};
     for (let r = 0; r < data.length; r += 1) {
         for (let c = 0; c < data[0].length; c += 1) {
-            const computeEntry = borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`];
-            if (computeEntry && !computeEntry.s) {
-                const bd_obj: CellBorderInfo = {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: r + row_s,
-                        col_index: c + col_s,
-                        l: computeEntry.l,
-                        r: computeEntry.r,
-                        t: computeEntry.t,
-                        b: computeEntry.b,
-                    },
-                };
-
-                if (cfg.borderInfo == null) {
-                    cfg.borderInfo = [];
-                }
-
-                cfg.borderInfo.push(bd_obj);
-            } else if (computeEntry?.s) {
-                const bd_obj: RangeBorderInfo = {
-                    rangeType: 'range',
-                    borderType: 'border-slash',
-                    color: computeEntry.s.color,
-                    style: computeEntry.s.style,
-                    range: normalizeSelection(ctx, [{ row: [r + row_s, r + row_s], column: [c + col_s, c + col_s] }]),
-                };
-
-                if (cfg.borderInfo == null) {
-                    cfg.borderInfo = [];
-                }
-
-                cfg.borderInfo.push(bd_obj);
-            }
+            carrySides(
+                cfg.borderInfo,
+                r + row_s,
+                c + col_s,
+                borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`],
+            );
 
             let value = null;
             if (data[r] != null && data[r][c] != null) {
@@ -436,10 +367,6 @@ export function onCellsMoveEnd(
     last.row_focus = rf;
     last.column_focus = cf;
     ctx.selections = normalizeSelection(ctx, [last]);
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex != null) {
-        ctx.sheets[sheetIndex].config = cloneDeep(cfg);
-    }
 
     jfrefreshgrid(ctx, d, range);
 }

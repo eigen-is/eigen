@@ -1,11 +1,11 @@
-import type { BorderInfo, BorderType, RangeBorderInfo } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine/conditional-format';
+import type { BorderType } from '@workspace/lib/sheets';
+import { forEach, isNil, isPlainObject, pick, round } from 'es-toolkit/compat';
 import { genarate, is_date, update } from '../../engine/format';
-import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
-import { type Context, editableConfig, getFlowdata } from '../context';
+import type { Cell, CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { GlobalCache } from '../types';
-import { getSheetIndex, isAllowEdit } from '../utils';
+import { clipToUsedExtent, getSheetIndex, isAllowEdit } from '../utils';
+import { applyBorder, clearSides } from './border';
 import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
 import { colors } from './color';
 import { setFormulaCellInfo } from './formula-cache';
@@ -21,7 +21,7 @@ import {
 } from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
-import { normalizeSelection, selectIsOverlap } from './selection';
+import { selectIsOverlap } from './selection';
 import { sortSelection } from './sort';
 import { getCellTextInfo } from './text';
 import { hasPartMC, isdatatypemulti, isRealNull, isRealNum } from './validation';
@@ -48,7 +48,7 @@ export function updateFormatCell(
     if (sheetIndex == null) {
         return;
     }
-    const cfg = editableConfig(ctx, ctx.sheets[sheetIndex]);
+    const cfg = (ctx.sheets[sheetIndex].config ??= {});
     if (attr === 'ct') {
         for (let r = row_st; r <= row_ed; r += 1) {
             if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[r])) {
@@ -686,13 +686,10 @@ export function autoSelectionFormula(
 
 export function cancelPaintModel(ctx: Context) {
     if (ctx.copyState === null) return;
+    // The painter's marching ants are drawn from ctx.formulaRangeSelections, which only ever
+    // shows the current sheet. A copy sourced from another sheet has nothing on screen here.
     if (ctx.copyState?.dataSheetId === ctx.currentSheetId) {
         ctx.formulaRangeSelections = [];
-    } else {
-        if (!ctx.copyState) return;
-        const index = getSheetIndex(ctx, ctx.copyState.dataSheetId);
-        if (!index) return;
-        ctx.sheets[index].formulaRangeSelections = [];
     }
 
     ctx.copyState = {
@@ -945,12 +942,13 @@ export function handleFormatPainter(ctx: Context) {
     let RowlChange = false;
     let HasMC = false;
 
+    const cfg = getSheetConfig(ctx);
     for (let r = ctx.selections[0].row[0]; r <= ctx.selections[0].row[1]; r += 1) {
-        if (ctx.config.rowhidden != null && ctx.config.rowhidden[r] != null) {
+        if (cfg?.rowhidden?.[r] != null) {
             continue;
         }
 
-        if (ctx.config.rowlen != null && r in ctx.config.rowlen) {
+        if (cfg?.rowlen != null && r in cfg.rowlen) {
             RowlChange = true;
         }
 
@@ -985,7 +983,7 @@ export function handleClearFormat(ctx: Context) {
     if (!flowdata) return;
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
-    const cfg = editableConfig(ctx, ctx.sheets[index]);
+    const cfg = (ctx.sheets[index].config ??= {});
     for (const selection of ctx.selections ?? []) {
         const [rowSt, rowEd] = selection.row;
         const [colSt, colEd] = selection.column;
@@ -999,51 +997,7 @@ export function handleClearFormat(ctx: Context) {
                 flowdata[r][c] = pick(cell, 'v', 'm', 'mc', 'f', 'ct');
             }
         }
-        // When clearing table styles, also clear border styles
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const source_borderInfo: BorderInfo[] = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const entry = cfg.borderInfo[i];
-
-                if (entry.rangeType === 'range' && entry.borderType !== 'border-slash') {
-                    const bd_emptyRange: SingleRange[] = [];
-
-                    for (let j = 0; j < entry.range.length; j += 1) {
-                        bd_emptyRange.push(
-                            ...cfSplitRange(
-                                entry.range[j],
-                                { row: [rowSt, rowEd], column: [colSt, colEd] },
-                                { row: [rowSt, rowEd], column: [colSt, colEd] },
-                                'restPart',
-                            ),
-                        );
-                    }
-
-                    entry.range = bd_emptyRange;
-                    source_borderInfo.push(entry);
-                } else if (entry.rangeType === 'cell') {
-                    const bd_r = entry.value.row_index;
-                    const bd_c = entry.value.col_index;
-
-                    if (!(bd_r >= rowSt && bd_r <= rowEd && bd_c >= colSt && bd_c <= colEd)) {
-                        source_borderInfo.push(entry);
-                    }
-                } else if (
-                    !(
-                        entry.range[0].row[0] >= rowSt &&
-                        entry.range[0].row[0] <= rowEd &&
-                        entry.range[0].column[0] >= colSt &&
-                        entry.range[0].column[0] <= colEd
-                    )
-                ) {
-                    // remaining slash range entries that fall outside the clear rect
-                    source_borderInfo.push(entry);
-                }
-            }
-
-            cfg.borderInfo = source_borderInfo;
-        }
+        clearSides(cfg.borderInfo, rowSt, rowEd, colSt, colEd);
     }
 }
 
@@ -1059,48 +1013,14 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
-    const style = borderStyle == null || borderStyle === '' ? '1' : borderStyle;
-
-    const cfg = ctx.config;
-    if (cfg.borderInfo == null) {
-        cfg.borderInfo = [];
-    }
-
-    if (type !== 'border-slash') {
-        const borderInfo: RangeBorderInfo = {
-            rangeType: 'range',
-            borderType: type,
-            color,
-            style,
-            range: cloneDeep(ctx.selections) || [],
-        };
-        cfg.borderInfo.push(borderInfo);
-    } else {
-        const rangeList: string[] = [];
-        forEach(ctx.selections, (selection) => {
-            for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
-                for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                    const range = `${r}_${c}`;
-                    if (includes(rangeList, range)) continue;
-                    const borderInfo: RangeBorderInfo = {
-                        rangeType: 'range',
-                        borderType: type,
-                        color,
-                        style,
-                        range: normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]),
-                    };
-                    cfg.borderInfo!.push(borderInfo);
-                    rangeList.push(range);
-                }
-            }
-        });
-    }
-
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
 
-    ctx.sheets[index].config = ctx.config;
+    const color = borderColor == null || borderColor === '' ? '#000' : borderColor;
+    const style = borderStyle == null || borderStyle === '' ? 1 : Number(borderStyle);
+    // Four sides per cell: a header click over 130k rows must not become half a million patches.
+    const ranges = clipToUsedExtent(ctx, ctx.selections ?? []);
+    applyBorder((ctx.sheets[index].config ??= {}), type, { style, color }, ranges);
 }
 
 export function handleMerge(ctx: Context, type: string) {
@@ -1111,7 +1031,8 @@ export function handleMerge(ctx: Context, type: string) {
         return;
     }
 
-    if (ctx.config.merge != null) {
+    const merge = getSheetConfig(ctx)?.merge;
+    if (merge != null) {
         let has_PartMC = false;
         if (!ctx.selections) return;
         for (let s = 0; s < ctx.selections.length; s += 1) {
@@ -1162,7 +1083,7 @@ export function handleFreeze(ctx: Context, type: string) {
     let { row_focus, column_focus } = firstSelection;
     if (row_focus == null || column_focus == null) return;
 
-    const m = ctx.config.merge?.[`${row_focus}_${column_focus}`];
+    const m = file.config?.merge?.[`${row_focus}_${column_focus}`];
     if (m) {
         row_focus = m.r + m.rs - 1;
         column_focus = m.c + m.cs - 1;

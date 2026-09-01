@@ -1,13 +1,17 @@
-import type {
-    BorderSide,
-    ConditionalFormatRule,
-    DataVerificationRule,
-    DefaultConditionalFormatRule,
-    Cell as FortuneCell,
-    InlineStringSegment,
-    MergeCell,
-    Sheet,
-    SingleRange,
+import {
+    BORDER_STYLES,
+    type BorderSide,
+    borderInfoExtent,
+    type CellBorderSides,
+    type ConditionalFormatRule,
+    type DataVerificationRule,
+    type DefaultConditionalFormatRule,
+    type Cell as FortuneCell,
+    type InlineStringSegment,
+    mergedBorderSides,
+    parseCellKey,
+    type Sheet,
+    type SingleRange,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import {
@@ -30,7 +34,6 @@ import type {
 } from 'exceljs';
 import JSZip from 'jszip';
 import { resolveFontFamily } from './fonts';
-import { type CellBorderSides, expandBorderInfo } from './range-borders';
 
 // Sheet[] -> XLSX workbook bytes. Runs inside the transform Worker (worker.ts owns
 // execution; the main-thread orchestration lives in export-document.ts). This module
@@ -52,22 +55,6 @@ const REVERSE_VERTICAL: Record<number, 'top' | 'middle' | 'bottom'> = {
     0: 'middle',
     1: 'top',
     2: 'bottom',
-};
-
-const REVERSE_BORDER_STYLE: Record<number, NonNullable<Border['style']>> = {
-    1: 'thin',
-    2: 'hair',
-    3: 'dotted',
-    4: 'dashed',
-    5: 'dashDot',
-    6: 'dashDotDot',
-    7: 'double',
-    8: 'medium',
-    9: 'mediumDashed',
-    10: 'mediumDashDot',
-    11: 'mediumDashDotDot',
-    12: 'slantDashDot',
-    13: 'thick',
 };
 
 function hexToArgb(hex: string): string {
@@ -129,7 +116,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
                 // runs land intact in sharedStrings.xml.
                 const richText = inlineSegmentsToRichText(cell?.ct?.s);
                 const display = cell?.m != null ? String(cell.m) : cell?.v != null ? String(cell.v) : '';
-                const [r, c] = key.split('_').map(Number);
+                const [r, c] = parseCellKey(key);
                 worksheet.getCell(r + 1, c + 1).value = {
                     // exceljs detects hyperlink values by `text && hyperlink` — an
                     // empty display string would degrade the cell to a plain object,
@@ -168,41 +155,17 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
             }
         }
 
-        if (config.borderInfo) {
-            // exceljs merge constituents SHARE the master's style object (lib/doc/
-            // cell.js merge() assigns `this.style = master.style`), so writing
-            // `cell.border` per constituent would clobber the shared border — the
-            // last constituent wins and the merge loses e.g. its left edge. Compose
-            // ONE border per merge instead: a side counts only from constituents on
-            // the merge's matching edge (the editor's render compute ignores
-            // non-edge sides under a merge, packages/sheet state/modules/border.ts);
-            // same-side conflicts resolve last-write-wins per side in map order.
-            const mergeAt = mergeConstituents(config.merge);
-            const mergeBorders = new Map<string, CellBorderSides>();
-            for (const [key, sides] of expandBorderInfo(config.borderInfo)) {
-                const [r, c] = key.split('_').map(Number);
-                const merge = mergeAt.get(key);
-                if (merge) {
-                    const union = mergeBorders.get(`${merge.r}_${merge.c}`) ?? {};
-                    if (sides.l && c === merge.c) union.l = sides.l;
-                    if (sides.r && c === merge.c + merge.cs - 1) union.r = sides.r;
-                    if (sides.t && r === merge.r) union.t = sides.t;
-                    if (sides.b && r === merge.r + merge.rs - 1) union.b = sides.b;
-                    mergeBorders.set(`${merge.r}_${merge.c}`, union);
-                    continue;
-                }
-                const border = toBorder(sides);
-                if (border) worksheet.getCell(r + 1, c + 1).border = border;
-            }
-            for (const [key, sides] of mergeBorders) {
-                const border = toBorder(sides);
-                if (!border) continue;
-                const [r, c] = key.split('_').map(Number);
-                // One write through the anchor lands on every constituent via the
-                // shared style — Excel renders the merge perimeter from the edge
-                // cells' sides and ignores the sides facing inward.
-                worksheet.getCell(r + 1, c + 1).border = border;
-            }
+        // exceljs constituents share the master's style object, so a merge's perimeter is
+        // written once through the master; per-constituent writes would clobber each other.
+        // Bound the fold to the bordered extent so a merge beyond it is skipped, not expanded.
+        // mergedBorderSides bails on an empty map, so no length guard is needed here.
+        const { maxRow: borderMaxRow, maxCol: borderMaxCol } = borderInfoExtent(config.borderInfo ?? {});
+        const folded = mergedBorderSides(config.borderInfo, config.merge, [0, borderMaxRow, 0, borderMaxCol]);
+        for (const [key, sides] of Object.entries(folded)) {
+            const border = toBorder(sides);
+            if (!border) continue;
+            const [r, c] = parseCellKey(key);
+            worksheet.getCell(r + 1, c + 1).border = border;
         }
 
         if (sheet.filterRange) {
@@ -225,7 +188,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         if (sheet.dataVerification) {
             for (const [key, rule] of Object.entries(sheet.dataVerification)) {
-                const [r, c] = key.split('_').map(Number);
+                const [r, c] = parseCellKey(key);
                 const validation = toDataValidation(rule, r, c);
                 if (validation) worksheet.getCell(r + 1, c + 1).dataValidation = validation;
             }
@@ -380,31 +343,23 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
 
 function toBorderSide(side: BorderSide): Partial<Border> {
     return {
-        style: REVERSE_BORDER_STYLE[side.style] ?? 'thin',
+        style: BORDER_STYLES[side.style]?.name ?? 'thin',
         color: { argb: hexToArgb(side.color) },
     };
 }
 
+// The slash side `s` is OOXML's diagonal border. The canvas paints it top-left → bottom-right
+// (state/render/borders.ts), which is xlsx's diagonalDown, so it exports as `diagonal` with
+// `down: true`.
 function toBorder(sides: CellBorderSides): Partial<Borders> | null {
     const border = {
         ...(sides.l && { left: toBorderSide(sides.l) }),
         ...(sides.r && { right: toBorderSide(sides.r) }),
         ...(sides.t && { top: toBorderSide(sides.t) }),
         ...(sides.b && { bottom: toBorderSide(sides.b) }),
+        ...(sides.s && { diagonal: { ...toBorderSide(sides.s), down: true } }),
     };
     return Object.keys(border).length > 0 ? border : null;
-}
-
-function mergeConstituents(merge: Record<string, MergeCell> | undefined): Map<string, MergeCell> {
-    const byCell = new Map<string, MergeCell>();
-    for (const m of Object.values(merge ?? {})) {
-        for (let r = m.r; r < m.r + m.rs; r += 1) {
-            for (let c = m.c; c < m.c + m.cs; c += 1) {
-                byCell.set(`${r}_${c}`, m);
-            }
-        }
-    }
-    return byCell;
 }
 
 // Inline-string segments carry the cell's hex defaults or rgb(…) strings produced by

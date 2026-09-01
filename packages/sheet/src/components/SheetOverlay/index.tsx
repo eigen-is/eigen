@@ -18,6 +18,7 @@ import {
     getCellHyperlink,
     getCellRowColumn,
     getRangetxt,
+    getSheetConfig,
     getSheetIndex,
     handleCellAreaDoubleClick,
     handleCellAreaMouseDown,
@@ -335,13 +336,14 @@ export const SheetOverlay: React.FC = () => {
         };
     }, [onMouseUp]);
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: range text recomputed on selection/sheet changes; context.config.merge is read but stable per sheet
+    // biome-ignore lint/correctness/useExhaustiveDependencies: range text recomputed on selection/sheet changes; the sheet's merge config is read but stable per sheet
     const rangeText = useMemo(() => {
         const lastSelection = context.selections?.at(-1);
         if (!(lastSelection && lastSelection.row_focus != null && lastSelection.column_focus != null)) return '';
         const rf = lastSelection.row_focus;
         const cf = lastSelection.column_focus;
-        if (context.config.merge != null && `${rf}_${cf}` in context.config.merge) {
+        const merge = getSheetConfig(context)?.merge;
+        if (merge != null && `${rf}_${cf}` in merge) {
             return getRangetxt(context, context.currentSheetId, {
                 column: [cf, cf],
                 row: [rf, rf],
@@ -425,12 +427,16 @@ export const SheetOverlay: React.FC = () => {
                     onContextMenu={cellAreaContextMenu}
                     onScroll={onCellAreaScroll}
                     {...cellAreaLongPress.bind(null)}
+                    // A hovered glyph also stands the drag handles' cursors down (index.css).
+                    data-glyph-hover={context.cellGlyphHover}
                     style={{
                         width: context.cellmainWidth,
                         height: context.cellmainHeight,
                         cursor: context.cellSelectExtending
                             ? 'crosshair'
-                            : context.filterButtonHover != null
+                            : context.filterButtonHover != null ||
+                                context.cellGlyphHover === 'dropdown' ||
+                                context.cellGlyphHover === 'checkbox'
                               ? 'pointer'
                               : 'default',
                     }}

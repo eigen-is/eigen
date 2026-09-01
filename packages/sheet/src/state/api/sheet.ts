@@ -1,5 +1,6 @@
 import { cloneDeep, isUndefined } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
+import { normalizeSheetConfig } from '../../engine/replay-ops';
 import type { CellMatrix } from '../../engine/types';
 import { api, createContextResolver, en, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
@@ -31,6 +32,7 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet):
             draftCtx.sheets[index].config = newData.config;
         }
     }
+    normalizeSheetConfig(draftCtx.sheets[index]);
     return expandedData;
 }
 

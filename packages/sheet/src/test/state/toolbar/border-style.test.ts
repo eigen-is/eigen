@@ -1,33 +1,27 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { getBorderInfoCompute } from '../../../state/modules/border';
+import { handleBorder } from '../../../state/modules/toolbar';
 import { contextFactory } from '../factories/context';
 
 describe('sheet/core/toolbar/border-style', () => {
-    // border-slash is a per-range diagonal: each selected range stamps the `s`
-    // side on its own focus cell. With multiple ranges every range's focus must
-    // be stamped — not range[0]'s repeatedly.
-    test('border-slash stamps each selected range focus cell', () => {
+    // border-slash is a per-cell diagonal: every cell of every selected range gets
+    // its own `s` side — not range[0]'s cells repeatedly.
+    test('border-slash stamps every cell of each selected range', () => {
         const ctx = contextFactory({
-            config: {
-                borderInfo: [
-                    {
-                        rangeType: 'range',
-                        borderType: 'border-slash',
-                        color: '#000000',
-                        style: 1,
-                        range: [
-                            { row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 },
-                            { row: [2, 2], column: [2, 2], row_focus: 2, column_focus: 2 },
-                        ],
-                    },
-                ],
-            },
+            config: { borderInfo: {} },
+            selections: [
+                { row: [0, 0], column: [0, 1], row_focus: 0, column_focus: 0 },
+                { row: [2, 2], column: [2, 2], row_focus: 2, column_focus: 2 },
+            ],
         }) as Context;
 
-        const map = getBorderInfoCompute(ctx);
+        handleBorder(ctx, 'border-slash', '#000000', '1');
+        const map = getBorderInfoCompute(ctx, ctx.currentSheetId, [0, 2, 0, 2]);
 
-        expect(map['0_0']?.s).toBeDefined();
-        expect(map['2_2']?.s).toBeDefined();
+        expect(map['0_0']?.s).toEqual({ style: 1, color: '#000000' });
+        expect(map['0_1']?.s).toEqual({ style: 1, color: '#000000' });
+        expect(map['2_2']?.s).toEqual({ style: 1, color: '#000000' });
+        expect(Object.keys(map)).toHaveLength(3);
     });
 });

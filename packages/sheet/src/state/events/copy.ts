@@ -1,6 +1,6 @@
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cancelPaintModel, checkCF, getComputeMap, getSheetIndex } from '..';
-import type { Context } from '../context';
+import { type Context, getSheetConfig } from '../context';
 import { copy, selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 
@@ -16,7 +16,7 @@ export function handleCopy(ctx: Context): boolean {
     }
 
     // warn if the copy range contains partially merged cells
-    if (ctx.config.merge != null) {
+    if (getSheetConfig(ctx)?.merge != null) {
         let has_PartMC = false;
 
         for (let s = 0; s < selection.length; s += 1) {

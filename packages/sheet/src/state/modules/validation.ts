@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { forEach } from 'es-toolkit/compat';
-import type { Context } from '../context';
+import { type Context, getSheetConfig } from '../context';
 import { hasChinaword } from './text';
 
 export { error, isdatetime, isRealNull, isRealNum, valueIsError } from '../../engine/validation';
@@ -18,7 +18,7 @@ export function isdatatypemulti(s: unknown) {
 export function hasPartMC(ctx: Context, r1: number, r2: number, c1: number, c2: number) {
     let ret = false;
 
-    forEach(ctx.config.merge, (mc) => {
+    forEach(getSheetConfig(ctx)?.merge, (mc) => {
         if (r1 < mc.r) {
             if (r2 >= mc.r && r2 < mc.r + mc.rs - 1) {
                 if (c1 >= mc.c && c1 <= mc.c + mc.cs - 1) {

@@ -53,37 +53,12 @@ const WORKBOOK: Sheet[] = [
         config: {
             merge: { '4_0': { r: 4, c: 0, rs: 2, cs: 2 } },
             rowlen: { '0': 30 },
-            borderInfo: [
-                {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: 0,
-                        col_index: 0,
-                        l: { style: 1, color: '#000000' },
-                        t: { style: 1, color: '#000000' },
-                    },
-                },
-                {
-                    rangeType: 'range',
-                    borderType: 'border-all',
-                    color: '#000000',
-                    style: 1,
-                    range: [{ row: [0, 2], column: [0, 2] }],
-                },
-                {
-                    rangeType: 'cell',
-                    value: {
-                        row_index: 1,
-                        col_index: 0,
-                        l: { style: 1, color: '#000000' },
-                        t: { style: 1, color: '#000000' },
-                    },
-                },
-                {
-                    rangeType: 'cell',
-                    value: { row_index: 2, col_index: 0, b: { style: 7, color: '#ff00ff' }, l: null },
-                },
-            ],
+            borderInfo: {
+                '0_0': { l: { style: 1, color: '#000000' }, t: { style: 1, color: '#000000' } },
+                '1_0': { l: { style: 1, color: '#000000' }, t: { style: 1, color: '#000000' } },
+                '2_0': { b: { style: 7, color: '#ff00ff' } },
+                '3_3': { s: { style: 1, color: '#ff00ff' } },
+            },
         },
         frozen: { type: 'rangeBoth', range: { row_focus: 0, column_focus: 0 } },
         filterRange: { row: [0, 7], column: [0, 4] },
@@ -142,9 +117,9 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
     test('repeated style and border payloads are interned once', () => {
         const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
         // HEADER_STYLE is shared by four cells across both sheets, the thin black
-        // border by two borderInfo entries.
+        // border by two borderInfo cells.
         expect(envelope.styles.filter((style) => style['bg'] === '#ff0000')).toHaveLength(1);
-        expect(envelope.borders).toHaveLength(2);
+        expect(envelope.borders).toHaveLength(3);
     });
 
     test('computed: false → no calcChain on any sheet', () => {
@@ -152,15 +127,6 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             encodeSheetsSnapshot(WORKBOOK, { computed: false }),
         ) as SheetWithCalcChain[];
         for (const sheet of decoded) expect(sheet.calcChain).toBeUndefined();
-    });
-
-    test('legacy snapshot (plain Sheet[] JSON) is parsed unchanged', () => {
-        const legacy: SheetWithCalcChain[] = [
-            { id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [{ r: 0, c: 0, v: { v: 1, m: '1' } }] },
-            { id: 'sheet-2', name: 'Sheet2', order: 1, calcChain: [{ r: 0, c: 0, id: 'sheet-2' }] },
-        ];
-        expect(decodeSheetsSnapshot(JSON.stringify(legacy))).toEqual(legacy);
-        expect(decodeSheetsSnapshot(`\n  ${JSON.stringify(legacy)}`)).toEqual(legacy);
     });
 
     test('one shared style across 3000 cells is serialized once', () => {
@@ -223,20 +189,24 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
                 name: 'Sheet1',
                 order: 0,
                 celldata: [],
-                config: {
-                    borderInfo: [
-                        { rangeType: 'cell', value: { row_index: 0, col_index: 0, ...side } },
-                        { rangeType: 'cell', value: { row_index: 1, col_index: 0, ...side } },
-                    ],
-                },
+                config: { borderInfo: { '0_0': side, '1_0': side } },
             } as Sheet,
         ];
         const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
-        const [a, b] = decoded[0].config!.borderInfo! as { value: { l: { style: number; color: string } } }[];
-        expect(a.value.l).toEqual({ style: 1, color: '#000000' });
-        expect(a.value.l).not.toBe(b.value.l);
-        a.value.l.style = 13;
-        expect(b.value.l.style).toBe(1);
+        const borderInfo = decoded[0].config!.borderInfo!;
+        const [a, b] = [borderInfo['0_0'], borderInfo['1_0']];
+        expect(a.l).toEqual({ style: 1, color: '#000000' });
+        expect(a.l).not.toBe(b.l);
+        a.l!.style = 13;
+        expect(b.l!.style).toBe(1);
+    });
+
+    test('an empty borderInfo map round-trips as an empty map', () => {
+        // N1 materializes the config collections on every base; the codec must not
+        // turn a present-but-empty map into an absent key (or the reverse).
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: { borderInfo: {} } }];
+        const encoded = encodeSheetsSnapshot(sheets, { computed: false });
+        expect(decodeSheetsSnapshot(encoded)).toEqual(sheets);
     });
 
     test('an empty cell object survives as {} rather than collapsing to null', () => {
@@ -257,6 +227,32 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(() => decodeSheetsSnapshot('{"foo":1}')).toThrow('Unknown sheets snapshot format');
     });
 
+    test('a border entry that is not a [row, col, index] tuple throws the same error', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['borderCells'] = [{}];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('a borderCells index past the borders dictionary throws the same error', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['borderCells'] = [[0, 0, 999]];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('a cell style index past the styles dictionary throws the same error', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['cells'] = [[0, 0, 999]];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('a v1 snapshot (plain Sheet[] JSON) throws instead of decoding', () => {
+        // No legacy reading anywhere: the editor opens such a doc read-only on defaults
+        // (use-sheet.ts loadedRef) and never persists over it.
+        const legacy = JSON.stringify([{ id: 'sheet-1', name: 'Sheet1', order: 0, config: {}, celldata: [] }]);
+        expect(() => decodeSheetsSnapshot(legacy)).toThrow('Unknown sheets snapshot format');
+        expect(() => decodeSheetsSnapshot(`\n  ${legacy}`)).toThrow('Unknown sheets snapshot format');
+    });
+
     test('encoding is byte-stable for a fixed workbook', async () => {
         // Byte stability is what the import golden in document-transform.test.ts pins
         // end-to-end; this local pin makes a codec-side drift fail fast. Moving it is
@@ -264,7 +260,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(WORKBOOK, { computed: true });
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded));
         const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-        expect(hex).toBe('b454d628aefb05b830f5b722861cac9dcc688a5851be0d624fcc155389b6dc5e');
+        expect(hex).toBe('5c106a392d5cb1103e0a83b5a6117489da13dea5908d15345f91709767ae3728');
     });
 
     test('data and selections never reach the snapshot', () => {

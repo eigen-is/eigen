@@ -1,8 +1,9 @@
+import { parseCellKey } from '@workspace/lib/sheets';
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
-import type { Context } from '../context';
+import { type Context, getFlowdata, getSheetConfig } from '../context';
 import { en } from '../locale/en';
 import { checkCellIsLocked } from '../modules';
-import type { Sheet } from '../types';
+import type { Selection, Sheet } from '../types';
 
 export * from './patch';
 
@@ -159,17 +160,17 @@ export function replaceHtml(temp: string, dataarry: Record<string, string | numb
 }
 
 export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
-    const cfg = ctx.config;
+    const cfg = getSheetConfig(ctx);
     const judgeRange = isUndefined(range) ? ctx.selections : range;
     return (
         every(judgeRange, (selection) => {
             for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
-                if (cfg.rowReadOnly?.[r]) {
+                if (cfg?.rowReadOnly?.[r]) {
                     return false;
                 }
             }
             for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                if (cfg.colReadOnly?.[c]) {
+                if (cfg?.colReadOnly?.[c]) {
                     return false;
                 }
             }
@@ -185,4 +186,60 @@ export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
             return true;
         }) && (isUndefined(ctx.allowEdit) ? true : ctx.allowEdit)
     );
+}
+
+// A click on a row or column header hands over every row or column the sheet has
+// (events/mouse-header.ts), and per-cell writes over 130k rows are a quarter of a million
+// immer patches for the collab layer to turn into Yjs ops. A whole-sheet axis is clipped
+// to the last cell holding something; a range the user dragged out is applied as selected.
+//
+// "Whole axis" is read from the header-select flags, never from the extent: a whole-column
+// header selection carries `column_select` (spans every row → clip its rows), a whole-row one
+// carries `row_select` (spans every column → clip its columns); `selectAll` sets both. These
+// flags are set ONLY by the header click/drag paths and selectAll, so a hand-dragged A1:Z100
+// range on a default 26-column sheet — which happens to span the visible column axis — is no
+// longer misread as whole-axis and silently clipped.
+export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selection[] {
+    const wholeRows = selections.map((s) => s.column_select === true);
+    const wholeColumns = selections.map((s) => s.row_select === true);
+    const d = getFlowdata(ctx);
+    if (!d || (!wholeRows.includes(true) && !wholeColumns.includes(true))) return selections;
+
+    // The DATA extent is sheet-wide on purpose, NOT bounded to the selection's axis: a header
+    // click on an empty column still reaches the last row that holds data in any column, and a
+    // click on an empty row the last column with data in any row (pinned by border.test.ts
+    // "bounds a header-click selection to the used extent"). Both scans already early-exit from
+    // the far edge, so there is no cheap trim to make here without an index — and a cached extent
+    // is out of scope. Only the bordered-extent pass below is axis-aware.
+    let lastRow = d.length - 1;
+    while (lastRow > 0 && !d[lastRow]?.some((cell) => cell != null)) lastRow -= 1;
+    let lastColumn = 0;
+    if (wholeColumns.includes(true)) {
+        for (let r = 0; r <= lastRow; r += 1) {
+            const row = d[r];
+            if (!row) continue;
+            for (let c = row.length - 1; c > lastColumn; c -= 1) {
+                if (row[c] == null) continue;
+                lastColumn = c;
+                break;
+            }
+        }
+    }
+    // A bordered blank cell is used content too, but only along the selection's fixed axis: a
+    // whole-column selection extends its rows for borders in its own columns, a whole-row
+    // selection its columns for borders in its own rows. A border elsewhere is not "its" content
+    // — counting it would seed insertCheckbox/border-all thousands of cells past the data.
+    const rowClipCols = selections.filter((_, i) => wholeRows[i]).map((s) => s.column);
+    const colClipRows = selections.filter((_, i) => wholeColumns[i]).map((s) => s.row);
+    const borderInfo = getSheetConfig(ctx)?.borderInfo;
+    for (const key in borderInfo) {
+        const [r, c] = parseCellKey(key);
+        if (r > lastRow && rowClipCols.some(([c0, c1]) => c >= c0 && c <= c1)) lastRow = r;
+        if (c > lastColumn && colClipRows.some(([r0, r1]) => r >= r0 && r <= r1)) lastColumn = c;
+    }
+    return selections.map((selection, i) => ({
+        ...selection,
+        row: wholeRows[i] ? [selection.row[0], lastRow] : selection.row,
+        column: wholeColumns[i] ? [selection.column[0], lastColumn] : selection.column,
+    }));
 }

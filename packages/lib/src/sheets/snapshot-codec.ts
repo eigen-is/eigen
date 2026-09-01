@@ -6,14 +6,14 @@
 // The dictionary lives at the serialization seam only: the in-memory Sheet[] the
 // decoder rebuilds is exactly today's shape.
 
-import type { BorderInfo, Cell, CellBorderInfo, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
+import { cloneSides, parseCellKey } from './borders';
+import type { Cell, CellBorderSides, CellMatrix, CellWithRowAndCol, Sheet, SheetConfig } from './types';
 
 const FORMAT = 'eigensheets/2';
 
-// Dictionary payloads. Deliberately loose Records: they hold whatever keys a cell
-// or a border carried, including ones no current type knows about.
+// Cell style payload. Deliberately loose: it holds whatever keys a cell carried,
+// including ones no current type knows about.
 type StyleTuple = Record<string, unknown>;
-type BorderSides = Record<string, unknown>;
 
 // [row, col, styleIndex, content?]. styleIndex -1 = no style; a missing content
 // slot = the cell had neither content nor extra keys (with -1: no cell at all).
@@ -22,9 +22,8 @@ type EncodedCell = [number, number, number, EncodedContent?];
 // common cell, encoded without either key name. Everything else spells out the
 // keys it had verbatim (`cc` = commentCardIds).
 type EncodedContent = string | number | boolean | Record<string, unknown>;
-// [row, col, borderIndex] for a cell border; other rangeTypes ride along verbatim
-// because the array order is semantic (later entries override earlier ones).
-type EncodedBorder = [number, number, number] | BorderInfo;
+// [row, col, borderIndex] — one per `config.borderInfo` key.
+type EncodedBorder = [number, number, number];
 
 type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config'> & {
     config?: Omit<SheetConfig, 'borderInfo'>;
@@ -36,7 +35,7 @@ type SnapshotV2 = {
     f: typeof FORMAT;
     computed: boolean;
     styles: StyleTuple[];
-    borders: BorderSides[];
+    borders: CellBorderSides[];
     sheets: EncodedSheet[];
 };
 
@@ -49,7 +48,7 @@ type RuntimeSheet = Sheet & { selections?: unknown; calcChain?: CalcChainEntry[]
 export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean }): string {
     const styles: StyleTuple[] = [];
     const styleIndex = new Map<string, number>();
-    const borders: BorderSides[] = [];
+    const borders: CellBorderSides[] = [];
     const borderIndex = new Map<string, number>();
 
     const encoded = sheets.map((sheet) => {
@@ -80,7 +79,13 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
         if (config) {
             const { borderInfo, ...restConfig } = config;
             out.config = restConfig;
-            if (borderInfo) out.borderCells = borderInfo.map((info) => encodeBorder(info, borders, borderIndex));
+            if (borderInfo) {
+                const borderCells: EncodedBorder[] = [];
+                for (const [key, sides] of Object.entries(borderInfo)) {
+                    borderCells.push([...parseCellKey(key), intern(sides, borders, borderIndex)]);
+                }
+                out.borderCells = borderCells;
+            }
         }
 
         return out;
@@ -91,13 +96,10 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
 }
 
 export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
-    // Every doc written before v2 stores a plain Sheet[] array.
-    if (snapshot.trimStart().startsWith('[')) return JSON.parse(snapshot) as Sheet[];
-
     const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
-    // Fail crisp on a corrupt envelope or a future format — silent garbage-in
-    // would materialize a half-empty workbook instead of surfacing the problem.
-    if (f !== FORMAT) throw new Error(`Unknown sheets snapshot format: ${String(f).slice(0, 40)}`);
+    // Fail crisp on a corrupt envelope, a v1 array or a future format — silent
+    // garbage-in would materialize a half-empty workbook instead of surfacing the problem.
+    if (f !== FORMAT) throw unknownFormat(f);
     return sheets.map((encoded) => {
         const { cells, borderCells, config, ...rest } = encoded;
         const sheet: RuntimeSheet = { ...rest };
@@ -119,11 +121,26 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
 
         if (config || borderCells) {
             sheet.config = { ...config };
-            if (borderCells) sheet.config.borderInfo = borderCells.map((entry) => decodeBorder(entry, borders));
+            if (borderCells) {
+                const borderInfo: Record<string, CellBorderSides> = {};
+                for (const entry of borderCells) {
+                    if (!Array.isArray(entry) || entry.length !== 3) throw unknownFormat(entry);
+                    const [r, c, borderIdx] = entry;
+                    // An index past the borders dictionary is as corrupt as a bad shape — crisp
+                    // over the raw TypeError cloneSides(undefined) would otherwise throw.
+                    if (borders[borderIdx] === undefined) throw unknownFormat(entry);
+                    borderInfo[`${r}_${c}`] = cloneSides(borders[borderIdx]);
+                }
+                sheet.config.borderInfo = borderInfo;
+            }
         }
 
         return sheet;
     });
+}
+
+function unknownFormat(found: unknown): Error {
+    return new Error(`Unknown sheets snapshot format: ${String(found).slice(0, 40)}`);
 }
 
 function denseToEntries(data: CellMatrix): CellWithRowAndCol[] {
@@ -187,6 +204,9 @@ function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: 
 function decodeCell(styleIdx: number, content: EncodedContent | undefined, styles: StyleTuple[]): Cell | null {
     if (styleIdx === -1 && content === undefined) return null;
 
+    // Same dictionary hole as borderIdx: an index past the styles table would iterate
+    // an `undefined` into a silent blank-styled cell — throw the standard error instead.
+    if (styleIdx !== -1 && styles[styleIdx] === undefined) throw unknownFormat(styleIdx);
     const cell: Record<string, unknown> = styleIdx === -1 ? {} : materializeStyle(styles[styleIdx]);
     if (content === undefined) return cell as Cell;
     if (typeof content !== 'object') {
@@ -222,22 +242,6 @@ function cloneJsonValue(value: unknown): unknown {
         return out;
     }
     return value;
-}
-
-function encodeBorder(info: BorderInfo, borders: BorderSides[], borderIndex: Map<string, number>): EncodedBorder {
-    if (info.rangeType !== 'cell') return info;
-    const { row_index, col_index, ...sides } = info.value;
-    return [row_index, col_index, intern(sides, borders, borderIndex)];
-}
-
-function decodeBorder(entry: EncodedBorder, borders: BorderSides[]): BorderInfo {
-    if (!Array.isArray(entry)) return entry;
-    const value = {
-        row_index: entry[0],
-        col_index: entry[1],
-        ...materializeStyle(borders[entry[2]]),
-    } as CellBorderInfo['value'];
-    return { rangeType: 'cell', value };
 }
 
 // Keys are sorted before stringifying so two payloads that were written in a

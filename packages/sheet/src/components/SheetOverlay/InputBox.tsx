@@ -11,6 +11,7 @@ import {
     getFlowdata,
     getFormulaHtml,
     getInlineStringHTML,
+    getSheetConfig,
     getStyleByCell,
     handleFormulaInput,
     isAllowEdit,
@@ -215,9 +216,9 @@ export const InputBox: React.FC = () => {
         [context.editingCellPosition],
     );
 
-    const cfg = context.config || {};
-    const rowReadOnly: Record<string, number> = cfg.rowReadOnly || {};
-    const colReadOnly: Record<string, number> = cfg.colReadOnly || {};
+    const cfg = getSheetConfig(context);
+    const rowReadOnly: Record<string, number> = cfg?.rowReadOnly || {};
+    const colReadOnly: Record<string, number> = cfg?.colReadOnly || {};
 
     const edit = !((colReadOnly[col_index] || rowReadOnly[row_index]) && context.allowEdit === true);
 

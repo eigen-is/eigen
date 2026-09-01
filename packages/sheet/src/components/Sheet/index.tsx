@@ -164,10 +164,10 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     // Latched by the 0×0 guards below so the rAF redraw skips a hidden surface.
     const visibleRef = useRef(true);
 
-    const rowlenKey = useStableJson(context.config?.rowlen);
-    const columnlenKey = useStableJson(context.config?.columnlen);
-    const rowhiddenKey = useStableJson(context.config?.rowhidden);
-    const colhiddenKey = useStableJson(context.config?.colhidden);
+    const rowlenKey = useStableJson(sheet.config?.rowlen);
+    const columnlenKey = useStableJson(sheet.config?.columnlen);
+    const rowhiddenKey = useStableJson(sheet.config?.rowhidden);
+    const colhiddenKey = useStableJson(sheet.config?.colhidden);
 
     // Data via ref so the handler identity survives edits — a rebuilt observer would re-clear the
     // canvas bitmap, and so repaint the whole grid, per keystroke.
@@ -205,7 +205,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     }, [resize]);
 
     // Recalculate row/col info when data or config dimensions change
-    // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from context.config; the source object refs would re-fire on identity churn
+    // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from sheet.config; the source object refs would re-fire on identity churn
     useEffect(() => {
         if (!data) return;
         setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
