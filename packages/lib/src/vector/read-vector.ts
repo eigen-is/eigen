@@ -6,7 +6,7 @@
 import type * as Y from 'yjs';
 import { validateElbowPoints } from './elbow-pins';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
-import { parsePoints, serializePoints } from './geometry';
+import { parsePoints, parsePressures, serializePoints, serializePressures } from './geometry';
 import {
     ARROWHEADS,
     DEFAULT_ARROW_PROPS,
@@ -117,11 +117,20 @@ function readElement(value: unknown): VectorElement | null {
             const points = parsePoints(str(value.get('points'), ''));
             if (points.length === 0) return null;
             const clamped = points.map((p) => ({ x: clampCoord(p.x), y: clampCoord(p.y) }));
+            // Pen pressure (freedraw only) rides a separate index-aligned array. A stored simulate flag,
+            // a missing/garbage array, or a length that drifts from the surviving points (a non-finite
+            // point was dropped) all collapse to '' + simulate — so the invariant "pressures[i] pairs
+            // points[i]" holds for every consumer, and legacy strokes render exactly as before.
+            const pressures = base.type === 'freedraw' ? parsePressures(str(value.get('pressures'), '')) : [];
+            const simulate = base.type !== 'freedraw' || bool(value.get('simulatePressure'), true);
+            const useReal = !simulate && pressures.length > 0 && pressures.length === clamped.length;
             return {
                 ...base,
                 type: base.type,
                 roundness: oneOf(value.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
                 points: serializePoints(clamped),
+                pressures: useReal ? serializePressures(pressures) : '',
+                simulatePressure: !useReal,
             };
         }
         case 'arrow': {

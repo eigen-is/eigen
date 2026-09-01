@@ -147,6 +147,48 @@ describe('readVectorFromDoc', () => {
         expect(freedraw).toMatchObject({ type: 'freedraw', points: '[[0,0],[3,4]]', roundness: 'sharp' });
     });
 
+    test('materializes freedraw pen pressure, index-aligned with points; defaults simulate', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'pen', {
+                type: 'freedraw',
+                index: 'a0',
+                points: '[[0,0],[10,5],[20,0]]',
+                pressures: '[0.25,0.75,0.5]',
+                simulatePressure: false,
+            });
+            // A legacy freedraw (no pressure fields) reads back as simulate with no pressures.
+            writeElement(elements, 'old', { type: 'freedraw', index: 'a1', points: '[[0,0],[5,5]]' });
+        });
+        const [pen, old] = readVectorFromDoc(doc).elements;
+        expect(pen).toMatchObject({
+            type: 'freedraw',
+            points: '[[0,0],[10,5],[20,0]]',
+            pressures: '[0.25,0.75,0.5]',
+            simulatePressure: false,
+        });
+        expect(old).toMatchObject({ type: 'freedraw', points: '[[0,0],[5,5]]', pressures: '', simulatePressure: true });
+    });
+
+    test('blanks pen pressures when their count drifts from the surviving points (alignment invariant)', () => {
+        const doc = docWith((elements) => {
+            // A non-finite point drops one survivor → 2 points but 3 pressures ⇒ misaligned ⇒ blank + simulate.
+            writeElement(elements, 'pen', {
+                type: 'freedraw',
+                index: 'a0',
+                points: '[[0,0],[1e400,0],[20,0]]',
+                pressures: '[0.1,0.2,0.3]',
+                simulatePressure: false,
+            });
+        });
+        const [pen] = readVectorFromDoc(doc).elements;
+        expect(pen).toMatchObject({
+            type: 'freedraw',
+            points: '[[0,0],[20,0]]',
+            pressures: '',
+            simulatePressure: true,
+        });
+    });
+
     test('skips a linear element whose points are missing, empty, or garbage', () => {
         const doc = docWith((elements) => {
             writeElement(elements, 'ok', { type: 'line', index: 'a0', points: '[[0,0],[10,0]]' });
@@ -413,6 +455,30 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         roundness: 'round',
         points: '[[0,0],[80,10],[40,-5]]',
     };
+    // freedraw carries the pen-pressure fields (index-aligned with points) on top of the linear fields.
+    const freedraw: Record<string, unknown> = {
+        id: 'freedraw1',
+        type: 'freedraw',
+        x: 5,
+        y: 6,
+        width: 40,
+        height: 10,
+        angle: 0,
+        strokeColor: '#101112',
+        backgroundColor: '#131415',
+        fillStyle: 'solid',
+        strokeWidth: 4,
+        strokeStyle: 'solid',
+        roughness: 1,
+        seed: 555,
+        opacity: 90,
+        locked: false,
+        index: 'a1',
+        roundness: 'sharp',
+        points: '[[0,0],[20,10],[40,0]]',
+        pressures: '[0.25,0.75,0.5]',
+        simulatePressure: false,
+    };
 
     const BASE_FIELDS = [
         'id',
@@ -475,6 +541,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         { record: text, fields: [...BASE_FIELDS, 'text', 'fontSize', 'fontFamily', 'textAlign'] },
         { record: image, fields: [...BASE_FIELDS, 'mediaName'] },
         { record: line, fields: [...BASE_FIELDS, 'roundness', 'points'] },
+        { record: freedraw, fields: [...BASE_FIELDS, 'roundness', 'points', 'pressures', 'simulatePressure'] },
         {
             record: arrow,
             fields: [

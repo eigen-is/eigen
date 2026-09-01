@@ -942,6 +942,10 @@ export function VectorCanvas({
                         roundness: meta.roundness,
                         points: meta.points,
                     };
+                    if (meta.type === 'freedraw') {
+                        partial.pressures = meta.pressures;
+                        partial.simulatePressure = meta.simulatePressure;
+                    }
                     if (meta.type === 'arrow') {
                         partial.startArrowhead = meta.startArrowhead;
                         partial.endArrowhead = meta.endArrowhead;

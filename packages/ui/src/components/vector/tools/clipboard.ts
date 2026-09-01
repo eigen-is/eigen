@@ -40,6 +40,8 @@ export type VectorClipMeta = {
     opacity?: number;
     roundness?: Roundness;
     points?: string;
+    pressures?: string;
+    simulatePressure?: boolean;
     startArrowhead?: Arrowhead;
     endArrowhead?: Arrowhead;
     startBinding?: string;
@@ -115,6 +117,10 @@ function buildElementClipboardItem(
         roundness: el.roundness,
     };
     if (isLinearElement(el)) vector.points = el.points;
+    if (el.type === 'freedraw') {
+        vector.pressures = el.pressures;
+        vector.simulatePressure = el.simulatePressure;
+    }
     if (el.type === 'arrow') {
         vector.startArrowhead = el.startArrowhead;
         vector.endArrowhead = el.endArrowhead;

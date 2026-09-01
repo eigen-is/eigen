@@ -19,6 +19,7 @@ import {
     FREEDRAW_SIZE_FACTOR,
     isClosedPath,
     parsePoints,
+    parsePressures,
     unionBounds,
 } from './geometry';
 import {
@@ -129,8 +130,13 @@ function renderFreedraw(gen: RoughGenerator, el: VectorLinearElement): string {
         fill = drawableToSvg(gen.polygon(coords, options));
     }
 
-    const outline = getStroke(coords, {
-        simulatePressure: true,
+    // Real per-point pressure iff the element opts out of simulation AND carries an index-aligned array
+    // (the reader guarantees alignment; guard here too so a hand-built element can't misfeed getStroke).
+    // Absent/'' + simulate ⇒ the 2-tuple coords with simulatePressure:true — byte-identical to legacy.
+    const pressures = !el.simulatePressure && el.pressures !== '' ? parsePressures(el.pressures) : [];
+    const realPressure = pressures.length > 0 && pressures.length === coords.length;
+    const outline = getStroke(realPressure ? coords.map(([x, y], i): number[] => [x, y, pressures[i]]) : coords, {
+        simulatePressure: !realPressure,
         size: el.strokeWidth * FREEDRAW_SIZE_FACTOR,
         thinning: 0.6,
         smoothing: 0.5,

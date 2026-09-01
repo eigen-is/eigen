@@ -187,6 +187,8 @@ const linear = (over: Partial<VectorLinearElement> & { points: string }): Vector
     seed: 1,
     index: 'a0',
     roundness: 'sharp',
+    pressures: '',
+    simulatePressure: true,
     ...over,
 });
 

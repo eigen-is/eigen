@@ -213,6 +213,29 @@ export function serializePoints(points: Point[]): string {
     return JSON.stringify(points.map((p) => [round2(p.x), round2(p.y)]));
 }
 
+// Per-point pen pressure, the parallel array to a freedraw's points (Excalidraw's `pressures`). Any
+// structural garbage or a non-finite/non-number entry ⇒ [] (the caller then falls back to simulate);
+// finite values clamp to [0,1]. Kept a JSON string like points so a whole stroke is one scalar write.
+export function parsePressures(pressures: string): number[] {
+    let raw: unknown;
+    try {
+        raw = JSON.parse(pressures);
+    } catch {
+        return [];
+    }
+    if (!Array.isArray(raw)) return [];
+    const out: number[] = [];
+    for (const p of raw) {
+        if (typeof p !== 'number' || !Number.isFinite(p)) return [];
+        out.push(Math.min(1, Math.max(0, p)));
+    }
+    return out;
+}
+
+export function serializePressures(pressures: number[]): string {
+    return JSON.stringify(pressures.map((p) => round3(Math.min(1, Math.max(0, p)))));
+}
+
 // Re-derive (x, y, width, height, points) so the point bbox's MIN corner is the origin (every point
 // non-negative) and width/height span the raw bbox — so the box ALWAYS equals the content and bounds,
 // viewBox, selection ring, rotation pivot and hit-testing agree with no special case. `box` is the
@@ -387,6 +410,12 @@ function pointsBounds(points: Point[]): Bounds {
 
 function round2(n: number): number {
     const r = Math.round(n * 100) / 100;
+    return r === 0 ? 0 : r;
+}
+
+// Pressures are 0..1, so 2-decimal point rounding would flatten the width variation — keep 3 decimals.
+function round3(n: number): number {
+    const r = Math.round(n * 1000) / 1000;
     return r === 0 ? 0 : r;
 }
 

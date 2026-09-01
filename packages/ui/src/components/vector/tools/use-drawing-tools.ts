@@ -26,6 +26,7 @@ import {
     parseBinding,
     parsePoints,
     renormalize,
+    serializePressures,
     unpinSegment,
     type VectorArrowElement,
     type VectorElement,
@@ -94,6 +95,9 @@ function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[
         ...linearBase(origin, points, seed),
         type,
         roundness: type === 'line' ? DEFAULT_LINE_ROUNDNESS : DEFAULT_LINEAR_ROUNDNESS,
+        // The live preview always simulates; real per-point pressure is written on commit (finishFreedraw).
+        pressures: '',
+        simulatePressure: true,
     };
 }
 
@@ -275,6 +279,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         cancelFreedraw();
         if (!stroke) return;
         undoManager?.stopCapturing();
+        // Real pen pressure iff any sample left the 0.5 no-pressure sentinel (Excalidraw's test — a mouse
+        // reports a flat 0.5). normalizeLinear preserves point order and count, so stroke.pressures stays
+        // index-aligned with the written points. Simulate ⇒ pressures '' + true ⇒ byte-identical legacy ink.
+        const realPressure = stroke.pressures.some((p) => p !== 0.5);
         // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
         const id = addElement({
             type: 'freedraw',
@@ -283,6 +291,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 { x: stroke.origin.x, y: stroke.origin.y, width: 0, height: 0, angle: 0 },
                 stroke.points,
             ),
+            pressures: realPressure ? serializePressures(stroke.pressures) : '',
+            simulatePressure: !realPressure,
         });
         undoManager?.stopCapturing();
         if (id) setSelectedIds([id]);
@@ -396,7 +406,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setSelectedIds([]);
             seedRef.current = randomSeed();
             pointerIdRef.current = e.pointerId;
-            strokeRef.current = startFreedrawStroke(scene);
+            strokeRef.current = startFreedrawStroke(scene, e.pressure);
             setActiveKind('freedraw');
             setPreviewEl(previewElement('freedraw', scene, strokeRef.current.points, seedRef.current));
             return true;
@@ -446,10 +456,13 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             if (pointerIdRef.current !== e.pointerId) return true;
             const native = e.nativeEvent;
             const coalesced = native.getCoalescedEvents?.() ?? [];
-            const pts = coalesced.length
-                ? coalesced.map((ce) => clientToScene(ce.clientX, ce.clientY))
-                : [clientToScene(e.clientX, e.clientY)];
-            extendFreedrawStroke(strokeRef.current, pts, FREEDRAW_MIN_STEP_SCREEN / zoom);
+            // Each coalesced event carries its own clientX/Y AND pressure; fall back to the plain event when
+            // coalescing is unavailable (injected/synthetic events return []). Points and pressures are read
+            // from the same source so they stay index-aligned before extendFreedrawStroke's minDist thinning.
+            const src = coalesced.length ? coalesced : [native];
+            const pts = src.map((ce) => clientToScene(ce.clientX, ce.clientY));
+            const pressures = src.map((ce) => ce.pressure);
+            extendFreedrawStroke(strokeRef.current, pts, pressures, FREEDRAW_MIN_STEP_SCREEN / zoom);
             setPreviewEl(
                 previewElement('freedraw', strokeRef.current.origin, strokeRef.current.points, seedRef.current),
             );
