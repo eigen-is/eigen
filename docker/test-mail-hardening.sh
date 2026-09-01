@@ -22,9 +22,9 @@
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
-# Runtime is about 10 minutes. Probes 9 and 10 pace themselves under Postfix's anvil AUTH cap, and
-# probe 7 waits for the queue monitor's next interval. A PROBES subset that names any login probe
-# also runs probe 1, which is what proves the credentials.
+# Runtime is about 6 minutes: probe 9 paces itself under Postfix's anvil AUTH cap and probe 7 waits
+# for the queue monitor's next interval; everything else is quick. A PROBES subset that names any
+# login probe also runs probe 1, which is what proves the credentials.
 
 set -euo pipefail
 
@@ -40,6 +40,7 @@ header() { printf '\n=== %s ===\n' "$*"; }
 ok()     { log "✓ $*"; PASS=$((PASS+1)); }
 fail()   { log "✗ $*"; FAIL=$((FAIL+1)); FAIL_LINES+=("$*"); }
 skip()   { log "– skipped: $*"; SKIP=$((SKIP+1)); }
+
 oneline() { printf '%s' "$1" | tr '\r\n' '  '; }
 
 dc() {
@@ -50,6 +51,16 @@ dc() {
 should_run() {
     [ -z "${PROBES:-}" ] && return 0
     case ",${PROBES}," in *,"$1",*) return 0 ;; *) return 1 ;; esac
+}
+
+# Why a login probe did not run. Deselecting it and having no credentials are different things, and
+# reporting the wrong one sends the reader hunting for a broken password that works fine.
+skip_login_probe() {
+    if should_run "$1"; then
+        skip "probe $1 (needs a working login)"
+    else
+        skip "probe $1 not selected"
+    fi
 }
 
 # --- SMTP dialog helpers ---------------------------------------------------------------------
@@ -111,8 +122,9 @@ auth_once() {
 }
 
 # Postfix caps AUTH commands per client IP per 60s (smtpd_client_auth_rate_limit=20), and every
-# connection here comes from the same host address. Hold the spray to 18 per window, measured on
-# the clock so the dialogs' own duration counts toward it and only the shortfall is slept off.
+# connection here comes from the same host address, so probe 9's run of failures holds itself to 18
+# per window. Measured on the clock, so the dialogs' own duration counts toward the window and only
+# the shortfall is slept off.
 ANVIL_BUDGET=18
 anvil_window_start=$SECONDS
 anvil_sent=0
@@ -132,6 +144,23 @@ anvil_pace() {
 anvil_reset() {
     anvil_window_start=$SECONDS
     anvil_sent=0
+}
+
+# Make room for N more AUTH commands in the current window, sleeping out its remainder only when
+# the budget would otherwise be exceeded. Probe 10 runs right after probe 9 has spent most of a
+# window, and a 450 there would look like a limiter failure instead of a pacing one.
+anvil_reserve() {
+    if [ $((anvil_sent + $1)) -le "$ANVIL_BUDGET" ]; then
+        anvil_sent=$((anvil_sent + $1))
+        return 0
+    fi
+    local elapsed=$((SECONDS - anvil_window_start))
+    if [ "$elapsed" -lt 62 ]; then
+        log "  waiting $((62 - elapsed))s for the anvil window before $1 more AUTH commands..."
+        sleep $((62 - elapsed))
+    fi
+    anvil_window_start=$SECONDS
+    anvil_sent="$1"
 }
 
 # One authenticated submission dialog, asserting whether the envelope sender is accepted.
@@ -222,7 +251,7 @@ header "Probe 1 — credential sanity (/internal/auth/verify)"
 ##############################################################################
 HAVE_LOGIN=0
 if ! should_run 1 && [ "$NEEDS_LOGIN" = 0 ]; then
-    skip "probe 1 not in PROBES"
+    skip "probe 1 not selected"
 elif [ -z "$ALICE_EMAIL" ] || [ -z "$ALICE_PASSWORD" ]; then
     skip "ALICE_EMAIL / ALICE_PASSWORD not set — every login probe will be skipped"
 else
@@ -245,7 +274,7 @@ if should_run 2 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <$ALICE_EMAIL>" \
         "$ALICE_EMAIL" "$ALICE_PASSWORD" "$ALICE_EMAIL" accept
 else
-    skip "probe 2 (needs a working login)"
+    skip_login_probe 2
 fi
 
 ##############################################################################
@@ -255,7 +284,7 @@ if should_run 3 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <$SENDER_OTHER>" \
         "$ALICE_EMAIL" "$ALICE_PASSWORD" "$SENDER_OTHER" reject
 else
-    skip "probe 3 (needs a working login)"
+    skip_login_probe 3
 fi
 
 ##############################################################################
@@ -265,7 +294,7 @@ if should_run 4 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <$SENDER_FOREIGN>" \
         "$ALICE_EMAIL" "$ALICE_PASSWORD" "$SENDER_FOREIGN" reject
 else
-    skip "probe 4 (needs a working login)"
+    skip_login_probe 4
 fi
 
 ##############################################################################
@@ -279,7 +308,7 @@ if should_run 5 && [ "$HAVE_LOGIN" = 1 ]; then
     probe_submission "AUTH $MIXED_LOGIN + MAIL FROM <$ALICE_EMAIL>" \
         "$MIXED_LOGIN" "$ALICE_PASSWORD" "$ALICE_EMAIL" accept
 else
-    skip "probe 5 (needs a working login)"
+    skip_login_probe 5
 fi
 
 ##############################################################################
@@ -301,7 +330,7 @@ if should_run 6; then
         ok "inbound sender accepted; the recipient reply was: $(oneline "$transcript")"
     fi
 else
-    skip "probe 6 not in PROBES"
+    skip "probe 6 not selected"
 fi
 
 ##############################################################################
@@ -363,7 +392,7 @@ if should_run 7; then
         fail "no admin-alert notification within 120s (queue=$queued); look at: dc logs postfix"
     fi
 else
-    skip "probe 7 not in PROBES"
+    skip "probe 7 not selected"
 fi
 
 ##############################################################################
@@ -388,7 +417,7 @@ curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/jso
         fail "expected 429 after 50 failures from one IP, got $code"
     fi
 else
-    skip "probe 8 not in PROBES"
+    skip "probe 8 not selected"
 fi
 
 ##############################################################################
@@ -430,67 +459,94 @@ if should_run 9 && [ "$HAVE_LOGIN" = 1 ]; then
     dc restart eigen-api >/dev/null 2>&1
     wait_api || fail "eigen-api did not come back healthy after the restart"
 else
-    skip "probe 9 (needs a working login)"
+    skip_login_probe 9
 fi
 
 ##############################################################################
 header "Probe 10 — the client IP reaches the limiter through real SMTP AUTH"
 ##############################################################################
-# The one probe that proves the whole chain: postfix reports the SMTP client as `rip`, dovecot
-# exports it as TCPREMOTEIP, eigen-checkpassword forwards it as `ip`, and verifyProtocolAuth keys
-# its per-IP bucket on it. Every connection from this host arrives from one bridge address, so the
-# failures are spread over 60 addresses, one AUTH each: no address gets anywhere near its own cap of
-# 10, and 60 failures clear the per-IP cap of 50 with margin. A lockout in that shape can only be
-# the per-IP bucket. The final assertion uses the CORRECT password on an address with a clean
-# bucket: if the client IP never reached the API, that login simply succeeds.
-# Each 535 is counted, so an attempt postfix never completed cannot silently shrink the spray.
-# Paced under postfix's anvil cap (20 AUTH per client IP per 60s), so this takes ~4 minutes.
-SPRAY_ADDRESSES=60
+# Proves the chain the limiter depends on: postfix reports the SMTP client as `rip`, dovecot exports
+# it as TCPREMOTEIP, eigen-checkpassword forwards it as `ip`, and verifyProtocolAuth keys its per-IP
+# bucket on that value. The assertion is one real SMTP AUTH with the CORRECT password against a
+# bucket filled for the address the containers see: a 535 is only possible if the same string
+# travelled the whole chain, and alice's own bucket stays cold, so nothing else can refuse her.
+#
+# The bucket is filled over HTTP rather than by spraying SMTP. A write-only SMTP spray cannot get
+# there on this host: postfix abandons an auth request that is still in flight when the client
+# disconnects, and the next connection on that smtpd then finds its cached dovecot connection dead,
+# so losses arrive in pairs. Only 28-36 of 60 attempts landed, and holding the connection 12s
+# instead of 2s bought one extra delivery — the loss is proportional, so no larger spray fixes it.
+# Probe 9 is the real-SASL-transport proof; this probe is the IP-threading proof.
 if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
     log "restarting eigen-api for a clean failure-bucket baseline..."
     dc restart eigen-api >/dev/null 2>&1
     wait_api || fail "eigen-api did not come back healthy"
 
-    delivered=0
-    lost=0
-    anvil_reset
-    log "spraying $SPRAY_ADDRESSES failed logins, one per address and one per connection..."
-    for i in $(seq 1 "$SPRAY_ADDRESSES"); do
-        bad=$(auth_plain "ip-spray-$i@probe.invalid" "wrongpassword")
-        spray=$(auth_once "$bad")
-        if printf '%s\n' "$spray" | grep -q '^535'; then
-            delivered=$((delivered + 1))
-        else
-            lost=$((lost + 1))
-            [ "$lost" = 1 ] && log "  first non-535 reply: $(oneline "$spray")"
-        fi
-        anvil_pace "$delivered failures"
+    # 1. A deliberate failure over real SMTP, then ask dovecot which client address it saw. Never
+    # hardcode it: it is the docker gateway, and the value differs between Docker Desktop and Linux.
+    # Retried, because this very attempt can be one postfix abandons (see the notes in
+    # LOCAL-TESTING.md), and an abandoned attempt reaches dovecot's log no more than the API.
+    discover_user="ip-discover@probe.invalid"
+    client_ip=""
+    anvil_reserve 8  # 4 discovery attempts at worst, plus the assertion and its retry
+    for _ in 1 2 3 4; do
+        auth_once "$(auth_plain "$discover_user" "wrongpassword")" >/dev/null
+        client_ip=$(dc logs --tail=400 dovecot 2>&1 |
+            grep -F "checkpassword($discover_user," |
+            tail -1 |
+            sed -n 's/.*checkpassword([^,]*,\([^,)]*\).*/\1/p' |
+            tr -d '\r' || true)
+        [ -n "$client_ip" ] && break
     done
-    log "$delivered of $SPRAY_ADDRESSES failures reached the API ($lost without a 535 reply)"
 
-    good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
-    transcript=$(auth_once "$good")
-    if printf '%s\n' "$transcript" | grep -q '^454'; then
-        # Pre-existing quirk, unrelated to this branch: the first AUTH after an auth-server restart
-        # hits postfix's stale cached SASL connection, and postfix reconnects on the next attempt.
-        log "  454 on the first attempt (postfix's cached SASL connection); retrying once"
-        transcript=$(auth_once "$good")
-    fi
-    if [ "$delivered" -lt 51 ]; then
-        fail "only $delivered of $SPRAY_ADDRESSES failures were delivered, short of the per-IP cap of 50 — the spray, not the limiter, is what failed"
-    elif printf '%s\n' "$transcript" | grep -q '^235'; then
-        fail "a correct password still authenticated after $delivered failures from this IP: the client address is not reaching the limiter (postfix rip → dovecot TCPREMOTEIP → checkpassword ip)"
-    elif printf '%s\n' "$transcript" | grep -q '^535'; then
-        ok "$delivered failures across $SPRAY_ADDRESSES addresses locked this client IP out, end to end"
+    if [ -z "$client_ip" ]; then
+        fail "dovecot logged no checkpassword line for $discover_user, so the client IP could not be discovered — look at: dc logs dovecot"
     else
-        fail "expected a 535 from the per-IP lockout: $(oneline "$transcript")"
+        log "dovecot sees this client as $client_ip"
+
+        # 2. Fill that address's bucket over HTTP, one unique email per post so no per-email bucket
+        # (cap 10) can be what refuses anything later. Stop as soon as the limiter says 429.
+        filled=$(dc exec -T -e PROBE_IP="$client_ip" eigen-api sh -c '
+i=0
+while [ $i -lt 70 ]; do
+    i=$((i + 1))
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "Content-Type: application/json" \
+        -d "{\"email\":\"ipfill-$i-$$@probe.invalid\",\"password\":\"wrong\",\"ip\":\"$PROBE_IP\"}" \
+        http://localhost:8000/internal/auth/verify)
+    if [ "$code" = "429" ]; then echo "$i"; exit 0; fi
+done
+echo 0
+' | tr -dc '0-9')
+
+        # 3. One real SMTP AUTH with the correct password. Only the per-IP bucket can refuse it.
+        good=$(auth_plain "$ALICE_EMAIL" "$ALICE_PASSWORD")
+        transcript=$(auth_once "$good")
+        if printf '%s\n' "$transcript" | grep -qE '^(454|450)'; then
+            # 454 is a pre-existing quirk, unrelated to this branch: the first AUTH after an
+            # auth-server restart hits postfix's stale cached SASL connection, and postfix
+            # reconnects on the next attempt. A 450 would be postfix's own anvil cap answering, so
+            # give the window room before the retry.
+            log "  $(printf '%s\n' "$transcript" | grep -E '^(454|450)' | head -1) on the first attempt; retrying once"
+            anvil_reserve 2
+            transcript=$(auth_once "$good")
+        fi
+
+        if [ "${filled:-0}" -eq 0 ]; then
+            fail "the limiter never answered 429 for $client_ip after 70 posts, so the bucket was never full — the probe, not the chain, is what failed"
+        elif printf '%s\n' "$transcript" | grep -q '^235'; then
+            fail "a correct password authenticated even though $client_ip is locked out: that address is not reaching the limiter (postfix rip → dovecot TCPREMOTEIP → checkpassword ip)"
+        elif printf '%s\n' "$transcript" | grep -q '^535'; then
+            ok "locking out $client_ip (429 after $filled posts) refuses a correct password over real SMTP AUTH"
+        else
+            fail "expected a 535 from the per-IP lockout: $(oneline "$transcript")"
+        fi
     fi
 
     log "restarting eigen-api to clear the in-memory failure buckets..."
     dc restart eigen-api >/dev/null 2>&1
     wait_api || fail "eigen-api did not come back healthy after the restart"
 else
-    skip "probe 10 (needs a working login)"
+    skip_login_probe 10
 fi
 
 ##############################################################################
