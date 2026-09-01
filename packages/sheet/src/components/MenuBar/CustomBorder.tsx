@@ -8,18 +8,21 @@ import { useState } from 'react';
 import { en } from '../../state';
 import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 
+// The border-style vocabulary is owned by BORDER_STYLES (@workspace/lib/sheets), keyed by the
+// same ordinals in `text`. Only the SVG preview geometry is local — double (7) and slantDashDot
+// (12) are intentionally absent, they have no single-stroke preview.
 const BORDER_STYLES = [
-    { text: '1', value: 'Thin', strokeDasharray: '1,0', strokeWidth: '1' },
-    { text: '2', value: 'Hair', strokeDasharray: '1,5', strokeWidth: '1' },
-    { text: '3', value: 'Dotted', strokeDasharray: '2,5', strokeWidth: '2' },
-    { text: '4', value: 'Dashed', strokeDasharray: '5,5', strokeWidth: '2' },
-    { text: '5', value: 'DashDot', strokeDasharray: '20,5,5,10,5,5', strokeWidth: '2' },
-    { text: '6', value: 'DashDotDot', strokeDasharray: '20,5,5,5,5,10,5,5,5,5', strokeWidth: '2' },
-    { text: '8', value: 'Medium', strokeDasharray: '2,0', strokeWidth: '2' },
-    { text: '9', value: 'MediumDashed', strokeDasharray: '3,5', strokeWidth: '3' },
-    { text: '10', value: 'MediumDashDot', strokeDasharray: '20,5,5,10,5,5', strokeWidth: '3' },
-    { text: '11', value: 'MediumDashDotDot', strokeDasharray: '5,5,5,5,20,5,5,5,5,10', strokeWidth: '3' },
-    { text: '13', value: 'Thick', strokeDasharray: '2,0', strokeWidth: '3' },
+    { text: '1', strokeDasharray: '1,0', strokeWidth: '1' },
+    { text: '2', strokeDasharray: '1,5', strokeWidth: '1' },
+    { text: '3', strokeDasharray: '2,5', strokeWidth: '2' },
+    { text: '4', strokeDasharray: '5,5', strokeWidth: '2' },
+    { text: '5', strokeDasharray: '20,5,5,10,5,5', strokeWidth: '2' },
+    { text: '6', strokeDasharray: '20,5,5,5,5,10,5,5,5,5', strokeWidth: '2' },
+    { text: '8', strokeDasharray: '2,0', strokeWidth: '2' },
+    { text: '9', strokeDasharray: '3,5', strokeWidth: '3' },
+    { text: '10', strokeDasharray: '20,5,5,10,5,5', strokeWidth: '3' },
+    { text: '11', strokeDasharray: '5,5,5,5,20,5,5,5,5,10', strokeWidth: '3' },
+    { text: '13', strokeDasharray: '2,0', strokeWidth: '3' },
 ];
 
 type Props = {

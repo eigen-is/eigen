@@ -1,11 +1,33 @@
 // Cell borders from config.borderInfo, drawn over the finished cells.
 
-import { parseCellKey } from '@workspace/lib/sheets';
+import { BORDER_STYLES, parseCellKey } from '@workspace/lib/sheets';
 import { getSheetConfig } from '../context';
-import { BORDER_STYLE_NAMES, getBorderInfoCompute } from '../modules/border';
+import { getBorderInfoCompute } from '../modules/border';
 import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
+
+// Dash pattern + line width per border-style ordinal, computed once from the shared vocabulary
+// (BORDER_STYLES) instead of re-matching capitalized style-name substrings every frame. `medium`
+// styles nudge the stroke half a pixel across its own axis; the mapping reproduces the old cascade.
+const BORDER_DASH: Record<number, { dash: number[]; lineWidth: number; medium: boolean }> = (() => {
+    const table: Record<number, { dash: number[]; lineWidth: number; medium: boolean }> = {};
+    for (const [ord, { name }] of Object.entries(BORDER_STYLES)) {
+        const n = name[0].toUpperCase() + name.slice(1);
+        let dash = [0];
+        if (n === 'Hair') dash = [1, 2];
+        else if (n.includes('DashDotDot')) dash = [2, 2, 5, 2, 2];
+        else if (n.includes('DashDot')) dash = [2, 5, 2];
+        else if (n.includes('Dotted')) dash = [2];
+        else if (n.includes('Dashed')) dash = [3];
+        const medium = n.includes('Medium');
+        let lineWidth = 1;
+        if (medium) lineWidth = 2;
+        else if (n === 'Thick') lineWidth = 3;
+        table[Number(ord)] = { dash, lineWidth, medium };
+    }
+    return table;
+})();
 
 function setLineDash(
     canvasborder: CanvasRenderingContext2D,
@@ -16,25 +38,11 @@ function setLineDash(
     toX: number,
     toY: number,
 ) {
-    const typeName = BORDER_STYLE_NAMES[type.toString()] ?? '';
-
-    if (typeName === 'Hair') {
-        canvasborder.setLineDash([1, 2]);
-    } else if (typeName.includes('DashDotDot')) {
-        canvasborder.setLineDash([2, 2, 5, 2, 2]);
-    } else if (typeName.includes('DashDot')) {
-        canvasborder.setLineDash([2, 5, 2]);
-    } else if (typeName.includes('Dotted')) {
-        canvasborder.setLineDash([2]);
-    } else if (typeName.includes('Dashed')) {
-        canvasborder.setLineDash([3]);
-    } else {
-        canvasborder.setLineDash([0]);
-    }
-
+    const { dash, lineWidth, medium } = BORDER_DASH[type] ?? { dash: [0], lineWidth: 1, medium: false };
+    canvasborder.setLineDash(dash);
     canvasborder.beginPath();
 
-    if (typeName.includes('Medium')) {
+    if (medium) {
         if (hv === 'h') {
             canvasborder.moveTo(moveX, moveY - 0.5);
             canvasborder.lineTo(toX, toY - 0.5);
@@ -42,17 +50,11 @@ function setLineDash(
             canvasborder.moveTo(moveX - 0.5, moveY);
             canvasborder.lineTo(toX - 0.5, toY);
         }
-
-        canvasborder.lineWidth = 2;
-    } else if (typeName === 'Thick') {
-        canvasborder.moveTo(moveX, moveY);
-        canvasborder.lineTo(toX, toY);
-        canvasborder.lineWidth = 3;
     } else {
         canvasborder.moveTo(moveX, moveY);
         canvasborder.lineTo(toX, toY);
-        canvasborder.lineWidth = 1;
     }
+    canvasborder.lineWidth = lineWidth;
 }
 
 export function drawCellBorders(pass: RenderPass) {

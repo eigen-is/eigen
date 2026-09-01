@@ -100,6 +100,23 @@ export type BorderType =
     | 'border-vertical'
     | 'border-none';
 
+// The xlsx/OOXML border-style vocabulary (exceljs `Border['style']`), the `name`
+// side of each `BORDER_STYLES` ordinal.
+export type BorderStyleName =
+    | 'thin'
+    | 'hair'
+    | 'dotted'
+    | 'dashed'
+    | 'dashDot'
+    | 'dashDotDot'
+    | 'double'
+    | 'medium'
+    | 'mediumDashed'
+    | 'mediumDashDot'
+    | 'mediumDashDotDot'
+    | 'slantDashDot'
+    | 'thick';
+
 export type MergeCell = { r: number; c: number; rs: number; cs: number };
 
 // Per-cell data-validation rule, produced by the editor's state layer

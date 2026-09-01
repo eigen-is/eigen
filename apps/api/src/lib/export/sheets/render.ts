@@ -1,8 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
     BORDER_SIDE_CSS,
-    BORDER_STYLES,
-    type BorderSide,
+    borderSideCss,
     type Cell,
     type CellBorderSides,
     type CellWithRowAndCol,
@@ -545,7 +544,7 @@ function buildCellStyle(
         // CSS has no diagonal border, so the slash side `s` is not rendered.
         for (const [key, name] of BORDER_SIDE_CSS) {
             const side = borders[key];
-            if (side) parts.push(`border-${name}:${borderSideToCSS(side)}`);
+            if (side) parts.push(`border-${name}:${borderSideCss(side.style, escapeHtml(side.color))}`);
         }
     } else if (showGrid) {
         parts.push('border:1px solid #d4d4d4');
@@ -605,11 +604,6 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
         return `<span ${styleAttr(styles, decl)}>${inner}</span>`;
     }
     return inner;
-}
-
-function borderSideToCSS(side: BorderSide): string {
-    const css = BORDER_STYLES[side.style]?.css ?? '1px solid';
-    return `${css} ${escapeHtml(side.color)}`;
 }
 
 function hasVisibleContent(v: Cell | null): boolean {

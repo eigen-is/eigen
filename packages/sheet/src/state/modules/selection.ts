@@ -1,7 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
     BORDER_SIDE_CSS,
-    BORDER_STYLES,
+    borderSideCss,
     type CellBorderSides,
     type ConditionalFormatRule,
     type DataVerificationRule,
@@ -35,7 +35,7 @@ function cellBorderCss(border: CellBorderSides): string {
     let css = '';
     for (const [key, name] of BORDER_SIDE_CSS) {
         const side = border[key];
-        if (side) css += `border-${name}:${getHtmlBorderStyle(side.style, side.color)}`;
+        if (side) css += `border-${name}:${borderSideCss(side.style, side.color)};`;
     }
     return css;
 }
@@ -1193,12 +1193,6 @@ export function moveHighlightRange(
             column_focus: cf,
         };
     }
-}
-
-// Clipboard HTML borders share the ordinal→CSS table with the exporters so a copied cell
-// pastes with the same border it exports (they disagreed before: hair, double, …).
-function getHtmlBorderStyle(type: number, color: string) {
-    return `${BORDER_STYLES[type]?.css ?? '1px solid'} ${color};`;
 }
 
 // The marker that says "this clipboard HTML came from a sheet": written by the copy path,
