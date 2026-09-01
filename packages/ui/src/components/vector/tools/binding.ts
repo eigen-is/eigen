@@ -10,6 +10,7 @@ import {
     bindingAnchor,
     bindingDistance,
     elbowAnchorScene,
+    elbowRoutingContext,
     followBindings,
     hitTestBox,
     hitTestDiamond,
@@ -238,7 +239,9 @@ export function bindPinnedElbowEnd(
     const endBinding = end === 'end' ? binding : arrow.endBinding;
     const shape = candidate ? byId.get(candidate) : undefined;
     const dock = shape && isBindable(shape) && fixedPoint ? elbowAnchorScene(shape, fixedPoint) : rawScene;
-    const moved = moveEndpoints(arrow, end === 'start' ? dock : null, end === 'end' ? dock : null);
+    // The jog context reflects the endpoint's NEW binding (bound/unbound after this drag).
+    const ctx = elbowRoutingContext({ ...arrow, startBinding, endBinding }, byId);
+    const moved = moveEndpoints(arrow, end === 'start' ? dock : null, end === 'end' ? dock : null, ctx);
     return { ...moved, startBinding, endBinding };
 }
 

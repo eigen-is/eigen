@@ -15,8 +15,9 @@ import {
     DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_TEXT_PROPS,
     elbowBindPoint,
+    elbowRoutingContext,
     elementToSvg,
-    HIT_THRESHOLD_SCREEN,
+    hitThresholdScreen,
     isBindable,
     linearLocalToScene,
     normalizeLinear,
@@ -25,6 +26,7 @@ import {
     parseBinding,
     parsePoints,
     renormalize,
+    serializePressures,
     unpinSegment,
     type VectorArrowElement,
     type VectorElement,
@@ -51,11 +53,12 @@ import { markErase } from './eraser';
 import { extendFreedrawStroke, type FreedrawStroke, startFreedrawStroke } from './freedraw';
 import { distinctCount, type LineDraft, previewPoints, snapSegment, startLineDraft } from './line';
 import { LinePointHandles } from './point-handles';
+import { isFreedrawSpike } from './touch-gestures';
 
 // Screen-px thresholds (÷ zoom → constant on-screen distance): the eraser sample step (Excalidraw's
 // eraser trail), the freehand minimum sample spacing that thins sub-pixel points, the multi-point
 // line's confirm/close radius (LINE_CONFIRM_THRESHOLD), and the drag-vs-click threshold that splits a
-// 2-point line from a multi-point one. Hit tolerance is the shared HIT_THRESHOLD_SCREEN.
+// 2-point line from a multi-point one. Hit tolerance is the shared hitThresholdScreen (coarse-aware).
 const ERASER_STEP_SCREEN = 4;
 const FREEDRAW_MIN_STEP_SCREEN = 1;
 const LINE_CONFIRM_SCREEN = 8;
@@ -93,6 +96,9 @@ function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[
         ...linearBase(origin, points, seed),
         type,
         roundness: type === 'line' ? DEFAULT_LINE_ROUNDNESS : DEFAULT_LINEAR_ROUNDNESS,
+        // The live preview always simulates; real per-point pressure is written on commit (finishFreedraw).
+        pressures: '',
+        simulatePressure: true,
     };
 }
 
@@ -118,6 +124,8 @@ type DrawingToolsParams = {
     toolLocked: boolean;
     canWrite: boolean;
     zoom: number;
+    // The active pointer is coarse (finger/stylus) → the eraser and hit paths use a fatter screen slop.
+    coarse: boolean;
     ordered: VectorElement[];
     // The committed scene by id — lets the eraser hit-test an elbow arrow on its DERIVED route.
     byId: Map<string, VectorElement>;
@@ -159,6 +167,10 @@ export type DrawingTools = {
     onPointerDown: (e: React.PointerEvent, scene: Point) => boolean;
     onPointerMove: (e: React.PointerEvent) => boolean;
     onPointerUp: (e: React.PointerEvent) => boolean;
+    // A second touch landed: end any live draw draft (spike-discard/finalize) so pan/pinch can take over.
+    abortForSecondTouch: () => boolean;
+    // Whether the live draw draft was started by a stylus — the touch policy ignores touches during it.
+    isPenDrawing: () => boolean;
     // The pointer left the canvas → drop the pre-click hover highlight (no active draft).
     onPointerLeave: () => void;
 };
@@ -170,6 +182,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         toolLocked,
         canWrite,
         zoom,
+        coarse,
         ordered,
         byId,
         selectedIds,
@@ -192,6 +205,9 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
     const lineMovedRef = useRef(false);
     const eraserRef = useRef<{ marked: Set<string>; last: Point } | null>(null);
     const pointerIdRef = useRef<number | null>(null);
+    // The pointerType that started the live draw draft — the touch policy pins the two-finger pinch
+    // out while a stylus stroke is in flight (palm rejection wins over the handoff).
+    const drawPointerTypeRef = useRef<string | null>(null);
     const seedRef = useRef(0);
     // Ctrl/Cmd held while dragging an arrow endpoint suppresses binding. Tracked live off key
     // events for the EVENT-LESS paths — the point-handle preview/commit callbacks and the pointer-less
@@ -274,6 +290,10 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         cancelFreedraw();
         if (!stroke) return;
         undoManager?.stopCapturing();
+        // Real pen pressure iff any sample left the 0.5 no-pressure sentinel (Excalidraw's test — a mouse
+        // reports a flat 0.5). normalizeLinear preserves point order and count, so stroke.pressures stays
+        // index-aligned with the written points. Simulate ⇒ pressures '' + true ⇒ byte-identical legacy ink.
+        const realPressure = stroke.pressures.some((p) => p !== 0.5);
         // Tool stays freedraw (Excalidraw keeps the pencil active); one addElement per stroke.
         const id = addElement({
             type: 'freedraw',
@@ -282,6 +302,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 { x: stroke.origin.x, y: stroke.origin.y, width: 0, height: 0, angle: 0 },
                 stroke.points,
             ),
+            pressures: realPressure ? serializePressures(stroke.pressures) : '',
+            simulatePressure: !realPressure,
         });
         undoManager?.stopCapturing();
         if (id) setSelectedIds([id]);
@@ -395,7 +417,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             setSelectedIds([]);
             seedRef.current = randomSeed();
             pointerIdRef.current = e.pointerId;
-            strokeRef.current = startFreedrawStroke(scene);
+            drawPointerTypeRef.current = e.pointerType;
+            strokeRef.current = startFreedrawStroke(scene, e.pressure);
             setActiveKind('freedraw');
             setPreviewEl(previewElement('freedraw', scene, strokeRef.current.points, seedRef.current));
             return true;
@@ -404,12 +427,13 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             containerRef.current?.setPointerCapture(e.pointerId);
             frozenRef.current = true;
             pointerIdRef.current = e.pointerId;
+            drawPointerTypeRef.current = e.pointerType;
             const marked = new Set<string>();
             markErase(
                 ordered,
                 scene,
                 scene,
-                HIT_THRESHOLD_SCREEN / zoom,
+                hitThresholdScreen(coarse) / zoom,
                 ERASER_STEP_SCREEN / zoom,
                 e.altKey,
                 marked,
@@ -430,6 +454,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 setSelectedIds([]);
                 seedRef.current = randomSeed();
                 pointerIdRef.current = e.pointerId;
+                drawPointerTypeRef.current = e.pointerType;
                 lineMovedRef.current = false;
                 lineRef.current = startLineDraft(tool, scene);
                 setActiveKind('line');
@@ -445,10 +470,13 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
             if (pointerIdRef.current !== e.pointerId) return true;
             const native = e.nativeEvent;
             const coalesced = native.getCoalescedEvents?.() ?? [];
-            const pts = coalesced.length
-                ? coalesced.map((ce) => clientToScene(ce.clientX, ce.clientY))
-                : [clientToScene(e.clientX, e.clientY)];
-            extendFreedrawStroke(strokeRef.current, pts, FREEDRAW_MIN_STEP_SCREEN / zoom);
+            // Each coalesced event carries its own clientX/Y AND pressure; fall back to the plain event when
+            // coalescing is unavailable (injected/synthetic events return []). Points and pressures are read
+            // from the same source so they stay index-aligned before extendFreedrawStroke's minDist thinning.
+            const src = coalesced.length ? coalesced : [native];
+            const pts = src.map((ce) => clientToScene(ce.clientX, ce.clientY));
+            const pressures = src.map((ce) => ce.pressure);
+            extendFreedrawStroke(strokeRef.current, pts, pressures, FREEDRAW_MIN_STEP_SCREEN / zoom);
             setPreviewEl(
                 previewElement('freedraw', strokeRef.current.origin, strokeRef.current.points, seedRef.current),
             );
@@ -462,7 +490,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
                 ordered,
                 er.last,
                 scene,
-                HIT_THRESHOLD_SCREEN / zoom,
+                hitThresholdScreen(coarse) / zoom,
                 ERASER_STEP_SCREEN / zoom,
                 e.altKey,
                 er.marked,
@@ -538,6 +566,33 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         }
         return false;
     };
+
+    // A second finger landed mid-draw: hand the surface to a two-finger gesture by ending whatever
+    // draw draft is live. A freehand stroke is discarded when it's still a short palm spike, else
+    // finalized (Excalidraw App.tsx:8398-8432); an eraser swipe commits what it marked; a press-drag
+    // line draft keeps its committed points (mirrors Escape). Returns whether a draft was ended.
+    const abortForSecondTouch = (): boolean => {
+        if (strokeRef.current) {
+            if (isFreedrawSpike(strokeRef.current.points.length)) cancelFreedraw();
+            else finishFreedraw();
+            return true;
+        }
+        if (eraserRef.current) {
+            finishEraser();
+            return true;
+        }
+        if (lineRef.current) {
+            finishLineWith(lineRef.current.committed);
+            return true;
+        }
+        return false;
+    };
+
+    // Whether the live draw draft (if any) was started by a stylus — the touch policy pins the
+    // two-finger pinch out while a pen stroke is in flight, so palm rejection wins over the handoff.
+    const isPenDrawing = (): boolean =>
+        drawPointerTypeRef.current === 'pen' &&
+        (strokeRef.current !== null || eraserRef.current !== null || lineRef.current !== null);
 
     // --- Point handles (a single selected line or arrow) ----------------------------------------
     const sole = selectedIds.length === 1 ? ordered.find((el) => el.id === selectedIds[0]) : undefined;
@@ -811,6 +866,7 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
               key: 'elbow-pins',
               arrow: elbowForPins,
               route: arrowRoute(elbowForPins, byId) ?? [],
+              context: elbowRoutingContext(elbowForPins, byId),
               zoom,
               boxToStyle,
               clientToScene,
@@ -1019,6 +1075,8 @@ export function useDrawingTools(params: DrawingToolsParams): DrawingTools {
         onPointerDown,
         onPointerMove,
         onPointerUp,
+        abortForSecondTouch,
+        isPenDrawing,
         onPointerLeave,
     };
 }

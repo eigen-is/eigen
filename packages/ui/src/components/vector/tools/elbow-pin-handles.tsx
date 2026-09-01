@@ -1,8 +1,9 @@
-// Segment-pin handles for a selected ELBOW arrow (Excalidraw's fixedSegments UX). The dots sit on
-// the interior segments of the arrow's route — the DERIVED route while unpinned, the stored polyline once
+// Segment-pin handles for a selected ELBOW arrow (Excalidraw's fixedSegments UX). The dots sit on every
+// long-enough segment of the arrow's route — the DERIVED route while unpinned, the stored polyline once
 // pinned. Dragging a dot pins that segment: past a 2px threshold the first drag materializes the polyline
-// (materializeFirstPin), later drags slide the segment in place (moveSegment) — axis-locked, zero new
-// interior corners, the whole snake following live. Double-click (or Delete while the dot is selected)
+// (materializeFirstPin), later drags slide the segment in place (moveSegment) — axis-locked; an interior
+// drag adds zero corners, an end-segment drag inserts an L-jog so the pinned segment turns interior (the
+// routing context supplies the endpoint headings + bound flags). Double-click (or Delete while selected)
 // unpins. Pin identity is the polyline INDEX (segment i ⇒ index i+1) — never a geometric match — so a dot
 // always knows whether its segment is pinned. Self-contained: owns its drag lifecycle under an
 // AbortController; reports the live geometry patch via onPreview and commits it on release.
@@ -13,6 +14,7 @@ import {
     materializeFirstPin,
     moveSegment,
     type PinPatch,
+    type PinRoutingContext,
     type Point,
     parseFixedSegments,
     unpinSegment,
@@ -31,6 +33,9 @@ type ElbowPinHandlesProps = {
     // The arrow's route in its local frame (arrowRoute): the derived route while unpinned, else the stored
     // polyline. Dot on segment i sits between route[i] and route[i+1] and keys polyline index i+1.
     route: Point[];
+    // The endpoint headings + bound flags an end-segment jog needs (elbowRoutingContext), resolved at the
+    // scene seam so this overlay and elbow-pins stay pure.
+    context: PinRoutingContext;
     zoom: number;
     boxToStyle: (box: Box) => React.CSSProperties;
     clientToScene: (clientX: number, clientY: number) => Point;
@@ -47,6 +52,7 @@ type ElbowPinHandlesProps = {
 export function ElbowPinHandles({
     arrow,
     route,
+    context,
     zoom,
     boxToStyle,
     clientToScene,
@@ -83,8 +89,8 @@ export function ElbowPinHandles({
             const cursor = clientToScene(clientX, clientY);
             latest =
                 arrow.fixedSegments === ''
-                    ? materializeFirstPin(arrow, route, index, cursor)
-                    : moveSegment(arrow, index, cursor);
+                    ? materializeFirstPin(arrow, route, index, cursor, context)
+                    : moveSegment(arrow, index, cursor, context);
             onPreview(latest);
         };
         const teardown = () => {
@@ -134,8 +140,10 @@ export function ElbowPinHandles({
     return (
         <>
             {route.slice(0, -1).map((a, i) => {
-                // Interior segments only — the first (i === 0) and last can't be fixed (Excalidraw's invariant).
-                if (i === 0 || i === route.length - 2) return null;
+                // Dots render on EVERY segment, ends included: dragging a first/last segment inserts an L-jog
+                // so the pinned segment turns interior (elbow-pins' handleSegmentMove) — the stored invariant
+                // "first/last can't be fixed" holds as an output. We keep OUR 40px short-segment gate (upstream
+                // gates elbow dots at ~5px; consistency with our shipped mid-segment gate beats matching it — D6.3).
                 const b = route[i + 1];
                 if (Math.hypot(b.x - a.x, b.y - a.y) * zoom < PIN_MIN_SEGMENT_SCREEN_PX) return null;
                 const index = i + 1;

@@ -73,6 +73,14 @@ export type VectorLinearElement = VectorElementBase & {
     type: 'freedraw' | 'line';
     points: string;
     roundness: Roundness; // line: 'round' = roughjs curve through the vertices, 'sharp' = linearPath. freedraw ignores it.
+    // Per-point pen pressure (freedraw only; a line always carries '' + simulate). A JSON `[p0,…]` string
+    // aligned by INDEX with `points`, '' = none. `simulatePressure:false` + a matching pressures array feeds
+    // perfect-freehand the real per-point widths (Excalidraw's model); the default `simulatePressure:true`
+    // (and/or '') reproduces the velocity-simulated stroke, so legacy strokes with neither field render
+    // pixel-identically. Pressure rides this SEPARATE field, never inside `points` — read-vector re-serializes
+    // points as 2-tuples and would strip a 3rd element.
+    pressures: string;
+    simulatePressure: boolean;
 };
 
 // An arrow is a line (points + roundness) plus heads, forward bindings, and an optional label. Its own
@@ -154,6 +162,8 @@ export const ELEMENT_FIELDS = [
     'index',
     'roundness',
     'points',
+    'pressures',
+    'simulatePressure',
     'text',
     'fontSize',
     'fontFamily',

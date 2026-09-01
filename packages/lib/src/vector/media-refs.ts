@@ -69,6 +69,19 @@ export function rewriteEigenMediaRefs(svg: string, renames: Map<string, string>)
     return svg.replace(REF_SCAN, (token) => tokens.get(token) ?? token);
 }
 
+// Replace each `eigen-media:` ref named in `replacements` with an arbitrary href value (e.g. a base64
+// `data:` URI) — the same token-precise `href="…"` swap stripEigenMediaRefs does, only substituting
+// instead of removing. A name absent from the map is left untouched. Called by the clipboard's
+// foreign-flavour SVG inliner; the value is the full replacement href, not another eigen-media token.
+export function replaceEigenMediaHrefs(svg: string, replacements: Map<string, string>): string {
+    if (replacements.size === 0) return svg;
+    let out = svg;
+    for (const [name, href] of replacements) {
+        out = out.split(` href="${eigenMediaHref(name)}"`).join(` href="${href}"`);
+    }
+    return out;
+}
+
 // Drop the `href` attribute of every `<image>` referencing one of `names`, so the element renders as
 // nothing (sceneToSvg's null-media contract). Called by materializeClipboardSvg for images
 // whose re-upload failed — skip-on-failure, never abort the paste.

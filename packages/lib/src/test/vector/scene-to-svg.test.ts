@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 import { eigenMediaHref } from '../../vector/media-refs';
 import { elementToSvg, sceneToSvg } from '../../vector/scene-to-svg';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorScene } from '../../vector/types';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    type VectorElement,
+    type VectorLinearElement,
+    type VectorScene,
+} from '../../vector/types';
 
 const base = (over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>) => ({
     ...DEFAULT_ELEMENT_PROPS,
@@ -72,6 +77,8 @@ export function buildGoldenScene(): VectorScene {
             index: 'a6',
             roundness: 'sharp',
             points: '[[0,0],[15,10],[30,4],[45,18],[60,8]]',
+            pressures: '',
+            simulatePressure: true,
         },
         {
             ...DEFAULT_ELEMENT_PROPS,
@@ -86,6 +93,8 @@ export function buildGoldenScene(): VectorScene {
             index: 'a7',
             roundness: 'sharp',
             points: '[[0,0],[100,0],[100,40]]',
+            pressures: '',
+            simulatePressure: true,
         },
         {
             ...DEFAULT_ELEMENT_PROPS,
@@ -102,6 +111,8 @@ export function buildGoldenScene(): VectorScene {
             backgroundColor: '#ffd43b',
             fillStyle: 'solid',
             points: '[[0,0],[80,0],[40,60],[0,0]]',
+            pressures: '',
+            simulatePressure: true,
         },
         // A plain arrow — default head on the end only, unbound, no label.
         {
@@ -224,6 +235,8 @@ export function buildGoldenScene(): VectorScene {
             roughness: 2,
             roundness: 'sharp',
             points: '[[0,0],[100,0],[100,40]]',
+            pressures: '',
+            simulatePressure: true,
         },
         // An r=2 arrow with an 'arrow' barb head: the shaft's endpoints pin, and the head roughness caps at
         // 1 (getArrowheadLineOptions) so the barb docks cleanly on the pinned end.
@@ -438,6 +451,51 @@ describe('sceneToSvg', () => {
     });
 });
 
+// Pressure BC gate + real-pressure divergence. The freedraw element with NO pressure fields must render
+// byte-identically to today (simulate path); this pin is computed from the pre-change renderer and stays
+// green forever — it is the pixel-BC proof at the data level for old .eigenvector docs.
+describe('freedraw pen pressure', () => {
+    const freedraw = (over: Partial<VectorLinearElement>): VectorLinearElement => ({
+        ...DEFAULT_ELEMENT_PROPS,
+        id: 'fd',
+        type: 'freedraw',
+        x: 0,
+        y: 0,
+        width: 60,
+        height: 20,
+        angle: 0,
+        seed: 7,
+        index: 'a0',
+        roundness: 'sharp',
+        points: '[[0,0],[15,10],[30,4],[45,18],[60,8]]',
+        pressures: '',
+        simulatePressure: true,
+        ...over,
+    });
+
+    const NO_PRESSURE_PIN =
+        '<g transform="translate(0 0)"><path d="M 1.01 -1.52 Q 1.01 -1.52 5.17 1.38 9.33 4.28 15.13 3.74 20.93 3.19 28.11 7.1 35.28 11 47.51 8.78 59.75 6.56 59.99 6.56 60.22 6.56 60.45 6.63 60.67 6.71 60.86 6.85 61.05 6.99 61.18 7.18 61.32 7.38 61.38 7.6 61.45 7.83 61.44 8.07 61.43 8.3 61.34 8.52 61.26 8.74 61.1 8.92 60.95 9.1 60.75 9.23 60.55 9.35 60.32 9.4 60.09 9.46 59.86 9.43 59.62 9.41 59.41 9.31 59.19 9.21 59.02 9.05 58.85 8.89 58.73 8.68 58.62 8.48 58.58 8.25 58.54 8.01 58.58 7.78 58.61 7.55 58.72 7.34 58.83 7.13 59 6.96 59.17 6.8 59.38 6.7 59.6 6.6 59.83 6.57 60.07 6.54 60.3 6.59 60.53 6.64 60.73 6.76 60.93 6.88 61.09 7.06 61.24 7.24 61.33 7.46 61.42 7.67 61.44 7.91 61.45 8.15 61.39 8.37 61.33 8.6 61.2 8.8 61.07 8.99 60.88 9.14 60.69 9.28 60.47 9.36 60.25 9.44 60.25 9.44 60.25 9.44 47.25 11.58 34.25 13.73 27.57 10.01 20.9 6.29 14.41 6.75 7.92 7.22 3.45 4.37 -1.01 1.52 -1.18 1.38 -1.35 1.23 -1.48 1.05 -1.6 0.88 -1.69 0.67 -1.77 0.47 -1.8 0.25 -1.83 0.03 -1.8 -0.19 -1.78 -0.41 -1.71 -0.62 -1.63 -0.82 -1.51 -1.01 -1.39 -1.19 -1.22 -1.34 -1.06 -1.49 -0.87 -1.59 -0.68 -1.7 -0.46 -1.75 -0.25 -1.81 -0.03 -1.81 0.19 -1.82 0.41 -1.77 0.62 -1.72 0.82 -1.62 1.01 -1.52 1.01 -1.52 L 1.01 -1.52 Z" fill="#1e1e1e" stroke="none"/></g>';
+
+    test('BC pin — a freedraw with NO pressure fields renders exactly as today (simulate)', () => {
+        expect(elementToSvg(freedraw({}))).toBe(NO_PRESSURE_PIN);
+    });
+
+    test('real per-point pressures render a different, deterministic path', () => {
+        const withPressure = freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: false });
+        const out = elementToSvg(withPressure);
+        // Real pressures with simulatePressure:false must diverge from the simulate output…
+        expect(out).not.toBe(NO_PRESSURE_PIN);
+        // …and the same element renders identically twice (deterministic getStroke input).
+        expect(out).toBe(elementToSvg(freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: false })));
+    });
+
+    test('simulatePressure:true ignores stored pressures (BC — same as no pressures)', () => {
+        expect(elementToSvg(freedraw({ pressures: '[0.1,0.9,0.2,0.8,0.3]', simulatePressure: true }))).toBe(
+            NO_PRESSURE_PIN,
+        );
+    });
+});
+
 // The cartoon-roughness (r≥2) endpoint pinning: preserveVertices now holds for every LINEAR element, so a
 // sketchy line's on-curve vertices land EXACTLY on the stored points (only the control points wander — that
 // IS the sketch look). Pre-fix (preserveVertices off at r≥2) the endpoints themselves drifted ~2–3px, which
@@ -462,6 +520,8 @@ describe('linear preserveVertices at cartoon roughness', () => {
         roughness: 2,
         roundness: 'sharp',
         points: JSON.stringify(verts),
+        pressures: '',
+        simulatePressure: true,
     });
 
     test('r=2 line: every rendered subpath endpoint sits exactly on a stored vertex, across seeds', () => {

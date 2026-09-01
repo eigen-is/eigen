@@ -9,12 +9,11 @@ import { useAuth } from '@workspace/lib/auth';
 import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildImageClipboardItem,
+    classifyPaste,
     hasRichHtmlBeyondMarker,
     materializeClipboardSvg,
     needsReUpload,
     readClipboardBox,
-    readEigenClipboard,
-    readSvgClipboardWithItems,
     reUploadImage,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
@@ -444,43 +443,36 @@ const TiptapEditor = ({
                 },
                 handlePaste: (_view, event) => {
                     if (!event.clipboardData) return false;
+                    const paste = classifyPaste(event.clipboardData);
+                    const mediaFolderId = mediaFolderIdRef.current;
 
-                    // A vector SVG payload (or a pasted SVG document) lands as a figure through the
-                    // exact image-upload path — stored in media/, served as-is, rendered by <image>.
-                    // Its images are name-referenced (eigen-media:); materialize re-uploads each into our
-                    // media/ and rewrites the svg's refs before it's stored.
-                    const svgPayload = readSvgClipboardWithItems(event.clipboardData);
-                    const svgMediaFolderId = mediaFolderIdRef.current;
-                    if (svgPayload && svgMediaFolderId) {
+                    // A vector SVG payload (or a pasted SVG document) lands as a figure through the exact
+                    // image-upload path — stored in media/, served as-is, rendered by <image>. Its images
+                    // are name-referenced (eigen-media:); materialize re-uploads each into our media/ and
+                    // rewrites the svg's refs before it's stored.
+                    if (paste.svg && mediaFolderId) {
                         event.preventDefault();
-                        materializeClipboardSvg(
-                            svgPayload.svg,
-                            svgPayload.items,
-                            svgMediaFolderId,
-                            uploadFile.mutateAsync,
-                        )
+                        materializeClipboardSvg(paste.svg.svg, paste.svg.items, mediaFolderId, uploadFile.mutateAsync)
                             .then(handleImageUpload)
                             .catch(() => {});
                         return true;
                     }
 
-                    const eigenData = readEigenClipboard(event.clipboardData);
-                    if (eigenData && eigenData.items.length > 0) {
-                        // Image payloads MUST take the eigen path (the cross-mount re-upload seam).
-                        // A text-only payload is consumed directly only when text/html is marker-only
+                    if (paste.eigen && paste.eigen.items.length > 0) {
+                        // Image payloads MUST take the eigen path (the cross-mount re-upload seam). A
+                        // text-only payload is consumed directly only when text/html is marker-only
                         // (slides — PM fallthrough there pastes nothing); a rich-HTML producer (sheets
                         // tables) is left to PM so its <table> parses as a real docs table.
-                        const hasImage = eigenData.items.some((i) => i.type === 'image');
+                        const hasImage = paste.eigen.items.some((i) => i.type === 'image');
                         if (hasImage || !hasRichHtmlBeyondMarker(event.clipboardData)) {
                             event.preventDefault();
-                            handleEigenItemsPaste(eigenData.items).catch(() => {});
+                            handleEigenItemsPaste(paste.eigen.items).catch(() => {});
                             return true;
                         }
                     }
 
-                    const files = Array.from(event.clipboardData.files);
-                    const imageFile = files.find((f) => f.type.startsWith('image/'));
-                    if (imageFile && mediaFolderIdRef.current) {
+                    const imageFile = paste.imageFiles[0];
+                    if (imageFile && mediaFolderId) {
                         event.preventDefault();
                         handleImageUpload(imageFile).catch(() => {});
                         return true;

@@ -5,13 +5,13 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1155 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1164 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (144)
+## Components (145)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -59,6 +59,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SidebarSection` | `@workspace/ui` | packages/ui/src/components/layout/sidebar/sidebar-section.tsx |
 | `SortHeader` | `@workspace/ui` | packages/ui/src/components/sort-header.tsx |
 | `Toolbar` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar.tsx |
+| `ToolbarMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-menu.tsx |
 | `ToolbarSeparator` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-separator.tsx |
 | `ToolbarTitle` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/toolbar-title.tsx |
 | `TooltipButton` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/tooltip-button.tsx |
@@ -431,7 +432,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (304)
+## Types (307)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -441,6 +442,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `LocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `EmoteDefinition` | `@workspace/lib/chat/built-in-emotes` | packages/lib/src/core/chat/built-in-emotes.ts |
+| `ClassifiedEigen` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
+| `ClassifiedPaste` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
+| `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `CollabDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab-doc.ts |
 | `CollabDocContext` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab-doc.ts |
@@ -740,7 +744,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (451)
+## Utilities & constants (456)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -857,11 +861,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EMOTE_COMMANDS` | `@workspace/lib/chat/emotes` | packages/lib/src/core/chat/emotes.ts |
 | `buildImageClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `buildTextClipboardItem` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `classifyPaste` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `clipboardTextItemHasContent` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `copyToClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `EIGEN_CLIPBOARD_RENDER_ATTR` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `embedClipboardSvgMetadata` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `extractClipboardSvgMetadata` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `hasRichHtmlBeyondMarker` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `inlineClipboardSvgMedia` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `materializeClipboardSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -870,6 +877,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readSvgClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readSvgClipboardWithItems` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `reUploadImage` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `svgToImageDataUri` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `svgToImageFile` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -1129,6 +1137,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `redockBindingsForElbow` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `renormalize` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
+| `replaceEigenMediaHrefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `rescalePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `resizeRotatedRect` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

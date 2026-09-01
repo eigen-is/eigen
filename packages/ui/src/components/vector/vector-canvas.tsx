@@ -1,12 +1,14 @@
 import {
+    classifyPaste,
     clipboardTextItemHasContent,
+    EIGEN_CLIPBOARD_RENDER_ATTR,
     extractClipboardSvgMetadata,
+    inlineClipboardSvgMedia,
     needsReUpload,
     readClipboardBox,
-    readEigenClipboard,
     readEigenClipboardAsync,
-    readSvgClipboard,
     reUploadImage,
+    svgToImageDataUri,
     svgToImageFile,
     writeEigenClipboard,
     writeEigenClipboardAsync,
@@ -19,6 +21,7 @@ import {
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
+import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -93,6 +96,7 @@ import {
 } from './tools/clipboard';
 import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
+import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
 import { VectorObjectMenu } from './vector-object-menu';
 
@@ -238,10 +242,13 @@ export function VectorCanvas({
         boxToStyle,
         groupTransform,
         panBy,
+        pinch,
         resetZoom,
         frozenRef,
         zoom,
     } = useViewport();
+    // Coarse pointers (finger/stylus) get a fatter hit-slop and drive the touch gesture policy below.
+    const coarse = useIsCoarsePointer();
     // Images resolve/upload through the container's media/ folder (the provider the editor wraps
     // us in). resolveMediaUrl feeds every <image> href; startUpload drives the optimistic insert;
     // resolveMediaPath gives a copied image a portable source path for cross-mount paste.
@@ -275,6 +282,9 @@ export function VectorCanvas({
     const transformStartedRef = useRef(false);
     // Latest finishGesture closure, for the window-blur listener bound once below.
     const finishRef = useRef<() => void>(() => {});
+    // Latest touch-gesture reset, called from the blur/pointercancel safety net so a torn-down
+    // two-finger gesture can't leave stale touch state behind.
+    const touchResetRef = useRef<() => void>(() => {});
     // Live editing session, read from event listeners (bound once) that must know a text overlay is
     // open — the freeze safety-net below and commitEditing both consult it.
     const editingRef = useRef<EditingState | null>(null);
@@ -313,6 +323,7 @@ export function VectorCanvas({
         toolLocked,
         canWrite,
         zoom,
+        coarse,
         ordered,
         byId: committedById,
         selectedIds,
@@ -416,14 +427,21 @@ export function VectorCanvas({
         const onBlur = () => {
             if (editingRef.current) return; // the textarea's own onBlur commits the session
             finishRef.current();
+            touchResetRef.current();
+            clear();
+        };
+        // pointercancel is a genuine tear-down (lost capture, system gesture) — a plain pointerup is a
+        // normal lift the touch handler already unwinds, so only cancel/blur reset the touch state.
+        const onCancel = () => {
+            touchResetRef.current();
             clear();
         };
         document.addEventListener('pointerup', clear);
-        document.addEventListener('pointercancel', clear);
+        document.addEventListener('pointercancel', onCancel);
         window.addEventListener('blur', onBlur);
         return () => {
             document.removeEventListener('pointerup', clear);
-            document.removeEventListener('pointercancel', clear);
+            document.removeEventListener('pointercancel', onCancel);
             window.removeEventListener('blur', onBlur);
         };
     }, [frozenRef]);
@@ -810,6 +828,37 @@ export function VectorCanvas({
     );
     const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
+    // The eigen `svg` field references images BY NAME and renders blank outside eigen's server-side
+    // inliner. For the async menu-copy path only, build a foreign-visible `<img src="data:svg…">` whose
+    // images are inlined as base64 data URIs, so a plain contenteditable pastes the drawing as an image.
+    // Bytes come from the credentialed media resolver; over the soft cap (or on inline failure) we skip
+    // the flavour and write today's payload. The sync ⌘C path stays byte-free (a copy event can't fetch).
+    const fetchMediaBlob = useCallback(
+        async (name: string): Promise<Blob | null> => {
+            const url = resolveMediaUrl(name);
+            if (!url) return null;
+            try {
+                const res = await fetch(url, { credentials: 'include' });
+                return res.ok ? await res.blob() : null;
+            } catch {
+                return null;
+            }
+        },
+        [resolveMediaUrl],
+    );
+    const foreignImgHtml = useCallback(
+        async (svg: string | undefined): Promise<string | undefined> => {
+            if (!svg) return undefined;
+            const inlined = await inlineClipboardSvgMedia(svg, fetchMediaBlob);
+            // Mark the img so hasRichHtmlBeyondMarker ignores it — else a shape-only vector copy reads
+            // as rich HTML and a non-media host persists the base64 SVG as a figure.
+            return inlined
+                ? `<img ${EIGEN_CLIPBOARD_RENDER_ATTR}="" src="${await svgToImageDataUri(inlined)}">`
+                : undefined;
+        },
+        [fetchMediaBlob],
+    );
+
     // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
     // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
     // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text) and
@@ -909,6 +958,10 @@ export function VectorCanvas({
                         roundness: meta.roundness,
                         points: meta.points,
                     };
+                    if (meta.type === 'freedraw') {
+                        partial.pressures = meta.pressures;
+                        partial.simulatePressure = meta.simulatePressure;
+                    }
                     if (meta.type === 'arrow') {
                         partial.startArrowhead = meta.startArrowhead;
                         partial.endArrowhead = meta.endArrowhead;
@@ -1077,30 +1130,33 @@ export function VectorCanvas({
         const onPasteEvent = (e: ClipboardEvent) => {
             if (isTypingTarget() || !canWrite || editingRef.current) return;
             const cd = e.clipboardData;
-            const data = cd ? readEigenClipboard(cd) : null;
-            if (data) {
+            if (!cd) return;
+            const paste = classifyPaste(cd);
+            // Eigen items are consumed FIRST (before the SVG rung) so a vector→vector paste restores
+            // native elements instead of landing as one flat image.
+            if (paste.eigen) {
                 e.preventDefault();
                 e.stopPropagation();
-                pasteEigenItems(data.items);
+                pasteEigenItems(paste.eigen.items);
                 return;
             }
-            if (!cd) return;
             // A bare SVG on the clipboard: ours (element JSON in `<metadata>`) restores native elements;
             // any other SVG inserts as an image via the media path. OS files still fall through.
-            const svg = readSvgClipboard(cd);
-            if (svg) {
+            if (paste.svg) {
                 e.preventDefault();
                 e.stopPropagation();
-                const restored = extractClipboardSvgMetadata(svg);
+                // Ours (element JSON in <metadata>) restores native elements; any other SVG inserts as
+                // an image. The native-vs-image split is vector-local, so we read the metadata here.
+                const restored = extractClipboardSvgMetadata(paste.svg.svg);
                 if (restored) pasteEigenItems(restored.items);
-                else void insertImageFiles([svgToImageFile(svg)], viewportCenterScene());
+                else void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
                 return;
             }
             // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
-            if (cd.files.length > 0) return;
+            if (paste.files.length > 0) return;
             // Plain text (or the text of pasted HTML) → a new text element; only claim the event when
             // content is actually consumed, else it falls through to the OS-file path.
-            if (pasteNonEigenText(cd.getData('text/html'), cd.getData('text/plain'))) {
+            if (pasteNonEigenText(paste.html, paste.text)) {
                 e.preventDefault();
                 e.stopPropagation();
             }
@@ -1127,16 +1183,19 @@ export function VectorCanvas({
         undoManager,
     ]);
 
-    const onDoubleClick = (e: React.MouseEvent) => {
-        // frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's openNewText); else edit the hit text/arrow label.
+    // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
+    // the tap-tap). frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's
+    // openNewText); else edit the hit text/arrow label.
+    const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canWrite || tool !== 'select' || editing || frozenRef.current) return;
-        const p = clientToScene(e.clientX, e.clientY);
-        const hit = hitTestTopmost(ordered, p, zoom, committedById);
+        const p = clientToScene(clientX, clientY);
+        const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'text') openEditExisting(hitEl);
         else if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
         else if (!hitEl) openNewText(p.x, p.y);
     };
+    const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
     // Right-click on an element opens the object menu (empty canvas keeps the browser default). Like
     // slides, a right-click on an element outside the current selection selects it first, so the menu
@@ -1152,7 +1211,7 @@ export function VectorCanvas({
             return;
         }
         const p = clientToScene(e.clientX, e.clientY);
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById);
+        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         if (!hitId) return;
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
         objectContextMenu.handleContextMenu(e, hitId);
@@ -1168,14 +1227,17 @@ export function VectorCanvas({
     // the keyboard path, so the two stay one behavior.
     const onMenuCopy = () => {
         const data = buildData();
-        if (data.items.length) writeEigenClipboardAsync(data, plainText()).catch(() => {});
+        if (!data.items.length) return;
+        // The inliner promise goes straight into the writer: the clipboard write must start inside
+        // the user gesture (Safari/Firefox), not after the media fetch resolves.
+        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg)).catch(() => {});
     };
     const onMenuCut = () => {
         const data = buildData();
         if (!data.items.length) return;
         // Delete only once the async write lands — a denied/failed clipboard write must not destroy
         // the selection (the content would exist nowhere but the undo stack).
-        writeEigenClipboardAsync(data, plainText())
+        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg))
             .then(() => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager))
             .catch(() => {});
     };
@@ -1201,11 +1263,29 @@ export function VectorCanvas({
         });
     };
 
+    // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
+    // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
+    // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
+    const touch = useTouchGestures({
+        tool,
+        containerRef,
+        frozenRef,
+        pinch,
+        abortActiveGesture: () => {
+            if (!drawing.abortForSecondTouch()) finishRef.current();
+        },
+        isPenDrawing: drawing.isPenDrawing,
+        onDoubleTap: openTextAtClient,
+    });
+    touchResetRef.current = touch.reset;
+
     const onPointerDown = (e: React.PointerEvent) => {
-        if (frozenRef.current) return; // a gesture is already active (defensive)
         // Focus the tabIndex=-1 container so a following paste lands on our onPaste — a bare canvas
         // div never holds focus, so image paste would otherwise bubble past us to the body.
         containerRef.current?.focus();
+        // Touch gestures get first dibs (a second finger must intercept even while frozen).
+        if (touch.onPointerDown(e)) return;
+        if (frozenRef.current) return; // a gesture is already active (defensive)
         // Pan: space-drag or middle mouse.
         if (spaceHeld || e.button === 1) {
             e.preventDefault();
@@ -1234,7 +1314,7 @@ export function VectorCanvas({
             // discards the empty session instantly (intermittent dead clicks). Canceling also
             // keeps mousedown's caret-placement from destroying the select-all on existing text.
             e.preventDefault();
-            const hit = hitTestTopmost(ordered, p, zoom, committedById);
+            const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
             const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
             if (hitEl?.type === 'text') openEditExisting(hitEl);
             else openNewText(p.x, p.y);
@@ -1259,7 +1339,7 @@ export function VectorCanvas({
         }
 
         // Select tool.
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById);
+        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         if (hitId) {
             if (e.shiftKey) {
                 toggle(hitId); // shift-click toggles membership, no move
@@ -1308,6 +1388,8 @@ export function VectorCanvas({
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
+        // Two-finger pan/pinch consumes the move before any single-pointer gesture sees it.
+        if (touch.onPointerMove(e)) return;
         // Publish the local cursor on every move (throttled downstream; no React state → no
         // re-render), then handle the active gesture if any.
         const scene = clientToScene(e.clientX, e.clientY);
@@ -1327,7 +1409,7 @@ export function VectorCanvas({
         if (drawing.onPointerMove(e)) return;
         // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
         if (!g && tool === 'select' && !editing) {
-            const over = hitTestTopmost(ordered, scene, zoom, committedById) !== null;
+            const over = hitTestTopmost(ordered, scene, zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
         }
         if (!g || e.pointerId !== g.pointerId) return;
@@ -1479,6 +1561,8 @@ export function VectorCanvas({
     finishRef.current = finishGesture;
 
     const onPointerUp = (e: React.PointerEvent) => {
+        // Touch first: ends a pinch, or fires a double-tap (which cleans its own gesture + claims the up).
+        if (touch.onPointerUp(e)) return;
         const g = gestureRef.current;
         // A freehand/line/eraser gesture finishes (writes) through the tools hook; a pan (the one canvas
         // gesture that can coexist with a line draft) ends here.

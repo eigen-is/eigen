@@ -3,17 +3,13 @@ import type { useCommentFilter } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath, EffectiveMember } from '@workspace/lib/types/drive';
-import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
+import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, ToolbarMenu } from '@workspace/ui';
 import { CommentFilterMenuItems, FilterSummary } from '@workspace/ui/components/comments';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
-    DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { cn } from '@workspace/ui/lib/utils';
@@ -65,36 +61,26 @@ export function Toolbar({
                     />
                     <EditMenu canEdit={canWrite} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo} />
                     {canWrite && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost">Insert</Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                <DropdownMenuItem onClick={onAddColumn}>
-                                    <Plus className="h-4 w-4 mr-2" /> Column
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <ToolbarMenu label="Insert">
+                            <DropdownMenuItem onClick={onAddColumn}>
+                                <Plus className="h-4 w-4 mr-2" /> Column
+                            </DropdownMenuItem>
+                        </ToolbarMenu>
                     )}
-                    <DropdownMenu open={filterOpen} onOpenChange={setFilterOpen}>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost">Filter</Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                            <CommentFilterMenuItems
-                                primitives={{
-                                    Item: DropdownMenuItem,
-                                    Sub: DropdownMenuSub,
-                                    SubTrigger: DropdownMenuSubTrigger,
-                                    SubContent: DropdownMenuSubContent,
-                                }}
-                                filter={filter}
-                                members={members}
-                                currentUserEmail={currentUserEmail}
-                                onClose={() => setFilterOpen(false)}
-                            />
-                        </DropdownMenuContent>
-                    </DropdownMenu>
+                    <ToolbarMenu label="Filter" open={filterOpen} onOpenChange={setFilterOpen}>
+                        <CommentFilterMenuItems
+                            primitives={{
+                                Item: DropdownMenuItem,
+                                Sub: DropdownMenuSub,
+                                SubTrigger: DropdownMenuSubTrigger,
+                                SubContent: DropdownMenuSubContent,
+                            }}
+                            filter={filter}
+                            members={members}
+                            currentUserEmail={currentUserEmail}
+                            onClose={() => setFilterOpen(false)}
+                        />
+                    </ToolbarMenu>
                 </div>
             }
             center={

@@ -4,12 +4,11 @@ import { getBackgroundStyle } from '@workspace/lib/background';
 import {
     buildImageClipboardItem,
     buildTextClipboardItem,
+    classifyPaste,
     materializeClipboardSvg,
     needsReUpload,
     readClipboardBox,
-    readEigenClipboard,
     readEigenClipboardAsync,
-    readSvgClipboardWithItems,
     reUploadImage,
     writeEigenClipboard,
     writeEigenClipboardAsync,
@@ -653,8 +652,10 @@ function SlideEditorInner({
         const handlePaste = (e: ClipboardEvent) => {
             if (isTypingTarget()) return;
             if (!activeSlideId || !canWrite) return;
+            if (!e.clipboardData) return;
+            const paste = classifyPaste(e.clipboardData);
 
-            const imageFile = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));
+            const imageFile = paste.imageFiles[0];
             if (imageFile) {
                 e.preventDefault();
                 handleImageFile(imageFile);
@@ -666,19 +667,17 @@ function SlideEditorInner({
             // the eigen-items branch so a vector selection lands as one image, not its shape carriers. Its
             // images are name-referenced (eigen-media:); materialize re-uploads each into our media/ and
             // rewrites the svg's refs before it's stored.
-            const svgPayload = e.clipboardData ? readSvgClipboardWithItems(e.clipboardData) : null;
-            if (svgPayload && mediaFolderId) {
+            if (paste.svg && mediaFolderId) {
                 e.preventDefault();
-                materializeClipboardSvg(svgPayload.svg, svgPayload.items, mediaFolderId, uploadFile.mutateAsync)
+                materializeClipboardSvg(paste.svg.svg, paste.svg.items, mediaFolderId, uploadFile.mutateAsync)
                     .then(handleImageFile)
                     .catch(() => {});
                 return;
             }
 
-            const eigenData = e.clipboardData ? readEigenClipboard(e.clipboardData) : null;
-            if (eigenData) {
+            if (paste.eigen) {
                 e.preventDefault();
-                pasteEigenData(eigenData);
+                pasteEigenData(paste.eigen);
                 return;
             }
 
@@ -687,7 +686,7 @@ function SlideEditorInner({
             // paragraphs (LightEditor is multi-block). fontSize 16 = docs body px mapped 1:1 into slide
             // units (1 unit = 1px @1080p), NOT DEFAULT_TEXT_OBJECT's 48 — same prose, same size whether
             // or not it carried formatting.
-            const html = e.clipboardData?.getData('text/html');
+            const html = paste.html;
             const richHtml = html ? sanitizeToLightEditorHtml(html).trim() : '';
             // Only take the rich branch when a block element survived. Div-structured clipboards (VS
             // Code, terminals) unwrap to merged inline text with no <p>, losing line breaks — those fall
@@ -699,7 +698,7 @@ function SlideEditorInner({
                 // sanitizer); carry it onto the object field. slides accepts all four values, so no map.
                 // null means implicit left (Tiptap only emits styles for non-default alignments) — the
                 // centered DEFAULT_TEXT_OBJECT is a title affordance, wrong for pasted prose.
-                const align = readDominantTextAlign(html ?? '');
+                const align = readDominantTextAlign(html);
                 addObject(activeSlideId, {
                     ...DEFAULT_TEXT_OBJECT,
                     text: richHtml,
@@ -709,7 +708,7 @@ function SlideEditorInner({
                 return;
             }
 
-            const text = e.clipboardData?.getData('text/plain') ?? '';
+            const text = paste.text;
             if (text.trim()) {
                 e.preventDefault();
                 addObject(activeSlideId, {

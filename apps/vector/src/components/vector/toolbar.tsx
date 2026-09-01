@@ -1,16 +1,12 @@
 import { useYjsUndoState } from '@workspace/lib/collab';
 import { useIsCompactToolbar } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, TooltipButton } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
+import { CenteredToolbar, DocumentShareCluster, EditMenu, FileMenu, ToolbarMenu, TooltipButton } from '@workspace/ui';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
-    DropdownMenu,
     DropdownMenuCheckboxItem,
-    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuShortcut,
-    DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { VECTOR_TOOLS, type VectorTool } from '@workspace/ui/components/vector';
 import { Diamond, ImagePlus } from 'lucide-react';
@@ -106,21 +102,16 @@ export function Toolbar({
                                         <DropdownMenuShortcut>Q</DropdownMenuShortcut>
                                     </DropdownMenuCheckboxItem>
                                 </EditMenu>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost">Insert</Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="start">
-                                        {INSERT_TOOLS.map((t) => (
-                                            <ToolMenuItem key={t.tool} tool={t} setTool={setTool} />
-                                        ))}
-                                        {onInsertImage && (
-                                            <DropdownMenuItem onClick={onInsertImage}>
-                                                <ImagePlus className="h-4 w-4 mr-2" /> Image
-                                            </DropdownMenuItem>
-                                        )}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
+                                <ToolbarMenu label="Insert">
+                                    {INSERT_TOOLS.map((t) => (
+                                        <ToolMenuItem key={t.tool} tool={t} setTool={setTool} />
+                                    ))}
+                                    {onInsertImage && (
+                                        <DropdownMenuItem onClick={onInsertImage}>
+                                            <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                        </DropdownMenuItem>
+                                    )}
+                                </ToolbarMenu>
                             </>
                         )}
                     </div>

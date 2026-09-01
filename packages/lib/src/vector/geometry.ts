@@ -4,6 +4,7 @@
 // primitive.
 
 import { moveEndpoints, renormalize } from './elbow-pins';
+import { elbowRoutingContext } from './elbow-route';
 import { getLineHeightPx } from './font-metrics';
 import {
     type Arrowhead,
@@ -187,6 +188,17 @@ const LINEAR_HIT_SCREEN_FACTOR = 0.85;
 // and the eraser can never drift apart.
 export const HIT_THRESHOLD_SCREEN = 8;
 
+// A coarse pointer (finger/stylus) has no pixel-precise tip, so it grabs within a fatter screen radius
+// than a mouse. Excalidraw keeps a constant threshold — this multiplier is our own touch addition, kept
+// to a single knob applied wherever HIT_THRESHOLD_SCREEN feeds hover/hit-testing/eraser.
+export const COARSE_HIT_SLOP_MULTIPLIER = 1.75;
+
+// The screen-px grab tolerance for the active pointer: the base for a mouse, fattened for coarse
+// pointers. Callers still divide by zoom. One source so hover/hit and the eraser can never drift apart.
+export function hitThresholdScreen(coarse: boolean): number {
+    return coarse ? HIT_THRESHOLD_SCREEN * COARSE_HIT_SLOP_MULTIPLIER : HIT_THRESHOLD_SCREEN;
+}
+
 export function parsePoints(points: string): Point[] {
     let raw: unknown;
     try {
@@ -210,6 +222,29 @@ export function parsePoints(points: string): Point[] {
 
 export function serializePoints(points: Point[]): string {
     return JSON.stringify(points.map((p) => [round2(p.x), round2(p.y)]));
+}
+
+// Per-point pen pressure, the parallel array to a freedraw's points (Excalidraw's `pressures`). Any
+// structural garbage or a non-finite/non-number entry ⇒ [] (the caller then falls back to simulate);
+// finite values clamp to [0,1]. Kept a JSON string like points so a whole stroke is one scalar write.
+export function parsePressures(pressures: string): number[] {
+    let raw: unknown;
+    try {
+        raw = JSON.parse(pressures);
+    } catch {
+        return [];
+    }
+    if (!Array.isArray(raw)) return [];
+    const out: number[] = [];
+    for (const p of raw) {
+        if (typeof p !== 'number' || !Number.isFinite(p)) return [];
+        out.push(Math.min(1, Math.max(0, p)));
+    }
+    return out;
+}
+
+export function serializePressures(pressures: number[]): string {
+    return JSON.stringify(pressures.map((p) => round3(Math.min(1, Math.max(0, p)))));
 }
 
 // Re-derive (x, y, width, height, points) so the point bbox's MIN corner is the origin (every point
@@ -386,6 +421,12 @@ function pointsBounds(points: Point[]): Bounds {
 
 function round2(n: number): number {
     const r = Math.round(n * 100) / 100;
+    return r === 0 ? 0 : r;
+}
+
+// Pressures are 0..1, so 2-decimal point rounding would flatten the width variation — keep 3 decimals.
+function round3(n: number): number {
+    const r = Math.round(n * 1000) / 1000;
     return r === 0 ? 0 : r;
 }
 
@@ -670,9 +711,105 @@ export function outlineIntersections(shape: VectorShapeElement, a: Point, b: Poi
     return outlineHits(shape, la, lb, gap).map((h) => rotatePoint(h, center, shape.angle));
 }
 
+export type CubicBezier = [Point, Point, Point, Point];
+
+// The arrow curve's parametric form — the ONE geometry-side owner of the shape roughjs's `gen.curve`
+// draws for a round (non-elbow) arrow. Golden-locked by test to roughjs's `_curve` control points at
+// roughness 0: a uniform Catmull-Rom cardinal spline (curveTightness 0 ⇒ s = 1) with the first and last
+// points duplicated so the shaft passes through its endpoints. `points` must have ≥ 2 entries.
+export function arrowCurveBeziers(points: Point[]): CubicBezier[] {
+    const ps = [points[0], points[0], ...points.slice(1), points[points.length - 1]];
+    const beziers: CubicBezier[] = [];
+    for (let i = 1; i + 2 < ps.length; i++) {
+        const p0 = ps[i - 1];
+        const p1 = ps[i];
+        const p2 = ps[i + 1];
+        const p3 = ps[i + 2];
+        beziers.push([
+            p1,
+            { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 },
+            { x: p2.x + (p1.x - p3.x) / 6, y: p2.y + (p1.y - p3.y) / 6 },
+            p2,
+        ]);
+    }
+    return beziers;
+}
+
+function cubicAt(bez: CubicBezier, t: number): Point {
+    const mt = 1 - t;
+    const a = mt * mt * mt;
+    const b = 3 * mt * mt * t;
+    const c = 3 * mt * t * t;
+    const d = t * t * t;
+    return {
+        x: a * bez[0].x + b * bez[1].x + c * bez[2].x + d * bez[3].x,
+        y: a * bez[0].y + b * bez[1].y + c * bez[2].y + d * bez[3].y,
+    };
+}
+
+// Polyline approximation of the arrow curve (`samplesPerSegment` points per bezier), through the first and
+// last vertex. Used by the golden lock test and the curved bound-endpoint dock.
+export function sampleArrowCurve(points: Point[], samplesPerSegment: number): Point[] {
+    if (points.length < 2) return points.map((p) => ({ ...p }));
+    const beziers = arrowCurveBeziers(points);
+    const out: Point[] = [beziers[0][0]];
+    for (const bez of beziers) {
+        for (let s = 1; s <= samplesPerSegment; s++) out.push(cubicAt(bez, s / samplesPerSegment));
+    }
+    return out;
+}
+
+// Sample count per terminal bezier when docking a curved arrow's bound end onto the outline.
+const CURVE_DOCK_SAMPLES = 24;
+
+// Where the CURVED shaft first crosses the shape's inflated outline, walking the terminal span from the
+// arrow body toward the bound end. Endpoint-independent: the bound end is replaced by `anchor` (the point
+// the fixedPoint resolves to, inside the shape), so the dock depends only on the interior vertices, the
+// anchor and the shape — never on the stored endpoint. That makes it a strict fixed point under
+// followBindings (a settled arrow re-solves to the identical crossing). null when the curve never crosses
+// (buried inside / out of reach) → the caller keeps the straight-chord result.
+function curveOutlineDock(
+    arrow: VectorArrowElement,
+    end: 'start' | 'end',
+    shape: VectorShapeElement,
+    points: Point[],
+    anchor: Point,
+    gap: number,
+): Point | null {
+    const scene = points.map((p) => linearLocalToScene(arrow, p));
+    scene[end === 'start' ? 0 : scene.length - 1] = anchor;
+    // Orient so index 0 is the arrow body and the last index is the bound end (curve is reversal-symmetric).
+    const oriented = end === 'start' ? scene.slice().reverse() : scene;
+    const beziers = arrowCurveBeziers(oriented);
+    const span = beziers.slice(Math.max(0, beziers.length - 2));
+    let prev: Point | null = null;
+    for (const bez of span) {
+        for (let s = 0; s <= CURVE_DOCK_SAMPLES; s++) {
+            const pt = cubicAt(bez, s / CURVE_DOCK_SAMPLES);
+            if (prev) {
+                const hits = outlineIntersections(shape, prev, pt, gap);
+                let best: Point | null = null;
+                let bestDist = Number.POSITIVE_INFINITY;
+                for (const h of hits) {
+                    const d = distSq(prev, h);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        best = h;
+                    }
+                }
+                if (best) return best;
+            }
+            prev = pt;
+        }
+    }
+    return null;
+}
+
 // A bound endpoint's scene position: snap the anchor to the shape outline along the segment from the
 // adjacent vertex, with Excalidraw's guard — if that would make the arrow shorter than 10 units, sit on the
-// anchor instead (a degenerate arrow would otherwise flip inside the shape).
+// anchor instead (a degenerate arrow would otherwise flip inside the shape). A curved (round, ≥3-point)
+// arrow docks on the CURVE∩outline crossing instead of the straight chord, so the drawn shaft meets the
+// outline exactly at the head; a strict fixed point at stored precision keeps a settled arrow from redirtying.
 export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', shape: VectorShapeElement): Point {
     const points = parsePoints(arrow.points);
     if (points.length < 2) return linearLocalToScene(arrow, points[0] ?? ORIGIN);
@@ -685,11 +822,23 @@ export function boundEndpoint(arrow: VectorArrowElement, end: 'start' | 'end', s
     if (arrow.elbow) return elbowAnchorScene(shape, binding.fixedPoint);
     // Excalidraw aims the chord from the ADJACENT vertex (updateBoundPoint, index 1 / -2), so a dragged
     // mid point slides the attachment along the outline to face it. Same point as the far end for 2-point
-    // arrows. The visible curve still crosses the outline slightly off this chord — curve-exact
-    // intersection is a ROADMAP item Excalidraw doesn't do either.
+    // arrows.
     const otherScene = linearLocalToScene(arrow, end === 'start' ? points[1] : points[points.length - 2]);
     const anchor = anchorToScene(shape, binding.fixedPoint);
-    const endpoint = outlinePoint(shape, otherScene, anchor, bindingGap(shape));
+    const gap = bindingGap(shape);
+    let endpoint = outlinePoint(shape, otherScene, anchor, gap);
+    if (arrow.roundness === 'round' && points.length >= 3) {
+        const dock = curveOutlineDock(arrow, end, shape, points, anchor, gap);
+        if (dock) {
+            // Strict fixed point: if the dock rounds to the already-stored endpoint (stored precision =
+            // serializePoints' round2), return the exact stored point so followBindings sees no change.
+            const dockLocal = linearSceneToLocal(arrow, dock);
+            endpoint =
+                round2(dockLocal.x) === thisLocal.x && round2(dockLocal.y) === thisLocal.y
+                    ? linearLocalToScene(arrow, thisLocal)
+                    : dock;
+        }
+    }
     if (Math.hypot(endpoint.x - otherScene.x, endpoint.y - otherScene.y) <= BASE_ARROW_MIN_LENGTH) return anchor;
     return endpoint;
 }
@@ -713,7 +862,7 @@ export function followBindings(
     if (arrow.fixedSegments !== '') {
         const newStart = start ? boundEndpoint(arrow, 'start', start) : null;
         const newEnd = end ? boundEndpoint(arrow, 'end', end) : null;
-        const moved = moveEndpoints(arrow, newStart, newEnd);
+        const moved = moveEndpoints(arrow, newStart, newEnd, elbowRoutingContext(arrow, byId));
         const patch = renormalize({ ...arrow, ...moved });
         if (
             patch.points === arrow.points &&

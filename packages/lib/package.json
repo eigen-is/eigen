@@ -8,6 +8,9 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
+  "devDependencies": {
+    "happy-dom": "^20.10.6"
+  },
   "dependencies": {
     "@apps/api": "workspace:*",
     "@better-auth/api-key": "^1.5.6",

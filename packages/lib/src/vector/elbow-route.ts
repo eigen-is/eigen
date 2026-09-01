@@ -28,6 +28,7 @@ import {
     headingIsHorizontal,
     vectorToHeading,
 } from './elbow-heading';
+import type { PinRoutingContext } from './elbow-pins';
 import { boundShape, linearLocalToScene, linearSceneToLocal, type Point, parsePoints } from './geometry';
 import type { VectorArrowElement, VectorElement, VectorShapeElement } from './types';
 
@@ -156,6 +157,58 @@ type ElbowArrowData = {
     endBound: boolean;
 };
 
+// The heading each endpoint leaves its shape by (Excalidraw's getElbowArrowData heading block): a bound end
+// inflates its element by the endpoint's distance to the outline (the cone AABB) and the distance-GATE keys
+// on origStart/origEnd; an unbound end just points at the other endpoint. One source for both the router and
+// the pin-drag routing context.
+function endpointHeadings(
+    startShape: VectorShapeElement | null,
+    endShape: VectorShapeElement | null,
+    startGlobal: Point,
+    endGlobal: Point,
+    origStart: Point,
+    origEnd: Point,
+): { startHeading: Heading; endHeading: Heading } {
+    const startConeAABB = startShape
+        ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
+        : null;
+    const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
+    return {
+        startHeading: getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart),
+        endHeading: getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd),
+    };
+}
+
+// The routing context an end-segment pin jog needs — the two endpoint headings decomposed into
+// horizontal?/positive? plus per-end bound flags — computed at the call seam so elbow-pins stays pure.
+// Uses the arrow's stored endpoints at rest (origStart/origEnd = the endpoints themselves).
+export function elbowRoutingContext(arrow: VectorArrowElement, byId: Map<string, VectorElement>): PinRoutingContext {
+    const startShape = boundShape(arrow.startBinding, byId);
+    const endShape = boundShape(arrow.endBinding, byId);
+    const pts = parsePoints(arrow.points);
+    const startGlobal = linearLocalToScene(arrow, pts[0]);
+    const endGlobal = linearLocalToScene(arrow, pts[pts.length - 1]);
+    const { startHeading, endHeading } = endpointHeadings(
+        startShape,
+        endShape,
+        startGlobal,
+        endGlobal,
+        startGlobal,
+        endGlobal,
+    );
+    const horizontal = (h: Heading): boolean => headingIsHorizontal(h);
+    const positive = (h: Heading): boolean =>
+        headingIsHorizontal(h) ? compareHeading(h, HEADING_RIGHT) : compareHeading(h, HEADING_DOWN);
+    return {
+        startBound: !!startShape,
+        endBound: !!endShape,
+        startHeadingHorizontal: horizontal(startHeading),
+        startHeadingPositive: positive(startHeading),
+        endHeadingHorizontal: horizontal(endHeading),
+        endHeadingPositive: positive(endHeading),
+    };
+}
+
 function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArrowData {
     const { startShape, endShape, startGlobal, endGlobal, startArrowhead, endArrowhead, origStart, origEnd } = input;
 
@@ -163,12 +216,14 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
     // cone geometry keys on the rest/docked endpoint; the distance-GATE keys on the pre-dock original point
     // (origStart/origEnd — equal to the stored endpoint at rest), so a dragged dock gliding on the
     // outline doesn't flip the exit side under the anchor.
-    const startConeAABB = startShape
-        ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
-        : null;
-    const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
-    const startHeading = getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart);
-    const endHeading = getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd);
+    const { startHeading, endHeading } = endpointHeadings(
+        startShape,
+        endShape,
+        startGlobal,
+        endGlobal,
+        origStart,
+        origEnd,
+    );
 
     const startPointBounds = pointBounds(startGlobal);
     const endPointBounds = pointBounds(endGlobal);

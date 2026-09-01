@@ -53,7 +53,8 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
     if (type === 'text') return { ...base, ...DEFAULT_TEXT_PROPS };
     if (type === 'image') return { ...base, mediaName: '' };
     // Both arrive with real points from the gesture. Freedraw is sharp; a new line curves (Excalidraw parity).
-    if (type === 'freedraw') return { ...base, roundness: DEFAULT_LINEAR_ROUNDNESS, points: '[]' };
+    if (type === 'freedraw')
+        return { ...base, roundness: DEFAULT_LINEAR_ROUNDNESS, points: '[]', pressures: '', simulatePressure: true };
     if (type === 'line') return { ...base, roundness: DEFAULT_LINE_ROUNDNESS, points: '[]' };
     // An arrow is a line plus heads, forward bindings and an optional label (text/fontSize/fontFamily).
     if (type === 'arrow')
