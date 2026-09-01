@@ -67,6 +67,13 @@ if docker compose --env-file .env.production ps --services --status running 2>/d
         caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 fi
 
+# The fail2ban jails watch the mail containers' logs by container ID; the rebuild changed the
+# IDs, so without a reload the jails keep watching deleted files (docker/fail2ban/README.md).
+if command -v fail2ban-client >/dev/null && fail2ban-client status 2>/dev/null | grep -q eigen-postfix-sasl; then
+    echo "Reloading fail2ban jails..."
+    fail2ban-client reload >/dev/null || echo "  fail2ban reload failed — run 'fail2ban-client reload' manually"
+fi
+
 echo "Pruning unused Docker build cache and images..."
 docker builder prune -f --filter "until=168h"
 docker image prune -f
