@@ -4,6 +4,7 @@
 // primitive.
 
 import { moveEndpoints, renormalize } from './elbow-pins';
+import { elbowRoutingContext } from './elbow-route';
 import { getLineHeightPx } from './font-metrics';
 import {
     type Arrowhead,
@@ -821,7 +822,7 @@ export function followBindings(
     if (arrow.fixedSegments !== '') {
         const newStart = start ? boundEndpoint(arrow, 'start', start) : null;
         const newEnd = end ? boundEndpoint(arrow, 'end', end) : null;
-        const moved = moveEndpoints(arrow, newStart, newEnd);
+        const moved = moveEndpoints(arrow, newStart, newEnd, elbowRoutingContext(arrow, byId));
         const patch = renormalize({ ...arrow, ...moved });
         if (
             patch.points === arrow.points &&
