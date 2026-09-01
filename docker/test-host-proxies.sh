@@ -6,6 +6,7 @@
 # instead of 127.0.0.1:8080). Probes the same set of URLs as test-deployments.sh.
 #
 # Usage:  ./docker/test-host-proxies.sh
+#         PROXY_PORT=9081 ./docker/test-host-proxies.sh   # when 8081-8083 are taken on this host
 # Needs:  docker, .env.production, dist/ already built (or run test-deployments.sh first).
 
 set -euo pipefail
@@ -17,6 +18,8 @@ cd "$(dirname "$0")/.."
 
 NETWORK=eigen_eigen
 CONTAINERS=(test-proxy-nginx test-proxy-apache test-proxy-caddy)
+# Host port for the first throwaway proxy; the other two take the next two ports.
+PROXY_PORT="${PROXY_PORT:-8081}"
 
 cleanup() {
     docker rm -f "${CONTAINERS[@]}" >/dev/null 2>&1 || true
@@ -71,12 +74,12 @@ header "Scenario E — static,mail behind nginx"
 ##############################################################################
 docker run -d --rm --name test-proxy-nginx \
     --network "$NETWORK" \
-    -p 8081:80 \
+    -p "$PROXY_PORT:80" \
     -v "$PWD/docker/test-proxies/nginx-test.conf:/etc/nginx/conf.d/default.conf:ro" \
     nginx:alpine >/dev/null
 # Give nginx a moment to start listening.
 sleep 1
-run_probes http://localhost:8081
+run_probes "http://localhost:$PROXY_PORT"
 docker rm -f test-proxy-nginx >/dev/null 2>&1
 
 ##############################################################################
@@ -84,11 +87,11 @@ header "Scenario F — static,mail behind Caddy"
 ##############################################################################
 docker run -d --rm --name test-proxy-caddy \
     --network "$NETWORK" \
-    -p 8082:80 \
+    -p "$((PROXY_PORT + 1)):80" \
     -v "$PWD/docker/test-proxies/caddy-test.Caddyfile:/etc/caddy/Caddyfile:ro" \
     caddy:2-alpine >/dev/null
 sleep 1
-run_probes http://localhost:8082
+run_probes "http://localhost:$((PROXY_PORT + 1))"
 docker rm -f test-proxy-caddy >/dev/null 2>&1
 
 ##############################################################################
@@ -96,11 +99,11 @@ header "Scenario G — static,mail behind Apache"
 ##############################################################################
 docker run -d --rm --name test-proxy-apache \
     --network "$NETWORK" \
-    -p 8083:80 \
+    -p "$((PROXY_PORT + 2)):80" \
     -v "$PWD/docker/test-proxies/apache-test.conf:/usr/local/apache2/conf/httpd.conf:ro" \
     httpd:2.4 >/dev/null
 sleep 2
-run_probes http://localhost:8083
+run_probes "http://localhost:$((PROXY_PORT + 2))"
 docker rm -f test-proxy-apache >/dev/null 2>&1
 
 ##############################################################################

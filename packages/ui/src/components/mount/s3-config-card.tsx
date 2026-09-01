@@ -64,9 +64,17 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
 
     const handleHarden = async () => {
         // A refused request comes back as an ok:false result, so there is nothing to catch here.
-        // The panel reads the re-read bucket state straight off this result, per field.
         setHarden(await onHarden(value, days));
     };
+
+    // What the bucket says right now. Both fields are optional — a check that never got as far as the
+    // bucket settings leaves them out, which reads the same as unreadable — and a harden result
+    // carries the re-read state, so it wins per field: it can measure one half and say nothing about
+    // the other.
+    const versioning = harden?.versioning ?? result?.versioning ?? 'unknown';
+    const lifecycle = harden?.lifecycle ?? result?.lifecycle ?? 'unknown';
+    // Opened from the all-green state, the dialog is a retention change and not the first pass.
+    const changingRetention = versioning === 'enabled' && typeof lifecycle === 'object';
 
     return (
         <div className="space-y-3 border rounded-lg p-4">
@@ -156,7 +164,8 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
             {result?.ok && (
                 <BucketSafetyPanel
                     config={value}
-                    result={result}
+                    versioning={versioning}
+                    lifecycle={lifecycle}
                     harden={harden}
                     days={days}
                     onEnable={() => setConfirming(true)}
@@ -166,13 +175,15 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
             <ConfirmDialog
                 open={confirming}
                 onOpenChange={setConfirming}
-                title="Make this bucket safe for Eigen"
+                title={changingRetention ? 'Change retention' : 'Make this bucket safe for Eigen'}
                 description={
                     <span className="block space-y-2">
-                        <span className="block">
-                            Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning applies
-                            to the whole bucket.
-                        </span>
+                        {!changingRetention && (
+                            <span className="block">
+                                Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning
+                                applies to the whole bucket.
+                            </span>
+                        )}
                         <span className="flex items-center gap-2">
                             Expire old versions after
                             <Input
@@ -193,7 +204,7 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                     </span>
                 }
                 onConfirm={handleHarden}
-                confirmText="Enable"
+                confirmText={changingRetention ? 'Update' : 'Enable'}
             />
         </div>
     );
@@ -201,22 +212,19 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
 
 function BucketSafetyPanel({
     config,
-    result,
+    versioning,
+    lifecycle,
     harden,
     days,
     onEnable,
 }: {
     config: S3Config;
-    result: S3CheckResult;
+    versioning: S3VersioningState;
+    lifecycle: S3LifecycleState;
     harden: S3HardenResult | null;
     days: number;
     onEnable: () => void;
 }) {
-    // Both fields are optional — a check that never got as far as the bucket settings leaves them
-    // out — and for the panel that reads the same as unreadable. A harden result carries the
-    // re-read state and wins per field: it can measure one half and say nothing about the other.
-    const versioning = harden?.versioning ?? result.versioning ?? 'unknown';
-    const lifecycle = harden?.lifecycle ?? result.lifecycle ?? 'unknown';
     const lifecycleDays = typeof lifecycle === 'object' ? lifecycle.noncurrentDays : null;
     // A key that can't read bucket settings can't write them either, and a foreign lifecycle config is
     // never rewritten — so the button only shows where a PUT can actually change something.
@@ -248,17 +256,13 @@ function BucketSafetyPanel({
                 {lifecycle === 'none' && 'Old-version cleanup: no rule. Old versions grow forever.'}
                 {lifecycle === 'foreign' && 'Old-version cleanup: another lifecycle rule is in place.'}
                 {lifecycle === 'unknown' && 'Old-version cleanup: cannot be read with this access key.'}
-            </SafetyLine>
-
-            {/* Everything is set, so there is no button — this is the only way back to the days input. */}
-            {versioning === 'enabled' && lifecycleDays !== null && (
-                <p className="text-sm text-muted-foreground">
-                    Retention: {lifecycleDays} days.{' '}
+                {/* All green, so there is no button — this link is the only way back to the days input. */}
+                {versioning === 'enabled' && lifecycleDays !== null && (
                     <button type="button" className="underline hover:text-foreground" onClick={onEnable}>
                         Change
                     </button>
-                </p>
-            )}
+                )}
+            </SafetyLine>
 
             {harden && <p className={cn('text-sm', harden.ok ? 'text-success' : 'text-warning')}>{harden.message}</p>}
 
