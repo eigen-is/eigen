@@ -161,14 +161,14 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
             return;
         }
 
+        const d = getFlowdata(ctx); // fetch data
+        if (!d) return;
+
         // Seeded only once the paste is certain: every config write is syncable now that the
         // mirror is gone, so seeding above the guard would ship an op for a paste that never ran.
         const cfg = (ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!].config ??= {});
         cfg.merge ??= {};
         cfg.borderInfo ??= {};
-
-        const d = getFlowdata(ctx); // fetch data
-        if (!d) return;
 
         const rowMaxLength = d.length;
         const cellMaxLength = d[0].length;
