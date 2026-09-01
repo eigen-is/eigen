@@ -41,10 +41,23 @@ export type TeamSettings = {
 
 export type ServerStorageType = 'local-id' | 'local-fullnames' | 's3';
 
+// 'unknown' = the access key cannot read the setting, so nothing may be written blind either.
+export type S3VersioningState = 'enabled' | 'suspended' | 'disabled' | 'unknown';
+
+// 'foreign' = a lifecycle configuration exists that Eigen didn't author, so we never rewrite it.
+export type S3LifecycleState = 'none' | 'foreign' | 'unknown' | { noncurrentDays: number };
+
 export type S3CheckResult = {
     ok: boolean;
     message: string;
-    versioning?: 'enabled' | 'suspended' | 'disabled' | 'unknown';
+    versioning?: S3VersioningState;
+    lifecycle?: S3LifecycleState;
+};
+
+// Partial application is a first-class outcome: `applied` says what changed, `reason` why a half didn't.
+export type S3HardenResult = S3CheckResult & {
+    applied: { versioning: boolean; lifecycle: boolean };
+    reason?: 'access-denied' | 'not-supported' | 'foreign-lifecycle' | 'error';
 };
 
 export type LandingLink = {

@@ -1,0 +1,5 @@
+# smtpd_sender_login_maps: which SASL login owns an envelope sender address.
+# Eigen has one address per user, no aliases and no send-as, so the map is the identity:
+# the login must equal the MAIL FROM address. `regexp:` is built into Postfix — `pcre:`
+# would need an extra Debian package.
+/^(.+)$/ ${1}

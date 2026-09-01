@@ -12,10 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY main.cf.template /etc/postfix/main.cf.template
 COPY master.cf.template /etc/postfix/master.cf.template
+COPY sender_login.regexp /etc/postfix/sender_login.regexp
+COPY null_sender.regexp /etc/postfix/null_sender.regexp
 COPY eigen-deliver /usr/local/bin/eigen-deliver
+COPY queue-monitor.sh /usr/local/bin/queue-monitor.sh
 COPY entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /usr/local/bin/eigen-deliver /entrypoint.sh
+RUN chmod +x /usr/local/bin/eigen-deliver /usr/local/bin/queue-monitor.sh /entrypoint.sh
 
 EXPOSE 25 465 587
 

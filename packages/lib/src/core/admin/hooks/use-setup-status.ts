@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { S3CheckResult } from '@workspace/lib/types/settings';
+import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { setupApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
+import { hardenFailure } from '../../settings/hooks/use-s3-check';
 import { adminKeys } from './keys';
 
 export function useSetupStatus() {
@@ -42,6 +43,19 @@ export function useCheckSetupS3() {
         mutationFn: async (config: S3Config): Promise<S3CheckResult> => {
             const res = await setupApi.s3check.post(config);
             if (res.error) return { ok: false, message: new AppError(res).message };
+            return res.data;
+        },
+        onError: onMutationError,
+    });
+}
+
+// The /setup twin of useHardenS3Bucket — hardening the bucket at the moment it is first
+// configured, on the same first-run gate the wizard's connection check already uses.
+export function useHardenSetupS3() {
+    return useMutation({
+        mutationFn: async (input: S3Config & { noncurrentDays: number }): Promise<S3HardenResult> => {
+            const res = await setupApi.s3harden.post(input);
+            if (res.error) return hardenFailure(new AppError(res).message);
             return res.data;
         },
         onError: onMutationError,

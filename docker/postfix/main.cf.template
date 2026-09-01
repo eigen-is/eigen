@@ -39,6 +39,10 @@ non_smtpd_milters = inet:127.0.0.1:8891
 # Logging to stdout (Docker)
 maillog_file = /dev/stdout
 
+# Which SASL login may use which envelope sender. Enforced only on the submission services
+# (master.cf), so inbound port 25 is untouched.
+smtpd_sender_login_maps = regexp:/etc/postfix/sender_login.regexp
+
 # Anti-spam
 smtpd_helo_required = yes
 smtpd_delay_reject = yes

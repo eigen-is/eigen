@@ -23,6 +23,11 @@ import { ApiError } from '../core/errors';
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_FAILURES_PER_EMAIL = 10;
 const MAX_FAILURES_PER_IP = 50;
+// A map only prunes the keys an attempt touches, so a spray across thousands of addresses leaves a
+// dead key each. Past this size every recorded failure walks the whole map and drops what aged out:
+// a few thousand comparisons, on a path that otherwise does scrypt work. No honest deployment has
+// this many distinct failing emails or client IPs inside one window.
+const SWEEP_ABOVE_KEYS = 2000;
 
 const emailFailures = new Map<string, number[]>();
 const ipFailures = new Map<string, number[]>();
@@ -34,6 +39,14 @@ function getPruned(buckets: Map<string, number[]>, key: string, now: number): nu
 function persist(buckets: Map<string, number[]>, key: string, fresh: number[]): void {
     if (fresh.length === 0) buckets.delete(key);
     else buckets.set(key, fresh);
+}
+
+// Timestamps go in oldest-first, so the last one dates the whole bucket.
+function sweep(buckets: Map<string, number[]>, now: number): void {
+    if (buckets.size <= SWEEP_ABOVE_KEYS) return;
+    for (const [key, times] of buckets) {
+        if (now - times[times.length - 1] >= WINDOW_MS) buckets.delete(key);
+    }
 }
 
 // Called at the START of every attempt — refuse before doing any credential work. Pruning here
@@ -70,6 +83,9 @@ export function recordProtocolAuthFailure(email: string, ip?: string): void {
         ipFresh.push(now);
         ipFailures.set(ip, ipFresh);
     }
+
+    sweep(emailFailures, now);
+    sweep(ipFailures, now);
 }
 
 // Called on a successful auth: a proven-real credential clears its own EMAIL bucket (unlocking the
@@ -81,4 +97,8 @@ export function clearProtocolAuthFailures(email: string): void {
 export function _resetProtocolAuthLimitForTests(): void {
     emailFailures.clear();
     ipFailures.clear();
+}
+
+export function _protocolAuthLimitSizesForTests(): { emails: number; ips: number } {
+    return { emails: emailFailures.size, ips: ipFailures.size };
 }

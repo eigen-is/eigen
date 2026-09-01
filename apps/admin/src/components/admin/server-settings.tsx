@@ -1,5 +1,6 @@
 import {
     useCheckS3Connection,
+    useHardenS3Bucket,
     useServerS3Config,
     useServerSettings,
     useUpdateServerS3Config,
@@ -27,6 +28,7 @@ export function ServerSettingsPage() {
     const { data: s3Config } = useServerS3Config();
     const updateS3Config = useUpdateServerS3Config();
     const s3Check = useCheckS3Connection();
+    const s3Harden = useHardenS3Bucket();
 
     const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
     const [dirty, setDirty] = useState(false);
@@ -76,6 +78,8 @@ export function ServerSettingsPage() {
     const anyDirty = dirty || s3Dirty;
     const saving = updateSettings.isPending || updateS3Config.isPending;
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
+    const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
+        s3Harden.mutateAsync({ ...config, noncurrentDays });
 
     const handleSave = async () => {
         if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
@@ -164,6 +168,7 @@ export function ServerSettingsPage() {
                         setS3Draft(config);
                     }}
                     checkS3={handleS3Check}
+                    hardenS3={handleS3Harden}
                 />
             </div>
 

@@ -133,18 +133,22 @@ temp-copy backend.
   (`SHUTDOWN_DRAIN_BUDGET_MS = 20 s`) can finish before SIGKILL; undrained uploads replay on boot.
 - **Enable bucket versioning + a noncurrent-version expiry rule** on the S3 bucket. Versioning makes
   accidental overwrites recoverable; because the pipeline re-PUTs whole files, a lifecycle rule expires old
-  versions so they don't accumulate forever:
+  versions so they don't accumulate forever. The admin app does both from the S3 config card ("Bucket safety" →
+  "Enable safe defaults", `POST /settings/s3harden`). The same rule by hand, for a key that isn't allowed to
+  change bucket settings — keep the rule ID, the app matches on it:
   ```bash
   cat > /tmp/lifecycle.json <<'JSON'
-  { "Rules": [ { "ID": "expire-noncurrent-versions", "Filter": {}, "Status": "Enabled",
+  { "Rules": [ { "ID": "eigen-expire-noncurrent", "Filter": {}, "Status": "Enabled",
       "NoncurrentVersionExpiration": { "NoncurrentDays": 30 },
       "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 } } ] }
   JSON
   aws s3api put-bucket-lifecycle-configuration --endpoint-url https://nbg1.your-objectstorage.com \
     --bucket eigen-drive --lifecycle-configuration file:///tmp/lifecycle.json
   ```
-  `NoncurrentDays` trades recovery window against storage cost. See
-  [PROPOSAL_S3_VERSIONING_UX.md](proposals/PROPOSAL_S3_VERSIONING_UX.md) for doing this from the admin UI.
+  `NoncurrentDays` trades recovery window against storage cost. A lifecycle configuration Eigen didn't author
+  is never rewritten: the card reports it and shows the commands instead. Rule ID and defaults live in
+  `packages/lib/src/constants/s3.ts`; the design is in
+  [PROPOSAL_S3_VERSIONING_UX.md](proposals/PROPOSAL_S3_VERSIONING_UX.md).
 
 ## Residual limitations
 

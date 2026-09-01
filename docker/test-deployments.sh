@@ -12,97 +12,10 @@
 
 set -euo pipefail
 
+# Counters, log/probe helpers, the dc() compose wrapper and the Result summary.
+. "$(dirname "$0")/probe-lib.sh"
+
 cd "$(dirname "$0")/.."
-
-PASS=0
-FAIL=0
-FAIL_LINES=()
-
-log()    { printf '  %s\n' "$*"; }
-header() { printf '\n=== %s ===\n' "$*"; }
-
-probe() {
-    local desc="$1" url="$2" expected_code="$3" expected_pattern="${4:-}"
-    local body=/tmp/eigen-smoke-body-$$
-    local got_code
-    got_code=$(curl -sk -o "$body" -w '%{http_code}' --max-time 10 "$url" || echo 000)
-    if [ "$got_code" != "$expected_code" ]; then
-        log "✗ $desc → $got_code (expected $expected_code)"
-        FAIL=$((FAIL+1)); FAIL_LINES+=("$desc → $got_code, expected $expected_code")
-    elif [ -n "$expected_pattern" ] && ! grep -q "$expected_pattern" "$body"; then
-        log "✗ $desc → $got_code but body missing '$expected_pattern' (likely landing page served instead of app)"
-        FAIL=$((FAIL+1)); FAIL_LINES+=("$desc body missing $expected_pattern")
-    else
-        log "✓ $desc → $got_code${expected_pattern:+ with $expected_pattern}"
-        PASS=$((PASS+1))
-    fi
-    rm -f "$body"
-}
-
-probe_ws() {
-    local desc="$1" url="$2"
-    local got_code
-    got_code=$(curl -sk -o /dev/null -w '%{http_code}' --max-time 10 \
-        --http1.1 \
-        -H 'Upgrade: websocket' \
-        -H 'Connection: Upgrade' \
-        -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
-        -H 'Sec-WebSocket-Version: 13' \
-        "$url" || echo 000)
-    # 401 = auth gate reached → upgrade was correctly forwarded to the app.
-    # 404 = upgrade headers got stripped, request landed as plain GET on a non-existent route.
-    if [ "$got_code" = "401" ]; then
-        log "✓ $desc → 401 (auth, upgrade pass-through OK)"
-        PASS=$((PASS+1))
-    else
-        log "✗ $desc → $got_code (expected 401; 404 means upgrade headers were stripped)"
-        FAIL=$((FAIL+1)); FAIL_LINES+=("WS at $url → $got_code, expected 401")
-    fi
-}
-
-# Postfix should send a 220 SMTP banner as soon as the TCP connection is open. Doubles as
-# proof that postfix could resolve unbound's IP and start cleanly — the part that breaks
-# when EIGEN_SUBNET / EIGEN_UNBOUND_IP get out of sync. Retries because postfix has no
-# healthcheck, so `compose up --wait` returns before the listener is fully accepting.
-probe_smtp() {
-    local desc="$1" port="$2"
-    local banner=""
-    for _ in 1 2 3 4 5; do
-        banner=$(printf 'QUIT\r\n' | nc -w 5 localhost "$port" 2>/dev/null | head -1 || true)
-        echo "$banner" | grep -q '^220 ' && break
-        sleep 1
-    done
-    if echo "$banner" | grep -q '^220 '; then
-        log "✓ $desc → 220 banner"
-        PASS=$((PASS+1))
-    else
-        log "✗ $desc → '$banner' (expected SMTP 220 banner)"
-        FAIL=$((FAIL+1)); FAIL_LINES+=("SMTP banner on port $port: '$banner'")
-    fi
-}
-
-# Dovecot IMAPS speaks IMAP over TLS. Sending `a logout` keeps the connection open long
-# enough for openssl to emit the `* OK ...` greeting before exiting.
-probe_imaps() {
-    local desc="$1" port="$2"
-    local banner=""
-    for _ in 1 2 3 4 5; do
-        banner=$(echo 'a logout' | openssl s_client -connect "localhost:$port" -quiet 2>/dev/null | head -1 || true)
-        echo "$banner" | grep -q '^\* OK ' && break
-        sleep 1
-    done
-    if echo "$banner" | grep -q '^\* OK '; then
-        log "✓ $desc → '* OK' greeting"
-        PASS=$((PASS+1))
-    else
-        log "✗ $desc → '$banner' (expected '* OK ...')"
-        FAIL=$((FAIL+1)); FAIL_LINES+=("IMAPS banner on port $port: '$banner'")
-    fi
-}
-
-dc() {
-    docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production "$@"
-}
 
 bring_up() {
     local profiles="$1"
@@ -217,11 +130,4 @@ tear_down
 ##############################################################################
 header "Result"
 ##############################################################################
-if [ "$FAIL" -eq 0 ]; then
-    printf '✓ ALL OK (%d checks passed)\n' "$PASS"
-    exit 0
-else
-    printf '✗ %d FAILURES (%d passed)\n' "$FAIL" "$PASS"
-    for line in "${FAIL_LINES[@]}"; do printf '  - %s\n' "$line"; done
-    exit 1
-fi
+probe_summary

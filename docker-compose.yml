@@ -140,6 +140,10 @@ services:
       SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
       SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
       SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
+      # queue-monitor.sh: notify the org owner when the queue backs up (spam-run early warning).
+      QUEUE_CHECK_INTERVAL: ${QUEUE_CHECK_INTERVAL:-300}
+      QUEUE_ALERT_THRESHOLD: ${QUEUE_ALERT_THRESHOLD:-200}
+      QUEUE_ALERT_COOLDOWN: ${QUEUE_ALERT_COOLDOWN:-21600}
     depends_on:
       eigen-api:
         condition: service_healthy
@@ -149,9 +153,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
+    # Bigger than the other services keep: this log is the record of an abuse run, and what a
+    # host-side fail2ban reads. During the 2026-08-31 incident 3x10MB rotated away in about two
+    # hours and took the start of the run with it.
     logging:
       driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+      options: { max-size: "50m", max-file: "10" }
 
   dovecot:
     profiles: ["mail"]
@@ -170,9 +177,11 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
+    # Same size as postfix keeps, and for the same reason: dovecot's log is where an IMAP
+    # password-guessing run shows up, and what the host-side fail2ban jail reads.
     logging:
       driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+      options: { max-size: "50m", max-file: "10" }
 
 volumes:
   postfix-queue:

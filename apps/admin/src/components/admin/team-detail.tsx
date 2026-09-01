@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAddTeamMember, useMembers, useRemoveTeam, useRemoveTeamMember, useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
-import { useCheckS3Connection, useServerSettings } from '@workspace/lib/settings';
+import { useCheckS3Connection, useHardenS3Bucket, useServerSettings } from '@workspace/lib/settings';
 import {
     useAddTeamMount,
     useRemoveTeamAvatar,
@@ -94,6 +94,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const updateSettings = useUpdateTeamSettings(team.id);
     const { data: serverSettings } = useServerSettings();
     const s3Check = useCheckS3Connection();
+    const s3Harden = useHardenS3Bucket();
 
     const { data: mounts = {} } = useTeamMounts(team.id);
     const addMount = useAddTeamMount(team.id);
@@ -182,6 +183,8 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     };
 
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
+    const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
+        s3Harden.mutateAsync({ ...config, noncurrentDays });
 
     const handleAvatarUpload = async (file: File) => {
         await uploadAvatar.mutateAsync(file);
@@ -332,6 +335,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     onOpenChange={setShowAddMount}
                     onSubmit={handleAddMount}
                     onS3Check={handleS3Check}
+                    onS3Harden={handleS3Harden}
                     title="Add Mount"
                     submitLabel="Create Mount"
                     defaultStorageType={defaultMountStorageType}
@@ -346,6 +350,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     }}
                     onSubmit={handleEditMount}
                     onS3Check={handleS3Check}
+                    onS3Harden={handleS3Harden}
                     initialValues={
                         editingMount
                             ? {

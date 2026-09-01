@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1164 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1182 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -185,7 +185,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (242)
+## Hooks (244)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -200,6 +200,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCreateUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteUser` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useDeleteWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
+| `useHardenSetupS3` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-setup-status.ts |
 | `useIsAdmin` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-is-admin.ts |
 | `useMembers` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-members.ts |
 | `useRejectWaitlistEntry` | `@workspace/lib/admin` | packages/lib/src/core/admin/hooks/use-waitlist.ts |
@@ -374,6 +375,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useDocCommentSearchHalf` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-doc-comment-search.ts |
 | `useSearchQuery` | `@workspace/lib/search` | packages/lib/src/core/search/hooks/use-search.ts |
 | `useCheckS3Connection` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
+| `useHardenS3Bucket` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `useServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
 | `useServerSettings` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-server-settings.ts |
 | `useUpdateServerS3Config` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-config.ts |
@@ -432,7 +434,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (307)
+## Types (311)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -442,7 +444,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ViewMode` | `@workspace/lib/calendar` | packages/lib/src/core/calendar/calendar-utils.ts |
 | `LocalCommand` | `@workspace/lib/chat` | packages/lib/src/core/chat/commands.ts |
 | `EmoteDefinition` | `@workspace/lib/chat/built-in-emotes` | packages/lib/src/core/chat/built-in-emotes.ts |
-| `ClassifiedEigen` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClassifiedPaste` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClassifiedSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/classify.ts |
 | `ClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -601,6 +602,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
+| `S3HardenResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `S3LifecycleState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
+| `S3VersioningState` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SearchResponse` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SearchSource` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `SentMailResult` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -660,6 +664,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Binding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `Bounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Box` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `CubicBezier` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `FillStyle` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FixedSegment` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FontMetrics` | `@workspace/lib/vector` | packages/lib/src/vector/font-metrics.ts |
@@ -668,6 +673,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `ParsedFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
+| `PinRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `Point` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `Roundness` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `SceneToSvgOptions` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
@@ -744,7 +750,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (456)
+## Utilities & constants (468)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -874,7 +880,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
-| `readSvgClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readSvgClipboardWithItems` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `reUploadImage` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `svgToImageDataUri` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -919,6 +924,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
 | `MAX_SEND_RECIPIENTS` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `MAX_SEND_REFERENCES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
+| `S3_LIFECYCLE_RULE_ID` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
+| `S3_NONCURRENT_DAYS_DEFAULT` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
+| `S3_NONCURRENT_DAYS_MAX` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
 | `STALE_TIME` | `@workspace/lib/constants` | packages/lib/src/constants/stale-time.ts |
 | `userColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -968,6 +977,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isClickableNotification` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `resolveNotificationLink` | `@workspace/lib/notification` | packages/lib/src/core/notification/resolve-link.ts |
 | `loadPagefind` | `@workspace/lib/search` | packages/lib/src/core/search/pagefind.ts |
+| `hardenFailure` | `@workspace/lib/settings` | packages/lib/src/core/settings/hooks/use-s3-check.ts |
 | `BORDER_SIDE_CSS` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `BORDER_STYLES` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `borderInfoExtent` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
@@ -1049,6 +1059,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `applyResize` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrangeBoundingBox` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `ARROW_SHAPES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `arrowCurveBeziers` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrowheadGeometry` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ARROWHEADS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `arrowLabelBox` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1064,6 +1075,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `boundEndpoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `COARSE_HIT_SLOP_MULTIPLIER` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `computeArrange` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `computeSnapTargets` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `DEFAULT_ARROW_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1086,6 +1098,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `elbowAnchorScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `elbowBindPoint` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `elbowRoute` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
+| `elbowRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `elementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `elementToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
@@ -1106,6 +1119,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestEllipse` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `hitThresholdScreen` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isBindable` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isClosedPath` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1132,6 +1146,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseEigenMediaHref` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `parseFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `parsePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `parsePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `readVectorFromDoc` | `@workspace/lib/vector` | packages/lib/src/vector/read-vector.ts |
 | `redockBindingsForElbow` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
@@ -1144,10 +1159,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `rewriteEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `sampleArrowCurve` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `sceneToSvg` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `serializeBinding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializeFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `shapeSideMidpoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `SNAP_SCREEN_THRESHOLD` | `@workspace/lib/vector` | packages/lib/src/vector/snap.ts |
 | `snapAngle` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1157,6 +1174,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STROKE_WIDTH_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `UNBOUND_PIN_CONTEXT` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `unpinSegment` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `validateElbowPoints` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |

@@ -1,7 +1,7 @@
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { S3CheckResult, ServerStorageType } from '@workspace/lib/types/settings';
+import type { S3CheckResult, S3HardenResult, ServerStorageType } from '@workspace/lib/types/settings';
 import { Label } from '@workspace/ui/components/label';
-import { S3ConfigCard } from '@workspace/ui/components/mount/s3-config-card';
+import { S3ConfigCard } from '@workspace/ui/components/mount';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useEffect, useState } from 'react';
 
@@ -11,6 +11,7 @@ type StorageTypePickerProps = {
     s3Config: S3Config;
     onS3ConfigChange: (config: S3Config) => void;
     checkS3: (config: S3Config) => Promise<S3CheckResult>;
+    hardenS3: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
     onS3Verified?: (verified: boolean) => void;
 };
 
@@ -20,6 +21,7 @@ export function StorageTypePicker({
     s3Config,
     onS3ConfigChange,
     checkS3,
+    hardenS3,
     onS3Verified,
 }: StorageTypePickerProps) {
     const [s3CheckResult, setS3CheckResult] = useState<S3CheckResult | null>(null);
@@ -56,6 +58,7 @@ export function StorageTypePicker({
                     value={s3Config}
                     onChange={onS3ConfigChange}
                     onCheck={checkS3}
+                    onHarden={hardenS3}
                     onCheckResult={setS3CheckResult}
                 />
             )}

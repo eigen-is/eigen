@@ -165,6 +165,8 @@ The composer (`apps/mail/src/components/mail/email-draft.tsx` + its `hooks/use-d
 
 `messageSend` (`mail-domain.ts`) does a full save, maps the draft to an `OutboundMail` (`draftToOutboundMail`, `sender.ts`), then delivers. `sendMail` (`lib/core/mailer.ts`) is the sendmail transport unless `SMTP_HOST` is set, and is **skipped in dev/test** (logged, not sent). On success the message moves to `Sent`, the draft flag clears, and `MAIL_SENT` fires. A demo box has no MTA, so `messageSend` throws `403` before any delivery and the message stays in Drafts.
 
+**Two ways out, two rule sets.** The app path sends over `postfix:25` without authenticating (`mynetworks`), so nothing below applies to it. External clients come in on the submission ports 587 and 465 with SASL, and there a login may only use its own address as the envelope sender: `smtpd_sender_login_maps` plus `reject_authenticated_sender_login_mismatch`, over the identity map in `docker/postfix/sender_login.regexp`. One address per user, no aliases and no send-as, so login and sender are the same string. A forged sender gets `553 5.7.1`. That was the hole the 2026-08-31 spam run used; the rest of that hardening (anvil AUTH caps, queue alerting, opt-in fail2ban) is in [../docker/SETUP-GUIDE.md § Mail abuse hardening](../docker/SETUP-GUIDE.md#mail-abuse-hardening).
+
 **Recipient canonicalisation.** `canonicalizeRecipients` (`recipients.ts`) is the one server-side recipient set, shared by delivery and the grant. It recursively flattens RFC 2822 address groups (`Team: a@x, b@x;`) into their leaf members (fixing a pre-existing drop that lost group members), requires a bare `@` rather than the stricter `validateEmailAddress` (so `@localhost` still sends), and dedupes case-insensitively across To/Cc/Bcc with **to > cc > bcc** precedence (Bcc stays Bcc). Hard caps live as shared FE/BE constants (`packages/lib/src/constants/mail.ts`): `MAX_SEND_RECIPIENTS` (100, a 400 beyond) and `MAX_SEND_REFERENCES` (20), which bounds `driveReferences` and `grantAccessRefIds` at the route schema (`maxItems`, a 422 beyond) so an oversized list is rejected before *any* save renders a pill per reference; `messageSend` re-checks it at runtime, since `refs` can also come from the draft sidecar, and the composer refuses the overflow at its one attach seam (`handleDriveAttach`, `email-draft.tsx`) so a 21st linked document never 422s every auto-save into a lost draft. Internal vs external is `isInternalAddress` (`server-config.ts`), a lowercased mail-domain compare and the same source `buildAttachmentUrl` uses.
 
 **Per-recipient `?email=` links.** With no `driveReferences` or no external recipients it is exactly one send, so the common case is untouched. Otherwise `messageSend` splits into one bare copy for all internal recipients plus one copy per external recipient, each carrying `?email=<that address>` links in **both** the HTML body and the plain-text alternative (`appendReferenceLinks` + `renderAttachmentLinksText`, links built by `mail-template.ts`). Externals then land on the guest login with their address prefilled (see [GUEST-ACCESS.md](GUEST-ACCESS.md)). Every copy keeps the composed To/Cc headers, no copy carries a Bcc header, and each is steered by an explicit SMTP envelope `{ from, to }` so a leaked personalised link cannot reach the wrong person. `from` is always set: nodemailer replaces the envelope rather than merging it, and a `{ to }`-only envelope would leave an empty reverse path. The Sent copy stays bare (baked by `draftFullSave`).
@@ -205,6 +207,8 @@ the user by address, appends the raw bytes to INBOX, then synchronously scans fo
 user's first mail init a welcome message is written straight into their INBOX (`welcome.ts`, gated by the
 `onboarding.welcomeMail` server setting), bypassing SMTP.
 
+`POST /internal/mail/queue-alert` is the other localhost-only mail route. The queue lives on a private volume, so the API cannot count it; `docker/postfix/queue-monitor.sh` counts it inside the Postfix container and posts the number once it crosses `QUEUE_ALERT_THRESHOLD`. The route resolves `getOrgOwner()` and relays an `admin-alert` notification through `sendToHome` (never a cross-home `getHome()`), coalesced on the `mail-queue-backlog` tag. A notification and not an email, because an email about a jammed queue would sit in that queue.
+
 ## Protocol access (IMAP/CalDAV/WebDAV)
 
 There is **no in-repo IMAP server**. The Maildir is written in a Dovecot-compatible on-disk format; Dovecot
@@ -213,6 +217,11 @@ its `checkpassword` mechanism → Eigen's `POST /internal/auth/verify` → `veri
 (`lib/auth/protocol-auth.ts`), which tries an app-password (better-auth API key) first and falls back to the
 primary account password (the fallback fails if 2FA is on). The same `verifyProtocolAuth` is shared by CalDAV
 and WebDAV. Full Dovecot config/deployment is in [IMAP.md](IMAP.md#dovecot-configuration-reference).
+
+`verifyProtocolAuth` counts failures per address and per client IP (`protocol-rate-limit.ts`). Both buckets now
+fill on the SASL path too: `eigen-checkpassword` forwards Dovecot's `TCPREMOTEIP`, and for a submission login that is
+the SMTP client's address, which Postfix reports to Dovecot as `rip`. A valid app password is checked before
+the limiter, so a saturated bucket never locks out an app-password client.
 
 ## Keyboard shortcuts and settings
 

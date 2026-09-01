@@ -285,6 +285,40 @@ ufw allow 587/tcp    # SMTP submission
 ufw allow 993/tcp    # IMAP
 ```
 
+### Mail abuse hardening
+
+One stolen account password is enough to turn a mail server into a spam relay. In August 2026 a botnet pushed about 17k messages through eigen.is on port 465 with one password, using forged sender addresses. Three defences are on by default. A fourth, fail2ban, is host config you install yourself.
+
+**Senders are bound to their login.** On the submission ports (587 and 465) an authenticated user can only send as their own address. Postfix checks the envelope sender against `smtpd_sender_login_maps` (`docker/postfix/main.cf.template`) with `reject_authenticated_sender_login_mismatch` on both services (`master.cf.template`). Eigen gives every user one address and has no aliases and no send-as, so the map is the identity map in `docker/postfix/sender_login.regexp`. A forged sender gets `553 5.7.1 ... not owned by user`. One exemption comes first (`docker/postfix/null_sender.regexp`): an empty envelope sender, `MAIL FROM:<>`, is permitted, because the identity map gives it no owner and read receipts and vacation replies are required to be sent that way (RFC 3834). It opens no relay — the recipient rules still demand a login. Inbound port 25 keeps accepting foreign senders: the `authenticated_` variant of the check does nothing when there is no login. The API sends over `postfix:25` without authenticating, so app mail is unaffected.
+
+**Failed logins are rate limited.** The API verifies every SASL login and counts failures in a sliding 15 minute window, 10 per address and 50 per client IP. It sees the client IP because Dovecot's `checkpassword` helper passes it along. Each submission service also caps AUTH attempts per client IP with Postfix's anvil counter, and hangs up on a session that keeps making errors:
+
+| Setting | Value | Why this value |
+|---|---|---|
+| `smtpd_client_auth_rate_limit` | `20` per 60s | A client authenticates about once per message. Twenty a minute is well above what a real client does and well below what a password-guessing run needs. |
+| `smtpd_hard_error_limit` | `5` | A submission client that makes five errors in one session is broken or hostile, so Postfix hangs up. Inbound port 25 keeps the default of 20, where a rejected recipient should not end the session. |
+
+The AUTH rate limit is per client IP, so one abusive address cannot spend another client's budget. The hard error limit counts within a single SMTP session, so a hostile client gets a new budget on every reconnect — the rate limit and fail2ban are what make reconnecting expensive.
+
+**The queue is watched.** `docker/postfix/queue-monitor.sh` counts the queue every `QUEUE_CHECK_INTERVAL` seconds (default 300). Above `QUEUE_ALERT_THRESHOLD` messages (default 200) it notifies the instance owner in the web UI. Set any of these in `.env.production` to tune it. Raise the threshold if your instance legitimately queues a few hundred messages. While the backlog lasts it repeats the alert at most every `QUEUE_ALERT_COOLDOWN` seconds (default 21600, six hours), and it re-arms once the queue drains. It is a notification and not an email, because an email about a jammed queue would sit in that queue. The 17k backlog above went unnoticed for a day.
+
+**fail2ban (opt-in).** The layers above limit the damage but still accept the connections. To drop the traffic at the firewall, install the shipped jails. There are two, one for Postfix's submission ports and one for Dovecot's IMAPS, because a botnet that gets nowhere on 465 starts guessing on 993 and that traffic is in the dovecot log only. Each bans an IP after five failed logins in ten minutes:
+
+```bash
+apt-get install fail2ban
+cp /opt/eigen/docker/fail2ban/filter.d/eigen-postfix-sasl.conf  /etc/fail2ban/filter.d/
+cp /opt/eigen/docker/fail2ban/filter.d/eigen-dovecot-auth.conf  /etc/fail2ban/filter.d/
+cp /opt/eigen/docker/fail2ban/jail.d/eigen-mail-sasl.conf       /etc/fail2ban/jail.d/
+systemctl enable --now fail2ban
+systemctl restart fail2ban
+fail2ban-client status eigen-postfix-sasl
+fail2ban-client status eigen-dovecot-auth
+```
+
+It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. One maintenance duty: run `fail2ban-client reload` after every update that recreates the mail containers — the jails' log glob is expanded at start and the Docker log path embeds the container ID, so without a reload they keep watching deleted files while reporting themselves up. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
+
+The postfix and dovecot logs are the record of an abuse run, and what fail2ban reads, so they keep 10 files of 50 MB where the other containers keep 3 of 10 MB. During the incident the old 3x10 MB rotated away in about two hours and took the start of the run with it.
+
 ### Troubleshooting
 
 **Container status:**
