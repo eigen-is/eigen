@@ -1,4 +1,5 @@
 import {
+    BORDER_STYLES,
     type BorderSide,
     type BorderType,
     type CellBorderSides,
@@ -11,24 +12,11 @@ import type { Context } from '../context';
 import type { Selection, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-// The xlsx border-style ordinal → style name; consumed by the canvas border
-// pass (dash pattern / line width) and the copy-as-HTML serializer.
-export const BORDER_STYLE_NAMES: Record<string, string> = {
-    '0': 'none',
-    '1': 'Thin',
-    '2': 'Hair',
-    '3': 'Dotted',
-    '4': 'Dashed',
-    '5': 'DashDot',
-    '6': 'DashDotDot',
-    '7': 'Double',
-    '8': 'Medium',
-    '9': 'MediumDashed',
-    '10': 'MediumDashDot',
-    '11': 'MediumDashDotDot',
-    '12': 'SlantedDashDot',
-    '13': 'Thick',
-};
+// The canvas border pass categorizes the dash pattern / line width by capitalized style name;
+// derived from the shared ordinal table so the vocabulary has one home (BORDER_STYLES).
+export const BORDER_STYLE_NAMES: Record<string, string> = Object.fromEntries(
+    Object.entries(BORDER_STYLES).map(([ord, { name }]) => [ord, name[0].toUpperCase() + name.slice(1)]),
+);
 
 type BorderSideKey = keyof CellBorderSides;
 
@@ -93,6 +81,18 @@ function removeSide(map: Record<string, CellBorderSides>, r: number, c: number, 
     if (Object.keys(entry).length === 0) delete map[`${r}_${c}`];
 }
 
+// Mirror of removeSide: overrides one side of an EXISTING neighbour entry, never creating one.
+function overrideSide(
+    map: Record<string, CellBorderSides>,
+    r: number,
+    c: number,
+    key: BorderSideKey,
+    side: BorderSide,
+) {
+    const entry = map[`${r}_${c}`];
+    if (entry) entry[key] = { style: side.style, color: side.color };
+}
+
 // Carries a source cell's computed sides onto a destination cell (paste, fill, move,
 // format painter): a source without sides clears the destination, so a plain cell
 // pasted over a bordered one leaves it plain.
@@ -112,8 +112,9 @@ export function clearSides(
 }
 
 // Expands a toolbar layout into the cells' own sides. A border belongs to the cell it was
-// drawn on — nothing is mirrored onto the neighbour across the shared edge, which would
-// create the neighbour's key as one whole-object add and clobber a peer's write to it.
+// drawn on — no neighbour key is ever created (that would clobber a peer's write to it), but
+// an EXISTING outside neighbour's facing side is overridden so a stale mirror can't repaint
+// the shared edge (border-none clears the same facing sides symmetrically).
 export function applyBorder(cfg: SheetConfig, type: BorderType, side: BorderSide, ranges: Selection[]) {
     const map = (cfg.borderInfo ??= {});
     for (const { row, column } of ranges) {
@@ -139,6 +140,11 @@ export function applyBorder(cfg: SheetConfig, type: BorderType, side: BorderSide
                 let entry: CellBorderSides | undefined;
                 const set = (key: BorderSideKey) => {
                     (entry ??= map[`${r}_${c}`] ??= {})[key] = { style: side.style, color: side.color };
+                    // On the range's outer edge, override the facing side of an existing outside neighbour.
+                    if (key === 'l' && c === c1) overrideSide(map, r, c - 1, 'r', side);
+                    else if (key === 'r' && c === c2) overrideSide(map, r, c + 1, 'l', side);
+                    else if (key === 't' && r === r1) overrideSide(map, r - 1, c, 'b', side);
+                    else if (key === 'b' && r === r2) overrideSide(map, r + 1, c, 't', side);
                 };
                 switch (type) {
                     case 'border-all':

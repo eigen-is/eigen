@@ -207,6 +207,30 @@ describe('border-none erases', () => {
     });
 });
 
+describe('a colored border overrides an existing outside neighbour', () => {
+    const BLUE = { style: 1, color: '#00f' };
+    const RED = { style: 1, color: '#f00' };
+
+    test("overrides the neighbour's facing side, so a stale mirror can't repaint the edge", () => {
+        // A2 (1_0) right=blue was mirrored onto B2 (1_1) left=blue; recoloring A2's right to red
+        // must recolor B2's left too, or B2's blue paints last over the same edge.
+        const ctx = withSelection([1, 1], [0, 0]);
+        ctx.sheets[0].config!.borderInfo = { '1_0': { r: BLUE }, '1_1': { l: BLUE } };
+        handleBorder(ctx, 'border-right', '#f00');
+        const map = ctx.sheets[0].config!.borderInfo!;
+        expect(map['1_0']!.r).toEqual(RED);
+        expect(map['1_1']!.l).toEqual(RED);
+    });
+
+    test('never creates a neighbour entry that did not exist', () => {
+        const ctx = withSelection([1, 1], [0, 0]);
+        handleBorder(ctx, 'border-right', '#f00');
+        const map = ctx.sheets[0].config!.borderInfo!;
+        expect(map['1_1']).toBeUndefined();
+        expect(map['1_0']).toEqual({ r: RED });
+    });
+});
+
 describe('getBorderInfoCompute', () => {
     test('shows a merged cell only the sides on the merge outer edge; storage keeps them all', () => {
         const ctx = withSelection([0, 3], [0, 3]);

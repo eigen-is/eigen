@@ -14,6 +14,7 @@ import type {
     SheetConfig,
     SingleRange,
 } from '@workspace/lib/sheets';
+import { BORDER_STYLES } from '@workspace/lib/sheets';
 import {
     booleanDisplay,
     functionCopy,
@@ -114,21 +115,10 @@ function mapToSupportedFont(name: string): string | null {
     return category ? BUNDLED_FONT_BY_CATEGORY[category] : null;
 }
 
-const BORDER_STYLE_MAP: Record<string, number> = {
-    thin: 1,
-    hair: 2,
-    dotted: 3,
-    dashed: 4,
-    dashDot: 5,
-    dashDotDot: 6,
-    double: 7,
-    medium: 8,
-    mediumDashed: 9,
-    mediumDashDot: 10,
-    mediumDashDotDot: 11,
-    slantDashDot: 12,
-    thick: 13,
-};
+// xlsx style name → ordinal, derived from the shared ordinal table (the reverse of its `name`).
+const BORDER_STYLE_MAP: Record<string, number> = Object.fromEntries(
+    Object.entries(BORDER_STYLES).map(([ord, { name }]) => [name, Number(ord)]),
+);
 
 type ThemePalette = string[];
 

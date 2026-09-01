@@ -7,7 +7,7 @@ const RED = { style: 8, color: '#f00' };
 describe('mergedBorderSides', () => {
     test('non-merge cells pass through untouched', () => {
         const borderInfo = { '0_0': { l: SIDE }, '5_5': { b: SIDE } };
-        expect(mergedBorderSides(borderInfo, undefined)).toEqual(borderInfo);
+        expect(mergedBorderSides(borderInfo, undefined, [0, 5, 0, 5])).toEqual(borderInfo);
     });
 
     test('folds a border-outside box around A1:C3 onto the master', () => {
@@ -18,18 +18,20 @@ describe('mergedBorderSides', () => {
             '2_0': { b: SIDE, l: SIDE },
             '2_2': { b: RED, r: RED },
         };
-        expect(mergedBorderSides(borderInfo, merge)).toEqual({ '0_0': { t: SIDE, l: SIDE, r: RED, b: RED } });
+        expect(mergedBorderSides(borderInfo, merge, [0, 2, 0, 2])).toEqual({
+            '0_0': { t: SIDE, l: SIDE, r: RED, b: RED },
+        });
     });
 
     test('drops interior sides and a non-master diagonal, deleting a master left empty', () => {
         const merge = { '0_0': { r: 0, c: 0, rs: 2, cs: 2 } };
         const borderInfo = { '0_1': { l: SIDE, b: SIDE, s: SIDE }, '1_0': { t: SIDE, r: SIDE } };
-        expect(mergedBorderSides(borderInfo, merge)).toEqual({});
+        expect(mergedBorderSides(borderInfo, merge, [0, 1, 0, 1])).toEqual({});
     });
 
     test('keeps the master diagonal', () => {
         const merge = { '1_1': { r: 1, c: 1, rs: 1, cs: 2 } };
-        expect(mergedBorderSides({ '1_1': { s: SIDE } }, merge)).toEqual({ '1_1': { s: SIDE } });
+        expect(mergedBorderSides({ '1_1': { s: SIDE } }, merge, [1, 1, 1, 2])).toEqual({ '1_1': { s: SIDE } });
     });
 
     test('a range visits only its cells, plus every constituent of a merge crossing it', () => {
@@ -39,6 +41,13 @@ describe('mergedBorderSides', () => {
             '0_0': { l: SIDE },
             '2_2': { r: RED, b: RED },
         });
+    });
+
+    test('a huge merge outside the range contributes nothing and is not expanded', () => {
+        // A1:A1000000 — a rangeless call expanded it into a million-entry map; the range must skip it.
+        const merge = { '0_0': { r: 0, c: 0, rs: 1_000_000, cs: 1 } };
+        const borderInfo = { '5_5': { l: SIDE } };
+        expect(mergedBorderSides(borderInfo, merge, [5, 5, 5, 5])).toEqual({ '5_5': { l: SIDE } });
     });
 });
 

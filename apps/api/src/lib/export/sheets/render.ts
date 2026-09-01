@@ -1,6 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
     BORDER_SIDE_CSS,
+    BORDER_STYLES,
     type BorderSide,
     type Cell,
     type CellBorderSides,
@@ -54,22 +55,6 @@ const VERTICAL_ALIGN: Record<number, string> = {
     0: 'middle',
     1: 'top',
     2: 'bottom',
-};
-
-const BORDER_STYLE_CSS: Record<number, string> = {
-    1: '1px solid',
-    2: '1px dotted',
-    3: '1px dotted',
-    4: '1px dashed',
-    5: '1px dashed',
-    6: '1px dashed',
-    7: '3px double',
-    8: '2px solid',
-    9: '2px dashed',
-    10: '2px dashed',
-    11: '2px dashed',
-    12: '2px dashed',
-    13: '3px solid',
 };
 
 const PAGE_MARGIN = 40;
@@ -273,8 +258,7 @@ function clipRulesToWindow(
 
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
     const config = sheet.config ?? {};
-    const borderMap = mergedBorderSides(config.borderInfo, config.merge);
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
+    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
     if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
 
     // The dimension maps are schemaless at the Yjs boundary — coerce so a stray string can never
@@ -307,11 +291,8 @@ function renderSheet(
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
-    // A merge's perimeter sits on the master, the only cell this renderer emits for it.
-    const borderMap = mergedBorderSides(config.borderInfo, config.merge);
-
     // Find the minimal bounding box containing all visible content
-    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
+    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, config.borderInfo ?? {});
     if (maxRow < 0 || maxCol < 0) {
         return { html: `<div class="sheet"></div>`, truncated: false };
     }
@@ -343,6 +324,10 @@ function renderSheet(
     }
     const lastRow = renderRows.at(-1) ?? -1;
     const lastCol = renderCols.at(-1) ?? -1;
+
+    // A merge's perimeter sits on the master, the only cell this renderer emits for it. Bounded
+    // to the render window so a merge beyond it (in preview, past the budget) is never expanded.
+    const borderMap = mergedBorderSides(config.borderInfo, config.merge, [minRow, lastRow, minCol, lastCol]);
 
     // Conditional formatting — engine produces a "r_c" -> { textColor, cellColor, dataBar } map.
     // Evaluation needs the dense `data` matrix; loaded snapshots without it skip CF (the canvas
@@ -623,7 +608,7 @@ function wrapForRotation(v: Cell | null, inner: string, styles?: StyleRegistry):
 }
 
 function borderSideToCSS(side: BorderSide): string {
-    const css = BORDER_STYLE_CSS[side.style] ?? '1px solid';
+    const css = BORDER_STYLES[side.style]?.css ?? '1px solid';
     return `${css} ${escapeHtml(side.color)}`;
 }
 
@@ -638,7 +623,7 @@ function hasVisibleContent(v: Cell | null): boolean {
 
 function getGridBounds(
     sheet: Sheet,
-    borderMap: Record<string, CellBorderSides>,
+    borderInfo: Record<string, CellBorderSides>,
 ): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
     let minRow = Number.MAX_SAFE_INTEGER;
     let minCol = Number.MAX_SAFE_INTEGER;
@@ -655,8 +640,8 @@ function getGridBounds(
         }
     }
 
-    // Extend bounds to cover border cells
-    for (const key of Object.keys(borderMap)) {
+    // Extend bounds to cover border cells (raw keys — folding only ever drops keys onto masters).
+    for (const key of Object.keys(borderInfo)) {
         const [r, c] = parseCellKey(key);
         if (r < minRow) minRow = r;
         if (c < minCol) minCol = c;

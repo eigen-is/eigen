@@ -1,6 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
     BORDER_SIDE_CSS,
+    BORDER_STYLES,
     type CellBorderSides,
     type ConditionalFormatRule,
     type DataVerificationRule,
@@ -13,7 +14,7 @@ import { update } from '../../engine/format';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
-import { BORDER_STYLE_NAMES, carrySides, getBorderInfoCompute } from './border';
+import { carrySides, getBorderInfoCompute } from './border';
 import {
     getCellValue,
     getDataBySelectionNoCopy,
@@ -1194,33 +1195,10 @@ export function moveHighlightRange(
     }
 }
 
+// Clipboard HTML borders share the ordinal→CSS table with the exporters so a copied cell
+// pastes with the same border it exports (they disagreed before: hair, double, …).
 function getHtmlBorderStyle(type: number, color: string) {
-    let style = '';
-    const name = BORDER_STYLE_NAMES[String(type)];
-
-    if (name.includes('Medium')) {
-        style += '1pt ';
-    } else if (name === 'Thick') {
-        style += '1.5pt ';
-    } else {
-        style += '0.5pt ';
-    }
-
-    if (name === 'Hair') {
-        style += 'double ';
-    } else if (name.includes('DashDotDot')) {
-        style += 'dotted ';
-    } else if (name.includes('DashDot')) {
-        style += 'dashed ';
-    } else if (name.includes('Dotted')) {
-        style += 'dotted ';
-    } else if (name.includes('Dashed')) {
-        style += 'dashed ';
-    } else {
-        style += 'solid ';
-    }
-
-    return `${style + color};`;
+    return `${BORDER_STYLES[type]?.css ?? '1px solid'} ${color};`;
 }
 
 // The marker that says "this clipboard HTML came from a sheet": written by the copy path,

@@ -212,13 +212,17 @@ export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selecti
             }
         }
     }
-    // A bordered blank cell is used content too: without this a header-click
-    // "no border" could never reach borders dragged past the data.
+    // A bordered blank cell is used content too, but only along the selection's fixed axis: a
+    // whole-column selection extends its rows for borders in its own columns, a whole-row
+    // selection its columns for borders in its own rows. A border elsewhere is not "its" content
+    // — counting it would seed insertCheckbox/border-all thousands of cells past the data.
+    const rowClipCols = selections.filter((_, i) => wholeRows[i]).map((s) => s.column);
+    const colClipRows = selections.filter((_, i) => wholeColumns[i]).map((s) => s.row);
     const borderInfo = getSheetConfig(ctx)?.borderInfo;
     for (const key in borderInfo) {
         const [r, c] = parseCellKey(key);
-        if (r > lastRow) lastRow = r;
-        if (c > lastColumn) lastColumn = c;
+        if (r > lastRow && rowClipCols.some(([c0, c1]) => c >= c0 && c <= c1)) lastRow = r;
+        if (c > lastColumn && colClipRows.some(([r0, r1]) => r >= r0 && r <= r1)) lastColumn = c;
     }
     return selections.map((selection, i) => ({
         ...selection,

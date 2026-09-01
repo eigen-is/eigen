@@ -1,4 +1,5 @@
 import {
+    BORDER_STYLES,
     type BorderSide,
     type CellBorderSides,
     type ConditionalFormatRule,
@@ -53,22 +54,6 @@ const REVERSE_VERTICAL: Record<number, 'top' | 'middle' | 'bottom'> = {
     0: 'middle',
     1: 'top',
     2: 'bottom',
-};
-
-const REVERSE_BORDER_STYLE: Record<number, NonNullable<Border['style']>> = {
-    1: 'thin',
-    2: 'hair',
-    3: 'dotted',
-    4: 'dashed',
-    5: 'dashDot',
-    6: 'dashDotDot',
-    7: 'double',
-    8: 'medium',
-    9: 'mediumDashed',
-    10: 'mediumDashDot',
-    11: 'mediumDashDotDot',
-    12: 'slantDashDot',
-    13: 'thick',
 };
 
 function hexToArgb(hex: string): string {
@@ -171,11 +156,23 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
 
         // exceljs constituents share the master's style object, so a merge's perimeter is
         // written once through the master; per-constituent writes would clobber each other.
-        for (const [key, sides] of Object.entries(mergedBorderSides(config.borderInfo, config.merge))) {
-            const border = toBorder(sides);
-            if (!border) continue;
-            const [r, c] = parseCellKey(key);
-            worksheet.getCell(r + 1, c + 1).border = border;
+        // Bound the fold to the bordered extent so a merge beyond it is skipped, not expanded.
+        const borderKeys = Object.keys(config.borderInfo ?? {});
+        if (borderKeys.length > 0) {
+            let borderMaxRow = 0;
+            let borderMaxCol = 0;
+            for (const key of borderKeys) {
+                const [r, c] = parseCellKey(key);
+                if (r > borderMaxRow) borderMaxRow = r;
+                if (c > borderMaxCol) borderMaxCol = c;
+            }
+            const folded = mergedBorderSides(config.borderInfo, config.merge, [0, borderMaxRow, 0, borderMaxCol]);
+            for (const [key, sides] of Object.entries(folded)) {
+                const border = toBorder(sides);
+                if (!border) continue;
+                const [r, c] = parseCellKey(key);
+                worksheet.getCell(r + 1, c + 1).border = border;
+            }
         }
 
         if (sheet.filterRange) {
@@ -353,7 +350,7 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
 
 function toBorderSide(side: BorderSide): Partial<Border> {
     return {
-        style: REVERSE_BORDER_STYLE[side.style] ?? 'thin',
+        style: BORDER_STYLES[side.style]?.name ?? 'thin',
         color: { argb: hexToArgb(side.color) },
     };
 }
