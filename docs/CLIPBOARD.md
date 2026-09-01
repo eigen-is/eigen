@@ -115,6 +115,10 @@ A vector copy also sets `EigenClipboardData.svg`: a self-contained `sceneToSvg` 
 
 **Image-bearing selections reference their images BY NAME**: the copy's SVG never inlines image bytes (the synchronous copy path can't), and never bakes a live href (owner-scoped preview URLs, tab-local `blob:` pendings) that would render blank for every other viewer. Instead each `<image>` carries `href="eigen-media:<encodeURIComponent(name)>"` (`eigenMediaHref`, `packages/lib/src/vector/media-refs.ts`), and `materializeClipboardSvg` resolves those names against the target container on paste: for each name its typed image item is the fetch manifest — a cross-container ref re-uploads through the credentialed `reUploadImage` seam, a same-folder ref keeps its name — then the stored SVG's refs are rewritten old→final (collision renames) or stripped when the upload failed, so the drawing only ever references names that exist in the target's `media/`. The display path swaps each surviving `eigen-media:` ref for a `data:` URI at serve time. A still-pending upload has no portable path, so it's omitted from the SVG exactly as it's omitted from the typed items. While a pasted media reference resolves, the consuming editors (docs figures, slides objects) show the shared `ImagePlaceholder` spinner; a terminally missing name shows the same spinner — the by-name resolver's miss-triggered refetch self-heals the common case, and distinguishing "still resolving" from "gone" would need refetch-settled tracking in the resolver, deferred until it earns its machinery. See [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md) for the name-based reference design.
 
+The name-ref SVG in the eigen JSON is **unchanged** by the rest of this section — every eigen host still materializes it by name via `materializeClipboardSvg`. What the polish round added is a SECOND, foreign-visible flavour that the async menu **Copy/Cut** now ALSO writes: a `<img src="data:image/svg+xml;base64,…">` appended after the marker span, so a plain contenteditable (chat, mail, another web page) that can't read the eigen payload still pastes the drawing as an image. Its images are inlined as base64 `data:` URIs at write time via `inlineClipboardSvgMedia` (bytes fetched through the credentialed media resolver), because no eigen server-side inliner will serve a clipboard `<img>`. Two guards keep it well-behaved: a per-image fetch that fails **strips that ref** (exactly as `materializeClipboardSvg` strips a failed re-upload, so the SVG never references bytes it can't show), and a ~4MB soft cap on the total inlined payload **skips the flavour entirely** (`inlineClipboardSvgMedia` returns null → the write degrades to today's marker + name-ref payload) rather than putting a multi-MB, clipboard-rejectable blob on the clipboard. The `<img>` is marked with `EIGEN_CLIPBOARD_RENDER_ATTR` (`data-eigen-clipboard-render`), which `hasRichHtmlBeyondMarker` strips before its test — so a shape-only vector copy never counts as foreign rich HTML (else docs' rich-HTML rung would land the drawing as a persisted base64 figure).
+
+**Limitation — sync ⌘C keeps name refs only.** Only the async menu path writes the inlined `<img>`; a native `copy`/`cut` event (`writeEigenClipboard`) writes just the marker + name-ref SVG, because a sync clipboard event can't fetch the media bytes. Making ⌘C write the inlined flavour would mean handing `navigator.clipboard.write` a promise-`ClipboardItem`, which drops the custom `application/eigen-clipboard` MIME — the same Phase-0 asymmetry the async write already lives with (see the API § asymmetry note). So a menu-copied drawing pastes as an image into a foreign contenteditable; a ⌘C-copied one does not.
+
 ## Cross-Document Media
 
 When pasting images between documents, `needsReUpload()` compares `sourceParentId` to the target's `mediaFolderId`.
@@ -140,8 +144,12 @@ import {
 // Sync write (during a copy event) — optional html is appended after the marker
 writeEigenClipboard(e, data, "plain text fallback", "<p>optional html</p>");
 
-// Async write (button click, no ClipboardEvent to hang off)
-await writeEigenClipboardAsync(data, "plain text fallback");
+// Async write (button click, no ClipboardEvent to hang off) — optional html, appended after the
+// marker span like the sync path. It may be a string OR a Promise (the SVG data-URI inliner fetches
+// media): a promise-valued ClipboardItem lets navigator.clipboard.write START inside the user gesture,
+// so Safari/Firefox don't reject the write while the fetch is still in flight. A rejecting/undefined
+// html promise degrades to a marker-only html blob rather than aborting the whole write.
+await writeEigenClipboardAsync(data, "plain text fallback", htmlOrHtmlPromise);
 
 // Read (during a paste event)
 const eigenData = readEigenClipboard(e.clipboardData);
@@ -162,6 +170,25 @@ to the rich payload, and used far more widely (calendar, index, drive menus, com
 through the HTML marker. Tracked as Copy-Paste Phase 0 in [ROADMAP.md](ROADMAP.md).
 
 **Files**: `packages/lib/src/core/clipboard/`
+
+## Classifying a paste (`classifyPaste`)
+
+`classifyPaste(cd, opts?)` (`core/clipboard/classify.ts`) is the shared flavour classifier: one **sync** pass over an
+already-obtained `DataTransfer` that resolves every present clipboard flavour once — the parsed `eigen` payload, the
+`svg` payload (svg + the typed items that back its refs), `imageFiles`, all `files`, `html`, `text` — and returns
+them as an object of flavours. It composes the existing readers (`readEigenClipboard`, `readSvgClipboardWithItems`)
+rather than re-parsing: the eigen JSON is parsed exactly once and handed to `readSvgClipboardWithItems`, so the svg
+flavour is derived without a second parse. It stays sync because every reader it composes is sync (the async menu
+paths only ever want eigen items and keep `readEigenClipboardAsync`).
+
+It deliberately does **not** impose a priority order — each app keeps its own short ladder that reads the returned
+fields in its own rung order and calls its own per-kind insert handlers (the per-app ladders in docs / slides /
+sheets / vector). Rich-HTML arbitration also stays caller-side: a consumer that gates on foreign HTML (docs) calls
+`hasRichHtmlBeyondMarker` itself; `classifyPaste` makes no pass over `text/html` for that decision. The one built-in
+special case is the `internalMarkerText` option: sheets' same-tab copy writes a table marker in `text/html` and
+serves paste from `ctx.copyState`, so passing that marker string suppresses the `eigen` + `svg` flavours entirely
+(the caller then falls through to its native table paste). One place owns the marker-skip; every other app passes no
+`internalMarkerText`.
 
 ## Used by
 

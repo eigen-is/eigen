@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_auth/vector/$ownerId/$mountId/$pathId')(
 function VectorView() {
     const { ownerId, mountId, pathId } = Route.useParams();
     // ?chat=<chatName> deep-links straight to a comment thread (validated by eigenDocEditorValidateSearch;
-    // ?q= stays unconsumed — vector has no in-document find bar, D15 is out of this program).
+    // ?q= stays unconsumed — vector has no in-document find bar).
     const { chat } = Route.useSearch();
     const {
         docInfo,
