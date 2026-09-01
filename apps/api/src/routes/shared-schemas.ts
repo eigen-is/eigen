@@ -1,3 +1,4 @@
+import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { S3Config } from '@workspace/lib/types/mount';
@@ -55,6 +56,11 @@ export const s3ConfigBody = t.Object({
     accessKeyId: t.String({ minLength: 1 }),
     secretAccessKey: t.String({ minLength: 1 }),
     region: t.Optional(t.String()),
+});
+
+export const s3HardenBody = t.Object({
+    ...s3ConfigBody.properties,
+    noncurrentDays: t.Integer({ minimum: 1, maximum: S3_NONCURRENT_DAYS_MAX }),
 });
 
 export function toS3Config(body: {

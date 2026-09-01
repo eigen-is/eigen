@@ -1,4 +1,4 @@
-import { useCheckSetupS3, useCompleteSetup, type useSetupStatus } from '@workspace/lib/admin';
+import { useCheckSetupS3, useCompleteSetup, useHardenSetupS3, type useSetupStatus } from '@workspace/lib/admin';
 import { EMPTY_S3 } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
@@ -18,7 +18,10 @@ type SetupStatus = NonNullable<ReturnType<typeof useSetupStatus>['data']>;
 export function SetupWizard({ status }: { status: SetupStatus }) {
     const completeSetup = useCompleteSetup();
     const s3Check = useCheckSetupS3();
+    const s3Harden = useHardenSetupS3();
     const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
+    const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
+        s3Harden.mutateAsync({ ...config, noncurrentDays });
 
     const [completed, setCompleted] = useState(false);
 
@@ -139,6 +142,7 @@ export function SetupWizard({ status }: { status: SetupStatus }) {
                                 s3Config={s3Config}
                                 onS3ConfigChange={setS3Config}
                                 checkS3={handleS3Check}
+                                hardenS3={handleS3Harden}
                                 onS3Verified={onS3Verified}
                             />
                         </div>

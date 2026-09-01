@@ -6,7 +6,7 @@ import type { MountConfig, S3Config } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { Mount } from '../../lib/mount/mount';
-import { S3Storage } from '../../lib/storage/s3-storage';
+import { hardenS3Bucket, S3Storage, signedS3Request } from '../../lib/storage/s3-storage';
 
 // Live-S3 suite (audit test-gap 1): pins the network-touching S3Storage surface and the S3-mount
 // trash lifecycle against a real S3 — the scripts/s3-local MinIO harness. Opt-in: set
@@ -126,6 +126,149 @@ describe.skipIf(!live)('S3Storage (MinIO)', () => {
 
     test('size returns null for a missing key', async () => {
         expect(await storage.size('direct/no-such-key')).toBeNull();
+    });
+});
+
+// Bucket versioning and the lifecycle configuration are bucket-wide, so hardening tests never touch
+// the shared test bucket's config — each gets its own throwaway bucket, deleted in afterAll.
+const createdBuckets: S3Config[] = [];
+
+async function createThrowawayBucket(prefix = ''): Promise<S3Config> {
+    const config: S3Config = { ...s3Config, bucket: `eigen-harden-${randomUUID().slice(0, 8)}`, prefix };
+    const res = await signedS3Request(config, { method: 'PUT' });
+    if (!res.ok) throw new Error(`CreateBucket ${config.bucket} failed (${res.status}): ${await res.text()}`);
+    createdBuckets.push(config);
+    return config;
+}
+
+function readLifecycleXml(config: S3Config): Promise<string> {
+    return signedS3Request(config, { method: 'GET', query: 'lifecycle' }).then((res) => res.text());
+}
+
+describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
+    afterAll(async () => {
+        // These buckets hold no objects, and bucket config doesn't block DeleteBucket.
+        for (const config of createdBuckets) {
+            await signedS3Request(config, { method: 'DELETE' });
+        }
+    });
+
+    test('a fresh bucket gets versioning plus our cleanup rule, confirmed by the re-read', async () => {
+        const config = await createThrowawayBucket();
+        const result = await hardenS3Bucket(config, 30);
+
+        expect(result.ok).toBe(true);
+        expect(result.applied).toEqual({ versioning: true, lifecycle: true });
+        expect(result.versioning).toBe('enabled');
+        expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
+        expect(await readLifecycleXml(config)).toContain('eigen-expire-noncurrent');
+    });
+
+    test('hardening again with the same retention applies nothing', async () => {
+        const config = await createThrowawayBucket();
+        await hardenS3Bucket(config, 30);
+
+        const result = await hardenS3Bucket(config, 30);
+        expect(result.ok).toBe(true);
+        expect(result.applied).toEqual({ versioning: false, lifecycle: false });
+        expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
+    });
+
+    test('changing the retention re-PUTs our rule and leaves exactly one', async () => {
+        const config = await createThrowawayBucket();
+        await hardenS3Bucket(config, 30);
+
+        const result = await hardenS3Bucket(config, 7);
+        expect(result.applied).toEqual({ versioning: false, lifecycle: true });
+        expect(result.lifecycle).toEqual({ noncurrentDays: 7 });
+        expect((await readLifecycleXml(config)).match(/<Rule>/g)).toHaveLength(1);
+    });
+
+    test('the rule is scoped to the mount prefix when the config has one', async () => {
+        const config = await createThrowawayBucket('team-data');
+        await hardenS3Bucket(config, 30);
+
+        expect(await readLifecycleXml(config)).toContain('<Prefix>team-data/</Prefix>');
+    });
+
+    test('our own rule is repaired when someone disabled it', async () => {
+        const config = await createThrowawayBucket();
+        const disabled =
+            '<LifecycleConfiguration><Rule><ID>eigen-expire-noncurrent</ID><Filter></Filter>' +
+            '<Status>Disabled</Status><NoncurrentVersionExpiration><NoncurrentDays>99</NoncurrentDays>' +
+            '</NoncurrentVersionExpiration></Rule></LifecycleConfiguration>';
+        expect((await signedS3Request(config, { method: 'PUT', query: 'lifecycle', body: disabled })).ok).toBe(true);
+
+        const result = await hardenS3Bucket(config, 30);
+        expect(result.ok).toBe(true);
+        expect(result.applied.lifecycle).toBe(true);
+        expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
+        expect((await readLifecycleXml(config)).match(/<Rule>/g)).toHaveLength(1);
+    });
+
+    test('a foreign lifecycle configuration is reported and left untouched', async () => {
+        const config = await createThrowawayBucket();
+        const foreign =
+            '<LifecycleConfiguration><Rule><ID>ops-archive</ID><Filter></Filter><Status>Enabled</Status>' +
+            '<Expiration><Days>400</Days></Expiration></Rule></LifecycleConfiguration>';
+        const seeded = await signedS3Request(config, { method: 'PUT', query: 'lifecycle', body: foreign });
+        expect(seeded.ok).toBe(true);
+
+        const result = await hardenS3Bucket(config, 30);
+        expect(result.reason).toBe('foreign-lifecycle');
+        expect(result.applied).toEqual({ versioning: true, lifecycle: false });
+        expect(result.versioning).toBe('enabled');
+        expect(result.lifecycle).toBe('foreign');
+
+        const xml = await readLifecycleXml(config);
+        expect(xml).toContain('ops-archive');
+        expect(xml).not.toContain('eigen-expire-noncurrent');
+    });
+});
+
+// Network-free: a loopback stub S3 answering the bucket-config PUTs, to pin the reason mapping that
+// a live MinIO can only reach with a restricted user.
+function stubS3Endpoint(status: number, code: string) {
+    return Bun.serve({
+        port: 0,
+        fetch(req) {
+            if (req.method === 'GET') {
+                if (new URL(req.url).search === '?lifecycle') return new Response(null, { status: 404 });
+                return new Response('<VersioningConfiguration></VersioningConfiguration>');
+            }
+            return new Response(`<Error><Code>${code}</Code></Error>`, { status });
+        },
+    });
+}
+
+describe('hardenS3Bucket reason mapping', () => {
+    test('a refused bucket-config PUT maps to access-denied and applies nothing', async () => {
+        const server = stubS3Endpoint(403, 'AccessDenied');
+        try {
+            const result = await hardenS3Bucket(
+                { ...s3Config, endpoint: `http://localhost:${server.port}`, bucket: 'stub', prefix: '' },
+                30,
+            );
+            expect(result.ok).toBe(false);
+            expect(result.reason).toBe('access-denied');
+            expect(result.applied).toEqual({ versioning: false, lifecycle: false });
+        } finally {
+            server.stop(true);
+        }
+    });
+
+    test('a backend without the bucket-config APIs maps to not-supported', async () => {
+        const server = stubS3Endpoint(501, 'NotImplemented');
+        try {
+            const result = await hardenS3Bucket(
+                { ...s3Config, endpoint: `http://localhost:${server.port}`, bucket: 'stub', prefix: '' },
+                30,
+            );
+            expect(result.ok).toBe(false);
+            expect(result.reason).toBe('not-supported');
+        } finally {
+            server.stop(true);
+        }
     });
 });
 

@@ -6,6 +6,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type {
     HomeSizeResponse,
     MountResponse,
+    S3HardenResult,
     ServerSettings,
     TeamSettings,
     UserSettings,
@@ -794,6 +795,134 @@ describe('S3 Config Persistence', () => {
             }),
         });
         expect(putRes.status).toBe(403);
+    });
+});
+
+describe('S3 Bucket Hardening', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    const hardenBody = {
+        endpoint: 'https://s3.example.com',
+        bucket: 'eigen-test',
+        prefix: 'data',
+        accessKeyId: 'AKIAEXAMPLE',
+        secretAccessKey: 'secret-example',
+        region: 'eu-west-1',
+        noncurrentDays: 30,
+    };
+
+    test('POST /settings/s3harden returns the harden result and threads the retention days', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'hardenS3Bucket').mockResolvedValueOnce({
+            ok: true,
+            message: 'Versioning enabled. Old-version cleanup rule applied.',
+            versioning: 'enabled',
+            lifecycle: { noncurrentDays: 30 },
+            applied: { versioning: true, lifecycle: true },
+        });
+
+        try {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3harden', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(hardenBody),
+            });
+            const data = await assertJson<S3HardenResult>(res);
+            expect(data.applied).toEqual({ versioning: true, lifecycle: true });
+            expect(data.versioning).toBe('enabled');
+            expect(data.lifecycle).toEqual({ noncurrentDays: 30 });
+
+            expect(spy).toHaveBeenCalledTimes(1);
+            expect(spy.mock.calls[0]?.[0].bucket).toBe('eigen-test');
+            expect(spy.mock.calls[0]?.[0].prefix).toBe('data');
+            expect(spy.mock.calls[0]?.[1]).toBe(30);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('POST /settings/s3harden reports a partial application without failing the request', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'hardenS3Bucket').mockResolvedValueOnce({
+            ok: false,
+            message: 'Versioning enabled. An existing lifecycle configuration was found.',
+            versioning: 'enabled',
+            lifecycle: 'foreign',
+            applied: { versioning: true, lifecycle: false },
+            reason: 'foreign-lifecycle',
+        });
+
+        try {
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3harden', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(hardenBody),
+            });
+            const data = await assertJson<S3HardenResult>(res);
+            expect(data.reason).toBe('foreign-lifecycle');
+            expect(data.applied).toEqual({ versioning: true, lifecycle: false });
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('non-admin cannot harden a bucket and the bucket is never touched', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'hardenS3Bucket');
+
+        try {
+            const res = await authedRequest(ctx.bob.user.sessionToken, '/settings/s3harden', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(hardenBody),
+            });
+            expect(res.status).toBe(403);
+            expect(spy).not.toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('POST /settings/s3harden rejects a retention that is not a whole day in range', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'hardenS3Bucket');
+
+        try {
+            for (const noncurrentDays of [0, 1.5, 4000]) {
+                const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3harden', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...hardenBody, noncurrentDays }),
+                });
+                expect(res.status).toBe(422);
+            }
+            expect(spy).not.toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('POST /setup/s3harden is refused once setup is completed', async () => {
+        const s3Storage = await import('../../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'hardenS3Bucket');
+
+        try {
+            const res = await ctx.app.handle(
+                new Request('http://localhost/setup/s3harden', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(hardenBody),
+                }),
+            );
+            expect(res.status).toBe(403);
+            expect(spy).not.toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
     });
 });
 

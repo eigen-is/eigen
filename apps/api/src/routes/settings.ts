@@ -1,6 +1,6 @@
 import type { AdminUser, AdminUserRow } from '@workspace/lib/types/admin';
 import type { S3Config } from '@workspace/lib/types/mount';
-import type { HomeSizeResponse, S3CheckResult, ServerSettings } from '@workspace/lib/types/settings';
+import type { HomeSizeResponse, S3CheckResult, S3HardenResult, ServerSettings } from '@workspace/lib/types/settings';
 import { eq, isNull, ne, or, sql } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, session, team, teamMember, user } from '../../auth-schema';
@@ -9,11 +9,11 @@ import { getServerConfig } from '../lib/config/server-config';
 import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
-import { checkS3Connection } from '../lib/storage/s3-storage';
+import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
 import { getAllUsersUsage } from '../lib/user/admin-usage';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { betterAuth } from './auth';
-import { s3ConfigBody, toS3Config } from './shared-schemas';
+import { s3ConfigBody, s3HardenBody, toS3Config } from './shared-schemas';
 
 // Who appears on the admin Users page: everyone except guests, orphans included.
 // `ne(user.role, 'guest')` alone excludes NULL-role orphans in SQLite, so OR in isNull.
@@ -268,4 +268,13 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             return checkS3Connection(toS3Config(body));
         },
         { body: s3ConfigBody, auth: true },
+    )
+
+    .post(
+        '/settings/s3harden',
+        async ({ body, user }): Promise<S3HardenResult> => {
+            await requireAdmin(user.id);
+            return hardenS3Bucket(toS3Config(body), body.noncurrentDays);
+        },
+        { body: s3HardenBody, auth: true },
     );
