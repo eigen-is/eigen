@@ -430,6 +430,8 @@ export function buildGoldenVectorScene(): VectorScene {
             index: 'a3',
             roundness: 'sharp',
             points: '[[0,0],[15,10],[30,4],[45,18],[60,8]]',
+            pressures: '',
+            simulatePressure: true,
         },
         {
             ...base,
@@ -443,6 +445,8 @@ export function buildGoldenVectorScene(): VectorScene {
             index: 'a4',
             roundness: 'sharp',
             points: '[[0,0],[100,0],[100,40]]',
+            pressures: '',
+            simulatePressure: true,
         },
         {
             ...base,
