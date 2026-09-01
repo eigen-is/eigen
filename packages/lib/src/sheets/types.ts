@@ -77,7 +77,8 @@ export type BorderSide = { style: number; color: string };
 // One cell's own borders, keyed `${row}_${col}` in `SheetConfig.borderInfo` like
 // `merge`. A border belongs to the cell it was drawn on — nothing is mirrored onto
 // the neighbour across the shared edge — and a side that is absent has no border.
-// `s` is the editor's diagonal slash; xlsx has no equivalent and skips it.
+// `s` is the editor's diagonal slash (painted top-left → bottom-right); it round-trips to
+// xlsx's diagonalDown border.
 export type CellBorderSides = {
     l?: BorderSide;
     r?: BorderSide;

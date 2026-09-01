@@ -348,13 +348,16 @@ function toBorderSide(side: BorderSide): Partial<Border> {
     };
 }
 
-// xlsx has no diagonal border, so the slash side `s` is skipped.
+// The slash side `s` is OOXML's diagonal border. The canvas paints it top-left → bottom-right
+// (state/render/borders.ts), which is xlsx's diagonalDown, so it exports as `diagonal` with
+// `down: true`.
 function toBorder(sides: CellBorderSides): Partial<Borders> | null {
     const border = {
         ...(sides.l && { left: toBorderSide(sides.l) }),
         ...(sides.r && { right: toBorderSide(sides.r) }),
         ...(sides.t && { top: toBorderSide(sides.t) }),
         ...(sides.b && { bottom: toBorderSide(sides.b) }),
+        ...(sides.s && { diagonal: { ...toBorderSide(sides.s), down: true } }),
     };
     return Object.keys(border).length > 0 ? border : null;
 }

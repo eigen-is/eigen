@@ -42,12 +42,13 @@ describe('mergedBorderSides', () => {
         expect(mergedBorderSides({ '1_1': { s: SIDE } }, merge, [1, 1, 1, 2])).toEqual({ '1_1': { s: SIDE } });
     });
 
-    test('a range visits only its cells, plus every constituent of a merge crossing it', () => {
-        const merge = { '2_2': { r: 2, c: 2, rs: 2, cs: 2 }, '8_8': { r: 8, c: 8, rs: 2, cs: 2 } };
-        const borderInfo = { '0_0': { l: SIDE }, '9_9': { l: SIDE }, '3_3': { r: RED, b: RED } };
-        expect(mergedBorderSides(borderInfo, merge, [0, 2, 0, 2])).toEqual({
-            '0_0': { l: SIDE },
-            '2_2': { r: RED, b: RED },
+    test('a crossing merge folds only its in-window constituents onto the master', () => {
+        // A1:C3 merge, window A1:B2. The master top edge (0_0) and an in-window left edge (1_0)
+        // fold onto the master; the far corner 2_2 is OUTSIDE the window, so it folds nothing.
+        const merge = { '0_0': { r: 0, c: 0, rs: 3, cs: 3 } };
+        const borderInfo = { '0_0': { t: SIDE }, '1_0': { l: SIDE }, '2_2': { b: RED, r: RED } };
+        expect(mergedBorderSides(borderInfo, merge, [0, 1, 0, 1])).toEqual({
+            '0_0': { t: SIDE, l: SIDE },
         });
     });
 
@@ -56,6 +57,15 @@ describe('mergedBorderSides', () => {
         // merge must never be expanded. Any walk of its extent would show up as a slow test.
         const merge = { '0_0': { r: 0, c: 0, rs: 1_000_000, cs: 1 } };
         expect(mergedBorderSides({}, merge, [0, 0, 0, 0])).toEqual({});
+    });
+
+    test('a window-crossing huge merge with a border expands only the window', () => {
+        // A1:A1000000 crossing the window [0,1,0,0]: the merge intersects, so it is expanded —
+        // but only over its two in-window cells, never its million-row extent (that would hang).
+        // The master top edge folds; a border far down (999999_0) is off-window and folds nothing.
+        const merge = { '0_0': { r: 0, c: 0, rs: 1_000_000, cs: 1 } };
+        const borderInfo = { '0_0': { t: SIDE }, '999999_0': { b: RED } };
+        expect(mergedBorderSides(borderInfo, merge, [0, 1, 0, 0])).toEqual({ '0_0': { t: SIDE } });
     });
 
     test('a huge merge outside the range contributes nothing and is not expanded', () => {

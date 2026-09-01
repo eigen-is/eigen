@@ -678,6 +678,18 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(sheets[0].config?.borderInfo).toEqual({ '0_0': { l: thin, r: thin, t: thin, b: thin } });
     });
 
+    test('imports a diagonalDown border as the slash side, dropping diagonalUp', async () => {
+        const thinBorder = { style: 'thin' as const, color: { argb: 'FF000000' } };
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 'down', border: { diagonal: { ...thinBorder, down: true } } },
+            { a1: 'B1', value: 'up', border: { diagonal: { ...thinBorder, up: true } } },
+        ]);
+        const sheets = await parseXlsx(buffer);
+        // Our slash is top-left → bottom-right (diagonalDown); a diagonalUp-only border has no
+        // single-direction equivalent in our model and is dropped.
+        expect(sheets[0].config?.borderInfo).toEqual({ '0_0': { s: { style: 1, color: '#000000' } } });
+    });
+
     test('convert imports the border of a value-less cell', async () => {
         const thinBorder = { style: 'thin' as const, color: { argb: 'FF000000' } };
         const workbook = new ExcelJS.Workbook();

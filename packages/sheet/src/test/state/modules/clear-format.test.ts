@@ -46,4 +46,16 @@ describe('handleClearFormat clears borders on the sheet config', () => {
 
         expect(Object.keys(cleared.sheets[0].config!.borderInfo!).sort()).toEqual(['2_0', '3_3']);
     });
+
+    // Diverges from main, which preserved a slash via a `borderType !== 'border-slash'` guard:
+    // clear-format now clears every side, diagonal included, so it is consistent with Delete.
+    test('also drops a slash/diagonal-only border inside the rect', () => {
+        const ctx = clearFormatContext();
+        ctx.sheets[0].config!.borderInfo!['0_1'] = { s: SIDE };
+        const [cleared] = produceWithPatches(ctx, (c: Context) => {
+            handleClearFormat(c);
+        });
+
+        expect(cleared.sheets[0].config!.borderInfo!['0_1']).toBeUndefined();
+    });
 });

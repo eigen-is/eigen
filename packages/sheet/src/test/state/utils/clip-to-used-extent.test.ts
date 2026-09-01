@@ -22,13 +22,33 @@ function sheet(usedThrough: number, dataCol: number, borderInfo: Record<string, 
     return ctx;
 }
 
+// A whole-column header selection carries column_select; a whole-row one carries row_select.
 const wholeColumn = (col: number): Selection => ({
     row: [0, 499],
     column: [col, col],
     row_focus: 0,
     column_focus: col,
+    column_select: true,
 });
-const wholeRow = (row: number): Selection => ({ row: [row, row], column: [0, 3], row_focus: row, column_focus: 0 });
+const wholeRow = (row: number): Selection => ({
+    row: [row, row],
+    column: [0, 3],
+    row_focus: row,
+    column_focus: 0,
+    row_select: true,
+});
+
+describe('clipToUsedExtent detects whole-axis from the header-select flags, not the extent', () => {
+    // Regression: a hand-dragged range that happens to span the full axis has no flag, so it must
+    // be applied exactly as selected — never clipped to the used extent. docs/SHEETS.md promises it.
+    test('a dragged full-height selection on a small sheet is not clipped', () => {
+        const ctx = sheet(4, 2, {});
+        const dragged: Selection = { row: [0, 499], column: [1, 3], row_focus: 0, column_focus: 1 };
+        const [out] = clipToUsedExtent(ctx, [dragged]);
+        expect(out.row).toEqual([0, 499]);
+        expect(out.column).toEqual([1, 3]);
+    });
+});
 
 describe('clipToUsedExtent respects the selection fixed axis', () => {
     test('a border in another column does not stretch a whole-column selection', () => {

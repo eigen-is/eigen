@@ -3,7 +3,6 @@ import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheet
 import type { Op, Sheet, WorkbookInstance } from '@workspace/sheet';
 import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import type * as Y from 'yjs';
 
 export function useSheet(
@@ -16,10 +15,6 @@ export function useSheet(
     const [snapshotVersion, setSnapshotVersion] = useState(0);
     // The workbook shows the defaults fallback; the consumer renders it read-only and says so.
     const [loadFailed, setLoadFailed] = useState(false);
-
-    // Per-doc toast id: a global id lets one open sheet's successful load dismiss another's
-    // still-standing load-failed toast.
-    const loadFailedToastId = `sheet-load-failed-${pathId}`;
 
     const isLocalOpRef = useRef(false);
     const isLocalSnapshotRef = useRef(false);
@@ -36,7 +31,7 @@ export function useSheet(
     // to remount. `keepViewOnFailure` distinguishes the two failure paths: the initial load shows
     // the blank defaults fallback (nothing on screen yet); a peer's undecodable mid-session flush
     // keeps the populated workbook already on screen — replacing it with defaults would wipe the
-    // user's view — and only arms the read-only lock + toast.
+    // user's view — and only arms the read-only lock + banner.
     const loadSnapshot = (doc: Y.Doc, keepViewOnFailure = false): boolean => {
         const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
         const pending = doc.getArray('ops').toArray() as Op[][];
@@ -52,16 +47,10 @@ export function useSheet(
         // Read-only lock either way: local state may now diverge from the truth on the wire, so
         // writes must stop (loadedRef gates flushSnapshot + handleOp; loadFailed gates allowEdit).
         loadedRef.current = loaded;
+        // The read-only lock plus a persistent in-editor banner (editor.tsx, gated on loadFailed)
+        // surface the failure. A toast was wrong here: it dismissed on click, leaving a blank
+        // read-only sheet indistinguishable from data loss.
         setLoadFailed(!loaded);
-        if (loaded) toast.dismiss(loadFailedToastId);
-        // WHY the app-side try/catch + toast (CODE-STANDARDS forbids it in mutation flows): this
-        // is a decode boundary, not a mutation — there is no hook/onMutationError seam to route to.
-        else {
-            toast.error('This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.', {
-                id: loadFailedToastId,
-                duration: Infinity,
-            });
-        }
         if (!loaded && keepViewOnFailure) return false;
         latestDataRef.current = data;
         setInitialData(data);
@@ -148,7 +137,6 @@ export function useSheet(
                 // provider/doc, so a WS message racing teardown can't fire against a destroyed doc.
                 opsArray.unobserve(handleOps);
                 stateMap.unobserve(handleState);
-                toast.dismiss(loadFailedToastId);
             };
         },
         onSync: ({ doc }, isSynced) => {

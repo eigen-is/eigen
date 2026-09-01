@@ -7,7 +7,7 @@ import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
 
-// `medium` (lineWidth 2) nudges the stroke half a pixel across its own axis for a crisp line.
+// Fallback paint for an unknown border ordinal: a plain 1px solid line.
 const DEFAULT_DASH = { dash: [0], lineWidth: 1 };
 
 function setLineDash(
@@ -23,6 +23,7 @@ function setLineDash(
     canvasborder.setLineDash(dash);
     canvasborder.beginPath();
 
+    // `medium` (lineWidth 2) nudges the stroke half a pixel across its own axis for a crisp line.
     if (lineWidth === 2) {
         if (hv === 'h') {
             canvasborder.moveTo(moveX, moveY - 0.5);
@@ -114,7 +115,17 @@ export function drawCellBorders(pass: RenderPass) {
             renderBorder(bdInfo.l.style, bdInfo.l.color, 'v', leftX, topY - 1, leftX, bottomY);
         }
 
-        if (bdInfo.r && (!overflowInfo.colIn || overflowInfo.colLast)) {
+        // Two neighbours can each declare the shared edge (A1.r vs B1.l) with different styles —
+        // common after xlsx import. Both paint the same pixel line, so the last stroke wins, and
+        // forEachInRect's walk mode (row-major vs key order) flips which is last as the viewport
+        // changes — the edge changes color on zoom. Deterministic rule: the higher-index
+        // neighbour's facing side wins, so skip this cell's right/bottom when the neighbour past
+        // it declares its opposite (its left/top).
+        if (
+            bdInfo.r &&
+            (!overflowInfo.colIn || overflowInfo.colLast) &&
+            !borderInfoCompute[`${bdRow}_${bdCol + 1}`]?.l
+        ) {
             renderBorder(bdInfo.r.style, bdInfo.r.color, 'v', rightX, topY - 1, rightX, bottomY);
         }
 
@@ -123,7 +134,7 @@ export function drawCellBorders(pass: RenderPass) {
             renderBorder(bdInfo.t.style, bdInfo.t.color, 'h', leftX, tY, rightX, tY);
         }
 
-        if (bdInfo.b) {
+        if (bdInfo.b && !borderInfoCompute[`${bdRow + 1}_${bdCol}`]?.t) {
             renderBorder(bdInfo.b.style, bdInfo.b.color, 'h', leftX, bottomY, rightX, bottomY);
         }
     }

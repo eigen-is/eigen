@@ -192,9 +192,16 @@ export function isAllowEdit(ctx: Context, range?: Sheet['selections']) {
 // (events/mouse-header.ts), and per-cell writes over 130k rows are a quarter of a million
 // immer patches for the collab layer to turn into Yjs ops. A whole-sheet axis is clipped
 // to the last cell holding something; a range the user dragged out is applied as selected.
+//
+// "Whole axis" is read from the header-select flags, never from the extent: a whole-column
+// header selection carries `column_select` (spans every row → clip its rows), a whole-row one
+// carries `row_select` (spans every column → clip its columns); `selectAll` sets both. These
+// flags are set ONLY by the header click/drag paths and selectAll, so a hand-dragged A1:Z100
+// range on a default 26-column sheet — which happens to span the visible column axis — is no
+// longer misread as whole-axis and silently clipped.
 export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selection[] {
-    const wholeRows = selections.map((s) => s.row[0] === 0 && s.row[1] >= ctx.visibledatarow.length - 1);
-    const wholeColumns = selections.map((s) => s.column[0] === 0 && s.column[1] >= ctx.visibledatacolumn.length - 1);
+    const wholeRows = selections.map((s) => s.column_select === true);
+    const wholeColumns = selections.map((s) => s.row_select === true);
     const d = getFlowdata(ctx);
     if (!d || (!wholeRows.includes(true) && !wholeColumns.includes(true))) return selections;
 

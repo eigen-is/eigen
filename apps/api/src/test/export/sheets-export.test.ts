@@ -793,7 +793,7 @@ describe('Sheets xlsx export — cell borders', () => {
                         '1_1': { l: medium, r: medium, t: medium, b: medium },
                         '1_2': { t: thin, r: thin },
                         '2_1': { b: thin },
-                        // xlsx has no diagonal border; the slash side is skipped.
+                        // The slash side `s` is xlsx's diagonalDown.
                         '3_3': { s: thin },
                         '4_4': { l: thin, s: thin },
                     },
@@ -812,8 +812,25 @@ describe('Sheets xlsx export — cell borders', () => {
         });
         expect(ws.getCell('C2').border).toEqual({ top: thinBlack, right: thinBlack });
         expect(ws.getCell('B3').border).toEqual({ bottom: thinBlack });
-        expect(ws.getCell('D4').border ?? {}).toEqual({});
-        expect(ws.getCell('E5').border).toEqual({ left: thinBlack });
+        const thinDiagDown = { ...thinBlack, down: true, up: false };
+        expect(ws.getCell('D4').border).toEqual({ diagonal: thinDiagDown });
+        expect(ws.getCell('E5').border).toEqual({ left: thinBlack, diagonal: thinDiagDown });
+    });
+
+    test('round-trips a diagonal slash as xlsx diagonalDown', async () => {
+        const s = { style: 8, color: '#FF0000' };
+        const sheets: Sheet[] = [
+            {
+                name: 'Sheet1',
+                celldata: [
+                    { r: 1, c: 1, v: { v: 'x' } },
+                    { r: 2, c: 2, v: { v: 'y' } },
+                ],
+                config: { borderInfo: { '1_1': { s }, '2_2': { l: s, s } } },
+            },
+        ];
+        const rt = await roundTrip(sheets);
+        expect(rt[0].config?.borderInfo).toEqual({ '1_1': { s }, '2_2': { l: s, s } });
     });
 
     test('round-trips per-cell borders', async () => {

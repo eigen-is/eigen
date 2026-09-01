@@ -149,14 +149,14 @@ describe('handleBorder bounds a header-click selection to the used extent', () =
 
     test('a whole column stops at the last row that holds data', () => {
         const ctx = sheetWithRows(500, 4);
-        ctx.selections = [{ row: [0, 499], column: [2, 2], row_focus: 0, column_focus: 2 }];
+        ctx.selections = [{ row: [0, 499], column: [2, 2], row_focus: 0, column_focus: 2, column_select: true }];
         handleBorder(ctx, 'border-all');
         expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toEqual(['0_2', '1_2', '2_2', '3_2', '4_2']);
     });
 
     test('a whole row stops at the last column that holds data', () => {
         const ctx = sheetWithRows(500, 4);
-        ctx.selections = [{ row: [7, 7], column: [0, 3], row_focus: 7, column_focus: 0 }];
+        ctx.selections = [{ row: [7, 7], column: [0, 3], row_focus: 7, column_focus: 0, row_select: true }];
         handleBorder(ctx, 'border-all');
         expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toEqual(['7_0', '7_1']);
     });
@@ -175,7 +175,7 @@ describe('handleBorder bounds a header-click selection to the used extent', () =
         ctx.selections = [{ row: [0, 20], column: [0, 1], row_focus: 0, column_focus: 0 }];
         handleBorder(ctx, 'border-all');
         expect(Object.keys(ctx.sheets[0].config!.borderInfo!)).toHaveLength(42);
-        ctx.selections = [{ row: [0, 499], column: [0, 1], row_focus: 0, column_focus: 0 }];
+        ctx.selections = [{ row: [0, 499], column: [0, 1], row_focus: 0, column_focus: 0, column_select: true }];
         handleBorder(ctx, 'border-none');
         expect(ctx.sheets[0].config!.borderInfo).toEqual({});
     });

@@ -122,9 +122,9 @@ export function OverlayVisuals({ containerRef }: Props) {
                         : {}
                 }
             />
-            {(context.formulaRangeSelections?.length ?? 0) > 0 && (
+            {context.formulaRangeSelections.length > 0 && (
                 <div>
-                    {context.formulaRangeSelections!.map((range) => {
+                    {context.formulaRangeSelections.map((range) => {
                         const r1 = range.row[0];
                         const r2 = range.row[1];
                         const c1 = range.column[0];

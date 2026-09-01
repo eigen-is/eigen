@@ -1382,7 +1382,16 @@ function convertBorder(cell: XlsxCell, theme: ThemePalette): CellBorderSides | n
     const r = convertBorderSide(border.right, theme);
     const t = convertBorderSide(border.top, theme);
     const b = convertBorderSide(border.bottom, theme);
-    const sides: CellBorderSides = { ...(l && { l }), ...(r && { r }), ...(t && { t }), ...(b && { b }) };
+    // Our slash `s` is a top-left → bottom-right diagonal, i.e. xlsx's diagonalDown; a
+    // diagonalUp-only border has no equivalent in our single-direction slash and is dropped.
+    const s = border.diagonal?.down ? convertBorderSide(border.diagonal, theme) : null;
+    const sides: CellBorderSides = {
+        ...(l && { l }),
+        ...(r && { r }),
+        ...(t && { t }),
+        ...(b && { b }),
+        ...(s && { s }),
+    };
     return Object.keys(sides).length > 0 ? sides : null;
 }
 

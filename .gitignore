@@ -45,6 +45,9 @@ next-env.d.ts
 /apps/api/data/bucket
 /apps/api/data/users3.db
 /apps/api/data/config.db
+# SQLite WAL sidecars (regenerated at runtime, never committed)
+*.db-shm
+*.db-wal
 /data/home
 /data/server
 /data/team

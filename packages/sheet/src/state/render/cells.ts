@@ -24,8 +24,6 @@ import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
 import { defaultStyle } from './types';
 
-// Unlike the engine's stricter isRealNum, this accepts anything Number() can
-// coerce (null, '', booleans); it only gates the forced-string indicator.
 // Data-verification tick box. Hardcoded light like every other canvas color —
 // the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
 // § Theming) — and grey rather than black, the way Google draws the box.

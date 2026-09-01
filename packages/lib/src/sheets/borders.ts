@@ -34,11 +34,10 @@ export const BORDER_STYLES: Record<number, { name: BorderStyleName; css: string;
         13: { name: 'thick', css: '3px solid', dash: [0], lineWidth: 3 },
     };
 
-// The CSS shorthand for one border side — `<width> <style> <color>`, no trailing `;` — shared
-// by the HTML/PDF export and the copy-as-HTML serializer so a copied cell pastes with the same
-// border it exports. The BE escapes `color` at its export seam before calling; the FE passes the
-// raw color. Each caller owns its own `;` handling.
-export function borderSideCss(style: number, color: string): string {
+// The CSS shorthand for one border side — `<width> <style> <color>`, no trailing `;`. Internal
+// to `borderSidesToCss` below (its only caller); color-escaping and `;` handling live with that
+// function's callers.
+function borderSideCss(style: number, color: string): string {
     return `${BORDER_STYLES[style]?.css ?? '1px solid'} ${color}`;
 }
 
@@ -127,7 +126,10 @@ export function borderInfoExtent(borderInfo: Record<string, CellBorderSides>): {
 // Folds each merge's perimeter onto its master for readers that address a merge through one
 // cell (an exceljs style, an HTML td). Storage keeps every constituent's sides for an unmerge.
 // `range` is required so the work is bounded: only its cells and the merges crossing it are
-// visited (a rangeless call expanded EVERY merge — one legal A1:A100000 merge = ~100k entries).
+// visited, and a crossing merge is expanded ONLY over its intersection with the range (a legal
+// A1:A100000 merge that crosses the window otherwise built ~100k entries). A constituent that
+// lies outside the range folds nothing — the far edge of a window-crossing merge is off-window,
+// so nothing there is drawn or copied.
 export function mergedBorderSides(
     borderInfo: Record<string, CellBorderSides> | undefined,
     merge: Record<string, MergeCell> | undefined,
@@ -147,8 +149,13 @@ export function mergedBorderSides(
     for (const key in merge) {
         const m = merge[key];
         if (m.r > rowEd || m.r + m.rs - 1 < rowSt || m.c > colEd || m.c + m.cs - 1 < colSt) continue;
-        for (let r = m.r; r < m.r + m.rs; r += 1) {
-            for (let c = m.c; c < m.c + m.cs; c += 1) mergeAt.set(`${r}_${c}`, m);
+        // Clamp to the intersection so a window-crossing merge never expands its full extent.
+        const r0 = Math.max(m.r, rowSt);
+        const r1 = Math.min(m.r + m.rs - 1, rowEd);
+        const c0 = Math.max(m.c, colSt);
+        const c1 = Math.min(m.c + m.cs - 1, colEd);
+        for (let r = r0; r <= r1; r += 1) {
+            for (let c = c0; c <= c1; c += 1) mergeAt.set(`${r}_${c}`, m);
         }
     }
 
