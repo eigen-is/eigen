@@ -19,7 +19,7 @@ type ToolbarMenuProps = {
 // gate stay caller-side (they differ per app), so this stays policy-free.
 export function ToolbarMenu({ label, children, open, onOpenChange, onCloseAutoFocus }: ToolbarMenuProps) {
     return (
-        <DropdownMenu {...(open === undefined ? {} : { open, onOpenChange })}>
+        <DropdownMenu open={open} onOpenChange={onOpenChange}>
             <DropdownMenuTrigger asChild>
                 <Button variant="ghost">{label}</Button>
             </DropdownMenuTrigger>

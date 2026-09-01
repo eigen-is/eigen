@@ -1,7 +1,9 @@
 import {
     classifyPaste,
     clipboardTextItemHasContent,
-    inlineSvgMediaRefs,
+    EIGEN_CLIPBOARD_RENDER_ATTR,
+    extractClipboardSvgMetadata,
+    inlineClipboardSvgMedia,
     needsReUpload,
     readClipboardBox,
     readEigenClipboardAsync,
@@ -831,8 +833,12 @@ export function VectorCanvas({
     const foreignImgHtml = useCallback(
         async (svg: string | undefined): Promise<string | undefined> => {
             if (!svg) return undefined;
-            const inlined = await inlineSvgMediaRefs(svg, fetchMediaBlob);
-            return inlined ? `<img src="${await svgToImageDataUri(inlined)}">` : undefined;
+            const inlined = await inlineClipboardSvgMedia(svg, fetchMediaBlob);
+            // Mark the img so hasRichHtmlBeyondMarker ignores it — else a shape-only vector copy reads
+            // as rich HTML and a non-media host persists the base64 SVG as a figure.
+            return inlined
+                ? `<img ${EIGEN_CLIPBOARD_RENDER_ATTR}="" src="${await svgToImageDataUri(inlined)}">`
+                : undefined;
         },
         [fetchMediaBlob],
     );
@@ -1119,7 +1125,10 @@ export function VectorCanvas({
             if (paste.svg) {
                 e.preventDefault();
                 e.stopPropagation();
-                if (paste.svg.restored) pasteEigenItems(paste.svg.restored.items);
+                // Ours (element JSON in <metadata>) restores native elements; any other SVG inserts as
+                // an image. The native-vs-image split is vector-local, so we read the metadata here.
+                const restored = extractClipboardSvgMetadata(paste.svg.svg);
+                if (restored) pasteEigenItems(restored.items);
                 else void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
                 return;
             }

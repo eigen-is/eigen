@@ -239,13 +239,10 @@ export function useCopyPath() {
                     return response.data;
                 }),
             );
-            const succeeded = results
-                .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
-                .map((r) => r.value);
-            if (succeeded.length > 0) {
+            const { copied, failedCount } = partitionCopyResults(results);
+            if (copied.length > 0) {
                 invalidateItemCreated(queryClient, targetOwnerId, targetMountId, targetParentId);
             }
-            const failedCount = results.length - succeeded.length;
             if (failedCount > 0) {
                 throw new Error(
                     failedCount === results.length
@@ -253,7 +250,7 @@ export function useCopyPath() {
                         : `Failed to copy ${failedCount} of ${results.length} items`,
                 );
             }
-            return succeeded;
+            return copied;
         },
         onError: onMutationError,
     });
@@ -278,13 +275,10 @@ export function useDuplicatePath() {
                     return response.data;
                 }),
             );
-            const succeeded = results
-                .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
-                .map((r) => r.value);
-            for (const item of succeeded) {
+            const { copied, failedCount } = partitionCopyResults(results);
+            for (const item of copied) {
                 invalidateItemCreated(queryClient, item.ownerId, item.mountId, item.parentId);
             }
-            const failedCount = results.length - succeeded.length;
             if (failedCount > 0) {
                 throw new Error(
                     failedCount === results.length
@@ -292,7 +286,7 @@ export function useDuplicatePath() {
                         : `Failed to duplicate ${failedCount} of ${results.length} items`,
                 );
             }
-            return succeeded;
+            return copied;
         },
         onError: onMutationError,
     });

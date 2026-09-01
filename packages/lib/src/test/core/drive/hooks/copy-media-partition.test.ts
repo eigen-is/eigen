@@ -2,7 +2,27 @@ import { describe, expect, test } from 'bun:test';
 import { partitionCopyResults } from '../../../../core/drive/hooks/copy-media-partition';
 import type { DrivePath } from '../../../../types/drive';
 
-const path = (id: string): DrivePath => ({ id }) as DrivePath;
+// A full, honest DrivePath fixture (no cast) — partitionCopyResults only reads `id` back, but the
+// value is a real DrivePath, matching the makeDrivePath style in the clipboard test.
+const path = (id: string): DrivePath => ({
+    id,
+    name: `${id}.png`,
+    mountId: 'mt',
+    type: 'file',
+    parentId: 'parent',
+    ownerId: 'o',
+    mimeType: 'image/png',
+    size: 1,
+    hash: null,
+    thumbnail: null,
+    acl: null,
+    visibility: 'private',
+    sharingRestricted: false,
+    details: null,
+    trashedAt: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+});
 
 const fulfilled = (id: string): PromiseSettledResult<DrivePath> => ({ status: 'fulfilled', value: path(id) });
 const rejected = (): PromiseSettledResult<DrivePath> => ({ status: 'rejected', reason: new Error('nope') });

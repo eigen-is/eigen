@@ -1,17 +1,27 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { Window } from 'happy-dom';
 import {
+    EIGEN_CLIPBOARD_RENDER_ATTR,
     embedClipboardSvgMetadata,
     extractClipboardSvgMetadata,
-    inlineSvgMediaRefs,
+    hasRichHtmlBeyondMarker,
+    inlineClipboardSvgMedia,
     materializeClipboardSvg,
     readSvgClipboard,
     readSvgClipboardWithItems,
     svgToImageDataUri,
     svgToImageFile,
+    writeEigenClipboardAsync,
 } from '../../../core/clipboard/clipboard';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '../../../types/clipboard';
 import type { DrivePath } from '../../../types/drive';
 import { eigenMediaHref } from '../../../vector/media-refs';
+
+// hasRichHtmlBeyondMarker parses text/html with DOMParser — install happy-dom at module scope the way
+// the classify test does.
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+g.DOMParser = new Window().DOMParser;
 
 const EIGEN_MIME = 'application/eigen-clipboard';
 
@@ -258,11 +268,11 @@ describe('materializeClipboardSvg', () => {
     });
 });
 
-describe('inlineSvgMediaRefs', () => {
+describe('inlineClipboardSvgMedia', () => {
     test('rewrites every eigen-media ref to a base64 data URI, svg otherwise intact', async () => {
         const svg = svgWith('a.png');
         const fetcher = mock(async (_name: string) => new Blob(['AAA'], { type: 'image/png' }));
-        const out = await inlineSvgMediaRefs(svg, fetcher);
+        const out = await inlineClipboardSvgMedia(svg, fetcher);
         expect(out).not.toBeNull();
         expect(out).not.toContain('eigen-media:');
         expect(out).toContain('href="data:image/png;base64,');
@@ -277,7 +287,7 @@ describe('inlineSvgMediaRefs', () => {
         const fetcher = mock(async (name: string) =>
             name === 'b.png' ? null : new Blob(['AAA'], { type: 'image/png' }),
         );
-        const out = await inlineSvgMediaRefs(svg, fetcher);
+        const out = await inlineClipboardSvgMedia(svg, fetcher);
         expect(out).toContain('href="data:image/png;base64,'); // a.png inlined
         expect(out).not.toContain(eigenMediaHref('b.png')); // b.png stripped
         expect(out).not.toContain('eigen-media:');
@@ -288,13 +298,13 @@ describe('inlineSvgMediaRefs', () => {
         const svg = svgWith('big.png');
         const big = new Uint8Array(4 * 1024 * 1024); // 4MB raw → ~5.5MB base64 > 4MB cap
         const fetcher = mock(async () => new Blob([big], { type: 'image/png' }));
-        expect(await inlineSvgMediaRefs(svg, fetcher)).toBeNull();
+        expect(await inlineClipboardSvgMedia(svg, fetcher)).toBeNull();
     });
 
     test('returns a ref-free svg unchanged and never fetches', async () => {
         const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>';
         const fetcher = mock(async () => new Blob(['x'], { type: 'image/png' }));
-        expect(await inlineSvgMediaRefs(svg, fetcher)).toBe(svg);
+        expect(await inlineClipboardSvgMedia(svg, fetcher)).toBe(svg);
         expect(fetcher).not.toHaveBeenCalled();
     });
 });
@@ -327,5 +337,64 @@ describe('readSvgClipboardWithItems', () => {
 
     test('returns null when there is no SVG to paste', () => {
         expect(readSvgClipboardWithItems(stubClipboard({ 'text/plain': 'just text' }))).toBeNull();
+    });
+});
+
+describe('hasRichHtmlBeyondMarker', () => {
+    const marker = '<span data-eigen-clipboard="x"></span>';
+    const IMG_SRC = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
+
+    test('marker + our render-marked <img> → false (the vector foreign-render img is ignored)', () => {
+        const html = `${marker}<img ${EIGEN_CLIPBOARD_RENDER_ATTR}="" src="${IMG_SRC}">`;
+        expect(hasRichHtmlBeyondMarker(stubClipboard({ 'text/html': html }))).toBe(false);
+    });
+
+    test('marker + a foreign unmarked <img> → true (real rich html, unchanged)', () => {
+        const html = `${marker}<img src="${IMG_SRC}">`;
+        expect(hasRichHtmlBeyondMarker(stubClipboard({ 'text/html': html }))).toBe(true);
+    });
+
+    test('marker only → false', () => {
+        expect(hasRichHtmlBeyondMarker(stubClipboard({ 'text/html': marker }))).toBe(false);
+    });
+});
+
+describe('writeEigenClipboardAsync', () => {
+    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+    const gg = globalThis as any;
+
+    test('a rejecting html promise still resolves the write with a marker-only text/html', async () => {
+        const captured: { items?: Record<string, Blob | Promise<Blob>> } = {};
+        gg.ClipboardItem = class {
+            constructor(public items: Record<string, Blob | Promise<Blob>>) {}
+        };
+        const origNavigator = gg.navigator;
+        gg.navigator = {
+            clipboard: {
+                // biome-ignore lint/suspicious/noExplicitAny: minimal ClipboardItem stub
+                write: async (list: any[]) => {
+                    captured.items = list[0].items;
+                },
+            },
+        };
+        try {
+            const data: EigenClipboardData = {
+                version: 1,
+                items: [{ type: 'text', text: 'x', width: 1, height: 1 }],
+            };
+            // The svg inliner's fetch rejecting must NOT abort the whole write.
+            await writeEigenClipboardAsync(data, 'plain fallback', Promise.reject(new Error('inliner failed')));
+
+            const htmlBlob = await captured.items?.['text/html'];
+            const html = await htmlBlob?.text();
+            // Marker survives even though the html promise rejected...
+            expect(html).toContain('data-eigen-clipboard=');
+            // ...and it degraded to marker-only (no appended html body).
+            expect(html?.endsWith('</span>')).toBe(true);
+            // ...and the text/plain fallback is still on the clipboard.
+            expect(captured.items?.['text/plain']).toBeDefined();
+        } finally {
+            gg.navigator = origNavigator;
+        }
     });
 });

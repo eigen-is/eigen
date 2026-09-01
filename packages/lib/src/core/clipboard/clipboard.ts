@@ -8,8 +8,8 @@ import type {
 } from '../../types/clipboard';
 import type { DrivePath } from '../../types/drive';
 import {
-    eigenMediaHref,
     listEigenMediaRefs,
+    replaceEigenMediaHrefs,
     rewriteEigenMediaRefs,
     stripEigenMediaRefs,
 } from '../../vector/media-refs';
@@ -17,6 +17,12 @@ import { getDriveDownloadUrl } from '../api';
 
 const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
+
+// Marks the foreign-visible `<img>` a vector copy appends after the marker span (an inlined SVG render).
+// It exists only so a non-eigen host renders something; `hasRichHtmlBeyondMarker` must ignore it, or a
+// shape-only vector copy reads as rich HTML and lands as a persisted figure. One source, used on both
+// the write side (vector-canvas) and the ignore side (hasRichHtmlBeyondMarker).
+export const EIGEN_CLIPBOARD_RENDER_ATTR = 'data-eigen-clipboard-render';
 
 // Geometry carried on every placeable clipboard item, in the source app's document-space units.
 // Both dims are mandatory (see the type's contract note) — a producer that stores only one measures
@@ -132,7 +138,7 @@ export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
 
 // Base64 `data:` URI for a Blob's bytes. Cross-environment (browser + the bun test runtime): neither
 // FileReader nor Node's Buffer is available in both, so we go through Blob.arrayBuffer + btoa over a
-// chunked binary string. Private — callers reach it via inlineSvgMediaRefs / svgToImageDataUri.
+// chunked binary string. Private — callers reach it via inlineClipboardSvgMedia / svgToImageDataUri.
 async function blobToDataUri(blob: Blob): Promise<string> {
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = '';
@@ -163,7 +169,7 @@ const INLINE_SVG_SOFT_CAP_BYTES = 4 * 1024 * 1024;
 // failed re-upload, so the svg never references bytes it can't show. Returns the svg unchanged when it
 // has no refs, or null when the total inlined payload would exceed the soft cap (the caller then skips
 // the foreign flavour). React-free: the browser fetch belongs to the caller, passed in as `resolve`.
-export async function inlineSvgMediaRefs(
+export async function inlineClipboardSvgMedia(
     svg: string,
     resolve: (name: string) => Promise<Blob | null>,
 ): Promise<string | null> {
@@ -190,13 +196,8 @@ export async function inlineSvgMediaRefs(
         dataUris.set(name, dataUri);
     }
 
-    // Swap each resolved ref's exact `href="…"` for its data URI (the same token-precise replace as
-    // stripEigenMediaRefs, only the target is a data URI instead of removal), then strip the failures.
-    let out = svg;
-    for (const [name, dataUri] of dataUris) {
-        out = out.split(` href="${eigenMediaHref(name)}"`).join(` href="${dataUri}"`);
-    }
-    return stripEigenMediaRefs(out, failed);
+    // Swap each resolved ref's exact `href="…"` for its data URI, then strip the failures.
+    return stripEigenMediaRefs(replaceEigenMediaHrefs(svg, dataUris), failed);
 }
 
 // The SVG a paste consumer should treat as an image: vector's copy flavour (the `svg` field on the
@@ -215,11 +216,13 @@ export function readSvgClipboard(clipboardData: DataTransfer): string | null {
 // the host, so it never parses the payload twice (readSvgClipboard delegates here). Mirrors that
 // function's two arms: a vector copy's `svg` field arrives with its image items; a foreign SVG on
 // text/plain has none. Null when there's no SVG to paste. The plain-text arm requires the SVG
-// namespace on the root tag (a hand-pasted `<svg>` snippet without it stays text).
+// namespace on the root tag (a hand-pasted `<svg>` snippet without it stays text). `eigen` may be
+// supplied by a caller that already read the payload (classifyPaste) so it is parsed only once;
+// omit it and this reads the payload itself.
 export function readSvgClipboardWithItems(
     clipboardData: DataTransfer,
+    eigen: EigenClipboardData | null = readEigenClipboard(clipboardData),
 ): { svg: string; items: EigenClipboardItem[] } | null {
-    const eigen = readEigenClipboard(clipboardData);
     if (eigen?.svg) return { svg: eigen.svg, items: eigen.items };
     const plain = clipboardData.getData('text/plain').trimStart();
     if (/^<svg[^>]*\sxmlns="http:\/\/www\.w3\.org\/2000\/svg"/.test(plain)) return { svg: plain, items: [] };
@@ -237,7 +240,10 @@ export function hasRichHtmlBeyondMarker(clipboardData: DataTransfer): boolean {
     const html = clipboardData.getData('text/html');
     if (!html) return false;
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    for (const el of doc.querySelectorAll(`[${HTML_MARKER}]`)) el.remove();
+    // Remove our marker span AND the foreign-render `<img>` a vector copy appends after it — the latter
+    // exists only so a non-eigen host shows something, and must not read as rich content (else a
+    // shape-only vector copy trips docs' eigen-rung gate and lands as a persisted base64 figure).
+    for (const el of doc.querySelectorAll(`[${HTML_MARKER}], [${EIGEN_CLIPBOARD_RENDER_ATTR}]`)) el.remove();
     if ((doc.body.textContent ?? '').trim().length > 0) return true;
     return doc.body.querySelector('img, table, figure, hr, picture, svg, video, li') != null;
 }
@@ -307,7 +313,11 @@ export async function writeEigenClipboardAsync(
     // so navigator.clipboard.write starts inside the user gesture — Safari/Firefox reject a write
     // whose activation window expired while awaiting the fetch.
     const items: Record<string, Blob | Promise<Blob>> = {
-        'text/html': Promise.resolve(html).then((h) => new Blob([h ? marker + h : marker], { type: 'text/html' })),
+        // A rejecting html promise (the svg inliner's fetch failed) must not abort the whole write and
+        // lose the marker + text/plain — degrade to a marker-only html blob instead.
+        'text/html': Promise.resolve(html)
+            .catch(() => undefined)
+            .then((h) => new Blob([h ? marker + h : marker], { type: 'text/html' })),
     };
     if (plainText) {
         items['text/plain'] = new Blob([plainText], { type: 'text/plain' });

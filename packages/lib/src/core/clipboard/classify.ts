@@ -1,19 +1,12 @@
 import type { EigenClipboardData, EigenClipboardItem } from '../../types/clipboard';
-import {
-    extractClipboardSvgMetadata,
-    hasRichHtmlBeyondMarker,
-    readEigenClipboard,
-    readSvgClipboardWithItems,
-} from './clipboard';
+import { hasRichHtmlBeyondMarker, readEigenClipboard, readSvgClipboardWithItems } from './clipboard';
 
 // The SVG flavour, resolved once. `svg` + `items` are the materialize-as-image inputs (docs/slides/
-// sheets); `restored` is the raw eigen payload pulled from the SVG's <metadata> block, non-null only
-// for our own copies — vector maps its items back to native elements. Both must be exposed: collapsing
-// them would break the native-restore vs image-materialize split.
+// sheets). Restoring our own copies to native elements is vector-local: vector calls
+// extractClipboardSvgMetadata on `svg` itself at its svg rung, so that split lives with its one reader.
 export type ClassifiedSvg = {
     svg: string;
     items: EigenClipboardItem[];
-    restored: EigenClipboardData | null;
 };
 
 // The eigen payload plus the single `hasRichHtmlBeyondMarker` read it depends on (docs gates eigen-text
@@ -30,7 +23,6 @@ export type ClassifiedPaste = {
     files: File[];
     html: string;
     text: string;
-    internalMarker: boolean;
 };
 
 // One classification pass over an already-obtained DataTransfer, resolving every present clipboard
@@ -39,7 +31,8 @@ export type ClassifiedPaste = {
 // is sync; the async menu paths only ever want eigen items and keep readEigenClipboardAsync.
 //
 // It composes the existing readers, never re-implementing their parsing: readSvgClipboardWithItems /
-// readEigenClipboard / extractClipboardSvgMetadata / hasRichHtmlBeyondMarker.
+// readEigenClipboard / hasRichHtmlBeyondMarker. The eigen payload is parsed exactly once here and
+// handed to readSvgClipboardWithItems so the svg flavour is derived from it without a second parse.
 export function classifyPaste(cd: DataTransfer, opts?: { internalMarkerText?: string }): ClassifiedPaste {
     const html = cd.getData('text/html');
     const text = cd.getData('text/plain');
@@ -52,18 +45,15 @@ export function classifyPaste(cd: DataTransfer, opts?: { internalMarkerText?: st
     // internalMarkerText and never trips it.
     const internalMarker = opts?.internalMarkerText ? html.includes(opts.internalMarkerText) : false;
 
-    const svgPayload = internalMarker ? null : readSvgClipboardWithItems(cd);
     const eigenData = internalMarker ? null : readEigenClipboard(cd);
+    const svgPayload = internalMarker ? null : readSvgClipboardWithItems(cd, eigenData);
 
     return {
-        svg: svgPayload
-            ? { svg: svgPayload.svg, items: svgPayload.items, restored: extractClipboardSvgMetadata(svgPayload.svg) }
-            : undefined,
+        svg: svgPayload ?? undefined,
         eigen: eigenData ? { data: eigenData, hasRichHtml: hasRichHtmlBeyondMarker(cd) } : undefined,
         imageFiles,
         files,
         html,
         text,
-        internalMarker,
     };
 }
