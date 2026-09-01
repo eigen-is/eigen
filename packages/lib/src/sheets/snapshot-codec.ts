@@ -126,6 +126,9 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
                 for (const entry of borderCells) {
                     if (!Array.isArray(entry) || entry.length !== 3) throw unknownFormat(entry);
                     const [r, c, borderIdx] = entry;
+                    // An index past the borders dictionary is as corrupt as a bad shape — crisp
+                    // over the raw TypeError cloneSides(undefined) would otherwise throw.
+                    if (borders[borderIdx] === undefined) throw unknownFormat(entry);
                     borderInfo[`${r}_${c}`] = cloneSides(borders[borderIdx]);
                 }
                 sheet.config.borderInfo = borderInfo;
@@ -201,6 +204,9 @@ function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: 
 function decodeCell(styleIdx: number, content: EncodedContent | undefined, styles: StyleTuple[]): Cell | null {
     if (styleIdx === -1 && content === undefined) return null;
 
+    // Same dictionary hole as borderIdx: an index past the styles table would iterate
+    // an `undefined` into a silent blank-styled cell — throw the standard error instead.
+    if (styleIdx !== -1 && styles[styleIdx] === undefined) throw unknownFormat(styleIdx);
     const cell: Record<string, unknown> = styleIdx === -1 ? {} : materializeStyle(styles[styleIdx]);
     if (content === undefined) return cell as Cell;
     if (typeof content !== 'object') {

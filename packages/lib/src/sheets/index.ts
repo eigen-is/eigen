@@ -1,7 +1,9 @@
 export {
     BORDER_SIDE_CSS,
     BORDER_STYLES,
+    borderInfoExtent,
     borderSideCss,
+    borderSidesToCss,
     cloneSides,
     forEachInRect,
     mergedBorderSides,

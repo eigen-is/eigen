@@ -7,27 +7,8 @@ import { colEndX, colStartX, HALF_PIXEL, rowEndY, rowStartY } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
 
-// Dash pattern + line width per border-style ordinal, computed once from the shared vocabulary
-// (BORDER_STYLES) instead of re-matching capitalized style-name substrings every frame. `medium`
-// styles nudge the stroke half a pixel across its own axis; the mapping reproduces the old cascade.
-const BORDER_DASH: Record<number, { dash: number[]; lineWidth: number; medium: boolean }> = (() => {
-    const table: Record<number, { dash: number[]; lineWidth: number; medium: boolean }> = {};
-    for (const [ord, { name }] of Object.entries(BORDER_STYLES)) {
-        const n = name[0].toUpperCase() + name.slice(1);
-        let dash = [0];
-        if (n === 'Hair') dash = [1, 2];
-        else if (n.includes('DashDotDot')) dash = [2, 2, 5, 2, 2];
-        else if (n.includes('DashDot')) dash = [2, 5, 2];
-        else if (n.includes('Dotted')) dash = [2];
-        else if (n.includes('Dashed')) dash = [3];
-        const medium = n.includes('Medium');
-        let lineWidth = 1;
-        if (medium) lineWidth = 2;
-        else if (n === 'Thick') lineWidth = 3;
-        table[Number(ord)] = { dash, lineWidth, medium };
-    }
-    return table;
-})();
+// `medium` (lineWidth 2) nudges the stroke half a pixel across its own axis for a crisp line.
+const DEFAULT_DASH = { dash: [0], lineWidth: 1 };
 
 function setLineDash(
     canvasborder: CanvasRenderingContext2D,
@@ -38,11 +19,11 @@ function setLineDash(
     toX: number,
     toY: number,
 ) {
-    const { dash, lineWidth, medium } = BORDER_DASH[type] ?? { dash: [0], lineWidth: 1, medium: false };
+    const { dash, lineWidth } = BORDER_STYLES[type] ?? DEFAULT_DASH;
     canvasborder.setLineDash(dash);
     canvasborder.beginPath();
 
-    if (medium) {
+    if (lineWidth === 2) {
         if (hv === 'h') {
             canvasborder.moveTo(moveX, moveY - 0.5);
             canvasborder.lineTo(toX, toY - 0.5);

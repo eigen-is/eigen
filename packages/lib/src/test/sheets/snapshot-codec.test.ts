@@ -233,6 +233,18 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
     });
 
+    test('a borderCells index past the borders dictionary throws the same error', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['borderCells'] = [[0, 0, 999]];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
+    test('a cell style index past the styles dictionary throws the same error', () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['cells'] = [[0, 0, 999]];
+        expect(() => decodeSheetsSnapshot(JSON.stringify(envelope))).toThrow('Unknown sheets snapshot format');
+    });
+
     test('a v1 snapshot (plain Sheet[] JSON) throws instead of decoding', () => {
         // No legacy reading anywhere: the editor opens such a doc read-only on defaults
         // (use-sheet.ts loadedRef) and never persists over it.

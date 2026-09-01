@@ -32,7 +32,12 @@ export function useSheet(
     // has unflushed local ops: B's edits survive the Yjs merge and must be reapplied). A failure
     // disarms persistence: what this client shows must never be flushed over a snapshot it
     // could not read — and the doc must still open, a throw escaping the Yjs handler kills the app.
-    const loadSnapshot = (doc: Y.Doc) => {
+    // Returns whether the on-screen view was (re)seeded, so the mid-session caller knows whether
+    // to remount. `keepViewOnFailure` distinguishes the two failure paths: the initial load shows
+    // the blank defaults fallback (nothing on screen yet); a peer's undecodable mid-session flush
+    // keeps the populated workbook already on screen — replacing it with defaults would wipe the
+    // user's view — and only arms the read-only lock + toast.
+    const loadSnapshot = (doc: Y.Doc, keepViewOnFailure = false): boolean => {
         const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
         const pending = doc.getArray('ops').toArray() as Op[][];
         let data = createDefaultSheets();
@@ -44,17 +49,23 @@ export function useSheet(
             loaded = false;
             console.error('[sheet] Failed to load the snapshot, opening read-only without persistence:', e);
         }
+        // Read-only lock either way: local state may now diverge from the truth on the wire, so
+        // writes must stop (loadedRef gates flushSnapshot + handleOp; loadFailed gates allowEdit).
         loadedRef.current = loaded;
-        latestDataRef.current = data;
         setLoadFailed(!loaded);
         if (loaded) toast.dismiss(loadFailedToastId);
+        // WHY the app-side try/catch + toast (CODE-STANDARDS forbids it in mutation flows): this
+        // is a decode boundary, not a mutation — there is no hook/onMutationError seam to route to.
         else {
             toast.error('This spreadsheet could not be loaded. It is shown read-only so nothing gets overwritten.', {
                 id: loadFailedToastId,
                 duration: Infinity,
             });
         }
+        if (!loaded && keepViewOnFailure) return false;
+        latestDataRef.current = data;
         setInitialData(data);
+        return true;
     };
 
     // useCollabDoc owns the doc/provider lifecycle; sheets layers its op-log + snapshot protocol on
@@ -120,8 +131,9 @@ export function useSheet(
                     isLocalSnapshotRef.current = false;
                     return;
                 }
-                loadSnapshot(doc);
-                setSnapshotVersion((v) => v + 1);
+                // Mid-session: a decodable flush reseeds initialData and remounts the workbook to
+                // it; an undecodable one keeps the current view (no remount) and only locks it.
+                if (loadSnapshot(doc, true)) setSnapshotVersion((v) => v + 1);
             };
             stateMap.observe(handleState);
 

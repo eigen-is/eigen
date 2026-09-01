@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import { cloneSides, mergedBorderSides, mergeEdgeSides, parseCellKey } from '../../sheets/borders';
+import {
+    BORDER_STYLES,
+    borderInfoExtent,
+    borderSidesToCss,
+    cloneSides,
+    mergedBorderSides,
+    mergeEdgeSides,
+    parseCellKey,
+} from '../../sheets/borders';
 
 const SIDE = { style: 1, color: '#000' };
 const RED = { style: 8, color: '#f00' };
@@ -86,5 +94,66 @@ describe('mergeEdgeSides', () => {
 
     test('returns undefined when nothing survives', () => {
         expect(mergeEdgeSides({ l: SIDE, t: SIDE, s: RED }, mc, 2, 2)).toBeUndefined();
+    });
+});
+
+describe('BORDER_STYLES canvas paint', () => {
+    // Pins the exact dash/lineWidth the old re-capitalize cascade produced, per ordinal 1-13, so
+    // the canvas stays pixel-identical. Double (7) and slantDashDot (12) paint at lineWidth 1 by
+    // design (screen-vs-print divergence), even though their css is 3px/2px.
+    test('dash + lineWidth per ordinal', () => {
+        const paint = Object.fromEntries(
+            Object.entries(BORDER_STYLES).map(([ord, s]) => [ord, { dash: s.dash, lineWidth: s.lineWidth }]),
+        );
+        expect(paint).toEqual({
+            1: { dash: [0], lineWidth: 1 },
+            2: { dash: [1, 2], lineWidth: 1 },
+            3: { dash: [2], lineWidth: 1 },
+            4: { dash: [3], lineWidth: 1 },
+            5: { dash: [2, 5, 2], lineWidth: 1 },
+            6: { dash: [2, 2, 5, 2, 2], lineWidth: 1 },
+            7: { dash: [0], lineWidth: 1 },
+            8: { dash: [0], lineWidth: 2 },
+            9: { dash: [3], lineWidth: 2 },
+            10: { dash: [2, 5, 2], lineWidth: 2 },
+            11: { dash: [2, 2, 5, 2, 2], lineWidth: 2 },
+            12: { dash: [2, 5, 2], lineWidth: 1 },
+            13: { dash: [0], lineWidth: 3 },
+        });
+    });
+});
+
+describe('borderSidesToCss', () => {
+    test('emits a declaration per present side, skipping the diagonal, no trailing ;', () => {
+        expect(borderSidesToCss({ l: { style: 1, color: '#000' }, b: { style: 8, color: '#f00' }, s: SIDE })).toEqual([
+            'border-left:1px solid #000',
+            'border-bottom:2px solid #f00',
+        ]);
+    });
+
+    test('mapColor rewrites each color (the BE export passes its escaper)', () => {
+        expect(borderSidesToCss({ t: { style: 1, color: 'x' } }, (c) => `[${c}]`)).toEqual([
+            'border-top:1px solid [x]',
+        ]);
+    });
+});
+
+describe('borderInfoExtent', () => {
+    test('bounds the raw keys', () => {
+        expect(borderInfoExtent({ '2_3': { l: SIDE }, '5_1': { b: SIDE } })).toEqual({
+            minRow: 2,
+            minCol: 1,
+            maxRow: 5,
+            maxCol: 3,
+        });
+    });
+
+    test('empty map is an inverted box that merges as a no-op', () => {
+        expect(borderInfoExtent({})).toEqual({
+            minRow: Number.MAX_SAFE_INTEGER,
+            minCol: Number.MAX_SAFE_INTEGER,
+            maxRow: -1,
+            maxCol: -1,
+        });
     });
 });

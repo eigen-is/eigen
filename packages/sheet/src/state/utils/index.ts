@@ -198,6 +198,12 @@ export function clipToUsedExtent(ctx: Context, selections: Selection[]): Selecti
     const d = getFlowdata(ctx);
     if (!d || (!wholeRows.includes(true) && !wholeColumns.includes(true))) return selections;
 
+    // The DATA extent is sheet-wide on purpose, NOT bounded to the selection's axis: a header
+    // click on an empty column still reaches the last row that holds data in any column, and a
+    // click on an empty row the last column with data in any row (pinned by border.test.ts
+    // "bounds a header-click selection to the used extent"). Both scans already early-exit from
+    // the far edge, so there is no cheap trim to make here without an index — and a cached extent
+    // is out of scope. Only the bordered-extent pass below is axis-aware.
     let lastRow = d.length - 1;
     while (lastRow > 0 && !d[lastRow]?.some((cell) => cell != null)) lastRow -= 1;
     let lastColumn = 0;

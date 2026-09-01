@@ -1,6 +1,7 @@
 import {
     BORDER_STYLES,
     type BorderSide,
+    borderInfoExtent,
     type CellBorderSides,
     type ConditionalFormatRule,
     type DataVerificationRule,
@@ -158,13 +159,7 @@ export async function sheetsToXlsx(sheets: Sheet[]): Promise<Buffer> {
         // written once through the master; per-constituent writes would clobber each other.
         // Bound the fold to the bordered extent so a merge beyond it is skipped, not expanded.
         // mergedBorderSides bails on an empty map, so no length guard is needed here.
-        let borderMaxRow = 0;
-        let borderMaxCol = 0;
-        for (const key of Object.keys(config.borderInfo ?? {})) {
-            const [r, c] = parseCellKey(key);
-            if (r > borderMaxRow) borderMaxRow = r;
-            if (c > borderMaxCol) borderMaxCol = c;
-        }
+        const { maxRow: borderMaxRow, maxCol: borderMaxCol } = borderInfoExtent(config.borderInfo ?? {});
         const folded = mergedBorderSides(config.borderInfo, config.merge, [0, borderMaxRow, 0, borderMaxCol]);
         for (const [key, sides] of Object.entries(folded)) {
             const border = toBorder(sides);

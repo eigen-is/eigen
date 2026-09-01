@@ -1,7 +1,6 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
-    BORDER_SIDE_CSS,
-    borderSideCss,
+    borderSidesToCss,
     type CellBorderSides,
     type ConditionalFormatRule,
     type DataVerificationRule,
@@ -33,10 +32,7 @@ export const selectionCache = {
 
 function cellBorderCss(border: CellBorderSides): string {
     let css = '';
-    for (const [key, name] of BORDER_SIDE_CSS) {
-        const side = border[key];
-        if (side) css += `border-${name}:${borderSideCss(side.style, side.color)};`;
-    }
+    for (const decl of borderSidesToCss(border)) css += `${decl};`;
     return css;
 }
 

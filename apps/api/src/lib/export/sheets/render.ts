@@ -1,14 +1,13 @@
 import { escapeHtml } from '@workspace/lib/html';
 import {
-    BORDER_SIDE_CSS,
-    borderSideCss,
+    borderInfoExtent,
+    borderSidesToCss,
     type Cell,
     type CellBorderSides,
     type CellWithRowAndCol,
     type ConditionalFormatRule,
     type MergeCell,
     mergedBorderSides,
-    parseCellKey,
     type Sheet,
 } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
@@ -542,10 +541,7 @@ function buildCellStyle(
 
     if (borders) {
         // CSS has no diagonal border, so the slash side `s` is not rendered.
-        for (const [key, name] of BORDER_SIDE_CSS) {
-            const side = borders[key];
-            if (side) parts.push(`border-${name}:${borderSideCss(side.style, escapeHtml(side.color))}`);
-        }
+        parts.push(...borderSidesToCss(borders, escapeHtml));
     } else if (showGrid) {
         parts.push('border:1px solid #d4d4d4');
     }
@@ -635,13 +631,11 @@ function getGridBounds(
     }
 
     // Extend bounds to cover border cells (raw keys — folding only ever drops keys onto masters).
-    for (const key of Object.keys(borderInfo)) {
-        const [r, c] = parseCellKey(key);
-        if (r < minRow) minRow = r;
-        if (c < minCol) minCol = c;
-        if (r > maxRow) maxRow = r;
-        if (c > maxCol) maxCol = c;
-    }
+    const be = borderInfoExtent(borderInfo);
+    if (be.minRow < minRow) minRow = be.minRow;
+    if (be.minCol < minCol) minCol = be.minCol;
+    if (be.maxRow > maxRow) maxRow = be.maxRow;
+    if (be.maxCol > maxCol) maxCol = be.maxCol;
 
     // Extend bounds to cover merge ranges
     if (sheet.config?.merge) {
