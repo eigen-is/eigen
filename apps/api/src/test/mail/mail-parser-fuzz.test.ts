@@ -113,7 +113,7 @@ function hostile(i: number): { name: string; bytes: Buffer } {
 }
 
 // parseMail is synchronous, so a hang can't be raced against a timer: a run past `ms` counts as one.
-function parseWithTimeout(bytes: Buffer, ms: number): { ok: boolean; err?: string; timedOut?: boolean } {
+function parseTimed(bytes: Buffer, ms: number): { ok: boolean; err?: string; timedOut?: boolean } {
     const t0 = performance.now();
     let result: { ok: boolean; err?: string };
     try {
@@ -137,7 +137,7 @@ describe('mail parser fuzzing (hostile input)', () => {
         for (let i = 0; i < N; i++) {
             const { name, bytes } = hostile(i);
             const t0 = performance.now();
-            const res = parseWithTimeout(bytes, PER_INPUT_TIMEOUT);
+            const res = parseTimed(bytes, PER_INPUT_TIMEOUT);
             const ms = performance.now() - t0;
             if (res.timedOut) hangs.push({ i, name });
             if (ms > 200) slow.push({ i, name, ms });
@@ -162,7 +162,7 @@ describe('mail parser fuzzing (hostile input)', () => {
         for (let k = 0; k < depth; k++) s += `Content-Type: multipart/mixed; boundary="L${k}"\r\n\r\n--L${k}\r\n`;
         s += 'Content-Type: text/plain\r\n\r\nleaf\r\n';
         const t0 = performance.now();
-        const res = parseWithTimeout(Buffer.from(s, 'binary'), 5000);
+        const res = parseTimed(Buffer.from(s, 'binary'), 5000);
         console.log(
             `[fuzz] nested-5000 depth: ${(performance.now() - t0).toFixed(0)}ms, timedOut=${res.timedOut ?? false}, err=${res.err ?? 'none'}`,
         );

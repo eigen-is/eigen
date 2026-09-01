@@ -4,7 +4,7 @@ import libqp from 'libqp';
 import type { PartHeaders } from './headers';
 
 export function decodeTransfer(body: Buffer, encoding: string): Buffer {
-    if (encoding === 'base64') return Buffer.from(body.toString('latin1').replace(/[^a-zA-Z0-9+/=]/g, ''), 'base64');
+    if (encoding === 'base64') return Buffer.from(body.toString('latin1'), 'base64');
     if (encoding === 'quoted-printable') return libqp.decode(body.toString('latin1'));
     return body;
 }

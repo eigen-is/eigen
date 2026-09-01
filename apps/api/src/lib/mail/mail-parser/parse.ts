@@ -61,21 +61,6 @@ export function parseMail(bytes: Buffer): ParsedMail {
 
     const text: string[] = [];
     const html: string[] = [];
-    const render = (part: MimePart, alternative: boolean): void => {
-        if (part.parent?.embedsMessage) renderMessageMeta(part.headers);
-        const body = bodies.get(part);
-        if (body) {
-            if (part.contentType === 'text/html') {
-                if ((!alternative && hasText) || (part.parent === null && !hasText)) text.push(htmlToText(body));
-                html.push(body);
-            } else {
-                text.push(body);
-                if (!alternative && hasHtml) html.push(textToHtml(body));
-            }
-        }
-        const inAlternative = alternative || part.contentType === 'multipart/alternative';
-        for (const child of part.children) render(child, inAlternative);
-    };
 
     // An inline forwarded message shows its own envelope above its body.
     const renderMessageMeta = (headers: MimePart['headers']): void => {
@@ -105,6 +90,22 @@ export function parseMail(bytes: Buffer): ParsedMail {
             html.push(`<table class="mp_head">${cells.join('\n')}</table>`);
         }
         if (hasText) text.push(`\n${rows.map((row) => `${row.key}: ${row.text}`).join('\n')}\n`);
+    };
+
+    const render = (part: MimePart, alternative: boolean): void => {
+        if (part.parent?.embedsMessage) renderMessageMeta(part.headers);
+        const body = bodies.get(part);
+        if (body) {
+            if (part.contentType === 'text/html') {
+                if ((!alternative && hasText) || (part.parent === null && !hasText)) text.push(htmlToText(body));
+                html.push(body);
+            } else {
+                text.push(body);
+                if (!alternative && hasHtml) html.push(textToHtml(body));
+            }
+        }
+        const inAlternative = alternative || part.contentType === 'multipart/alternative';
+        for (const child of part.children) render(child, inAlternative);
     };
 
     collect(root);

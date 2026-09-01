@@ -5,20 +5,11 @@
 import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AddressObject, ParsedMail } from '@workspace/lib/types/mail';
+import type { ParsedMail } from '@workspace/lib/types/mail';
 import { parseMail } from '../../lib/mail/mail-parser';
 
 const CORPUS_DIR = join(import.meta.dir, '../fixtures/mail-corpus');
 const UPDATE = process.env['UPDATE_GOLDEN'] === '1';
-
-function projectAddress(ao: AddressObject): unknown {
-    return { value: ao.value, text: ao.text };
-}
-
-function projectAddresses(a: AddressObject | AddressObject[] | undefined): unknown {
-    if (a === undefined) return undefined;
-    return Array.isArray(a) ? a.map(projectAddress) : projectAddress(a);
-}
 
 function projectAttachment(att: ParsedMail['attachments'][number]): unknown {
     const hasher = new Bun.CryptoHasher('sha256');
@@ -36,11 +27,11 @@ function project(mail: ParsedMail): unknown {
     return {
         subject: mail.subject,
         date: mail.date ? mail.date.toISOString() : null,
-        from: projectAddresses(mail.from),
-        to: projectAddresses(mail.to),
-        cc: projectAddresses(mail.cc),
-        bcc: projectAddresses(mail.bcc),
-        replyTo: projectAddresses(mail.replyTo),
+        from: mail.from,
+        to: mail.to,
+        cc: mail.cc,
+        bcc: mail.bcc,
+        replyTo: mail.replyTo,
         messageId: mail.messageId,
         inReplyTo: mail.inReplyTo,
         references: mail.references,
