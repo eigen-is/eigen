@@ -21,7 +21,7 @@ Note the second rule only fires once a workspace actually has tests. Do not add 
 ## Running
 
 ```bash
-bun run check              # lint + typecheck + home-import check + test-layout check + primitives:check + test
+bun run check              # lint + typecheck + home-import check + test-layout check + docs-link check + primitives:check + test
 bun run test               # tests only (all workspaces)
 bun run test:api           # API tests only
 bun run test:sheet         # sheet package unit tests only (packages/sheet, plain `bun test`, no preload)
@@ -102,5 +102,6 @@ steps:
 ```
 
 The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set plus
-`bun scripts/check-home-imports.ts` and `bun scripts/check-test-layout.ts`: lint → typecheck → home-import
-check → test-layout check → `primitives:check` → test.
+`bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, and `bun scripts/check-docs-links.ts`
+(relative markdown links and backtick'd `apps/`|`packages/`|`docker/`|`scripts/` paths must resolve on disk):
+lint → typecheck → home-import check → test-layout check → docs-link check → `primitives:check` → test.

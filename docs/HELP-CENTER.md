@@ -28,7 +28,7 @@ postbuild  bun scripts/prerender.tsx         each route -> full static HTML + si
 ```
 
 **`build-content.ts`** walks `src/data/{blog,support}`, parses frontmatter with `gray-matter`, validates it
-against the Zod schemas in `scripts/lib/content-types.ts` (a bad or missing required field throws and fails the
+against the Zod schemas in `apps/index/scripts/lib/content-types.ts` (a bad or missing required field throws and fails the
 build), extracts media grids, and renders Markdown with `markdown-it` + `markdown-it-anchor`. Per collection it
 writes one `<slug>.json` body file (`{ html, mediaGrids }`) and one `<collection>.manifest.json` holding metadata
 only: title, description, type, category, tags, order, `updated`, the h2/h3 TOC and the resolved `related` list.
@@ -41,7 +41,7 @@ page's own body synchronously and lazy-loads any other article the visitor navig
 
 ## Prerender
 
-`scripts/prerender.tsx` boots a Vite SSR server so the route tree's Vite-only APIs resolve, then for every route
+`apps/index/scripts/prerender.tsx` boots a Vite SSR server so the route tree's Vite-only APIs resolve, then for every route
 calls `src/entry-server.tsx`: a TanStack Router built on a **memory history** at that path, `router.load()`,
 `serverSsr.dehydrate()`, `renderToString(<RouterServer/>)`. The rendered HTML is spliced into the built shell's
 `<div id="app">`, together with the article body as an inline JSON `<script>` and TanStack's dehydration script
@@ -71,7 +71,7 @@ explain each one — read them before changing the render path.
   unknown app name throws at build.
 - `crossSections: [other-section]` lists an article on a second section page without changing its canonical URL.
 - `related` is explicit when set, otherwise resolved at build time from shared `tags` within the same section
-  (`scripts/lib/related.ts`, max 4).
+  (`apps/index/scripts/lib/related.ts`, max 4).
 - `draft: true` drops the article from the build entirely.
 - The blog rides the same pipeline with a smaller schema (`id`, `title`, `description`); its date comes from the
   filename prefix.

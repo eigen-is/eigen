@@ -4,7 +4,7 @@
 > second path segment — so a load balancer can hash on it and pin a Home to a server. Every cross-home interaction
 > already funnels through `apps/api/src/lib/home/home-relay.ts`, which is the one file sharding has to change.
 > Those three exist today; no sharding does. The concrete first step is
-> [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](PROPOSAL_SINGLE_MACHINE_CLUSTER.md).
+> [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md).
 
 Multi-server scaling design for Eigen. The architecture is built around per-user data isolation (the Home
 singleton) and consistent routing by `ownerId`, which together make user-sharding a natural extension of
@@ -56,7 +56,7 @@ multi-step coordination needed across servers.
 ## Future: Multi-Server Architecture
 
 The first step is smaller than this: several API processes on one box, sharing the filesystem, routed by Caddy.
-That is worked out in [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](PROPOSAL_SINGLE_MACHINE_CLUSTER.md) (also not
+That is worked out in [PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md) (also not
 implemented). The picture below is the multi-machine end state.
 
 ```
@@ -95,7 +95,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 ```
 
 Pull functions follow the same pattern — check shard locality, call locally or make an API request.
-[PROPOSAL_SINGLE_MACHINE_CLUSTER.md](PROPOSAL_SINGLE_MACHINE_CLUSTER.md) works this through concretely for one
+[PROPOSAL_SINGLE_MACHINE_CLUSTER.md](proposals/PROPOSAL_SINGLE_MACHINE_CLUSTER.md) works this through concretely for one
 machine, using Caddy as the only router so the application never hashes an ownerId itself.
 
 ### Shared State That Needs Addressing
@@ -122,7 +122,7 @@ like `getDrive(user)`, `resolveCalendar(user, ownerId)` — routes just use `hom
 
 ### Delivery Guarantees
 
-Answered and scheduled, not open: [PROPOSAL_HOME_RELAY_OUTBOX.md](PROPOSAL_HOME_RELAY_OUTBOX.md) turns
+Answered and scheduled, not open: [PROPOSAL_HOME_RELAY_OUTBOX.md](proposals/PROPOSAL_HOME_RELAY_OUTBOX.md) turns
 `sendToHome` into a durable row in a server-level outbox with a single drain loop, per-target FIFO, retry/backoff
 and replay on boot — and in the sharded future that drain step is the one place that learns about remote shards.
 The ACL fan-out is already bounded-async (`apps/api/src/lib/drive/acl-propagation.ts`: bounded concurrency,

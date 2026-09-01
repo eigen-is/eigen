@@ -104,7 +104,7 @@ panel column takes over the screen when a pane is open, the same as the other do
   alt-drag duplicate), `use-snap-lines.ts`, `use-marquee-select.ts`, `use-slide-dnd.ts`,
   `use-active-comments.ts`
 
-Shared: `packages/ui/src/components/media/image-resize-handles.tsx` (used by docs + slides).
+Shared: `packages/ui/src/components/transform/object-transform.tsx` (the selection/resize/rotate chrome, used by docs + slides).
 
 ## Export & Preview
 

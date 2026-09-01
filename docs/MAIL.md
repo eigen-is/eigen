@@ -33,7 +33,7 @@ apps/mail (React)                          apps/api (Elysia)
 ```
 
 `MailStore` is a deliberate seam: a second backend (JMAP/Stalwart) is proposed in
-[PROPOSAL_STALWART_MAIL.md](PROPOSAL_STALWART_MAIL.md) but not built. See
+[PROPOSAL_STALWART_MAIL.md](proposals/PROPOSAL_STALWART_MAIL.md) but not built. See
 [IMAP.md § Code Architecture](IMAP.md#code-architecture) for the storage side in depth.
 
 ## Data model
