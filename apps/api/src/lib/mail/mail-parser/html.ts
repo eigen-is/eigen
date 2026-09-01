@@ -4,9 +4,9 @@ import { convert } from 'html-to-text';
 import LinkifyIt from 'linkify-it';
 import tlds from 'tlds';
 
-// htmlToText runs synchronously at ~70-90 ms/MB on the shared event loop, on every message open and every
-// sync pass, so a multi-MB HTML body is a DoS lever. The rendered html stays whole; only the derived
-// plaintext is cut off past the cap.
+// Both derivations (html→text in htmlToText, text→html in textToHtml) run synchronously on the shared event
+// loop, on every message open and every sync pass, so a multi-MB body is a DoS lever. Only the derived output
+// is cut off past this cap; the stored source part is never touched.
 const MAX_HTML_TEXT_LENGTH = 2 * 1024 * 1024;
 
 export type CidImage = { cid: string; contentType: string; content: Buffer };
@@ -19,15 +19,20 @@ const linkify = new LinkifyIt()
     .set({ fuzzyIP: true, fuzzyLink: true, fuzzyEmail: true })
     .add('@', {
         validate(text, pos, self) {
-            const tail = text.slice(pos);
+            // Sticky match at pos on the original string — a per-`@` text.slice(pos) makes a body full of
+            // addresses O(n²). src_ZPCc lives on the linkify-it instance, so the compiled re is cached there.
             if (!self.re['bluesky']) {
                 self.re['bluesky'] = new RegExp(
-                    `^([a-zA-Z0-9_][a-zA-Z0-9._-]*[a-zA-Z0-9])(?=$|${self.re['src_ZPCc']})`,
+                    `([a-zA-Z0-9_][a-zA-Z0-9._-]*[a-zA-Z0-9])(?=$|${self.re['src_ZPCc']})`,
+                    'y',
                 );
             }
-            const match = self.re['bluesky'].exec(tail);
+            const re = self.re['bluesky'];
+            re.lastIndex = pos;
+            const match = re.exec(text);
             if (!match) return 0;
-            if (pos >= 2 && tail[pos - 2] === '@') return false;
+            // An `@` directly preceded by another `@` is not a handle (pos points just past the `@`).
+            if (pos >= 2 && text[pos - 2] === '@') return false;
             return match[0].length;
         },
         normalize(match) {
@@ -40,7 +45,8 @@ export function htmlToText(html: string): string {
 }
 
 export function textToHtml(str: string): string {
-    const encoded = linkify.pretest(str) ? linkifyText(str) : he.encode(str, { useNamedReferences: true });
+    const text = str.slice(0, MAX_HTML_TEXT_LENGTH);
+    const encoded = linkify.pretest(text) ? linkifyText(text) : he.encode(text, { useNamedReferences: true });
     const body = encoded
         .replace(/\r?\n/g, '\n')
         .trim()

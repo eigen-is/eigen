@@ -208,7 +208,7 @@ export class Mail {
 
     async messageGetAttachment(messageId: string, index: number): Promise<Attachment> {
         const attachments = await this.store.getAttachments(messageId);
-        if (index >= attachments.length) {
+        if (index < 0 || index >= attachments.length) {
             throw new ApiError(404, `Attachment ${index} not found for message '${messageId}'`);
         }
         return attachments[index];

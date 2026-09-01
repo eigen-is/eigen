@@ -103,11 +103,7 @@ export async function saveAttachmentsToDrive(
     const prepared = indexes.map((index) => {
         const att = attachments[index];
         const filename = att.filename || `attachment-${index}`;
-        // Attachment.content is typed unknown (parser origin); narrow to Uint8Array at this boundary.
-        if (!(att.content instanceof Uint8Array)) {
-            throw new ApiError(400, `Attachment ${index} has no content`);
-        }
-        const content = Buffer.isBuffer(att.content) ? att.content : Buffer.from(att.content);
+        const content = Buffer.from(att.content);
         if (content.byteLength > maxSize) {
             const limitMB = Math.floor(maxSize / (1024 * 1024));
             throw new ApiError(413, `Attachment "${filename}" exceeds ${limitMB}MB drive limit`);

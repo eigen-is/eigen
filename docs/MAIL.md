@@ -247,7 +247,8 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
 - **Step 4 (worker offload) is deferred** — a cold index of tens of thousands of messages saturates the
   shared event loop until it drains (only matters for one-time bulk imports). The move also covers the
   residuals from the mail-parser audit: `DOMPurify.sanitize` still runs uncapped synchronous CPU on untrusted
-  HTML in `mail-parse.ts` (the `htmlToText` input is capped at 2 MB in `html.ts`, DOMPurify's isn't).
+  HTML in `mail-parse.ts` (the `htmlToText`/`textToHtml` inputs are capped at 2 MB in `html.ts`, DOMPurify's isn't), and
+  `textToHtml`'s linkify is quadratic in the number of email addresses in a plain-text body (see the ROADMAP row).
 - The summary/cold-index parse fully decodes + buffers attachment content it never reads (audit #12) —
   a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile
   justifies it (largely subsumed by the worker move).
