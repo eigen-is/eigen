@@ -1,0 +1,7 @@
+# check_sender_access map for the submission services: MAIL FROM:<> skips the sender/login check.
+# Postfix looks the null sender up as `<>` (smtpd_null_access_lookup_key), and the identity map in
+# sender_login.regexp gives that key no owner, so reject_authenticated_sender_login_mismatch would
+# 553 the delivery notifications and vacation replies RFC 3834 requires an empty envelope sender
+# for. `OK` ends the sender list only — recipient restrictions still demand a login, so an
+# unauthenticated client gains nothing here.
+/^<>$/ OK

@@ -9,7 +9,10 @@ smtp      inet  n       -       n       -       -       smtpd
 # The mismatch check must come BEFORE permit_sasl_authenticated, which would otherwise accept a
 # forged sender first. The authenticated_ variant does nothing without a login, so the rule can
 # never reject inbound mail if it ever leaks into main.cf.
-# The two limits below are per client IP (auth rate per anvil_rate_time_unit, 60s by default).
+# null_sender.regexp comes first because the identity map gives MAIL FROM:<> no owner, so the
+# mismatch check would refuse the empty-sender bounces and auto-replies RFC 3834 asks for.
+# The auth rate limit below is per client IP (per anvil_rate_time_unit, 60s by default); the hard
+# error limit counts errors within one SMTP session.
 # Why these values: SETUP-GUIDE.md § Mail abuse hardening.
 submission inet n       -       n       -       -       smtpd
     -o syslog_name=postfix/submission
@@ -18,7 +21,7 @@ submission inet n       -       n       -       -       smtpd
     -o smtpd_sasl_type=dovecot
     -o smtpd_sasl_path=inet:dovecot:12345
     -o smtpd_sasl_security_options=noanonymous
-    -o smtpd_sender_restrictions=reject_authenticated_sender_login_mismatch,permit_sasl_authenticated,reject
+    -o smtpd_sender_restrictions=check_sender_access,regexp:/etc/postfix/null_sender.regexp,reject_authenticated_sender_login_mismatch,permit_sasl_authenticated,reject
     -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
     -o smtpd_client_auth_rate_limit=20
     -o smtpd_hard_error_limit=5
@@ -32,7 +35,7 @@ smtps     inet  n       -       n       -       -       smtpd
     -o smtpd_sasl_type=dovecot
     -o smtpd_sasl_path=inet:dovecot:12345
     -o smtpd_sasl_security_options=noanonymous
-    -o smtpd_sender_restrictions=reject_authenticated_sender_login_mismatch,permit_sasl_authenticated,reject
+    -o smtpd_sender_restrictions=check_sender_access,regexp:/etc/postfix/null_sender.regexp,reject_authenticated_sender_login_mismatch,permit_sasl_authenticated,reject
     -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
     -o smtpd_client_auth_rate_limit=20
     -o smtpd_hard_error_limit=5

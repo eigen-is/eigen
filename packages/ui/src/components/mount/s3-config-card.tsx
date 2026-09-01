@@ -64,12 +64,8 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
 
     const handleHarden = async () => {
         // A refused request comes back as an ok:false result, so there is nothing to catch here.
-        const next = await onHarden(value, days);
-        setHarden(next);
-        // The harden result carries the re-read bucket state, so the panel flips to what was measured.
-        if (next.versioning) {
-            setResult((prev) => prev && { ...prev, versioning: next.versioning, lifecycle: next.lifecycle });
-        }
+        // The panel reads the re-read bucket state straight off this result, per field.
+        setHarden(await onHarden(value, days));
     };
 
     return (
@@ -217,9 +213,10 @@ function BucketSafetyPanel({
     onEnable: () => void;
 }) {
     // Both fields are optional — a check that never got as far as the bucket settings leaves them
-    // out — and for the panel that reads the same as unreadable.
-    const versioning = result.versioning ?? 'unknown';
-    const lifecycle = result.lifecycle ?? 'unknown';
+    // out — and for the panel that reads the same as unreadable. A harden result carries the
+    // re-read state and wins per field: it can measure one half and say nothing about the other.
+    const versioning = harden?.versioning ?? result.versioning ?? 'unknown';
+    const lifecycle = harden?.lifecycle ?? result.lifecycle ?? 'unknown';
     const lifecycleDays = typeof lifecycle === 'object' ? lifecycle.noncurrentDays : null;
     // A key that can't read bucket settings can't write them either, and a foreign lifecycle config is
     // never rewritten — so the button only shows where a PUT can actually change something.
@@ -252,6 +249,16 @@ function BucketSafetyPanel({
                 {lifecycle === 'foreign' && 'Old-version cleanup: another lifecycle rule is in place.'}
                 {lifecycle === 'unknown' && 'Old-version cleanup: cannot be read with this access key.'}
             </SafetyLine>
+
+            {/* Everything is set, so there is no button — this is the only way back to the days input. */}
+            {versioning === 'enabled' && lifecycleDays !== null && (
+                <p className="text-sm text-muted-foreground">
+                    Retention: {lifecycleDays} days.{' '}
+                    <button type="button" className="underline hover:text-foreground" onClick={onEnable}>
+                        Change
+                    </button>
+                </p>
+            )}
 
             {harden && <p className={cn('text-sm', harden.ok ? 'text-success' : 'text-warning')}>{harden.message}</p>}
 
@@ -332,23 +339,33 @@ function SafetyLine({ ok, children }: { ok: boolean; children: ReactNode }) {
     );
 }
 
+// Single-quote a value for the shell: this text is meant to be pasted into a terminal, and a bucket
+// name or prefix is user input.
+function shellQuote(value: string): string {
+    return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 function manualSnippet(config: S3Config, days: number, include: { versioning: boolean; lifecycle: boolean }): string {
-    const filter = config.prefix ? `{"Prefix":"${config.prefix}/"}` : '{}';
-    const rules =
-        `{"Rules":[{"ID":"${S3_LIFECYCLE_RULE_ID}","Filter":${filter},"Status":"Enabled",` +
-        `"NoncurrentVersionExpiration":{"NoncurrentDays":${days}},` +
-        `"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":${S3_ABORT_INCOMPLETE_UPLOAD_DAYS}}}]}`;
+    const rules = {
+        Rules: [
+            {
+                ID: S3_LIFECYCLE_RULE_ID,
+                Filter: config.prefix ? { Prefix: `${config.prefix}/` } : {},
+                Status: 'Enabled',
+                NoncurrentVersionExpiration: { NoncurrentDays: days },
+                AbortIncompleteMultipartUpload: { DaysAfterInitiation: S3_ABORT_INCOMPLETE_UPLOAD_DAYS },
+            },
+        ],
+    };
+    const target = `--endpoint-url ${shellQuote(config.endpoint)} --bucket ${shellQuote(config.bucket)}`;
     const lines: string[] = [];
     if (include.versioning) {
-        lines.push(
-            `aws s3api put-bucket-versioning --endpoint-url ${config.endpoint} --bucket ${config.bucket} \\`,
-            '  --versioning-configuration Status=Enabled',
-        );
+        lines.push(`aws s3api put-bucket-versioning ${target} \\`, '  --versioning-configuration Status=Enabled');
     }
     if (include.lifecycle) {
         lines.push(
-            `aws s3api put-bucket-lifecycle-configuration --endpoint-url ${config.endpoint} --bucket ${config.bucket} \\`,
-            `  --lifecycle-configuration '${rules}'`,
+            `aws s3api put-bucket-lifecycle-configuration ${target} \\`,
+            `  --lifecycle-configuration ${shellQuote(JSON.stringify(rules))}`,
         );
     }
     return lines.join('\n');

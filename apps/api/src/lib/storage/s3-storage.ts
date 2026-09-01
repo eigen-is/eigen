@@ -67,6 +67,8 @@ export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): 
             reason ??= 'error';
             lifecycleNote = "Could not read the bucket's lifecycle configuration, so the cleanup rule was not applied.";
         } else if (lifecycle === 'none' || lifecycle.noncurrentDays !== noncurrentDays) {
+            // S3 has no conditional PUT, so a foreign configuration written in the seconds between
+            // the read above and this write is replaced. Accepted: the alternative is never writing.
             const res = await setS3LifecycleRule(config, noncurrentDays);
             if (res.ok) {
                 applied.lifecycle = true;

@@ -17,12 +17,12 @@
 # can differ from the account's domain. The sender/login binding does not care: it compares the
 # login with the envelope sender, whatever the domain is.
 #
-# LOCAL DEV ONLY: probe 7 sets `defer_transports=smtp`, seeds queue files, and deletes the whole
+# LOCAL DEV ONLY: probe 8 sets `defer_transports=smtp`, seeds queue files, and deletes the whole
 # Postfix queue afterwards. Never point this at a production stack.
 #
 # No message is ever delivered: the submission dialogs stop at RCPT TO and never send DATA.
 #
-# Runtime is about 6 minutes: probe 9 paces itself under Postfix's anvil AUTH cap and probe 7 waits
+# Runtime is about 6 minutes: probe 10 paces itself under Postfix's anvil AUTH cap and probe 8 waits
 # for the queue monitor's next interval; everything else is quick. A PROBES subset that names any
 # login probe also runs probe 1, which is what proves the credentials.
 
@@ -118,7 +118,7 @@ anvil_window_start=$SECONDS
 anvil_sent=0
 
 # Make room for N more AUTH commands in the current window, sleeping out its remainder only when
-# the budget would otherwise be exceeded. Probe 10 runs right after probe 9 has spent most of a
+# the budget would otherwise be exceeded. Probe 11 runs right after probe 10 has spent most of a
 # window, and a 450 there would look like a limiter failure instead of a pacing one.
 anvil_reserve() {
     if [ $((anvil_sent + $1)) -le "$ANVIL_BUDGET" ]; then
@@ -163,6 +163,8 @@ probe_submission() {
 # Fill one address's failure bucket over HTTP and echo the attempt at which the limiter first
 # answered 429 (0 = it never did). One unique email per post, so the per-email bucket (cap 10) can
 # never be what refuses anything. Runs inside eigen-api because the route is localhost-only.
+# `|| true` because `set -o pipefail` would otherwise make a broken `dc exec` abort the whole run
+# from inside a $(...) — the caller reads an empty answer as 0 and reports a failed probe instead.
 fill_ip_bucket() {
     dc exec -T -e PROBE_IP="$1" eigen-api sh -c '
 i=0
@@ -174,7 +176,7 @@ while [ $i -lt 70 ]; do
     if [ "$code" = "429" ]; then echo "$i"; exit 0; fi
 done
 echo 0
-' | tr -dc '0-9'
+' | tr -dc '0-9' || true
 }
 
 # --- prerequisites ---------------------------------------------------------------------------
@@ -199,7 +201,7 @@ export QUEUE_ALERT_THRESHOLD="${QUEUE_ALERT_THRESHOLD:-3}"
 export QUEUE_CHECK_INTERVAL="${QUEUE_CHECK_INTERVAL:-10}"
 
 cleanup() {
-    # Only undo what probe 7 did. Without the flag a PROBES=2,3 run would wipe a queue it never
+    # Only undo what probe 8 did. Without the flag a PROBES=2,3 run would wipe a queue it never
     # touched.
     if [ "${STACK_UP:-0}" = 1 ] && [ "${QUEUE_PROBE_RAN:-0}" = 1 ]; then
         dc exec -T postfix sh -c 'postconf -e defer_transports= && postfix reload && postsuper -d ALL' \
@@ -228,7 +230,7 @@ fi
 
 # Login probes. Probe 1 is what proves the credentials and sets HAVE_LOGIN, so it is not optional
 # when one of these is selected: excluding it would skip every login probe and still print green.
-LOGIN_PROBES="2 3 4 5 9 10"
+LOGIN_PROBES="2 3 4 5 6 10 11"
 NEEDS_LOGIN=0
 for p in $LOGIN_PROBES; do
     if should_run "$p"; then NEEDS_LOGIN=1; fi
@@ -246,7 +248,7 @@ else
     code=$(dc exec -T eigen-api curl -s -o /dev/null -w '%{http_code}' -X POST \
         -H 'Content-Type: application/json' \
         -d "{\"email\":\"$ALICE_EMAIL\",\"password\":\"$ALICE_PASSWORD\"}" \
-        http://localhost:8000/internal/auth/verify | tr -d '\r')
+        http://localhost:8000/internal/auth/verify | tr -d '\r' || true)
     if [ "$code" = "200" ]; then
         HAVE_LOGIN=1
         ok "the API accepts $ALICE_EMAIL"
@@ -286,29 +288,42 @@ else
 fi
 
 ##############################################################################
-header "Probe 5 — mixed-case login still owns its lowercase address"
+header "Probe 5 — an authenticated null sender is still accepted"
 ##############################################################################
-# The login/sender comparison must be case-insensitive, or every client that stores the address
-# capitalised breaks. If this one fails, the fix is a /i pattern in sender_login.regexp plus
-# lowercasing in eigen-checkpassword.
+# Delivery notifications and vacation replies must carry an empty envelope sender (RFC 3834), and
+# the identity sender/login map gives <> no owner — so without the null_sender.regexp exemption the
+# mismatch check 553s exactly the mail a client is required to send that way.
 if should_run 5 && [ "$HAVE_LOGIN" = 1 ]; then
-    MIXED_LOGIN=$(printf '%s' "$ALICE_EMAIL" | tr '[:lower:]' '[:upper:]')
-    probe_submission "AUTH $MIXED_LOGIN + MAIL FROM <$ALICE_EMAIL>" \
-        "$MIXED_LOGIN" "$ALICE_PASSWORD" "$ALICE_EMAIL" accept
+    probe_submission "AUTH $ALICE_EMAIL + MAIL FROM <>" \
+        "$ALICE_EMAIL" "$ALICE_PASSWORD" "" accept
 else
     skip_login_probe 5
 fi
 
 ##############################################################################
-header "Probe 6 — inbound port 25 never rejects a foreign sender"
+header "Probe 6 — mixed-case login still owns its lowercase address"
+##############################################################################
+# The login/sender comparison must be case-insensitive, or every client that stores the address
+# capitalised breaks. If this one fails, the fix is a /i pattern in sender_login.regexp plus
+# lowercasing in eigen-checkpassword.
+if should_run 6 && [ "$HAVE_LOGIN" = 1 ]; then
+    MIXED_LOGIN=$(printf '%s' "$ALICE_EMAIL" | tr '[:lower:]' '[:upper:]')
+    probe_submission "AUTH $MIXED_LOGIN + MAIL FROM <$ALICE_EMAIL>" \
+        "$MIXED_LOGIN" "$ALICE_PASSWORD" "$ALICE_EMAIL" accept
+else
+    skip_login_probe 6
+fi
+
+##############################################################################
+header "Probe 7 — inbound port 25 never rejects a foreign sender"
 ##############################################################################
 # The sender/login rule lives on the submission services only. If it ever leaks into main.cf,
 # every message from the internet is refused, so this probe is the canary: a 553 here is the
 # failure. The recipient uses Postfix's own mydomain, which in the dev overlay is `localhost`
 # whatever MAIL_DOMAIN says, so a 550 unknown-user reply is fine. Sender restrictions run before
 # recipient restrictions, so a leak would show up as a 553 first either way.
-if should_run 6; then
-    postfix_domain=$(dc exec -T postfix postconf -h mydomain | tr -d '\r')
+if should_run 7; then
+    postfix_domain=$(dc exec -T postfix postconf -h mydomain | tr -d '\r' || true)
     transcript=$(smtp25 "EHLO $HELO_NAME\nMAIL FROM:<$SENDER_FOREIGN>\nRCPT TO:<probe@$postfix_domain>\nQUIT\n") || true
     if printf '%s\n' "$transcript" | grep -q '^553'; then
         fail "inbound MAIL FROM <$SENDER_FOREIGN> got a 553 sender rejection: $(oneline "$transcript")"
@@ -318,16 +333,17 @@ if should_run 6; then
         ok "inbound sender accepted; the recipient reply was: $(oneline "$transcript")"
     fi
 else
-    skip "probe 6 not selected"
+    skip "probe 7 not selected"
 fi
 
 ##############################################################################
-header "Probe 7 — queue backlog raises an admin-alert notification"
+header "Probe 8 — queue backlog raises an admin-alert notification"
 ##############################################################################
 # Newest admin-alert notification across all homes, as a unix timestamp (0 when there is none).
 # The alert coalesces on one tag, so a rerun updates that row instead of adding one: the stamp is
 # what moves, not the count. Read from INSIDE the API container, because on Docker Desktop the
-# host's view of the bind mount lags behind the container's writes.
+# host's view of the bind mount lags behind the container's writes. `|| true` for the same reason
+# as fill_ip_bucket: a broken exec must fail this probe, not the whole run.
 admin_alert_stamp() {
     dc exec -T eigen-api bun -e '
 const { readdirSync, existsSync } = require("node:fs");
@@ -343,10 +359,10 @@ for (const dir of readdirSync(base)) {
     db.close();
 }
 console.log(newest);
-' 2>/dev/null | tr -dc '0-9'
+' 2>/dev/null | tr -dc '0-9' || true
 }
 
-if should_run 7; then
+if should_run 8; then
     QUEUE_PROBE_RAN=1
     before=$(admin_alert_stamp)
     # Restart postfix so queue-monitor.sh starts fresh: it holds its alert cooldown in memory, and
@@ -365,7 +381,7 @@ if should_run 7; then
     sleep 5
     queued=$(dc exec -T postfix sh -c \
         'find /var/spool/postfix/incoming /var/spool/postfix/active /var/spool/postfix/deferred -type f | wc -l' \
-        | tr -dc '0-9')
+        | tr -dc '0-9' || true)
     log "queue holds $queued messages (threshold $QUEUE_ALERT_THRESHOLD)"
 
     after="$before"
@@ -380,15 +396,20 @@ if should_run 7; then
         fail "no admin-alert notification within 120s (queue=$queued); look at: dc logs postfix"
     fi
 else
-    skip "probe 7 not selected"
+    skip "probe 8 not selected"
 fi
 
 ##############################################################################
-header "Probe 8 — per-IP SASL failure lockout"
+header "Probe 9 — per-IP SASL failure lockout"
 ##############################################################################
 # The route-level half of the story: drive it with a synthetic IP so the lockout is observable
-# without locking this host out. Probe 10 proves the real SMTP path actually delivers a client IP.
-if should_run 8; then
+# without locking this host out. Probe 11 proves the real SMTP path actually delivers a client IP.
+# The assertion pins the 429 at exactly attempt 51, so the bucket has to start empty: a KEEP_STACK
+# rerun within the 15 minute window would otherwise still hold the previous run's failures.
+if should_run 9; then
+    log "restarting eigen-api for a clean failure-bucket baseline..."
+    dc restart eigen-api >/dev/null 2>&1
+    wait_api || fail "eigen-api did not come back healthy"
     filled=$(fill_ip_bucket 198.51.100.10)
     if [ "${filled:-0}" -eq 51 ]; then
         ok "51st failure from one IP → 429 (per-IP bucket engaged)"
@@ -396,18 +417,18 @@ if should_run 8; then
         fail "expected the 429 on failure 51 from one IP, the limiter answered at ${filled:-0} (0 = never)"
     fi
 else
-    skip "probe 8 not selected"
+    skip "probe 9 not selected"
 fi
 
 ##############################################################################
-header "Probe 9 — repeated bad AUTH locks the account's password path"
+header "Probe 10 — repeated bad AUTH locks the account's password path"
 ##############################################################################
 # Saturates the per-email failure bucket (cap 10), so the correct password stays refused for 15
 # minutes, or until eigen-api restarts — which this probe does at the end.
-# Same delivery discipline as probe 10: one AUTH per connection, reply read before QUIT, and the
+# Same delivery discipline as probe 11: one AUTH per connection, reply read before QUIT, and the
 # 535s counted, because an abandoned attempt would leave the bucket one short and read as a
 # regression in the limiter.
-if should_run 9 && [ "$HAVE_LOGIN" = 1 ]; then
+if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
     log "waiting 60s for the anvil auth-rate window to roll over..."
     sleep 60
     anvil_window_start=$SECONDS
@@ -439,11 +460,11 @@ if should_run 9 && [ "$HAVE_LOGIN" = 1 ]; then
     dc restart eigen-api >/dev/null 2>&1
     wait_api || fail "eigen-api did not come back healthy after the restart"
 else
-    skip_login_probe 9
+    skip_login_probe 10
 fi
 
 ##############################################################################
-header "Probe 10 — the client IP reaches the limiter through real SMTP AUTH"
+header "Probe 11 — the client IP reaches the limiter through real SMTP AUTH"
 ##############################################################################
 # Proves the chain the limiter depends on: postfix reports the SMTP client as `rip`, dovecot exports
 # it as TCPREMOTEIP, eigen-checkpassword forwards it as `ip`, and verifyProtocolAuth keys its per-IP
@@ -456,8 +477,8 @@ header "Probe 10 — the client IP reaches the limiter through real SMTP AUTH"
 # disconnects, and the next connection on that smtpd then finds its cached dovecot connection dead,
 # so losses arrive in pairs. Only 28-36 of 60 attempts landed, and holding the connection 12s
 # instead of 2s bought one extra delivery — the loss is proportional, so no larger spray fixes it.
-# Probe 9 is the real-SASL-transport proof; this probe is the IP-threading proof.
-if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
+# Probe 10 is the real-SASL-transport proof; this probe is the IP-threading proof.
+if should_run 11 && [ "$HAVE_LOGIN" = 1 ]; then
     log "restarting eigen-api for a clean failure-bucket baseline..."
     dc restart eigen-api >/dev/null 2>&1
     wait_api || fail "eigen-api did not come back healthy"
@@ -515,7 +536,7 @@ if should_run 10 && [ "$HAVE_LOGIN" = 1 ]; then
     dc restart eigen-api >/dev/null 2>&1
     wait_api || fail "eigen-api did not come back healthy after the restart"
 else
-    skip_login_probe 10
+    skip_login_probe 11
 fi
 
 ##############################################################################

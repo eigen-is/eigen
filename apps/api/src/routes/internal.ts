@@ -18,8 +18,8 @@ export const internalRouter = new Elysia({ name: 'internal' })
             body: t.Object({
                 email: t.String(),
                 password: t.String(),
-                // Longest possible textual address: IPv4-mapped IPv6 with a zone id.
-                ip: t.Optional(t.String({ maxLength: 45 })),
+                // 45 is the longest zone-less IPv6 text form; the slack is room for a zone id.
+                ip: t.Optional(t.String({ maxLength: 64 })),
             }),
         },
     )

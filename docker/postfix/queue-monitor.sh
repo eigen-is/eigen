@@ -8,9 +8,22 @@
 # QUEUE_ALERT_COOLDOWN seconds while the backlog lasts, re-armed when the queue drops back under
 # the threshold. In the 2026-08-31 spam incident 17k queued messages went unnoticed for a day.
 
-INTERVAL="${QUEUE_CHECK_INTERVAL:-300}"
-THRESHOLD="${QUEUE_ALERT_THRESHOLD:-200}"
-COOLDOWN="${QUEUE_ALERT_COOLDOWN:-21600}"
+# Read one setting from the environment, falling back to the default unless it is a positive
+# integer. Garbage would make every [ -lt ] below fail, and the loop would then alert on every
+# interval for as long as the container runs.
+setting() {
+    value=$(printenv "$1")
+    case "$value" in
+        '' | *[!0-9]*) ;;
+        *) if [ "$value" -gt 0 ]; then printf '%s' "$value"; return; fi ;;
+    esac
+    [ -n "$value" ] && echo "queue-monitor: $1='$value' is not a positive integer — using $2" >&2
+    printf '%s' "$2"
+}
+
+INTERVAL=$(setting QUEUE_CHECK_INTERVAL 300)
+THRESHOLD=$(setting QUEUE_ALERT_THRESHOLD 200)
+COOLDOWN=$(setting QUEUE_ALERT_COOLDOWN 21600)
 
 # Timestamp of the last alert we got through; 0 means armed, so the next crossing alerts at once.
 last_alert=0
