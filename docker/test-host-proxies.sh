@@ -16,7 +16,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-NETWORK=eigen_eigen
+# Compose names the network <project>_eigen and derives the project from this directory's
+# name (lowercased, invalid chars stripped) — assume neither, or every worktree attaches
+# the proxies to a network without eigen-static and all scenarios fail.
+PROJECT="${COMPOSE_PROJECT_NAME:-$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]//g')}"
+NETWORK="${PROJECT}_eigen"
 CONTAINERS=(test-proxy-nginx test-proxy-apache test-proxy-caddy)
 # Host port for the first throwaway proxy; the other two take the next two ports.
 PROXY_PORT="${PROXY_PORT:-8081}"
