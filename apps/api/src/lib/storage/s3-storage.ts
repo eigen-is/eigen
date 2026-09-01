@@ -1,5 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
-import type { S3CheckResult } from '@workspace/lib/types/settings';
+import { S3_ABORT_INCOMPLETE_UPLOAD_DAYS, S3_LIFECYCLE_RULE_ID } from '@workspace/lib/constants/s3';
+import type { S3CheckResult, S3HardenResult, S3LifecycleState } from '@workspace/lib/types/settings';
 import { type BunFile, S3Client, type S3File } from 'bun';
 import { ApiError } from '../core';
 import type { S3Config, StorageBackend } from './types';
@@ -19,47 +20,129 @@ export async function checkS3Connection(config: S3Config): Promise<S3CheckResult
         const exists = await testFile.exists();
         await testFile.delete();
         if (!exists) throw new Error('Write verification failed');
-        const versioning = await checkS3Versioning(config);
-        return { ok: true, message: 'Connection successful', versioning };
+        // In parallel so the two bucket-config GETs cost one timeout, not two.
+        const [versioning, lifecycle] = await Promise.all([checkS3Versioning(config), checkS3Lifecycle(config)]);
+        return { ok: true, message: 'Connection successful', versioning, lifecycle };
     } catch (err) {
         return { ok: false, message: err instanceof Error ? err.message : 'Connection failed' };
     }
 }
 
+// Turn on versioning, then expire noncurrent versions, then read both back so the caller reports
+// measured state instead of intent. Partial application is an outcome, not a failure.
+export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): Promise<S3HardenResult> {
+    const applied = { versioning: false, lifecycle: false };
+    let reason: S3HardenResult['reason'];
+    let versioningNote = '';
+    let lifecycleNote = '';
+
+    try {
+        const [versioning, lifecycle] = await Promise.all([checkS3Versioning(config), checkS3Lifecycle(config)]);
+
+        if (versioning !== 'enabled') {
+            const res = await setS3Versioning(config);
+            if (res.ok) {
+                applied.versioning = true;
+                versioningNote = 'Versioning enabled.';
+            } else {
+                reason = await failureReason(res);
+                versioningNote = 'Could not enable versioning.';
+            }
+        }
+
+        if (lifecycle === 'foreign') {
+            reason ??= 'foreign-lifecycle';
+            lifecycleNote = 'An existing lifecycle configuration was found, so the cleanup rule was not applied.';
+        } else if (lifecycle === 'unknown') {
+            reason ??= 'error';
+            lifecycleNote = "Could not read the bucket's lifecycle configuration, so the cleanup rule was not applied.";
+        } else if (lifecycle === 'none' || lifecycle.noncurrentDays !== noncurrentDays) {
+            const res = await setS3LifecycleRule(config, noncurrentDays);
+            if (res.ok) {
+                applied.lifecycle = true;
+                lifecycleNote = `Old versions now expire after ${noncurrentDays} days.`;
+            } else {
+                reason ??= await failureReason(res);
+                lifecycleNote = 'Could not apply the old-version cleanup rule.';
+            }
+        }
+
+        const [versioningAfter, lifecycleAfter] = await Promise.all([
+            checkS3Versioning(config),
+            checkS3Lifecycle(config),
+        ]);
+        return {
+            ok: !reason,
+            message: [versioningNote, lifecycleNote].filter(Boolean).join(' ') || 'Bucket already had safe settings.',
+            versioning: versioningAfter,
+            lifecycle: lifecycleAfter,
+            applied,
+            reason,
+        };
+    } catch (err) {
+        return {
+            ok: false,
+            message: err instanceof Error ? err.message : 'Bucket update failed',
+            applied,
+            reason: 'error',
+        };
+    }
+}
+
 const EMPTY_SHA256 = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+const OUR_LIFECYCLE_RULE = new RegExp(`<ID>\\s*${S3_LIFECYCLE_RULE_ID}\\s*</ID>`);
+
+// SigV4-signed bucket-level request, path-style. Exported for the live-S3 suite, which creates and
+// drops its own throwaway buckets rather than mutating a shared one's configuration.
+export async function signedS3Request(
+    config: S3Config,
+    { method, query = '', body }: { method: string; query?: string; body?: string },
+): Promise<Response> {
+    const rawEndpoint = config.endpoint.replace(/\/$/, '');
+    const endpoint = /^https?:\/\//.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`;
+    const path = `/${config.bucket}`;
+    const host = new URL(endpoint).host;
+    const region = config.region || 'us-east-1';
+    const amzDate = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
+    const dateStamp = amzDate.slice(0, 8);
+    const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
+    const payloadHash = body ? sha256Hex(body) : EMPTY_SHA256;
+    // AWS requires Content-MD5 on PUT ?lifecycle; providers that don't need it ignore it.
+    const contentMd5 = body ? createHash('md5').update(body).digest('base64') : undefined;
+    const signedHeaders = contentMd5
+        ? 'content-md5;host;x-amz-content-sha256;x-amz-date'
+        : 'host;x-amz-content-sha256;x-amz-date';
+    const canonicalHeaders =
+        (contentMd5 ? `content-md5:${contentMd5}\n` : '') +
+        `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+    const canonicalQuery = query ? `${query}=` : '';
+    const canonicalRequest = `${method}\n${path}\n${canonicalQuery}\n${canonicalHeaders}\n${signedHeaders}\n${payloadHash}`;
+    const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
+    const kDate = hmac(`AWS4${config.secretAccessKey}`, dateStamp);
+    const kRegion = hmac(kDate, region);
+    const kService = hmac(kRegion, 's3');
+    const kSigning = hmac(kService, 'aws4_request');
+    const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+    const authorization =
+        `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}, ` +
+        `SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    return fetch(`${endpoint}${path}${query ? `?${query}` : ''}`, {
+        method,
+        headers: {
+            ...(contentMd5 ? { 'content-md5': contentMd5 } : {}),
+            'x-amz-content-sha256': payloadHash,
+            'x-amz-date': amzDate,
+            authorization,
+        },
+        body,
+        signal: AbortSignal.timeout(5000),
+    });
+}
 
 async function checkS3Versioning(config: S3Config): Promise<'enabled' | 'suspended' | 'disabled' | 'unknown'> {
     try {
-        const rawEndpoint = config.endpoint.replace(/\/$/, '');
-        const endpoint = /^https?:\/\//.test(rawEndpoint) ? rawEndpoint : `https://${rawEndpoint}`;
-        const path = `/${config.bucket}`;
-        const host = new URL(endpoint).host;
-        const region = config.region || 'us-east-1';
-        const amzDate = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
-        const dateStamp = amzDate.slice(0, 8);
-        const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
-        const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
-        const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${EMPTY_SHA256}\nx-amz-date:${amzDate}\n`;
-        const canonicalRequest = `GET\n${path}\nversioning=\n${canonicalHeaders}\n${signedHeaders}\n${EMPTY_SHA256}`;
-        const stringToSign = `AWS4-HMAC-SHA256\n${amzDate}\n${credentialScope}\n${sha256Hex(canonicalRequest)}`;
-        const kDate = hmac(`AWS4${config.secretAccessKey}`, dateStamp);
-        const kRegion = hmac(kDate, region);
-        const kService = hmac(kRegion, 's3');
-        const kSigning = hmac(kService, 'aws4_request');
-        const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
-        const authorization =
-            `AWS4-HMAC-SHA256 Credential=${config.accessKeyId}/${credentialScope}, ` +
-            `SignedHeaders=${signedHeaders}, Signature=${signature}`;
-
-        const res = await fetch(`${endpoint}${path}?versioning`, {
-            method: 'GET',
-            headers: {
-                'x-amz-content-sha256': EMPTY_SHA256,
-                'x-amz-date': amzDate,
-                authorization,
-            },
-            signal: AbortSignal.timeout(5000),
-        });
+        const res = await signedS3Request(config, { method: 'GET', query: 'versioning' });
         if (!res.ok) return 'unknown';
         const body = await res.text();
         const match = body.match(/<Status>\s*(Enabled|Suspended)\s*<\/Status>/);
@@ -69,6 +152,54 @@ async function checkS3Versioning(config: S3Config): Promise<'enabled' | 'suspend
     } catch {
         return 'unknown';
     }
+}
+
+async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
+    try {
+        const res = await signedS3Request(config, { method: 'GET', query: 'lifecycle' });
+        if (res.status === 404) return 'none'; // NoSuchLifecycleConfiguration
+        if (!res.ok) return 'unknown';
+        const body = await res.text();
+        const [rule, ...rest] = body.split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
+        if (!rule) return 'none';
+        // Our rule next to rules we didn't author still counts as foreign: PutBucketLifecycleConfiguration
+        // replaces the whole configuration, so re-PUTting ours alone would drop theirs.
+        if (rest.length > 0 || !OUR_LIFECYCLE_RULE.test(rule)) return 'foreign';
+        const days = rule.match(/<NoncurrentDays>\s*(\d+)\s*<\/NoncurrentDays>/);
+        return days?.[1] ? { noncurrentDays: Number(days[1]) } : 'foreign';
+    } catch {
+        return 'unknown';
+    }
+}
+
+function setS3Versioning(config: S3Config): Promise<Response> {
+    return signedS3Request(config, {
+        method: 'PUT',
+        query: 'versioning',
+        body: '<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>',
+    });
+}
+
+function setS3LifecycleRule(config: S3Config, noncurrentDays: number): Promise<Response> {
+    // Prefix-scoped when the mount has one, so Eigen never expires another tenant's versions.
+    const prefix = config.prefix
+        ? `<Prefix>${config.prefix.replace(/&/g, '&amp;').replace(/</g, '&lt;')}/</Prefix>`
+        : '';
+    const body =
+        `<LifecycleConfiguration><Rule><ID>${S3_LIFECYCLE_RULE_ID}</ID>` +
+        `<Filter>${prefix}</Filter><Status>Enabled</Status>` +
+        `<NoncurrentVersionExpiration><NoncurrentDays>${noncurrentDays}</NoncurrentDays></NoncurrentVersionExpiration>` +
+        '<AbortIncompleteMultipartUpload>' +
+        `<DaysAfterInitiation>${S3_ABORT_INCOMPLETE_UPLOAD_DAYS}</DaysAfterInitiation>` +
+        '</AbortIncompleteMultipartUpload></Rule></LifecycleConfiguration>';
+    return signedS3Request(config, { method: 'PUT', query: 'lifecycle', body });
+}
+
+async function failureReason(res: Response): Promise<'access-denied' | 'not-supported' | 'error'> {
+    const body = await res.text();
+    if (res.status === 403 || body.includes('AccessDenied')) return 'access-denied';
+    if (res.status === 501 || body.includes('NotImplemented')) return 'not-supported';
+    return 'error';
 }
 
 function sha256Hex(data: string): string {

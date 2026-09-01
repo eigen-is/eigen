@@ -1,8 +1,9 @@
+import type { S3HardenResult } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { ApiError } from '../lib/core/errors';
 import { completeSetup, getSetupStatus, isSetupRequired } from '../lib/setup/setup';
-import { checkS3Connection } from '../lib/storage/s3-storage';
-import { s3ConfigBody, toS3Config } from './shared-schemas';
+import { checkS3Connection, hardenS3Bucket } from '../lib/storage/s3-storage';
+import { s3ConfigBody, s3HardenBody, toS3Config } from './shared-schemas';
 
 export const setupRouter = new Elysia({ name: 'setup' })
     .get('/setup/status', () => getSetupStatus())
@@ -13,6 +14,14 @@ export const setupRouter = new Elysia({ name: 'setup' })
             return checkS3Connection(toS3Config(body));
         },
         { body: s3ConfigBody },
+    )
+    .post(
+        '/setup/s3harden',
+        async ({ body }): Promise<S3HardenResult> => {
+            if (!isSetupRequired()) throw new ApiError(403, 'Setup already completed');
+            return hardenS3Bucket(toS3Config(body), body.noncurrentDays);
+        },
+        { body: s3HardenBody },
     )
     .post('/setup/complete', ({ body }) => completeSetup(body), {
         body: t.Object({

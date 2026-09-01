@@ -57,6 +57,11 @@ export const s3ConfigBody = t.Object({
     region: t.Optional(t.String()),
 });
 
+export const s3HardenBody = t.Object({
+    ...s3ConfigBody.properties,
+    noncurrentDays: t.Number({ minimum: 1 }),
+});
+
 export function toS3Config(body: {
     endpoint: string;
     bucket: string;
