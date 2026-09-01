@@ -2,9 +2,11 @@ import { describe, expect, mock, test } from 'bun:test';
 import {
     embedClipboardSvgMetadata,
     extractClipboardSvgMetadata,
+    inlineSvgMediaRefs,
     materializeClipboardSvg,
     readSvgClipboard,
     readSvgClipboardWithItems,
+    svgToImageDataUri,
     svgToImageFile,
 } from '../../../core/clipboard/clipboard';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '../../../types/clipboard';
@@ -253,6 +255,58 @@ describe('materializeClipboardSvg', () => {
 
         expect(out).toContain(eigenMediaHref('a (1).png'));
         expect(out).not.toContain(eigenMediaHref('b.png'));
+    });
+});
+
+describe('inlineSvgMediaRefs', () => {
+    test('rewrites every eigen-media ref to a base64 data URI, svg otherwise intact', async () => {
+        const svg = svgWith('a.png');
+        const fetcher = mock(async (_name: string) => new Blob(['AAA'], { type: 'image/png' }));
+        const out = await inlineSvgMediaRefs(svg, fetcher);
+        expect(out).not.toBeNull();
+        expect(out).not.toContain('eigen-media:');
+        expect(out).toContain('href="data:image/png;base64,');
+        // The drawing wrapper around the <image> is untouched.
+        expect(out?.startsWith('<svg')).toBe(true);
+        expect(out).toContain('width="10"');
+        expect(fetcher).toHaveBeenCalledTimes(1);
+    });
+
+    test('strips the ref of an image whose fetch returns null, inlines the rest', async () => {
+        const svg = svgWith('a.png', 'b.png');
+        const fetcher = mock(async (name: string) =>
+            name === 'b.png' ? null : new Blob(['AAA'], { type: 'image/png' }),
+        );
+        const out = await inlineSvgMediaRefs(svg, fetcher);
+        expect(out).toContain('href="data:image/png;base64,'); // a.png inlined
+        expect(out).not.toContain(eigenMediaHref('b.png')); // b.png stripped
+        expect(out).not.toContain('eigen-media:');
+        expect(out).toContain('<image '); // the stripped element survives, just href-less
+    });
+
+    test('returns null when the inlined payload exceeds the soft cap', async () => {
+        const svg = svgWith('big.png');
+        const big = new Uint8Array(4 * 1024 * 1024); // 4MB raw → ~5.5MB base64 > 4MB cap
+        const fetcher = mock(async () => new Blob([big], { type: 'image/png' }));
+        expect(await inlineSvgMediaRefs(svg, fetcher)).toBeNull();
+    });
+
+    test('returns a ref-free svg unchanged and never fetches', async () => {
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>';
+        const fetcher = mock(async () => new Blob(['x'], { type: 'image/png' }));
+        expect(await inlineSvgMediaRefs(svg, fetcher)).toBe(svg);
+        expect(fetcher).not.toHaveBeenCalled();
+    });
+});
+
+describe('svgToImageDataUri', () => {
+    test('encodes a (UTF-8) svg as a base64 image/svg+xml data URI', async () => {
+        const svg = '<svg xmlns="http://www.w3.org/2000/svg">café ✓</svg>';
+        const uri = await svgToImageDataUri(svg);
+        const prefix = 'data:image/svg+xml;base64,';
+        expect(uri.startsWith(prefix)).toBe(true);
+        const bytes = Uint8Array.from(atob(uri.slice(prefix.length)), (c) => c.charCodeAt(0));
+        expect(new TextDecoder().decode(bytes)).toBe(svg);
     });
 });
 

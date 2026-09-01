@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1160 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1162 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -744,7 +744,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (452)
+## Utilities & constants (454)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -867,6 +867,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `embedClipboardSvgMetadata` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `extractClipboardSvgMetadata` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `hasRichHtmlBeyondMarker` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `inlineSvgMediaRefs` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `materializeClipboardSvg` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `needsReUpload` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readClipboardBox` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
@@ -875,6 +876,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `readSvgClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `readSvgClipboardWithItems` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `reUploadImage` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
+| `svgToImageDataUri` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `svgToImageFile` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboard` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |
 | `writeEigenClipboardAsync` | `@workspace/lib/clipboard` | packages/lib/src/core/clipboard/clipboard.ts |

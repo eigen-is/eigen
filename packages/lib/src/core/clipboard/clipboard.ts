@@ -7,7 +7,12 @@ import type {
     EigenClipboardTypography,
 } from '../../types/clipboard';
 import type { DrivePath } from '../../types/drive';
-import { listEigenMediaRefs, rewriteEigenMediaRefs, stripEigenMediaRefs } from '../../vector/media-refs';
+import {
+    eigenMediaHref,
+    listEigenMediaRefs,
+    rewriteEigenMediaRefs,
+    stripEigenMediaRefs,
+} from '../../vector/media-refs';
 import { getDriveDownloadUrl } from '../api';
 
 const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
@@ -125,6 +130,75 @@ export function svgToImageFile(svg: string, name = 'drawing.svg'): File {
     return new File([svg], name, { type: 'image/svg+xml' });
 }
 
+// Base64 `data:` URI for a Blob's bytes. Cross-environment (browser + the bun test runtime): neither
+// FileReader nor Node's Buffer is available in both, so we go through Blob.arrayBuffer + btoa over a
+// chunked binary string. Private — callers reach it via inlineSvgMediaRefs / svgToImageDataUri.
+async function blobToDataUri(blob: Blob): Promise<string> {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = '';
+    const CHUNK = 0x8000; // stay well under the spread arg-count limit
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return `data:${blob.type || 'application/octet-stream'};base64,${btoa(binary)}`;
+}
+
+// A whole SVG string as a base64 `data:image/svg+xml` URI — the `src` for the foreign-visible `<img>`
+// flavour the async menu-copy path writes. Goes through blobToDataUri so UTF-8 text in the drawing is
+// encoded correctly (a naive btoa over the raw string throws on non-Latin1 characters).
+export async function svgToImageDataUri(svg: string): Promise<string> {
+    return blobToDataUri(new Blob([svg], { type: 'image/svg+xml' }));
+}
+
+// Soft cap on the total inlined payload (the sum of the image data-URIs). Beyond it the async copy
+// path skips the foreign `<img>` flavour entirely rather than put a multi-MB, clipboard-rejectable
+// blob on the clipboard — the eigen name-ref svg still travels for every eigen host. base64 inflates
+// the raw bytes ~1.37×, so a ~3MB image already lands here.
+const INLINE_SVG_SOFT_CAP_BYTES = 4 * 1024 * 1024;
+
+// Inline an image-bearing vector SVG's `eigen-media:` name refs into self-contained base64 data URIs,
+// for the foreign-visible copy flavour (an `<img src="data:image/svg+xml…">` that no eigen server-side
+// inliner will serve). `resolve` fetches a ref's bytes — the caller wires it to the credentialed media
+// resolver; a null/failed fetch STRIPS that image's ref exactly as materializeClipboardSvg strips a
+// failed re-upload, so the svg never references bytes it can't show. Returns the svg unchanged when it
+// has no refs, or null when the total inlined payload would exceed the soft cap (the caller then skips
+// the foreign flavour). React-free: the browser fetch belongs to the caller, passed in as `resolve`.
+export async function inlineSvgMediaRefs(
+    svg: string,
+    resolve: (name: string) => Promise<Blob | null>,
+): Promise<string | null> {
+    const refs = listEigenMediaRefs(svg);
+    if (refs.length === 0) return svg;
+
+    const resolved = await Promise.all(
+        refs.map(async (name) => {
+            const blob = await resolve(name).catch(() => null);
+            return { name, dataUri: blob ? await blobToDataUri(blob) : null };
+        }),
+    );
+
+    const dataUris = new Map<string, string>();
+    const failed = new Set<string>();
+    let total = 0;
+    for (const { name, dataUri } of resolved) {
+        if (!dataUri) {
+            failed.add(name);
+            continue;
+        }
+        total += dataUri.length;
+        if (total > INLINE_SVG_SOFT_CAP_BYTES) return null;
+        dataUris.set(name, dataUri);
+    }
+
+    // Swap each resolved ref's exact `href="…"` for its data URI (the same token-precise replace as
+    // stripEigenMediaRefs, only the target is a data URI instead of removal), then strip the failures.
+    let out = svg;
+    for (const [name, dataUri] of dataUris) {
+        out = out.split(` href="${eigenMediaHref(name)}"`).join(` href="${dataUri}"`);
+    }
+    return stripEigenMediaRefs(out, failed);
+}
+
 // The SVG a paste consumer should treat as an image: vector's copy flavour (the `svg` field on the
 // eigen payload) first, then a `text/plain` that is a whole SVG document (a foreign drawing). Null when
 // neither is present. eigen-aware hosts call this BEFORE consuming the typed items so a vector selection
@@ -221,12 +295,19 @@ export function writeEigenClipboard(e: ClipboardEvent, data: EigenClipboardData,
     }
 }
 
-export async function writeEigenClipboardAsync(data: EigenClipboardData, plainText?: string) {
+export async function writeEigenClipboardAsync(
+    data: EigenClipboardData,
+    plainText?: string,
+    html?: string | Promise<string | null | undefined>,
+) {
     const json = JSON.stringify(data);
     const encoded = encodeURIComponent(json);
-    const html = `<span ${HTML_MARKER}="${encoded}"></span>`;
-    const items: Record<string, Blob> = {
-        'text/html': new Blob([html], { type: 'text/html' }),
+    const marker = `<span ${HTML_MARKER}="${encoded}"></span>`;
+    // html may resolve later (the svg data-URI inliner fetches media): hand ClipboardItem a promise
+    // so navigator.clipboard.write starts inside the user gesture — Safari/Firefox reject a write
+    // whose activation window expired while awaiting the fetch.
+    const items: Record<string, Blob | Promise<Blob>> = {
+        'text/html': Promise.resolve(html).then((h) => new Blob([h ? marker + h : marker], { type: 'text/html' })),
     };
     if (plainText) {
         items['text/plain'] = new Blob([plainText], { type: 'text/plain' });

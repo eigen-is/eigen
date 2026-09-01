@@ -1,10 +1,12 @@
 import {
     classifyPaste,
     clipboardTextItemHasContent,
+    inlineSvgMediaRefs,
     needsReUpload,
     readClipboardBox,
     readEigenClipboardAsync,
     reUploadImage,
+    svgToImageDataUri,
     svgToImageFile,
     writeEigenClipboard,
     writeEigenClipboardAsync,
@@ -808,6 +810,33 @@ export function VectorCanvas({
     );
     const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
+    // The eigen `svg` field references images BY NAME and renders blank outside eigen's server-side
+    // inliner. For the async menu-copy path only, build a foreign-visible `<img src="data:svg…">` whose
+    // images are inlined as base64 data URIs, so a plain contenteditable pastes the drawing as an image.
+    // Bytes come from the credentialed media resolver; over the soft cap (or on inline failure) we skip
+    // the flavour and write today's payload. The sync ⌘C path stays byte-free (a copy event can't fetch).
+    const fetchMediaBlob = useCallback(
+        async (name: string): Promise<Blob | null> => {
+            const url = resolveMediaUrl(name);
+            if (!url) return null;
+            try {
+                const res = await fetch(url, { credentials: 'include' });
+                return res.ok ? await res.blob() : null;
+            } catch {
+                return null;
+            }
+        },
+        [resolveMediaUrl],
+    );
+    const foreignImgHtml = useCallback(
+        async (svg: string | undefined): Promise<string | undefined> => {
+            if (!svg) return undefined;
+            const inlined = await inlineSvgMediaRefs(svg, fetchMediaBlob);
+            return inlined ? `<img src="${await svgToImageDataUri(inlined)}">` : undefined;
+        },
+        [fetchMediaBlob],
+    );
+
     // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
     // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
     // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text) and
@@ -1166,14 +1195,17 @@ export function VectorCanvas({
     // the keyboard path, so the two stay one behavior.
     const onMenuCopy = () => {
         const data = buildData();
-        if (data.items.length) writeEigenClipboardAsync(data, plainText()).catch(() => {});
+        if (!data.items.length) return;
+        // The inliner promise goes straight into the writer: the clipboard write must start inside
+        // the user gesture (Safari/Firefox), not after the media fetch resolves.
+        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg)).catch(() => {});
     };
     const onMenuCut = () => {
         const data = buildData();
         if (!data.items.length) return;
         // Delete only once the async write lands — a denied/failed clipboard write must not destroy
         // the selection (the content would exist nowhere but the undo stack).
-        writeEigenClipboardAsync(data, plainText())
+        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg))
             .then(() => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager))
             .catch(() => {});
     };
