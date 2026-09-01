@@ -65,6 +65,18 @@ export function useViewport() {
         setViewport((v) => ({ ...v, scrollX: v.scrollX + dxPx / v.zoom, scrollY: v.scrollY + dyPx / v.zoom }));
     }, []);
 
+    // Two-finger pinch: zoom by `scale` about the container-relative (px, py) midpoint AND pan by the
+    // midpoint's screen travel — the imperative entry the touch module drives so the viewport stays the
+    // single owner of the clamp/anchor math (never duplicated in the gesture module). Not gated on
+    // frozenRef: a pinch IS the active gesture.
+    const pinch = useCallback((scale: number, px: number, py: number, panDxPx: number, panDyPx: number) => {
+        setViewport((v) => {
+            const nextZoom = clamp(v.zoom * scale, MIN_ZOOM, MAX_ZOOM);
+            const z = zoomAt(v, nextZoom, px, py);
+            return { zoom: nextZoom, scrollX: z.scrollX + panDxPx / nextZoom, scrollY: z.scrollY + panDyPx / nextZoom };
+        });
+    }, []);
+
     // Zoom-pill reset: back to 100%, keeping the scene point at the container centre fixed.
     const resetZoom = useCallback(() => {
         const rect = containerRef.current?.getBoundingClientRect();
@@ -107,6 +119,7 @@ export function useViewport() {
         boxToStyle,
         groupTransform,
         panBy,
+        pinch,
         resetZoom,
         frozenRef,
         zoom,

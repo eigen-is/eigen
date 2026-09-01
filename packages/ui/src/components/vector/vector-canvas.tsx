@@ -21,6 +21,7 @@ import {
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
+import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
@@ -95,6 +96,7 @@ import {
 } from './tools/clipboard';
 import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
+import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
 import { VectorObjectMenu } from './vector-object-menu';
 
@@ -240,10 +242,13 @@ export function VectorCanvas({
         boxToStyle,
         groupTransform,
         panBy,
+        pinch,
         resetZoom,
         frozenRef,
         zoom,
     } = useViewport();
+    // Coarse pointers (finger/stylus) get a fatter hit-slop and drive the touch gesture policy below.
+    const coarse = useIsCoarsePointer();
     // Images resolve/upload through the container's media/ folder (the provider the editor wraps
     // us in). resolveMediaUrl feeds every <image> href; startUpload drives the optimistic insert;
     // resolveMediaPath gives a copied image a portable source path for cross-mount paste.
@@ -277,6 +282,9 @@ export function VectorCanvas({
     const transformStartedRef = useRef(false);
     // Latest finishGesture closure, for the window-blur listener bound once below.
     const finishRef = useRef<() => void>(() => {});
+    // Latest touch-gesture reset, called from the blur/pointercancel safety net so a torn-down
+    // two-finger gesture can't leave stale touch state behind.
+    const touchResetRef = useRef<() => void>(() => {});
     // Live editing session, read from event listeners (bound once) that must know a text overlay is
     // open — the freeze safety-net below and commitEditing both consult it.
     const editingRef = useRef<EditingState | null>(null);
@@ -315,6 +323,7 @@ export function VectorCanvas({
         toolLocked,
         canWrite,
         zoom,
+        coarse,
         ordered,
         byId: committedById,
         selectedIds,
@@ -418,14 +427,21 @@ export function VectorCanvas({
         const onBlur = () => {
             if (editingRef.current) return; // the textarea's own onBlur commits the session
             finishRef.current();
+            touchResetRef.current();
+            clear();
+        };
+        // pointercancel is a genuine tear-down (lost capture, system gesture) — a plain pointerup is a
+        // normal lift the touch handler already unwinds, so only cancel/blur reset the touch state.
+        const onCancel = () => {
+            touchResetRef.current();
             clear();
         };
         document.addEventListener('pointerup', clear);
-        document.addEventListener('pointercancel', clear);
+        document.addEventListener('pointercancel', onCancel);
         window.addEventListener('blur', onBlur);
         return () => {
             document.removeEventListener('pointerup', clear);
-            document.removeEventListener('pointercancel', clear);
+            document.removeEventListener('pointercancel', onCancel);
             window.removeEventListener('blur', onBlur);
         };
     }, [frozenRef]);
@@ -1167,16 +1183,19 @@ export function VectorCanvas({
         undoManager,
     ]);
 
-    const onDoubleClick = (e: React.MouseEvent) => {
-        // frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's openNewText); else edit the hit text/arrow label.
+    // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
+    // the tap-tap). frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's
+    // openNewText); else edit the hit text/arrow label.
+    const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canWrite || tool !== 'select' || editing || frozenRef.current) return;
-        const p = clientToScene(e.clientX, e.clientY);
-        const hit = hitTestTopmost(ordered, p, zoom, committedById);
+        const p = clientToScene(clientX, clientY);
+        const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'text') openEditExisting(hitEl);
         else if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
         else if (!hitEl) openNewText(p.x, p.y);
     };
+    const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
     // Right-click on an element opens the object menu (empty canvas keeps the browser default). Like
     // slides, a right-click on an element outside the current selection selects it first, so the menu
@@ -1192,7 +1211,7 @@ export function VectorCanvas({
             return;
         }
         const p = clientToScene(e.clientX, e.clientY);
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById);
+        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         if (!hitId) return;
         if (!selectedIds.includes(hitId)) setSelectedIds([hitId]);
         objectContextMenu.handleContextMenu(e, hitId);
@@ -1244,11 +1263,29 @@ export function VectorCanvas({
         });
     };
 
+    // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
+    // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
+    // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
+    const touch = useTouchGestures({
+        tool,
+        containerRef,
+        frozenRef,
+        pinch,
+        abortActiveGesture: () => {
+            if (!drawing.abortForSecondTouch()) finishRef.current();
+        },
+        isPenDrawing: drawing.isPenDrawing,
+        onDoubleTap: openTextAtClient,
+    });
+    touchResetRef.current = touch.reset;
+
     const onPointerDown = (e: React.PointerEvent) => {
-        if (frozenRef.current) return; // a gesture is already active (defensive)
         // Focus the tabIndex=-1 container so a following paste lands on our onPaste — a bare canvas
         // div never holds focus, so image paste would otherwise bubble past us to the body.
         containerRef.current?.focus();
+        // Touch gestures get first dibs (a second finger must intercept even while frozen).
+        if (touch.onPointerDown(e)) return;
+        if (frozenRef.current) return; // a gesture is already active (defensive)
         // Pan: space-drag or middle mouse.
         if (spaceHeld || e.button === 1) {
             e.preventDefault();
@@ -1277,7 +1314,7 @@ export function VectorCanvas({
             // discards the empty session instantly (intermittent dead clicks). Canceling also
             // keeps mousedown's caret-placement from destroying the select-all on existing text.
             e.preventDefault();
-            const hit = hitTestTopmost(ordered, p, zoom, committedById);
+            const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
             const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
             if (hitEl?.type === 'text') openEditExisting(hitEl);
             else openNewText(p.x, p.y);
@@ -1302,7 +1339,7 @@ export function VectorCanvas({
         }
 
         // Select tool.
-        const hitId = hitTestTopmost(ordered, p, zoom, committedById);
+        const hitId = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         if (hitId) {
             if (e.shiftKey) {
                 toggle(hitId); // shift-click toggles membership, no move
@@ -1351,6 +1388,8 @@ export function VectorCanvas({
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
+        // Two-finger pan/pinch consumes the move before any single-pointer gesture sees it.
+        if (touch.onPointerMove(e)) return;
         // Publish the local cursor on every move (throttled downstream; no React state → no
         // re-render), then handle the active gesture if any.
         const scene = clientToScene(e.clientX, e.clientY);
@@ -1370,7 +1409,7 @@ export function VectorCanvas({
         if (drawing.onPointerMove(e)) return;
         // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
         if (!g && tool === 'select' && !editing) {
-            const over = hitTestTopmost(ordered, scene, zoom, committedById) !== null;
+            const over = hitTestTopmost(ordered, scene, zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
         }
         if (!g || e.pointerId !== g.pointerId) return;
@@ -1522,6 +1561,8 @@ export function VectorCanvas({
     finishRef.current = finishGesture;
 
     const onPointerUp = (e: React.PointerEvent) => {
+        // Touch first: ends a pinch, or fires a double-tap (which cleans its own gesture + claims the up).
+        if (touch.onPointerUp(e)) return;
         const g = gestureRef.current;
         // A freehand/line/eraser gesture finishes (writes) through the tools hook; a pan (the one canvas
         // gesture that can coexist with a line draft) ends here.

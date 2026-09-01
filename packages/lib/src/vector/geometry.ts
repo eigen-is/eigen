@@ -188,6 +188,17 @@ const LINEAR_HIT_SCREEN_FACTOR = 0.85;
 // and the eraser can never drift apart.
 export const HIT_THRESHOLD_SCREEN = 8;
 
+// A coarse pointer (finger/stylus) has no pixel-precise tip, so it grabs within a fatter screen radius
+// than a mouse. Excalidraw keeps a constant threshold — this multiplier is our own touch addition, kept
+// to a single knob applied wherever HIT_THRESHOLD_SCREEN feeds hover/hit-testing/eraser.
+export const COARSE_HIT_SLOP_MULTIPLIER = 1.75;
+
+// The screen-px grab tolerance for the active pointer: the base for a mouse, fattened for coarse
+// pointers. Callers still divide by zoom. One source so hover/hit and the eraser can never drift apart.
+export function hitThresholdScreen(coarse: boolean): number {
+    return coarse ? HIT_THRESHOLD_SCREEN * COARSE_HIT_SLOP_MULTIPLIER : HIT_THRESHOLD_SCREEN;
+}
+
 export function parsePoints(points: string): Point[] {
     let raw: unknown;
     try {

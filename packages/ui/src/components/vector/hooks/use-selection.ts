@@ -6,8 +6,8 @@ import {
     arrowRoute,
     type Bounds,
     elementBounds,
-    HIT_THRESHOLD_SCREEN,
     hitTestElement,
+    hitThresholdScreen,
     type MarqueeMode,
     marqueeHits,
     type Point,
@@ -23,8 +23,9 @@ export function hitTestTopmost(
     point: Point,
     zoom: number,
     byId?: Map<string, VectorElement>,
+    coarse = false,
 ): string | null {
-    const threshold = HIT_THRESHOLD_SCREEN / zoom;
+    const threshold = hitThresholdScreen(coarse) / zoom;
     for (let i = ordered.length - 1; i >= 0; i--) {
         if (hitTestElement(ordered[i], point, threshold, arrowRoute(ordered[i], byId))) return ordered[i].id;
     }

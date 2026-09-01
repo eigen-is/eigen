@@ -13,6 +13,7 @@ import {
     bindingGap,
     boundEndpoint,
     boxCenter,
+    COARSE_HIT_SLOP_MULTIPLIER,
     distanceToPolyline,
     elbowAnchorScene,
     elementBounds,
@@ -20,10 +21,12 @@ import {
     followBindings,
     getElementBounds,
     getElementsBounds,
+    HIT_THRESHOLD_SCREEN,
     hitTestBox,
     hitTestDiamond,
     hitTestElement,
     hitTestEllipse,
+    hitThresholdScreen,
     isClosedPath,
     linearLocalToScene,
     linearSceneToLocal,
@@ -1424,5 +1427,16 @@ describe('focusSnapPoint (eigen extension)', () => {
     test('returns null past the band (no magnet — the raw aim stands)', () => {
         expect(focusSnapPoint(rect(), { x: 100, y: 200 }, 1)).toBeNull();
         expect(focusSnapPoint(rect(), { x: 50, y: 50 }, 1)).toBeNull();
+    });
+});
+
+describe('hitThresholdScreen', () => {
+    test('a fine pointer grabs at the base screen threshold', () => {
+        expect(hitThresholdScreen(false)).toBe(HIT_THRESHOLD_SCREEN);
+    });
+
+    test('a coarse pointer fattens the threshold by the slop multiplier', () => {
+        expect(hitThresholdScreen(true)).toBe(HIT_THRESHOLD_SCREEN * COARSE_HIT_SLOP_MULTIPLIER);
+        expect(hitThresholdScreen(true)).toBeGreaterThan(hitThresholdScreen(false));
     });
 });
