@@ -17,6 +17,16 @@ systemctl enable --now fail2ban
 systemctl restart fail2ban
 ```
 
+## Reload after every eigen update
+
+Fail2ban expands the jail's log glob only when the jail starts. The Docker json-log path embeds the container ID, so any `docker compose up` that recreates the postfix or dovecot container leaves both jails polling deleted log files — `fail2ban-client status` still reports them up, but nothing matches and nobody gets banned. After every update:
+
+```bash
+fail2ban-client reload
+```
+
+On a host that updates unattended, put the reload in a daily cron so a forgotten one can't disarm the jails for long.
+
 ## Check it works
 
 ```bash

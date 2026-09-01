@@ -192,6 +192,18 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
         expect(await readLifecycleXml(config)).toContain('<Prefix>team-data/</Prefix>');
     });
 
+    test('a rule scoped to a different prefix reads as none and is re-PUT', async () => {
+        const config = await createThrowawayBucket('team-data');
+        await hardenS3Bucket(config, 30);
+
+        const moved = { ...config, prefix: 'other-team' };
+        const result = await hardenS3Bucket(moved, 30);
+        expect(result.ok).toBe(true);
+        expect(result.applied.lifecycle).toBe(true);
+        expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
+        expect(await readLifecycleXml(moved)).toContain('<Prefix>other-team/</Prefix>');
+    });
+
     test('our own rule is repaired when someone disabled it', async () => {
         const config = await createThrowawayBucket();
         const disabled =

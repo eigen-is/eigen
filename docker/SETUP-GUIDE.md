@@ -315,7 +315,7 @@ fail2ban-client status eigen-postfix-sasl
 fail2ban-client status eigen-dovecot-auth
 ```
 
-It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
+It stays host config because fail2ban writes host firewall rules, and it bans in the `DOCKER-USER` chain because Docker's published ports never pass through `INPUT`. One maintenance duty: run `fail2ban-client reload` after every update that recreates the mail containers — the jails' log glob is expanded at start and the Docker log path embeds the container ID, so without a reload they keep watching deleted files while reporting themselves up. Tuning, checks, and the nftables variant are in [docker/fail2ban/README.md](fail2ban/README.md).
 
 The postfix and dovecot logs are the record of an abuse run, and what fail2ban reads, so they keep 10 files of 50 MB where the other containers keep 3 of 10 MB. During the incident the old 3x10 MB rotated away in about two hours and took the start of the run with it.
 

@@ -175,6 +175,7 @@ async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
         if (!res.ok) return 'unknown';
         const body = await res.text();
         const rules = body.split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
+        const expectedPrefix = config.prefix ? `${escapeXml(config.prefix)}/` : '';
         let noncurrentDays: number | null = null;
         for (const rule of rules) {
             // One rule we didn't author makes the whole configuration foreign, because
@@ -182,12 +183,18 @@ async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
             // stays ours even when hand-edited, so harden can repair it.
             if (!OUR_LIFECYCLE_RULE.test(rule)) return 'foreign';
             const days = rule.match(/<NoncurrentDays>\s*(\d+)\s*<\/NoncurrentDays>/);
-            if (noncurrentDays === null && days && /<Status>\s*Enabled\s*<\/Status>/.test(rule)) {
+            const prefix = rule.match(/<Prefix>\s*(.*?)\s*<\/Prefix>/)?.[1] ?? '';
+            if (
+                noncurrentDays === null &&
+                days &&
+                prefix === expectedPrefix &&
+                /<Status>\s*Enabled\s*<\/Status>/.test(rule)
+            ) {
                 noncurrentDays = Number(days[1]);
             }
         }
-        // No rules, or ours disabled or missing its expiry: it cleans up nothing, so report it as no
-        // rule and let harden re-PUT it.
+        // No rules, or ours disabled, missing its expiry, or scoped to another prefix: it cleans up
+        // nothing for this config, so report it as no rule and let harden re-PUT it.
         return noncurrentDays === null ? 'none' : { noncurrentDays };
     } catch {
         return 'unknown';

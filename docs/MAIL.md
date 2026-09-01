@@ -219,7 +219,7 @@ primary account password (the fallback fails if 2FA is on). The same `verifyProt
 and WebDAV. Full Dovecot config/deployment is in [IMAP.md](IMAP.md#dovecot-configuration-reference).
 
 `verifyProtocolAuth` counts failures per address and per client IP (`protocol-rate-limit.ts`). Both buckets now
-fill on the SASL path too: `eigen-checkpassword` forwards Dovecot's `IP`, and for a submission login that is
+fill on the SASL path too: `eigen-checkpassword` forwards Dovecot's `TCPREMOTEIP`, and for a submission login that is
 the SMTP client's address, which Postfix reports to Dovecot as `rip`. A valid app password is checked before
 the limiter, so a saturated bucket never locks out an app-password client.
 
