@@ -125,6 +125,13 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
     `chatText`/`chatReplies` become a live chat
     (real personas, same as doc comments) with `color`/`chatName` patched onto the placed board's `tasks`
     Y.Map — so that part needs no fixture regen.
+- **Site plan is content-driven, no fixture.** `content.ts` `SITE_PLAN` is a typed spec (shapes, arrows,
+  lines, images, texts); `demo/vector-build.ts` `buildVectorDoc` writes it straight into a freshly created
+  `site plan.eigenvector` container's Y.Doc (authored by Saar in `production/`), the way the stickies board
+  is authored but without any byte-copied fixture to migrate. Text is sized from the
+  `demo/excalifont-metrics.ts` advance table (the seeder has no DOM to `measureText` with); ids and roughjs
+  seeds are deterministic so every reseed renders identical jitter. The two referenced images upload into
+  the container's `media/` subfolder via `createFileFromData`, matching each image element's `mediaName`.
 - **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own
   coastal/festival photos, two Unsplash) are uploaded into an `images/` team-drive folder through
   the real `createFileFromData` path, keyed to plausible persona uploaders (`content.ts` `PHOTOS`).

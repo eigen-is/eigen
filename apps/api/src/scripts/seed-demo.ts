@@ -21,7 +21,7 @@
  */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
@@ -52,11 +52,13 @@ import {
     PHOTOS,
     personaByKey,
     personaByRole,
+    SITE_PLAN,
     SPONSOR_DECK,
     TEAM_FOLDERS,
     TEAM_MOUNT_NAME,
     TEAM_NAME,
 } from './demo/content';
+import { buildVectorDoc } from './demo/vector-build';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const SQLITE_MIME = 'application/x-sqlite3';
@@ -566,6 +568,37 @@ async function main(): Promise<void> {
         }
     });
     await teamDrive.flushContainerDb(teamMountId, boardId);
+
+    // --- Site plan: a vector drawing built straight into the container's Y.Doc from the SITE_PLAN
+    // spec (no fixture bytes; see demo/vector-build.ts). The two referenced images are uploaded into
+    // the container's media/ subfolder (CollabDocument.create makes it) so the drawing stays whole. ---
+    {
+        const author = userForRole(SITE_PLAN.author);
+        const container = await teamDrive.create(
+            teamMountId,
+            folderId.get(SITE_PLAN.folder)!,
+            SITE_PLAN.name,
+            'vector',
+            author,
+        );
+        const mediaFolder = await teamDrive.getChildByName(teamMountId, container.id, 'media');
+        if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
+        for (const image of SITE_PLAN.images) {
+            const path = join(FIXTURES_DIR, image.file);
+            const bytes = readFileSync(path);
+            await teamDrive.createFileFromData(
+                teamMountId,
+                mediaFolder.id,
+                basename(path),
+                Bun.file(path).type,
+                bytes,
+                author,
+            );
+        }
+        const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
+        buildVectorDoc(collab.doc, SITE_PLAN);
+        await teamDrive.flushContainerDb(teamMountId, container.id);
+    }
 
     // --- Chat channels in chats/ (alternating personas; #production carries the weather worry). ---
     for (const channel of CHATS) {

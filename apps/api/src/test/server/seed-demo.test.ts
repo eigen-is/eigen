@@ -6,12 +6,22 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { parseBinding, readVectorFromDoc } from '@workspace/lib/vector';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { readDeckFromDoc } from '../../lib/document/slides';
-import { BRANDING, BUDGET, KANBAN, PHOTOS, personaByRole, SPONSOR_DECK, TEAM_NAME } from '../../scripts/demo/content';
+import {
+    BRANDING,
+    BUDGET,
+    KANBAN,
+    PHOTOS,
+    personaByRole,
+    SITE_PLAN,
+    SPONSOR_DECK,
+    TEAM_NAME,
+} from '../../scripts/demo/content';
 
 // Contract test for the demo-world seeder. The seeder relies on module-level singletons
 // (the Elysia app, the auth DB, the Home map), so it cannot run in-process alongside the
@@ -313,6 +323,51 @@ describe('seed-demo', () => {
                 expect(task.chatName).toEndWith('.eigenchat');
                 expect(task.creator).toContain('@');
             }
+
+            // Site plan: a vector drawing built straight into the container's Y.Doc from SITE_PLAN
+            // (no fixture). It reads back through the shipped reader with surviving shape bindings,
+            // elbow arrows, measured text, and every image pointing at a media file that landed.
+            const vectorName = `${SITE_PLAN.name}.eigenvector`;
+            const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, vectorName);
+            const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
+            expect(scene.elements.length).toBeGreaterThanOrEqual(60);
+
+            // The reader clears dangling bindings, so a surviving endBinding proves its target is present.
+            const elementIds = new Set(scene.elements.map((el) => el.id));
+            const boundArrows = scene.elements.filter((el) => {
+                if (el.type !== 'arrow') return false;
+                const binding = parseBinding(el.endBinding);
+                return binding !== null && elementIds.has(binding.elementId);
+            });
+            expect(boundArrows.length).toBeGreaterThanOrEqual(6);
+            expect(scene.elements.filter((el) => el.type === 'arrow' && el.elbow).length).toBeGreaterThanOrEqual(3);
+            for (const text of scene.elements.filter((el) => el.type === 'text')) {
+                expect(text.width).toBeGreaterThan(0);
+                expect(text.height).toBeGreaterThan(0);
+            }
+
+            // Each image element names a real file under the container's media/ folder.
+            const vectorContainer = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE name = '${vectorName}' AND trashedAt IS NULL`,
+            );
+            const vectorMedia = query<{ id: string }>(
+                metadataDb,
+                `SELECT id FROM paths WHERE parentId = '${vectorContainer[0].id}' AND name = 'media' AND trashedAt IS NULL`,
+            );
+            const vectorMediaNames = new Set(
+                query<{ name: string }>(
+                    metadataDb,
+                    `SELECT name FROM paths WHERE parentId = '${vectorMedia[0].id}' AND trashedAt IS NULL`,
+                ).map((row) => row.name),
+            );
+            let imageCount = 0;
+            for (const el of scene.elements) {
+                if (el.type !== 'image') continue;
+                imageCount++;
+                expect(vectorMediaNames.has(el.mediaName)).toBe(true);
+            }
+            expect(imageCount).toBeGreaterThanOrEqual(1);
 
             // Assignment: the volunteer coordinator got the bell notification the assign route persists.
             const assignees = query<{ id: string }>(

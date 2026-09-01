@@ -9,6 +9,8 @@
 // the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
 // email, so ids may be random per rebuild. All names, acts and vendors are fictional.
 
+import type { Arrowhead, FillStyle, Roundness, StrokeStyle } from '@workspace/lib/vector';
+
 export type LeadRole =
     | 'director'
     | 'programming'
@@ -335,6 +337,552 @@ export type BrandingAsset = {
 
 export const BRANDING: BrandingAsset[] = [{ file: 'logo.svg', mimeType: 'image/svg+xml', uploader: 'mees' }];
 
+// --- Site plan (a vector drawing the seeder builds straight into the container's Y.Doc from this
+// spec — no fixture bytes; see vector-build.ts). Scene units are pixels, y down; every shape's
+// label is centred inside it. Shape keys are stable so arrows can bind to them by name. ---
+
+export type SitePlanSide = 'top' | 'right' | 'bottom' | 'left';
+// An arrow end: docked on a named shape's side (a real binding) or a free scene point.
+// `along` (0..1) docks off-centre on a rectangle side; default is the side midpoint.
+export type SitePlanEnd = { shape: string; side: SitePlanSide; along?: number } | { at: [number, number] };
+
+export type SitePlanShape = {
+    key: string;
+    kind: 'rectangle' | 'ellipse' | 'diamond';
+    label: string; // '' for an unlabelled outline; '\n' for a second line
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontSize?: number; // label size, default 16
+    fill?: string; // default transparent
+    fillStyle?: FillStyle; // default solid
+    stroke?: string; // default DEFAULT_ELEMENT_PROPS.strokeColor
+    strokeStyle?: StrokeStyle;
+    strokeWidth?: number;
+    roundness?: Roundness; // default round
+};
+
+export type SitePlanArrow = {
+    from: SitePlanEnd;
+    to: SitePlanEnd;
+    elbow?: boolean;
+    label?: string;
+    labelSize?: number; // default 13
+    stroke?: string;
+    strokeStyle?: StrokeStyle;
+    startHead?: Arrowhead; // default none
+    endHead?: Arrowhead; // default arrow
+};
+
+export type SitePlanText = {
+    text: string;
+    x: number;
+    y: number;
+    fontSize: number;
+    color?: string;
+};
+
+// A (poly)line in absolute scene points; `round` curves through the vertices.
+export type SitePlanLine = {
+    points: [number, number][];
+    stroke?: string;
+    strokeWidth?: number;
+    strokeStyle?: StrokeStyle;
+    roundness?: Roundness; // default round
+};
+
+export type SitePlanImage = {
+    file: string; // fixture path under fixtures/, copied into the container's media/ folder
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+const STAGE = { fill: '#ffd8a8', fillStyle: 'hachure', stroke: '#e8590c' } as const;
+const BUILDING = { fill: '#e9ecef' } as const;
+const NOTE = '#495057';
+
+export const SITE_PLAN = {
+    folder: 'production' as TeamFolder,
+    name: 'site plan', // lowercase, no extension
+    author: 'production' as LeadRole,
+    // Drawn bottom-up: lines (ground), shapes, images, arrows, then every text on top.
+    lines: [
+        // The dune ridge west of the field, the sea just behind it.
+        {
+            points: [
+                [70, 150],
+                [88, 230],
+                [64, 310],
+                [90, 390],
+                [66, 470],
+                [90, 550],
+                [64, 630],
+                [90, 710],
+                [66, 790],
+                [84, 870],
+            ],
+            stroke: '#74c0fc',
+        },
+        // Three gusts blowing in on the second stage.
+        {
+            points: [
+                [880, 262],
+                [905, 254],
+                [930, 262],
+                [955, 254],
+            ],
+            stroke: '#74c0fc',
+        },
+        {
+            points: [
+                [880, 287],
+                [905, 279],
+                [930, 287],
+                [955, 279],
+            ],
+            stroke: '#74c0fc',
+        },
+        {
+            points: [
+                [880, 312],
+                [905, 304],
+                [930, 312],
+                [955, 304],
+            ],
+            stroke: '#74c0fc',
+        },
+        // The art trail winding from the workshops to the camping field.
+        {
+            points: [
+                [360, 475],
+                [500, 590],
+                [690, 650],
+                [900, 660],
+                [1010, 700],
+            ],
+            stroke: '#9c36b5',
+            strokeStyle: 'dotted',
+        },
+    ] satisfies SitePlanLine[],
+    shapes: [
+        {
+            key: 'fence',
+            kind: 'rectangle',
+            label: '',
+            x: 120,
+            y: 150,
+            width: 1180,
+            height: 720,
+            stroke: '#868e96',
+            strokeStyle: 'dashed',
+        },
+        {
+            key: 'crew-cabin',
+            kind: 'rectangle',
+            label: 'Crew cabin',
+            x: 170,
+            y: 180,
+            width: 110,
+            height: 45,
+            fontSize: 14,
+            ...BUILDING,
+        },
+        {
+            key: 'farmhouse',
+            kind: 'rectangle',
+            label: 'Farmhouse, off limits',
+            x: 295,
+            y: 180,
+            width: 180,
+            height: 45,
+            fontSize: 13,
+            ...BUILDING,
+        },
+        {
+            key: 'backstage',
+            kind: 'rectangle',
+            label: 'Backstage & hospitality',
+            x: 520,
+            y: 175,
+            width: 220,
+            height: 50,
+            fontSize: 13,
+            ...BUILDING,
+        },
+        {
+            key: 'main-stage',
+            kind: 'rectangle',
+            label: 'Main stage',
+            x: 540,
+            y: 255,
+            width: 300,
+            height: 100,
+            fontSize: 24,
+            ...STAGE,
+        },
+        {
+            key: 'foh',
+            kind: 'rectangle',
+            label: 'FOH',
+            x: 600,
+            y: 385,
+            width: 60,
+            height: 36,
+            fontSize: 12,
+            ...BUILDING,
+        },
+        {
+            key: 'barn-stage',
+            kind: 'rectangle',
+            label: 'Barn stage\n(the old barn)',
+            x: 170,
+            y: 250,
+            width: 200,
+            height: 110,
+            fontSize: 18,
+            ...STAGE,
+            fillStyle: 'cross-hatch',
+            roundness: 'sharp',
+        },
+        {
+            key: 'second-stage',
+            kind: 'rectangle',
+            label: 'Second stage',
+            x: 1000,
+            y: 260,
+            width: 220,
+            height: 90,
+            fontSize: 20,
+            ...STAGE,
+        },
+        {
+            key: 'wind-cover',
+            kind: 'ellipse',
+            label: '',
+            x: 970,
+            y: 238,
+            width: 280,
+            height: 136,
+            stroke: '#e03131',
+            strokeStyle: 'dashed',
+        },
+        { key: 'g1', kind: 'diamond', label: 'G1', x: 760, y: 160, width: 84, height: 60, fontSize: 13, ...BUILDING },
+        { key: 'g2', kind: 'diamond', label: 'G2', x: 1000, y: 160, width: 84, height: 60, fontSize: 13, ...BUILDING },
+        {
+            key: 'g-backup',
+            kind: 'diamond',
+            label: 'backup',
+            x: 1120,
+            y: 160,
+            width: 84,
+            height: 60,
+            fontSize: 12,
+            ...BUILDING,
+        },
+        {
+            key: 'workshops',
+            kind: 'ellipse',
+            label: 'Workshops\n& kids',
+            x: 185,
+            y: 420,
+            width: 180,
+            height: 100,
+            fill: '#d0bfff',
+        },
+        {
+            key: 'bar-tent',
+            kind: 'ellipse',
+            label: 'Bar tent',
+            x: 410,
+            y: 430,
+            width: 180,
+            height: 90,
+            fontSize: 18,
+            fill: '#a5d8ff',
+        },
+        {
+            key: 'food',
+            kind: 'rectangle',
+            label: 'Food trucks',
+            x: 760,
+            y: 430,
+            width: 200,
+            height: 80,
+            fontSize: 18,
+            fill: '#ffec99',
+        },
+        {
+            key: 'water',
+            kind: 'ellipse',
+            label: 'Water',
+            x: 985,
+            y: 420,
+            width: 90,
+            height: 50,
+            fontSize: 14,
+            fill: '#a5d8ff',
+        },
+        {
+            key: 'toilets-a',
+            kind: 'rectangle',
+            label: 'Toilets',
+            x: 280,
+            y: 620,
+            width: 110,
+            height: 45,
+            fontSize: 14,
+            ...BUILDING,
+        },
+        {
+            key: 'toilets-b',
+            kind: 'rectangle',
+            label: 'Toilets',
+            x: 1120,
+            y: 420,
+            width: 110,
+            height: 45,
+            fontSize: 14,
+            ...BUILDING,
+        },
+        {
+            key: 'waste',
+            kind: 'rectangle',
+            label: 'Waste & bins',
+            x: 760,
+            y: 560,
+            width: 130,
+            height: 45,
+            fontSize: 14,
+            fill: '#b2f2bb',
+        },
+        {
+            key: 'first-aid',
+            kind: 'rectangle',
+            label: 'First aid',
+            x: 430,
+            y: 690,
+            width: 110,
+            height: 50,
+            fill: '#ffc9c9',
+            stroke: '#e03131',
+        },
+        {
+            key: 'info',
+            kind: 'rectangle',
+            label: 'Info & lost+found',
+            x: 830,
+            y: 690,
+            width: 150,
+            height: 50,
+            fontSize: 13,
+            ...BUILDING,
+        },
+        {
+            key: 'gate',
+            kind: 'rectangle',
+            label: 'Gate & wristbands',
+            x: 560,
+            y: 840,
+            width: 260,
+            height: 60,
+            fontSize: 18,
+            fill: '#b2f2bb',
+            fillStyle: 'hachure',
+        },
+        {
+            key: 'box-office',
+            kind: 'rectangle',
+            label: 'Box office',
+            x: 380,
+            y: 890,
+            width: 150,
+            height: 50,
+            ...BUILDING,
+        },
+        {
+            key: 'meadow',
+            kind: 'ellipse',
+            label: 'Meadow, in bloom',
+            x: 860,
+            y: 895,
+            width: 230,
+            height: 70,
+            fontSize: 14,
+            fill: '#b2f2bb',
+            fillStyle: 'zigzag',
+            stroke: '#2f9e44',
+        },
+        {
+            key: 'shuttle',
+            kind: 'rectangle',
+            label: 'Shuttle stop',
+            x: 600,
+            y: 1000,
+            width: 180,
+            height: 50,
+            ...BUILDING,
+        },
+        {
+            key: 'parking',
+            kind: 'rectangle',
+            label: 'Parking\n(crew & artists)',
+            x: 170,
+            y: 900,
+            width: 190,
+            height: 110,
+            fontSize: 14,
+            ...BUILDING,
+            fillStyle: 'cross-hatch',
+        },
+        { key: 'camping', kind: 'rectangle', label: '', x: 1010, y: 520, width: 270, height: 330, fill: '#b2f2bb' },
+        {
+            key: 'camping-desk',
+            kind: 'rectangle',
+            label: 'Camping host desk',
+            x: 1030,
+            y: 770,
+            width: 170,
+            height: 45,
+            fontSize: 13,
+            ...BUILDING,
+        },
+        // A polaroid of the camping field pinned next to it.
+        {
+            key: 'polaroid',
+            kind: 'rectangle',
+            label: '',
+            x: 1330,
+            y: 540,
+            width: 220,
+            height: 206,
+            fill: '#ffffff',
+            roundness: 'sharp',
+        },
+        // Legend swatches.
+        {
+            key: 'legend-stage',
+            kind: 'rectangle',
+            label: '',
+            x: 1330,
+            y: 805,
+            width: 14,
+            height: 14,
+            ...STAGE,
+            strokeWidth: 1,
+        },
+        {
+            key: 'legend-drinks',
+            kind: 'rectangle',
+            label: '',
+            x: 1330,
+            y: 825,
+            width: 14,
+            height: 14,
+            fill: '#a5d8ff',
+            strokeWidth: 1,
+        },
+        {
+            key: 'legend-green',
+            kind: 'rectangle',
+            label: '',
+            x: 1330,
+            y: 845,
+            width: 14,
+            height: 14,
+            fill: '#b2f2bb',
+            strokeWidth: 1,
+        },
+        {
+            key: 'legend-aid',
+            kind: 'rectangle',
+            label: '',
+            x: 1330,
+            y: 865,
+            width: 14,
+            height: 14,
+            fill: '#ffc9c9',
+            stroke: '#e03131',
+            strokeWidth: 1,
+        },
+    ] satisfies SitePlanShape[],
+    images: [
+        { file: 'branding/logo.webp', x: 1454, y: 24, width: 96, height: 96 },
+        { file: 'images/camping-field.webp', x: 1340, y: 550, width: 200, height: 150 },
+    ] satisfies SitePlanImage[],
+    arrows: [
+        // Power runs from the generators; the backup can carry the second stage on its own.
+        { from: { shape: 'g1', side: 'bottom' }, to: { shape: 'main-stage', side: 'top', along: 0.87 }, elbow: true },
+        { from: { shape: 'g2', side: 'bottom' }, to: { shape: 'second-stage', side: 'top', along: 0.19 }, elbow: true },
+        {
+            from: { shape: 'g-backup', side: 'bottom' },
+            to: { shape: 'second-stage', side: 'top', along: 0.74 },
+            elbow: true,
+            strokeStyle: 'dashed',
+        },
+        // How people arrive and spread out.
+        {
+            from: { shape: 'shuttle', side: 'top' },
+            to: { shape: 'gate', side: 'bottom' },
+            label: 'every 30 min, last bus 02:00',
+        },
+        {
+            from: { shape: 'gate', side: 'top' },
+            to: { shape: 'main-stage', side: 'bottom' },
+            strokeStyle: 'dashed',
+            stroke: '#868e96',
+            label: 'crowd flow',
+        },
+        {
+            from: { shape: 'gate', side: 'right', along: 0.25 },
+            to: { shape: 'camping', side: 'left', along: 0.9 },
+            elbow: true,
+            strokeStyle: 'dashed',
+            stroke: '#868e96',
+        },
+        { from: { shape: 'polaroid', side: 'left' }, to: { shape: 'camping', side: 'right', along: 0.37 } },
+        // North.
+        { from: { at: [1300, 125] }, to: { at: [1300, 70] }, endHead: 'triangle' },
+    ] satisfies SitePlanArrow[],
+    texts: [
+        { text: 'Tuimel Festival site plan', x: 120, y: 40, fontSize: 36 },
+        {
+            text: 'Hoeve Tuimelaar, Vlierzand. Sketched after the site visit. Not to scale, obviously.',
+            x: 120,
+            y: 92,
+            fontSize: 16,
+            color: '#868e96',
+        },
+        { text: 'N', x: 1290, y: 40, fontSize: 20 },
+        { text: 'dunes, sea 5 min', x: 18, y: 120, fontSize: 14, color: '#4dabf7' },
+        {
+            text: 'Power: 2 x 60kVA + a backup that runs the second stage alone (delivery Thu)',
+            x: 760,
+            y: 128,
+            fontSize: 12,
+            color: NOTE,
+        },
+        { text: 'quieter acts here if Sunday blows (Sanne)', x: 170, y: 368, fontSize: 13, color: NOTE },
+        { text: 'wind cover? decide at go/no-go', x: 985, y: 380, fontSize: 13, color: '#e03131' },
+        { text: 're-peg either way, site crew is ready (Ravi)', x: 985, y: 400, fontSize: 12, color: NOTE },
+        { text: 'art trail (Sem)', x: 545, y: 632, fontSize: 13, color: '#9c36b5' },
+        { text: 'extra bins come with the fencing (Lars)', x: 760, y: 612, fontSize: 12, color: NOTE },
+        { text: 'covered both days, one gap Sunday morning (Imke)', x: 430, y: 745, fontSize: 12, color: NOTE },
+        { text: '3 wristband tiers (Daan)', x: 705, y: 905, fontSize: 13, color: NOTE },
+        { text: 'Camping field', x: 1030, y: 535, fontSize: 24 },
+        { text: 'opens Friday midday', x: 1030, y: 575, fontSize: 13, color: NOTE },
+        { text: 'quiet after 02:00', x: 1030, y: 596, fontSize: 13, color: NOTE },
+        { text: 'the sign went up today (Yara)', x: 1340, y: 708, fontSize: 13 },
+        { text: 'Legend', x: 1330, y: 780, fontSize: 14 },
+        { text: 'stages', x: 1352, y: 803, fontSize: 12, color: NOTE },
+        { text: 'drinks & water', x: 1352, y: 823, fontSize: 12, color: NOTE },
+        { text: 'camping, gate & meadow', x: 1352, y: 843, fontSize: 12, color: NOTE },
+        { text: 'first aid', x: 1352, y: 863, fontSize: 12, color: NOTE },
+    ] satisfies SitePlanText[],
+};
+
 // --- Chat channels (real chat rooms in chats/, seeded via ChatRoom.postMessage as personas) ---
 
 export type ChatLine = { author: string; text: string };
@@ -356,6 +904,12 @@ export const CHATS: SeededChat[] = [
             { author: 'saar', text: 'On it. Will have numbers before the meeting.' },
             { author: 'ravi', text: 'Site crew can re-peg the second stage either way. Ready for both.' },
             { author: 'timo', text: '/highfive' },
+            {
+                author: 'saar',
+                text: 'Site plan from the site visit is in production/. Timo, check the generator runs. Fenna, the bar tent moved next to the food trucks.',
+            },
+            { author: 'fenna', text: 'Closer to the food, closer to the queue. Fine by me.' },
+            { author: 'timo', text: 'Runs look right. The backup on the second stage is exactly what Rob confirmed.' },
         ],
     },
     {
