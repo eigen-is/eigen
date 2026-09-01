@@ -112,7 +112,9 @@ export const EditorToolbar = ({
     // Controlled: useEditor skips selection-only re-renders, so opening must re-render for a live disabled check.
     const [insertMenuOpen, setInsertMenuOpen] = useState(false);
     const { exportPath, isExporting } = useDocumentExport();
-    const isCompact = useIsCompactToolbar();
+    // Docs' inline toolbar is the widest in the suite (~30 controls), so it folds earlier than the
+    // shared 1200px default.
+    const isCompact = useIsCompactToolbar(1400);
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
