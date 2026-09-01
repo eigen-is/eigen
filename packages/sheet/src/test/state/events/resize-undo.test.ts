@@ -123,3 +123,14 @@ describe('a config write syncs as a granular patch, not a whole-config replace',
         expect(filterPatch(inversePatches).map((p) => p.path)).toEqual([['sheets', 0, 'config', 'rowlen', '2']]);
     });
 });
+
+test('a drag survives a sibling suite deleting globalThis.window', () => {
+    // Pins the CI order flake: hyperlink.test.ts's cleanup used to delete the global
+    // window after grid-dom's cached module had already installed it.
+    // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis surgery
+    delete (globalThis as any).window;
+    const ctx = resizeContext();
+    ctx.colsResizing = true;
+    ctx.colsResizeStart = [200, 2];
+    expect(() => produce(ctx, (draft: Context) => void dragResize(draft))).not.toThrow();
+});

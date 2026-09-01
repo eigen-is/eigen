@@ -29,6 +29,10 @@ export function withGridGeometry(ctx: Context): Context {
 
 export function mouseUpAt(pageX: number, pageY: number) {
     return (ctx: Context) => {
+        // Re-assert per call: the module-scope assignment doesn't re-run for cached
+        // imports, and a sibling test's cleanup may have deleted the global window.
+        g.window = win;
+        g.document = win.document;
         const container = win.document.createElement('div') as unknown as HTMLDivElement;
         container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
         const scrollEl = win.document.createElement('div') as unknown as HTMLDivElement;

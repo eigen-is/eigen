@@ -16,12 +16,17 @@ const g = globalThis as unknown as {
     window?: { open: (url?: string, target?: string, features?: string) => void };
 };
 
+// Restore whatever window a sibling suite installed (grid-dom's happy-dom) — deleting
+// the global here broke later drag tests on CI, where the file order differs.
+let previousWindow: typeof g.window;
+
 afterEach(() => {
-    delete g.window;
+    g.window = previousWindow;
 });
 
 function openedUrls(): string[] {
     const calls: string[] = [];
+    previousWindow = g.window;
     g.window = { open: (url?: string) => void calls.push(url ?? '') };
     return calls;
 }
