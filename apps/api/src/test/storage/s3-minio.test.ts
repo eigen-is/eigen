@@ -191,6 +191,21 @@ describe.skipIf(!live)('hardenS3Bucket (MinIO)', () => {
         expect(await readLifecycleXml(config)).toContain('<Prefix>team-data/</Prefix>');
     });
 
+    test('our own rule is repaired when someone disabled it', async () => {
+        const config = await createThrowawayBucket();
+        const disabled =
+            '<LifecycleConfiguration><Rule><ID>eigen-expire-noncurrent</ID><Filter></Filter>' +
+            '<Status>Disabled</Status><NoncurrentVersionExpiration><NoncurrentDays>99</NoncurrentDays>' +
+            '</NoncurrentVersionExpiration></Rule></LifecycleConfiguration>';
+        expect((await signedS3Request(config, { method: 'PUT', query: 'lifecycle', body: disabled })).ok).toBe(true);
+
+        const result = await hardenS3Bucket(config, 30);
+        expect(result.ok).toBe(true);
+        expect(result.applied.lifecycle).toBe(true);
+        expect(result.lifecycle).toEqual({ noncurrentDays: 30 });
+        expect((await readLifecycleXml(config)).match(/<Rule>/g)).toHaveLength(1);
+    });
+
     test('a foreign lifecycle configuration is reported and left untouched', async () => {
         const config = await createThrowawayBucket();
         const foreign =

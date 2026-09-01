@@ -7,4 +7,7 @@ export const S3_LIFECYCLE_RULE_ID = 'eigen-expire-noncurrent';
 // recovery depth against storage cost.
 export const S3_NONCURRENT_DAYS_DEFAULT = 30;
 
+// Ten years: a retention this long is already a mistake, and it keeps the route's input bounded.
+export const S3_NONCURRENT_DAYS_MAX = 3650;
+
 export const S3_ABORT_INCOMPLETE_UPLOAD_DAYS = 7;

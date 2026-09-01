@@ -39,7 +39,11 @@ export async function hardenS3Bucket(config: S3Config, noncurrentDays: number): 
     try {
         const [versioning, lifecycle] = await Promise.all([checkS3Versioning(config), checkS3Lifecycle(config)]);
 
-        if (versioning !== 'enabled') {
+        if (versioning === 'unknown') {
+            // A key that can't read the versioning state can't be trusted to write it blind.
+            reason = 'access-denied';
+            versioningNote = 'Could not read the versioning state, so it was left alone.';
+        } else if (versioning !== 'enabled') {
             const res = await setS3Versioning(config);
             if (res.ok) {
                 applied.versioning = true;
@@ -160,13 +164,19 @@ async function checkS3Lifecycle(config: S3Config): Promise<S3LifecycleState> {
         if (res.status === 404) return 'none'; // NoSuchLifecycleConfiguration
         if (!res.ok) return 'unknown';
         const body = await res.text();
-        const [rule, ...rest] = body.split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
-        if (!rule) return 'none';
-        // Our rule next to rules we didn't author still counts as foreign: PutBucketLifecycleConfiguration
-        // replaces the whole configuration, so re-PUTting ours alone would drop theirs.
-        if (rest.length > 0 || !OUR_LIFECYCLE_RULE.test(rule)) return 'foreign';
-        const days = rule.match(/<NoncurrentDays>\s*(\d+)\s*<\/NoncurrentDays>/);
-        return days?.[1] ? { noncurrentDays: Number(days[1]) } : 'foreign';
+        const rules = body.split('</Rule>').filter((chunk) => chunk.includes('<Rule>'));
+        if (rules.length === 0) return 'none';
+        // One rule we didn't author makes the whole configuration foreign, because
+        // PutBucketLifecycleConfiguration replaces all of it. A configuration that is only ours stays
+        // ours even when hand-edited, so harden can repair it.
+        if (!rules.every((rule) => OUR_LIFECYCLE_RULE.test(rule))) return 'foreign';
+        const ours = rules.find(
+            (rule) => /<Status>\s*Enabled\s*<\/Status>/.test(rule) && /<NoncurrentDays>\s*\d+\s*</.test(rule),
+        );
+        // Disabled or missing its expiry, our own rule cleans up nothing — report it as no rule so it gets re-PUT.
+        if (!ours) return 'none';
+        const days = ours.match(/<NoncurrentDays>\s*(\d+)\s*<\/NoncurrentDays>/);
+        return days?.[1] ? { noncurrentDays: Number(days[1]) } : 'none';
     } catch {
         return 'unknown';
     }

@@ -887,17 +887,19 @@ describe('S3 Bucket Hardening', () => {
         }
     });
 
-    test('POST /settings/s3harden rejects a retention below one day', async () => {
+    test('POST /settings/s3harden rejects a retention that is not a whole day in range', async () => {
         const s3Storage = await import('../../lib/storage/s3-storage');
         const spy = spyOn(s3Storage, 'hardenS3Bucket');
 
         try {
-            const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3harden', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...hardenBody, noncurrentDays: 0 }),
-            });
-            expect(res.status).toBe(422);
+            for (const noncurrentDays of [0, 1.5, 4000]) {
+                const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3harden', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...hardenBody, noncurrentDays }),
+                });
+                expect(res.status).toBe(422);
+            }
             expect(spy).not.toHaveBeenCalled();
         } finally {
             spy.mockRestore();

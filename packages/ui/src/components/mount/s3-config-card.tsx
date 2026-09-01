@@ -3,6 +3,7 @@ import {
     S3_ABORT_INCOMPLETE_UPLOAD_DAYS,
     S3_LIFECYCLE_RULE_ID,
     S3_NONCURRENT_DAYS_DEFAULT,
+    S3_NONCURRENT_DAYS_MAX,
 } from '@workspace/lib/constants/s3';
 import { isS3ConfigValid } from '@workspace/lib/types';
 import type { S3Config } from '@workspace/lib/types/mount';
@@ -190,9 +191,11 @@ export function S3ConfigCard({ value, onChange, onCheck, onHarden, isEdit, onChe
                             <Input
                                 type="number"
                                 min={1}
+                                max={S3_NONCURRENT_DAYS_MAX}
+                                step={1}
                                 className="h-8 w-20"
                                 value={days}
-                                onChange={(e) => setDays(Math.max(1, e.target.valueAsNumber || 1))}
+                                onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
                             />
                             days
                         </span>
@@ -224,11 +227,20 @@ function BucketSafetyPanel({
 }) {
     const { versioning, lifecycle } = result;
     const lifecycleDays = typeof lifecycle === 'object' ? lifecycle.noncurrentDays : null;
-    // A key that can't read bucket config can't write it, and a foreign lifecycle config is never
-    // rewritten — so the button only shows where a PUT can actually change something.
-    const canApply = (versioning !== 'enabled' && versioning !== 'unknown') || lifecycle === 'none';
+    const versioningReadable = versioning !== undefined && versioning !== 'unknown';
+    // A key that can't read bucket settings can't write them either, and a foreign lifecycle config is
+    // never rewritten — so the button only shows where a PUT can actually change something.
+    const canApply = versioningReadable && (versioning !== 'enabled' || lifecycle === 'none');
     const showManualSteps =
-        versioning === 'unknown' || lifecycle === 'foreign' || lifecycle === 'unknown' || !!harden?.reason;
+        !versioningReadable || lifecycle === 'foreign' || lifecycle === 'unknown' || !!harden?.reason;
+
+    const needVersioning = versioning !== 'enabled';
+    const needLifecycle = lifecycleDays === null;
+    const nothingLeft = !needVersioning && !needLifecycle;
+    const commands = manualSnippet(config, days, {
+        versioning: needVersioning || nothingLeft,
+        lifecycle: needLifecycle || nothingLeft,
+    });
 
     return (
         <div className="space-y-2 rounded-md border p-3">
@@ -263,14 +275,30 @@ function BucketSafetyPanel({
             {showManualSteps && (
                 <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">
-                        Eigen can't change this bucket from here. Apply the same settings in your S3 provider:
+                        {nothingLeft && 'The same settings by hand, for a key without bucket-settings permission:'}
+                        {!nothingLeft &&
+                            needVersioning &&
+                            needLifecycle &&
+                            "Eigen can't change this bucket from here. Apply these settings in your S3 provider:"}
+                        {!needVersioning &&
+                            needLifecycle &&
+                            'Versioning is on. The old-version cleanup rule still has to be set in your S3 provider:'}
+                        {needVersioning &&
+                            !needLifecycle &&
+                            'Old-version cleanup is set. Versioning still has to be turned on in your S3 provider:'}
                     </p>
-                    <pre className="text-xs bg-muted rounded p-2 overflow-x-auto">{manualSnippet(config, days)}</pre>
+                    {lifecycle === 'foreign' && needLifecycle && (
+                        <p className="text-sm text-muted-foreground">
+                            This command replaces the bucket's whole lifecycle configuration, so add the rules that are
+                            already there to it first.
+                        </p>
+                    )}
+                    <pre className="text-xs bg-muted rounded p-2 overflow-x-auto">{commands}</pre>
                     <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => copyToClipboard(manualSnippet(config, days), 'Commands copied to clipboard')}
+                        onClick={() => copyToClipboard(commands, 'Commands copied to clipboard')}
                     >
                         <Copy className="h-4 w-4 mr-1" />
                         Copy commands
@@ -279,6 +307,11 @@ function BucketSafetyPanel({
             )}
         </div>
     );
+}
+
+// The rule takes whole days, and the route's schema rejects anything else — keep the input in range.
+function clampDays(value: number): number {
+    return Math.min(S3_NONCURRENT_DAYS_MAX, Math.max(1, Math.round(value) || 1));
 }
 
 function SafetyLine({ ok, children }: { ok: boolean; children: ReactNode }) {
@@ -290,16 +323,24 @@ function SafetyLine({ ok, children }: { ok: boolean; children: ReactNode }) {
     );
 }
 
-function manualSnippet(config: S3Config, days: number): string {
+function manualSnippet(config: S3Config, days: number, include: { versioning: boolean; lifecycle: boolean }): string {
     const filter = config.prefix ? `{"Prefix":"${config.prefix}/"}` : '{}';
     const rules =
         `{"Rules":[{"ID":"${S3_LIFECYCLE_RULE_ID}","Filter":${filter},"Status":"Enabled",` +
         `"NoncurrentVersionExpiration":{"NoncurrentDays":${days}},` +
         `"AbortIncompleteMultipartUpload":{"DaysAfterInitiation":${S3_ABORT_INCOMPLETE_UPLOAD_DAYS}}}]}`;
-    return [
-        `aws s3api put-bucket-versioning --endpoint-url ${config.endpoint} --bucket ${config.bucket} \\`,
-        '  --versioning-configuration Status=Enabled',
-        `aws s3api put-bucket-lifecycle-configuration --endpoint-url ${config.endpoint} --bucket ${config.bucket} \\`,
-        `  --lifecycle-configuration '${rules}'`,
-    ].join('\n');
+    const lines: string[] = [];
+    if (include.versioning) {
+        lines.push(
+            `aws s3api put-bucket-versioning --endpoint-url ${config.endpoint} --bucket ${config.bucket} \\`,
+            '  --versioning-configuration Status=Enabled',
+        );
+    }
+    if (include.lifecycle) {
+        lines.push(
+            `aws s3api put-bucket-lifecycle-configuration --endpoint-url ${config.endpoint} --bucket ${config.bucket} \\`,
+            `  --lifecycle-configuration '${rules}'`,
+        );
+    }
+    return lines.join('\n');
 }
