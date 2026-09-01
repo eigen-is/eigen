@@ -1,3 +1,4 @@
+import { IMIP_METHODS } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, ParsedMail } from '@workspace/lib/types/mail';
 import he from 'he';
 import libmime from 'libmime';
@@ -41,11 +42,11 @@ export function parseMail(bytes: Buffer): ParsedMail {
                     content,
                     size: content.length,
                 };
-                const method = attachment.contentType.startsWith('text/calendar')
-                    ? headers.contentType.params['method']?.toUpperCase()
-                    : undefined;
-                if (method === 'REQUEST' || method === 'REPLY' || method === 'CANCEL')
-                    attachment.calendarMethod = method;
+                if (attachment.contentType.startsWith('text/calendar')) {
+                    const method = headers.contentType.params['method']?.toUpperCase();
+                    const calendarMethod = IMIP_METHODS.find((known) => known === method);
+                    if (calendarMethod) attachment.calendarMethod = calendarMethod;
+                }
                 attachments.push(attachment);
                 if (headers.contentId) {
                     cidImages.push({
