@@ -251,9 +251,9 @@ value in it fails the rule — why. Both render through one React card,
   longer reach the painter.
 - **It stands down while the list is open** (`context.dataVerificationDropDownList`) — the two hang
   over the same corner of the cell.
-- **Copy lives in the locale** (`state/locale/en.ts` → `dataVerification.hintCard` + `optionLabel`),
-  assembled by `describeValidationRule(item, kind)` — which also supplies the `prohibitInput` warn
-  dialog, so the two ways a rejected value is reported say the same thing.
+- **Copy lives with the code** (`state/modules/data-verification.ts` → `HINT_FRAMES` +
+  `OPTION_LABEL`), assembled by `describeValidationRule(item, kind)` — which also supplies the
+  `prohibitInput` warn dialog, so the two ways a rejected value is reported say the same thing.
 
 ## Cell corner indicators
 

@@ -489,8 +489,8 @@ export function insertCheckbox(ctx: Context) {
 
 // --- The in-grid validation card -------------------------------------------
 // What a validated cell has to say: why the value in it was rejected, or what
-// to type. Copy lives in the locale next to the rest of the dialog's strings;
-// the sentence frames slot in a rule-type word and a condition phrase.
+// to type. Copy is the HINT_FRAMES table below; the sentence frames slot in a
+// rule-type word and a condition phrase.
 
 export type ValidationHint = {
     kind: 'invalid' | 'prompt';
