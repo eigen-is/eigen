@@ -1,5 +1,5 @@
 import { DEFAULT_FILL_COLOR } from '@workspace/lib/background';
-import { useCollabDoc } from '@workspace/lib/collab';
+import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
 import { yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { ZOp } from '@workspace/ui/components/properties-panel';
@@ -9,11 +9,9 @@ import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
 import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
 
-// commentCardIds may still be a legacy Y.Array (yMapToObject tolerates it on read) — normalize
-// before rewriting so an anchor write can't silently drop the existing ids.
+// Copy before rewriting so an anchor write can't silently drop the existing ids.
 function readCommentCardIds(objMap: Y.Map<unknown>): string[] {
     const raw = objMap.get('commentCardIds');
-    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') return (raw as Y.Array<string>).toArray();
     return Array.isArray(raw) ? [...raw] : [];
 }
 
@@ -22,12 +20,12 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
 
     const initializeDefaultDeck = useCallback((doc: Y.Doc) => {
-        const slidesMap = doc.getMap('slides');
+        const slidesMap = getItemMapRoot(doc, 'slides');
         if (slidesMap.size > 0) return;
 
         doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
-            const slideOrderArray = doc.getArray('slideOrder');
+            const objectsMap = getItemMapRoot(doc, 'objects');
+            const slideOrderArray = getIdArrayRoot(doc, 'slideOrder');
 
             const slideId = `slide-${nanoid(6)}`;
             const objId = `obj-${nanoid(6)}`;
@@ -70,9 +68,9 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         pathId,
         undoScope: (doc) => [doc.getMap('slides'), doc.getMap('objects'), doc.getArray('slideOrder')],
         onInit: ({ doc, provider, undoManager }) => {
-            const slidesMap = doc.getMap('slides');
-            const objectsMap = doc.getMap('objects');
-            const slideOrderArray = doc.getArray('slideOrder');
+            const slidesMap = getItemMapRoot(doc, 'slides');
+            const objectsMap = getItemMapRoot(doc, 'objects');
+            const slideOrderArray = getIdArrayRoot(doc, 'slideOrder');
 
             // Normalize only on REMOTE merges — concurrent edits are what dupe/orphan a ref; local
             // edits are well-formed by construction, so a local tick just reads (U6d cadence fix; this
@@ -85,12 +83,10 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 const newState: DeckData = {
                     slides: {},
                     objects: {},
-                    slideOrder: slideOrderArray.toArray() as string[],
+                    slideOrder: slideOrderArray.toArray(),
                 };
-                for (const [slideId, slideMapValue] of slidesMap) {
-                    const slideMap = slideMapValue as Y.Map<unknown>;
-                    const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
-                    const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
+                for (const [slideId, slideMap] of slidesMap) {
+                    const objIds = getIdArray(slideMap, 'objectIds')?.toArray() ?? [];
                     const bgRaw = slideMap.get('background');
                     newState.slides[slideId] = {
                         id: slideId,
@@ -98,8 +94,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                         background: bgRaw && typeof bgRaw === 'object' ? (bgRaw as BackgroundFill) : null,
                     };
                 }
-                for (const [objId, objMapValue] of objectsMap) {
-                    const objMap = objMapValue as Y.Map<unknown>;
+                for (const [objId, objMap] of objectsMap) {
                     newState.objects[objId] = yMapToObject(objMap);
                 }
                 setDeck(newState);
@@ -149,8 +144,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         if (!doc) return;
         const slideId = `slide-${nanoid(6)}`;
         doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            const slideOrderArray = doc.getArray('slideOrder');
+            const slidesMap = getItemMapRoot(doc, 'slides');
+            const slideOrderArray = getIdArrayRoot(doc, 'slideOrder');
             const slideYMap = new Y.Map();
             slideYMap.set('id', slideId);
             slideYMap.set('background', background);
@@ -167,17 +162,17 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             if (!doc) return;
             undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const objectsMap = doc.getMap('objects');
-                const slideOrderArray = doc.getArray('slideOrder');
+                const slidesMap = getItemMapRoot(doc, 'slides');
+                const objectsMap = getItemMapRoot(doc, 'objects');
+                const slideOrderArray = getIdArrayRoot(doc, 'slideOrder');
 
-                const slideMap = slidesMap.get(slideId) as Y.Map<unknown> | undefined;
+                const slideMap = slidesMap.get(slideId);
                 if (slideMap) {
-                    const objIds = ((slideMap.get('objectIds') as Y.Array<string>)?.toArray() as string[]) || [];
+                    const objIds = getIdArray(slideMap, 'objectIds')?.toArray() ?? [];
                     for (const objId of objIds) objectsMap.delete(objId);
                 }
 
-                const order = slideOrderArray.toArray() as string[];
+                const order = slideOrderArray.toArray();
                 const idx = order.indexOf(slideId);
                 if (idx !== -1) slideOrderArray.delete(idx, 1);
                 slidesMap.delete(slideId);
@@ -201,9 +196,9 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const newSlideId = `slide-${nanoid(6)}`;
             undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const objectsMap = doc.getMap('objects');
-                const slideOrderArray = doc.getArray('slideOrder');
+                const slidesMap = getItemMapRoot(doc, 'slides');
+                const objectsMap = getItemMapRoot(doc, 'objects');
+                const slideOrderArray = getIdArrayRoot(doc, 'slideOrder');
 
                 const newObjIds: string[] = [];
                 for (const objId of slide.objectIds) {
@@ -229,7 +224,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 slideYMap.set('objectIds', objIdsArr);
                 slidesMap.set(newSlideId, slideYMap);
 
-                const order = slideOrderArray.toArray() as string[];
+                const order = slideOrderArray.toArray();
                 const idx = order.indexOf(slideId);
                 slideOrderArray.insert(idx + 1, [newSlideId]);
             });
@@ -257,9 +252,9 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             if (!doc) return;
             const targetIds = getTargetSlideIds(slideId, applyTo);
             doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
+                const slidesMap = getItemMapRoot(doc, 'slides');
                 for (const id of targetIds) {
-                    const slideMap = slidesMap.get(id) as Y.Map<unknown> | undefined;
+                    const slideMap = slidesMap.get(id);
                     if (slideMap) slideMap.set('background', background);
                 }
             });
@@ -274,8 +269,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const newIds: string[] = [];
             undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
-                const objectsMap = doc.getMap('objects');
-                const slidesMap = doc.getMap('slides');
+                const objectsMap = getItemMapRoot(doc, 'objects');
+                const slidesMap = getItemMapRoot(doc, 'slides');
                 for (const placement of placements) {
                     const src = deck.objects[placement.id];
                     if (!src) continue;
@@ -289,11 +284,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                         else objYMap.set(k, v);
                     }
                     objectsMap.set(newObjId, objYMap);
-                    const slideMap = slidesMap.get(src.slideId) as Y.Map<unknown> | undefined;
-                    if (slideMap) {
-                        const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                        if (objIdsArr) objIdsArr.push([newObjId]);
-                    }
+                    const slideMap = slidesMap.get(src.slideId);
+                    if (slideMap) getIdArray(slideMap, 'objectIds')?.push([newObjId]);
                     newIds.push(newObjId);
                 }
             });
@@ -308,8 +300,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         if (!doc) return;
         const objId = `obj-${nanoid(6)}`;
         doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
-            const slidesMap = doc.getMap('slides');
+            const objectsMap = getItemMapRoot(doc, 'objects');
+            const slidesMap = getItemMapRoot(doc, 'slides');
             const objYMap = new Y.Map();
             objYMap.set('id', objId);
             objYMap.set('slideId', slideId);
@@ -318,11 +310,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             }
             objectsMap.set(objId, objYMap);
 
-            const slideMap = slidesMap.get(slideId) as Y.Map<unknown> | undefined;
-            if (slideMap) {
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                if (objIdsArr) objIdsArr.push([objId]);
-            }
+            const slideMap = slidesMap.get(slideId);
+            if (slideMap) getIdArray(slideMap, 'objectIds')?.push([objId]);
         });
         return objId;
     }, []);
@@ -331,8 +320,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
-            const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
+            const objectsMap = getItemMapRoot(doc, 'objects');
+            const objMap = objectsMap.get(objId);
             if (!objMap) return;
             for (const [k, v] of Object.entries(updates)) {
                 if (k === 'id' || k === 'slideId') continue;
@@ -356,10 +345,10 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             if (!first) return;
             undoManagerRef.current?.stopCapturing();
             doc.transact(() => {
-                const slidesMap = doc.getMap('slides');
-                const slideMap = slidesMap.get(first.slideId) as Y.Map<unknown> | undefined;
+                const slidesMap = getItemMapRoot(doc, 'slides');
+                const slideMap = slidesMap.get(first.slideId);
                 if (!slideMap) return;
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<string> | undefined;
+                const objIdsArr = getIdArray(slideMap, 'objectIds');
                 if (!objIdsArr) return;
                 const currentOrder = objIdsArr.toArray();
                 const inSel = objIds.filter((id) => currentOrder.includes(id));
@@ -410,9 +399,9 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
+            const objectsMap = getItemMapRoot(doc, 'objects');
             for (const objId of objIds) {
-                const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
+                const objMap = objectsMap.get(objId);
                 if (!objMap) continue;
                 for (const [k, v] of Object.entries(updates)) {
                     if (k === 'id' || k === 'slideId') continue;
@@ -427,20 +416,17 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         if (!doc) return;
         undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
-            const slidesMap = doc.getMap('slides');
+            const objectsMap = getItemMapRoot(doc, 'objects');
+            const slidesMap = getItemMapRoot(doc, 'slides');
             for (const objId of objIds) {
-                const obj = objectsMap.get(objId) as Y.Map<unknown> | undefined;
+                const obj = objectsMap.get(objId);
                 if (obj) {
                     const slideId = obj.get('slideId') as string;
-                    const slideMap = slidesMap.get(slideId) as Y.Map<unknown> | undefined;
-                    if (slideMap) {
-                        const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
-                        if (objIdsArr) {
-                            const arr = objIdsArr.toArray() as string[];
-                            const idx = arr.indexOf(objId);
-                            if (idx !== -1) objIdsArr.delete(idx, 1);
-                        }
+                    const slideMap = slidesMap.get(slideId);
+                    const objIdsArr = slideMap && getIdArray(slideMap, 'objectIds');
+                    if (objIdsArr) {
+                        const idx = objIdsArr.toArray().indexOf(objId);
+                        if (idx !== -1) objIdsArr.delete(idx, 1);
                     }
                 }
                 objectsMap.delete(objId);
@@ -460,8 +446,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
-            const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
+            const objectsMap = getItemMapRoot(doc, 'objects');
+            const objMap = objectsMap.get(objId);
             if (!objMap) return;
             const arr = readCommentCardIds(objMap);
             if (!arr.includes(cardId)) {
@@ -475,8 +461,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
-            const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
+            const objectsMap = getItemMapRoot(doc, 'objects');
+            const objMap = objectsMap.get(objId);
             if (!objMap) return;
             objMap.set(
                 'commentCardIds',

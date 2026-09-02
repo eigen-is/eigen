@@ -1,7 +1,7 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useAuth } from '@workspace/lib/auth';
-import { useYjsUndoHotkeys } from '@workspace/lib/collab';
+import { getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
     matchesCommentFilter,
@@ -203,9 +203,9 @@ export function StickiesBoard({
             if (!yjsDoc || !addTargetColumn) return;
             const targetColumnId = addTargetColumn;
             const card = await createCard({ ...patch, attachments }, (card) => {
-                const col = yjsDoc.getMap('columns').get(targetColumnId) as Y.Map<unknown> | undefined;
+                const col = getItemMapRoot(yjsDoc, 'columns').get(targetColumnId);
                 if (!col) return;
-                let taskIds = col.get('taskIds') as Y.Array<string> | undefined;
+                let taskIds = getIdArray(col, 'taskIds');
                 if (!taskIds) {
                     taskIds = new Y.Array<string>();
                     col.set('taskIds', taskIds);
