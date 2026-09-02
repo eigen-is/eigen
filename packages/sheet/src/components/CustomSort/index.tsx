@@ -52,14 +52,8 @@ export function CustomSort() {
                 <DialogTitle>Custom sort</DialogTitle>
             </DialogHeader>
             <div className="text-sm">
-                <span>
-                    <span>Sort range from</span>
-                    {indexToColumnChar(col_start)}
-                    {row_start + 1}
-                    <span>to</span>
-                    {indexToColumnChar(col_end)}
-                    {row_end + 1}
-                </span>
+                Sort range from {`${indexToColumnChar(col_start)}${row_start + 1}`} to{' '}
+                {`${indexToColumnChar(col_end)}${row_end + 1}`}
             </div>
 
             <div className="space-y-2.5">

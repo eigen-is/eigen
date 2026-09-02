@@ -26,31 +26,25 @@ export type ConditionRuleType =
     | 'aboveAverage'
     | 'belowAverage';
 
-// The two _percent variants never had a description upstream; they render the
-// heading alone.
-const RULE_COPY: Record<ConditionRuleType, { label: string; description: string }> = {
-    greaterThan: { label: 'Conditionformat-GreaterThan', description: 'Format cells greater than' },
-    lessThan: { label: 'Conditionformat-LessThan', description: 'Format cells smaller than' },
-    between: { label: 'Conditionformat-Betweenness', description: 'Format cells with values between' },
-    equal: { label: 'Conditionformat-Equal', description: 'Format cells equal to' },
-    textContains: {
-        label: 'Conditionformat-TextContains',
-        description: 'Format cells containing the following text',
-    },
-    occurrenceDate: {
-        label: 'Conditionformat-OccurrenceDate',
-        description: 'Format cells containing the following dates',
-    },
+// The 13 highlight / item-selection rules, labelled once here and read back by
+// the Format → Conditional formatting menu that opens this dialog.
+export const RULE_COPY: Record<ConditionRuleType, { label: string; description: string }> = {
+    greaterThan: { label: 'Greater than', description: 'Format cells greater than' },
+    lessThan: { label: 'Less than', description: 'Format cells smaller than' },
+    between: { label: 'Between', description: 'Format cells with values between' },
+    equal: { label: 'Equal', description: 'Format cells equal to' },
+    textContains: { label: 'Text contains', description: 'Format cells containing the following text' },
+    occurrenceDate: { label: 'Date', description: 'Format cells containing the following dates' },
     duplicateValue: {
-        label: 'Conditionformat-DuplicateValue',
+        label: 'Duplicate value',
         description: 'Format cells containing the following types of values',
     },
-    top10: { label: 'Conditionformat-Top10', description: 'Format the cells with the highest value' },
-    top10_percent: { label: 'Conditionformat-Top10%', description: '' },
-    last10: { label: 'Conditionformat-Last10', description: 'Format the cells with the smallest value' },
-    last10_percent: { label: 'Conditionformat-Last10%', description: '' },
-    aboveAverage: { label: 'Conditionformat-AboveAverage', description: 'Format cells above average' },
-    belowAverage: { label: 'Conditionformat-SubAverage', description: 'Format cells below average' },
+    top10: { label: 'Top 10', description: 'Format the cells with the highest value' },
+    top10_percent: { label: 'Top 10%', description: 'Format the cells with the highest value' },
+    last10: { label: 'Last 10', description: 'Format the cells with the smallest value' },
+    last10_percent: { label: 'Last 10%', description: 'Format the cells with the smallest value' },
+    aboveAverage: { label: 'Above average', description: 'Format cells above average' },
+    belowAverage: { label: 'Below average', description: 'Format cells below average' },
 };
 
 export function ConditionRules({ type }: { type: ConditionRuleType }) {

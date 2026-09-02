@@ -35,7 +35,7 @@ import {
     updateFormat,
 } from '../../state';
 import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
-import { ConditionRules, type ConditionRuleType } from '../ConditionFormat/ConditionRules';
+import { ConditionRules, type ConditionRuleType, RULE_COPY } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
 import { CustomDateTimeFormats } from '../FormatDialogs/CustomDateTimeFormats';
@@ -459,25 +459,27 @@ function MergeCellsSubmenu() {
     );
 }
 
-type ConditionRuleItem = { text: ConditionRuleType; label: string; value: string };
+// The label is RULE_COPY's, so the menu row and the dialog it opens can't drift.
+// `value` is the shorthand shown dimmed on the right of the row.
+type ConditionRuleItem = { text: ConditionRuleType; value: string };
 
 const HIGHLIGHT_CELL_RULES: ConditionRuleItem[] = [
-    { text: 'greaterThan', label: 'Greater than', value: '>' },
-    { text: 'lessThan', label: 'Less than', value: '<' },
-    { text: 'between', label: 'Between', value: '[]' },
-    { text: 'equal', label: 'Equal', value: '=' },
-    { text: 'textContains', label: 'Text contains', value: '()' },
-    { text: 'occurrenceDate', label: 'Date', value: 'YTD' },
-    { text: 'duplicateValue', label: 'Duplicate value', value: '##' },
+    { text: 'greaterThan', value: '>' },
+    { text: 'lessThan', value: '<' },
+    { text: 'between', value: '[]' },
+    { text: 'equal', value: '=' },
+    { text: 'textContains', value: '()' },
+    { text: 'occurrenceDate', value: 'YTD' },
+    { text: 'duplicateValue', value: '##' },
 ];
 
 const ITEM_SELECTION_RULES: ConditionRuleItem[] = [
-    { text: 'top10', label: 'Top 10', value: 'Top 10' },
-    { text: 'top10_percent', label: 'Top 10%', value: 'Top 10%' },
-    { text: 'last10', label: 'Last 10', value: 'Last 10' },
-    { text: 'last10_percent', label: 'Last 10%', value: 'Last 10%' },
-    { text: 'aboveAverage', label: 'Above average', value: 'Above' },
-    { text: 'belowAverage', label: 'Below average', value: 'Below' },
+    { text: 'top10', value: 'Top 10' },
+    { text: 'top10_percent', value: 'Top 10%' },
+    { text: 'last10', value: 'Last 10' },
+    { text: 'last10_percent', value: 'Last 10%' },
+    { text: 'aboveAverage', value: 'Above' },
+    { text: 'belowAverage', value: 'Below' },
 ];
 
 const COLOR_SCALE_PRESETS = [
@@ -535,7 +537,7 @@ function ConditionalFormattingSubmenu() {
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
-                                    <span>{v.label}</span>
+                                    <span>{RULE_COPY[v.text].label}</span>
                                     <span className="text-xs opacity-50 ml-4">{v.value}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -554,7 +556,7 @@ function ConditionalFormattingSubmenu() {
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
-                                    <span>{v.label}</span>
+                                    <span>{RULE_COPY[v.text].label}</span>
                                     <span className="text-xs opacity-50 ml-4">{v.value}</span>
                                 </div>
                             </DropdownMenuItem>
