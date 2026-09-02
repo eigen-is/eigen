@@ -514,7 +514,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                     key: y,
                     type: 'year',
                     value: y,
-                    text: `${y}Year`,
+                    text: y,
                     children: [],
                     rows: [],
                     dateValues: [],
@@ -529,7 +529,9 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                     key: `${y}-${m}`,
                     type: 'month',
                     value: m,
-                    text: `${m}Month`,
+                    // Excel's tree reads 2024 > August > 5. `update` is the package's own
+                    // English formatter, so the month name has one source.
+                    text: update('MMMM', cell.v),
                     children: [],
                     rows: [],
                     dateValues: [],
@@ -543,7 +545,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                     key: dateStr,
                     type: 'day',
                     value: d,
-                    text: d,
+                    text: String(Number(d)),
                     children: [],
                     rows: [],
                     dateValues: [],
