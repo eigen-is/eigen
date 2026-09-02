@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import { parseBinding, readVectorFromDoc } from '@workspace/lib/vector';
+import { orderByFractionalIndex, parseBinding, readVectorFromDoc } from '@workspace/lib/vector';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
@@ -331,6 +331,12 @@ describe('seed-demo', () => {
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, vectorName);
             const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
+
+            // Z-order: the fence outline sits under everything (a click inside it lands on what it
+            // encloses), and the wind-cover ring sits just under the stage it rings.
+            const zOrder = orderByFractionalIndex(scene.elements).map((el) => el.id);
+            expect(zOrder[0]).toBe('el-fence');
+            expect(zOrder.indexOf('el-wind-cover')).toBe(zOrder.indexOf('el-second-stage') - 1);
 
             // The reader clears dangling bindings, so a surviving endBinding proves its target is present.
             const elementIds = new Set(scene.elements.map((el) => el.id));

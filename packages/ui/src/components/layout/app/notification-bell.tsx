@@ -103,7 +103,7 @@ export function NotificationBell() {
                     <CountBadge count={count} />
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="end">
+            <PopoverContent className="w-80 sm:w-96 p-0" align="end">
                 <div className="flex items-center justify-between px-3 py-2 border-b">
                     <span className="text-sm font-medium">Notifications</span>
                     {count > 0 && (
@@ -113,7 +113,7 @@ export function NotificationBell() {
                         </Button>
                     )}
                 </div>
-                <div className="max-h-80 overflow-y-auto">
+                <div className="max-h-80 sm:max-h-112 overflow-y-auto">
                     {notifications.length === 0 ? (
                         <div className="px-3 py-8 text-center text-sm text-muted-foreground">No notifications</div>
                     ) : (

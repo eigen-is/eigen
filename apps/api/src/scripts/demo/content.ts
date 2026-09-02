@@ -362,6 +362,7 @@ export type SitePlanShape = {
     strokeStyle?: StrokeStyle;
     strokeWidth?: number;
     roundness?: Roundness; // default round
+    ground?: boolean; // drawn beneath the lines too, for an outline that must never catch a click meant for what it encloses
 };
 
 export type SitePlanArrow = {
@@ -480,6 +481,7 @@ export const SITE_PLAN = {
             height: 720,
             stroke: '#868e96',
             strokeStyle: 'dashed',
+            ground: true,
         },
         {
             key: 'crew-cabin',
@@ -552,17 +554,6 @@ export const SITE_PLAN = {
             roundness: 'sharp',
         },
         {
-            key: 'second-stage',
-            kind: 'rectangle',
-            label: 'Second stage',
-            x: 1000,
-            y: 260,
-            width: 220,
-            height: 90,
-            fontSize: 20,
-            ...STAGE,
-        },
-        {
             key: 'wind-cover',
             kind: 'ellipse',
             label: '',
@@ -572,6 +563,17 @@ export const SITE_PLAN = {
             height: 136,
             stroke: '#e03131',
             strokeStyle: 'dashed',
+        },
+        {
+            key: 'second-stage',
+            kind: 'rectangle',
+            label: 'Second stage',
+            x: 1000,
+            y: 260,
+            width: 220,
+            height: 90,
+            fontSize: 20,
+            ...STAGE,
         },
         { key: 'g1', kind: 'diamond', label: 'G1', x: 760, y: 160, width: 84, height: 60, fontSize: 13, ...BUILDING },
         { key: 'g2', kind: 'diamond', label: 'G2', x: 1000, y: 160, width: 84, height: 60, fontSize: 13, ...BUILDING },
@@ -694,7 +696,6 @@ export const SITE_PLAN = {
             height: 60,
             fontSize: 18,
             fill: '#b2f2bb',
-            fillStyle: 'hachure',
         },
         {
             key: 'box-office',
@@ -870,10 +871,10 @@ export const SITE_PLAN = {
         { text: 'quieter acts here if Sunday blows (Sanne)', x: 170, y: 368, fontSize: 13, color: NOTE },
         { text: 'wind cover? decide at go/no-go', x: 985, y: 380, fontSize: 13, color: '#e03131' },
         { text: 're-peg either way, site crew is ready (Ravi)', x: 985, y: 400, fontSize: 12, color: NOTE },
-        { text: 'art trail (Sem)', x: 610, y: 776, fontSize: 13, color: '#9c36b5' },
+        { text: 'art trail (Sem)', x: 590, y: 776, fontSize: 13, color: '#9c36b5' },
         { text: 'wind, Sunday?', x: 872, y: 320, fontSize: 12, color: '#868e96' },
         { text: 'extra bins come with the fencing (Lars)', x: 760, y: 612, fontSize: 12, color: NOTE },
-        { text: 'covered both days, one gap Sunday morning (Imke)', x: 430, y: 745, fontSize: 12, color: NOTE },
+        { text: 'covered both days, one gap Sunday morning (Imke)', x: 410, y: 745, fontSize: 12, color: NOTE },
         { text: '3 wristband tiers (Daan)', x: 705, y: 905, fontSize: 13, color: NOTE },
         { text: 'Camping field', x: 1030, y: 535, fontSize: 24 },
         { text: 'opens Friday midday', x: 1030, y: 575, fontSize: 13, color: NOTE },

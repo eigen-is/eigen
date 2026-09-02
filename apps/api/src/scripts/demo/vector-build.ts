@@ -96,8 +96,10 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
         .map((s) => buildLabel(s, byKey.get(s.key)!));
     const texts: VectorTextElement[] = plan.texts.map((t, i) => buildText(t, i));
 
-    // Bottom-up z-order: ground lines, shapes, images, arrows, then every text on top.
-    const ordered: VectorElement[] = [...lines, ...shapes, ...images, ...arrows, ...labels, ...texts];
+    // Bottom-up z-order: ground outlines, lines, shapes, images, arrows, then every text on top.
+    const ground = shapes.filter((_, i) => plan.shapes[i].ground);
+    const rest = shapes.filter((_, i) => !plan.shapes[i].ground);
+    const ordered: VectorElement[] = [...ground, ...lines, ...rest, ...images, ...arrows, ...labels, ...texts];
     const keys = generateNKeysBetween(null, null, ordered.length);
     const seed = mulberry32(SEED_SALT);
     for (const [i, el] of ordered.entries()) {
