@@ -9,12 +9,54 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { en, setConditionRules } from '../../state';
+import { setConditionRules } from '../../state';
 
-export function ConditionRules({ type }: { type: string }) {
+export type ConditionRuleType =
+    | 'greaterThan'
+    | 'lessThan'
+    | 'between'
+    | 'equal'
+    | 'textContains'
+    | 'occurrenceDate'
+    | 'duplicateValue'
+    | 'top10'
+    | 'top10_percent'
+    | 'last10'
+    | 'last10_percent'
+    | 'aboveAverage'
+    | 'belowAverage';
+
+// The two _percent variants never had a description upstream; they render the
+// heading alone.
+const RULE_COPY: Record<ConditionRuleType, { label: string; description: string }> = {
+    greaterThan: { label: 'Conditionformat-GreaterThan', description: 'Format cells greater than' },
+    lessThan: { label: 'Conditionformat-LessThan', description: 'Format cells smaller than' },
+    between: { label: 'Conditionformat-Betweenness', description: 'Format cells with values between' },
+    equal: { label: 'Conditionformat-Equal', description: 'Format cells equal to' },
+    textContains: {
+        label: 'Conditionformat-TextContains',
+        description: 'Format cells containing the following text',
+    },
+    occurrenceDate: {
+        label: 'Conditionformat-OccurrenceDate',
+        description: 'Format cells containing the following dates',
+    },
+    duplicateValue: {
+        label: 'Conditionformat-DuplicateValue',
+        description: 'Format cells containing the following types of values',
+    },
+    top10: { label: 'Conditionformat-Top10', description: 'Format the cells with the highest value' },
+    top10_percent: { label: 'Conditionformat-Top10%', description: '' },
+    last10: { label: 'Conditionformat-Last10', description: 'Format the cells with the smallest value' },
+    last10_percent: { label: 'Conditionformat-Last10%', description: '' },
+    aboveAverage: { label: 'Conditionformat-AboveAverage', description: 'Format cells above average' },
+    belowAverage: { label: 'Conditionformat-SubAverage', description: 'Format cells below average' },
+};
+
+export function ConditionRules({ type }: { type: ConditionRuleType }) {
     const { context, setContext } = useContext(WorkbookContext);
     const { hideDialog } = useDialog();
-    const { conditionformat, button } = en;
+    const { label, description } = RULE_COPY[type];
     const [colorRules, setColorRules] = useState<{
         textColor: string;
         cellColor: string;
@@ -26,7 +68,7 @@ export function ConditionRules({ type }: { type: string }) {
                 setContext((ctx) => {
                     ctx.conditionRules.textColor.color = colorRules.textColor;
                     ctx.conditionRules.cellColor.color = colorRules.cellColor;
-                    setConditionRules(ctx, conditionformat, ctx.conditionRules);
+                    setConditionRules(ctx, ctx.conditionRules);
                 });
             }
             setContext((ctx) => {
@@ -80,15 +122,11 @@ export function ConditionRules({ type }: { type: string }) {
     return (
         <div className="flex flex-col gap-4">
             <DialogHeader>
-                <DialogTitle className="text-base">
-                    {conditionformat[`conditionformat_${type}` as keyof typeof conditionformat]}
-                </DialogTitle>
+                <DialogTitle className="text-base">{label}</DialogTitle>
             </DialogHeader>
 
             <div>
-                <p className="text-sm text-muted-foreground mb-2">
-                    {conditionformat[`conditionformat_${type}_title` as keyof typeof conditionformat]}
-                </p>
+                <p className="text-sm text-muted-foreground mb-2">{description}</p>
 
                 {(type === 'greaterThan' || type === 'lessThan' || type === 'equal' || type === 'textContains') && (
                     <Input
@@ -117,7 +155,7 @@ export function ConditionRules({ type }: { type: string }) {
                                 });
                             }}
                         />
-                        <span className="text-sm">{conditionformat.to}</span>
+                        <span className="text-sm">to</span>
                         <Input
                             className="h-8 w-24"
                             type="text"
@@ -159,15 +197,15 @@ export function ConditionRules({ type }: { type: string }) {
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value="0">{conditionformat.duplicateValue}</SelectItem>
-                            <SelectItem value="1">{conditionformat.uniqueValue}</SelectItem>
+                            <SelectItem value="0">Duplicate value</SelectItem>
+                            <SelectItem value="1">Unique value</SelectItem>
                         </SelectContent>
                     </Select>
                 )}
 
                 {(type === 'top10' || type === 'top10_percent' || type === 'last10' || type === 'last10_percent') && (
                     <div className="flex items-center gap-2 mb-3 text-sm">
-                        {type === 'top10' || type === 'top10_percent' ? conditionformat.top : conditionformat.last}
+                        {type === 'top10' || type === 'top10_percent' ? 'Top' : 'Last'}
                         <Input
                             className="h-8 w-16"
                             type="number"
@@ -179,11 +217,11 @@ export function ConditionRules({ type }: { type: string }) {
                                 });
                             }}
                         />
-                        {type === 'top10' || type === 'last10' ? conditionformat.oneself : '%'}
+                        {type === 'top10' || type === 'last10' ? '' : '%'}
                     </div>
                 )}
 
-                <p className="text-sm text-muted-foreground mt-3 mb-2">{`${conditionformat.setAs}:`}</p>
+                <p className="text-sm text-muted-foreground mt-3 mb-2">Set as:</p>
 
                 <div className="rounded-md border p-3 space-y-3 mb-4">
                     <div className="flex items-center gap-3">
@@ -197,7 +235,7 @@ export function ConditionRules({ type }: { type: string }) {
                             }}
                         />
                         <Label htmlFor="checkTextColor" className="text-sm w-20">
-                            {conditionformat.textColor}
+                            Text color
                         </Label>
                         <Popover>
                             <PopoverTrigger asChild>
@@ -232,7 +270,7 @@ export function ConditionRules({ type }: { type: string }) {
                             }}
                         />
                         <Label htmlFor="checkCellColor" className="text-sm w-20">
-                            {conditionformat.cellColor}
+                            Cell color
                         </Label>
                         <Popover>
                             <PopoverTrigger asChild>
@@ -260,10 +298,10 @@ export function ConditionRules({ type }: { type: string }) {
             </div>
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => close('close')}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button size="sm" onClick={() => close('confirm')}>
-                    {button.confirm}
+                    OK
                 </Button>
             </DialogFooter>
         </div>

@@ -15,7 +15,6 @@ import {
     applyDataBarPreset,
     CF_PRESETS,
     clearSheetRules,
-    en,
     FONT_ARRAY,
     getFlowdata,
     handleBold,
@@ -36,7 +35,7 @@ import {
     updateFormat,
 } from '../../state';
 import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
-import { ConditionRules } from '../ConditionFormat/ConditionRules';
+import { ConditionRules, type ConditionRuleType } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
 import { CustomDateTimeFormats } from '../FormatDialogs/CustomDateTimeFormats';
@@ -47,7 +46,6 @@ import { CustomBorder } from './CustomBorder';
 function NumberFormatSubmenu() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const toolbarFormat = en.format;
     const { currency } = settings;
     const defaultFormat = numberFormatPresets(currency);
 
@@ -55,9 +53,9 @@ function NumberFormatSubmenu() {
     const activeFa = anchor?.ct?.fa ?? 'General';
 
     const customItems = [
-        { text: toolbarFormat.customCurrency, dialog: <CustomCurrencies /> },
-        { text: toolbarFormat.customDateTime, dialog: <CustomDateTimeFormats /> },
-        { text: toolbarFormat.customNumber, dialog: <CustomNumberFormats /> },
+        { text: 'Custom currency', dialog: <CustomCurrencies /> },
+        { text: 'Custom date and time', dialog: <CustomDateTimeFormats /> },
+        { text: 'Custom number format', dialog: <CustomNumberFormats /> },
     ];
 
     return (
@@ -100,7 +98,6 @@ function NumberFormatSubmenu() {
 
 function TextSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { toolbar } = en;
     const textColor = useAnchorCell()?.fc ?? '';
 
     return (
@@ -114,7 +111,7 @@ function TextSubmenu() {
                         });
                     }}
                 >
-                    {toolbar.bold}
+                    Bold (Ctrl+B)
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -123,7 +120,7 @@ function TextSubmenu() {
                         });
                     }}
                 >
-                    {toolbar.italic}
+                    Italic (Ctrl+I)
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -132,7 +129,7 @@ function TextSubmenu() {
                         });
                     }}
                 >
-                    {toolbar.underline}
+                    Underline
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -141,7 +138,7 @@ function TextSubmenu() {
                         });
                     }}
                 >
-                    {toolbar['strike-through']}
+                    Strikethrough (Alt+Shift+5)
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
@@ -165,7 +162,7 @@ function TextSubmenu() {
                 </DropdownMenuSub>
 
                 <ColorPickerMenuItem
-                    label={toolbar['font-color']}
+                    label="Font color"
                     value={textColor}
                     resetLabel="Default"
                     onChange={(color) => {
@@ -181,7 +178,6 @@ function TextSubmenu() {
 
 function AlignmentSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { align } = en;
 
     return (
         <DropdownMenuSub>
@@ -194,7 +190,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    {align.left}
+                    left
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -203,7 +199,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    {align.center}
+                    center
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -212,7 +208,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    {align.right}
+                    right
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
@@ -224,7 +220,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    {align.top}
+                    Top
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -233,7 +229,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    {align.middle}
+                    Middle
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -242,7 +238,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    {align.bottom}
+                    Bottom
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -251,22 +247,21 @@ function AlignmentSubmenu() {
 
 function RotationSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { toolbar, rotation } = en;
 
     // Each preset writes Cell.rt directly: signed degrees in [-90, 90] or 'vertical'.
     // Positive = CCW / "up", negative = CW / "down". 0 clears rotation.
     const presets: { label: string; value: number | 'vertical' }[] = [
-        { label: rotation.none, value: 0 },
-        { label: rotation.angleup, value: 45 },
-        { label: rotation.angledown, value: -45 },
-        { label: rotation.vertical, value: 'vertical' },
-        { label: rotation.rotationUp, value: 90 },
-        { label: rotation.rotationDown, value: -90 },
+        { label: 'None', value: 0 },
+        { label: 'Tilt Up', value: 45 },
+        { label: 'Tilt Down', value: -45 },
+        { label: 'Stack Vertically', value: 'vertical' },
+        { label: 'Rotate Up', value: 90 },
+        { label: 'Rotate Down', value: -90 },
     ];
 
     return (
         <DropdownMenuSub>
-            <DropdownMenuSubTrigger>{toolbar.textRotate}</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>Text rotate</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 {presets.map(({ label, value }) => (
                     <DropdownMenuItem
@@ -289,7 +284,6 @@ function RotationSubmenu() {
 
 function WrappingSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { textWrap } = en;
 
     return (
         <DropdownMenuSub>
@@ -304,7 +298,7 @@ function WrappingSubmenu() {
                         });
                     }}
                 >
-                    {textWrap.overflow}
+                    Overflow
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -315,7 +309,7 @@ function WrappingSubmenu() {
                         });
                     }}
                 >
-                    {textWrap.wrap}
+                    Wrap
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -326,7 +320,7 @@ function WrappingSubmenu() {
                         });
                     }}
                 >
-                    {textWrap.clip}
+                    Clip
                 </DropdownMenuItem>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -377,24 +371,23 @@ function FillColorItem() {
 
 function BordersSubmenu() {
     const { setContext } = useContext(WorkbookContext);
-    const { border } = en;
     const [customColor, setCustomColor] = useState('#000000');
     const [customStyle, setCustomStyle] = useState('1');
 
     const borderItems: { text: string; value: BorderType | 'divider' }[] = [
-        { text: border.borderTop, value: 'border-top' },
-        { text: border.borderBottom, value: 'border-bottom' },
-        { text: border.borderLeft, value: 'border-left' },
-        { text: border.borderRight, value: 'border-right' },
+        { text: 'Top border', value: 'border-top' },
+        { text: 'Bottom border', value: 'border-bottom' },
+        { text: 'Left border', value: 'border-left' },
+        { text: 'Right border', value: 'border-right' },
         { text: '', value: 'divider' },
-        { text: border.borderNone, value: 'border-none' },
-        { text: border.borderAll, value: 'border-all' },
-        { text: border.borderOutside, value: 'border-outside' },
+        { text: 'No border', value: 'border-none' },
+        { text: 'All borders', value: 'border-all' },
+        { text: 'Outside border', value: 'border-outside' },
         { text: '', value: 'divider' },
-        { text: border.borderInside, value: 'border-inside' },
-        { text: border.borderHorizontal, value: 'border-horizontal' },
-        { text: border.borderVertical, value: 'border-vertical' },
-        { text: border.borderSlash, value: 'border-slash' },
+        { text: 'Inside border', value: 'border-inside' },
+        { text: 'Horizontal borders', value: 'border-horizontal' },
+        { text: 'Vertical borders', value: 'border-vertical' },
+        { text: 'Slash border', value: 'border-slash' },
     ];
 
     return (
@@ -437,13 +430,12 @@ function BordersSubmenu() {
 
 function MergeCellsSubmenu() {
     const { setContext } = useContext(WorkbookContext);
-    const { merge } = en;
 
     const mergeItems = [
-        { text: merge.mergeAll, value: 'merge-all' },
-        { text: merge.mergeH, value: 'merge-horizontal' },
-        { text: merge.mergeV, value: 'merge-vertical' },
-        { text: merge.mergeCancel, value: 'merge-cancel' },
+        { text: 'Merge all', value: 'merge-all' },
+        { text: 'Merge Horizontally', value: 'merge-horizontal' },
+        { text: 'Merge Vertically', value: 'merge-vertical' },
+        { text: 'Unmerge', value: 'merge-cancel' },
     ];
 
     return (
@@ -467,29 +459,50 @@ function MergeCellsSubmenu() {
     );
 }
 
+type ConditionRuleItem = { text: ConditionRuleType; label: string; value: string };
+
+const HIGHLIGHT_CELL_RULES: ConditionRuleItem[] = [
+    { text: 'greaterThan', label: 'Greater than', value: '>' },
+    { text: 'lessThan', label: 'Less than', value: '<' },
+    { text: 'between', label: 'Between', value: '[]' },
+    { text: 'equal', label: 'Equal', value: '=' },
+    { text: 'textContains', label: 'Text contains', value: '()' },
+    { text: 'occurrenceDate', label: 'Date', value: 'YTD' },
+    { text: 'duplicateValue', label: 'Duplicate value', value: '##' },
+];
+
+const ITEM_SELECTION_RULES: ConditionRuleItem[] = [
+    { text: 'top10', label: 'Top 10', value: 'Top 10' },
+    { text: 'top10_percent', label: 'Top 10%', value: 'Top 10%' },
+    { text: 'last10', label: 'Last 10', value: 'Last 10' },
+    { text: 'last10_percent', label: 'Last 10%', value: 'Last 10%' },
+    { text: 'aboveAverage', label: 'Above average', value: 'Above' },
+    { text: 'belowAverage', label: 'Below average', value: 'Below' },
+];
+
 const COLOR_SCALE_PRESETS = [
-    'colorGradation_1',
-    'colorGradation_2',
-    'colorGradation_3',
-    'colorGradation_4',
-    'colorGradation_5',
-    'colorGradation_6',
-    'colorGradation_7',
-    'colorGradation_8',
-    'colorGradation_9',
-    'colorGradation_10',
-    'colorGradation_11',
-    'colorGradation_12',
-] as const;
+    { key: 'colorGradation_1', label: 'Green-yellow-red color gradation' },
+    { key: 'colorGradation_2', label: 'Red-yellow-green color gradation' },
+    { key: 'colorGradation_3', label: 'Green-white-red color gradation' },
+    { key: 'colorGradation_4', label: 'Red-white-green color gradation' },
+    { key: 'colorGradation_5', label: 'Blue-white-red color gradation' },
+    { key: 'colorGradation_6', label: 'Red-white-blue color gradation' },
+    { key: 'colorGradation_7', label: 'White-red color gradation' },
+    { key: 'colorGradation_8', label: 'Red-white color gradation' },
+    { key: 'colorGradation_9', label: 'Green-white color gradation' },
+    { key: 'colorGradation_10', label: 'White-green color gradation' },
+    { key: 'colorGradation_11', label: 'Green-yellow color gradation' },
+    { key: 'colorGradation_12', label: 'Yellow-green color gradation' },
+];
 
 const DATA_BAR_PRESETS = [
-    'solidColorDataBar_1',
-    'solidColorDataBar_2',
-    'solidColorDataBar_3',
-    'solidColorDataBar_4',
-    'solidColorDataBar_5',
-    'solidColorDataBar_6',
-] as const;
+    { key: 'solidColorDataBar_1', label: 'Blue data bar' },
+    { key: 'solidColorDataBar_2', label: 'Green data bar' },
+    { key: 'solidColorDataBar_3', label: 'Red data bar' },
+    { key: 'solidColorDataBar_4', label: 'Orange data bar' },
+    { key: 'solidColorDataBar_5', label: 'Light blue data bar' },
+    { key: 'solidColorDataBar_6', label: 'Purple data bar' },
+];
 
 function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
     const colors = CF_PRESETS[presetKey] ?? [];
@@ -506,24 +519,15 @@ function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
 function ConditionalFormattingSubmenu() {
     const { setContext } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const { conditionformat } = en;
 
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Conditional formatting</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>{conditionformat.highlightCellRules}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>Highlight cell rules</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {[
-                            { text: 'greaterThan', value: '>' },
-                            { text: 'lessThan', value: '<' },
-                            { text: 'between', value: '[]' },
-                            { text: 'equal', value: '=' },
-                            { text: 'textContains', value: '()' },
-                            { text: 'occurrenceDate', value: conditionformat.yesterday },
-                            { text: 'duplicateValue', value: '##' },
-                        ].map((v) => (
+                        {HIGHLIGHT_CELL_RULES.map((v) => (
                             <DropdownMenuItem
                                 key={v.text}
                                 onClick={() => {
@@ -531,7 +535,7 @@ function ConditionalFormattingSubmenu() {
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
-                                    <span>{conditionformat[v.text as keyof typeof conditionformat]}</span>
+                                    <span>{v.label}</span>
                                     <span className="text-xs opacity-50 ml-4">{v.value}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -540,16 +544,9 @@ function ConditionalFormattingSubmenu() {
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>{conditionformat.itemSelectionRules}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>Item selection rules</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {[
-                            { text: 'top10', value: conditionformat.top10 },
-                            { text: 'top10_percent', value: conditionformat.top10_percent },
-                            { text: 'last10', value: conditionformat.last10 },
-                            { text: 'last10_percent', value: conditionformat.last10_percent },
-                            { text: 'aboveAverage', value: conditionformat.above },
-                            { text: 'belowAverage', value: conditionformat.below },
-                        ].map((v) => (
+                        {ITEM_SELECTION_RULES.map((v) => (
                             <DropdownMenuItem
                                 key={v.text}
                                 onClick={() => {
@@ -557,7 +554,7 @@ function ConditionalFormattingSubmenu() {
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
-                                    <span>{conditionformat[v.text as keyof typeof conditionformat]}</span>
+                                    <span>{v.label}</span>
                                     <span className="text-xs opacity-50 ml-4">{v.value}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -566,30 +563,30 @@ function ConditionalFormattingSubmenu() {
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>{conditionformat.colorGradation}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>color gradation</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {COLOR_SCALE_PRESETS.map((preset) => (
+                        {COLOR_SCALE_PRESETS.map(({ key, label }) => (
                             <DropdownMenuItem
-                                key={preset}
-                                onClick={() => setContext((draftCtx) => applyColorScalePreset(draftCtx, preset))}
+                                key={key}
+                                onClick={() => setContext((draftCtx) => applyColorScalePreset(draftCtx, key))}
                             >
-                                <ColorScaleSwatch presetKey={preset} />
-                                <span>{conditionformat[preset]}</span>
+                                <ColorScaleSwatch presetKey={key} />
+                                <span>{label}</span>
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>{conditionformat.dataBar}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>data bar</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {DATA_BAR_PRESETS.map((preset) => (
+                        {DATA_BAR_PRESETS.map(({ key, label }) => (
                             <DropdownMenuItem
-                                key={preset}
-                                onClick={() => setContext((draftCtx) => applyDataBarPreset(draftCtx, preset))}
+                                key={key}
+                                onClick={() => setContext((draftCtx) => applyDataBarPreset(draftCtx, key))}
                             >
-                                <ColorScaleSwatch presetKey={preset} />
-                                <span>{conditionformat[preset]}</span>
+                                <ColorScaleSwatch presetKey={key} />
+                                <span>{label}</span>
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuSubContent>
@@ -597,12 +594,10 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>
-                    {conditionformat.manageRules}
-                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Management rules</DropdownMenuItem>
 
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>{conditionformat.deleteRule}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         <DropdownMenuItem
                             onClick={() => {
@@ -611,11 +606,11 @@ function ConditionalFormattingSubmenu() {
                                 });
                             }}
                         >
-                            {conditionformat.deleteSheetRule}
+                            Delete sheet rule
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>
-                            {conditionformat.manageRules}
+                            Management rules
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>

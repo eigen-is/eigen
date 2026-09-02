@@ -50,8 +50,11 @@ function toRuleValue(raw: unknown): string | number {
     return String(raw);
 }
 
+const ONLY_SINGLE_CELL = 'Only a single cell can be referenced';
+const VALUE_MUST_BE_NUMBER_OR_CELL = 'The condition value can only be a number or a single cell';
+
 // Set condition rules
-export function setConditionRules(ctx: Context, conditionformat: Record<string, string>, rules: ConditionRulesProps) {
+export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
     if (!checkProtectionFormatCells(ctx)) {
         return;
     }
@@ -87,12 +90,12 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
                 conditionRange.push({ row: first.row, column: first.column });
                 conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
             } else {
-                ctx.warnDialog = conditionformat.onlySingleCell;
+                ctx.warnDialog = ONLY_SINGLE_CELL;
             }
         } else if (rangeArr.length === 0) {
             const v = rules.rulesValue;
             if (Number.isNaN(v) || v === '') {
-                ctx.warnDialog = conditionformat.conditionValueCanOnly;
+                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
                 return;
             }
             conditionValue.push(v);
@@ -103,7 +106,7 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
 
         const rangeArr1 = getRangeByTxt(ctx, v1);
         if (rangeArr1.length > 1) {
-            ctx.warnDialog = conditionformat.onlySingleCell;
+            ctx.warnDialog = ONLY_SINGLE_CELL;
             return;
         }
         if (rangeArr1.length === 1) {
@@ -117,19 +120,19 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
                 conditionRange.push({ row: first.row, column: first.column });
                 conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
             } else {
-                ctx.warnDialog = conditionformat.onlySingleCell;
+                ctx.warnDialog = ONLY_SINGLE_CELL;
                 return;
             }
         } else if (rangeArr1.length === 0) {
             if (Number.isNaN(v1) || v1 === '') {
-                ctx.warnDialog = conditionformat.conditionValueCanOnly;
+                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
                 return;
             }
             conditionValue.push(v1);
         }
         const rangeArr2 = getRangeByTxt(ctx, v2);
         if (rangeArr2.length > 1) {
-            ctx.warnDialog = conditionformat.onlySingleCell;
+            ctx.warnDialog = ONLY_SINGLE_CELL;
             return;
         }
         if (rangeArr2.length === 1) {
@@ -143,12 +146,12 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
                 conditionRange.push({ row: first.row, column: first.column });
                 conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
             } else {
-                ctx.warnDialog = conditionformat.onlySingleCell;
+                ctx.warnDialog = ONLY_SINGLE_CELL;
                 return;
             }
         } else if (rangeArr2.length === 0) {
             if (Number.isNaN(v2) || v2 === '') {
-                ctx.warnDialog = conditionformat.conditionValueCanOnly;
+                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
             } else {
                 conditionValue.push(v2);
             }
@@ -156,7 +159,7 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
     } else if (conditionName === 'occurrenceDate') {
         const v = rules.dateValue;
         if (!v) {
-            ctx.warnDialog = conditionformat.pleaseSelectADate;
+            ctx.warnDialog = 'Please select a date';
             return;
         }
         conditionValue.push(v);
@@ -171,7 +174,7 @@ export function setConditionRules(ctx: Context, conditionformat: Record<string, 
         const v = rules.projectValue;
         const n = parseInt(v, 10);
         if (n.toString() !== v || n < 1 || n > 1000) {
-            ctx.warnDialog = conditionformat.pleaseEnterInteger;
+            ctx.warnDialog = 'Please enter an integer between 1 and 1000';
             return;
         }
         conditionValue.push(v);
@@ -273,8 +276,8 @@ export function checkCF(r: number, c: number, computeMap: ComputeMap | null): Ce
 }
 
 // 12 color-scale + 6 solid-data-bar presets, ported from luckysheet upstream.
-// Numbers match the locale keys colorGradation_1..12 / solidColorDataBar_1..6
-// in state/locale/en.ts.
+// Numbers match the preset keys COLOR_SCALE_PRESETS / DATA_BAR_PRESETS offer in
+// components/MenuBar/format-menu.tsx.
 export const CF_PRESETS: Record<string, string[]> = {
     // 3-color gradients (max → mid → min)
     colorGradation_1: ['#f8696b', '#ffeb84', '#63be7b'],
