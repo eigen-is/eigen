@@ -354,6 +354,7 @@ export type SitePlanShape = {
     y: number;
     width: number;
     height: number;
+    angle?: number; // degrees clockwise, default 0 (the label turns with it)
     fontSize?: number; // label size, default 16
     fill?: string; // default transparent
     fillStyle?: FillStyle; // default solid
@@ -386,6 +387,7 @@ export type SitePlanText = {
 // A (poly)line in absolute scene points; `round` curves through the vertices.
 export type SitePlanLine = {
     points: [number, number][];
+    freedraw?: boolean; // a pen stroke instead of a line (roundness ignored)
     stroke?: string;
     strokeWidth?: number;
     strokeStyle?: StrokeStyle;
@@ -434,7 +436,7 @@ export const SITE_PLAN = {
                 [930, 262],
                 [955, 254],
             ],
-            stroke: '#74c0fc',
+            stroke: '#adb5bd',
         },
         {
             points: [
@@ -443,7 +445,7 @@ export const SITE_PLAN = {
                 [930, 287],
                 [955, 279],
             ],
-            stroke: '#74c0fc',
+            stroke: '#adb5bd',
         },
         {
             points: [
@@ -452,7 +454,7 @@ export const SITE_PLAN = {
                 [930, 312],
                 [955, 304],
             ],
-            stroke: '#74c0fc',
+            stroke: '#adb5bd',
         },
         // The art trail winding from the workshops to the camping field.
         {
@@ -465,6 +467,211 @@ export const SITE_PLAN = {
             ],
             stroke: '#9c36b5',
             strokeStyle: 'dotted',
+        },
+        // A scribbled crowd on the open field, drawn with the pen: dots seen from above.
+        {
+            points: [
+                [212, 797.2],
+                [214.5, 798],
+                [215.5, 800],
+                [214.5, 802],
+                [212, 802.8],
+                [209.5, 802],
+                [208.5, 800],
+                [209.5, 798],
+                [212, 797.2],
+                [214.5, 798],
+                [215.5, 800],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [246, 822.8],
+                [248.8, 823.7],
+                [250, 826],
+                [248.8, 828.3],
+                [246, 829.2],
+                [243.2, 828.3],
+                [242, 826],
+                [243.2, 823.7],
+                [246, 822.8],
+                [248.8, 823.7],
+                [250, 826],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [284, 788.4],
+                [287.2, 789.5],
+                [288.5, 792],
+                [287.2, 794.5],
+                [284, 795.6],
+                [280.8, 794.5],
+                [279.5, 792],
+                [280.8, 789.5],
+                [284, 788.4],
+                [287.2, 789.5],
+                [288.5, 792],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [318, 835.2],
+                [320.5, 836],
+                [321.5, 838],
+                [320.5, 840],
+                [318, 840.8],
+                [315.5, 840],
+                [314.5, 838],
+                [315.5, 836],
+                [318, 835.2],
+                [320.5, 836],
+                [321.5, 838],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [352, 802.8],
+                [354.8, 803.7],
+                [356, 806],
+                [354.8, 808.3],
+                [352, 809.2],
+                [349.2, 808.3],
+                [348, 806],
+                [349.2, 803.7],
+                [352, 802.8],
+                [354.8, 803.7],
+                [356, 806],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [388, 826.4],
+                [391.2, 827.5],
+                [392.5, 830],
+                [391.2, 832.5],
+                [388, 833.6],
+                [384.8, 832.5],
+                [383.5, 830],
+                [384.8, 827.5],
+                [388, 826.4],
+                [391.2, 827.5],
+                [392.5, 830],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [426, 795.2],
+                [428.5, 796],
+                [429.5, 798],
+                [428.5, 800],
+                [426, 800.8],
+                [423.5, 800],
+                [422.5, 798],
+                [423.5, 796],
+                [426, 795.2],
+                [428.5, 796],
+                [429.5, 798],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [458, 832.8],
+                [460.8, 833.7],
+                [462, 836],
+                [460.8, 838.3],
+                [458, 839.2],
+                [455.2, 838.3],
+                [454, 836],
+                [455.2, 833.7],
+                [458, 832.8],
+                [460.8, 833.7],
+                [462, 836],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [494, 808.4],
+                [497.2, 809.5],
+                [498.5, 812],
+                [497.2, 814.5],
+                [494, 815.6],
+                [490.8, 814.5],
+                [489.5, 812],
+                [490.8, 809.5],
+                [494, 808.4],
+                [497.2, 809.5],
+                [498.5, 812],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [528, 831.2],
+                [530.5, 832],
+                [531.5, 834],
+                [530.5, 836],
+                [528, 836.8],
+                [525.5, 836],
+                [524.5, 834],
+                [525.5, 832],
+                [528, 831.2],
+                [530.5, 832],
+                [531.5, 834],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [268, 846.8],
+                [270.8, 847.7],
+                [272, 850],
+                [270.8, 852.3],
+                [268, 853.2],
+                [265.2, 852.3],
+                [264, 850],
+                [265.2, 847.7],
+                [268, 846.8],
+                [270.8, 847.7],
+                [272, 850],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
+        },
+        {
+            points: [
+                [404, 852.4],
+                [407.2, 853.5],
+                [408.5, 856],
+                [407.2, 858.5],
+                [404, 859.6],
+                [400.8, 858.5],
+                [399.5, 856],
+                [400.8, 853.5],
+                [404, 852.4],
+                [407.2, 853.5],
+                [408.5, 856],
+            ],
+            freedraw: true,
+            stroke: '#868e96',
         },
     ] satisfies SitePlanLine[],
     shapes: [
@@ -493,6 +700,7 @@ export const SITE_PLAN = {
         {
             key: 'farmhouse',
             kind: 'rectangle',
+            angle: 3,
             label: 'Farmhouse, off limits',
             x: 295,
             y: 180,
@@ -537,6 +745,7 @@ export const SITE_PLAN = {
         {
             key: 'barn-stage',
             kind: 'rectangle',
+            angle: -4,
             label: 'Barn stage\n(the old barn)',
             x: 170,
             y: 250,
@@ -809,7 +1018,7 @@ export const SITE_PLAN = {
         },
     ] satisfies SitePlanShape[],
     images: [
-        { file: 'branding/logo.webp', x: 1454, y: 24, width: 96, height: 96 },
+        { file: 'branding/logo.webp', x: 20, y: 940, width: 96, height: 96 },
         { file: 'images/camping-field.webp', x: 1340, y: 550, width: 200, height: 150 },
     ] satisfies SitePlanImage[],
     arrows: [
@@ -838,7 +1047,6 @@ export const SITE_PLAN = {
         {
             from: { shape: 'gate', side: 'right', along: 0.25 },
             to: { shape: 'camping', side: 'left', along: 0.9 },
-            elbow: true,
             strokeStyle: 'dashed',
             stroke: '#868e96',
         },
@@ -849,7 +1057,7 @@ export const SITE_PLAN = {
     texts: [
         { text: 'Tuimel Festival site plan', x: 120, y: 40, fontSize: 36 },
         {
-            text: 'Hoeve Tuimelaar, Vlierzand. Sketched after the site visit. Not to scale, obviously.',
+            text: 'Hoeve Tuimelaar, Vlierzand. Based on last year, to check and make final at the site visit. Not to scale, obviously.',
             x: 120,
             y: 92,
             fontSize: 16,
@@ -867,7 +1075,9 @@ export const SITE_PLAN = {
         { text: 'quieter acts here if Sunday blows (Sanne)', x: 170, y: 368, fontSize: 13, color: NOTE },
         { text: 'wind cover? decide at go/no-go', x: 985, y: 380, fontSize: 13, color: '#e03131' },
         { text: 're-peg either way, site crew is ready (Ravi)', x: 985, y: 400, fontSize: 12, color: NOTE },
-        { text: 'art trail (Sem)', x: 545, y: 632, fontSize: 13, color: '#9c36b5' },
+        { text: 'art trail (Sem)', x: 560, y: 660, fontSize: 13, color: '#9c36b5' },
+        { text: 'wind, Sunday?', x: 872, y: 320, fontSize: 12, color: '#868e96' },
+        { text: 'the field', x: 200, y: 765, fontSize: 14, color: '#868e96' },
         { text: 'extra bins come with the fencing (Lars)', x: 760, y: 612, fontSize: 12, color: NOTE },
         { text: 'covered both days, one gap Sunday morning (Imke)', x: 430, y: 745, fontSize: 12, color: NOTE },
         { text: '3 wristband tiers (Daan)', x: 705, y: 905, fontSize: 13, color: NOTE },
@@ -906,7 +1116,7 @@ export const CHATS: SeededChat[] = [
             { author: 'timo', text: '/highfive' },
             {
                 author: 'saar',
-                text: 'Site plan from the site visit is in production/. Timo, check the generator runs. Fenna, the bar tent moved next to the food trucks.',
+                text: 'Site plan draft is in production/, based on last year. We walk it on the site visit and make it final after. Timo, check the generator runs. Fenna, the bar tent moved next to the food trucks.',
             },
             { author: 'fenna', text: 'Closer to the food, closer to the queue. Fine by me.' },
             { author: 'timo', text: 'Runs look right. The backup on the second stage is exactly what Rob confirmed.' },

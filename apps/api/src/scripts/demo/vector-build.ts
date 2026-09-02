@@ -128,7 +128,7 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         y: s.y,
         width: s.width,
         height: s.height,
-        angle: 0,
+        angle: s.angle ?? 0,
         strokeColor: s.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
         backgroundColor: s.fill ?? DEFAULT_ELEMENT_PROPS.backgroundColor,
         fillStyle: s.fillStyle ?? DEFAULT_ELEMENT_PROPS.fillStyle,
@@ -148,7 +148,7 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
     const norm = normalizeLinear(ZERO_BOX, points);
     return {
         id: `el-line-${i}`,
-        type: 'line',
+        type: l.freedraw ? 'freedraw' : 'line',
         x: norm.x,
         y: norm.y,
         width: norm.width,
@@ -288,7 +288,7 @@ function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorTextElem
         y: shape.y + shape.height / 2 - height / 2,
         width,
         height,
-        angle: 0,
+        angle: shape.angle,
         strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
         backgroundColor: DEFAULT_ELEMENT_PROPS.backgroundColor,
         fillStyle: DEFAULT_ELEMENT_PROPS.fillStyle,
