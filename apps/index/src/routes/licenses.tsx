@@ -1,15 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { AppShell, Column, ColumnLayout } from '@workspace/ui';
-import type { LicensePackage } from '../../scripts/lib/content-types';
+import type { LicensePackage, LicenseVendored } from '../../scripts/lib/content-types';
 
 // Eager glob (not a static import) so a not-yet-generated file degrades to an empty list
 // in dev instead of breaking the module load. Regenerated on every prod build by
 // scripts/build-licenses.ts (prebuild).
-const generated = import.meta.glob<{ packages: LicensePackage[] }>('../content/.generated/licenses.json', {
-    eager: true,
-    import: 'default',
-});
+const generated = import.meta.glob<{ packages: LicensePackage[]; vendored: LicenseVendored[] }>(
+    '../content/.generated/licenses.json',
+    { eager: true, import: 'default' },
+);
 const packages: LicensePackage[] = Object.values(generated)[0]?.packages ?? [];
+const vendored: LicenseVendored[] = Object.values(generated)[0]?.vendored ?? [];
 
 export const Route = createFileRoute('/licenses')({
     component: LicensesPage,
@@ -39,6 +40,29 @@ function LicensesPage() {
                                 eigen is built on the work of {packages.length} open-source packages. Thank you to
                                 everyone who maintains them.
                             </p>
+                            <h2 className="text-lg font-medium mb-2">Ported and forked code</h2>
+                            <p className="text-foreground leading-7 mb-4">
+                                Some of eigen is adapted from other projects rather than installed as a package.
+                            </p>
+                            <ul className="divide-y divide-border mb-10">
+                                {vendored.map((project) => (
+                                    <li key={project.name} className="py-2 text-sm">
+                                        <div className="flex items-baseline gap-3">
+                                            <a
+                                                href={project.url}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="text-link hover:text-link/80 font-medium"
+                                            >
+                                                {project.name}
+                                            </a>
+                                            <span className="ml-auto text-muted-foreground">{project.license}</span>
+                                        </div>
+                                        <p className="text-muted-foreground">{project.note}</p>
+                                    </li>
+                                ))}
+                            </ul>
+                            <h2 className="text-lg font-medium mb-2">Packages</h2>
                             <ul className="divide-y divide-border">
                                 {packages.map((pkg) => (
                                     <li key={pkg.name} className="flex items-baseline gap-3 py-2 text-sm">

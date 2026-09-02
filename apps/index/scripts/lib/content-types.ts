@@ -59,3 +59,7 @@ export type ArticleBody = { html: string; mediaGrids: MediaGridData[] };
 
 // The generated open-source license list (one entry per package), written by build-licenses.ts.
 export type LicensePackage = { name: string; version: string; license: string; url: string };
+
+// Projects eigen ports or forks code from without depending on them, so the dependency walk
+// cannot find them. Hardcoded in build-licenses.ts; `note` says what was taken.
+export type LicenseVendored = { name: string; license: string; url: string; note: string };

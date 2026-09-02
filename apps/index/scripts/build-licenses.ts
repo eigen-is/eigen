@@ -1,12 +1,40 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Glob } from 'bun';
-import type { LicensePackage } from './lib/content-types';
+import type { LicensePackage, LicenseVendored } from './lib/content-types';
 
 // apps/index/scripts → repo root is three levels up.
 const INDEX_APP = join(import.meta.dir, '..');
 const REPO_ROOT = join(INDEX_APP, '..', '..');
 const OUT = join(INDEX_APP, 'src', 'content', '.generated', 'licenses.json');
+
+// Code ported or forked into the tree. Not in any package.json, so listed by hand.
+const VENDORED: LicenseVendored[] = [
+    {
+        name: 'Excalidraw',
+        license: 'MIT',
+        url: 'https://github.com/excalidraw/excalidraw',
+        note: 'eigen|vector> ports its elbow-arrow routing, freehand and elbow SVG path generation, and fractional-index repair',
+    },
+    {
+        name: 'fortune-sheet',
+        license: 'MIT',
+        url: 'https://github.com/ruilisi/fortune-sheet',
+        note: 'the sheets engine and grid started as a fork of fortune-sheet 1.0.4',
+    },
+    {
+        name: 'Luckysheet',
+        license: 'MIT',
+        url: 'https://github.com/dream-num/Luckysheet',
+        note: "fortune-sheet's own origin; the conditional-format colour presets come from it",
+    },
+    {
+        name: 'fractional-indexing',
+        license: 'CC0-1.0',
+        url: 'https://github.com/rocicorp/fractional-indexing',
+        note: 'vendored verbatim to pin z-order behaviour in eigen|vector>',
+    },
+];
 
 type PackageJson = {
     version?: string;
@@ -87,6 +115,6 @@ for (const { dir, pkg } of workspacePackageJsons()) {
 
 const packages = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'en'));
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, JSON.stringify({ packages }));
-console.log(`✓ Wrote ${OUT} — ${packages.length} packages`);
+writeFileSync(OUT, JSON.stringify({ packages, vendored: VENDORED }));
+console.log(`✓ Wrote ${OUT} — ${packages.length} packages, ${VENDORED.length} vendored`);
 if (missing.length) console.warn(`⚠ Could not resolve ${missing.length}: ${missing.sort().join(', ')}`);
