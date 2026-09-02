@@ -5,7 +5,7 @@ import { ApiError } from '../../lib/core';
 import { wrapWithStorageFault } from '../../lib/storage/fault-storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 
-const TEST_DIR = join(import.meta.dir, `../../../../../data/test-fault-storage-${Date.now()}`);
+const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-fault-storage-${Date.now()}`);
 
 let storage: LocalStorage;
 

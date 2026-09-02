@@ -6,7 +6,14 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import { buildStorageKey } from '../../lib/mount/helpers';
 import type { Mount } from '../../lib/mount/mount';
-import { createFaultMount, type FaultStorage, type ParkedWrite } from '../fault-storage-helpers';
+import {
+    createFaultMount,
+    type FaultStorage,
+    type ParkedWrite,
+    provisionDoc,
+    shrinkPutTimeout,
+    waitFor,
+} from '../fault-storage-helpers';
 
 // Chaos verification for the "orphaned PUT lands after a newer PUT and regresses the object" class
 // (performUpload's Promise.race timeout; repaired in-process via trackOrphan). A PUT that stalls
@@ -68,25 +75,6 @@ async function countBackingRows(mount: Mount, fault: FaultStorage, id: string): 
     const file = fault.inner.read(await mount.getStorageKey(id));
     if (!file || !(await file.exists())) return null;
     return countRowsInBytes(await file.arrayBuffer());
-}
-
-async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
-    const rootId = (await mount.getRootFolder())!.id;
-    const containerId = await mount.createFolder(rootId, `doc-${Math.random().toString(36).slice(2)}`, 'doc');
-    const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
-    return { containerId, dataDbId };
-}
-
-function shrinkPutTimeout(mount: Mount, ms: number): void {
-    (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = ms;
-}
-
-async function waitFor(cond: () => boolean | Promise<boolean>, ms = 3_000): Promise<void> {
-    const end = Date.now() + ms;
-    while (!(await cond())) {
-        if (Date.now() > end) throw new Error('waitFor timeout');
-        await Bun.sleep(5);
-    }
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));

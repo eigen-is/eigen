@@ -79,7 +79,7 @@ All user-facing entry points funnel into that one compose flow:
 - Command palette `drive.mail-to` and the smart "Send {name} to {email}" results
   (`packages/lib/src/core/command-palette/commands/drive.ts:83-96`,
   `providers/smart.ts:44-118`); the open document counts as a palette selection
-  (`packages/ui/src/hooks/use-eigen-doc-editor-route.tsx:55-56`), so this works from inside
+  (`packages/ui/src/hooks/use-eigen-doc-editor-route.ts:60-62`), so this works from inside
   the editors too. Note these funnels open the compose with the attachment pre-seeded and
   **zero recipients** — relevant to the prompt-timing decision below.
 

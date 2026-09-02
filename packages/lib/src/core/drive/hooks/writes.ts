@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
 import {
-    DRIVE_EXTENSIONS,
     DRIVE_MIME_CHAT,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
@@ -10,11 +9,12 @@ import {
     DRIVE_MIME_VECTOR,
     type DrivePath,
     type EigenDocType,
+    withEigenExtension,
 } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-import { CREATE_TIMEOUT_MS, createWithReconcile } from '../reconcile-create';
+import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../reconcile-create';
 import { partitionCopyResults } from './copy-media-partition';
 import { invalidateItemCreated, invalidateItemDeleted, invalidatePathMoved, invalidatePathRenamed } from './keys';
 import { folderContentQueryConfig } from './reads';
@@ -348,12 +348,8 @@ export function useCreateDriveItem(type: EigenDocType) {
                     if (response.error) throw new AppError(response);
                     return response.data;
                 },
-                listFolder: () =>
-                    queryClient.fetchQuery({
-                        ...folderContentQueryConfig(ownerId, mountId, parentId),
-                        staleTime: 0,
-                    }),
-                expectedName: `${fileName}${DRIVE_EXTENSIONS[type]}`,
+                listFolder: () => fetchListingOnce(queryClient, folderContentQueryConfig(ownerId, mountId, parentId)),
+                expectedName: withEigenExtension(fileName, type),
             }),
         onSuccess: (_data, variables) =>
             invalidateItemCreated(

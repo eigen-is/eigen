@@ -1,3 +1,4 @@
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import { AppError } from '../api-error';
 
 // Create budgets. Storage that has gone slow (S3 stalling on `exists`) can leave a create in limbo:
@@ -5,10 +6,7 @@ import { AppError } from '../api-error';
 // The create hooks give the request 15s, then poll the listing for ~10s before calling it a failure.
 export const CREATE_TIMEOUT_MS = 15_000;
 export const RECONCILE_ATTEMPTS = 3;
-export const RECONCILE_DELAY_MS = 5_000;
-// The server stamps createdAt, so the floor allows a minute of client/server clock drift; more drift
-// than that makes reconcile miss (honest toast), never match a row we didn't create.
-export const CREATE_CLOCK_SKEW_MS = 60_000;
+const RECONCILE_DELAY_MS = 5_000;
 
 // The create failed AND the item never showed up. Carries the copy the toast shows (onMutationError
 // reads Error.message), with the original failure as `cause`.
@@ -19,58 +17,45 @@ export class CreateUnconfirmedError extends Error {
     }
 }
 
-// Polls a listing for an item the server may or may not have created. Names are stored NFC
-// (Mount's validateName), so the expected name is normalized before comparing. `since` floors the
-// match on createdAt, so a same-name sibling that predates the create can never pass for it (the
-// server may rename ours — chat's dedupeName — and we must miss honestly instead). A poll that
-// itself fails is just a miss — the next one still runs.
-export async function reconcileCreatedItem<T extends { name: string; createdAt: Date }>({
-    listFolder,
-    expectedName,
-    since,
-    attempts,
-    delayMs,
-}: {
-    listFolder: () => Promise<T[]>;
-    expectedName: string;
-    since: Date;
-    attempts: number;
-    delayMs: number;
-}): Promise<T | null> {
-    const target = expectedName.normalize('NFC');
-    for (let attempt = 0; attempt < attempts; attempt++) {
-        if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-        const items = await listFolder().catch(() => []);
-        const match = items.find((item) => item.name === target && item.createdAt >= since);
-        if (match) return match;
-    }
-    return null;
+// One listing fetch for a reconcile: cache-bypassing, and retry-free because the poll loop is the
+// retry — the query config's own `retry` would double the GETs against storage already struggling.
+export function fetchListingOnce<T>(
+    queryClient: QueryClient,
+    config: { queryKey: QueryKey; queryFn: () => Promise<T> },
+): Promise<T> {
+    return queryClient.fetchQuery({ ...config, staleTime: 0, retry: false });
 }
 
-// Wraps a create mutation: on an indeterminate failure (abort, network, 5xx) poll the listing and
-// treat a found item as the create's result, so a slow storage backend doesn't hand the user an
-// error for a row that exists. A 4xx is the server's definitive "no" (409 duplicate name, 507 over
-// quota) — it must not reconcile, or a same-name sibling would pass for the item we tried to create.
-export async function createWithReconcile<T extends { name: string; createdAt: Date }>({
+// A 4xx is the server's definitive "no" (409 duplicate name), so it is never reconciled. The rest
+// of the contract is in docs/STORAGE.md § Create reconcile.
+export async function createWithReconcile<T extends { id: string; name: string }>({
     create,
     listFolder,
     expectedName,
-    attempts = RECONCILE_ATTEMPTS,
     delayMs = RECONCILE_DELAY_MS,
 }: {
     create: () => Promise<T>;
     listFolder: () => Promise<T[]>;
     expectedName: string;
-    attempts?: number;
     delayMs?: number;
 }): Promise<T> {
-    const since = new Date(Date.now() - CREATE_CLOCK_SKEW_MS);
+    const knownIds = await listFolder()
+        .then((items) => new Set(items.map((item) => item.id)))
+        .catch(() => null);
     try {
         return await create();
     } catch (error) {
         if (error instanceof AppError && error.status >= 400 && error.status < 500) throw error;
-        const found = await reconcileCreatedItem({ listFolder, expectedName, since, attempts, delayMs });
-        if (!found) throw new CreateUnconfirmedError(error);
-        return found;
+        if (knownIds) {
+            // Names are stored NFC (Mount's validateName), so compare against the normalized form.
+            const target = expectedName.normalize('NFC');
+            for (let attempt = 0; attempt < RECONCILE_ATTEMPTS; attempt++) {
+                if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
+                const items = await listFolder().catch(() => []);
+                const match = items.find((item) => item.name === target && !knownIds.has(item.id));
+                if (match) return match;
+            }
+        }
+        throw new CreateUnconfirmedError(error);
     }
 }

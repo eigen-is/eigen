@@ -8,7 +8,13 @@ import type Drive from '../../lib/drive/drive';
 import { getHome } from '../../lib/home';
 import type { Mount } from '../../lib/mount/mount';
 import type { User } from '../../lib/user';
-import { createFaultMount, type FaultStorage } from '../fault-storage-helpers';
+import {
+    createFaultMount,
+    type FaultStorage,
+    registerFaultMount,
+    settleContainer,
+    unregisterFaultMount,
+} from '../fault-storage-helpers';
 import { collectSSE, getTestContext } from '../setup';
 
 // Create must be atomic: when provisioning a container's managed dbs (or a card chat's comment-index
@@ -26,22 +32,6 @@ let user: User;
 let ownerId: string;
 let rootId: string;
 
-function driveMounts(): Map<string, Mount> {
-    return (drive as unknown as { mounts: Map<string, Mount> }).mounts;
-}
-
-// A create-time storage failure only reproduces when the next open really reaches storage: close
-// the container's managed dbs and drain the write-behind queue, so neither a live temp nor a staged
-// copy can serve that open. Never closeAllDatabases here — it also closes the mount's upload queue
-// for good, and every later upload in this file would silently stop.
-async function settleContainer(containerId: string): Promise<void> {
-    for (const name of ['data.db', 'comments.db']) {
-        const child = await mount.getChildByName(containerId, name);
-        if (child) await mount.closeDatabase(child.id);
-    }
-    await mount.drainPendingUploads({ flushNow: true });
-}
-
 beforeAll(async () => {
     const ctx = await getTestContext();
     ownerId = ctx.alice.user.id;
@@ -51,7 +41,7 @@ beforeAll(async () => {
     user = home.user;
     ({ mount, fault } = createFaultMount(ownerId, TEST_DIR, MOUNT_ID));
     await mount.init();
-    driveMounts().set(MOUNT_ID, mount);
+    registerFaultMount(drive, mount);
     rootId = (await mount.getRootFolder())!.id;
 });
 
@@ -62,7 +52,7 @@ afterEach(() => {
 });
 
 afterAll(async () => {
-    driveMounts().delete(MOUNT_ID);
+    unregisterFaultMount(drive, MOUNT_ID);
     await mount.closeAllDatabases();
     rmSync(TEST_DIR, { recursive: true, force: true });
 });
@@ -88,7 +78,7 @@ describe('Drive.create is atomic under degraded storage', () => {
         const board = await drive.create(MOUNT_ID, rootId, 'Board', 'stickies', user);
         const chatFolder = (await mount.getChildByName(board.id, 'chat'))!;
         const commentsDb = (await mount.getChildByName(board.id, 'comments.db'))!;
-        await settleContainer(board.id);
+        await settleContainer(mount, board.id);
 
         // The chat's own data.db provisions fine; only the GET of the board's comment index fails,
         // so the failure lands in seedCommentRow — after ChatRoom.create already succeeded.
@@ -110,7 +100,7 @@ describe('Drive.create is atomic under degraded storage', () => {
     test('a data.db row whose storage object is gone still 503s on open (mustExist stays strict)', async () => {
         const doc = await drive.create(MOUNT_ID, rootId, 'Vanishing', 'doc', user);
         const dataDb = (await mount.getChildByName(doc.id, 'data.db'))!;
-        await settleContainer(doc.id);
+        await settleContainer(mount, doc.id);
         const key = await mount.getStorageKey(dataDb.id);
 
         await fault.inner.delete(key);

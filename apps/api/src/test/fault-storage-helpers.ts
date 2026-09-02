@@ -1,7 +1,9 @@
+import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { BunFile } from 'bun';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import type Drive from '../lib/drive/drive';
 import { Mount } from '../lib/mount/mount';
 import type { StorageBackend, StorageFile } from '../lib/storage';
 import { LocalStorage } from '../lib/storage/local-storage';
@@ -175,4 +177,68 @@ export function createFaultMount(ownerId: string, baseDir: string, id: string): 
     const fault = new FaultStorage(new LocalStorage(join(baseDir, `backing-${id}`)));
     mount.storage = fault;
     return { mount, fault };
+}
+
+// Drive keeps its mounts in a private map, and a fault mount only reaches Drive.create (or the
+// collab routes) once it is in there. One cast, one place.
+function driveMounts(drive: Drive): Map<string, Mount> {
+    return (drive as unknown as { mounts: Map<string, Mount> }).mounts;
+}
+
+export function registerFaultMount(drive: Drive, mount: Mount): void {
+    driveMounts(drive).set(mount.id, mount);
+}
+
+export function unregisterFaultMount(drive: Drive, mountId: string): void {
+    driveMounts(drive).delete(mountId);
+}
+
+// A create-time storage failure only reproduces when the next open really reaches storage: close
+// the container's managed dbs and drain the write-behind queue, so neither a live temp nor a staged
+// copy can serve that open. Never closeAllDatabases here — it also closes the mount's upload queue
+// for good, and every later upload in the file would silently stop.
+export async function settleContainer(mount: Mount, containerId: string): Promise<void> {
+    for (const name of ['data.db', 'comments.db']) {
+        const child = await mount.getChildByName(containerId, name);
+        if (child) await mount.closeDatabase(child.id);
+    }
+    await mount.drainPendingUploads({ flushNow: true });
+}
+
+export async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
+    const rootId = (await mount.getRootFolder())!.id;
+    const containerId = await mount.createFolder(rootId, `doc-${Math.random().toString(36).slice(2)}`, 'doc');
+    const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
+    return { containerId, dataDbId };
+}
+
+// Open a throwaway non-WAL copy of a data.db StorageFile and count its rows (a readonly WAL open
+// can't create its -shm sidecar).
+export async function countRowsInFile(file: StorageFile | null, tmpDir: string): Promise<number | null> {
+    if (!file || !(await file.exists())) return null;
+    const verifyPath = join(tmpDir, `verify-${Math.random().toString(36).slice(2)}.db`);
+    await Bun.write(verifyPath, await file.arrayBuffer());
+    const verify = new Database(verifyPath);
+    const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
+    verify.close();
+    return row.c;
+}
+
+// Count rows in the object that actually reached the backing store ("S3"/local). Reads storage
+// directly — NOT via mount.readFile, which is freshest-first and would surface un-acked staged
+// bytes; getStorageKey handles both the flat-key (s3) and hierarchical (local) layouts.
+export async function countBackingRows(mount: Mount, id: string, tmpDir: string): Promise<number | null> {
+    return countRowsInFile(mount.storage.read(await mount.getStorageKey(id)), tmpDir);
+}
+
+export function shrinkPutTimeout(mount: Mount, ms: number): void {
+    (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = ms;
+}
+
+export async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    while (!(await cond())) {
+        if (Date.now() > deadline) throw new Error('waitFor timed out');
+        await Bun.sleep(5);
+    }
 }

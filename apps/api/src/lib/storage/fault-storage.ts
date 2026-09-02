@@ -3,14 +3,13 @@ import { isProduction } from '../config/env';
 import { ApiError } from '../core';
 import type { StorageBackend, StorageFile } from './types';
 
-type FaultKind = 'exists-throw' | 'exists-delay' | 'read-delay';
+type FaultKind = 'exists-throw' | 'exists-delay';
 
 // Dev-only fault injection: every mount's backend delegates to the real one but fails or stalls on
-// the calls a create/open makes, so degraded-storage behaviour is reproducible without an outage.
-// read()/readRange() are synchronous handle factories — the GET happens when Bun consumes the
-// returned file, outside this class — so 'read-delay' delays the awaited backend calls a cold open
-// does make: the exists() probe in mount/document-db.ts that precedes the download, and size().
-class FaultStorage implements StorageBackend {
+// the exists() probe a create/open makes, so degraded-storage behaviour is reproducible without an
+// outage. read()/readRange() are synchronous handle factories — the GET happens when Bun consumes
+// the returned file, outside this class — so there is nothing to inject on the read path.
+class StorageFaultInjector implements StorageBackend {
     // These must be present exactly when the inner backend has them: a mount reads getPath's
     // presence to pick the path-based vs temp-copy path, and mkdir/rename/deleteDir the same way.
     readonly readRange: StorageBackend['readRange'];
@@ -52,30 +51,21 @@ class FaultStorage implements StorageBackend {
     }
 
     async size(key: string): Promise<number | null> {
-        if (this.kind === 'read-delay') await Bun.sleep(this.ms);
         return this.inner.size(key);
     }
 }
 
-// EIGEN_STORAGE_FAULT=exists-throw | exists-delay=<ms> | read-delay=<ms>. Never active in
-// production, whatever the variable says.
+// EIGEN_STORAGE_FAULT=exists-throw | exists-delay=<ms>. Never active in production, whatever the
+// variable says.
 export function wrapWithStorageFault(backend: StorageBackend): StorageBackend {
     const spec = process.env['EIGEN_STORAGE_FAULT'];
     if (!spec || isProduction()) return backend;
     const [kind, value] = spec.split('=');
     const ms = Number(value) || 0;
-    if (kind === 'exists-throw' || ((kind === 'exists-delay' || kind === 'read-delay') && ms > 0)) {
-        announceOnce(`[storage] EIGEN_STORAGE_FAULT=${spec} — injecting storage faults (dev only)`);
-        return new FaultStorage(backend, kind, ms);
+    if (kind === 'exists-throw' || (kind === 'exists-delay' && ms > 0)) {
+        console.warn(`[storage] EIGEN_STORAGE_FAULT=${spec} — injecting storage faults (dev only)`);
+        return new StorageFaultInjector(backend, kind, ms);
     }
-    announceOnce(`[storage] ignoring unrecognised EIGEN_STORAGE_FAULT=${spec}`);
+    console.warn(`[storage] ignoring unrecognised EIGEN_STORAGE_FAULT=${spec}`);
     return backend;
-}
-
-// Every mount wraps its backend, so say it once per process rather than once per mount.
-let announced = false;
-function announceOnce(message: string): void {
-    if (announced) return;
-    announced = true;
-    console.warn(message);
 }

@@ -11,7 +11,7 @@ Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's que
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (146)
+## Components (147)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -37,6 +37,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EditMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/edit-menu.tsx |
 | `EigenApp` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-app.tsx |
 | `EigenCyclingLogo` | `@workspace/ui` | packages/ui/src/components/braket/eigen-cycling-logo.tsx |
+| `EigenDocRouteStatus` | `@workspace/ui` | packages/ui/src/components/layout/app/eigen-doc-route-status.tsx |
 | `EigenLoader` | `@workspace/ui` | packages/ui/src/components/braket/eigen-loader.tsx |
 | `EigenLogo` | `@workspace/ui` | packages/ui/src/components/braket/eigen-logo.tsx |
 | `EmptyState` | `@workspace/ui` | packages/ui/src/components/layout/app/empty-state.tsx |
@@ -187,7 +188,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EigenDocDriveContext` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-root.tsx |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (244)
+## Hooks (243)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -249,7 +250,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useChatRoom` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-room.ts |
 | `useChatSections` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useComments` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-comments.ts |
-| `useCreateChat` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useCreateChatRoom` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useDeleteMessage` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useEditMessage` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
@@ -422,8 +422,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useVectorDoc` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-doc.ts |
 | `useVectorPresence` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-vector-presence.ts |
 | `useDialogPending` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
-| `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.tsx |
-| `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.tsx |
+| `useEigenDocEditorRoute` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
+| `useLatchedDocSearchTerm` | `@workspace/ui/hooks/use-eigen-doc-editor-route` | packages/ui/src/hooks/use-eigen-doc-editor-route.ts |
 | `useFileDropTarget` | `@workspace/ui/hooks/use-file-drop-target` | packages/ui/src/hooks/use-file-drop-target.ts |
 | `useFilePasteTarget` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
 | `useFocusTrap` | `@workspace/ui/hooks/use-focus-trap` | packages/ui/src/hooks/use-focus-trap.ts |
@@ -829,6 +829,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `onMutationError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `apps` | `@workspace/lib/apps` | packages/lib/src/core/apps.ts |
 | `authClient` | `@workspace/lib/auth` | packages/lib/src/core/auth/hooks/use-auth-client.ts |
 | `DEFAULT_FILL_COLOR` | `@workspace/lib/background` | packages/lib/src/background/style.ts |
@@ -950,18 +951,16 @@ rather than inlining `queryClient.invalidateQueries`.
 | `getDocExtensions` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/extensions.ts |
 | `PAGE_MARGIN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/index.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
-| `CREATE_CLOCK_SKEW_MS` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `CREATE_TIMEOUT_MS` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `createWithReconcile` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
+| `fetchListingOnce` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `folderContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `mimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
-| `RECONCILE_ATTEMPTS` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
-| `RECONCILE_DELAY_MS` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
-| `reconcileCreatedItem` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
+| `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `EIGEN_DOC_ICONS` | `@workspace/lib/eigendoc-icons` | packages/lib/src/core/eigendoc-icons.ts |
 | `getFileIconComponent` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
 | `getFilePresentation` | `@workspace/lib/file-presentation` | packages/lib/src/core/file-presentation.ts |
@@ -1054,6 +1053,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `teamOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `toFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |

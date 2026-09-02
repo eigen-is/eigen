@@ -31,6 +31,15 @@ export function getErrorMessage(error: unknown): string {
     return String(error);
 }
 
+// Errors onMutationError has already shown a toast for, so a caller that also sees the rejection
+// (CardForm) can swallow exactly those and let anything else surface.
+const toastedErrors = new WeakSet<object>();
+
 export function onMutationError(error: unknown): void {
+    if (error !== null && typeof error === 'object') toastedErrors.add(error);
     toast.error(getErrorMessage(error));
+}
+
+export function wasToasted(error: unknown): boolean {
+    return error !== null && typeof error === 'object' && toastedErrors.has(error);
 }

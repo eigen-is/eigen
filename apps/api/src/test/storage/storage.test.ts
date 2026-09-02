@@ -148,4 +148,8 @@ describe('S3Storage key guard', () => {
         expect(() => storage.read('a/b')).not.toThrow();
         expect(() => storage.read('folder-uuid/file-uuid')).not.toThrow();
     });
+
+    test('a provider failure on exists surfaces as a 503, not a raw error', async () => {
+        await expect(storage.exists('a/b')).rejects.toMatchObject({ status: 503 });
+    });
 });

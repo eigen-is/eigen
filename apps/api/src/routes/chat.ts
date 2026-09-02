@@ -1,5 +1,5 @@
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import { DRIVE_EXTENSIONS, DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_CHAT, type DrivePath, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
@@ -84,7 +84,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
             // loser (the race net every create path shares). Dedupe in the full-name space —
             // Drive.create re-appends the extension.
             if (body.dedupeName) {
-                const desired = `${fileName}${DRIVE_EXTENSIONS[DRIVE_TYPE_CHAT]}`;
+                const desired = withEigenExtension(fileName, DRIVE_TYPE_CHAT);
                 const siblings = await drive.getFolderContents(params.mountId, parentId);
                 const used = new Set(siblings.map((s) => s.name.toLowerCase()));
                 if (used.has(desired.toLowerCase())) {

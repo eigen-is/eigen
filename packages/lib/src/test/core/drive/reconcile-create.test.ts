@@ -1,24 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { AppError } from '../../../core/api-error';
-import {
-    CreateUnconfirmedError,
-    createWithReconcile,
-    RECONCILE_ATTEMPTS,
-    reconcileCreatedItem,
-} from '../../../core/drive/reconcile-create';
+import { CreateUnconfirmedError, createWithReconcile, RECONCILE_ATTEMPTS } from '../../../core/drive/reconcile-create';
 
-type Item = { name: string; createdAt: Date };
+type Item = { id: string; name: string };
 
-const SINCE = new Date('2026-09-02T10:00:00Z');
-const BEFORE = new Date('2026-09-02T09:59:00Z');
-const AFTER = new Date('2026-09-02T10:00:01Z');
-
-function item(name: string, createdAt: Date = AFTER): Item {
-    return { name, createdAt };
+function item(name: string, id: string = 'new'): Item {
+    return { id, name };
 }
 
-// Returns a listFolder that serves listings[0], listings[1], … one per poll (last one repeats).
-// A listing may be an Error, standing in for a poll that fails against slow storage.
+// Returns a listFolder that serves listings[0], listings[1], … one per call (last one repeats). The
+// first call is createWithReconcile's pre-create snapshot; the rest are the reconcile polls. A
+// listing may be an Error, standing in for a call that fails against slow storage.
 function pollingList(...listings: (Item[] | Error)[]): { listFolder: () => Promise<Item[]>; calls: () => number } {
     let calls = 0;
     return {
@@ -32,63 +24,49 @@ function pollingList(...listings: (Item[] | Error)[]): { listFolder: () => Promi
     };
 }
 
-describe('reconcileCreatedItem', () => {
+// Every create here fails indeterminately, which is what puts createWithReconcile into its polls.
+const unavailable = () =>
+    new AppError({ error: { status: 503, value: { message: 'Storage unavailable' } }, status: 503 });
+
+describe('createWithReconcile', () => {
     test('returns the match on the first poll without waiting', async () => {
-        const { listFolder, calls } = pollingList([item('Notes.eigendoc')]);
+        const { listFolder, calls } = pollingList([], [item('Notes.eigendoc')]);
         const started = Date.now();
 
-        const found = await reconcileCreatedItem({
+        const found = await createWithReconcile({
+            create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            since: SINCE,
-            attempts: 3,
-            delayMs: 500,
+            delayMs: 50,
         });
 
         expect(found).toEqual(item('Notes.eigendoc'));
-        expect(calls()).toBe(1);
-        expect(Date.now() - started).toBeLessThan(500);
+        expect(calls()).toBe(2);
+        expect(Date.now() - started).toBeLessThan(50);
     });
 
     test('keeps polling until the item lands', async () => {
-        const { listFolder, calls } = pollingList([], [], [item('Notes.eigendoc')]);
+        const { listFolder, calls } = pollingList([], [], [], [item('Notes.eigendoc')]);
 
-        const found = await reconcileCreatedItem({
+        const found = await createWithReconcile({
+            create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            since: SINCE,
-            attempts: 3,
             delayMs: 1,
         });
 
         expect(found).toEqual(item('Notes.eigendoc'));
-        expect(calls()).toBe(3);
-    });
-
-    test('returns null when the item never appears', async () => {
-        const { listFolder, calls } = pollingList([item('Other.eigendoc')]);
-
-        const found = await reconcileCreatedItem({
-            listFolder,
-            expectedName: 'Notes.eigendoc',
-            since: SINCE,
-            attempts: 3,
-            delayMs: 1,
-        });
-
-        expect(found).toBeNull();
-        expect(calls()).toBe(3);
+        expect(calls()).toBe(4);
     });
 
     test('matches a decomposed expected name against the NFC name the server stored', async () => {
         const stored = 'Café.eigendoc'.normalize('NFC');
-        const { listFolder } = pollingList([item(stored)]);
+        const { listFolder } = pollingList([], [item(stored)]);
 
-        const found = await reconcileCreatedItem({
+        const found = await createWithReconcile({
+            create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Café.eigendoc'.normalize('NFD'),
-            since: SINCE,
-            attempts: 3,
             delayMs: 1,
         });
 
@@ -96,92 +74,116 @@ describe('reconcileCreatedItem', () => {
     });
 
     test('a failing poll does not abort the remaining polls', async () => {
-        const { listFolder, calls } = pollingList(new Error('listing failed'), [item('Notes.eigendoc')]);
+        const { listFolder, calls } = pollingList([], new Error('listing failed'), [item('Notes.eigendoc')]);
 
-        const found = await reconcileCreatedItem({
+        const found = await createWithReconcile({
+            create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            since: SINCE,
-            attempts: 3,
             delayMs: 1,
         });
 
         expect(found).toEqual(item('Notes.eigendoc'));
-        expect(calls()).toBe(2);
-    });
-
-    test('ignores a same-name item created before the floor', async () => {
-        const { listFolder, calls } = pollingList([item('Notes.eigendoc', BEFORE)]);
-
-        const found = await reconcileCreatedItem({
-            listFolder,
-            expectedName: 'Notes.eigendoc',
-            since: SINCE,
-            attempts: 3,
-            delayMs: 1,
-        });
-
-        expect(found).toBeNull();
         expect(calls()).toBe(3);
     });
 
-    test('picks the fresh item over an older same-name sibling', async () => {
-        const ours = item('Notes.eigendoc', AFTER);
-        const { listFolder } = pollingList([item('Notes.eigendoc', BEFORE), ours]);
+    test('ignores a same-name item the snapshot already held', async () => {
+        const { listFolder, calls } = pollingList([item('Notes.eigendoc', 'pre-existing')]);
 
-        const found = await reconcileCreatedItem({
+        const error = await createWithReconcile({
+            create: () => Promise.reject(unavailable()),
             listFolder,
             expectedName: 'Notes.eigendoc',
-            since: SINCE,
-            attempts: 3,
+            delayMs: 1,
+        }).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(CreateUnconfirmedError);
+        expect(calls()).toBe(RECONCILE_ATTEMPTS + 1);
+    });
+
+    test('picks the unseen id over a same-name sibling from the snapshot', async () => {
+        const ours = item('Notes.eigendoc', 'ours');
+        const { listFolder } = pollingList(
+            [item('Notes.eigendoc', 'pre-existing')],
+            [item('Notes.eigendoc', 'pre-existing'), ours],
+        );
+
+        const found = await createWithReconcile({
+            create: () => Promise.reject(unavailable()),
+            listFolder,
+            expectedName: 'Notes.eigendoc',
             delayMs: 1,
         });
 
         expect(found).toBe(ours);
     });
-});
 
-describe('createWithReconcile', () => {
     test('rethrows a 4xx as is — the server already answered, so nothing to reconcile', async () => {
         const duplicate = new AppError({ error: { status: 409, value: 'A file with that name exists' }, status: 409 });
-        let polls = 0;
+        let listings = 0;
 
         const error = await createWithReconcile({
             create: () => Promise.reject(duplicate),
             listFolder: async () => {
-                polls++;
+                listings++;
                 return [item('Notes.eigendoc')];
             },
             expectedName: 'Notes.eigendoc',
         }).catch((e: unknown) => e);
 
         expect(error).toBe(duplicate);
-        expect(polls).toBe(0);
+        // Only the pre-create snapshot ran; the 4xx skipped the polls.
+        expect(listings).toBe(1);
+    });
+
+    test('a timed-out create whose row landed anyway resolves with the row the listing found', async () => {
+        // The exact rejection AbortSignal.timeout produces (Bun and the browsers alike): a
+        // DOMException, not an AppError — a shape the 4xx check must classify as indeterminate.
+        const timedOut = new DOMException('The operation timed out.', 'TimeoutError');
+        const landed = item('Notes.eigendoc', 'landed');
+        const { listFolder } = pollingList([item('Notes.eigendoc', 'pre-existing')], [landed]);
+
+        const created = await createWithReconcile({
+            create: () => Promise.reject(timedOut),
+            listFolder,
+            expectedName: 'Notes.eigendoc',
+            delayMs: 1,
+        });
+
+        expect(created).toBe(landed);
     });
 
     test('an indeterminate failure with nothing to reconcile rejects with the slow-storage copy', async () => {
-        const unavailable = new AppError({
-            error: { status: 503, value: { message: 'Storage unavailable' } },
-            status: 503,
-        });
-        let polls = 0;
+        const failure = unavailable();
+        const { listFolder, calls } = pollingList([item('Other.eigendoc')]);
 
         const error = await createWithReconcile({
-            create: () => Promise.reject(unavailable),
-            listFolder: async () => {
-                polls++;
-                return [item('Other.eigendoc')];
-            },
+            create: () => Promise.reject(failure),
+            listFolder,
             expectedName: 'Notes.eigendoc',
             // The 5s production budget would make this case wait 10s.
             delayMs: 1,
         }).catch((e: unknown) => e);
 
         if (!(error instanceof CreateUnconfirmedError)) throw error;
-        expect(error.cause).toBe(unavailable);
+        expect(error.cause).toBe(failure);
         expect(error.message).toBe(
             'Storage is responding slowly. The item may still appear in the list automatically.',
         );
-        expect(polls).toBe(RECONCILE_ATTEMPTS);
+        expect(calls()).toBe(RECONCILE_ATTEMPTS + 1);
+    });
+
+    test('a failed snapshot leaves no anchor, so the failure is reported without polling', async () => {
+        const { listFolder, calls } = pollingList(new Error('listing failed'), [item('Notes.eigendoc')]);
+
+        const error = await createWithReconcile({
+            create: () => Promise.reject(unavailable()),
+            listFolder,
+            expectedName: 'Notes.eigendoc',
+            delayMs: 1,
+        }).catch((e: unknown) => e);
+
+        expect(error).toBeInstanceOf(CreateUnconfirmedError);
+        expect(calls()).toBe(1);
     });
 });

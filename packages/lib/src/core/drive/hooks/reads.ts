@@ -148,21 +148,23 @@ export function useAggregateMimeContent(
 }
 
 // GET MIME CONTENTS scoped to a single mount
-export function useMountMimeContent(ownerId: string, mountId: string, mimeType: string) {
-    return useQuery<DrivePath[]>({
+export function mountMimeContentQueryConfig(ownerId: string, mountId: string, mimeType: string) {
+    return {
         queryKey: driveKeys.mountMime(ownerId, mountId, mimeType),
-        queryFn: async () => {
+        queryFn: async (): Promise<DrivePath[]> => {
             if (!mimeType) return [];
             const response = await driveApi({ ownerId })({ mountId }).mime({ mimeType }).get();
-            if (response.error) {
-                throw new AppError(response);
-            }
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         enabled: !!mimeType && !!ownerId && !!mountId,
         retry: 1,
         staleTime: STALE_TIME.FIVE_MINUTES,
-    });
+    };
+}
+
+export function useMountMimeContent(ownerId: string, mountId: string, mimeType: string) {
+    return useQuery<DrivePath[]>(mountMimeContentQueryConfig(ownerId, mountId, mimeType));
 }
 
 // GET PATH INFO

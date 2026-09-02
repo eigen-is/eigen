@@ -11,7 +11,6 @@ import {
     parseOwnerId,
 } from '@workspace/lib/types';
 import {
-    DRIVE_EXTENSIONS,
     type DriveACL,
     type DriveACLDelta,
     type DriveAccessCheckResult,
@@ -23,6 +22,7 @@ import {
     type EffectiveMember,
     type EigenDocType,
     isContainerType,
+    withEigenExtension,
 } from '@workspace/lib/types/drive';
 import {
     type ClientFileEventType,
@@ -282,7 +282,7 @@ export default class Drive {
             throw new ApiError(403, 'No write permission');
         }
 
-        const safeName = `${name}${DRIVE_EXTENSIONS[type]}`;
+        const safeName = withEigenExtension(name, type);
         const pathId = await mount.createFolder(parentId, safeName, type);
         // Roll the container back when provisioning fails, so a transient storage outage can't
         // leave a never-announced row that occupies the name and 503s on every open. mount.deletePath

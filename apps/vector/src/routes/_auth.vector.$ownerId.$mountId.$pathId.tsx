@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { RequestAccessView } from '@workspace/ui';
+import { EigenDocRouteStatus, RequestAccessView } from '@workspace/ui';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { useEigenDocEditorRoute } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
@@ -17,7 +17,9 @@ function VectorView() {
     const { chat } = Route.useSearch();
     const {
         docInfo,
-        statusView,
+        isError,
+        error,
+        refetch,
         path,
         mediaFolderId,
         chatFolderId,
@@ -26,8 +28,8 @@ function VectorView() {
         setAccessDialogOpen,
     } = useEigenDocEditorRoute(ownerId, mountId, pathId);
 
-    if (statusView) return statusView;
-    if (!docInfo?.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
+    if (!docInfo) return <EigenDocRouteStatus isError={isError} error={error} onRetry={refetch} />;
+    if (!docInfo.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
     return (
         <>

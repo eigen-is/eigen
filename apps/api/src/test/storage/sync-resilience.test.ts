@@ -8,11 +8,18 @@ import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
-import type { StorageFile } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { getUploadSemaphore, setShutdownDrainDeadline } from '../../lib/sync';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
-import { createFaultMount, createGetLocalDatabase, createS3MountConfig, FaultStorage } from '../fault-storage-helpers';
+import {
+    countBackingRows,
+    countRowsInFile,
+    createFaultMount,
+    createGetLocalDatabase,
+    createS3MountConfig,
+    FaultStorage,
+    provisionDoc,
+} from '../fault-storage-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-sync-resilience-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -44,32 +51,6 @@ function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
     const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
     createdMounts.push(mount);
     return { mount, fault };
-}
-
-// Open a throwaway non-WAL copy of a data.db StorageFile and count its rows (a readonly WAL open
-// can't create its -shm sidecar).
-async function countRowsInFile(file: StorageFile | null): Promise<number | null> {
-    if (!file || !(await file.exists())) return null;
-    const verifyPath = join(TEST_DIR, `verify-${Math.random().toString(36).slice(2)}.db`);
-    await Bun.write(verifyPath, await file.arrayBuffer());
-    const verify = new Database(verifyPath);
-    const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
-    verify.close();
-    return row.c;
-}
-
-// Count rows in the object that actually reached the backing store ("S3"/local). Reads storage
-// directly — NOT via mount.readFile, which is freshest-first and would surface un-acked staged
-// bytes; getStorageKey handles both the flat-key (s3) and hierarchical (local) layouts.
-async function countBackingRows(mount: Mount, id: string): Promise<number | null> {
-    return countRowsInFile(mount.storage.read(await mount.getStorageKey(id)));
-}
-
-async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
-    const rootId = (await mount.getRootFolder())!.id;
-    const containerId = await mount.createFolder(rootId, `doc-${Math.random().toString(36).slice(2)}`, 'doc');
-    const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
-    return { containerId, dataDbId };
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
@@ -107,7 +88,7 @@ describe('Phase 1a — crash-recovery durability (Gap 1)', () => {
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'synced' }).run();
         await mount.closeDatabase(dataDbId);
-        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
 
         // Simulate a crash: rebuild the temp from the backing store, add an UNSYNCED row, and
         // leave it behind exactly as an unclean shutdown would (no clean close ran).
@@ -126,7 +107,7 @@ describe('Phase 1a — crash-recovery durability (Gap 1)', () => {
         await mount.closeDatabase(dataDbId);
 
         // Without Phase 1a's markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
-        expect(await countBackingRows(mount, dataDbId)).toBe(2);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
     });
 });
 
@@ -149,7 +130,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         fault.writeDelayMs = 0; // don't make the verification drain slow too
         await mount.drainPendingUploads({ flushNow: true }); // now await the upload
         expect(mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
     });
 
     test('a failing backend keeps writes durably queued; recovery uploads them (no data loss)', async () => {
@@ -164,12 +145,12 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await mount.drainPendingUploads({ flushNow: true });
 
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // queued, not lost
-        expect(await countBackingRows(mount, dataDbId)).toBeNull(); // nothing reached "S3"
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBeNull(); // nothing reached "S3"
 
         fault.failNextWrites = 0; // outage over
         await mount.drainPendingUploads({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
         expect(readdirSync(mount.stagingDir)).toHaveLength(0); // staged copies cleaned up on ack
     });
 
@@ -191,7 +172,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         fault.failNextWrites = 0;
         await mount.closeDatabase(dataDbId);
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(mount, dataDbId)).toBe(2); // final state, not a stale snapshot
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2); // final state, not a stale snapshot
     });
 
     test('after an outage + restart, reopen recovers newest bytes from staging, not stale storage', async () => {
@@ -205,7 +186,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         managed1.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await m1.mount.closeDatabase(dataDbId);
         await m1.mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(m1.mount, dataDbId)).toBeNull(); // not in "S3"
+        expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBeNull(); // not in "S3"
 
         // Mount 2: a "restart" sharing the same baseDir + object store; outage still ongoing.
         const m2 = createS3Mount('crash-staging');
@@ -219,7 +200,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
 
         m2.fault.failNextWrites = 0; // outage over
         await m2.mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(m2.mount, dataDbId)).toBe(2);
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
     });
 
     test('startup reconcile resumes a persisted pending upload on a fresh mount', async () => {
@@ -238,7 +219,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await m2.mount.init();
         await m2.mount.drainPendingUploads({ flushNow: true });
         expect(m2.mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(m2.mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
     });
 
     test('permanent delete cancels queued uploads so they cannot resurrect the object', async () => {
@@ -278,7 +259,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         setShutdownDrainDeadline(null);
 
         expect(mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
     });
 
     test('shutdown flush is bounded under a slow-AND-failing backend (the real incident shape)', async () => {
@@ -314,7 +295,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
 
         // Outage + a new write {2}: the live/staged state is {1,2} but "S3" is still {1}.
         fault.failNextWrites = 9999;
@@ -330,7 +311,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         await mount.closeDatabase(dataDbId);
         await mount.drainPendingUploads({ flushNow: true });
 
-        expect(await countBackingRows(mount, versionId)).toBe(2); // current bytes, not stale {1}
+        expect(await countBackingRows(mount, versionId, TEST_DIR)).toBe(2); // current bytes, not stale {1}
     });
 
     test('a delete landing during an in-flight PUT does not resurrect the deleted object', async () => {
@@ -375,8 +356,8 @@ describe('Phase 1b — write-behind upload pipeline', () => {
         fault.failNextWrites = 0; // recovery uploads both
         await mount.drainPendingUploads({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(mount, dataDbId)).toBe(1);
-        expect(await countBackingRows(mount, commentsId)).toBe(1);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
+        expect(await countBackingRows(mount, commentsId, TEST_DIR)).toBe(1);
     });
 
     test('reconcile resumes the real pending upload and sweeps an orphan staging file', async () => {
@@ -405,7 +386,7 @@ describe('Phase 1b — write-behind upload pipeline', () => {
 
         m2.fault.failNextWrites = 0; // and the real one still uploads
         await m2.mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(m2.mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
     });
 
     test('idle teardown during an in-flight PUT bails cleanly and leaves the row for replay', async () => {
@@ -441,7 +422,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1);
 
         // A new write {2} whose upload is HELD in-flight: the staged {1,2} copy + pending row exist,
         // but "S3" is still {1}. writeDelayMs keeps that PUT from acking; reset to 0 (after the drain
@@ -452,20 +433,20 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         await Bun.sleep(100);
         fault.writeDelayMs = 0;
         expect(mount.pendingUploadCount).toBe(1);
-        expect(await countBackingRows(mount, dataDbId)).toBe(1); // "S3" still stale {1}
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(1); // "S3" still stale {1}
 
         // readFile is freshest-first (the seam behind downloadFile / copyPathAcross): it must surface
         // the staged {1,2}, not the stale {1} in storage.
-        expect(await countRowsInFile(await mount.readFile(dataDbId))).toBe(2);
+        expect(await countRowsInFile(await mount.readFile(dataDbId), TEST_DIR)).toBe(2);
 
         // Copy the whole container: the recursion into data.db must copy the staged {1,2}, not "S3" {1}.
         const copy = await mount.copyPath(containerId, rootId, 'doc-copy');
         const copiedDataDb = (await mount.getChildByName(copy.id, 'data.db'))!;
-        expect(await countBackingRows(mount, copiedDataDb.id)).toBe(2);
+        expect(await countBackingRows(mount, copiedDataDb.id, TEST_DIR)).toBe(2);
 
         // Duplicate-then-delete-original preserves the copied data.
         await mount.deletePath(containerId);
-        expect(await countBackingRows(mount, copiedDataDb.id)).toBe(2);
+        expect(await countBackingRows(mount, copiedDataDb.id, TEST_DIR)).toBe(2);
     });
 
     test('a data-dir relocation keeps pending uploads (stagingPath resolves against the current stagingDir)', async () => {
@@ -506,7 +487,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         backing.failNextWrites = 0; // outage over — the relocated upload still drains
         await mountB.drainPendingUploads({ flushNow: true });
         expect(mountB.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(mountB, dataDbId)).toBe(1);
+        expect(await countBackingRows(mountB, dataDbId, TEST_DIR)).toBe(1);
     });
 
     test("a delayed restart preserves an open doc's crash-recovery temp but sweeps stale transient temps", async () => {
@@ -567,7 +548,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
             .run();
         await mount.closeDatabase(dataDbId);
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(mount, dataDbId)).toBe(3);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(3);
 
         // Unclean shutdown leaves a poison temp: a 0-byte file from an interrupted/empty GET.
         await Bun.write(mount.getTempPath(dataDbId), new Uint8Array(0));
@@ -578,7 +559,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
 
         await mount.closeDatabase(dataDbId);
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(mount, dataDbId)).toBe(3); // good object intact, not overwritten
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(3); // good object intact, not overwritten
     });
 
     test('a valid but content-empty temp does not collapse a larger stored object', async () => {
@@ -596,7 +577,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         }
         await managed.flush();
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(mount, dataDbId)).toBe(500);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500);
         await mount.closeDatabase(dataDbId);
 
         // Poison temp: a VALID but freshly-initialized (0-row) SQLite — passes a header check but is
@@ -611,7 +592,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
 
         await mount.closeDatabase(dataDbId);
         await mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(mount, dataDbId)).toBe(500); // not collapsed to empty
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(500); // not collapsed to empty
     });
 });
 
