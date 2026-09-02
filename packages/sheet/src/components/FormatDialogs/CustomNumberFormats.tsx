@@ -5,13 +5,12 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { en, handleNumberFormat } from '../../state';
+import { handleNumberFormat } from '../../state';
 import { NUMBER_FORMAT_PRESETS, previewPattern } from './format-pattern';
 import { useAnchorCell } from './useAnchorCell';
 
 export function CustomNumberFormats() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { button, format } = en;
     const { hideDialog } = useDialog();
 
     const anchor = useAnchorCell();
@@ -33,13 +32,13 @@ export function CustomNumberFormats() {
     return (
         <div className="flex flex-col min-h-0 flex-1 gap-4">
             <DialogHeader>
-                <DialogTitle>{format.titleNumber}</DialogTitle>
+                <DialogTitle>Custom number formats</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-1.5 shrink-0">
                 <Input className="font-mono" value={pattern} onChange={(e) => setPattern(e.target.value)} />
                 {sample.ok ? (
                     <div className="text-sm text-muted-foreground">
-                        {format.sample}: <span className="text-foreground">{sample.text}</span>
+                        Sample: <span className="text-foreground">{sample.text}</span>
                     </div>
                 ) : (
                     <div className="text-sm text-destructive">{sample.error}</div>
@@ -60,10 +59,10 @@ export function CustomNumberFormats() {
             </div>
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button size="sm" disabled={!pattern || !sample.ok} onClick={apply}>
-                    {button.apply}
+                    Apply
                 </Button>
             </DialogFooter>
         </div>

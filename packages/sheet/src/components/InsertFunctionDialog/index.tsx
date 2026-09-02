@@ -6,7 +6,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { cancelNormalSelected, en, FUNCTION_LIST, setCaretPosition } from '../../state';
+import { cancelNormalSelected, FUNCTION_LIST, setCaretPosition } from '../../state';
+
+const FUNCTION_CATEGORIES = [
+    { t: 0, n: 'Math' },
+    { t: 1, n: 'Statistical' },
+    { t: 2, n: 'Lookup' },
+    { t: 4, n: 'Data Mining' },
+    { t: 5, n: 'Database' },
+    { t: 6, n: 'Date' },
+    { t: 7, n: 'Filter' },
+    { t: 8, n: 'Financial' },
+    { t: 9, n: 'Engineering' },
+    { t: 10, n: 'Logical' },
+    { t: 11, n: 'Operator' },
+    { t: 12, n: 'Text' },
+    { t: 13, n: 'Parser' },
+    { t: 14, n: 'Array' },
+    { t: -1, n: 'Other' },
+];
 
 export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => void }) {
     const {
@@ -17,28 +35,6 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
     const [selectedType, setSelectedType] = useState(0);
     const [selectedFuncIndex, setSelectedFuncIndex] = useState(0);
     const [searchText, setSearchText] = useState('');
-    const { formulaMore, button } = en;
-
-    const typeList = useMemo(
-        () => [
-            { t: 0, n: formulaMore.Math },
-            { t: 1, n: formulaMore.Statistical },
-            { t: 2, n: formulaMore.Lookup },
-            { t: 4, n: formulaMore.dataMining },
-            { t: 5, n: formulaMore.Database },
-            { t: 6, n: formulaMore.Date },
-            { t: 7, n: formulaMore.Filter },
-            { t: 8, n: formulaMore.Financial },
-            { t: 9, n: formulaMore.Engineering },
-            { t: 10, n: formulaMore.Logical },
-            { t: 11, n: formulaMore.Operator },
-            { t: 12, n: formulaMore.Text },
-            { t: 13, n: formulaMore.Parser },
-            { t: 14, n: formulaMore.Array },
-            { t: -1, n: formulaMore.other },
-        ],
-        [],
-    );
 
     const filteredFunctionList = useMemo(() => {
         if (searchText) {
@@ -101,14 +97,14 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
     return (
         <div className="flex flex-col min-h-0 flex-1 gap-4">
             <DialogHeader>
-                <DialogTitle>{formulaMore.selectFunctionTitle}</DialogTitle>
+                <DialogTitle>Select a function</DialogTitle>
             </DialogHeader>
             <div className="grid grid-cols-[1fr_auto] gap-3 shrink-0 items-end">
                 <div className="space-y-1.5">
-                    <Label htmlFor="searchFormulaListInput">{formulaMore.findFunctionTitle}</Label>
+                    <Label htmlFor="searchFormulaListInput">Search function</Label>
                     <Input
                         id="searchFormulaListInput"
-                        placeholder={formulaMore.tipInputFunctionName}
+                        placeholder="Function name or brief description of function"
                         spellCheck={false}
                         onChange={(e) => {
                             setSearchText(e.target.value);
@@ -117,7 +113,7 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
                     />
                 </div>
                 <div className="space-y-1.5">
-                    <Label>{formulaMore.selectCategory}</Label>
+                    <Label>Or select a category</Label>
                     <Select
                         value={String(selectedType)}
                         onValueChange={(v) => {
@@ -129,7 +125,7 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            {typeList.map((v) => (
+                            {FUNCTION_CATEGORIES.map((v) => (
                                 <SelectItem key={v.t} value={String(v.t)}>
                                     {v.n}
                                 </SelectItem>
@@ -156,10 +152,10 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
             </div>
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={onCancel}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button size="sm" onClick={onConfirm} disabled={filteredFunctionList.length === 0}>
-                    {button.confirm}
+                    OK
                 </Button>
             </DialogFooter>
         </div>

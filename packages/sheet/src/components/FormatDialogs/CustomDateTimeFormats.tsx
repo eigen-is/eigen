@@ -14,7 +14,7 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { is_date } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { DATE_FORMAT_PRESETS, en, handleNumberFormat } from '../../state';
+import { DATE_FORMAT_PRESETS, handleNumberFormat } from '../../state';
 import {
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
@@ -79,7 +79,6 @@ function TokenChip({
 
 export function CustomDateTimeFormats() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { button, format } = en;
     const { hideDialog } = useDialog();
 
     const anchor = useAnchorCell();
@@ -105,7 +104,7 @@ export function CustomDateTimeFormats() {
     return (
         <div className="flex flex-col min-h-0 flex-1 gap-4">
             <DialogHeader>
-                <DialogTitle>{format.titleDateTime}</DialogTitle>
+                <DialogTitle>Custom date and time formats</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-1.5 shrink-0">
                 <div className="flex flex-wrap items-center gap-1 rounded-md border border-input px-2 py-1.5 min-h-9">
@@ -171,7 +170,7 @@ export function CustomDateTimeFormats() {
                 </div>
                 {preview.ok ? (
                     <div className="text-sm text-muted-foreground">
-                        {format.preview}: <span className="text-foreground">{preview.text}</span>
+                        Preview: <span className="text-foreground">{preview.text}</span>
                     </div>
                 ) : (
                     <div className="text-sm text-destructive">{preview.error}</div>
@@ -195,10 +194,10 @@ export function CustomDateTimeFormats() {
             </div>
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button size="sm" disabled={!pattern || !preview.ok} onClick={apply}>
-                    {button.apply}
+                    Apply
                 </Button>
             </DialogFooter>
         </div>

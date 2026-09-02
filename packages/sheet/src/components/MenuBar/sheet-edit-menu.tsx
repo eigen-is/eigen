@@ -11,7 +11,6 @@ import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import {
     clearSelectedContents,
-    en,
     flushPendingCopy,
     handleCopy,
     handleCut,
@@ -27,7 +26,6 @@ import {
 export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
     const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
-    const { toolbar, button } = en;
     const docSearchBar = useOptionalDocSearchBar();
 
     const selection = context.selections?.[0];
@@ -39,10 +37,10 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
             {context.allowEdit && (
                 <>
                     <DropdownMenuItem disabled={!canUndo} onClick={() => handleUndo()}>
-                        {toolbar.undo}
+                        Undo
                     </DropdownMenuItem>
                     <DropdownMenuItem disabled={!canRedo} onClick={() => handleRedo()}>
-                        {toolbar.redo}
+                        Redo
                     </DropdownMenuItem>
 
                     <DropdownMenuSeparator />
@@ -90,13 +88,13 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                             });
                         }}
                     >
-                        {toolbar.paintFormat}
+                        Paint format
                     </DropdownMenuItem>
 
                     <DropdownMenuSeparator />
 
                     <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>{button.delete}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>Delete</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent className="sheet-mousedown-cancel">
                             <DropdownMenuItem
                                 onClick={() => {

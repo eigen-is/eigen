@@ -12,7 +12,6 @@ import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
     computeOverlayRegions,
-    en,
     goToLink,
     isLinkValid,
     type LinkCardProps,
@@ -37,6 +36,15 @@ const modalBase =
 const RANGE_PICKER_WIDTH = 380;
 const RANGE_PICKER_GAP = 5;
 
+// biome-ignore lint/suspicious/noTemplateCurlyInString: ${linkAddress} is substituted by replaceHtml() at runtime, not JS template syntax
+const GO_TO_FRAME = 'Go to ${linkAddress}';
+
+const LINK_TYPES = [
+    { text: 'Webpages', value: 'webpage' },
+    { text: 'Cell range', value: 'cellrange' },
+    { text: 'Sheet', value: 'sheet' },
+];
+
 export function LinkEditCard({
     r,
     c,
@@ -53,7 +61,6 @@ export function LinkEditCard({
     const [linkText, setLinkText] = useState<string>(originText);
     const [linkAddress, setLinkAddress] = useState<string>(originAddress);
     const [linkType, setLinkType] = useState<string>(originType);
-    const { insertLink, linkTypeList, button } = en;
     const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
     const isLinkAddressValid = isLinkValid(linkType, linkAddress);
     const invalidBorder = linkAddress && !isLinkAddressValid.isValid && 'border-destructive';
@@ -174,7 +181,7 @@ export function LinkEditCard({
                         );
                     }}
                 >
-                    {linkType === 'webpage' ? insertLink.openLink : replaceHtml(insertLink.goTo, { linkAddress })}
+                    {linkType === 'webpage' ? 'Open link' : replaceHtml(GO_TO_FRAME, { linkAddress })}
                 </button>
                 {context.allowEdit && (
                     <>
@@ -231,7 +238,7 @@ export function LinkEditCard({
                 </DialogHeader>
                 <div className="space-y-3">
                     <div className="space-y-1.5">
-                        <Label htmlFor="link-text">{insertLink.linkText}</Label>
+                        <Label htmlFor="link-text">Display text</Label>
                         <Input
                             id="link-text"
                             spellCheck="false"
@@ -241,7 +248,7 @@ export function LinkEditCard({
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="link-type">{insertLink.linkType}</Label>
+                        <Label htmlFor="link-type">Link type</Label>
                         <Select
                             value={linkType}
                             onValueChange={(value) => {
@@ -259,7 +266,7 @@ export function LinkEditCard({
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {linkTypeList.map((type) => (
+                                {LINK_TYPES.map((type) => (
                                     <SelectItem key={type.value} value={type.value}>
                                         {type.text}
                                     </SelectItem>
@@ -269,7 +276,7 @@ export function LinkEditCard({
                     </div>
                     {linkType === 'webpage' && (
                         <div className="space-y-1.5">
-                            <Label htmlFor="link-address">{insertLink.linkAddress}</Label>
+                            <Label htmlFor="link-address">Link address</Label>
                             <Input
                                 id="link-address"
                                 className={cn(invalidBorder)}
@@ -282,7 +289,7 @@ export function LinkEditCard({
                     )}
                     {linkType === 'cellrange' && (
                         <div className="space-y-1.5">
-                            <Label htmlFor="link-cell">{insertLink.linkCell}</Label>
+                            <Label htmlFor="link-cell">Cell range</Label>
                             <div className="relative">
                                 <Input
                                     id="link-cell"
@@ -304,7 +311,7 @@ export function LinkEditCard({
                     )}
                     {linkType === 'sheet' && (
                         <div className="space-y-1.5">
-                            <Label htmlFor="link-sheet">{insertLink.linkSheet}</Label>
+                            <Label htmlFor="link-sheet">Worksheet</Label>
                             <Select
                                 value={linkAddress}
                                 onValueChange={(value) => {
@@ -329,7 +336,7 @@ export function LinkEditCard({
                 </div>
                 <DialogFooter>
                     <Button variant="outline" size="sm" onClick={hideLinkCard}>
-                        {button.cancel}
+                        Cancel
                     </Button>
                     <Button
                         size="sm"
@@ -339,7 +346,7 @@ export function LinkEditCard({
                             setContext((draftCtx) => saveHyperlink(draftCtx, r, c, linkText, linkType, linkAddress));
                         }}
                     >
-                        {button.confirm}
+                        OK
                     </Button>
                 </DialogFooter>
             </DialogContent>

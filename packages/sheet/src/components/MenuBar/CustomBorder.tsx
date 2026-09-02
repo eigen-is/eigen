@@ -5,7 +5,6 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { useState } from 'react';
-import { en } from '../../state';
 import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
 
 // The border-style vocabulary is owned by BORDER_STYLES (@workspace/lib/sheets), keyed by the
@@ -30,14 +29,13 @@ type Props = {
 };
 
 export function CustomBorder({ onPick }: Props) {
-    const { border } = en;
     const [changeColor, setChangeColor] = useState('#000000');
     const [changeStyle, setChangeStyle] = useState('1');
 
     return (
         <>
             <ColorPickerMenuItem
-                label={border.borderColor}
+                label="border color"
                 value={changeColor}
                 showReset={false}
                 keepMenuOpen
@@ -50,7 +48,7 @@ export function CustomBorder({ onPick }: Props) {
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                     <div className="flex items-center gap-2 w-full">
-                        <span>{border.borderStyle}</span>
+                        <span>border style</span>
                         <svg className="ml-auto" height="6" width="50">
                             <g
                                 fill="none"
@@ -78,7 +76,7 @@ export function CustomBorder({ onPick }: Props) {
                             onPick(changeColor, '1');
                         }}
                     >
-                        {border.borderDefault ?? 'Default'}
+                        default
                     </DropdownMenuItem>
                     {BORDER_STYLE_PREVIEWS.map((item) => (
                         <DropdownMenuItem

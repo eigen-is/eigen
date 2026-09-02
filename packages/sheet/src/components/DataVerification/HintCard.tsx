@@ -1,7 +1,7 @@
 import { cn } from '@workspace/ui/lib/utils';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
-import { en, getValidationHint } from '../../state';
+import { getValidationHint } from '../../state';
 
 // The data-validation card: the prompt a validated cell carries, or the reason
 // the value in it was rejected. Rendered from the focus cell, so arrowing onto
@@ -41,9 +41,7 @@ export function ValidationHintCard() {
             // reaches a screen-reader user as well as a sighted one.
             role="status"
         >
-            {hint.kind === 'invalid' && (
-                <span className="font-medium text-destructive">{`${en.dataVerification.hintCard.invalidLabel} `}</span>
-            )}
+            {hint.kind === 'invalid' && <span className="font-medium text-destructive">{'Invalid: '}</span>}
             {hint.text}
         </div>
     );

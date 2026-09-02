@@ -9,7 +9,7 @@ import { Check, ChevronsLeft, ChevronsRight, LayoutGrid, Plus } from 'lucide-rea
 import type React from 'react';
 import { Fragment, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { addSheet, calcSelectionInfo, cancelActiveImgItem, cancelNormalSelected, en, updateCell } from '../../state';
+import { addSheet, calcSelectionInfo, cancelActiveImgItem, cancelNormalSelected, updateCell } from '../../state';
 import { SheetItem } from './SheetItem';
 
 const iconButtonClass =
@@ -20,7 +20,6 @@ export const SheetTab: React.FC = () => {
     const tabContainerRef = useRef<HTMLDivElement>(null);
     const [isShowScrollBtn, setIsShowScrollBtn] = useState<boolean>(false);
     const [isShowBoundary, setIsShowBoundary] = useState<boolean>(true);
-    const { info, formula } = en;
 
     const [calInfo, setCalInfo] = useState<{
         numberC: number;
@@ -94,11 +93,11 @@ export const SheetTab: React.FC = () => {
     );
 
     const stats = [
-        calInfo.count ? `${formula.count}: ${calInfo.count}` : null,
-        calInfo.numberC && calInfo.sum ? `${formula.sum}: ${calInfo.sum}` : null,
-        calInfo.numberC && calInfo.average ? `${formula.average}: ${calInfo.average}` : null,
-        calInfo.numberC && calInfo.max ? `${formula.max}: ${calInfo.max}` : null,
-        calInfo.numberC && calInfo.min ? `${formula.min}: ${calInfo.min}` : null,
+        calInfo.count ? `Count: ${calInfo.count}` : null,
+        calInfo.numberC && calInfo.sum ? `Sum: ${calInfo.sum}` : null,
+        calInfo.numberC && calInfo.average ? `Average: ${calInfo.average}` : null,
+        calInfo.numberC && calInfo.max ? `Max: ${calInfo.max}` : null,
+        calInfo.numberC && calInfo.min ? `Min: ${calInfo.min}` : null,
     ].filter((s): s is string => s !== null);
 
     return (
@@ -107,7 +106,7 @@ export const SheetTab: React.FC = () => {
             onContextMenu={(e) => e.preventDefault()}
         >
             {context.allowEdit && (
-                <button type="button" className={iconButtonClass} onClick={onAddSheetClick} aria-label={info.newSheet}>
+                <button type="button" className={iconButtonClass} onClick={onAddSheetClick} aria-label="New sheet">
                     <Plus width={16} height={16} aria-hidden="true" />
                 </button>
             )}

@@ -25,7 +25,6 @@ import {
     type Context,
     defaultContext,
     defaultSettings,
-    en,
     ensureSheetIndex,
     filterPatch,
     type GlobalCache,
@@ -177,7 +176,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const [context, setContext] = useState(defaultContext(refs));
-        const { info } = en;
 
         // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
         const mergedSettings = useMemo(
@@ -792,21 +790,21 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             tabIndex={0}
                             aria-live="polite"
                         >
-                            <h2 id="shortcuts-heading">{info.shortcuts}</h2>
+                            <h2 id="shortcuts-heading">Keyboard Shortcuts</h2>
                             <ul>
-                                <li>{info.toggleSheetFocusShortcut}</li>
-                                <li>{info.selectRangeShortcut}</li>
-                                <li>{info.autoFillDownShortcut}</li>
-                                <li>{info.autoFillRightShortcut}</li>
-                                <li>{info.boldTextShortcut}</li>
-                                <li>{info.copyShortcut}</li>
-                                <li>{info.pasteShortcut}</li>
-                                <li>{info.undoShortcut}</li>
-                                <li>{info.redoShortcut}</li>
-                                <li>{info.deleteCellContentShortcut}</li>
-                                <li>{info.confirmCellEditShortcut}</li>
-                                <li>{info.moveRightShortcut}</li>
-                                <li>{info.moveLeftShortcut}</li>
+                                <li>Toggle sheet focus lock: Shift, Control, F.</li>
+                                <li>Select range: Shift, arrow keys.</li>
+                                <li>Auto-fill selection down from first cell: Control or Meta key, D.</li>
+                                <li>Auto-fill selection right from first cell: Control or Meta key, R.</li>
+                                <li>Bold text: Control or Meta key, B.</li>
+                                <li>Copy: Control or Meta key, C.</li>
+                                <li>Paste: Control or Meta key, V.</li>
+                                <li>Undo: Control or Meta key, Z.</li>
+                                <li>Redo: Control or Meta key, Shift, Z.</li>
+                                <li>Delete cell content: Delete or Backspace.</li>
+                                <li>Confirm cell edit and move down: Enter.</li>
+                                <li>Move right: Tab.</li>
+                                <li>Move left: Shift, Tab.</li>
                             </ul>
                         </section>
                         <div className="w-full">

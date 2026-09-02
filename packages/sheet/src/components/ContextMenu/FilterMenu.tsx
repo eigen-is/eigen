@@ -16,7 +16,6 @@ import { useAlert } from '../../hooks/useAlert';
 import {
     type Context,
     clearFilter,
-    en,
     FILTER_CONDITION_ITEMS,
     type FilterColor,
     type FilterConditionName,
@@ -136,7 +135,6 @@ export const FilterMenu: React.FC = () => {
         endCol: null,
         col: null,
     };
-    const { filter } = en;
     const [data, setData] = useState<{
         dates: FilterDate[];
         dateRowMap: Record<string, number[]>;
@@ -312,7 +310,7 @@ export const FilterMenu: React.FC = () => {
                                 className={cn(menuItemClass, 'w-full')}
                                 onClick={() => sortData(true)}
                             >
-                                {filter.sortByAsc}
+                                Ascending sort
                             </button>
                         );
                     }
@@ -324,7 +322,7 @@ export const FilterMenu: React.FC = () => {
                                 className={cn(menuItemClass, 'w-full')}
                                 onClick={() => sortData(false)}
                             >
-                                {filter.sortByDesc}
+                                Descending sort
                             </button>
                         );
                     }
@@ -339,7 +337,7 @@ export const FilterMenu: React.FC = () => {
                                         onMouseLeave={closeSubMenu}
                                         onClick={openSubMenu}
                                     >
-                                        <span>{filter.filterByColor}</span>
+                                        <span>Filter by color</span>
                                         <ChevronRight className="size-3.5" aria-hidden="true" />
                                     </button>
                                 </PopoverAnchor>
@@ -353,7 +351,7 @@ export const FilterMenu: React.FC = () => {
                                 >
                                     {filterColors.bgColors.length < 2 && filterColors.fcColors.length < 2 ? (
                                         <div className="px-2 py-1 text-muted-foreground">
-                                            {filter.filterContainerOneColorTip}
+                                            This column contains only one color
                                         </div>
                                     ) : (
                                         <div className="space-y-2">
@@ -361,12 +359,12 @@ export const FilterMenu: React.FC = () => {
                                                 [
                                                     {
                                                         key: 'bgColors',
-                                                        title: filter.filiterByColorTip,
+                                                        title: 'Filter by cell color',
                                                         colors: filterColors.bgColors,
                                                     },
                                                     {
                                                         key: 'fcColors',
-                                                        title: filter.filiterByTextColorTip,
+                                                        title: 'Filter by font color',
                                                         colors: filterColors.fcColors,
                                                     },
                                                 ] as const
@@ -429,7 +427,7 @@ export const FilterMenu: React.FC = () => {
                                                     });
                                                 }}
                                             >
-                                                {filter.filterConform}
+                                                Confirm
                                             </Button>
                                         </div>
                                     )}
@@ -446,7 +444,7 @@ export const FilterMenu: React.FC = () => {
                                     className={cn(menuItemClass, 'w-full justify-between gap-2')}
                                     onClick={() => setConditionExpanded((prev) => !prev)}
                                 >
-                                    <span>{filter.filterByCondition}</span>
+                                    <span>Filter by condition</span>
                                     {conditionExpanded ? (
                                         <ChevronDown className="size-3.5" aria-hidden="true" />
                                     ) : (
@@ -463,7 +461,7 @@ export const FilterMenu: React.FC = () => {
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="none">{filter.conditionNone}</SelectItem>
+                                                <SelectItem value="none">None</SelectItem>
                                                 {FILTER_CONDITION_ITEMS.map((item) => (
                                                     <SelectItem key={item.name} value={item.name}>
                                                         {item.label}
@@ -474,7 +472,7 @@ export const FilterMenu: React.FC = () => {
                                         {arity >= 1 && (
                                             <Input
                                                 className="h-8"
-                                                placeholder={filter.filiterInputTip}
+                                                placeholder="Enter filter value"
                                                 value={conditionValues[0]}
                                                 onKeyDown={(e) => e.stopPropagation()}
                                                 onChange={(e) =>
@@ -485,7 +483,7 @@ export const FilterMenu: React.FC = () => {
                                         {arity === 2 && (
                                             <Input
                                                 className="h-8"
-                                                placeholder={filter.filiterInputTip}
+                                                placeholder="Enter filter value"
                                                 value={conditionValues[1]}
                                                 onKeyDown={(e) => e.stopPropagation()}
                                                 onChange={(e) =>
@@ -509,7 +507,7 @@ export const FilterMenu: React.FC = () => {
                                             className="underline-offset-2 hover:underline"
                                             onClick={selectAll}
                                         >
-                                            {filter.filterValueByAllBtn}
+                                            Check all
                                         </button>
                                         {' - '}
                                         <button
@@ -517,7 +515,7 @@ export const FilterMenu: React.FC = () => {
                                             className="underline-offset-2 hover:underline"
                                             onClick={clearAll}
                                         >
-                                            {filter.filterValueByClearBtn}
+                                            Clear
                                         </button>
                                         {' - '}
                                         <button
@@ -525,14 +523,14 @@ export const FilterMenu: React.FC = () => {
                                             className="underline-offset-2 hover:underline"
                                             onClick={inverseSelect}
                                         >
-                                            {filter.filterValueByInverseBtn}
+                                            Inverse
                                         </button>
                                     </div>
                                     <FilterIcon className="size-4 text-muted-foreground" aria-hidden="true" />
                                 </div>
                                 <Input
                                     onKeyDown={(e) => e.stopPropagation()}
-                                    placeholder={filter.filterValueByTip}
+                                    placeholder="filter By Values"
                                     className="h-7 mb-1.5"
                                     value={searchText}
                                     onChange={(e) => {
@@ -601,11 +599,11 @@ export const FilterMenu: React.FC = () => {
                             });
                         }}
                     >
-                        {filter.clearFilter}
+                        Clear filter
                     </Button>
                     <div className="flex items-center gap-2">
                         <Button variant="outline" size="sm" onClick={close}>
-                            {filter.filterCancel}
+                            Cancel
                         </Button>
                         <Button
                             size="sm"
@@ -653,7 +651,7 @@ export const FilterMenu: React.FC = () => {
                                 });
                             }}
                         >
-                            {filter.filterConform}
+                            Confirm
                         </Button>
                     </div>
                 </div>
