@@ -3,7 +3,6 @@ import { cfSplitRange } from '../../engine/conditional-format';
 import type { Cell, SingleRange } from '../../engine/types';
 
 import { type Context, getFlowdata } from '../context';
-import { en } from '../locale/en';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { carrySides, clearSides, getBorderInfoCompute } from './border';
@@ -200,11 +199,10 @@ export function onCellsMoveEnd(
 
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
-    const { drag: locale_drag } = en;
 
     // Selection contains partial cells
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
-        ctx.warnDialog = locale_drag.noMerge;
+        ctx.warnDialog = 'Cannot perform this operation on merged cells';
         return;
     }
 
@@ -235,7 +233,7 @@ export function onCellsMoveEnd(
 
     // Replacement position contains partial cells
     if (hasPartMC(ctx, row_s, row_e, col_s, col_e)) {
-        ctx.warnDialog = locale_drag.noMerge;
+        ctx.warnDialog = 'Cannot perform this operation on merged cells';
         return;
     }
 

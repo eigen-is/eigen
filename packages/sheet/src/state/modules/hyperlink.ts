@@ -2,7 +2,6 @@ import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { cloneDeep, omit, set } from 'es-toolkit/compat';
 import { iscelldata } from '../../engine/formula-utils';
 import { type Context, getFlowdata } from '../context';
-import { en } from '../locale/en';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { mergeBorder } from './cell';
 import { getcellrange } from './formula-exec';
@@ -153,17 +152,16 @@ export function goToLink(
 
 export function isLinkValid(linkType: string, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
-    const { insertLink } = en;
     if (linkType === 'webpage') {
         // Valid means "navigation would open it": the same resolveWebLink gate
         // goToLink uses, plus a structural parse — one fact, one place.
         const address = resolveWebLink(linkAddress);
         if (address == null || !URL.canParse(address)) {
-            return { isValid: false, tooltip: insertLink.tooltipInfo1 };
+            return { isValid: false, tooltip: 'Please enter a valid link' };
         }
     }
     if (linkType === 'cellrange' && !iscelldata(linkAddress)) {
-        return { isValid: false, tooltip: insertLink.invalidCellRangeTip };
+        return { isValid: false, tooltip: 'Please enter a valid cell range, such as Sheet1!A1:C8' };
     }
     return { isValid: true, tooltip: '' };
 }

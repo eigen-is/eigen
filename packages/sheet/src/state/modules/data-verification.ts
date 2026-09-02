@@ -24,13 +24,29 @@ import {
     type SingleRange,
     setCellValue,
 } from '..';
-import { en } from '../locale/en';
 import type { Rect } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
 
-// The rule-type and condition words the hint sentences slot in, widened once:
-// `type`/`type2` are free-form strings, the locale object is not.
-const optionLabel: Record<string, string> = en.dataVerification.optionLabel;
+// Lowercase phrase fragments the hint sentences slot into `${type}`/`${condition}`, keyed
+// loosely because `type`/`type2` are free-form strings. Text rules get their own frames —
+// "Text must equal to ACME" is not a sentence.
+const OPTION_LABEL: Record<string, string> = {
+    number: 'a number',
+    number_integer: 'a whole number',
+    number_decimal: 'a decimal number',
+    between: 'between',
+    notBetween: 'not between',
+    equal: 'equal to',
+    notEqualTo: 'not equal to',
+    moreThanThe: 'greater than',
+    lessThan: 'less than',
+    greaterOrEqualTo: 'greater than or equal to',
+    lessThanOrEqualTo: 'less than or equal to',
+    earlierThan: 'earlier than',
+    noEarlierThan: 'not earlier than',
+    laterThan: 'later than',
+    noLaterThan: 'not later than',
+};
 
 // Cell value handed to validateCellData by callers. Canvas passes the
 // formatted/raw cell value (`Cell['v']` flavour) and `updateCell` in cell.ts
@@ -488,32 +504,62 @@ export type ValidationHint = {
 // "between 1 and 10", "greater than 5", "earlier than 2024-01-01".
 function conditionPhrase(item: DataVerificationRule) {
     const { type2, value1, value2 } = item;
-    const label = optionLabel[type2];
+    const label = OPTION_LABEL[type2];
     if (!label) return '';
     if (type2 === 'between' || type2 === 'notBetween') return `${label} ${value1} and ${value2}`;
     return `${label} ${value1}`;
 }
 
+// Every rule type gets two sentences: why the value in the cell was rejected, and what to
+// type instead.
+const HINT_FRAMES = {
+    listInvalid: 'Input must be an item on the specified list.',
+    listPrompt: 'Pick an item from the list.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    numberInvalid: 'Input must be ${type} ${condition}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    numberPrompt: 'Enter ${type} ${condition}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    textIncludeInvalid: 'Text must include ${value}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    textIncludePrompt: 'Enter text that includes ${value}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    textExcludeInvalid: 'Text must not include ${value}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    textExcludePrompt: 'Enter text that does not include ${value}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    textEqualInvalid: 'Text must be ${value}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    textEqualPrompt: 'Enter ${value}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    lengthInvalid: 'Text length must be ${condition}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    lengthPrompt: 'Enter text of length ${condition}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    dateInvalid: 'Date must be ${condition}.',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
+    datePrompt: 'Enter a date ${condition}.',
+};
+
 // Also the copy for the `prohibitInput` warn dialog (modules/cell.ts), so the
 // two ways a rejected value is reported say the same thing.
 export function describeValidationRule(item: DataVerificationRule, kind: ValidationHint['kind']) {
-    const { hintCard } = en.dataVerification;
     const invalid = kind === 'invalid';
     const { type, type2 } = item;
 
     let frame = '';
     if (type === 'dropdown') {
-        frame = invalid ? hintCard.listInvalid : hintCard.listPrompt;
+        frame = invalid ? HINT_FRAMES.listInvalid : HINT_FRAMES.listPrompt;
     } else if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
-        frame = invalid ? hintCard.numberInvalid : hintCard.numberPrompt;
+        frame = invalid ? HINT_FRAMES.numberInvalid : HINT_FRAMES.numberPrompt;
     } else if (type === 'text_content') {
-        if (type2 === 'include') frame = invalid ? hintCard.textIncludeInvalid : hintCard.textIncludePrompt;
-        else if (type2 === 'exclude') frame = invalid ? hintCard.textExcludeInvalid : hintCard.textExcludePrompt;
-        else if (type2 === 'equal') frame = invalid ? hintCard.textEqualInvalid : hintCard.textEqualPrompt;
+        if (type2 === 'include') frame = invalid ? HINT_FRAMES.textIncludeInvalid : HINT_FRAMES.textIncludePrompt;
+        else if (type2 === 'exclude') frame = invalid ? HINT_FRAMES.textExcludeInvalid : HINT_FRAMES.textExcludePrompt;
+        else if (type2 === 'equal') frame = invalid ? HINT_FRAMES.textEqualInvalid : HINT_FRAMES.textEqualPrompt;
     } else if (type === 'text_length') {
-        frame = invalid ? hintCard.lengthInvalid : hintCard.lengthPrompt;
+        frame = invalid ? HINT_FRAMES.lengthInvalid : HINT_FRAMES.lengthPrompt;
     } else if (type === 'date') {
-        frame = invalid ? hintCard.dateInvalid : hintCard.datePrompt;
+        frame = invalid ? HINT_FRAMES.dateInvalid : HINT_FRAMES.datePrompt;
     }
     // A tick box can never hold an invalid value and needs no prompt: no frame,
     // no card.
@@ -523,7 +569,7 @@ export function describeValidationRule(item: DataVerificationRule, kind: Validat
     // collaborator or carried in from an xlsx, and `$&`/`$1` in a replacement string
     // are substitution patterns rather than literal text.
     return replaceHtml(frame, {
-        type: optionLabel[type] ?? '',
+        type: OPTION_LABEL[type] ?? '',
         condition: conditionPhrase(item),
         value: item.value1,
     });
@@ -624,10 +670,9 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
 
 // input data validation
 export function confirmMessage(ctx: Context): boolean {
-    const { generalDialog, dataVerification } = en;
     const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
     if (range.length === 0) {
-        ctx.warnDialog = generalDialog.noSeletionError;
+        ctx.warnDialog = 'The selection operation has not been performed yet';
         return false;
     }
     let str = range[range.length - 1]?.row[0];
@@ -656,69 +701,69 @@ export function confirmMessage(ctx: Context): boolean {
     const v2 = parseFloat(value2).toString() !== 'NaN';
     if (verifacationT === 'dropdown') {
         if (!value1) {
-            ctx.warnDialog = dataVerification.tooltipInfo1;
+            ctx.warnDialog = 'The drop-down list option cannot be empty';
             return false;
         }
     } else if (verifacationT === 'checkbox') {
         if (!value1 || !value2) {
-            ctx.warnDialog = dataVerification.tooltipInfo2;
+            ctx.warnDialog = 'Checkbox content cannot be empty';
             return false;
         }
     } else if (verifacationT === 'number' || verifacationT === 'number_integer' || verifacationT === 'number_decimal') {
         if (!v1) {
-            ctx.warnDialog = dataVerification.tooltipInfo3;
+            ctx.warnDialog = 'The value entered is not a numeric type';
             return false;
         }
         if (type2 === 'between' || type2 === 'notBetween') {
             if (!v2) {
-                ctx.warnDialog = dataVerification.tooltipInfo3;
+                ctx.warnDialog = 'The value entered is not a numeric type';
                 return false;
             }
             if (Number(value2) < Number(value1)) {
-                ctx.warnDialog = dataVerification.tooltipInfo4;
+                ctx.warnDialog = 'The value 2 cannot be less than the value 1';
                 return false;
             }
         }
     } else if (verifacationT === 'text_content') {
         if (!value1) {
-            ctx.warnDialog = dataVerification.tooltipInfo5;
+            ctx.warnDialog = 'The text content cannot be empty';
             return false;
         }
     } else if (verifacationT === 'text_length') {
         if (!v1) {
-            ctx.warnDialog = dataVerification.tooltipInfo3;
+            ctx.warnDialog = 'The value entered is not a numeric type';
             return false;
         }
         if (!Number.isInteger(Number(value1)) || Number(value1) < 0) {
-            ctx.warnDialog = dataVerification.textlengthInteger;
+            ctx.warnDialog = 'Text length must be an integer greater than or equal to 0';
             return false;
         }
         if (type2 === 'between' || type2 === 'notBetween') {
             if (!v2) {
-                ctx.warnDialog = dataVerification.tooltipInfo3;
+                ctx.warnDialog = 'The value entered is not a numeric type';
                 return false;
             }
             if (!Number.isInteger(Number(value2)) || Number(value2) < 0) {
-                ctx.warnDialog = dataVerification.textlengthInteger;
+                ctx.warnDialog = 'Text length must be an integer greater than or equal to 0';
                 return false;
             }
             if (Number(value2) < Number(value1)) {
-                ctx.warnDialog = dataVerification.tooltipInfo4;
+                ctx.warnDialog = 'The value 2 cannot be less than the value 1';
                 return false;
             }
         }
     } else if (verifacationT === 'date') {
         if (!isdatetime(value1)) {
-            ctx.warnDialog = dataVerification.tooltipInfo6;
+            ctx.warnDialog = 'The value entered is not a date type';
             return false;
         }
         if (type2 === 'between' || type2 === 'notBetween') {
             if (!isdatetime(value2)) {
-                ctx.warnDialog = dataVerification.tooltipInfo6;
+                ctx.warnDialog = 'The value entered is not a date type';
                 return false;
             }
             if (diff(value1, value2) > 0) {
-                ctx.warnDialog = dataVerification.tooltipInfo7;
+                ctx.warnDialog = 'Date 2 cannot be less than date 1';
                 return false;
             }
         }

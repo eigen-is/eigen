@@ -2,7 +2,7 @@ import { cloneDeep, isUndefined } from 'es-toolkit/compat';
 import { v4 as uuidv4 } from 'uuid';
 import { normalizeSheetConfig } from '../../engine/replay-ops';
 import type { CellMatrix } from '../../engine/types';
-import { api, createContextResolver, en, execfunction, setCellValue as setCellValueInternal } from '..';
+import { api, createContextResolver, execfunction, setCellValue as setCellValueInternal } from '..';
 import type { Context } from '../context';
 import type { FormulaCell, Sheet, SingleRange } from '../types';
 import { getSheetIndex } from '../utils';
@@ -54,8 +54,7 @@ export function showSheet(ctx: Context, sheetId: string) {
 }
 
 function generateCopySheetName(ctx: Context, sheetId: string) {
-    const { info } = en;
-    const copyWord = `(${info.copy}`;
+    const copyWord = '(Copy';
     const SheetIndex = getSheetIndex(ctx, sheetId);
     if (SheetIndex == null) return sheetId;
     let sheetName = ctx.sheets[SheetIndex].name;

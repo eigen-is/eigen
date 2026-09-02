@@ -2,7 +2,6 @@ import { cloneDeep, find, flatten, reduce, size } from 'es-toolkit/compat';
 import { genarate, update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
-import { en } from '../locale/en';
 import type { FilterCondition, FilterConditionName, Selection } from '../types';
 import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
 import { normalizedAttr } from './cell';
@@ -93,8 +92,7 @@ export function orderbydatafiler(
     }
 
     if (hasMc) {
-        const { filter } = en;
-        return filter.mergeError;
+        return 'There are merged cells in the filter selection, this operation cannot be performed!';
     }
 
     sortDataRange(ctx, d, data, curr - stc, asc, str, edr, stc, edc);
@@ -310,27 +308,27 @@ function getFilterHiddenRows(ctx: Context, col: number, startCol: number) {
 // operand inputs the condition needs.
 export const FILTER_CONDITION_ITEMS: {
     name: FilterConditionName;
-    localeKey: keyof typeof en.filter;
+    label: string;
     arity: 0 | 1 | 2;
 }[] = [
-    { name: 'isEmpty', localeKey: 'conditionCellIsNull', arity: 0 },
-    { name: 'isNotEmpty', localeKey: 'conditionCellNotNull', arity: 0 },
-    { name: 'textContains', localeKey: 'conditionCellTextContain', arity: 1 },
-    { name: 'textNotContains', localeKey: 'conditionCellTextNotContain', arity: 1 },
-    { name: 'textStartsWith', localeKey: 'conditionCellTextStart', arity: 1 },
-    { name: 'textEndsWith', localeKey: 'conditionCellTextEnd', arity: 1 },
-    { name: 'textEquals', localeKey: 'conditionCellTextEqual', arity: 1 },
-    { name: 'dateEqual', localeKey: 'conditionCellDateEqual', arity: 1 },
-    { name: 'dateBefore', localeKey: 'conditionCellDateBefore', arity: 1 },
-    { name: 'dateAfter', localeKey: 'conditionCellDateAfter', arity: 1 },
-    { name: 'greaterThan', localeKey: 'conditionCellGreater', arity: 1 },
-    { name: 'greaterThanOrEqual', localeKey: 'conditionCellGreaterEqual', arity: 1 },
-    { name: 'lessThan', localeKey: 'conditionCellLess', arity: 1 },
-    { name: 'lessThanOrEqual', localeKey: 'conditionCellLessEqual', arity: 1 },
-    { name: 'equal', localeKey: 'conditionCellEqual', arity: 1 },
-    { name: 'notEqual', localeKey: 'conditionCellNotEqual', arity: 1 },
-    { name: 'between', localeKey: 'conditionCellBetween', arity: 2 },
-    { name: 'notBetween', localeKey: 'conditionCellNotBetween', arity: 2 },
+    { name: 'isEmpty', label: 'Is empty', arity: 0 },
+    { name: 'isNotEmpty', label: 'Is not empty', arity: 0 },
+    { name: 'textContains', label: 'Text contains', arity: 1 },
+    { name: 'textNotContains', label: 'Text does not contain', arity: 1 },
+    { name: 'textStartsWith', label: 'Text starts with', arity: 1 },
+    { name: 'textEndsWith', label: 'Text ends with', arity: 1 },
+    { name: 'textEquals', label: 'Text is exactly', arity: 1 },
+    { name: 'dateEqual', label: 'Date is', arity: 1 },
+    { name: 'dateBefore', label: 'Date is before', arity: 1 },
+    { name: 'dateAfter', label: 'Date is after', arity: 1 },
+    { name: 'greaterThan', label: 'Greater than', arity: 1 },
+    { name: 'greaterThanOrEqual', label: 'Greater than or equal to', arity: 1 },
+    { name: 'lessThan', label: 'Less than', arity: 1 },
+    { name: 'lessThanOrEqual', label: 'Less than or equal to', arity: 1 },
+    { name: 'equal', label: 'Is equal to', arity: 1 },
+    { name: 'notEqual', label: 'Is not equal to', arity: 1 },
+    { name: 'between', label: 'Is between', arity: 2 },
+    { name: 'notBetween', label: 'Is not between', arity: 2 },
 ];
 
 // Unknown names (a snapshot written by a newer client) report arity 0.
@@ -494,7 +492,6 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
         };
 
     let cell: Cell | null;
-    const { filter } = en;
     for (let r = startRow + 1; r <= endRow; r += 1) {
         if (r in otherHiddenRows) {
             continue;
@@ -517,7 +514,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                     key: y,
                     type: 'year',
                     value: y,
-                    text: y + filter.filiterYearText,
+                    text: `${y}Year`,
                     children: [],
                     rows: [],
                     dateValues: [],
@@ -532,7 +529,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                     key: `${y}-${m}`,
                     type: 'month',
                     value: m,
-                    text: m + filter.filiterMonthText,
+                    text: `${m}Month`,
                     children: [],
                     rows: [],
                     dateValues: [],
@@ -578,7 +575,7 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
             }
 
             const data = valuesMap.get(`${v}`);
-            const text = m == null ? filter.valueBlank : `${m}`;
+            const text = m == null ? '(Null)' : `${m}`;
             const key = `${v}#$$$#${m}`;
             if (data != null) {
                 let maskValue = find(data, (value) => value.mask === m);

@@ -466,7 +466,7 @@ export const FilterMenu: React.FC = () => {
                                                 <SelectItem value="none">{filter.conditionNone}</SelectItem>
                                                 {FILTER_CONDITION_ITEMS.map((item) => (
                                                     <SelectItem key={item.name} value={item.name}>
-                                                        {filter[item.localeKey]}
+                                                        {item.label}
                                                     </SelectItem>
                                                 ))}
                                             </SelectContent>
