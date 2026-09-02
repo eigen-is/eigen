@@ -151,3 +151,20 @@ function cloneXmlChildren(source: Y.XmlFragment | Y.XmlElement): (Y.XmlElement |
         throw new Error(`restoreYjsDoc: XML child clone produced ${clone.constructor.name}`);
     });
 }
+
+// Typed root/id-array accessors for the slides + stickies shape (a root map of per-item Y.Maps, a
+// root id list, a nested id list). Yjs can't infer the value generic from `doc.getMap(name)`, so
+// without these every nested read is an `as` cast. Roots are safe unconditionally: `doc.get` upgrades
+// an AbstractType root (the state Y.applyUpdate leaves) in place, and throws on a real type mismatch.
+export function getItemMapRoot(doc: Y.Doc, name: string): Y.Map<Y.Map<unknown>> {
+    return doc.getMap<Y.Map<unknown>>(name);
+}
+
+export function getIdArrayRoot(doc: Y.Doc, name: string): Y.Array<string> {
+    return doc.getArray<string>(name);
+}
+
+export function getIdArray(map: Y.Map<unknown>, field: string): Y.Array<string> | undefined {
+    const value = map.get(field);
+    return value instanceof Y.Array ? value : undefined;
+}

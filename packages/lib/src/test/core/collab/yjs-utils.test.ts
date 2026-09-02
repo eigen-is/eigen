@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { restoreYjsDoc } from '../../../core/collab/yjs-utils';
+import { getIdArray, getIdArrayRoot, getItemMapRoot, restoreYjsDoc } from '../../../core/collab/yjs-utils';
 
 describe('restoreYjsDoc', () => {
     test('restores Y.Map content into a doc that already registered the type via getMap', () => {
@@ -160,5 +160,64 @@ describe('restoreYjsDoc', () => {
 
         const restoredInner = live.getMap('state').get('inner') as Y.Map<unknown>;
         expect(restoredInner.toJSON()).toEqual({ b: 2, c: 3 });
+    });
+});
+
+describe('getItemMapRoot / getIdArrayRoot / getIdArray', () => {
+    test('returns typed roots on a fresh doc', () => {
+        const doc = new Y.Doc();
+        const slides = getItemMapRoot(doc, 'slides');
+        expect(slides).toBeInstanceOf(Y.Map);
+        expect(slides.size).toBe(0);
+
+        const slide = new Y.Map();
+        slide.set('id', 'slide-1');
+        slides.set('slide-1', slide);
+        expect(getItemMapRoot(doc, 'slides').get('slide-1')?.get('id')).toBe('slide-1');
+    });
+
+    test('upgrades an AbstractType root left by Y.applyUpdate (server-side path)', () => {
+        const seed = new Y.Doc();
+        const seedSlide = new Y.Map();
+        seedSlide.set('id', 'slide-1');
+        seed.getMap('slides').set('slide-1', seedSlide);
+        seed.getArray<string>('slideOrder').push(['slide-1']);
+
+        const live = new Y.Doc();
+        Y.applyUpdate(live, Y.encodeStateAsUpdate(seed));
+        for (const value of live.share.values()) expect(value.constructor.name).toBe('AbstractType');
+
+        expect(getItemMapRoot(live, 'slides').get('slide-1')?.get('id')).toBe('slide-1');
+        expect(getIdArrayRoot(live, 'slideOrder').toArray()).toEqual(['slide-1']);
+        expect(live.share.get('slides')).toBeInstanceOf(Y.Map);
+        expect(live.share.get('slideOrder')).toBeInstanceOf(Y.Array);
+    });
+
+    test('reads a nested id array, and returns undefined for missing or non-array values', () => {
+        const doc = new Y.Doc();
+        const slides = getItemMapRoot(doc, 'slides');
+        const slide = new Y.Map();
+        const objectIds = new Y.Array<string>();
+        objectIds.push(['obj-1', 'obj-2']);
+        slide.set('objectIds', objectIds);
+        slide.set('title', 'not an array');
+        slides.set('slide-1', slide);
+
+        expect(getIdArray(slide, 'objectIds')?.toArray()).toEqual(['obj-1', 'obj-2']);
+        expect(getIdArray(slide, 'taskIds')).toBeUndefined();
+        expect(getIdArray(slide, 'title')).toBeUndefined();
+    });
+
+    test('root id array reads as string[] without a cast', () => {
+        const doc = new Y.Doc();
+        getIdArrayRoot(doc, 'slideOrder').push(['a', 'b']);
+        const order: string[] = getIdArrayRoot(doc, 'slideOrder').toArray();
+        expect(order).toEqual(['a', 'b']);
+    });
+
+    test('throws on a genuine root type mismatch (fail loud on corruption)', () => {
+        const doc = new Y.Doc();
+        getItemMapRoot(doc, 'slides');
+        expect(() => getIdArrayRoot(doc, 'slides')).toThrow();
     });
 });

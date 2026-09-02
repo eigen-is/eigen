@@ -1,4 +1,5 @@
 import type * as Y from 'yjs';
+import { getIdArray, getItemMapRoot } from './yjs-utils';
 
 // Origin stamped on the repair transaction so it escapes every host's UndoManager — all collab
 // editors build theirs through useCollabDoc with default trackedOrigins ({null}), so any non-null
@@ -29,7 +30,7 @@ export function normalizeParentChildRefs(
     childRefField: string,
     orderArrayName: string,
 ): void {
-    const parents = doc.getMap(parentMap);
+    const parents = getItemMapRoot(doc, parentMap);
     const children = doc.getMap(childMap);
     const parentIds = Array.from(parents.keys());
     const childIds = Array.from(children.keys());
@@ -53,12 +54,10 @@ export function normalizeParentChildRefs(
 
     const childToParents: Record<string, string[]> = {};
     for (const parentId of parentIds) {
-        const parentValue = parents.get(parentId);
-        if (!parentValue) continue;
-        const parent = parentValue as Y.Map<unknown>;
-        const refs = parent.get(childRefField) as Y.Array<string>;
+        const parent = parents.get(parentId);
+        const refs = parent && getIdArray(parent, childRefField);
         if (!refs) continue; // tolerate a parent missing its ref array
-        for (const childId of refs.toArray() as string[]) {
+        for (const childId of refs.toArray()) {
             if (!childToParents[childId]) childToParents[childId] = [];
             childToParents[childId].push(parentId);
         }
@@ -72,11 +71,10 @@ export function normalizeParentChildRefs(
             if (owners.length <= 1) continue;
             owners.sort((a, b) => rank[a] - rank[b]);
             for (let i = 0; i < owners.length - 1; i++) {
-                const parentValue = parents.get(owners[i]);
-                if (!parentValue) continue;
-                const parent = parentValue as Y.Map<unknown>;
-                const refs = parent.get(childRefField) as Y.Array<string>;
-                const idx = (refs.toArray() as string[]).indexOf(childId);
+                const parent = parents.get(owners[i]);
+                const refs = parent && getIdArray(parent, childRefField);
+                if (!refs) continue;
+                const idx = refs.toArray().indexOf(childId);
                 if (idx !== -1) refs.delete(idx, 1);
             }
         }
@@ -85,10 +83,9 @@ export function normalizeParentChildRefs(
         // strays. No ordered parents → fall back to map-key order (sequence[0]).
         const homeParentId = orderedParents.length > 0 ? orderedParents[0] : sequence[0];
         if (homeParentId !== undefined) {
-            const homeValue = parents.get(homeParentId);
-            if (homeValue) {
-                const homeParent = homeValue as Y.Map<unknown>;
-                const homeRefs = homeParent.get(childRefField) as Y.Array<string> | undefined;
+            const homeParent = parents.get(homeParentId);
+            if (homeParent) {
+                const homeRefs = getIdArray(homeParent, childRefField);
                 if (!homeRefs) return; // tolerate here too — a throw would escape into the observer
                 for (const childId of childIds) {
                     if (!childToParents[childId] || childToParents[childId].length === 0) {
