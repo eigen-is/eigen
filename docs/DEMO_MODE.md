@@ -132,6 +132,10 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   `demo/excalifont-metrics.ts` advance table (the seeder has no DOM to `measureText` with); ids and roughjs
   seeds are deterministic so every reseed renders identical jitter. The two referenced images upload into
   the container's `media/` subfolder via `createFileFromData`, matching each image element's `mediaName`.
+  Arrows bind to shapes by key (`{ shape, side, along? }`) and settle through the lib's own `followBindings`,
+  so they read back exactly as an editor would store them; shapes take an `angle`, lines a `freedraw` flag.
+  To eyeball a layout change without a browser, build a fresh Y.Doc with `buildVectorDoc`, run it through
+  `readVectorFromDoc` + `sceneToSvg` (the same renderer the app and previews use), and open the SVG.
 - **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own
   coastal/festival photos, two Unsplash) are uploaded into an `images/` team-drive folder through
   the real `createFileFromData` path, keyed to plausible persona uploaders (`content.ts` `PHOTOS`).
@@ -235,6 +239,8 @@ See the **Demo instance** section of `docker/SETUP-GUIDE.md` for the operator wa
 | `apps/api/src/scripts/demo/content.ts` | Tuimel Festival content (data only) |
 | `apps/api/src/scripts/demo/author-fixtures.ts` | Regenerates the stickies board fixture (slides/sheets are hand-maintained) |
 | `apps/api/src/scripts/demo/fixtures-build.ts` | `buildStickiesDoc` — the Y.Doc shapes `author-fixtures.ts` writes |
+| `apps/api/src/scripts/demo/vector-build.ts` | `buildVectorDoc` — writes the `SITE_PLAN` spec into the site plan's Y.Doc at seed time |
+| `apps/api/src/scripts/demo/excalifont-metrics.ts` | Generated Excalifont advance/kerning table the builder sizes text with |
 | `apps/api/src/scripts/demo/fixtures/` | Byte-copied `.eigenslides` / `.eigensheets` / `.eigenstickies` containers + `images/` site photos + `branding/` logo + `avatars/` portraits (`images/` and `avatars/` carry their own `CREDITS.md`) |
 | `scripts/demo-reset.sh` | Hourly wipe + reseed (hard `EIGEN_DEMO=1` gate) |
 | `scripts/snapshot.sh` / `scripts/restore.sh` | General offline backup/restore |
