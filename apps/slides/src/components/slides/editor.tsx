@@ -236,7 +236,7 @@ function SlideEditorInner({
     const {
         deck,
         isSynced,
-        connected,
+        offline,
         loaded,
         activeSlideId,
         setActiveSlideId,
@@ -1051,7 +1051,7 @@ function SlideEditorInner({
                             <Toolbar
                                 path={path}
                                 canWrite={canWrite}
-                                offline={!connected}
+                                offline={offline}
                                 undoManager={undoManager}
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onAddText={handleAddText}

@@ -179,7 +179,7 @@ export function VectorEditor({
                             <Toolbar
                                 path={path}
                                 canWrite={canWrite}
-                                offline={doc.loaded && !doc.connected}
+                                offline={doc.offline}
                                 undoManager={doc.undoManager}
                                 tool={tool}
                                 setTool={setTool}

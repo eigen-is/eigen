@@ -205,7 +205,7 @@ export const CollaborativeEditor = ({
     const {
         doc: yDoc,
         provider,
-        connected,
+        offline,
         loaded,
     } = useCollabDoc({
         ownerId: path.ownerId,
@@ -233,7 +233,7 @@ export const CollaborativeEditor = ({
                 yDoc={yDoc}
                 provider={provider}
                 canWrite={canWrite}
-                offline={!connected}
+                offline={offline}
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}

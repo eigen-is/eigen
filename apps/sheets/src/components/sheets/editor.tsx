@@ -80,7 +80,7 @@ function SheetEditorInner({
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
     const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
 
-    const { initialData, snapshotVersion, loadFailed, synced, connected, handleOp, onDataChange, docRef, provider } =
+    const { initialData, snapshotVersion, loadFailed, synced, offline, handleOp, onDataChange, docRef, provider } =
         useSheet(ownerId, path.mountId, path.id, workbookRef);
 
     const auth = useAuth();
@@ -294,7 +294,7 @@ function SheetEditorInner({
         () => (
             <DocumentShareCluster
                 canWrite={canWrite}
-                offline={!connected}
+                offline={offline}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onToggleCommentPanel={toggleComments}
                 commentPanelOpen={commentPanelOpen}
@@ -306,7 +306,7 @@ function SheetEditorInner({
         ),
         [
             canWrite,
-            connected,
+            offline,
             onAccessDialogOpen,
             commentPanelOpen,
             activityPanelOpen,

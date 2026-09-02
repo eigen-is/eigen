@@ -49,11 +49,12 @@ export interface CollabDoc {
     // Live sync state — flips true on every provider 'sync' and false on disconnect. Use for
     // presence, seed-if-empty, and other work that must track the actual connection.
     synced: boolean;
-    // Live socket state from the provider's 'status' event. Differs from `synced` only during the
-    // resync handshake right after a reconnect, so `loaded && !connected` is the honest "offline"
-    // signal for the toolbar pill: edits keep landing in the local doc and push on reconnect. While
-    // that is the case the hook also blocks `beforeunload`, since nothing persists them locally.
-    connected: boolean;
+    // Socket down after first load (`loaded && !connected`, from the provider's 'status' event —
+    // which, unlike `synced`, stays true through the resync handshake after a reconnect). Drives
+    // the toolbar pill: edits keep landing in the local doc and push on reconnect. Meanwhile the
+    // hook blocks `beforeunload`, since nothing persists them locally. Both trust y-websocket's
+    // view: a silently dead socket only counts once its 30s silence check fires.
+    offline: boolean;
     // LATCHED first-load flag: false at doc creation, true after the FIRST synced=true for this doc
     // instance, and reset only on teardown / pathId swap. Gate the initial loading screen on THIS,
     // not `synced` — a mid-session WS blip (synced → false → true) must not unmount the editor
@@ -115,10 +116,11 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             setConnected(status === 'connected');
         provider.on('status', handleStatus);
 
-        // y-websocket only forwards local updates over an open socket; anything applied while it is
-        // down waits in the doc for the next sync handshake.
-        const handleUpdate = (_update: Uint8Array, origin: unknown) => {
-            if (origin !== provider && !provider.wsconnected) unsyncedRef.current = true;
+        // y-websocket only forwards local updates over an open socket, and nothing from the server
+        // arrives while it is down — so every update applied meanwhile (local, or relayed by a
+        // sibling tab over BroadcastChannel) is one the server may still lack.
+        const handleUpdate = () => {
+            if (!provider.wsconnected) unsyncedRef.current = true;
         };
         doc.on('update', handleUpdate);
 
@@ -157,5 +159,5 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
     }, [ownerId, mountId, pathId]);
 
-    return { doc, docRef, provider, undoManager, synced, connected, loaded };
+    return { doc, docRef, provider, undoManager, synced, offline: loaded && !connected, loaded };
 }

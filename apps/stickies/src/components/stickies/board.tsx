@@ -87,7 +87,7 @@ export function StickiesBoard({
         handleAddColumn,
         deleteCardFromBoard,
         isSynced,
-        connected,
+        offline,
         loaded,
         yjsDoc,
         undoManager,
@@ -331,7 +331,7 @@ export function StickiesBoard({
                                 <Toolbar
                                     path={path}
                                     canWrite={canWrite}
-                                    offline={!connected}
+                                    offline={offline}
                                     undoManager={undoManager}
                                     onAccessDialogOpen={onAccessDialogOpen}
                                     onAddColumn={() => setIsAddColumnDialogOpen(true)}
