@@ -5,7 +5,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { cn } from '@workspace/ui/lib/utils';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { DriveLocationField, type DriveLocationValue } from './drive-location-field';
 
@@ -140,6 +140,7 @@ export function DriveLocationPicker({
                             Cancel
                         </Button>
                         <Button onClick={handleSubmit} disabled={pending || (hasName && !name.trim())}>
+                            {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                             {resolvedConfirmLabel}
                         </Button>
                     </div>

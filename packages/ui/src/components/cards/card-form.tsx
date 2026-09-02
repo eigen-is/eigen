@@ -114,6 +114,8 @@ export function CardForm({
         setIsSubmitting(true);
         try {
             await onSave(patch, attachments, assigneeArg);
+        } catch {
+            // The mutation hook already toasted; the form stays open so the user can retry.
         } finally {
             setIsSubmitting(false);
         }

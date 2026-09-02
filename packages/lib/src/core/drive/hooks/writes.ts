@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
 import {
+    DRIVE_EXTENSIONS,
     DRIVE_MIME_CHAT,
     DRIVE_MIME_DOC,
     DRIVE_MIME_SHEETS,
@@ -13,8 +14,10 @@ import {
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
+import { CREATE_TIMEOUT_MS, createWithReconcile } from '../reconcile-create';
 import { partitionCopyResults } from './copy-media-partition';
 import { invalidateItemCreated, invalidateItemDeleted, invalidatePathMoved, invalidatePathRenamed } from './keys';
+import { folderContentQueryConfig } from './reads';
 
 // CREATE FOLDER — owner/mount come per call so one instance serves any target drive.
 export function useCreateFolder() {
@@ -320,10 +323,12 @@ const EIGENDOC_MIME: Record<EigenDocType, string> = {
     vector: DRIVE_MIME_VECTOR,
 };
 
+// CREATE EIGEN DOCUMENT — the create waits CREATE_TIMEOUT_MS, then reconciles against the parent
+// listing rather than reporting a failure for an item slow storage did land. See reconcile-create.ts.
 export function useCreateDriveItem(type: EigenDocType) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({
+        mutationFn: ({
             ownerId,
             mountId,
             parentId,
@@ -333,14 +338,23 @@ export function useCreateDriveItem(type: EigenDocType) {
             mountId: string;
             parentId: string;
             fileName: string;
-        }): Promise<DrivePath> => {
-            const response = await driveApi({ ownerId })({ mountId })
-                .folder({ pathId: parentId })
-                .create({ type })
-                .post({ fileName });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
+        }): Promise<DrivePath> =>
+            createWithReconcile({
+                create: async () => {
+                    const response = await driveApi({ ownerId })({ mountId })
+                        .folder({ pathId: parentId })
+                        .create({ type })
+                        .post({ fileName }, { fetch: { signal: AbortSignal.timeout(CREATE_TIMEOUT_MS) } });
+                    if (response.error) throw new AppError(response);
+                    return response.data;
+                },
+                listFolder: () =>
+                    queryClient.fetchQuery({
+                        ...folderContentQueryConfig(ownerId, mountId, parentId),
+                        staleTime: 0,
+                    }),
+                expectedName: `${fileName}${DRIVE_EXTENSIONS[type]}`,
+            }),
         onSuccess: (_data, variables) =>
             invalidateItemCreated(
                 queryClient,

@@ -37,10 +37,10 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 }
 
 // GET FOLDER CONTENTS
-export function useFolderContent(ownerId: string, mountId: string, pathId: string) {
-    return useQuery<DrivePath[]>({
+export function folderContentQueryConfig(ownerId: string, mountId: string, pathId: string) {
+    return {
         queryKey: driveKeys.folder(ownerId, mountId, pathId),
-        queryFn: async () => {
+        queryFn: async (): Promise<DrivePath[]> => {
             if (!pathId) return [];
             const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
             if (response.error) {
@@ -51,7 +51,11 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
         enabled: !!pathId && !!ownerId && !!mountId,
         retry: 1,
         staleTime: STALE_TIME.FIVE_MINUTES,
-    });
+    };
+}
+
+export function useFolderContent(ownerId: string, mountId: string, pathId: string) {
+    return useQuery<DrivePath[]>(folderContentQueryConfig(ownerId, mountId, pathId));
 }
 
 // FOLDER LOOKUP — wraps useFolderContent with refetch-on-miss for name-based lookups.
