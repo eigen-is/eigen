@@ -26,10 +26,8 @@ export type ConditionRuleType =
     | 'aboveAverage'
     | 'belowAverage';
 
-// The 13 highlight / item-selection rules, labelled once here and read back by
-// the menu that opens this dialog and by the Manage-rules list. A few names
-// carry their connective ("Equal to", "Date is") because Manage-rules appends
-// the rule's value to them.
+// Named once for the menu, this dialog and the Manage-rules list; a few labels
+// carry their connective ("Equal to") because Manage-rules appends the value.
 export const RULE_COPY: Record<ConditionRuleType, { label: string; description: string }> = {
     greaterThan: { label: 'Greater than', description: 'Format cells greater than' },
     lessThan: { label: 'Less than', description: 'Format cells smaller than' },

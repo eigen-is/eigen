@@ -19,9 +19,9 @@ Highlight rules apply a text colour or background colour to cells that match a s
 3. Point to **Highlight cell rules** to open its submenu. Choose a condition:
    - **Greater than** or **Less than**: enter a number as the threshold.
    - **Between**: enter a lower and upper bound.
-   - **Equal**: enter an exact value or text.
+   - **Equal to**: enter an exact value or text.
    - **Text contains**: enter a text string.
-   - **Date**: pick a date.
+   - **Date is**: pick a date.
    - **Duplicate value**: flag duplicate or unique values in the selection.
 4. In the dialog that opens, set the colours you want to apply. Tick **Text color** to change the text colour, or **Cell color** to fill the background, then click the colour swatch next to each to pick a colour.
 5. Click **OK**.
@@ -41,7 +41,7 @@ Item selection rules highlight the top or bottom values in a range, or cells abo
 A colour scale shades cells with a gradient that reflects their value relative to the rest of the range. Higher values get one colour, lower values another.
 
 1. Select the range.
-2. Open **Format → Conditional formatting → color gradation**.
+2. Open **Format → Conditional formatting → Color scale**.
 3. Choose one of the preset gradients from the submenu. The range is coloured immediately.
 
 ## Apply a data bar
@@ -49,7 +49,7 @@ A colour scale shades cells with a gradient that reflects their value relative t
 A data bar draws a coloured bar inside each cell proportional to its value.
 
 1. Select the range.
-2. Open **Format → Conditional formatting → data bar**.
+2. Open **Format → Conditional formatting → Data bar**.
 3. Choose a colour preset. The bars appear in the cells straight away.
 
 ## View and delete rules
