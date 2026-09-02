@@ -48,7 +48,7 @@ import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comm
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
-import { Column, LoadingState, useLayout } from '@workspace/ui';
+import { CollabLoadingState, Column, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
@@ -206,6 +206,7 @@ export const CollaborativeEditor = ({
         doc: yDoc,
         provider,
         loaded,
+        storageUnavailable,
     } = useCollabDoc({
         ownerId: path.ownerId,
         mountId: path.mountId,
@@ -216,7 +217,7 @@ export const CollaborativeEditor = ({
     // TiptapEditor (y-prosemirror's undo history is destroyed on unmount); the mounted editor
     // converges on reconnect.
     if (!loaded || !provider || !yDoc) {
-        return <LoadingState />;
+        return <CollabLoadingState storageUnavailable={storageUnavailable} />;
     }
 
     return (

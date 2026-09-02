@@ -94,6 +94,7 @@
     "./components/upload-provider": "./src/components/upload-provider/index.ts",
     "./components/user": "./src/components/user/index.ts",
     "./components/vector": "./src/components/vector/index.ts",
+    "./hooks/use-eigen-doc-editor-route": "./src/hooks/use-eigen-doc-editor-route.tsx",
     "./hooks/*": "./src/hooks/*.ts"
   }
 }

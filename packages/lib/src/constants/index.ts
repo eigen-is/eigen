@@ -1,3 +1,4 @@
+export * from './collab';
 export * from './colors';
 export * from './contact';
 export * from './fonts';

@@ -112,7 +112,7 @@ Slides and stickies leave the replace members unset and stay search-only; no v1 
 
 A `?q=` term on any eigendoc route opens the bar pre-filled, highlights all matches, and reveals the
 first — with **focus staying in the document** (the bar input is not focused on this path).
-`useLatchedDocSearchTerm(q)` (`packages/ui/src/hooks/use-eigen-doc-editor-route.ts`) latches the term
+`useLatchedDocSearchTerm(q)` (`packages/ui/src/hooks/use-eigen-doc-editor-route.tsx`) latches the term
 once and strips `q` from the URL. This is the shape a palette drive/mail hit uses to carry its query
 into the opened document (mail highlights the message body instead of a find bar).
 

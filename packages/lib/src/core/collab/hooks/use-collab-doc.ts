@@ -1,4 +1,5 @@
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { COLLAB_STORAGE_UNAVAILABLE_CLOSE } from '@workspace/lib/constants/collab';
 import { type RefObject, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -9,6 +10,9 @@ import * as Y from 'yjs';
 // seeding, and mutation API on top through the two callback seams. All five apps passed the SAME
 // provider options, so they live here as a constant (kept, not dropped, per the U6a brief).
 const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, connect: true } as const;
+
+// How long to stay disconnected after a storage-unavailable close before trying again.
+const STORAGE_RETRY_MS = 5_000;
 
 export interface CollabDocContext {
     doc: Y.Doc;
@@ -55,6 +59,10 @@ export interface CollabDoc {
     // (destroying y-prosemirror undo history / transient selection); the mounted doc converges on
     // reconnect. The pathId-swap loading gate still works: the cleanup resets it before the new doc.
     loaded: boolean;
+    // True between a WS close carrying COLLAB_STORAGE_UNAVAILABLE_CLOSE (the route's answer when the
+    // document's storage is unreachable) and the next successful sync. The hook keeps retrying in the
+    // background, so this only changes what the loading screen says.
+    storageUnavailable: boolean;
 }
 
 export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
@@ -65,6 +73,7 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [undoManager, setUndoManager] = useState<Y.UndoManager | null>(null);
     const [synced, setSynced] = useState(false);
     const [loaded, setLoaded] = useState(false);
+    const [storageUnavailable, setStorageUnavailable] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
 
@@ -95,10 +104,29 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             setSynced(isSynced);
             // Latch on the first successful sync; never cleared here (only in teardown below), so a
             // later disconnect leaves `loaded` true and the editor stays mounted.
-            if (isSynced) setLoaded(true);
+            if (isSynced) {
+                setLoaded(true);
+                setStorageUnavailable(false);
+            }
             onSyncRef.current?.(ctx, isSynced);
         };
         provider.on('sync', handleSync);
+
+        // y-websocket's backoff only grows for sockets that never opened; ours DID open (the route
+        // runs after the 101 and closes from inside open()), so its retry timer stays at 100ms and
+        // every retry re-pays the failing storage load. It emits 'connection-close' before arming
+        // that timer and setupWS is gated on shouldConnect, so disconnecting here cancels it; we
+        // reconnect ourselves after a pause. disconnect() re-enters this handler with a null event,
+        // which the code check ignores.
+        let retryTimer: ReturnType<typeof setTimeout> | undefined;
+        const handleConnectionClose = (event: CloseEvent | null) => {
+            if (event?.code !== COLLAB_STORAGE_UNAVAILABLE_CLOSE) return;
+            setStorageUnavailable(true);
+            provider.disconnect();
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(() => provider.connect(), STORAGE_RETRY_MS);
+        };
+        provider.on('connection-close', handleConnectionClose);
 
         setDoc(doc);
         setProvider(provider);
@@ -108,7 +136,10 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             setSynced(false);
             // Reset the latch so a pathId swap re-shows the loading screen for the new doc.
             setLoaded(false);
+            setStorageUnavailable(false);
             provider.off('sync', handleSync);
+            provider.off('connection-close', handleConnectionClose);
+            clearTimeout(retryTimer);
             // Host teardown first (unobserve, flush-on-unmount), then destroy the framework objects
             // provider→doc (provider.destroy detaches its own doc listener). The effect re-runs on a
             // pathId switch without an unmount, so skipping any of this leaks the old doc/provider.
@@ -123,5 +154,5 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
     }, [ownerId, mountId, pathId]);
 
-    return { doc, docRef, provider, undoManager, synced, loaded };
+    return { doc, docRef, provider, undoManager, synced, loaded, storageUnavailable };
 }

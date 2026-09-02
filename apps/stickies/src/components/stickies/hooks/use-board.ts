@@ -111,6 +111,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         doc: yjsDoc,
         synced: isSynced,
         loaded,
+        storageUnavailable,
     } = useCollabDoc({
         ownerId,
         mountId,
@@ -214,6 +215,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         board,
         isSynced,
         loaded,
+        storageUnavailable,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,
         handleAddColumn,

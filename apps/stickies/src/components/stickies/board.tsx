@@ -14,7 +14,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comments';
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ColumnLayout, DeleteDialog, Column as LayoutColumn, LoadingState, useLayout } from '@workspace/ui';
+import { CollabLoadingState, ColumnLayout, DeleteDialog, Column as LayoutColumn, useLayout } from '@workspace/ui';
 import { useAttachmentMeta } from '@workspace/ui/components/attachment';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
@@ -88,6 +88,7 @@ export function StickiesBoard({
         deleteCardFromBoard,
         isSynced,
         loaded,
+        storageUnavailable,
         yjsDoc,
         undoManager,
         provider,
@@ -305,7 +306,7 @@ export function StickiesBoard({
     };
 
     // Latched: a WS blip keeps the board mounted; `isSynced` still gates presence + seeding. See useCollabDoc.
-    if (!loaded) return <LoadingState />;
+    if (!loaded) return <CollabLoadingState storageUnavailable={storageUnavailable} />;
 
     return (
         <MediaResolverProvider

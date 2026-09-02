@@ -15,7 +15,7 @@ import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { DocumentShareCluster, FileDropOverlay, LoadingState, useLayout } from '@workspace/ui';
+import { CollabLoadingState, DocumentShareCluster, FileDropOverlay, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -80,12 +80,17 @@ function SheetEditorInner({
     const [activeImage, setActiveImage] = useState<SheetImage | null>(null);
     const [imageAspectLocked, setImageAspectLocked] = useAspectLock(activeImage?.id ?? '', true);
 
-    const { initialData, snapshotVersion, loadFailed, synced, handleOp, onDataChange, docRef, provider } = useSheet(
-        ownerId,
-        path.mountId,
-        path.id,
-        workbookRef,
-    );
+    const {
+        initialData,
+        snapshotVersion,
+        loadFailed,
+        synced,
+        storageUnavailable,
+        handleOp,
+        onDataChange,
+        docRef,
+        provider,
+    } = useSheet(ownerId, path.mountId, path.id, workbookRef);
 
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
@@ -324,7 +329,7 @@ function SheetEditorInner({
     // drop the engine undo stack and any in-progress cell edit. The mounted workbook catches up via
     // the op-log observer (and a remote snapshot flush remounts through snapshotVersion).
     if (!initialData) {
-        return <LoadingState />;
+        return <CollabLoadingState storageUnavailable={storageUnavailable} />;
     }
 
     return (

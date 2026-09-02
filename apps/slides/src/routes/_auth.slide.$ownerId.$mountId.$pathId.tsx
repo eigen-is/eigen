@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { LoadingState, RequestAccessView } from '@workspace/ui';
+import { RequestAccessView } from '@workspace/ui';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { useEigenDocEditorRoute, useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
@@ -16,7 +16,7 @@ function SlideView() {
     const initialSearchTerm = useLatchedDocSearchTerm(q);
     const {
         docInfo,
-        isLoading,
+        statusView,
         path,
         mediaFolderId,
         chatFolderId,
@@ -25,7 +25,7 @@ function SlideView() {
         setAccessDialogOpen,
     } = useEigenDocEditorRoute(ownerId, mountId, pathId);
 
-    if (isLoading) return <LoadingState />;
+    if (statusView) return statusView;
     if (!docInfo?.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
     return (

@@ -62,6 +62,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         doc: yjsDoc,
         synced: isSynced,
         loaded,
+        storageUnavailable,
     } = useCollabDoc({
         ownerId,
         mountId,
@@ -475,6 +476,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         deck,
         isSynced,
         loaded,
+        storageUnavailable,
         activeSlideId,
         setActiveSlideId,
         addSlide,
