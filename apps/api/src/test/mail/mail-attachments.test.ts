@@ -79,7 +79,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'see attached',
                 html: '<p>see attached</p>',
@@ -109,7 +108,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'first',
                 html: '<p>first</p>',
@@ -148,7 +146,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'csv attached',
                 html: '<p>csv attached</p>',
@@ -189,7 +186,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'v1',
                 html: '<p>v1</p>',
@@ -228,7 +224,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'v1',
                 html: '<p>v1</p>',
@@ -283,7 +278,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'both',
                 html: '<p>both</p>',
@@ -315,7 +309,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'v1',
                 html: '<p>v1</p>',
@@ -363,7 +356,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'v1',
                 html: '<p>v1</p>',
@@ -422,7 +414,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'both',
                 html: '<p>both</p>',
@@ -521,7 +512,6 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 to: {
                     value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
                     text: 'Bob <bob@test.eigen.is>',
-                    html: '',
                 },
                 text: 'v1',
                 html: '<p>v1</p>',

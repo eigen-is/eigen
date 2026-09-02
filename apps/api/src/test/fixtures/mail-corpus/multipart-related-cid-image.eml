@@ -1,0 +1,19 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Related cid image
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="rel"
+
+--rel
+Content-Type: text/html; charset=utf-8
+
+<p>Inline image: <img src="cid:img1@x"></p>
+--rel
+Content-Type: image/png
+Content-ID: <img1@x>
+Content-Disposition: inline; filename="inline.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoLMFV6n8TpDjNYfaLH7BE2W4Clyu8UOV6DqM3yFzxhhqvQ9Ro/ZImu
+--rel--

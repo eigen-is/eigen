@@ -28,7 +28,7 @@ Everything lives in `apps/api/src/lib/mail/`. The storage half:
 | `mail-store.ts` | `MailStore` interface -- the swappable storage contract, plus the `MailStoreEvents` change stream |
 | `maildir-store.ts` | `MaildirStore implements MailStore` -- Maildir filesystem ops (deliver, move, list, rename, watch), the sync engine, and the `mail.db` index. Returns `BunFile` via `getMessageFile()` for lazy reads |
 | `maildb.ts` | CRUD + batch upsert for email metadata in `mail.db` |
-| `mail-parse.ts` | Parses `.eml` content into `Email` (accepts `BunFile`), sanitizes HTML via DOMPurify |
+| `mail-parse.ts` | Parses the `.eml` via `parseMail` (accepts `BunFile`), sanitizes the HTML with DOMPurify, and derives the `EmailSummary` |
 | `mailfile.ts` | Generates RFC 5322 `.eml` content from draft input |
 | `mailutils.ts` | Filename generation, flag parsing, flag rebuild helpers |
 | `schema.ts`, `db-config.ts` | Drizzle schema + versioned migrations for `mail.db` |

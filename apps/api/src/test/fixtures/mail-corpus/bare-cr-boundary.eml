@@ -1,0 +1,18 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Subject: Bare CR boundary
+MIME-Version: 1.0
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: multipart/mixed; boundary="boundary123"
+
+--boundary123
+Content-Type: text/plain; charset=utf-8
+
+This is the text part.
+--boundary123
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="test.bin"
+Content-Transfer-Encoding: base64
+
+YmluYXJ5IGZpbGUgY29udGVudA==
+--boundary123--

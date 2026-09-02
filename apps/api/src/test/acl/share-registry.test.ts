@@ -568,7 +568,7 @@ describe('Share Registry', () => {
                     driveType: 'doc',
                     mimeType: 'application/eigendoc',
                 };
-                const to: AddressObject = { value: [{ address: guestEmail, name: '' }], html: '', text: guestEmail };
+                const to: AddressObject = { value: [{ address: guestEmail, name: '' }], text: guestEmail };
                 const mail = {
                     subject: 'Team grant',
                     text: 'see attached',

@@ -1,0 +1,8 @@
+From: sender@example.com
+To: alice@example.com
+To: bob@example.com
+Subject: Two To lines
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Two To header lines.

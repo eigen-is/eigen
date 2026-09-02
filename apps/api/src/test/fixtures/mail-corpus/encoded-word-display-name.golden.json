@@ -1,0 +1,30 @@
+{
+  "subject": "Encoded display names",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "jose@example.com",
+        "name": "José Müller"
+      },
+      {
+        "address": "zoe@example.com",
+        "name": "Zo�"
+      }
+    ],
+    "text": "\"José Müller\" <jose@example.com>, \"Zo�\" <zoe@example.com>"
+  },
+  "text": "Encoded display names.\n",
+  "html": null,
+  "textAsHtml": "<p>Encoded display names.</p>",
+  "attachments": []
+}

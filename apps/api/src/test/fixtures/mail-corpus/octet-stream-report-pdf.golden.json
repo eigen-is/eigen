@@ -1,0 +1,33 @@
+{
+  "subject": "Octet-stream report",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "The report is attached.",
+  "html": null,
+  "textAsHtml": "<p>The report is attached.</p>",
+  "attachments": [
+    {
+      "contentType": "application/pdf",
+      "filename": "report.pdf",
+      "sha256": "c0bcd15e3842d58b3413ae63c7881865d68c4eecb55fcc2c3118739b79b9cde7",
+      "size": 37
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "subject": "RFC 2231 filename",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Attachment name uses RFC 2231.",
+  "html": null,
+  "textAsHtml": "<p>Attachment name uses RFC 2231.</p>",
+  "attachments": [
+    {
+      "contentType": "text/plain",
+      "filename": "£ résumé.txt",
+      "sha256": "e236963c020ff97f96189ce95f2ac85f3cb954f1ed2528ff744ffebb93a85981",
+      "size": 14
+    }
+  ]
+}

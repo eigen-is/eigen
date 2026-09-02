@@ -1,0 +1,33 @@
+{
+  "subject": "HTML as attachment",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "Alice",
+        "address": "alice@example.com"
+      }
+    ],
+    "text": "\"Alice\" <alice@example.com>"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "Bob",
+        "address": "bob@example.com"
+      }
+    ],
+    "text": "\"Bob\" <bob@example.com>"
+  },
+  "text": "The page is attached.",
+  "html": null,
+  "textAsHtml": "<p>The page is attached.</p>",
+  "attachments": [
+    {
+      "contentType": "text/html",
+      "filename": "page.html",
+      "sha256": "4987348061a1ba78f5bbfa059a6487e89cd48ea12727a43f334eaf6eec631c3c",
+      "size": 48
+    }
+  ]
+}

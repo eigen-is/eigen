@@ -1,0 +1,31 @@
+{
+  "subject": "HTML only plus attachment",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "Alice",
+        "address": "alice@example.com"
+      }
+    ],
+    "text": "\"Alice\" <alice@example.com>"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "Bob",
+        "address": "bob@example.com"
+      }
+    ],
+    "text": "\"Bob\" <bob@example.com>"
+  },
+  "html": "<p>Only <i>html</i> here, see attachment.</p>",
+  "attachments": [
+    {
+      "contentType": "text/csv",
+      "filename": "data.csv",
+      "sha256": "a64a34aacbdacd17c0c52c867be14c6b9dab76b5e7348392eb829431fbba3a33",
+      "size": 8
+    }
+  ]
+}

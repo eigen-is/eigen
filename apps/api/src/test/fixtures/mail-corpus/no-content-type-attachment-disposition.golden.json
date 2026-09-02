@@ -1,0 +1,44 @@
+{
+  "subject": "Attachment without Content-Type",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "Alice",
+        "address": "alice@example.com"
+      }
+    ],
+    "text": "\"Alice\" <alice@example.com>"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "Bob",
+        "address": "bob@example.com"
+      }
+    ],
+    "text": "\"Bob\" <bob@example.com>"
+  },
+  "text": "Two untyped parts follow.",
+  "html": null,
+  "textAsHtml": "<p>Two untyped parts follow.</p>",
+  "attachments": [
+    {
+      "contentType": "text/plain",
+      "filename": "notes.txt",
+      "sha256": "ac5d7d9ef3cd9d8398edc46863bffe326e4ce0d6f0d2e2451878891bc6d2af9e",
+      "size": 19
+    },
+    {
+      "contentType": "chemical/x-xyz",
+      "filename": "blob.xyz",
+      "sha256": "6d229884c1268bb0ab32d8da315d0fe52f9147228bd830a37bc9fb28a954940d",
+      "size": 6
+    },
+    {
+      "contentType": "application/octet-stream",
+      "sha256": "6894c50ce1e85af52b70947fba913ff55fbd425990ebc5c5a562fa665775bdf8",
+      "size": 18
+    }
+  ]
+}

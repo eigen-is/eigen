@@ -1,0 +1,18 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Mixed with binary attachment
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="mix"
+
+--mix
+Content-Type: text/plain; charset=utf-8
+
+See the attached image.
+--mix
+Content-Type: image/png
+Content-Disposition: attachment; filename="pic.png"
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoLMFV6n8TpDjNYfaLH7BE2W4Clyu8UOV6DqM3yFzxhhqvQ9Ro/ZImu
+--mix--

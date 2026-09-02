@@ -398,7 +398,7 @@ events.addEventListener('state', async (ev) => {
         if (email.attachments?.some(a => a.type === 'text/calendar')) {
             // Pull raw RFC 822, run existing processInboundImip
             const blob = await fetch(downloadUrl(email.blobId));
-            const parsed = await simpleParser(await blob.text());
+            const parsed = parseMail(Buffer.from(await blob.arrayBuffer()));
             await processInboundImip(home, parsed);
         }
         // Mirror to home.notifications + home.broadcast (MAIL_RECEIVED), matching Maildir flow

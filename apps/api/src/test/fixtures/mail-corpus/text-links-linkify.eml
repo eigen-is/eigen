@@ -1,0 +1,8 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Links
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Visit https://example.com/path?q=1 or email us at hello@example.com.
+Follow @reinder.bsky.social on Bluesky.

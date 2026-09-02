@@ -382,7 +382,7 @@ export function useMailActions() {
         );
         openPrefilledCompose(
             createDraftEmail({
-                to: { value: allRecipients, html: '', text: '' },
+                to: { value: allRecipients, text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
                 html: formatEmailQuote(email),
                 ...replyThreadingHeaders(email),

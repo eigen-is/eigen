@@ -1,0 +1,26 @@
+{
+  "subject": "Fwd: inline forward",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "Alice",
+        "address": "alice@example.com"
+      }
+    ],
+    "text": "\"Alice\" <alice@example.com>"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "Bob",
+        "address": "bob@example.com"
+      }
+    ],
+    "text": "\"Bob\" <bob@example.com>"
+  },
+  "text": "See the forwarded message below.\n\nFrom: \"Carol\" <carol@example.com>\nSubject: Original message\nDate: Sun, 31 Dec 2023 09:30:00 GMT\nTo: \"Alice\" <alice@example.com>\nCc: \"Dave\" <dave@example.com>\n\nThis is the original text.",
+  "html": "<p>See the <b>forwarded</b> message below.</p><br/>\n<table class=\"mp_head\"><tr><td class=\"mp_head_key\">From:</td><td class=\"mp_head_value\"><span class=\"mp_address_group\"><span class=\"mp_address_name\">Carol</span> &lt;<a href=\"mailto:carol@example.com\" class=\"mp_address_email\">carol@example.com</a>&gt;</span></td></tr>\n<tr><td class=\"mp_head_key\">Subject:</td><td class=\"mp_head_value\"><strong>Original message</strong></td></tr>\n<tr><td class=\"mp_head_key\">Date:</td><td class=\"mp_head_value\">Sun, 31 Dec 2023 09:30:00 GMT</td></tr>\n<tr><td class=\"mp_head_key\">To:</td><td class=\"mp_head_value\"><span class=\"mp_address_group\"><span class=\"mp_address_name\">Alice</span> &lt;<a href=\"mailto:alice@example.com\" class=\"mp_address_email\">alice@example.com</a>&gt;</span></td></tr>\n<tr><td class=\"mp_head_key\">Cc:</td><td class=\"mp_head_value\"><span class=\"mp_address_group\"><span class=\"mp_address_name\">Dave</span> &lt;<a href=\"mailto:dave@example.com\" class=\"mp_address_email\">dave@example.com</a>&gt;</span></td></tr></table><br/>\n<p>This is the original text.</p>",
+  "textAsHtml": "<p>See the forwarded message below.</p><br/>\n<p>From: &quot;Carol&quot; &lt;<a href=\"mailto:carol@example.com\">carol@example.com</a>&gt;<br/>Subject: Original message<br/>Date: Sun, 31 Dec 2023 09:30:00 GMT<br/>To: &quot;Alice&quot; &lt;<a href=\"mailto:alice@example.com\">alice@example.com</a>&gt;<br/>Cc: &quot;Dave&quot; &lt;<a href=\"mailto:dave@example.com\">dave@example.com</a>&gt;</p><br/>\n<p>This is the original text.</p>",
+  "attachments": []
+}

@@ -1,5 +1,3 @@
-export type { AttachmentStream, MailParserOptions, MessageText } from './mail-parser';
+/// <reference path="../mail-modules.d.ts" />
 
-export { default as MailParser } from './mail-parser';
-export type { SimpleParserOptions, Source } from './simple-parser';
-export { default as simpleParser } from './simple-parser';
+export { parseMail } from './parse';

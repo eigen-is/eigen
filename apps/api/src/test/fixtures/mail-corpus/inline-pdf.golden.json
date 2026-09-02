@@ -1,0 +1,33 @@
+{
+  "subject": "Inline PDF",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "Alice",
+        "address": "alice@example.com"
+      }
+    ],
+    "text": "\"Alice\" <alice@example.com>"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "Bob",
+        "address": "bob@example.com"
+      }
+    ],
+    "text": "\"Bob\" <bob@example.com>"
+  },
+  "text": "Inline document follows.",
+  "html": null,
+  "textAsHtml": "<p>Inline document follows.</p>",
+  "attachments": [
+    {
+      "contentType": "application/pdf",
+      "filename": "doc.pdf",
+      "sha256": "3d35ba198d22d37b366dd845bcb00765ece35df90debe9d2f2bd37664466f539",
+      "size": 29
+    }
+  ]
+}

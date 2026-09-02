@@ -3,7 +3,7 @@ import type { AddressObject, EmailAddress } from '@workspace/lib/types/mail';
 import { canonicalRecipients, flattenAddresses } from '../../../core/mail/addresses';
 
 function field(...value: EmailAddress[]): AddressObject {
-    return { value, html: '', text: '' };
+    return { value, text: '' };
 }
 
 describe('flattenAddresses', () => {

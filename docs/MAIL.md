@@ -51,6 +51,14 @@ v1 creates `emails` + base indexes; v2 adds the address columns; v3 adds the `em
 DESC)` — the composite index backing keyset pagination. **`emailLabels`/`emailsToLabels` are vestigial**:
 defined and migrated in v1, but nothing in the FE or BE reads or writes them.
 
+## Parsing
+
+`parseMail(bytes): ParsedMail` (`apps/api/src/lib/mail/mail-parser/`) turns a raw `.eml` into the parsed message. It is synchronous and non-streaming — the sole caller already holds the whole file in memory — across five files: `parse.ts` (entry + attachment/body/message-meta assembly), `split.ts` (non-streaming MIME tree with byte-exact bodies), `headers.ts` (unfolds continuation lines and decodes each header by name into a typed field), `decode.ts` (transfer, charset, and `format=flowed` decoding), and `html.ts` (`htmlToText`, `textAsHtml` linkification, and `cid:` → data-URI inlining). There is no header `Map`: headers are decoded into their exact types at the seam, so the output is the shared `ParsedMail` from `packages/lib/src/types/mail.ts` carrying only the fields Eigen consumes — `headers`, `headerLines`, `priority`, and `AddressObject.html` no longer exist.
+
+Charset decoding uses iconv-lite for the general case and `TextDecoder` for `iso-2022-jp`, the one charset iconv-lite lacks; Bun's `TextDecoder` lacks the `windows-125x`/`iso-8859-x`/`koi8-r` single-byte legacy sets, so iconv-lite stays for those.
+
+The behaviour contract is the golden corpus: every `.eml` under `apps/api/src/test/fixtures/mail-corpus/` has a committed `.golden.json`, checked by `mail-parser-golden.test.ts` (regenerate with `UPDATE_GOLDEN=1`).
+
 ## Mailboxes and the naming gotcha
 
 `STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive']` (`lib/core/constants.ts`) — the
@@ -238,9 +246,11 @@ with `?`) cover navigation (`j`/`k`/`o`/`u`), actions (`e`/`#`/`s`/`r`/`a`/`f`/`
 - `emailLabels`/`emailsToLabels` tables are **vestigial** — created by migration, never used.
 - **Step 4 (worker offload) is deferred** — a cold index of tens of thousands of messages saturates the
   shared event loop until it drains (only matters for one-time bulk imports). The move also covers the
-  mailparser-audit residuals: `DOMPurify.sanitize` still runs uncapped synchronous CPU on untrusted HTML
-  (the `htmlToText` input is truncated at 2 MB, DOMPurify's isn't), and `html-to-text`'s stack-overflow
-  catch on pathologically nested HTML rejects the whole parse (that one email becomes unreadable).
+  residuals from the mail-parser audit: `DOMPurify.sanitize` still runs uncapped synchronous CPU on untrusted
+  HTML in `mail-parse.ts` (the `htmlToText`/`textToHtml` inputs are capped at 2 MB in `html.ts`, DOMPurify's isn't), and
+  `textToHtml`'s linkify is quadratic in the number of email addresses in a plain-text body (see the ROADMAP row).
+  `html-to-text` throws on pathologically nested HTML (tens of thousands of nested tags); that propagates out of
+  `parseMail`, so that one email becomes unreadable rather than degrading.
 - The summary/cold-index parse fully decodes + buffers attachment content it never reads (audit #12) —
   a `skipAttachmentContent` flag is deliberately unbuilt; add it only if a real large-mailbox profile
   justifies it (largely subsumed by the worker move).

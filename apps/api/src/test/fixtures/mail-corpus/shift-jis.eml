@@ -1,0 +1,9 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Shift-JIS body
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=shift_jis
+Content-Transfer-Encoding: base64
+
+g1aDdINnSklTgsyWe5W2gsWCt4FC

@@ -1,0 +1,6 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Empty body
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+

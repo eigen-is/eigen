@@ -1,0 +1,53 @@
+{
+  "subject": "Punycode and reply-to",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "user@münchen.example",
+        "name": ""
+      }
+    ],
+    "text": "user@münchen.example"
+  },
+  "cc": {
+    "value": [
+      {
+        "address": "cc@example.com",
+        "name": ""
+      }
+    ],
+    "text": "cc@example.com"
+  },
+  "bcc": {
+    "value": [
+      {
+        "address": "bcc@example.com",
+        "name": ""
+      }
+    ],
+    "text": "bcc@example.com"
+  },
+  "replyTo": {
+    "value": [
+      {
+        "address": "replies@example.com",
+        "name": ""
+      }
+    ],
+    "text": "replies@example.com"
+  },
+  "text": "Punycode domain plus reply-to, cc, bcc.\n",
+  "html": null,
+  "textAsHtml": "<p>Punycode domain plus reply-to, cc, bcc.</p>",
+  "attachments": []
+}

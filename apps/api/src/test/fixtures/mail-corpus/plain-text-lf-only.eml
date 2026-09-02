@@ -1,0 +1,9 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Plain LF only
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+Body line one.
+Body line two.

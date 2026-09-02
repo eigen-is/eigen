@@ -1,0 +1,8 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Missing cid
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<p>Broken image: <img src="cid:missing@x"></p>

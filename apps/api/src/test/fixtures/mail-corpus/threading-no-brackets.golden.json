@@ -1,0 +1,29 @@
+{
+  "subject": "Re: Threaded bare",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "messageId": "<bare-3@example.com>",
+  "inReplyTo": "<bare-2@example.com>",
+  "references": ["<bare-1@example.com>", "<bare-2@example.com>"],
+  "text": "Threading ids without angle brackets.\n",
+  "html": null,
+  "textAsHtml": "<p>Threading ids without angle brackets.</p>",
+  "attachments": []
+}

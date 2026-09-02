@@ -224,8 +224,9 @@ behaviour even against forged headers:
 ```typescript
 // mail-domain.ts (sketch)
 async mailboxDeliver(message: Buffer): Promise<string> {
-    const parsed = await simpleParser(message).catch(() => null);
-    const isSpam = rspamdEnabled() && parsed?.headers.get('x-eigen-spam')?.toString() === 'Yes';
+    const parsed = parseMail(message);
+    // parseHeaders would decode X-Eigen-Spam into a typed field; the parser exposes no raw header map
+    const isSpam = rspamdEnabled() && parsed.spam;
     const uniqueId = await this.store.append(isSpam ? 'Junk' : '', message);
     // iMIP: ham → process now (reusing `parsed`); spam → defer, see below
     return uniqueId;

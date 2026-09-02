@@ -1,0 +1,9 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: =?ISO-2022-JP?B?GyRCN29MPiVGJTklSBsoQg==?=
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=iso-2022-jp
+Content-Transfer-Encoding: 7bit
+
+こんにちは、日本語のテストです。

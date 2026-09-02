@@ -1,0 +1,8 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: This is a very long subject that has been
+	folded across two header lines
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Body.

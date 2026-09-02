@@ -1,20 +1,6 @@
 import type { ImipMethod } from './calendar';
 import type { AttachmentReference } from './drive-reference';
 
-export type StructuredHeader = {
-    value: string;
-    params: { [key: string]: string };
-};
-
-export type HeaderValue = string | string[] | AddressObject | Date | StructuredHeader | StructuredHeader[];
-
-export type MailHeaders = Map<string, HeaderValue>;
-
-export type HeaderLines = ReadonlyArray<{
-    key: string;
-    line: string;
-}>;
-
 export type EmailAddress = {
     address?: string | undefined;
     name: string;
@@ -23,7 +9,6 @@ export type EmailAddress = {
 
 export type AddressObject = {
     value: EmailAddress[];
-    html: string;
     text: string;
 };
 
@@ -42,18 +27,11 @@ export type CalendarInvite = {
 };
 
 export type Attachment = {
-    type: 'attachment';
-    content: unknown;
     contentType: string;
-    contentDisposition: string;
     filename?: string | undefined;
-    headers: MailHeaders;
-    headerLines: HeaderLines;
-    checksum: string;
+    content: Uint8Array;
+    // Byte length of content; the detail payload blanks content, so the compose UI reads this instead.
     size: number;
-    contentId?: string | undefined;
-    cid?: string | undefined;
-    related: boolean;
     calendarMethod?: ImipMethod;
     // Set on text/calendar attachments in the message-detail payload; null = unparseable ICS.
     calendarInvite?: CalendarInvite | null;
@@ -61,8 +39,6 @@ export type Attachment = {
 
 export type ParsedMail = {
     attachments: Attachment[];
-    headers: MailHeaders;
-    headerLines: HeaderLines;
     html: string | null;
     text?: string | undefined;
     textAsHtml?: string | undefined;
@@ -76,7 +52,6 @@ export type ParsedMail = {
     replyTo?: AddressObject | undefined;
     messageId?: string | undefined;
     inReplyTo?: string | undefined;
-    priority?: 'normal' | 'low' | 'high' | undefined;
 };
 
 export type EmailSummary = {

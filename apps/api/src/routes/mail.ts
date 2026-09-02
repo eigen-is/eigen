@@ -23,7 +23,6 @@ const EmailAddressSchema = t.Object({
 
 const AddressObjectSchema = t.Object({
     value: t.Array(EmailAddressSchema),
-    html: t.String(),
     text: t.String(),
 });
 
@@ -294,7 +293,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             set.headers['Content-Type'] = 'application/octet-stream';
             set.headers['Content-Disposition'] = contentDisposition('attachment', params.fileName);
             const attachment = await (await getMailClient(user)).messageGetAttachment(params.id, params.index);
-            return attachment?.content ?? null;
+            return attachment.content;
         },
         {
             auth: true,

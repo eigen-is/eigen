@@ -1,0 +1,10 @@
+From: sender@example.com
+To: user@xn--mnchen-3ya.example
+Cc: cc@example.com
+Bcc: bcc@example.com
+Reply-To: replies@example.com
+Subject: Punycode and reply-to
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Punycode domain plus reply-to, cc, bcc.

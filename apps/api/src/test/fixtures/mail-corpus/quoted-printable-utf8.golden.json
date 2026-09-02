@@ -1,0 +1,26 @@
+{
+  "subject": "Café déjà vu",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Voilà: café, naïve, déjà vu — €5.\n",
+  "html": null,
+  "textAsHtml": "<p>Voil&agrave;: caf&eacute;, na&iuml;ve, d&eacute;j&agrave; vu &mdash; &euro;5.</p>",
+  "attachments": []
+}

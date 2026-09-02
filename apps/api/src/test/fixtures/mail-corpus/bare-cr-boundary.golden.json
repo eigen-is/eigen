@@ -1,0 +1,33 @@
+{
+  "subject": "Bare CR boundary",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "alice@example.com",
+        "name": "Alice"
+      }
+    ],
+    "text": "\"Alice\" <alice@example.com>"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "bob@example.com",
+        "name": "Bob"
+      }
+    ],
+    "text": "\"Bob\" <bob@example.com>"
+  },
+  "text": "This is the text part.",
+  "html": null,
+  "textAsHtml": "<p>This is the text part.</p>",
+  "attachments": [
+    {
+      "contentType": "application/octet-stream",
+      "filename": "test.bin",
+      "sha256": "89b89a5916db2c551e803f1d9d3c0fceb38a8db28eea62ea5a7fd00410176278",
+      "size": 19
+    }
+  ]
+}

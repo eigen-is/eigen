@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { simpleParser } from '../../lib/mail/mail-parser';
-import Splitter from '../../lib/mail/mail-split/message-splitter';
+import { parseMail } from '../../lib/mail/mail-parser';
 
 const PLAIN_EMAIL = [
     'From: sender@example.com',
@@ -45,17 +44,6 @@ const MULTIPART_EMAIL = [
     '--boundary123--',
 ].join('\r\n');
 
-const PRIORITY_EMAIL = [
-    'From: urgent@example.com',
-    'To: recipient@example.com',
-    'Subject: Urgent Message',
-    'X-Priority: 1',
-    'Date: Mon, 01 Jan 2024 12:00:00 +0000',
-    'Content-Type: text/plain',
-    '',
-    'This is urgent.',
-].join('\r\n');
-
 const MULTI_RECIPIENT_EMAIL = [
     'From: sender@example.com',
     'To: alice@example.com, bob@example.com',
@@ -68,9 +56,9 @@ const MULTI_RECIPIENT_EMAIL = [
 ].join('\r\n');
 
 describe('Mail Parser', () => {
-    describe('simpleParser', () => {
-        test('parses plain text email', async () => {
-            const mail = await simpleParser(PLAIN_EMAIL);
+    describe('parseMail', () => {
+        test('parses plain text email', () => {
+            const mail = parseMail(Buffer.from(PLAIN_EMAIL));
 
             expect(mail.subject).toBe('Test Subject');
             expect(mail.text).toContain('Hello, this is a test email body.');
@@ -78,15 +66,15 @@ describe('Mail Parser', () => {
             expect(mail.to).toBeDefined();
         });
 
-        test('parses HTML email', async () => {
-            const mail = await simpleParser(HTML_EMAIL);
+        test('parses HTML email', () => {
+            const mail = parseMail(Buffer.from(HTML_EMAIL));
 
             expect(mail.subject).toBe('HTML Test');
             expect(mail.html).toContain('<p>Hello <b>World</b></p>');
         });
 
-        test('parses multipart email with attachment', async () => {
-            const mail = await simpleParser(MULTIPART_EMAIL);
+        test('parses multipart email with attachment', () => {
+            const mail = parseMail(Buffer.from(MULTIPART_EMAIL));
 
             expect(mail.subject).toBe('Multipart Test');
             expect(mail.text).toContain('This is the text part.');
@@ -95,18 +83,11 @@ describe('Mail Parser', () => {
             const att = mail.attachments[0];
             expect(att.filename).toBe('test.bin');
             expect(att.contentType).toBe('application/octet-stream');
-            if (!Buffer.isBuffer(att.content)) throw new Error('attachment content is not a Buffer');
-            expect(att.content.toString()).toBe('binary file content');
+            expect(Buffer.from(att.content).toString()).toBe('binary file content');
         });
 
-        test('parses email priority', async () => {
-            const mail = await simpleParser(PRIORITY_EMAIL);
-
-            expect(mail.headers.get('priority')).toBe('high');
-        });
-
-        test('parses multiple recipients', async () => {
-            const mail = await simpleParser(MULTI_RECIPIENT_EMAIL);
+        test('parses multiple recipients', () => {
+            const mail = parseMail(Buffer.from(MULTI_RECIPIENT_EMAIL));
 
             expect(mail.subject).toBe('Group Email');
             const toAddresses = Array.isArray(mail.to) ? mail.to.flatMap((a) => a.value) : (mail.to?.value ?? []);
@@ -119,42 +100,10 @@ describe('Mail Parser', () => {
             expect(ccAddresses[0].address).toBe('charlie@example.com');
         });
 
-        test('accepts Buffer input', async () => {
-            const mail = await simpleParser(Buffer.from(PLAIN_EMAIL));
-            expect(mail.subject).toBe('Test Subject');
-        });
-
-        test('throws on null input', () => {
-            expect(() => simpleParser(null as unknown as string)).toThrow('Input cannot be null or undefined');
-        });
-
-        test('parses date header', async () => {
-            const mail = await simpleParser(PLAIN_EMAIL);
+        test('parses date header', () => {
+            const mail = parseMail(Buffer.from(PLAIN_EMAIL));
             expect(mail.date).toBeInstanceOf(Date);
-            expect(mail.date!.getFullYear()).toBe(2024);
-        });
-
-        test('headers map is populated', async () => {
-            const mail = await simpleParser(PLAIN_EMAIL);
-            expect(mail.headers).toBeInstanceOf(Map);
-            expect(mail.headers.has('subject')).toBe(true);
-            expect(mail.headers.has('from')).toBe(true);
-            expect(mail.headers.has('content-type')).toBe(true);
-        });
-
-        test('attachment has checksum and size', async () => {
-            const mail = await simpleParser(MULTIPART_EMAIL);
-            const att = mail.attachments[0];
-            expect(att.checksum).toBeTruthy();
-            expect(att.size).toBeGreaterThan(0);
-        });
-
-        test('callback style works', (done) => {
-            simpleParser(PLAIN_EMAIL, (err, mail) => {
-                expect(err).toBeNull();
-                expect(mail.subject).toBe('Test Subject');
-                done();
-            });
+            expect(mail.date?.getFullYear()).toBe(2024);
         });
     });
 });
@@ -187,32 +136,41 @@ const CALENDAR_EMAIL = [
     '--cal-boundary--',
 ].join('\r\n');
 
-test('parses calendarMethod from text/calendar attachment', async () => {
-    const mail = await simpleParser(CALENDAR_EMAIL);
+test('parses calendarMethod from text/calendar attachment', () => {
+    const mail = parseMail(Buffer.from(CALENDAR_EMAIL));
 
     const calAtt = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
     expect(calAtt?.calendarMethod).toBe('REQUEST');
 });
 
-test('non-calendar attachments have no calendarMethod', async () => {
-    const mail = await simpleParser(MULTIPART_EMAIL);
+test('non-calendar attachments have no calendarMethod', () => {
+    const mail = parseMail(Buffer.from(MULTIPART_EMAIL));
     expect(mail.attachments[0].calendarMethod).toBeUndefined();
 });
 
-// #14 — checkBoundary must skip a 2-byte leading prefix only for a real CRLF. The old `||`
-// test over-advanced startpos on a lone leading CR, then failed the `--` guard and missed a
-// valid boundary → mis-split multipart (attachment absorbed into text, raw MIME leaked).
-describe('#14 checkBoundary bare-CR', () => {
-    test('recognizes a boundary line with a lone leading CR (\\r--boundary)', () => {
-        const s = new Splitter() as unknown as {
-            node: { _boundary: Buffer };
-            checkBoundary(line: Buffer): number | false;
-        };
-        s.node._boundary = Buffer.from('boundary123');
-        expect(s.checkBoundary(Buffer.from('\r--boundary123\r\n', 'binary'))).toBe(1);
+// #14 — a boundary line may carry a lone leading CR (raw `\n\r--boundary`): it is a 1-byte prefix, not
+// half a CRLF. Over-advancing past it missed a valid boundary → mis-split multipart (attachment absorbed
+// into text, raw MIME leaked).
+describe('#14 boundary line with a bare-CR prefix', () => {
+    test('a lone leading CR still delimits the part', () => {
+        const bytes = Buffer.from(
+            'Content-Type: multipart/mixed; boundary="boundary123"\r\n' +
+                '\r\n' +
+                '--boundary123\r\n' +
+                'Content-Type: text/plain\r\n' +
+                '\r\n' +
+                'first' +
+                '\n\r--boundary123\r\n' +
+                'Content-Type: text/plain\r\n' +
+                '\r\n' +
+                'second\r\n' +
+                '--boundary123--\r\n',
+            'binary',
+        );
+        expect(parseMail(bytes).text).toBe('first\nsecond');
     });
 
-    test('bare-CR separator before the 2nd boundary keeps the attachment (end-to-end)', async () => {
+    test('bare-CR separator before the 2nd boundary keeps the attachment (end-to-end)', () => {
         const att = Buffer.from('binary file content').toString('base64');
         const bytes = Buffer.from(
             'From: Alice <alice@example.com>\r\n' +
@@ -236,13 +194,12 @@ describe('#14 checkBoundary bare-CR', () => {
                 '--boundary123--\r\n',
             'binary',
         );
-        const mail = await simpleParser(bytes);
+        const mail = parseMail(bytes);
 
         expect(mail.attachments).toHaveLength(1);
         const attachment = mail.attachments[0];
         expect(attachment.filename).toBe('test.bin');
-        if (!Buffer.isBuffer(attachment.content)) throw new Error('attachment content is not a Buffer');
-        expect(attachment.content.toString()).toBe('binary file content');
+        expect(Buffer.from(attachment.content).toString()).toBe('binary file content');
         expect(mail.text ?? '').toContain('This is the text part.');
         expect(mail.text ?? '').not.toContain('octet-stream');
     });
@@ -253,7 +210,7 @@ describe('#14 checkBoundary bare-CR', () => {
 // input to a fixed cap: the rendered html stays whole (email readable), the derived text is
 // bounded. Wiring maxHtmlLengthToParse instead would reject the whole parse (footgun).
 describe('#11 htmlToText DoS cap', () => {
-    test('multi-MB single-line HTML body still parses; derived text is bounded', async () => {
+    test('multi-MB single-line HTML body still parses; derived text is bounded', () => {
         const huge = 'A'.repeat(6 * 1024 * 1024);
         const bytes = Buffer.from(
             'From: sender@example.com\r\n' +
@@ -264,7 +221,7 @@ describe('#11 htmlToText DoS cap', () => {
                 `<div>${huge}</div>`,
             'binary',
         );
-        const mail = await simpleParser(bytes);
+        const mail = parseMail(bytes);
 
         // Not rejected — the whole email stays readable (the maxHtmlLengthToParse footgun would 500).
         expect(mail.html).toBeTruthy();

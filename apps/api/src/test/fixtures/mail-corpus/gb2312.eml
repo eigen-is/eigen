@@ -1,0 +1,9 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: GB2312 body
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset=gb2312
+Content-Transfer-Encoding: base64
+
+1eLKx7zyzOXW0M7E1f3OxKGj

@@ -1,0 +1,32 @@
+{
+  "subject": "Fwd: Original",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "forwarder@example.com",
+        "name": ""
+      }
+    ],
+    "text": "forwarder@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "See the forwarded message below.",
+  "html": null,
+  "textAsHtml": "<p>See the forwarded message below.</p>",
+  "attachments": [
+    {
+      "contentType": "message/rfc822",
+      "sha256": "d048fc3046b8a0025ec279e34b612fe06c9e190c120ae5c91ce643e9b6076904",
+      "size": 190
+    }
+  ]
+}

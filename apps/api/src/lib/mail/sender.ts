@@ -36,15 +36,9 @@ export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): O
     if (html) message.html = html;
 
     if (draft.attachments?.length) {
-        message.attachments = draft.attachments
-            .filter((a) => a.content && a.filename)
-            .map(
-                (a): OutboundAttachment => ({
-                    filename: a.filename!,
-                    content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(String(a.content)),
-                    contentType: a.contentType,
-                }),
-            );
+        message.attachments = draft.attachments.flatMap((a): OutboundAttachment[] =>
+            a.filename ? [{ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType }] : [],
+        );
     }
 
     return message;

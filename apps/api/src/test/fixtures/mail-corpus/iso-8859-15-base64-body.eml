@@ -1,0 +1,9 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Subject: Latin-9 euro
+Content-Type: text/plain; charset=iso-8859-15
+Content-Transfer-Encoding: base64
+
+UHJpY2U6IDUgpCAoZml2ZSBldXJvKS4NCrx1dnJlLg0K

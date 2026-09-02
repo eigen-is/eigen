@@ -1,0 +1,25 @@
+From: Alice <alice@example.com>
+To: Bob <bob@example.com>
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Subject: Attachment without Content-Type
+Content-Type: multipart/mixed; boundary="b3"
+
+--b3
+Content-Type: text/plain; charset=utf-8
+
+Two untyped parts follow.
+--b3
+Content-Disposition: attachment; filename="notes.txt"
+
+plain notes content
+--b3
+Content-Disposition: attachment; filename="blob.xyz"
+Content-Transfer-Encoding: base64
+
+b3BhcXVl
+--b3
+Content-Disposition: attachment
+
+no filename at all
+--b3--

@@ -1,0 +1,26 @@
+{
+  "subject": "件名テスト",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "address": "sender@example.com",
+        "name": ""
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "address": "recipient@example.com",
+        "name": ""
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "こんにちは、日本語のテストです。\n",
+  "html": null,
+  "textAsHtml": "<p>&#x3053;&#x3093;&#x306B;&#x3061;&#x306F;&#x3001;&#x65E5;&#x672C;&#x8A9E;&#x306E;&#x30C6;&#x30B9;&#x30C8;&#x3067;&#x3059;&#x3002;</p>",
+  "attachments": []
+}

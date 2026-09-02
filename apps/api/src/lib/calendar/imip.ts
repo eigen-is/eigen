@@ -1,12 +1,6 @@
 import { formatEventWhen } from '@workspace/lib/calendar/calendar-utils';
 import { escapeHtml } from '@workspace/lib/html';
-import {
-    type Attendee,
-    type CalendarEvent,
-    type EventData,
-    IMIP_METHODS,
-    type ImipMethod,
-} from '@workspace/lib/types/calendar';
+import type { Attendee, CalendarEvent, EventData, ImipMethod } from '@workspace/lib/types/calendar';
 import type { AddressObject, Attachment, CalendarInvite } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
@@ -157,16 +151,7 @@ export function extractCalendarAttachment(mail: {
     const attachment = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
     if (!attachment) return null;
 
-    const content = attachment.content;
-    const ics =
-        typeof content === 'string' ? content : content instanceof Buffer ? content.toString('utf-8') : String(content);
-
-    // Extract method from Content-Type header parameter (e.g. "text/calendar; method=REQUEST")
-    const methodMatch = attachment.contentType.match(/method=(\w+)/i);
-    const raw = methodMatch ? methodMatch[1].toUpperCase() : undefined;
-    const method = raw && IMIP_METHODS.includes(raw as ImipMethod) ? (raw as ImipMethod) : undefined;
-
-    return { ics, method };
+    return { ics: Buffer.from(attachment.content).toString(), method: attachment.calendarMethod };
 }
 
 // Read-time summary of a single text/calendar attachment for the message-detail payload.
@@ -182,7 +167,7 @@ export function summarizeCalendarInvite(attachment: Attachment): CalendarInvite 
         return {
             // ICS METHOD wins, then the parser's Content-Type-derived calendarMethod; a bare
             // event .ics without METHOD anywhere still renders as an invitation card.
-            method: method ?? attachment.calendarMethod ?? 'REQUEST',
+            method: method ?? cal.method ?? 'REQUEST',
             uid: event.uid,
             summary: event.title,
             startTime: event.startTime,

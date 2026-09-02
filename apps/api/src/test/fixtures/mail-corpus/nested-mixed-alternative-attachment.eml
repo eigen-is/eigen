@@ -1,0 +1,26 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Nested mixed/alternative
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+--outer
+Content-Type: multipart/alternative; boundary="inner"
+
+--inner
+Content-Type: text/plain; charset=utf-8
+
+Nested plain body.
+--inner
+Content-Type: text/html; charset=utf-8
+
+<p>Nested <b>html</b> body.</p>
+--inner--
+--outer
+Content-Type: application/octet-stream
+Content-Disposition: attachment; filename="data.bin"
+Content-Transfer-Encoding: base64
+
+bmVzdGVkIGF0dGFjaG1lbnQgYnl0ZXM=
+--outer--

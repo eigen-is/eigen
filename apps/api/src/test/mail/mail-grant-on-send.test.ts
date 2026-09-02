@@ -63,7 +63,7 @@ function addr(list: string): AddressObject {
         .map((s) => s.trim())
         .filter(Boolean)
         .map((address) => ({ address, name: '' }));
-    return { value, html: '', text: list };
+    return { value, text: list };
 }
 
 async function createDoc(name: string): Promise<string> {
