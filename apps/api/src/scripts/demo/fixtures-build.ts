@@ -3,6 +3,7 @@
 // in one place. The frontend readers require `taskIds`/`columnOrder` to be real Y.Array instances.
 // (The slides deck and budget sheet fixtures are hand-maintained — edited in a live demo and copied
 // back — so they have no builder here.)
+import { getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import * as Y from 'yjs';
 import type { CardSpec } from './content';
 
@@ -10,28 +11,30 @@ import type { CardSpec } from './content';
 // placing the fixture, so the board resolves author names regardless of the deployment's mail
 // domain. `boardAuthor` is the persona key that owns the columns.
 export function buildStickiesDoc(doc: Y.Doc, columns: string[], cards: CardSpec[], boardAuthor: string): void {
-    const columnsMap = doc.getMap('columns');
-    const tasksMap = doc.getMap('tasks');
-    const columnOrder = doc.getArray<string>('columnOrder');
+    const columnsMap = getItemMapRoot(doc, 'columns');
+    const tasksMap = getItemMapRoot(doc, 'tasks');
+    const columnOrder = getIdArrayRoot(doc, 'columnOrder');
     doc.transact(() => {
         const now = Date.now();
-        const colIdByTitle = new Map<string, string>();
-        columns.forEach((title, i) => {
+        // Hold each column's taskIds array by title — the card loop pushes into it, no re-lookup.
+        const taskIdsByTitle = new Map<string, Y.Array<string>>();
+        for (const [i, title] of columns.entries()) {
             const colId = `col-${i + 1}`;
-            colIdByTitle.set(title, colId);
+            const taskIds = new Y.Array<string>();
+            taskIdsByTitle.set(title, taskIds);
             const col = new Y.Map<unknown>();
             col.set('id', colId);
             col.set('title', title);
-            col.set('taskIds', new Y.Array<string>());
+            col.set('taskIds', taskIds);
             col.set('creator', boardAuthor);
             col.set('createdAt', now);
             columnsMap.set(colId, col);
             columnOrder.push([colId]);
-        });
-        cards.forEach((card, i) => {
+        }
+        for (const [i, card] of cards.entries()) {
             const cardId = `card-${i + 1}`;
-            const colId = colIdByTitle.get(card.column);
-            if (!colId) throw new Error(`Card "${card.title}" references unknown column "${card.column}"`);
+            const taskIds = taskIdsByTitle.get(card.column);
+            if (!taskIds) throw new Error(`Card "${card.title}" references unknown column "${card.column}"`);
             const task = new Y.Map<unknown>();
             task.set('id', cardId);
             task.set('title', card.title);
@@ -39,8 +42,7 @@ export function buildStickiesDoc(doc: Y.Doc, columns: string[], cards: CardSpec[
             task.set('creator', card.creator);
             task.set('createdAt', now);
             tasksMap.set(cardId, task);
-            const taskIds = (columnsMap.get(colId) as Y.Map<unknown>).get('taskIds') as Y.Array<string>;
             taskIds.push([cardId]);
-        });
+        }
     });
 }

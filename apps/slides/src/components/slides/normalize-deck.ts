@@ -15,9 +15,8 @@ export function normalizeDeck(doc: Y.Doc) {
         // Reconcile each object's slideId back-reference to the slide that actually holds it. objectIds
         // is the source of truth; the shared repair may have re-homed or dedupe-moved an object without
         // touching its slideId, which drives duplicate/z-order writes and comment/search navigation.
-        for (const slideId of Array.from(slidesMap.keys())) {
-            const slide = slidesMap.get(slideId);
-            const objectIds = slide && getIdArray(slide, 'objectIds');
+        for (const [slideId, slide] of slidesMap) {
+            const objectIds = getIdArray(slide, 'objectIds');
             if (!objectIds) continue; // tolerate a slide missing objectIds — a throw escapes the observer
             for (const objId of objectIds.toArray()) {
                 const obj = objectsMap.get(objId);
