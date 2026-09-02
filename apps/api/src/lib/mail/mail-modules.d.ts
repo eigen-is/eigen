@@ -20,8 +20,3 @@ declare module 'html-to-text' {
 
     export { convert };
 }
-
-declare module 'tlds' {
-    const tlds: string[];
-    export default tlds;
-}

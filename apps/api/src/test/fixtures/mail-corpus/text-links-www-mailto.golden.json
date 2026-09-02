@@ -1,0 +1,26 @@
+{
+  "subject": "www hosts, mailto and bare domains",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "",
+        "address": "sender@example.com"
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "",
+        "address": "recipient@example.com"
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "Docs live at www.example.com/docs, write to mailto:sales@example.com.\nBare domains like example.com and mail.example.com stay plain text.\n",
+  "html": null,
+  "textAsHtml": "<p>Docs live at <a href=\"http://www.example.com/docs\">www.example.com/docs</a>, write to <a href=\"mailto:sales@example.com\">mailto:sales@example.com</a>.<br/>Bare domains like example.com and mail.example.com stay plain text.</p>",
+  "attachments": []
+}

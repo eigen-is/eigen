@@ -1,0 +1,8 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: www hosts, mailto and bare domains
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Docs live at www.example.com/docs, write to mailto:sales@example.com.
+Bare domains like example.com and mail.example.com stay plain text.

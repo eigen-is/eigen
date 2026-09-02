@@ -21,7 +21,7 @@
   },
   "text": "Delivery to the following recipient failed permanently.\nReporting-MTA: dns; mail.example.com\n\nFinal-Recipient: rfc822; nobody@invalid.example\nAction: failed\nStatus: 5.1.1",
   "html": null,
-  "textAsHtml": "<p>Delivery to the following recipient failed permanently.</p><br/>\n<p>Reporting-MTA: dns; <a href=\"http://mail.example.com\">mail.example.com</a></p><p>Final-Recipient: rfc822; nobody@invalid.example<br/>Action: failed<br/>Status: 5.1.1</p>",
+  "textAsHtml": "<p>Delivery to the following recipient failed permanently.</p><br/>\n<p>Reporting-MTA: dns; mail.example.com</p><p>Final-Recipient: rfc822; <a href=\"mailto:nobody@invalid.example\">nobody@invalid.example</a><br/>Action: failed<br/>Status: 5.1.1</p>",
   "attachments": [
     {
       "contentType": "message/rfc822",
