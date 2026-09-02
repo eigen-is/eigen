@@ -9,7 +9,7 @@ import * as Y from 'yjs';
 import { normalizeDeck } from '../normalize-deck';
 import { type ApplyTo, DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
 
-// Copy before rewriting so an anchor write can't silently drop the existing ids.
+// Copy — the stored array is aliased into React state, so mutate a copy and re-set.
 function readCommentCardIds(objMap: Y.Map<unknown>): string[] {
     const raw = objMap.get('commentCardIds');
     return Array.isArray(raw) ? [...raw] : [];
