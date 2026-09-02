@@ -17,6 +17,7 @@ import type * as Y from 'yjs';
 
 type ToolbarProps = {
     canWrite: boolean;
+    offline: boolean;
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
     path: DrivePath;
@@ -33,6 +34,7 @@ type ToolbarProps = {
 
 export function Toolbar({
     canWrite,
+    offline,
     undoManager,
     onAccessDialogOpen,
     path,
@@ -103,6 +105,7 @@ export function Toolbar({
                     <div className="flex items-center gap-1">
                         <DocumentShareCluster
                             canWrite={canWrite}
+                            offline={offline}
                             onAccessDialogOpen={onAccessDialogOpen}
                             onToggleCommentPanel={onToggleCommentPanel}
                             commentPanelOpen={commentPanelOpen}

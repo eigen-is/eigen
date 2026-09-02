@@ -1,5 +1,5 @@
 import { useIsMobile } from '@workspace/lib/media';
-import { Activity, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
+import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
 import { CountBadge } from '../../count-badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
 import { FindInDocumentButton, FindInDocumentMenuItem, useFindBarRefocus } from '../../search/find-in-document-button';
@@ -18,6 +18,8 @@ type DocumentShareClusterProps = {
     watchTarget?: { ownerId: string; mountId: string; pathId: string };
     onToggleActivityPanel?: () => void;
     activityPanelOpen?: boolean;
+    // Collab socket down after first load: edits stay local until it reconnects.
+    offline?: boolean;
 };
 
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
@@ -37,10 +39,12 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
         watchTarget,
         onToggleActivityPanel,
         activityPanelOpen,
+        offline,
     } = props;
 
     return (
         <>
+            {offline && <OfflineBadge />}
             {onRename && <TooltipButton icon={Pencil} tooltipText="Edit" onClick={onRename} />}
             {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
             <FindInDocumentButton />
@@ -85,44 +89,63 @@ function MobileClusterKebab({
     assignedCommentCount,
     watchTarget,
     onToggleActivityPanel,
+    offline,
 }: DocumentShareClusterProps) {
     const { focusFindBarRef, onCloseAutoFocus } = useFindBarRefocus();
 
     return (
-        <div className="relative">
-            <DropdownMenu>
-                <KebabTrigger />
-                <DropdownMenuContent align="end" onCloseAutoFocus={onCloseAutoFocus}>
-                    {onRename && (
-                        <DropdownMenuItem onClick={onRename}>
-                            <Pencil className="mr-2" />
-                            Edit
-                        </DropdownMenuItem>
-                    )}
-                    {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
-                    <FindInDocumentMenuItem focusFindBarRef={focusFindBarRef} />
-                    {onToggleActivityPanel && (
-                        <DropdownMenuItem onClick={onToggleActivityPanel}>
-                            <Activity className="mr-2" />
-                            Activity
-                        </DropdownMenuItem>
-                    )}
-                    {watchTarget && <WatchMenuItem {...watchTarget} />}
-                    {onToggleCommentPanel && (
-                        <DropdownMenuItem onClick={onToggleCommentPanel}>
-                            <MessageSquare className="mr-2" />
-                            {assignedCommentCount ? `Comments (${assignedCommentCount})` : 'Comments'}
-                        </DropdownMenuItem>
-                    )}
-                    {canWrite && (
-                        <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="mr-2" />
-                            Share
-                        </DropdownMenuItem>
-                    )}
-                </DropdownMenuContent>
-            </DropdownMenu>
-            {onToggleCommentPanel && <CountBadge count={assignedCommentCount ?? 0} />}
-        </div>
+        <>
+            {offline && <OfflineBadge compact />}
+            <div className="relative">
+                <DropdownMenu>
+                    <KebabTrigger />
+                    <DropdownMenuContent align="end" onCloseAutoFocus={onCloseAutoFocus}>
+                        {onRename && (
+                            <DropdownMenuItem onClick={onRename}>
+                                <Pencil className="mr-2" />
+                                Edit
+                            </DropdownMenuItem>
+                        )}
+                        {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
+                        <FindInDocumentMenuItem focusFindBarRef={focusFindBarRef} />
+                        {onToggleActivityPanel && (
+                            <DropdownMenuItem onClick={onToggleActivityPanel}>
+                                <Activity className="mr-2" />
+                                Activity
+                            </DropdownMenuItem>
+                        )}
+                        {watchTarget && <WatchMenuItem {...watchTarget} />}
+                        {onToggleCommentPanel && (
+                            <DropdownMenuItem onClick={onToggleCommentPanel}>
+                                <MessageSquare className="mr-2" />
+                                {assignedCommentCount ? `Comments (${assignedCommentCount})` : 'Comments'}
+                            </DropdownMenuItem>
+                        )}
+                        {canWrite && (
+                            <DropdownMenuItem onClick={onAccessDialogOpen}>
+                                <UserRoundPlus className="mr-2" />
+                                Share
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                {onToggleCommentPanel && <CountBadge count={assignedCommentCount ?? 0} />}
+            </div>
+        </>
+    );
+}
+
+// Sits beside the icon buttons: the socket is down but the editor stays live, so the user needs
+// to know edits are safe as long as this tab stays open. Mobile keeps only the icon.
+function OfflineBadge({ compact }: { compact?: boolean }) {
+    const label = 'Offline, will sync when back online';
+    return (
+        <span
+            className="flex h-7 items-center gap-1.5 rounded-md border bg-muted px-2 text-xs text-muted-foreground"
+            title={compact ? label : undefined}
+        >
+            <WifiOff className="size-3.5" />
+            {!compact && label}
+        </span>
     );
 }

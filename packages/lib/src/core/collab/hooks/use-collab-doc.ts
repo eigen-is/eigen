@@ -49,6 +49,11 @@ export interface CollabDoc {
     // Live sync state — flips true on every provider 'sync' and false on disconnect. Use for
     // presence, seed-if-empty, and other work that must track the actual connection.
     synced: boolean;
+    // Live socket state from the provider's 'status' event. Differs from `synced` only during the
+    // resync handshake right after a reconnect, so `loaded && !connected` is the honest "offline"
+    // signal for the toolbar pill: edits keep landing in the local doc and push on reconnect. While
+    // that is the case the hook also blocks `beforeunload`, since nothing persists them locally.
+    connected: boolean;
     // LATCHED first-load flag: false at doc creation, true after the FIRST synced=true for this doc
     // instance, and reset only on teardown / pathId swap. Gate the initial loading screen on THIS,
     // not `synced` — a mid-session WS blip (synced → false → true) must not unmount the editor
@@ -64,9 +69,12 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const [provider, setProvider] = useState<WebsocketProvider | null>(null);
     const [undoManager, setUndoManager] = useState<Y.UndoManager | null>(null);
     const [synced, setSynced] = useState(false);
+    const [connected, setConnected] = useState(false);
     const [loaded, setLoaded] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
+    // Local edits made while the socket was down, cleared once a sync handshake completes.
+    const unsyncedRef = useRef(false);
 
     // Host config held in refs so its identity never re-runs the lifecycle effect: the doc/provider
     // are keyed STRICTLY on (ownerId, mountId, pathId). This is also the fix for the stickies quirk,
@@ -95,10 +103,31 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
             setSynced(isSynced);
             // Latch on the first successful sync; never cleared here (only in teardown below), so a
             // later disconnect leaves `loaded` true and the editor stays mounted.
-            if (isSynced) setLoaded(true);
+            if (isSynced) {
+                setLoaded(true);
+                unsyncedRef.current = false;
+            }
             onSyncRef.current?.(ctx, isSynced);
         };
         provider.on('sync', handleSync);
+
+        const handleStatus = ({ status }: { status: 'connected' | 'disconnected' | 'connecting' }) =>
+            setConnected(status === 'connected');
+        provider.on('status', handleStatus);
+
+        // y-websocket only forwards local updates over an open socket; anything applied while it is
+        // down waits in the doc for the next sync handshake.
+        const handleUpdate = (_update: Uint8Array, origin: unknown) => {
+            if (origin !== provider && !provider.wsconnected) unsyncedRef.current = true;
+        };
+        doc.on('update', handleUpdate);
+
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (!unsyncedRef.current) return;
+            e.preventDefault();
+            e.returnValue = '';
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
 
         setDoc(doc);
         setProvider(provider);
@@ -106,8 +135,13 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
 
         return () => {
             setSynced(false);
+            setConnected(false);
             // Reset the latch so a pathId swap re-shows the loading screen for the new doc.
             setLoaded(false);
+            unsyncedRef.current = false;
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            doc.off('update', handleUpdate);
+            provider.off('status', handleStatus);
             provider.off('sync', handleSync);
             // Host teardown first (unobserve, flush-on-unmount), then destroy the framework objects
             // provider→doc (provider.destroy detaches its own doc listener). The effect re-runs on a
@@ -123,5 +157,5 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
     }, [ownerId, mountId, pathId]);
 
-    return { doc, docRef, provider, undoManager, synced, loaded };
+    return { doc, docRef, provider, undoManager, synced, connected, loaded };
 }

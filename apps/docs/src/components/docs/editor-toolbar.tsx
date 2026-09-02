@@ -74,6 +74,7 @@ import { useState } from 'react';
 type EditorToolbarProps = {
     editor: Editor;
     canWrite: boolean;
+    offline: boolean;
     canUndo: boolean;
     canRedo: boolean;
     onAccessDialogOpen: () => void;
@@ -93,6 +94,7 @@ export const EditorToolbar = ({
     editor,
     path,
     canWrite,
+    offline,
     canUndo,
     canRedo,
     onAccessDialogOpen,
@@ -678,6 +680,7 @@ export const EditorToolbar = ({
                 right={
                     <DocumentShareCluster
                         canWrite={canWrite}
+                        offline={offline}
                         onAccessDialogOpen={onAccessDialogOpen}
                         onToggleCommentPanel={onToggleCommentPanel}
                         commentPanelOpen={commentPanelOpen}

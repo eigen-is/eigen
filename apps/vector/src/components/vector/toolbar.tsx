@@ -14,6 +14,7 @@ import { Diamond, ImagePlus } from 'lucide-react';
 type ToolbarProps = {
     path: DrivePath;
     canWrite: boolean;
+    offline: boolean;
     // Exactly what useYjsUndoState consumes (Y.UndoManager | null) — named via the hook so the app
     // needn't take a direct yjs dependency just to type one prop.
     undoManager: Parameters<typeof useYjsUndoState>[0];
@@ -52,6 +53,7 @@ function ToolMenuItem({ tool, setTool }: { tool: (typeof VECTOR_TOOLS)[number]; 
 export function Toolbar({
     path,
     canWrite,
+    offline,
     undoManager,
     tool,
     setTool,
@@ -141,6 +143,7 @@ export function Toolbar({
                     <div className="flex items-center gap-1">
                         <DocumentShareCluster
                             canWrite={canWrite}
+                            offline={offline}
                             onAccessDialogOpen={onAccessDialogOpen}
                             watchTarget={{ ownerId: path.ownerId, mountId: path.mountId, pathId: path.id }}
                             onToggleCommentPanel={onToggleCommentPanel}

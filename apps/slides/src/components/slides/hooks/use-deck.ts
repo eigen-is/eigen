@@ -61,6 +61,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         undoManager,
         doc: yjsDoc,
         synced: isSynced,
+        connected,
         loaded,
     } = useCollabDoc({
         ownerId,
@@ -474,6 +475,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     return {
         deck,
         isSynced,
+        connected,
         loaded,
         activeSlideId,
         setActiveSlideId,

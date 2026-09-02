@@ -205,6 +205,7 @@ export const CollaborativeEditor = ({
     const {
         doc: yDoc,
         provider,
+        connected,
         loaded,
     } = useCollabDoc({
         ownerId: path.ownerId,
@@ -232,6 +233,7 @@ export const CollaborativeEditor = ({
                 yDoc={yDoc}
                 provider={provider}
                 canWrite={canWrite}
+                offline={!connected}
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
@@ -247,6 +249,7 @@ const TiptapEditor = ({
     provider,
     path,
     canWrite,
+    offline,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -257,6 +260,7 @@ const TiptapEditor = ({
     provider: WebsocketProvider;
     path: DrivePath;
     canWrite: boolean;
+    offline: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -875,6 +879,7 @@ const TiptapEditor = ({
                                     editor={editor}
                                     path={path}
                                     canWrite={canWrite}
+                                    offline={offline}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}

@@ -110,6 +110,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         undoManager,
         doc: yjsDoc,
         synced: isSynced,
+        connected,
         loaded,
     } = useCollabDoc({
         ownerId,
@@ -213,6 +214,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     return {
         board,
         isSynced,
+        connected,
         loaded,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,
