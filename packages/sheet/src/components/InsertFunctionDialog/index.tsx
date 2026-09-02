@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { cancelNormalSelected, en, setCaretPosition } from '../../state';
+import { cancelNormalSelected, en, FUNCTION_LIST, setCaretPosition } from '../../state';
 
 export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => void }) {
     const {
@@ -17,7 +17,7 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
     const [selectedType, setSelectedType] = useState(0);
     const [selectedFuncIndex, setSelectedFuncIndex] = useState(0);
     const [searchText, setSearchText] = useState('');
-    const { formulaMore, functionlist, button } = en;
+    const { formulaMore, button } = en;
 
     const typeList = useMemo(
         () => [
@@ -44,9 +44,9 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
         if (searchText) {
             const text = searchText.toUpperCase();
             const isAlpha = /^[a-zA-Z]+$/.test(text);
-            return functionlist.filter((fn) => (isAlpha ? fn.n.includes(text) : fn.a.includes(text)));
+            return FUNCTION_LIST.filter((fn) => (isAlpha ? fn.n.includes(text) : fn.a.includes(text)));
         }
-        return functionlist.filter((v) => v.t === selectedType);
+        return FUNCTION_LIST.filter((v) => v.t === selectedType);
     }, [selectedType, searchText]);
 
     const onConfirm = useCallback(() => {
@@ -79,7 +79,7 @@ export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => 
                 ctx.functionHint = filteredFunctionList[selectedFuncIndex].n.toUpperCase();
                 ctx.functionCandidates = [];
                 if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {
-                    for (const fn of functionlist) {
+                    for (const fn of FUNCTION_LIST) {
                         ctx.formulaCache.functionlistMap[fn.n] = fn;
                     }
                 }

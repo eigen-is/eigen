@@ -16,6 +16,7 @@ import {
     CF_PRESETS,
     clearSheetRules,
     en,
+    FONT_ARRAY,
     getFlowdata,
     handleBold,
     handleBorder,
@@ -31,6 +32,7 @@ import {
     handleTextSize,
     handleUnderline,
     handleVerticalAlign,
+    numberFormatPresets,
     updateFormat,
 } from '../../state';
 import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
@@ -47,7 +49,7 @@ function NumberFormatSubmenu() {
     const { showDialog } = useDialog();
     const toolbarFormat = en.format;
     const { currency } = settings;
-    const defaultFormat = en.defaultFmt(currency);
+    const defaultFormat = numberFormatPresets(currency);
 
     const anchor = useAnchorCell();
     const activeFa = anchor?.ct?.fa ?? 'General';
@@ -98,7 +100,7 @@ function NumberFormatSubmenu() {
 
 function TextSubmenu() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { toolbar, fontarray } = en;
+    const { toolbar } = en;
     const textColor = useAnchorCell()?.fc ?? '';
 
     return (
@@ -147,7 +149,7 @@ function TextSubmenu() {
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Font</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel max-h-[50vh] overflow-y-auto">
-                        {fontarray.map((o) => (
+                        {FONT_ARRAY.map((o) => (
                             <DropdownMenuItem
                                 key={o}
                                 onClick={() => {

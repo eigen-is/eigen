@@ -23,9 +23,9 @@ import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
-import { en } from '../locale/en';
 import { carrySides, clearSides, getBorderInfoCompute } from '../modules/border';
 import { getdatabyselection, getQKBorder } from '../modules/cell';
+import { FONT_INDEX_BY_NAME } from '../modules/fonts';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
@@ -1112,8 +1112,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
         }
 
-        const locale_fontjson = en.fontjson;
-
         if (ctx.hooks.beforePaste?.(ctx.selections, txtdata) === false) {
             return;
         }
@@ -1253,7 +1251,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                             const ffs = ff.split(',');
                             for (let i = 0; i < ffs.length; i += 1) {
                                 const faKey = trim(ffs[i].toLowerCase());
-                                const fa: number | undefined = (locale_fontjson as Record<string, number>)[faKey];
+                                const fa: number | undefined = FONT_INDEX_BY_NAME[faKey];
                                 if (isNil(fa)) {
                                     cell.ff = 0;
                                 } else {

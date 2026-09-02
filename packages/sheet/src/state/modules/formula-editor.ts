@@ -2,7 +2,6 @@ import { escapeHtml, unescapeHtml } from '@workspace/lib/html';
 import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
 import { iscelldata, operatorjson } from '../../engine/formula-utils';
 import type { Context } from '../context';
-import { en } from '../locale/en';
 
 import { cancelFunctionrangeSelected } from '.';
 import { colors } from './color';
@@ -14,6 +13,7 @@ import {
     setRangeIndexes,
 } from './formula-cache';
 import { createRangeHightlight, setCaretPosition } from './formula-range';
+import { type FormulaFunctionEntry, FUNCTION_LIST } from './function-list';
 
 function functionHTML(txt: string) {
     if (txt[0] === '=') {
@@ -208,8 +208,6 @@ function getRangeIndexes($editor: HTMLDivElement) {
 }
 
 function searchFunction(ctx: Context, searchtxt: string) {
-    const { functionlist } = en;
-
     // // This logic has been modified from the original project
     // if (isNil($editer)) {
     //   return;
@@ -224,13 +222,13 @@ function searchFunction(ctx: Context, searchtxt: string) {
 
     // const searchtxt = match[1];
 
-    const f: typeof functionlist = [];
-    const s: typeof functionlist = [];
-    const t: typeof functionlist = [];
+    const f: FormulaFunctionEntry[] = [];
+    const s: FormulaFunctionEntry[] = [];
+    const t: FormulaFunctionEntry[] = [];
     let result_i = 0;
 
-    for (let i = 0; i < functionlist.length; i += 1) {
-        const item = functionlist[i];
+    for (let i = 0; i < FUNCTION_LIST.length; i += 1) {
+        const item = FUNCTION_LIST[i];
         const { n } = item;
 
         if (n === searchtxt) {
@@ -333,9 +331,8 @@ export function getrangeseleciton() {
 }
 
 function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Context) {
-    const { functionlist } = en;
     if (isEmpty(ctx.formulaCache.functionlistMap)) {
-        for (const fn of functionlist) {
+        for (const fn of FUNCTION_LIST) {
             ctx.formulaCache.functionlistMap[fn.n] = fn;
         }
     }

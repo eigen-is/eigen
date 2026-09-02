@@ -1,22 +1,7 @@
 import { useContext } from 'react';
 import { WorkbookContext } from '../../../context';
-import { en } from '../../../state';
+import { en, type FormulaFunctionEntry } from '../../../state';
 import { FormulaPopup } from '../FormulaPopup';
-
-type FormulaParam = {
-    name: string;
-    detail?: string;
-    example?: string;
-    require?: string;
-    repeat?: string;
-    type?: string;
-};
-
-type FormulaFunctionEntry = {
-    n: string;
-    d?: string;
-    p: FormulaParam[];
-};
 
 type FormulaHintProps = {
     anchorRef: { readonly current: HTMLElement | null };

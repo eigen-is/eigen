@@ -14,7 +14,7 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { is_date } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { en, handleNumberFormat } from '../../state';
+import { DATE_FORMAT_PRESETS, en, handleNumberFormat } from '../../state';
 import {
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
@@ -79,7 +79,7 @@ function TokenChip({
 
 export function CustomDateTimeFormats() {
     const { setContext, refs } = useContext(WorkbookContext);
-    const { button, format, dateFmtList } = en;
+    const { button, format } = en;
     const { hideDialog } = useDialog();
 
     const anchor = useAnchorCell();
@@ -178,7 +178,7 @@ export function CustomDateTimeFormats() {
                 )}
             </div>
             <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
-                {dateFmtList.map(({ name, value }) => (
+                {DATE_FORMAT_PRESETS.map(({ name, value }) => (
                     <div
                         className={cn(
                             'flex items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
