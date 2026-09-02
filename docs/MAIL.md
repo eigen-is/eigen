@@ -57,7 +57,7 @@ defined and migrated in v1, but nothing in the FE or BE reads or writes them.
 
 Charset decoding uses iconv-lite for the general case and `TextDecoder` for `iso-2022-jp`, the one charset iconv-lite lacks; Bun's `TextDecoder` lacks the `windows-125x`/`iso-8859-x`/`koi8-r` single-byte legacy sets, so iconv-lite stays for those.
 
-The behaviour contract is the golden corpus: every `.eml` under `apps/api/src/test/fixtures/mail-corpus/` has a committed `.golden.json`, checked by `mail-parser-golden.test.ts` (regenerate with `UPDATE_GOLDEN=1`).
+The behaviour contract is the golden corpus: every `.eml` under `apps/api/src/test/fixtures/mail-corpus/` has a committed `.golden.json`, checked by `mail-parser-golden.test.ts` (regenerate with `UPDATE_GOLDEN=1`). The 2026-09 audit that drove the rewrite, with its list of deliberate deviations from the ported nodemailer parser, is retired; git history keeps it (`docs/AUDIT_MAIL_PARSER.md`).
 
 ## Mailboxes and the naming gotcha
 
