@@ -3,6 +3,57 @@
 All notable user-visible changes to Eigen are documented in this file.
 Format follows [Keep a Changelog](https://keepachangelog.com).
 
+## [0.2.0] - 2026-09-02
+
+Drawing, contacts sync, and hardening release. Eigen gains a new app, eigen|vector>, a collaborative whiteboard heavily inspired by Excalidraw's impressive work. Contacts are now stored as vCard files and served over CardDAV, so phones and desktops sync them the way they already sync calendars. Mail got its own parser, per-recipient document links, and a hardened outbound relay after an abuse incident. Under the hood, every collaborative editor now shares one document lifecycle, clipboard, presence layer, and canvas toolkit.
+
+### Added
+
+- **eigen|vector>** — a new collaborative whiteboard app. Shapes, freehand strokes with pen pressure, lines, text, and images; arrows that stay bound to the shapes they connect, curved by default, with elbow routing, pinnable segments, heads, and labels; an eraser; snap lines with align and distribute; live cursors and presence; comments and an activity panel; touch and stylus tuning. Drawings export to SVG and PDF, show up in Drive previews and search, and paste into other apps as real images
+- **Contacts over CardDAV** — contacts are stored as vCard files and served under `/dav/addressbooks`, so iOS, macOS, Thunderbird, and other clients sync them two-way. Apple clients edit in place, vCard 4.0 uploads are accepted, labels round-trip as categories, and contact photos become avatars. The Integrations page shows a CardDAV card next to CalDAV, a device setup article walks through each client, and the setup guide documents the `_carddavs._tcp` / `_caldavs._tcp` autodiscovery DNS records
+- **Contacts** — edit a card straight from the context menu, select several contacts and email or chat with them at once, and see visible validation errors with honest required markers on the form
+- **Mail: send a document link** — the share-and-send dialog lists the referenced files, grants read access at send time, and prefills each recipient with a personal link; failed recipients are reported after a partial send
+- **Mail** — outbound messages carry a proper envelope, a pinned Message-ID, and reply threading headers, so replies thread correctly in every client
+- **Admin: Users** — a full-width responsive table with per-user storage usage, last sign-in, a guests-only filter, drag-to-team and multi-select, and orphaned accounts merged into the same list
+- **Admin: S3 bucket safety** — one click on the S3 storage card enables bucket versioning and a lifecycle rule with safe defaults; the retention period stays editable afterwards
+- **Drive** — sortable column headers for name, date, and size; real sizes for folders and containers; folder grouping only when sorting by name
+- **Sheets** — tick-box cells from the Insert menu and the cell context menu, including whole-column tick boxes bound to the rows that hold data; `Alt+Down` opens a cell's dropdown list; the data-validation hint is a proper card; imported Excel booleans display as `TRUE`/`FALSE`
+- **Slides** — live cursors and presence on the canvas, a right-click object menu, an aspect-ratio lock and W×H resize pill, and Alt-drag to duplicate
+- **Demo** — the demo instance ships a hand-drawn festival site plan in the vector app
+
+### Changed
+
+- **Sheets border storage (breaking)** — cell borders are stored per cell, so two people bordering different cells converge instead of disagreeing forever, and toolbar-drawn borders now survive HTML export and previews. There is no migration: a sheet saved with toolbar-range borders before this release opens blank and read-only with an error banner instead of being overwritten. Sheets without such borders, and sheets whose borders were set per cell, open as before
+- **Canvas editors share one toolkit** — docs, slides, stickies, and vector use the same document lifecycle, undo sealing, marquee selection, keymap, presence rings, file-drop overlay, properties-panel sections, and clipboard contract. Elements and images copy and paste between apps at their real aspect ratio, with one undo step per paste
+- **Selection chrome** — a thinner selection ring and dashed group bounds across all canvas apps, matching the remote presence rings
+- **Mail parser** — the ported nodemailer parser is replaced by our own, pinned by a golden corpus of real-world emails, and three dependencies are gone. Address groups are flattened in reply-all and in the header rows, and the message body reads left-aligned at one unified width
+- **Mail** — an empty message is refused instead of going out as "(No subject)", cleared recipients stay cleared when a draft is reopened, and the send button shows busy during the access probe
+- **Sheets** — conditional-format rules have human names and dialog titles, row and column resize is exact, the range picker sits under its cell at its old width, the dropdown chevron is always painted, the selection's move band and fill handle are easier to grab, and the sheet no longer carries a locale layer
+- **Calendar (CalDAV)** — clients see write privileges and ownership on the calendar home, so Apple clients edit events in place instead of creating duplicates; MKCALENDAR honours the client-chosen URL; a sync token ahead of the calendar is refused; the well-known DAV redirects actually fire
+- **Thumbnails** — animated images take their first frame, oversized images are skipped instead of exhausting the worker, and scratch files are isolated per job
+- **Docs** — pasted prose keeps its alignment, and the toolbar menus share one shell with slides and vector
+- **Server** — a database newer than the running binary's schema is refused instead of opened, and a wrong data-dir argument fails with a clear error
+
+### Fixed
+
+- **Sheets** — cell text, rich-text runs, formula tokens, and referenced sheet names no longer reach the grid unescaped; `IFERROR` traps errors raised by our own operators; `TRUE`/`FALSE`/`NULL` resolve case-insensitively; `F4` keeps cycling on absolute whole-row ranges; `Ctrl+Shift+F` stays on the workbook that owns the keypress; hidden columns no longer get filter buttons; formula conditional-format rules stop at the last row; a tick box no longer hides values it does not recognise or toggles while a formula is being composed; an invalid data-validation rule is rejected instead of applied; a failed snapshot load is shown instead of a blank grid
+- **Mail** — `&amp;` is decoded last when stripping tags; space freed by deleting mail reaches the quota check immediately; the draft stays editable when share-and-send is cancelled; the email header stays full width on wide screens
+- **Calendar** — a recreated event syncs once instead of staying tombstoned, re-received invitations and moved-back events clear their stale tombstones, receiving an invitation bumps the ctag atomically, and a single-event PROPFIND answers on the event's own href
+- **Contacts** — birthdays keep the picked date in every timezone, the edit form submits the etag it loaded so a stale form gets a 412 instead of clobbering, a duplicate label name returns 409, a lost staged avatar fails the save instead of clearing the photo, and the fallback avatar is served for an empty id
+- **Drive** — copying to a media folder keeps its partial successes, and a missing app URL no longer white-screens the app
+- **Stickies** — the description area keeps a minimum height on title-only cards, and the light card chrome shows only where the card is visible
+- **Admin** — long names and emails truncate in person lists instead of overflowing
+- **Server** — the outgoing Home closes before its replacement opens, atomic writes sweep their temp file on failure and fsync the parent directory, and database statements are finalized as they run so a database closes strictly
+- **Docker** — a host dev API on port 8000 no longer conflicts with the docker stack
+
+### Security
+
+- **Outbound mail relay** — hardened after the 2026-08-31 abuse incident: an authenticated sender may only send as its own identity, failed logins count towards the per-IP limiter and exit as auth failures for fail2ban, a fail2ban filter and jail ship with the docker stack and `update.sh` re-arms them after a rebuild, and a queue-size monitor notifies the org owner of a backlog
+- **Input bounds** — CalDAV and CardDAV request bodies are bounded before buffering with a 5 MiB card ceiling, the last unbounded email inputs are capped, reference ids on send are capped and deduped, and C0 control bytes are rejected at the vCard and DAV seams
+- **SVG serving** — container SVGs are served with their media inlined, the inliner is hardened, and name-referenced media only resolves for the document that owns it
+- **Access checks** — the per-email access check for shared links skips addresses that cannot hold an ACL and signals guest admission, and self-link claims are ranked so a user's own record cannot be stolen by an email twin
+- **Conditional REST writes** — stale contact forms get a 412 instead of clobbering a newer version
+
 ## [0.1.1] - 2026-08-13
 
 Mobile & reliability release. Every app now works properly on a phone — column navigation with
