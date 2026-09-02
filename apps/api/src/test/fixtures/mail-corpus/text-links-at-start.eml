@@ -1,0 +1,8 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Link at text start
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+https://example.com/start opens this mail. Handles: @alice.example.com, @@nope, foo@@bar.
+From the list <bob@example.com>.

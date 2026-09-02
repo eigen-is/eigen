@@ -1,0 +1,26 @@
+{
+  "subject": "Link at text start",
+  "date": "2024-01-01T12:00:00.000Z",
+  "from": {
+    "value": [
+      {
+        "name": "",
+        "address": "sender@example.com"
+      }
+    ],
+    "text": "sender@example.com"
+  },
+  "to": {
+    "value": [
+      {
+        "name": "",
+        "address": "recipient@example.com"
+      }
+    ],
+    "text": "recipient@example.com"
+  },
+  "text": "https://example.com/start opens this mail. Handles: @alice.example.com, @@nope, foo@@bar.\nFrom the list <bob@example.com>.\n",
+  "html": null,
+  "textAsHtml": "<p><a href=\"https://example.com/start\">https://example.com/start</a> opens this mail. Handles: <a href=\"https://bsky.app/profile/alice.example.com\">@alice.example.com</a>, @@nope, foo@@bar.<br/>From the list &lt;<a href=\"mailto:bob@example.com\">bob@example.com</a>&gt;.</p>",
+  "attachments": []
+}

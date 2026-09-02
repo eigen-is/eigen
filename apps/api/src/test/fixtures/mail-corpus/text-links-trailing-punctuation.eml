@@ -1,0 +1,8 @@
+From: sender@example.com
+To: recipient@example.com
+Subject: Links with trailing punctuation
+Date: Mon, 01 Jan 2024 12:00:00 +0000
+Content-Type: text/plain; charset=utf-8
+
+Read https://example.com/a. Then (https://example.com/b) or https://en.wikipedia.org/wiki/Foo_(bar)).
+Quoted "https://example.com/c", bracketed <https://example.com/d?x=1&y=2>, shouted https://example.com/e!

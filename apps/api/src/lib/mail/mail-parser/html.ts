@@ -1,8 +1,7 @@
 import type { EmailAddress } from '@workspace/lib/types/mail';
 import he from 'he';
 import { convert } from 'html-to-text';
-import LinkifyIt from 'linkify-it';
-import tlds from 'tlds';
+import { findLinks } from './linkify';
 
 // Both derivations (html→text in htmlToText, text→html in textToHtml) run synchronously on the shared event
 // loop, on every message open and every sync pass, so a multi-MB body is a DoS lever. Only the derived output
@@ -11,43 +10,12 @@ const MAX_HTML_TEXT_LENGTH = 2 * 1024 * 1024;
 
 export type CidImage = { cid: string; contentType: string; content: Buffer };
 
-const linkify = new LinkifyIt()
-    .tlds(tlds)
-    .tlds('onion', true)
-    .add('git:', 'http:')
-    .add('ftp:', null)
-    .set({ fuzzyIP: true, fuzzyLink: true, fuzzyEmail: true })
-    .add('@', {
-        validate(text, pos, self) {
-            // Sticky match at pos on the original string — a per-`@` text.slice(pos) makes a body full of
-            // addresses O(n²). src_ZPCc lives on the linkify-it instance, so the compiled re is cached there.
-            if (!self.re['bluesky']) {
-                self.re['bluesky'] = new RegExp(
-                    `([a-zA-Z0-9_][a-zA-Z0-9._-]*[a-zA-Z0-9])(?=$|${self.re['src_ZPCc']})`,
-                    'y',
-                );
-            }
-            const re = self.re['bluesky'];
-            re.lastIndex = pos;
-            const match = re.exec(text);
-            if (!match) return 0;
-            // An `@` directly preceded by another `@` is not a handle (pos points just past the `@`).
-            if (pos >= 2 && text[pos - 2] === '@') return false;
-            return match[0].length;
-        },
-        normalize(match) {
-            match.url = `https://bsky.app/profile/${match.url.replace(/^@/, '')}`;
-        },
-    });
-
 export function htmlToText(html: string): string {
     return convert(html.slice(0, MAX_HTML_TEXT_LENGTH));
 }
 
 export function textToHtml(str: string): string {
-    const text = str.slice(0, MAX_HTML_TEXT_LENGTH);
-    const encoded = linkify.pretest(text) ? linkifyText(text) : he.encode(text, { useNamedReferences: true });
-    const body = encoded
+    const body = linkifyText(str.slice(0, MAX_HTML_TEXT_LENGTH))
         .replace(/\r?\n/g, '\n')
         .trim()
         .replace(/[ \t]+$/gm, '')
@@ -58,15 +26,18 @@ export function textToHtml(str: string): string {
     return `<p>${body}</p>`;
 }
 
+function encode(text: string): string {
+    return he.encode(text, { useNamedReferences: true });
+}
+
 function linkifyText(str: string): string {
     const parts: string[] = [];
     let last = 0;
-    for (const link of linkify.match(str) ?? []) {
-        parts.push(he.encode(str.slice(last, link.index), { useNamedReferences: true }));
-        parts.push(`<a href="${link.url}">${link.text}</a>`);
-        last = link.lastIndex;
+    for (const { start, end, href } of findLinks(str)) {
+        parts.push(encode(str.slice(last, start)), `<a href="${encode(href)}">${encode(str.slice(start, end))}</a>`);
+        last = end;
     }
-    parts.push(he.encode(str.slice(last), { useNamedReferences: true }));
+    parts.push(encode(str.slice(last)));
     return parts.join('');
 }
 
