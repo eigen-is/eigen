@@ -39,7 +39,7 @@ export function DataMenu() {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem onClick={dispatch((ctx) => (filterActive ? clearFilter(ctx) : createFilter(ctx)))}>
-                {filterActive ? 'Clear filter' : 'create filter'}
+                {filterActive ? 'Clear filter' : 'Create filter'}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

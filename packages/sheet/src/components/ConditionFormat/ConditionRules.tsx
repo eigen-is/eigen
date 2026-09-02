@@ -27,14 +27,16 @@ export type ConditionRuleType =
     | 'belowAverage';
 
 // The 13 highlight / item-selection rules, labelled once here and read back by
-// the Format → Conditional formatting menu that opens this dialog.
+// the menu that opens this dialog and by the Manage-rules list. A few names
+// carry their connective ("Equal to", "Date is") because Manage-rules appends
+// the rule's value to them.
 export const RULE_COPY: Record<ConditionRuleType, { label: string; description: string }> = {
     greaterThan: { label: 'Greater than', description: 'Format cells greater than' },
     lessThan: { label: 'Less than', description: 'Format cells smaller than' },
     between: { label: 'Between', description: 'Format cells with values between' },
-    equal: { label: 'Equal', description: 'Format cells equal to' },
+    equal: { label: 'Equal to', description: 'Format cells equal to' },
     textContains: { label: 'Text contains', description: 'Format cells containing the following text' },
-    occurrenceDate: { label: 'Date', description: 'Format cells containing the following dates' },
+    occurrenceDate: { label: 'Date is', description: 'Format cells containing the following dates' },
     duplicateValue: {
         label: 'Duplicate value',
         description: 'Format cells containing the following types of values',

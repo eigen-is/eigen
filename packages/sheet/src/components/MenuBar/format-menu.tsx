@@ -190,7 +190,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    left
+                    Left
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -199,7 +199,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    center
+                    Center
                 </DropdownMenuItem>
                 <DropdownMenuItem
                     onClick={() => {
@@ -208,7 +208,7 @@ function AlignmentSubmenu() {
                         });
                     }}
                 >
-                    right
+                    Right
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
@@ -460,7 +460,6 @@ function MergeCellsSubmenu() {
 }
 
 // The label is RULE_COPY's, so the menu row and the dialog it opens can't drift.
-// `value` is the shorthand shown dimmed on the right of the row.
 type ConditionRuleItem = { text: ConditionRuleType; value: string };
 
 const HIGHLIGHT_CELL_RULES: ConditionRuleItem[] = [
@@ -565,7 +564,7 @@ function ConditionalFormattingSubmenu() {
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>color gradation</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>Color scale</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         {COLOR_SCALE_PRESETS.map(({ key, label }) => (
                             <DropdownMenuItem
@@ -580,7 +579,7 @@ function ConditionalFormattingSubmenu() {
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>data bar</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>Data bar</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="sheet-mousedown-cancel">
                         {DATA_BAR_PRESETS.map(({ key, label }) => (
                             <DropdownMenuItem

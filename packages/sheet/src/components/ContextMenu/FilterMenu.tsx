@@ -530,7 +530,7 @@ export const FilterMenu: React.FC = () => {
                                 </div>
                                 <Input
                                     onKeyDown={(e) => e.stopPropagation()}
-                                    placeholder="filter By Values"
+                                    placeholder="Filter by values"
                                     className="h-7 mb-1.5"
                                     value={searchText}
                                     onChange={(e) => {

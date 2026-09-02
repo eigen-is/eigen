@@ -35,7 +35,7 @@ export function CustomBorder({ onPick }: Props) {
     return (
         <>
             <ColorPickerMenuItem
-                label="border color"
+                label="Border color"
                 value={changeColor}
                 showReset={false}
                 keepMenuOpen
@@ -48,7 +48,7 @@ export function CustomBorder({ onPick }: Props) {
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                     <div className="flex items-center gap-2 w-full">
-                        <span>border style</span>
+                        <span>Border style</span>
                         <svg className="ml-auto" height="6" width="50">
                             <g
                                 fill="none"
@@ -76,7 +76,7 @@ export function CustomBorder({ onPick }: Props) {
                             onPick(changeColor, '1');
                         }}
                     >
-                        default
+                        Default
                     </DropdownMenuItem>
                     {BORDER_STYLE_PREVIEWS.map((item) => (
                         <DropdownMenuItem

@@ -6,6 +6,7 @@ import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import { getSheetIndex, indexToColumnChar } from '../../state';
+import { RULE_COPY } from './ConditionRules';
 
 function formatRange(range: SingleRange): string {
     const c1 = indexToColumnChar(range.column[0]);
@@ -21,23 +22,14 @@ function formatRanges(ranges: SingleRange[]): string {
 }
 
 const RULE_LABELS: Record<string, string> = {
-    greaterThan: 'Greater than',
+    // The names the Format menu can create come from RULE_COPY, so a rule is
+    // listed here under the name it was created with.
+    ...Object.fromEntries(Object.entries(RULE_COPY).map(([name, copy]) => [name, copy.label])),
+    // Engine condition names with no menu entry — xlsx import and formula rules.
     greaterThanOrEqual: 'Greater than or equal to',
-    lessThan: 'Less than',
     lessThanOrEqual: 'Less than or equal to',
-    between: 'Between',
-    notBetween: 'Not between',
-    equal: 'Equal to',
     notEqual: 'Not equal to',
-    textContains: 'Text contains',
-    occurrenceDate: 'Date is',
-    duplicateValue: 'Duplicate values',
-    top10: 'Top N',
-    top10_percent: 'Top N%',
-    last10: 'Bottom N',
-    last10_percent: 'Bottom N%',
-    aboveAverage: 'Above average',
-    belowAverage: 'Below average',
+    notBetween: 'Not between',
     formula: 'Custom formula',
 };
 
@@ -62,9 +54,10 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
         case 'top10_percent':
         case 'last10':
         case 'last10_percent':
-            return values[0] != null ? label.replace('N', String(values[0])) : label;
+            // The label reads "Top 10"; swap in the rule's own count.
+            return values[0] != null ? label.replace('10', String(values[0])) : label;
         case 'duplicateValue':
-            return values[0] === '1' ? 'Unique values' : label;
+            return values[0] === '1' ? 'Unique value' : label;
         default:
             return label;
     }

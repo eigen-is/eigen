@@ -97,7 +97,7 @@ export function CustomSort() {
 
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    close
+                    Close
                 </Button>
                 <Button
                     size="sm"
@@ -108,7 +108,7 @@ export function CustomSort() {
                         hideDialog();
                     }}
                 >
-                    sort
+                    Sort
                 </Button>
             </DialogFooter>
         </div>
