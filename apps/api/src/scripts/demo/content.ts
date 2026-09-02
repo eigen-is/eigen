@@ -844,7 +844,7 @@ export const SITE_PLAN = {
         },
         { from: { shape: 'polaroid', side: 'left' }, to: { shape: 'camping', side: 'right', along: 0.37 } },
         // North.
-        { from: { at: [1300, 125] }, to: { at: [1300, 70] }, endHead: 'triangle' },
+        { from: { at: [1307, 126] }, to: { at: [1293, 72] }, endHead: 'triangle' },
     ] satisfies SitePlanArrow[],
     texts: [
         { text: 'Tuimel Festival site plan', x: 120, y: 40, fontSize: 36 },
@@ -855,7 +855,7 @@ export const SITE_PLAN = {
             fontSize: 16,
             color: '#868e96',
         },
-        { text: 'N', x: 1290, y: 40, fontSize: 20 },
+        { text: 'N', x: 1283, y: 40, fontSize: 20 },
         { text: 'dunes, sea 5 min', x: 18, y: 120, fontSize: 14, color: '#4dabf7' },
         {
             text: 'Power: 2 x 60kVA + a backup that runs the second stage alone (delivery Thu)',
