@@ -4,12 +4,18 @@ import { usePaletteDocSelection } from '@workspace/lib/command-palette';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
-import { useCallback, useEffect, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useState } from 'react';
+import { ErrorState } from '../components/layout/app/error-state';
 import { useLayout } from '../components/layout/app/layout-context';
+import { LoadingState } from '../components/layout/app/loading-state';
 
 type EigenDocEditorRoute = {
     docInfo: CollabDocumentInfo | undefined;
-    isLoading: boolean;
+    // The pre-editor screen for the doc-info query, or null once it has an answer: the spinner while
+    // it loads, ErrorState when it fails (a failed query is not a verdict on access — the route must
+    // not offer to request access to a document the user may already own). All five editor routes
+    // render it as their first guard, so the failure treatment exists once, not per app.
+    statusView: ReactNode | null;
     path: DrivePath | null;
     mediaFolderId: string | null;
     chatFolderId: string | null;
@@ -41,7 +47,7 @@ export function useLatchedDocSearchTerm(q: string | undefined): string | undefin
 // folder ids, and owns the access-dialog open state. Editors differ only in the JSX they
 // render around this — so the route bodies collapse to a guard plus their own component.
 export function useEigenDocEditorRoute(ownerId: string, mountId: string, pathId: string): EigenDocEditorRoute {
-    const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
+    const { data: docInfo, isError, error } = useCollabDocumentInfo(ownerId, mountId, pathId);
     const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
@@ -57,13 +63,22 @@ export function useEigenDocEditorRoute(ownerId: string, mountId: string, pathId:
 
     const openAccessDialog = useCallback(() => setAccessDialogOpen(true), []);
 
+    // Answer first, state second: a failed background refetch of a document we already have must not
+    // unmount the open editor, and `isLoading` dips false between retry attempts — reading it would
+    // flash the request-access screen mid-retry.
+    const statusView = docInfo ? null : isError ? (
+        <ErrorState message="Could not open this document." detail={error.message} />
+    ) : (
+        <LoadingState />
+    );
+
     const path = docInfo?.path ?? null;
     const mediaFolderId = docInfo?.folderContents?.find((item) => item.name === 'media')?.id ?? null;
     const chatFolderId = docInfo?.folderContents?.find((item) => item.name === 'chat')?.id ?? null;
 
     return {
         docInfo,
-        isLoading,
+        statusView,
         path,
         mediaFolderId,
         chatFolderId,

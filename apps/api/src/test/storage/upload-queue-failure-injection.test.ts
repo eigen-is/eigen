@@ -2,15 +2,13 @@ import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { MountConfig, S3Config } from '@workspace/lib/types';
-import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
 import { buildStorageKey } from '../../lib/mount/helpers';
-import { Mount } from '../../lib/mount/mount';
-import type { StorageBackend, StorageFile } from '../../lib/storage';
-import { LocalStorage } from '../../lib/storage/local-storage';
+import type { Mount } from '../../lib/mount/mount';
+import type { StorageFile } from '../../lib/storage';
 import { setShutdownDrainDeadline } from '../../lib/sync';
+import { createFaultMount, type FaultStorage } from '../fault-storage-helpers';
 
 // Failure-injection pass over the write-behind upload queue (docs/SYNC.md, upload-queue.ts):
 // process death mid-drain, corrupted staged bytes, and the orphaned-PUT class — a PUT that
@@ -20,23 +18,6 @@ import { setShutdownDrainDeadline } from '../../lib/sync';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-uq-failure-injection-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
-
-const DUMMY_S3: S3Config = {
-    endpoint: 'http://127.0.0.1:1',
-    bucket: 'test',
-    accessKeyId: 'x',
-    secretAccessKey: 'y',
-    region: 'us-east-1',
-    prefix: '',
-};
-
-function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(config: DatabaseConfig<S>, relativePath: string) => {
-        const db = new ManagedDatabase(config, join(baseDir, relativePath));
-        await db.open(0);
-        return db;
-    };
-}
 
 const docSchema = {
     items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }),
@@ -49,78 +30,10 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
-// S3-like backend over a LocalStorage with parkable writes. Unlike sync-resilience's FaultStorage
-// (all-or-nothing hangWrites), each parked write can be released INDIVIDUALLY and in any order —
-// exactly the orphaned-PUT shape: the queue's Promise.race timeout has long since "failed" the
-// attempt, but the request still completes server-side later, with the bytes it captured at send
-// time. Bodies are read up-front like a real PUT streaming the request body, so unlinking the
-// staged copy after send never aborts an in-flight upload.
-class FaultStorage implements StorageBackend {
-    failNextWrites = 0;
-    parkWrites = false;
-    writeCount = 0;
-    private parked: Array<{ land: () => Promise<void>; release: () => void }> = [];
-
-    constructor(private readonly inner: LocalStorage) {}
-
-    get parkedCount(): number {
-        return this.parked.length;
-    }
-
-    // Complete the oldest parked write: its captured bytes land on the backing store NOW — after
-    // whatever else the test let happen in between — and its (long-forgotten) promise resolves.
-    async releaseOldestParked(): Promise<void> {
-        const oldest = this.parked.shift();
-        if (!oldest) throw new Error('no parked write to release');
-        await oldest.land();
-        oldest.release();
-    }
-
-    read(key: string): StorageFile {
-        return this.inner.read(key);
-    }
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        this.writeCount++;
-        const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
-        if (this.failNextWrites > 0) {
-            this.failNextWrites--;
-            throw new Error('injected upload failure (503)');
-        }
-        if (this.parkWrites) {
-            const written = bytes instanceof ArrayBuffer ? bytes.byteLength : bytes.length;
-            await new Promise<void>((release) => {
-                this.parked.push({ land: async () => void (await this.inner.write(key, bytes)), release });
-            });
-            return written;
-        }
-        return this.inner.write(key, bytes);
-    }
-    async delete(key: string): Promise<boolean> {
-        return this.inner.delete(key);
-    }
-    async exists(key: string): Promise<boolean> {
-        return this.inner.exists(key);
-    }
-    async size(key: string): Promise<number | null> {
-        return this.inner.size(key);
-    }
-}
-
 const createdMounts: Mount[] = [];
 
-// Same `id` ⇒ same baseDir + backing dir ⇒ a second call simulates a process restart sharing the
-// prior mount's metadata.db, staging dir, and "S3" object store (as in sync-resilience.test.ts).
 function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
-    const config: MountConfig = {
-        id,
-        name: id,
-        storageType: 's3',
-        isDefault: false,
-        s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
-    };
-    const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
-    const fault = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-    (mount as unknown as { storage: StorageBackend }).storage = fault;
+    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
     createdMounts.push(mount);
     return { mount, fault };
 }
@@ -142,8 +55,7 @@ async function countRowsInFile(file: StorageFile | null): Promise<number | null>
 // Rows in the object that actually reached the backing store — deliberately NOT mount.readFile,
 // which is freshest-first and would mask a regressed stored object behind staged bytes.
 async function countBackingRows(mount: Mount, id: string): Promise<number | null> {
-    const m = mount as unknown as { storage: StorageBackend; getStorageKey(id: string): Promise<string> };
-    return countRowsInFile(m.storage.read(await m.getStorageKey(id)));
+    return countRowsInFile(mount.storage.read(await mount.getStorageKey(id)));
 }
 
 async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {

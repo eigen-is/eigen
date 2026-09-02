@@ -3,40 +3,19 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, unlinkSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
-import type { MountConfig, S3Config } from '@workspace/lib/types';
-import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
 import { buildStorageKey, createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
-import type { StorageBackend, StorageFile } from '../../lib/storage';
+import type { StorageFile } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { getUploadSemaphore, setShutdownDrainDeadline } from '../../lib/sync';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
+import { createFaultMount, createGetLocalDatabase, createS3MountConfig, FaultStorage } from '../fault-storage-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-sync-resilience-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
-
-const DUMMY_S3: S3Config = {
-    endpoint: 'http://127.0.0.1:1',
-    bucket: 'test',
-    accessKeyId: 'x',
-    secretAccessKey: 'y',
-    region: 'us-east-1',
-    prefix: '',
-};
-
-function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        relativePath: string,
-    ): Promise<ManagedDatabase<S>> => {
-        const db = new ManagedDatabase(config, join(baseDir, relativePath));
-        await db.open(0);
-        return db;
-    };
-}
 
 const docSchema = {
     items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }),
@@ -58,71 +37,11 @@ const docConfigNoSnap: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
-// Wraps a LocalStorage as an S3-like backend with injectable write delays/failures, so the
-// async upload pipeline can be exercised deterministically without a real S3. Omits getPath so
-// the mount treats it like S3 (temp-copy path), not a path-based local store.
-class FaultStorage implements StorageBackend {
-    failNextWrites = 0;
-    writeDelayMs = 0;
-    writeCount = 0;
-    // Park every write until the test releases it — models a TCP-black-holed PUT that never resolves,
-    // so only the queue's client-side timeout can end the wait.
-    hangWrites = false;
-    private hungResolvers: Array<() => void> = [];
-
-    constructor(private readonly inner: LocalStorage) {}
-
-    // Let any parked writes proceed so a hung PUT promise doesn't linger past the test.
-    releaseHungWrites(): void {
-        this.hangWrites = false;
-        for (const resolve of this.hungResolvers.splice(0)) resolve();
-    }
-
-    read(key: string): StorageFile {
-        return this.inner.read(key);
-    }
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        this.writeCount++;
-        // Read the body up-front, like an S3 PUT streaming the request body — so a concurrent
-        // unlink of the staging file can't abort an already-started upload. This is what makes
-        // the resurrection window (cancel during an in-flight PUT) reproducible.
-        const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
-        if (this.hangWrites) await new Promise<void>((resolve) => this.hungResolvers.push(resolve));
-        if (this.writeDelayMs > 0) await Bun.sleep(this.writeDelayMs);
-        if (this.failNextWrites > 0) {
-            this.failNextWrites--;
-            throw new Error('injected upload failure (503)');
-        }
-        return this.inner.write(key, bytes);
-    }
-    async delete(key: string): Promise<boolean> {
-        return this.inner.delete(key);
-    }
-    async exists(key: string): Promise<boolean> {
-        return this.inner.exists(key);
-    }
-    async size(key: string): Promise<number | null> {
-        return this.inner.size(key);
-    }
-}
-
 // Tracks mounts created via createS3Mount so afterEach can stop their self-scheduled retry timers.
 const createdMounts: Mount[] = [];
 
-// Same `id` ⇒ same baseDir + backing dir ⇒ a second call simulates a process restart that shares the
-// prior mount's metadata.db, staging dir, and "S3" object store. A distinct bucket per id gives each
-// mount its own destination semaphore (matching the per-destination design).
 function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
-    const config: MountConfig = {
-        id,
-        name: id,
-        storageType: 's3',
-        isDefault: false,
-        s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
-    };
-    const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
-    const fault = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-    (mount as unknown as { storage: StorageBackend }).storage = fault;
+    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
     createdMounts.push(mount);
     return { mount, fault };
 }
@@ -143,8 +62,7 @@ async function countRowsInFile(file: StorageFile | null): Promise<number | null>
 // directly — NOT via mount.readFile, which is freshest-first and would surface un-acked staged
 // bytes; getStorageKey handles both the flat-key (s3) and hierarchical (local) layouts.
 async function countBackingRows(mount: Mount, id: string): Promise<number | null> {
-    const m = mount as unknown as { storage: StorageBackend; getStorageKey(id: string): Promise<string> };
-    return countRowsInFile(m.storage.read(await m.getStorageKey(id)));
+    return countRowsInFile(mount.storage.read(await mount.getStorageKey(id)));
 }
 
 async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
@@ -554,18 +472,12 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         const id = `relocate-${Date.now()}`;
         // The "S3" backing store is remote — a host migration does NOT move it; only the local data dir moves.
         const backing = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-        const config: MountConfig = {
-            id,
-            name: id,
-            storageType: 's3',
-            isDefault: false,
-            s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
-        };
+        const config = createS3MountConfig(id);
 
         // Original data dir A: stage a pending upload during an outage so it survives to relocation time.
         const baseA = join(TEST_DIR, `relocate-A-${id}`);
         const mountA = new Mount(OWNER_ID, baseA, config, createGetLocalDatabase(baseA));
-        (mountA as unknown as { storage: StorageBackend }).storage = backing;
+        mountA.storage = backing;
         createdMounts.push(mountA);
         backing.failNextWrites = 9999;
         await mountA.init();
@@ -584,7 +496,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
         renameSync(join(baseA, 'mounts'), join(baseB, 'mounts'));
 
         const mountB = new Mount(OWNER_ID, baseB, config, createGetLocalDatabase(baseB));
-        (mountB as unknown as { storage: StorageBackend }).storage = backing;
+        mountB.storage = backing;
         createdMounts.push(mountB);
         await mountB.init(); // reconcile: the basename resolves against B's stagingDir → row survives
 
