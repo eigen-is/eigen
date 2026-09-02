@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
+import { getItemMapRoot } from '../../collab/yjs-utils';
 
 export type CommentCardPatch = {
     title?: string;
@@ -10,7 +11,7 @@ export type CommentCardPatch = {
 };
 
 export function applyCardPatch(doc: Y.Doc, mapName: string, cardId: string, patch: CommentCardPatch): void {
-    const card = doc.getMap<Y.Map<unknown>>(mapName).get(cardId);
+    const card = getItemMapRoot(doc, mapName).get(cardId);
     if (!card) return;
     doc.transact(() => {
         if (patch.title !== undefined) card.set('title', patch.title);

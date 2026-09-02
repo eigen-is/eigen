@@ -5,6 +5,7 @@ import { nanoid } from 'nanoid';
 import { useCallback, useRef } from 'react';
 import * as Y from 'yjs';
 import type { CardAttachmentDraft, CommentCard } from '../../../types/comments';
+import { getItemMapRoot } from '../../collab/yjs-utils';
 import { useResolveCardAttachments } from './use-resolve-card-attachments';
 
 export type CreateCommentCardInput = {
@@ -16,7 +17,7 @@ export type CreateCommentCardInput = {
 
 // Pure write — callers control the transaction boundary so card + anchor can land in one undo step.
 export function writeCardToDoc(doc: Y.Doc, mapName: string, card: CommentCard): void {
-    const map = doc.getMap<Y.Map<unknown>>(mapName);
+    const map = getItemMapRoot(doc, mapName);
     const y = new Y.Map<unknown>();
     y.set('id', card.id);
     y.set('title', card.title);
