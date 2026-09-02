@@ -1,3 +1,4 @@
+import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { type DeckData, yMapToObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type * as Y from 'yjs';
@@ -7,16 +8,14 @@ import type * as Y from 'yjs';
 // of a persisted deck reads it in the Worker, so the Mount-side loader is gone: capture
 // (collab-source.ts) + materialize (yjs-loader.ts) is the only path in.
 export function readDeckFromDoc(doc: Y.Doc): DeckData {
-    const slidesMap = doc.getMap('slides');
-    const objectsMap = doc.getMap('objects');
-    const slideOrderArray = doc.getArray('slideOrder');
+    const slidesMap = getItemMapRoot(doc, 'slides');
+    const objectsMap = getItemMapRoot(doc, 'objects');
+    const slideOrderArray = getIdArrayRoot(doc, 'slideOrder');
 
-    const deck: DeckData = { slides: {}, objects: {}, slideOrder: slideOrderArray.toArray() as string[] };
+    const deck: DeckData = { slides: {}, objects: {}, slideOrder: slideOrderArray.toArray() };
 
-    for (const [slideId, slideMapValue] of slidesMap) {
-        const slideMap = slideMapValue as Y.Map<unknown>;
-        const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
-        const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
+    for (const [slideId, slideMap] of slidesMap) {
+        const objIds = getIdArray(slideMap, 'objectIds')?.toArray() ?? [];
         const bgRaw = slideMap.get('background');
         deck.slides[slideId] = {
             id: slideId,
@@ -25,8 +24,8 @@ export function readDeckFromDoc(doc: Y.Doc): DeckData {
         };
     }
 
-    for (const [objId, objMapValue] of objectsMap) {
-        deck.objects[objId] = yMapToObject(objMapValue as Y.Map<unknown>);
+    for (const [objId, objMap] of objectsMap) {
+        deck.objects[objId] = yMapToObject(objMap);
     }
 
     return deck;
