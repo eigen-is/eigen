@@ -22,8 +22,7 @@ function formatRanges(ranges: SingleRange[]): string {
 }
 
 const RULE_LABELS: Record<string, string> = {
-    // The names the Format menu can create come from RULE_COPY, so a rule is
-    // listed here under the name it was created with.
+    // Menu-created rules list under the RULE_COPY name they were created with.
     ...Object.fromEntries(Object.entries(RULE_COPY).map(([name, copy]) => [name, copy.label])),
     // Engine condition names with no menu entry — xlsx import and formula rules.
     greaterThanOrEqual: 'Greater than or equal to',
@@ -51,11 +50,13 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
         case 'notBetween':
             return values.length >= 2 ? `${label} ${values[0]} and ${values[1]}` : label;
         case 'top10':
+            return values[0] != null ? `Top ${values[0]}` : label;
         case 'top10_percent':
+            return values[0] != null ? `Top ${values[0]}%` : label;
         case 'last10':
+            return values[0] != null ? `Last ${values[0]}` : label;
         case 'last10_percent':
-            // The label reads "Top 10"; swap in the rule's own count.
-            return values[0] != null ? label.replace('10', String(values[0])) : label;
+            return values[0] != null ? `Last ${values[0]}%` : label;
         case 'duplicateValue':
             return values[0] === '1' ? 'Unique value' : label;
         default:
