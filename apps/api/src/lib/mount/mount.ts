@@ -20,7 +20,7 @@ import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { FileHistory } from '../drive/history';
 import { deleteThumbnail } from '../shared/thumbnails';
-import { LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
+import { LocalStorage, S3Storage, type StorageBackend, type StorageFile, wrapWithStorageFault } from '../storage';
 import type { RetentionPolicy } from '../versioning/retention';
 import * as snapshot from '../versioning/snapshot';
 import { type ContentExtractor, ContentReindexQueue } from './content-reindex-queue';
@@ -91,19 +91,22 @@ export class Mount {
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
 
+        let backend: StorageBackend;
         if (config.storageType === 'local-key' || config.storageType === 'local') {
             // LocalStorage is a strict superset of the flat-key backend; mount.ts gates all
             // mkdir/rename/deleteDir calls behind isPathBased, so the extra methods are inert for local-key.
-            this.storage = new LocalStorage(this.baseDir);
+            backend = new LocalStorage(this.baseDir);
         } else if (config.storageType === 's3') {
             if (!config.s3Config)
                 throw new Error(
                     `Mount '${config.id}' uses S3 storage but no S3 configuration found. Configure S3 in admin settings first.`,
                 );
-            this.storage = new S3Storage(config.s3Config);
+            backend = new S3Storage(config.s3Config);
         } else {
             throw new Error(`Storage type ${config.storageType} not yet supported`);
         }
+        // Passes the backend through untouched unless EIGEN_STORAGE_FAULT is set (never in production).
+        this.storage = wrapWithStorageFault(backend);
     }
 
     // Read live off config so a settings rename (TeamHome.updateMount) shows up without rebuilding.

@@ -62,6 +62,22 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 | `rename?`   | `Promise<void>`     | LocalStorage only                            |
 | `deleteDir?`| `Promise<boolean>`  | LocalStorage only                            |
 
+### Storage fault injection (dev only)
+
+`EIGEN_STORAGE_FAULT` (`apps/api/src/lib/storage/fault-storage.ts`) wraps every mount's backend with a delegating one that injects a single fault, so create/open behaviour can be verified against degraded storage without a real outage.
+
+| Value | Effect |
+|-------|--------|
+| `exists-throw` | every `exists()` rejects with `ApiError(503, 'storage unavailable')` — the shape `mount/document-db.ts` raises for an unreachable object |
+| `exists-delay=<ms>` | every `exists()` resolves after `<ms>` |
+| `read-delay=<ms>` | the awaited read-side calls resolve after `<ms>`: the `exists()` probe a cold document open makes before downloading, and `size()`. `read()`/`readRange()` return lazy handles, so the GET itself happens outside the backend and can't be delayed there |
+
+The wrapper returns the backend unchanged when the variable is unset, and it stays inert in production (`PRODUCTION=1` / `NODE_ENV=production`) regardless of what the variable says. It logs one line per process when it is active.
+
+```bash
+EIGEN_STORAGE_FAULT=exists-delay=45000 bun --filter '*' dev
+```
+
 **LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail/Contacts with extended fs
 methods (list, listDirs, stat, dirSize, watch, etc). Exposed as `home.fs`.
 
@@ -88,6 +104,16 @@ file-level snapshots described below. Both collab docs and chats opt into it.
 frame grab), each in a Worker that loads sharp, capped by a semaphore so a large export can't spawn one worker
 per file. Supports JPEG, PNG, WebP, GIF, TIFF, HEIC (via heic-convert fallback), and exiftool embedded preview
 extraction. Stored as WebP.
+
+## Creating a container
+
+`Drive.create` (`apps/api/src/lib/drive/drive.ts`) is atomic. It creates the container folder, then provisions it (`ChatRoom.create` or `CollabDocument.create`, plus the comment row a card chat seeds). When provisioning throws, the container row is removed with `mount.deletePath` and the error propagates. That delete is the silent one: the row was never announced, so no SSE goes out, and on a remote mount it cancels the container's queued uploads, so a staged PUT cannot resurrect the object. The name is free again, so an immediate retry with the same name starts clean. A rollback that itself fails is logged and leaves a container nobody has seen; that leftover is what the integrity sweep's orphaned-container scan is for ([PROPOSAL_DATA_INTEGRITY.md](proposals/PROPOSAL_DATA_INTEGRITY.md)).
+
+### Create reconcile
+
+Storage that has gone slow can make a create look failed when it is not: the request times out or 503s while the server keeps writing, and the row lands seconds later. The three create hooks (`useCreateDriveItem` for the drive dialog, `useCreateChat` for comment cards and stickies boards, `useCreateChatRoom` for the chat wizard) post through `createWithReconcile` (`packages/lib/src/core/drive/reconcile-create.ts`) with a 15 s abort signal. On an indeterminate failure (abort, network error, 5xx) they poll the parent listing 3 times, 5 s apart, for the name they sent (the chat wizard can create without naming a parent, so it polls this owner's chat listing instead, filtered to the mount). A row matches only when it was created after the request started, with a 60 s allowance for clock drift between client and server, so a same-name sibling that predates the create can never pass for it. A match resolves the mutation as a success. A 4xx is never reconciled: it is the server's definitive no (409 duplicate name, 507 over quota). A miss throws `CreateUnconfirmedError`, whose message is the toast copy `onMutationError` shows.
+
+The chat wizard has one honest miss. Its `dedupeName` creates let the server suffix a colliding name (`Name (2)`), so the row that lands is not the name the client sent and reconcile does not find it. The user gets the unconfirmed toast for a chat that is in the list.
 
 ## User Data Layout
 
