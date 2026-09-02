@@ -1,4 +1,6 @@
-export function numberFormatPresets(currency: string) {
+// The Format → Number menu's preset list. Distinct from NUMBER_FORMAT_PRESETS
+// (components/FormatDialogs/format-pattern.ts), which is the custom-pattern dialog's.
+export function numberMenuPresets(currency: string) {
     return [
         { text: 'Automatic', value: 'General', example: '' },
         { text: 'Plain text', value: '@', example: '' },

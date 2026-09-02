@@ -31,7 +31,7 @@ import {
     handleTextSize,
     handleUnderline,
     handleVerticalAlign,
-    numberFormatPresets,
+    numberMenuPresets,
     updateFormat,
 } from '../../state';
 import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
@@ -47,7 +47,7 @@ function NumberFormatSubmenu() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
     const { currency } = settings;
-    const defaultFormat = numberFormatPresets(currency);
+    const defaultFormat = numberMenuPresets(currency);
 
     const anchor = useAnchorCell();
     const activeFa = anchor?.ct?.fa ?? 'General';

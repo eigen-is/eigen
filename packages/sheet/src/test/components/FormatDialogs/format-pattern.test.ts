@@ -18,7 +18,7 @@ import {
     tokenizePattern,
 } from '../../../components/FormatDialogs/format-pattern';
 import { update } from '../../../engine/format';
-import { DATE_FORMAT_PRESETS } from '../../../state/modules/number-format-presets';
+import { DATE_FORMAT_PRESETS } from '../../../state/modules/format-presets';
 
 function token(tokenId: DateTokenId, pattern: string): FormatSegment {
     return { kind: 'token', token: tokenId, pattern };
