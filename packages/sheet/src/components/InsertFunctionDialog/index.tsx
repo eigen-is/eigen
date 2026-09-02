@@ -8,7 +8,9 @@ import { useCallback, useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { cancelNormalSelected, FUNCTION_LIST, setCaretPosition } from '../../state';
 
-const FUNCTION_CATEGORIES = [
+// Function-category tabs. The ids are FUNCTION_LIST's `t`; pinned against it by
+// test/state/modules/function-list.test.ts.
+export const FUNCTION_CATEGORIES = [
     { t: 0, n: 'Math' },
     { t: 1, n: 'Statistical' },
     { t: 2, n: 'Lookup' },

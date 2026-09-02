@@ -9,8 +9,8 @@ type FormulaFunctionParam = {
 
 export type FormulaFunctionEntry = {
     n: string;
-    // UNIQUE carries its category as the string '14' upstream, so the === category filter never matches it.
-    t: number | string;
+    // Category id, matching FUNCTION_CATEGORIES in components/InsertFunctionDialog.
+    t: number;
     d: string;
     a: string;
     m: number[];
@@ -8744,7 +8744,7 @@ export const FUNCTION_LIST: FormulaFunctionEntry[] = [
     },
     {
         n: 'UNIQUE',
-        t: '14',
+        t: 14,
         d: 'Returns unique rows in the provided source range, discarding duplicates. Rows are returned in the order in which they first appear in the source range.',
         a: 'Unique rows in the provided source range.',
         m: [1, 3],
