@@ -18,7 +18,7 @@ import {
     tokenizePattern,
 } from '../../../components/FormatDialogs/format-pattern';
 import { update } from '../../../engine/format';
-import { en } from '../../../state/locale/en';
+import { DATE_FORMAT_PRESETS } from '../../../state/modules/format-presets';
 
 function token(tokenId: DateTokenId, pattern: string): FormatSegment {
     return { kind: 'token', token: tokenId, pattern };
@@ -30,13 +30,13 @@ function literal(text: string): FormatSegment {
 
 describe('tokenizePattern / serializeSegments round-trip', () => {
     test('every date/time preset round-trips to the exact same pattern', () => {
-        for (const { value } of en.dateFmtList) {
+        for (const { value } of DATE_FORMAT_PRESETS) {
             expect(serializeSegments(tokenizePattern(value))).toBe(value);
         }
     });
 
     test('the preset list matches the spec', () => {
-        expect(en.dateFmtList.map((p) => [p.name, p.value])).toEqual([
+        expect(DATE_FORMAT_PRESETS.map((p) => [p.name, p.value])).toEqual([
             ['5-Aug-1930', 'd-MMM-yyyy'],
             ['5 Aug 1930', 'd MMM yyyy'],
             ['5 August 1930', 'd MMMM yyyy'],
@@ -57,7 +57,7 @@ describe('tokenizePattern / serializeSegments round-trip', () => {
     });
 
     test('every preset example except the elapsed row is the live rendering of its pattern', () => {
-        for (const { name, value } of en.dateFmtList) {
+        for (const { name, value } of DATE_FORMAT_PRESETS) {
             if (value === '[h]:mm:ss') continue; // example shows a small duration, not the 1930 sample
             expect(update(value, DATETIME_SAMPLE_SERIAL)).toBe(name);
         }

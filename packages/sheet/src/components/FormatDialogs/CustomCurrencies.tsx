@@ -7,18 +7,17 @@ import { useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
 import { useDialog } from '../../hooks/useDialog';
-import { en, handleNumberFormat } from '../../state';
+import { CURRENCIES, handleNumberFormat } from '../../state';
 import { buildCurrencyPattern, CURRENCY_VARIANTS, type CurrencyVariantId } from './format-pattern';
 
 export function CustomCurrencies() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
-    const { button, format, currencyDetail } = en;
     const { hideDialog } = useDialog();
 
     const [symbol, setSymbol] = useState(settings.currency);
     const [variantId, setVariantId] = useState<CurrencyVariantId>('symbolFirst');
     const [selectedName, setSelectedName] = useState<string | null>(
-        () => currencyDetail.find((c) => c.value === settings.currency)?.name ?? null,
+        () => CURRENCIES.find((c) => c.value === settings.currency)?.name ?? null,
     );
     // The field holds the active symbol, but only user-typed text filters the
     // list — a prefilled or clicked symbol keeps the full list visible.
@@ -26,7 +25,7 @@ export function CustomCurrencies() {
 
     const allCurrencies = useMemo(
         () =>
-            [...currencyDetail]
+            [...CURRENCIES]
                 .sort((a, b) => {
                     if (a.name === 'EUR') return -1;
                     if (b.name === 'EUR') return 1;
@@ -72,7 +71,7 @@ export function CustomCurrencies() {
     return (
         <div className="flex flex-col min-h-0 flex-1 gap-4">
             <DialogHeader>
-                <DialogTitle>{format.titleCurrency}</DialogTitle>
+                <DialogTitle>Custom currencies</DialogTitle>
             </DialogHeader>
             <div className="flex items-center gap-2 shrink-0">
                 <Input
@@ -115,10 +114,10 @@ export function CustomCurrencies() {
             </div>
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button size="sm" disabled={!symbol} onClick={apply}>
-                    {button.apply}
+                    Apply
                 </Button>
             </DialogFooter>
         </div>

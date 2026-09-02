@@ -53,8 +53,8 @@ Used in:
 - **Slides** (`apps/slides/src/components/slides/slide-properties-panel.tsx`) -- via `fontFamily` on `TextObject`
 - **Sheets** (`packages/sheet/src/components/MenuBar/format-toolbar.tsx`) -- the same `FontPicker`, straight
   in the engine's toolbar. The engine's own font lists are derived, not hand-written:
-  `packages/sheet/src/state/locale/en.ts` builds `fontarray` and `fontjson` from `EIGEN_FONTS`
-  (`fontjson` maps lowercased name → index, because a cell's `ff` may be stored as an index into `fontarray`)
+  `packages/sheet/src/state/modules/fonts.ts` builds `FONT_ARRAY` and `FONT_INDEX_BY_NAME` from `EIGEN_FONTS`
+  (`FONT_INDEX_BY_NAME` maps lowercased name → index, because a cell's `ff` may be stored as an index into `FONT_ARRAY`)
 
 ## Adding a New Font
 
@@ -76,7 +76,7 @@ The `FontPicker` automatically picks up new entries from `EIGEN_FONTS`.
 | `packages/ui/src/styles/eigen-prose.css`                      | Prose typography (body, headings)     |
 | `packages/lib/src/constants/fonts.ts`                         | `EIGEN_FONTS` registry, `getFontFamily()` |
 | `packages/ui/src/components/media/font-picker.tsx`     | Shared font picker component         |
-| `packages/sheet/src/state/locale/en.ts`                        | Sheets font list, derived from `EIGEN_FONTS` (the sheet package is English-only, so `en.ts` is the only locale) |
+| `packages/sheet/src/state/modules/fonts.ts`                    | Sheets font list, derived from `EIGEN_FONTS` |
 
 ## Future: CJK Support
 

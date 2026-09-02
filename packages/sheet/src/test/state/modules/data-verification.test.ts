@@ -6,7 +6,6 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import { en } from '../../../state/locale/en';
 import {
     applyDataVerification,
     cellTextBox,
@@ -410,13 +409,13 @@ describe('confirmMessage', () => {
     test('rejects a drop-down rule with no options', () => {
         const ctx = regulationContext({ type: 'dropdown', value1: '' });
         expect(confirmMessage(ctx)).toBe(false);
-        expect(ctx.warnDialog).toBe(en.dataVerification.tooltipInfo1);
+        expect(ctx.warnDialog).toBe('The drop-down list option cannot be empty');
     });
 
     test('rejects a checkbox rule with an empty selected or not-selected value', () => {
         const empty = regulationContext({ type: 'checkbox', value1: '', value2: '' });
         expect(confirmMessage(empty)).toBe(false);
-        expect(empty.warnDialog).toBe(en.dataVerification.tooltipInfo2);
+        expect(empty.warnDialog).toBe('Checkbox content cannot be empty');
 
         const halfEmpty = regulationContext({ type: 'checkbox', value1: 'Yes', value2: '' });
         expect(confirmMessage(halfEmpty)).toBe(false);

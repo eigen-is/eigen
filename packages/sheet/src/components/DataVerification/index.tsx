@@ -13,7 +13,6 @@ import {
     CHECKBOX_CHECKED_VALUE,
     CHECKBOX_UNCHECKED_VALUE,
     confirmMessage,
-    en,
     getDropdownList,
     getRangeByTxt,
     getRangetxt,
@@ -22,44 +21,52 @@ import {
 import { CellRangeDialog } from '../CellRangeDialog';
 
 const VERIFICATION_TYPES = [
-    'dropdown',
-    'checkbox',
-    'number',
-    'number_integer',
-    'number_decimal',
-    'text_content',
-    'text_length',
-    'date',
-] as const;
+    { value: 'dropdown', label: 'drop-down list' },
+    { value: 'checkbox', label: 'Checkbox' },
+    { value: 'number', label: 'Number' },
+    { value: 'number_integer', label: 'Number-integer' },
+    { value: 'number_decimal', label: 'Number-decimal' },
+    { value: 'text_content', label: 'Text-content' },
+    { value: 'text_length', label: 'Text-length' },
+    { value: 'date', label: 'Date' },
+];
 
 const NUMBER_CONDITIONS = [
-    'between',
-    'notBetween',
-    'equal',
-    'notEqualTo',
-    'moreThanThe',
-    'lessThan',
-    'greaterOrEqualTo',
-    'lessThanOrEqualTo',
-] as const;
+    { value: 'between', label: 'Between' },
+    { value: 'notBetween', label: 'Not between' },
+    { value: 'equal', label: 'Equal' },
+    { value: 'notEqualTo', label: 'Not equal to' },
+    { value: 'moreThanThe', label: 'More than the' },
+    { value: 'lessThan', label: 'Less than' },
+    { value: 'greaterOrEqualTo', label: 'Greater or equal to' },
+    { value: 'lessThanOrEqualTo', label: 'Less than or equal to' },
+];
 
 const DATE_CONDITIONS = [
-    'between',
-    'notBetween',
-    'equal',
-    'notEqualTo',
-    'earlierThan',
-    'noEarlierThan',
-    'laterThan',
-    'noLaterThan',
-] as const;
+    { value: 'between', label: 'Between' },
+    { value: 'notBetween', label: 'Not between' },
+    { value: 'equal', label: 'Equal' },
+    { value: 'notEqualTo', label: 'Not equal to' },
+    { value: 'earlierThan', label: 'Earlier than' },
+    { value: 'noEarlierThan', label: 'No earlier than' },
+    { value: 'laterThan', label: 'Later than' },
+    { value: 'noLaterThan', label: 'No later than' },
+];
 
-const TEXT_CONTENT_CONDITIONS = ['include', 'exclude', 'equal'] as const;
+const TEXT_CONTENT_CONDITIONS = [
+    { value: 'include', label: 'Include' },
+    { value: 'exclude', label: 'Exclude' },
+    { value: 'equal', label: 'Equal' },
+];
+
+const HINT_TOGGLES = [
+    { value: 'prohibitInput', label: 'Prohibit input when input data is invalid' },
+    { value: 'hintShow', label: 'Show prompt when the cell is selected' },
+] as const;
 
 export function DataVerification() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog, showNonModalDialog, hideDialog } = useDialog();
-    const { dataVerification, toolbar, button, generalDialog } = en;
 
     // Re-show this dialog when the picker closes; its mount effect reads rangeDialog back.
     // biome-ignore lint/correctness/useExhaustiveDependencies: DataVerification is this module's own component — a stable binding, not reactive state
@@ -123,7 +130,7 @@ export function DataVerification() {
                 setContext((ctx) => {
                     const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
                     if (range.length === 0) {
-                        showDialog(generalDialog.noSeletionError, 'ok');
+                        showDialog('The selection operation has not been performed yet', 'ok');
                         return;
                     }
                     const currentDataVerification =
@@ -221,12 +228,12 @@ export function DataVerification() {
     return (
         <div className="flex flex-col gap-4 select-none">
             <DialogHeader>
-                <DialogTitle>{toolbar.dataVerification}</DialogTitle>
+                <DialogTitle>Data verification</DialogTitle>
             </DialogHeader>
 
             <div className="text-sm space-y-4">
                 <div>
-                    <div className="text-sm font-medium mb-2">{dataVerification.cellRange}</div>
+                    <div className="text-sm font-medium mb-2">Cell range</div>
                     <div className="flex h-8 rounded-md border border-input overflow-hidden">
                         <Input
                             className="flex-1 border-none rounded-none h-full"
@@ -254,7 +261,7 @@ export function DataVerification() {
                 </div>
 
                 <div className="space-y-2">
-                    <div className="text-sm font-medium">{dataVerification.verificationCondition}</div>
+                    <div className="text-sm font-medium">Verification condition</div>
                     <Select
                         value={context.dataVerification!.dataRegulation!.type}
                         onValueChange={(value) => {
@@ -289,8 +296,8 @@ export function DataVerification() {
                         </SelectTrigger>
                         <SelectContent>
                             {VERIFICATION_TYPES.map((v) => (
-                                <SelectItem value={v} key={v}>
-                                    {dataVerification[v]}
+                                <SelectItem value={v.value} key={v.value}>
+                                    {v.label}
                                 </SelectItem>
                             ))}
                         </SelectContent>
@@ -303,7 +310,7 @@ export function DataVerification() {
                                     className="flex-1 border-none rounded-none h-full"
                                     spellCheck={false}
                                     value={context.dataVerification!.dataRegulation!.value1}
-                                    placeholder={dataVerification.placeholder1}
+                                    placeholder="Please enter the options, separated by commas, such as 1,2,3,4,5"
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
@@ -331,7 +338,7 @@ export function DataVerification() {
                                         });
                                     }}
                                 />
-                                {dataVerification.allowMultiSelect}
+                                Allow multiple selection
                             </Label>
                         </div>
                     )}
@@ -339,10 +346,10 @@ export function DataVerification() {
                     {context.dataVerification?.dataRegulation?.type === 'checkbox' && (
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
-                                <span className="text-sm shrink-0">{dataVerification.selected}</span>
+                                <span className="text-sm shrink-0">Selected</span>
                                 <Input
                                     className="h-8"
-                                    placeholder={dataVerification.placeholder2}
+                                    placeholder="Please enter content"
                                     value={context.dataVerification?.dataRegulation?.value1}
                                     onChange={(e) => {
                                         const { value } = e.target;
@@ -353,10 +360,10 @@ export function DataVerification() {
                                 />
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-sm shrink-0">{dataVerification.notSelected}</span>
+                                <span className="text-sm shrink-0">Not selected</span>
                                 <Input
                                     className="h-8"
-                                    placeholder={dataVerification.placeholder2}
+                                    placeholder="Please enter content"
                                     value={context.dataVerification?.dataRegulation?.value2}
                                     onChange={(e) => {
                                         const { value } = e.target;
@@ -389,8 +396,8 @@ export function DataVerification() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     {NUMBER_CONDITIONS.map((v) => (
-                                        <SelectItem value={v} key={v}>
-                                            {dataVerification[v]}
+                                        <SelectItem value={v.value} key={v.value}>
+                                            {v.label}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -428,7 +435,7 @@ export function DataVerification() {
                                 <Input
                                     type="number"
                                     className="h-8"
-                                    placeholder={dataVerification.placeholder3}
+                                    placeholder="Numeric value, such as 10"
                                     value={context.dataVerification.dataRegulation.value1}
                                     onChange={(e) => {
                                         const { value } = e.target;
@@ -458,15 +465,15 @@ export function DataVerification() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     {TEXT_CONTENT_CONDITIONS.map((v) => (
-                                        <SelectItem value={v} key={v}>
-                                            {dataVerification[v]}
+                                        <SelectItem value={v.value} key={v.value}>
+                                            {v.label}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                             <Input
                                 className="h-8"
-                                placeholder={dataVerification.placeholder4}
+                                placeholder="Please enter the specified text"
                                 value={context.dataVerification.dataRegulation.value1}
                                 onChange={(e) => {
                                     const { value } = e.target;
@@ -495,8 +502,8 @@ export function DataVerification() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     {DATE_CONDITIONS.map((v) => (
-                                        <SelectItem value={v} key={v}>
-                                            {dataVerification[v]}
+                                        <SelectItem value={v.value} key={v.value}>
+                                            {v.label}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -532,7 +539,7 @@ export function DataVerification() {
                                 <Input
                                     type="date"
                                     className="h-8"
-                                    placeholder={dataVerification.placeholder3}
+                                    placeholder="Numeric value, such as 10"
                                     value={context.dataVerification.dataRegulation.value1}
                                     onChange={(e) => {
                                         const { value } = e.target;
@@ -547,29 +554,29 @@ export function DataVerification() {
                 </div>
 
                 <div className="space-y-2">
-                    {(['prohibitInput', 'hintShow'] as const).map((v) => (
-                        <Label className="flex items-center gap-1.5" key={v}>
+                    {HINT_TOGGLES.map(({ value, label }) => (
+                        <Label className="flex items-center gap-1.5" key={value}>
                             <Checkbox
-                                id={v}
-                                checked={context.dataVerification!.dataRegulation![v]}
+                                id={value}
+                                checked={context.dataVerification!.dataRegulation![value]}
                                 onCheckedChange={() => {
                                     setContext((ctx) => {
                                         const dataRegulation = ctx.dataVerification?.dataRegulation;
-                                        if (v === 'prohibitInput') {
+                                        if (value === 'prohibitInput') {
                                             dataRegulation!.prohibitInput = !dataRegulation!.prohibitInput;
-                                        } else if (v === 'hintShow') {
+                                        } else if (value === 'hintShow') {
                                             dataRegulation!.hintShow = !dataRegulation!.hintShow;
                                         }
                                     });
                                 }}
                             />
-                            {dataVerification[v]}
+                            {label}
                         </Label>
                     ))}
                     {context.dataVerification?.dataRegulation?.hintShow && (
                         <Input
                             className="h-8"
-                            placeholder={dataVerification.placeholder5}
+                            placeholder="Please enter the prompt displayed when the cell is selected"
                             value={context.dataVerification!.dataRegulation!.hintValue}
                             onChange={(e) => {
                                 const { value } = e.target;
@@ -584,13 +591,13 @@ export function DataVerification() {
 
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => btn('delete')}>
-                    {dataVerification.deleteVerification}
+                    Delete verification
                 </Button>
                 <Button size="sm" onClick={() => btn('confirm')}>
-                    {button.confirm}
+                    OK
                 </Button>
             </DialogFooter>
         </div>

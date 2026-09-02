@@ -4,7 +4,7 @@ import { Input } from '@workspace/ui/components/input';
 import { cn } from '@workspace/ui/lib/utils';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { en, getRangetxt, isLinkValid } from '../../state';
+import { getRangetxt, isLinkValid } from '../../state';
 
 type CellRangeDialogProps = {
     value: string;
@@ -17,7 +17,6 @@ type CellRangeDialogProps = {
 
 export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRangeDialogProps) {
     const { context } = useContext(WorkbookContext);
-    const { insertLink, dataVerification, button } = en;
     const [rangeTxt, setRangeTxt] = useState<string>(value);
     const isLink = variant === 'link';
 
@@ -46,14 +45,14 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
     return (
         <>
             <DialogHeader>
-                <DialogTitle>{insertLink.selectCellRange}</DialogTitle>
+                <DialogTitle>Select cell range</DialogTitle>
             </DialogHeader>
             {isLink ? (
                 <div className="space-y-1.5">
                     <Input
                         className={cn('h-8', invalid && rangeTxt && 'border-destructive')}
                         spellCheck={false}
-                        placeholder={insertLink.cellRangePlaceholder}
+                        placeholder="Select cells using the cursor or enter directly"
                         value={rangeTxt}
                         onChange={(e) => setRangeTxt(e.target.value)}
                     />
@@ -67,16 +66,16 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
                     className="h-8"
                     readOnly
                     tabIndex={-1}
-                    placeholder={dataVerification.selectCellRange2}
+                    placeholder="Please select a range of cells"
                     value={rangeTxt}
                 />
             )}
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={onCancel}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button size="sm" disabled={invalid} onClick={() => onConfirm(rangeTxt)}>
-                    {button.confirm}
+                    OK
                 </Button>
             </DialogFooter>
         </>

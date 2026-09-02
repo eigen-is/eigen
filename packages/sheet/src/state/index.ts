@@ -3,7 +3,6 @@ import * as api from './api';
 export * from './canvas';
 export * from './context';
 export * from './events';
-export * from './locale/en';
 export * from './modules';
 export * from './presence';
 export * from './settings';

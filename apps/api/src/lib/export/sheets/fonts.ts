@@ -1,7 +1,7 @@
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 
 // Bundled font names, derived from the canonical registry so the numeric `ff` index stays
-// locked to the sheet package's locale `fontarray` (itself `EIGEN_FONTS.map(f => f.name)`): any
+// locked to the sheet package's `FONT_ARRAY` (itself `EIGEN_FONTS.map(f => f.name)`): any
 // cell stored with a numeric `ff` resolves through this array. Strings (post-xlsx-import or
 // user-entered) are used as-is and only fall back to the bundled list when the numeric form
 // is encountered.

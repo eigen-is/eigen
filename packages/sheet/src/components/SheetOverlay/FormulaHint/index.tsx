@@ -1,22 +1,7 @@
 import { useContext } from 'react';
 import { WorkbookContext } from '../../../context';
-import { en } from '../../../state';
+import type { FormulaFunctionEntry } from '../../../state';
 import { FormulaPopup } from '../FormulaPopup';
-
-type FormulaParam = {
-    name: string;
-    detail?: string;
-    example?: string;
-    require?: string;
-    repeat?: string;
-    type?: string;
-};
-
-type FormulaFunctionEntry = {
-    n: string;
-    d?: string;
-    p: FormulaParam[];
-};
 
 type FormulaHintProps = {
     anchorRef: { readonly current: HTMLElement | null };
@@ -25,7 +10,6 @@ type FormulaHintProps = {
 
 export function FormulaHint({ anchorRef, open }: FormulaHintProps) {
     const { context } = useContext(WorkbookContext);
-    const { formulaMore } = en;
     const fn = context.functionHint
         ? (context.formulaCache.functionlistMap[context.functionHint] as FormulaFunctionEntry | undefined)
         : undefined;
@@ -58,7 +42,7 @@ export function FormulaHint({ anchorRef, open }: FormulaHintProps) {
                     </div>
                     <div className="space-y-3 px-2.5 py-2 text-xs">
                         <div>
-                            <div className="text-muted-foreground">{formulaMore.helpExample}</div>
+                            <div className="text-muted-foreground">Example</div>
                             <div className="text-sm">
                                 <span>{fn.n}</span>
                                 <span>(</span>
@@ -74,15 +58,15 @@ export function FormulaHint({ anchorRef, open }: FormulaHintProps) {
                             </div>
                         </div>
                         <div>
-                            <div className="text-muted-foreground">{formulaMore.helpAbstract}</div>
+                            <div className="text-muted-foreground">Abstract</div>
                             <div className="break-words">{fn.d}</div>
                         </div>
                         {fn.p.map((param) => (
                             <div key={param.name}>
                                 <div className="text-muted-foreground">
                                     {param.name}
-                                    {param.repeat === 'y' && <span>{`...-${formulaMore.allowRepeatText}`}</span>}
-                                    {param.require === 'o' && <span>{`-[${formulaMore.allowOptionText}]`}</span>}
+                                    {param.repeat === 'y' && <span>...-Repeatable</span>}
+                                    {param.require === 'o' && <span>-[Optional]</span>}
                                 </div>
                                 <div className="break-words">{param.detail}</div>
                             </div>

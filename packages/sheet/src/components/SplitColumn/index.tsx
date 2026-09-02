@@ -6,11 +6,17 @@ import { Label } from '@workspace/ui/components/label';
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { en, getDataArr, getFlowdata, getRegStr, updateMoreCell } from '../../state';
+import { getDataArr, getFlowdata, getRegStr, updateMoreCell } from '../../state';
+
+const SPLIT_SYMBOLS = [
+    { name: 'Tab', value: 'Tab' },
+    { name: 'semicolon', value: 'semicolon' },
+    { name: 'comma', value: 'comma' },
+    { name: 'space', value: 'space' },
+];
 
 export function SplitColumn() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { splitText, button } = en;
     const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
     const [otherValue, setOtherValue] = useState('');
     const [tableData, setTableData] = useState<string[][]>([]);
@@ -45,7 +51,7 @@ export function SplitColumn() {
             }
         }
         if (dataCover) {
-            showDialog(splitText.splitConfirmToExe, 'yesno', () => {
+            showDialog('There is already data here, do you want to replace it?', 'yesno', () => {
                 hideDialog();
                 setContext((ctx) => {
                     updateMoreCell(r, c, dataArr, ctx);
@@ -65,11 +71,11 @@ export function SplitColumn() {
     return (
         <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
             <DialogHeader>
-                <DialogTitle>{splitText.splitTextTitle}</DialogTitle>
+                <DialogTitle>Split text</DialogTitle>
             </DialogHeader>
-            <div className="mt-2.5">{splitText.splitDelimiters}</div>
+            <div className="mt-2.5">Delimiters</div>
             <div className="border p-1.5 my-1.5 space-y-1 text-sm">
-                {splitText.splitSymbols.map((o) => (
+                {SPLIT_SYMBOLS.map((o) => (
                     <Label key={o.value} className="flex items-center gap-1.5">
                         <Checkbox checked={selected.has(o.value)} onCheckedChange={(c) => toggle(o.value, !!c)} />
                         {o.name}
@@ -77,7 +83,7 @@ export function SplitColumn() {
                 ))}
                 <Label className="flex items-center gap-1.5">
                     <Checkbox checked={selected.has('other')} onCheckedChange={(c) => toggle('other', !!c)} />
-                    {splitText.splitOther}
+                    Other
                     <Input
                         className="ml-1.5 h-7 w-[80px]"
                         value={otherValue}
@@ -89,10 +95,10 @@ export function SplitColumn() {
                         checked={selected.has('splitsimple')}
                         onCheckedChange={(c) => toggle('splitsimple', !!c)}
                     />
-                    {splitText.splitContinueSymbol}
+                    Consecutive separators are treated as a single
                 </Label>
             </div>
-            <div className="text-sm mt-6">{splitText.splitDataPreview}</div>
+            <div className="text-sm mt-6">Preview</div>
             <div className="border p-1.5 my-1.5 h-[100px] overflow-y-auto">
                 <table>
                     <tbody>
@@ -116,10 +122,10 @@ export function SplitColumn() {
             </div>
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    {button.cancel}
+                    Cancel
                 </Button>
                 <Button size="sm" onClick={() => certainBtn()}>
-                    {button.confirm}
+                    OK
                 </Button>
             </DialogFooter>
         </div>

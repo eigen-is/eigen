@@ -9,7 +9,7 @@ import { size } from 'es-toolkit/compat';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { type Context, clearFilter, createFilter, en, sortSelection } from '../../state';
+import { type Context, clearFilter, createFilter, sortSelection } from '../../state';
 import { CustomSort } from '../CustomSort';
 import { DataVerification } from '../DataVerification';
 import { SplitColumn } from '../SplitColumn';
@@ -17,7 +17,6 @@ import { SplitColumn } from '../SplitColumn';
 export function DataMenu() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
-    const { sort, filter, toolbar } = en;
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
@@ -26,31 +25,27 @@ export function DataMenu() {
     return (
         <>
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>{sort.sortTitle}</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>Sort range</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                    <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, true))}>
-                        {sort.asc}
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, true))}>Ascending</DropdownMenuItem>
                     <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, false))}>
-                        {sort.desc}
+                        Descending
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showDialog(<CustomSort />)}>{sort.custom}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => showDialog(<CustomSort />)}>Custom sort</DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuItem onClick={dispatch((ctx) => (filterActive ? clearFilter(ctx) : createFilter(ctx)))}>
-                {filterActive ? filter.clearFilter : filter.filter}
+                {filterActive ? 'Clear filter' : 'Create filter'}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onClick={() => showDialog(<DataVerification />)}>
-                {toolbar.dataVerification}
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>{toolbar.splitColumn}</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<DataVerification />)}>Data verification</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
         </>
     );
 }

@@ -5,7 +5,8 @@ import { X } from 'lucide-react';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { en, getSheetIndex, indexToColumnChar } from '../../state';
+import { getSheetIndex, indexToColumnChar } from '../../state';
+import { RULE_COPY } from './ConditionRules';
 
 function formatRange(range: SingleRange): string {
     const c1 = indexToColumnChar(range.column[0]);
@@ -21,23 +22,13 @@ function formatRanges(ranges: SingleRange[]): string {
 }
 
 const RULE_LABELS: Record<string, string> = {
-    greaterThan: 'Greater than',
+    // Menu-created rules list under the RULE_COPY name they were created with.
+    ...Object.fromEntries(Object.entries(RULE_COPY).map(([name, copy]) => [name, copy.label])),
+    // Engine condition names with no menu entry — xlsx import and formula rules.
     greaterThanOrEqual: 'Greater than or equal to',
-    lessThan: 'Less than',
     lessThanOrEqual: 'Less than or equal to',
-    between: 'Between',
-    notBetween: 'Not between',
-    equal: 'Equal to',
     notEqual: 'Not equal to',
-    textContains: 'Text contains',
-    occurrenceDate: 'Date is',
-    duplicateValue: 'Duplicate values',
-    top10: 'Top N',
-    top10_percent: 'Top N%',
-    last10: 'Bottom N',
-    last10_percent: 'Bottom N%',
-    aboveAverage: 'Above average',
-    belowAverage: 'Below average',
+    notBetween: 'Not between',
     formula: 'Custom formula',
 };
 
@@ -59,12 +50,15 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
         case 'notBetween':
             return values.length >= 2 ? `${label} ${values[0]} and ${values[1]}` : label;
         case 'top10':
+            return values[0] != null ? `Top ${values[0]}` : label;
         case 'top10_percent':
+            return values[0] != null ? `Top ${values[0]}%` : label;
         case 'last10':
+            return values[0] != null ? `Last ${values[0]}` : label;
         case 'last10_percent':
-            return values[0] != null ? label.replace('N', String(values[0])) : label;
+            return values[0] != null ? `Last ${values[0]}%` : label;
         case 'duplicateValue':
-            return values[0] === '1' ? 'Unique values' : label;
+            return values[0] === '1' ? 'Unique value' : label;
         default:
             return label;
     }
@@ -119,7 +113,6 @@ function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
 export function ManageRules() {
     const { context, setContext } = useContext(WorkbookContext);
     const { hideDialog } = useDialog();
-    const { button } = en;
 
     const rules = useMemo(() => {
         const index = getSheetIndex(context, context.currentSheetId) as number;
@@ -169,7 +162,7 @@ export function ManageRules() {
 
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={hideDialog}>
-                    {button.close}
+                    Close
                 </Button>
             </DialogFooter>
         </div>

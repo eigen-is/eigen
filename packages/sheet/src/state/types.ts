@@ -90,7 +90,7 @@ export type Presence = {
 
 // Sheet-protection settings. Read-only in this fork: no UI or xlsx-import
 // path writes the field today (the upstream luckysheet protect-sheet dialog
-// was never ported; locale strings for the other flags are dead).
+// was never ported).
 // protection.ts reads only these five fields: `sheet !== 0` toggles
 // protection on; the `selectLockedCells` / `selectunLockedCells` flags allow
 // selection when set to `1` (any other value, including undefined, blocks);
@@ -128,9 +128,9 @@ export type Image = {
 
 // Filter-by-condition rule names. The names overlapping conditional formatting
 // reuse the CF conditionNames (greaterThan, lessThan, equal, between, …); each
-// maps 1:1 onto a `conditionCell*` locale string. `values` carries the rule's
-// operands: none for is(Not)Empty, one for text/date/compare rules, two for
-// (not)between.
+// maps 1:1 onto a label in `FILTER_CONDITION_ITEMS` (`state/modules/filter.ts`).
+// `values` carries the rule's operands: none for is(Not)Empty, one for
+// text/date/compare rules, two for (not)between.
 export type FilterConditionName =
     | 'isEmpty'
     | 'isNotEmpty'

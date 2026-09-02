@@ -9,7 +9,6 @@
 import { describe, expect, test } from 'bun:test';
 import { genarate } from '../../../engine/format';
 import type { Context } from '../../../state/context';
-import { en } from '../../../state/locale/en';
 import {
     buildFilterConditionMatcher,
     clearFilter,
@@ -189,11 +188,11 @@ describe('buildFilterConditionMatcher', () => {
 });
 
 describe('FILTER_CONDITION_ITEMS', () => {
-    test('lists all 18 conditions with existing locale labels and sane arity', () => {
+    test('lists all 18 conditions with distinct labels and sane arity', () => {
         expect(FILTER_CONDITION_ITEMS).toHaveLength(18);
         expect(new Set(FILTER_CONDITION_ITEMS.map((i) => i.name)).size).toBe(18);
+        expect(new Set(FILTER_CONDITION_ITEMS.map((i) => i.label)).size).toBe(18);
         for (const item of FILTER_CONDITION_ITEMS) {
-            expect(typeof en.filter[item.localeKey]).toBe('string');
             expect([0, 1, 2]).toContain(item.arity);
         }
         expect(FILTER_CONDITION_ITEMS.find((i) => i.name === 'isEmpty')?.arity).toBe(0);

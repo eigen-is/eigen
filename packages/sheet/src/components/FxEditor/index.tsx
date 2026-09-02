@@ -5,7 +5,6 @@ import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
-    en,
     getFlowdata,
     getFormulaHtml,
     getInlineStringNoStyle,
@@ -33,7 +32,6 @@ export function FxEditor() {
     const prevFirstSelection = usePrevious(firstSelection);
     const prevSheetId = usePrevious(context.currentSheetId);
     const recentText = useRef('');
-    const { info } = en;
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes; prev-selection comparison avoids collaborative-update echo
     useEffect(() => {
@@ -227,7 +225,7 @@ export function FxEditor() {
                         className="flex-1 max-h-full overflow-y-auto pl-0.5 text-xs m-0 outline-none cursor-text whitespace-pre-wrap break-words box-border text-foreground text-left"
                         role="textbox"
                         id="sheet-functionbox-cell"
-                        aria-label={info.currentCellInput}
+                        aria-label="Current cell input"
                         onFocus={onFocus}
                         onKeyDown={onKeyDown}
                         onChange={onChange}

@@ -12,7 +12,6 @@ import { useDialog } from '../../hooks/useDialog';
 import {
     addSheet,
     autoSelectionFormula,
-    en,
     getFlowdata,
     handleLink,
     handleSum,
@@ -25,7 +24,6 @@ export function InsertMenu() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const { showDialog, hideDialog } = useDialog();
-    const { toolbar, formula } = en;
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
@@ -108,13 +106,13 @@ export function InsertMenu() {
                     settings.hooks?.onInsertImage?.();
                 }}
             >
-                {toolbar.insertImage}
+                Insert image
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>{toolbar.autoSum}</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger>Auto SUM</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem
                         onClick={() => {
@@ -123,7 +121,7 @@ export function InsertMenu() {
                             });
                         }}
                     >
-                        {formula.sum} (SUM)
+                        Sum (SUM)
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -138,7 +136,7 @@ export function InsertMenu() {
                             });
                         }}
                     >
-                        {formula.average}
+                        Average
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -153,7 +151,7 @@ export function InsertMenu() {
                             });
                         }}
                     >
-                        {formula.count}
+                        Count
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -168,7 +166,7 @@ export function InsertMenu() {
                             });
                         }}
                     >
-                        {formula.max}
+                        Max
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         onClick={() => {
@@ -183,11 +181,11 @@ export function InsertMenu() {
                             });
                         }}
                     >
-                        {formula.min}
+                        Min
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog onCancel={hideDialog} />)}>
-                        {`${formula.find}...`}
+                        Learn more...
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
@@ -199,7 +197,7 @@ export function InsertMenu() {
                     });
                 }}
             >
-                {toolbar.insertLink}
+                Insert link
             </DropdownMenuItem>
 
             <DropdownMenuItem
@@ -210,7 +208,7 @@ export function InsertMenu() {
                     });
                 }}
             >
-                {toolbar.tickBox}
+                Tick box
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />

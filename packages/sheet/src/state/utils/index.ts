@@ -1,7 +1,6 @@
 import { parseCellKey } from '@workspace/lib/sheets';
 import { every, isNil, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
 import { type Context, getFlowdata, getSheetConfig } from '../context';
-import { en } from '../locale/en';
 import { checkCellIsLocked } from '../modules';
 import type { Selection, Sheet } from '../types';
 
@@ -10,8 +9,7 @@ export * from './patch';
 export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean) {
     let index = file.length;
 
-    const locale_pivotTable = en.pivotTable;
-    const { title } = locale_pivotTable;
+    const title = 'Pivot Table';
 
     for (let i = 0; i < file.length; i += 1) {
         if (file[i].name.indexOf('Sheet') > -1 || file[i].name.indexOf(title) > -1) {

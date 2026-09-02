@@ -29,7 +29,7 @@ Sheets sorts the rows inside your selection. If you select a single cell, Sheets
 3. Tick **Data has a header row** if the first row contains column names. Sheets will exclude that row from sorting and use the column names in the **Sort by** dropdown.
 4. Choose the column to sort by from the **Sort by** dropdown.
 5. Select **Ascending** or **Descending**.
-6. Click **sort**.
+6. Click **Sort**.
 
 You can also reach **Custom sort** by right-clicking a cell and choosing **Sort**.
 
@@ -46,7 +46,7 @@ A filter adds a dropdown arrow to each column header in your data. Click an arro
 ### Turn on a filter
 
 1. Click any cell in your data.
-2. Open the **Data** menu and click **create filter**.
+2. Open the **Data** menu and click **Create filter**.
 
 A dropdown arrow appears in each header cell of the data range. The range is highlighted with a blue border.
 

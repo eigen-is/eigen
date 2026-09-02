@@ -4,7 +4,6 @@ import { normalizeSheetConfig } from '../../engine/replay-ops';
 import type { CellMatrix } from '../../engine/types';
 import { initSheetData } from '../api/sheet';
 import type { Context } from '../context';
-import { en } from '../locale/en';
 import type { Settings } from '../settings';
 import type { Sheet } from '../types';
 import { generateRandomSheetName, getSheetIndex } from '../utils';
@@ -179,7 +178,6 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
         editable.innerText = ctx.sheets[index].name;
         return;
     }
-    const { sheetconfig } = en;
     const oldtxt = editable.dataset.oldText || '';
     const txt = editable.innerText;
 
@@ -189,7 +187,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
     if (txt.length === 0) {
         editable.innerText = oldtxt;
-        throw new Error(sheetconfig.sheetNamecannotIsEmptyError);
+        throw new Error('Sheet name cannot be empty');
     }
 
     if (
@@ -199,7 +197,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
         /[：:\\/？?*[\]]+/.test(txt)
     ) {
         editable.innerText = oldtxt;
-        throw new Error(sheetconfig.sheetNameSpecCharError);
+        throw new Error('The name cannot contain:[ ] :  ? * / \' "');
     }
 
     if (index == null) return;

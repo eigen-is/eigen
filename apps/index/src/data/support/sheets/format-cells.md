@@ -75,7 +75,7 @@ The text colour button (a letter icon with a colour stripe beneath it) is also i
 ### Horizontal alignment
 
 1. Select the cells.
-2. Open **Format → Alignment** and choose **left**, **center**, or **right**.
+2. Open **Format → Alignment** and choose **Left**, **Center**, or **Right**.
 
 The three alignment buttons in the quick-format bar in the centre of the toolbar do the same thing.
 

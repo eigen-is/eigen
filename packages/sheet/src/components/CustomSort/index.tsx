@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { type Context, en, getSheetIndex, indexToColumnChar, sortSelection } from '../../state';
+import { type Context, getSheetIndex, indexToColumnChar, sortSelection } from '../../state';
 
 export function CustomSort() {
     const [rangeColChar, setRangeColChar] = useState<string[]>([]);
@@ -15,7 +15,6 @@ export function CustomSort() {
     const { context, setContext } = useContext(WorkbookContext);
     const [selectedValue, setSelectedValue] = useState<string>('0');
     const [isTitleChange, setIsTitleChange] = useState(false);
-    const { sort } = en;
     const { hideDialog } = useDialog();
 
     const col_start = context.selections![0].column[0];
@@ -35,7 +34,7 @@ export function CustomSort() {
                     list.push(colHeaderValue as string);
                 } else {
                     const ColumnChar = indexToColumnChar(i);
-                    list.push(`${sort.columnOperation} ${ColumnChar}`);
+                    list.push(`Column ${ColumnChar}`);
                 }
             }
         } else {
@@ -50,28 +49,22 @@ export function CustomSort() {
     return (
         <div className="flex flex-col gap-4">
             <DialogHeader>
-                <DialogTitle>{sort.custom}</DialogTitle>
+                <DialogTitle>Custom sort</DialogTitle>
             </DialogHeader>
             <div className="text-sm">
-                <span>
-                    <span>{sort.sortRangeTitle}</span>
-                    {indexToColumnChar(col_start)}
-                    {row_start + 1}
-                    <span>{sort.sortRangeTitleTo}</span>
-                    {indexToColumnChar(col_end)}
-                    {row_end + 1}
-                </span>
+                Sort range from {`${indexToColumnChar(col_start)}${row_start + 1}`} to{' '}
+                {`${indexToColumnChar(col_end)}${row_end + 1}`}
             </div>
 
             <div className="space-y-2.5">
                 <Label className="flex items-center gap-1.5">
                     <Checkbox checked={isTitleChange} onCheckedChange={(v) => setIsTitleChange(!!v)} />
-                    {sort.hasTitle}
+                    Data has a header row
                 </Label>
 
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 flex-1">
-                        <span>{sort.sortBy}</span>
+                        <span>Sort by</span>
                         <Select value={selectedValue} onValueChange={setSelectedValue}>
                             <SelectTrigger size="sm" className="w-full">
                                 <SelectValue />
@@ -92,11 +85,11 @@ export function CustomSort() {
                     >
                         <Label className="flex items-center gap-1.5">
                             <RadioGroupItem value="asc" />
-                            {sort.asc}
+                            Ascending
                         </Label>
                         <Label className="flex items-center gap-1.5">
                             <RadioGroupItem value="desc" />
-                            {sort.desc}
+                            Descending
                         </Label>
                     </RadioGroup>
                 </div>
@@ -104,7 +97,7 @@ export function CustomSort() {
 
             <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    {sort.close}
+                    Close
                 </Button>
                 <Button
                     size="sm"
@@ -115,7 +108,7 @@ export function CustomSort() {
                         hideDialog();
                     }}
                 >
-                    {sort.confirm}
+                    Sort
                 </Button>
             </DialogFooter>
         </div>

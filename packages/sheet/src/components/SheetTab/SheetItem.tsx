@@ -16,11 +16,13 @@ import {
     cancelNormalSelected,
     deleteSheet,
     editSheetName,
-    en,
     getSheetIndex,
     type Sheet,
 } from '../../state';
 import { ColorPickerMenuItem } from '../ColorPickerMenuItem';
+
+const NO_MORE_SHEET =
+    'The workbook contains at least one visual worksheet. To delete the selected worksheet, please insert a new worksheet or show a hidden worksheet.';
 
 type Props = {
     sheet: Sheet;
@@ -34,7 +36,6 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
     const { showAlert, hideAlert } = useAlert();
-    const { info, sheetconfig } = en;
 
     useEffect(() => {
         setContext((draftCtx) => {
@@ -146,7 +147,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                     onClick={() => {
                         const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
                         if (context.sheets.length > 1 && shownSheets.length > 1) {
-                            showAlert(sheetconfig.confirmDelete, 'yesno', () => {
+                            showAlert('Are you sure to delete', 'yesno', () => {
                                 setContext(
                                     (ctx) => {
                                         deleteSheet(ctx, sheet.id!);
@@ -156,18 +157,18 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                                 hideAlert();
                             });
                         } else {
-                            showAlert(sheetconfig.noMoreSheet, 'ok');
+                            showAlert(NO_MORE_SHEET, 'ok');
                         }
                     }}
                 >
-                    {sheetconfig.delete}
+                    Delete
                 </DropdownMenuItem>
             );
         }
         if (name === 'rename')
             return (
                 <DropdownMenuItem key={name} onClick={() => setEditing(true)}>
-                    {sheetconfig.rename}
+                    Rename
                 </DropdownMenuItem>
             );
         if (name === 'copy') {
@@ -184,7 +185,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                         );
                     }}
                 >
-                    {sheetconfig.copy}
+                    Copy
                 </DropdownMenuItem>
             );
         }
@@ -197,19 +198,19 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                         setContext((ctx) => {
                             const shownSheets = ctx.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
                             if (shownSheets.length > 1) api.hideSheet(ctx, sheet.id as string);
-                            else showAlert(sheetconfig.noMoreSheet, 'ok');
+                            else showAlert(NO_MORE_SHEET, 'ok');
                         });
                     }}
                 >
-                    {sheetconfig.hide}
+                    Hide
                 </DropdownMenuItem>
             );
         }
         if (name === 'move') {
             return (
                 <React.Fragment key={name}>
-                    <DropdownMenuItem onClick={() => moveSheet(-1.5)}>{sheetconfig.moveLeft}</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => moveSheet(1.5)}>{sheetconfig.moveRight}</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => moveSheet(-1.5)}>Move left</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => moveSheet(1.5)}>Move right</DropdownMenuItem>
                 </React.Fragment>
             );
         }
@@ -217,9 +218,9 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             return (
                 <ColorPickerMenuItem
                     key={name}
-                    label={sheetconfig.changeColor}
+                    label="Change color"
                     value={sheet.color ?? ''}
-                    resetLabel={sheetconfig.resetColor}
+                    resetLabel="Reset color"
                     onChange={(color) => {
                         if (context.allowEdit === false || !sheet?.id) return;
                         setContext((ctx) => {
@@ -241,7 +242,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                         });
                     }}
                 >
-                    {sheetconfig.focus}
+                    Focus
                 </DropdownMenuItem>
             );
         }
@@ -356,7 +357,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
                                 selectSheet();
                             }}
                             tabIndex={0}
-                            aria-label={info.sheetOptions}
+                            aria-label="Sheet options"
                         >
                             <ChevronDown width={12} height={12} aria-hidden="true" />
                         </span>

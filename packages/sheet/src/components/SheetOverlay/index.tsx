@@ -13,7 +13,6 @@ import {
     type Context,
     computeOverlayRegions,
     createFilterOptions,
-    en,
     type GlobalCache,
     getCellHyperlink,
     getCellRowColumn,
@@ -42,7 +41,6 @@ import { RowHeader } from './RowHeader';
 
 export const SheetOverlay: React.FC = () => {
     const { context, setContext, settings, refs } = useContext(WorkbookContext);
-    const { info } = en;
     const { showDialog } = useDialog();
     const {
         onContextMenu: cellAreaContextMenu,
@@ -539,7 +537,7 @@ export const SheetOverlay: React.FC = () => {
                                     }}
                                 >
                                     <Button variant="outline" size="sm" onClick={handleBottomAddRow}>
-                                        {info.add}
+                                        Add
                                     </Button>
                                     <Input
                                         ref={bottomAddRowInputRef}
@@ -547,9 +545,7 @@ export const SheetOverlay: React.FC = () => {
                                         className="h-8 w-16"
                                         placeholder={context.addDefaultRows.toString()}
                                     />
-                                    <span className="text-sm text-muted-foreground">
-                                        {info.row} ({info.addLast})
-                                    </span>
+                                    <span className="text-sm text-muted-foreground">(more rows at bottom)</span>
                                     <Button
                                         variant="outline"
                                         size="sm"
@@ -560,7 +556,7 @@ export const SheetOverlay: React.FC = () => {
                                             refs.cellArea.current!.scrollTop = 0;
                                         }}
                                     >
-                                        {info.backTop}
+                                        Back to the top
                                     </Button>
                                 </div>
                             </div>
@@ -569,12 +565,14 @@ export const SheetOverlay: React.FC = () => {
                 </div>
             </div>
             <div id="sr-selection" className="sr-only" role="alert">
-                {!rangeText.includes('NaN') ? `${rangeText} ${computedCellValue}` : `A1. ${info.sheetSrIntro}`}
+                {!rangeText.includes('NaN')
+                    ? `${rangeText} ${computedCellValue}`
+                    : 'A1. To release the sheet focus lock and let keys reach the rest of the app, use Shift, Control, F.'}
             </div>
             <div id="sr-sheetFocus" className="sr-only" role="alert">
                 {context.sheetFocused
-                    ? `${lastRangeText} ${lastCellValue ? `${lastCellValue}.` : ''} ${info.sheetIsFocused}`
-                    : info.sheetNotFocused}
+                    ? `${lastRangeText} ${lastCellValue ? `${lastCellValue}.` : ''} Sheet focus lock enabled.`
+                    : 'Sheet focus lock disabled.'}
             </div>
         </main>
     );
