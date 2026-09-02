@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCreateChat } from '@workspace/lib/chat';
-import { useCollabDoc } from '@workspace/lib/collab';
+import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
 import { writeCardToDoc } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { nanoid } from 'nanoid';
@@ -61,7 +61,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
 
     const initializeDefaultBoard = useCallback(
         async (doc: Y.Doc, userEmail: string) => {
-            const columnsMap = doc.getMap('columns');
+            const columnsMap = getItemMapRoot(doc, 'columns');
             if (columnsMap.size > 0) return;
 
             const chatName = await createCardChat();
@@ -70,7 +70,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             const now = Date.now();
 
             doc.transact(() => {
-                const columnOrderArray = doc.getArray('columnOrder');
+                const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');
 
                 const taskId = `task-${nanoid(10)}`;
                 writeCardToDoc(doc, 'tasks', {
@@ -118,19 +118,17 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         undoScope: (doc) => [doc.getMap('columns'), doc.getMap('tasks'), doc.getArray('columnOrder')],
         onInit: ({ doc }) => {
             initializedRef.current = false;
-            const columnsMap = doc.getMap('columns');
-            const columnOrderArray = doc.getArray('columnOrder');
+            const columnsMap = getItemMapRoot(doc, 'columns');
+            const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');
 
             const updateReactState = () => {
                 setBoard((prev) => {
                     const columns: Record<string, ColumnItem> = {};
-                    for (const [columnId, columnMapValue] of columnsMap) {
-                        const columnMap = columnMapValue as Y.Map<unknown>;
-                        const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
+                    for (const [columnId, columnMap] of columnsMap) {
                         const next: ColumnItem = {
                             id: columnId,
                             title: (columnMap.get('title') as string) || '',
-                            taskIds: taskIdsArray ? (taskIdsArray.toArray() as string[]) : [],
+                            taskIds: getIdArray(columnMap, 'taskIds')?.toArray() ?? [],
                             creator: (columnMap.get('creator') as string) || '',
                             // Stable fallback — a per-refresh Date.now() would defeat sameColumn for
                             // legacy columns that predate the createdAt field. Nothing renders it.
@@ -139,7 +137,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                         const prevColumn = prev.columns[columnId];
                         columns[columnId] = prevColumn && sameColumn(prevColumn, next) ? prevColumn : next;
                     }
-                    return { columns, columnOrder: columnOrderArray.toArray() as string[] };
+                    return { columns, columnOrder: columnOrderArray.toArray() };
                 });
             };
 
@@ -175,8 +173,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
             const columnId = `column-${nanoid(10)}`;
-            const columnsMap = doc.getMap('columns');
-            const columnOrderArray = doc.getArray('columnOrder');
+            const columnsMap = getItemMapRoot(doc, 'columns');
+            const columnOrderArray = getIdArrayRoot(doc, 'columnOrder');
             const newColumnMap = new Y.Map();
             newColumnMap.set('id', columnId);
             newColumnMap.set('title', title);
@@ -197,12 +195,11 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         // column refs. The `.eigenchat` + comments.db row persist for undo / version revert.
         undoManagerRef.current?.stopCapturing();
         doc.transact(() => {
-            const columnsMap = doc.getMap('columns');
-            for (const [, columnMapValue] of columnsMap) {
-                const columnMap = columnMapValue as Y.Map<unknown>;
-                const taskIds = columnMap.get('taskIds') as Y.Array<string> | undefined;
+            const columnsMap = getItemMapRoot(doc, 'columns');
+            for (const [, columnMap] of columnsMap) {
+                const taskIds = getIdArray(columnMap, 'taskIds');
                 if (!taskIds) continue;
-                const idx = (taskIds.toArray() as string[]).indexOf(cardId);
+                const idx = taskIds.toArray().indexOf(cardId);
                 if (idx !== -1) {
                     taskIds.delete(idx, 1);
                     break;

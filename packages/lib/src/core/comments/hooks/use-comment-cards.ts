@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 import type { ChatAttachment } from '../../../types/chat';
 import type { CommentCard } from '../../../types/comments';
+import { getItemMapRoot } from '../../collab/yjs-utils';
 
 function readCards(map: Y.Map<Y.Map<unknown>>): Record<string, CommentCard> {
     const out: Record<string, CommentCard> = {};
@@ -62,7 +63,7 @@ export function useCommentCards(
     // Read synchronously on first render — a host that mounts after Yjs sync (docs) must see its
     // cards immediately, or the ?chat= deep-link effect runs once against {} and gives up.
     const [cards, setCards] = useState<Record<string, CommentCard>>(() =>
-        doc ? readCards(doc.getMap<Y.Map<unknown>>(mapName)) : {},
+        doc ? readCards(getItemMapRoot(doc, mapName)) : {},
     );
 
     useEffect(() => {
@@ -70,7 +71,7 @@ export function useCommentCards(
             setCards({});
             return;
         }
-        const map = doc.getMap<Y.Map<unknown>>(mapName);
+        const map = getItemMapRoot(doc, mapName);
         // Reuse the previous card object when its fields are unchanged, so memoized
         // card components skip re-rendering when an edit elsewhere rebuilds the map.
         const refresh = () =>

@@ -1,7 +1,6 @@
 // Materialize a vector container's Y.Doc into a plain VectorScene. Worker-safe (yjs only),
 // mirrors document/slides.ts readDeckFromDoc but per-element-Map. Every v1 field is a scalar
-// or string, so — unlike slides' commentCardIds — there is no Y.Array branch;
-// primitive reads suffice even when the server hydrates values via Y.applyUpdate.
+// or string, so primitive reads suffice even when the server hydrates values via Y.applyUpdate.
 
 import type * as Y from 'yjs';
 import { validateElbowPoints } from './elbow-pins';

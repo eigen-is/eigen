@@ -1,3 +1,4 @@
+import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import { DeleteDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -34,8 +35,7 @@ export function ColumnSettingsDialog({
         if (!title.trim() || !yjsDoc) return;
 
         yjsDoc.transact(() => {
-            const columnsMap = yjsDoc.getMap('columns');
-            const columnMap = columnsMap.get(columnId) as Y.Map<unknown>;
+            const columnMap = getItemMapRoot(yjsDoc, 'columns').get(columnId);
             if (columnMap) columnMap.set('title', title.trim());
         });
 
@@ -47,21 +47,21 @@ export function ColumnSettingsDialog({
 
         undoManager?.stopCapturing();
         yjsDoc.transact(() => {
-            const columnsMap = yjsDoc.getMap('columns');
+            const columnsMap = getItemMapRoot(yjsDoc, 'columns');
             const tasksMap = yjsDoc.getMap('tasks');
-            const columnOrderArray = yjsDoc.getArray('columnOrder');
+            const columnOrderArray = getIdArrayRoot(yjsDoc, 'columnOrder');
 
-            const columnMap = columnsMap.get(columnId) as Y.Map<unknown>;
+            const columnMap = columnsMap.get(columnId);
             if (!columnMap) return;
 
-            const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
+            const taskIdsArray = getIdArray(columnMap, 'taskIds');
             if (taskIdsArray) {
-                for (const taskId of taskIdsArray.toArray() as string[]) {
+                for (const taskId of taskIdsArray.toArray()) {
                     tasksMap.delete(taskId);
                 }
             }
 
-            const columnOrder = columnOrderArray.toArray() as string[];
+            const columnOrder = columnOrderArray.toArray();
             const columnIndex = columnOrder.indexOf(columnId);
             if (columnIndex !== -1) columnOrderArray.delete(columnIndex, 1);
 

@@ -13,7 +13,7 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
-import { useYjsUndoHotkeys } from '@workspace/lib/collab';
+import { getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import {
     isPendingMediaName,
@@ -449,11 +449,11 @@ function SlideEditorInner({
         (dx: number, dy: number) => {
             if (!yjsDoc) return;
             yjsDoc.transact(() => {
-                const objectsMap = yjsDoc.getMap('objects');
+                const objectsMap = getItemMapRoot(yjsDoc, 'objects');
                 for (const id of selectedObjectIds) {
                     const obj = deck.objects[id];
                     if (!obj) continue;
-                    const objMap = objectsMap.get(id) as import('yjs').Map<unknown> | undefined;
+                    const objMap = objectsMap.get(id);
                     if (!objMap) continue;
                     objMap.set('x', obj.x + dx);
                     objMap.set('y', obj.y + dy);
@@ -471,9 +471,9 @@ function SlideEditorInner({
             // Arrange is a discrete op — seal it as its own undo step.
             undoManager?.stopCapturing();
             yjsDoc.transact(() => {
-                const objectsMap = yjsDoc.getMap('objects');
+                const objectsMap = getItemMapRoot(yjsDoc, 'objects');
                 for (const patch of patches) {
-                    const objMap = objectsMap.get(patch.id) as import('yjs').Map<unknown> | undefined;
+                    const objMap = objectsMap.get(patch.id);
                     if (!objMap) continue;
                     if (patch.x !== undefined) objMap.set('x', patch.x);
                     if (patch.y !== undefined) objMap.set('y', patch.y);

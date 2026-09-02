@@ -1,4 +1,4 @@
-import { NORMALIZE_ORIGIN, normalizeParentChildRefs } from '@workspace/lib/collab';
+import { getIdArray, getItemMapRoot, NORMALIZE_ORIGIN, normalizeParentChildRefs } from '@workspace/lib/collab';
 import type * as Y from 'yjs';
 
 export function normalizeDeck(doc: Y.Doc) {
@@ -9,22 +9,18 @@ export function normalizeDeck(doc: Y.Doc) {
     // Slides-only pass, untracked like the shared ref repair (NORMALIZE_ORIGIN escapes the
     // UndoManager) — a corruption fix is never a user undo step; nested in a remote transaction it rides
     // that origin, also untracked.
-    const objectsMap = doc.getMap('objects');
-    const slidesMap = doc.getMap('slides');
+    const objectsMap = getItemMapRoot(doc, 'objects');
+    const slidesMap = getItemMapRoot(doc, 'slides');
     doc.transact(() => {
         // Reconcile each object's slideId back-reference to the slide that actually holds it. objectIds
         // is the source of truth; the shared repair may have re-homed or dedupe-moved an object without
         // touching its slideId, which drives duplicate/z-order writes and comment/search navigation.
-        for (const slideId of Array.from(slidesMap.keys())) {
-            const slideValue = slidesMap.get(slideId);
-            if (!slideValue) continue;
-            const slide = slideValue as Y.Map<unknown>;
-            const objectIds = slide.get('objectIds') as Y.Array<string> | undefined;
+        for (const [slideId, slide] of slidesMap) {
+            const objectIds = getIdArray(slide, 'objectIds');
             if (!objectIds) continue; // tolerate a slide missing objectIds — a throw escapes the observer
-            for (const objId of objectIds.toArray() as string[]) {
-                const objValue = objectsMap.get(objId);
-                if (!objValue) continue;
-                const obj = objValue as Y.Map<unknown>;
+            for (const objId of objectIds.toArray()) {
+                const obj = objectsMap.get(objId);
+                if (!obj) continue;
                 if (obj.get('slideId') !== slideId) obj.set('slideId', slideId); // write only on change
             }
         }

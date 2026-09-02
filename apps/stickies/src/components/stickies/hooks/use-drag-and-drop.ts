@@ -1,4 +1,5 @@
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
 import type { CreateCommentCardInput } from '@workspace/lib/comments';
 import type { CommentCard } from '@workspace/lib/types/comments';
 import type { FileEventDetailsMap } from '@workspace/lib/types/file-history';
@@ -98,8 +99,8 @@ export const useDragAndDrop = ({
         }
         const activeId = active.id as string;
         const overId = over.id as string;
-        const columnsMap = yjsDoc.getMap('columns');
-        const columnOrderArray = yjsDoc.getArray('columnOrder');
+        const columnsMap = getItemMapRoot(yjsDoc, 'columns');
+        const columnOrderArray = getIdArrayRoot(yjsDoc, 'columnOrder');
 
         // Alt-drag duplicate: a COPY of the dragged CARD lands at the drop slot, the
         // original stays put. It goes through the frozen createCard seam — a fresh chatName (a card's
@@ -120,13 +121,10 @@ export const useDragAndDrop = ({
                         attachments: source.attachments,
                     },
                     (card) => {
-                        const destTaskIds = (columnsMap.get(destColumnId) as Y.Map<unknown> | undefined)?.get(
-                            'taskIds',
-                        ) as Y.Array<string> | undefined;
+                        const destColumn = columnsMap.get(destColumnId);
+                        const destTaskIds = destColumn && getIdArray(destColumn, 'taskIds');
                         if (!destTaskIds) return;
-                        const at = overIsColumn
-                            ? destTaskIds.length
-                            : (destTaskIds.toArray() as string[]).indexOf(overId);
+                        const at = overIsColumn ? destTaskIds.length : destTaskIds.toArray().indexOf(overId);
                         destTaskIds.insert(at === -1 ? destTaskIds.length : at, [card.id]);
                     },
                 )
@@ -155,7 +153,7 @@ export const useDragAndDrop = ({
             let moved: { oldColumn: string; newColumn: string } | null = null;
             if (dragState.activeType === 'column') {
                 if (activeId !== overId) {
-                    const currentOrder = columnOrderArray.toArray() as string[];
+                    const currentOrder = columnOrderArray.toArray();
                     const oldIndex = currentOrder.indexOf(activeId);
                     const newIndex = currentOrder.indexOf(overId);
                     if (oldIndex !== -1 && newIndex !== -1) {
@@ -172,20 +170,13 @@ export const useDragAndDrop = ({
                 const destColumnId = overIsColumn ? overId : findColumnOfTask(overId);
                 // Dropping on a column appends; dropping back onto the own column header is a no-op.
                 if (sourceColumnId && destColumnId && !(overIsColumn && destColumnId === sourceColumnId)) {
-                    const sourceTaskIds = (columnsMap.get(sourceColumnId) as Y.Map<unknown> | undefined)?.get(
-                        'taskIds',
-                    ) as Y.Array<string> | undefined;
-                    const destTaskIds =
-                        sourceColumnId === destColumnId
-                            ? sourceTaskIds
-                            : ((columnsMap.get(destColumnId) as Y.Map<unknown> | undefined)?.get('taskIds') as
-                                  | Y.Array<string>
-                                  | undefined);
+                    const sourceColumn = columnsMap.get(sourceColumnId);
+                    const sourceTaskIds = sourceColumn && getIdArray(sourceColumn, 'taskIds');
+                    const destColumn = sourceColumnId === destColumnId ? sourceColumn : columnsMap.get(destColumnId);
+                    const destTaskIds = destColumn && getIdArray(destColumn, 'taskIds');
                     if (sourceTaskIds && destTaskIds) {
-                        const sourceIndex = (sourceTaskIds.toArray() as string[]).indexOf(activeId);
-                        const destIndex = overIsColumn
-                            ? destTaskIds.length
-                            : (destTaskIds.toArray() as string[]).indexOf(overId);
+                        const sourceIndex = sourceTaskIds.toArray().indexOf(activeId);
+                        const destIndex = overIsColumn ? destTaskIds.length : destTaskIds.toArray().indexOf(overId);
                         if (sourceIndex !== -1 && destIndex !== -1) {
                             sourceTaskIds.delete(sourceIndex, 1);
                             destTaskIds.insert(destIndex, [activeId]);

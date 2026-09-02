@@ -25,6 +25,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { basename, join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { Attendee, EventData } from '@workspace/lib/types/calendar';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -180,7 +181,7 @@ function writeCommentCard(doc: Y.Doc, card: CommentCard): void {
     if (card.chatName) y.set('chatName', card.chatName);
     if (card.creator) y.set('creator', card.creator);
     if (card.createdAt !== undefined) y.set('createdAt', card.createdAt);
-    doc.getMap<Y.Map<unknown>>('comments').set(card.id, y);
+    getItemMapRoot(doc, 'comments').set(card.id, y);
 }
 
 async function main(): Promise<void> {
@@ -556,14 +557,14 @@ async function main(): Promise<void> {
     // default card color and its chat link.
     board.doc.transact(() => {
         for (const rootName of ['tasks', 'columns']) {
-            for (const [, value] of board.doc.getMap(rootName)) {
-                const entry = value as Y.Map<unknown>;
+            for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
                 const creator = entry.get('creator');
                 if (typeof creator === 'string' && !creator.includes('@')) entry.set('creator', emailFor(creator));
             }
         }
+        const tasksMap = getItemMapRoot(board.doc, 'tasks');
         for (const [cardId, chatName] of cardChatNames) {
-            const task = board.doc.getMap<Y.Map<unknown>>('tasks').get(cardId)!;
+            const task = tasksMap.get(cardId)!;
             task.set('color', DEFAULT_CARD_COLOR);
             task.set('chatName', chatName);
         }

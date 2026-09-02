@@ -1,4 +1,5 @@
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { getIdArrayRoot } from '@workspace/lib/collab';
 import { useState } from 'react';
 import type * as Y from 'yjs';
 
@@ -27,9 +28,9 @@ export const useSlideDnd = ({ yjsDoc }: UseSlideDndProps) => {
         const overId = over.id as string;
 
         if (activeId !== overId) {
-            const slideOrderArray = yjsDoc.getArray('slideOrder');
+            const slideOrderArray = getIdArrayRoot(yjsDoc, 'slideOrder');
             yjsDoc.transact(() => {
-                const currentOrder = slideOrderArray.toArray() as string[];
+                const currentOrder = slideOrderArray.toArray();
                 const oldIndex = currentOrder.indexOf(activeId);
                 const newIndex = currentOrder.indexOf(overId);
                 if (oldIndex !== -1 && newIndex !== -1) {
