@@ -142,7 +142,9 @@ function adjustRoughness(el: VectorShapeElement | VectorLinearElement | VectorAr
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);
 }
 
-function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
+// The stroke-style vocabulary as roughjs `strokeLineDash` / an SVG `stroke-dasharray`: one dash table,
+// shared by the drawing kinds and by the image's border.
+export function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
     if (strokeStyle === 'dashed') return [8, 8 + strokeWidth];
     if (strokeStyle === 'dotted') return [1.5, 6 + strokeWidth];
     return undefined;

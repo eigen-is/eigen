@@ -1,5 +1,7 @@
+import { backgroundCss } from '../../background/style';
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';
+import { isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { hitTestBox } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import {
@@ -92,9 +94,9 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     searchText: (el) => stripTagsServer(el.html).trim(),
 });
 
-// The box's typography as CSS, the one body the foreignObject wrapper and the live layer renderer share.
-// `highlightColor` is deliberately absent: it is a text mark applied inside `html`, and painting it on the
-// box is what gave slides its full-width highlight bug.
+// The box's paint + typography as CSS, the one body the foreignObject wrapper and the live layer
+// renderer share. `highlightColor` is deliberately absent: it is a text mark applied inside `html`, and
+// painting it on the box is what gave slides its full-width highlight bug.
 function richTextStyle(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
@@ -117,8 +119,19 @@ function richTextStyle(el: VectorRichTextElement): string {
         `letter-spacing:${round(el.letterSpacing)}px`,
         `line-height:${round(el.lineHeight)}`,
     ];
-    // border-box so the inset eats into the stored width/height instead of growing the box. Both
-    // declarations are omitted at padding 0, so an unpadded box's style string is unchanged.
-    if (el.padding > 0) style.push(`padding:${round(el.padding)}px`, 'box-sizing:border-box');
+    // The box background: the same Fill codec and the same CSS the frame/scene backgrounds speak. A
+    // transparent fill is passed as "no fill" — `background-color:transparent` is a paint declaration
+    // for a colour that paints nothing.
+    const fill = parseFill(el.fill);
+    style.push(...backgroundCss(isTransparentFill(fill) ? null : fill));
+    // The stroke fields are this kind's BORDER (types.ts) — CSS border-style shares our vocabulary.
+    const bordered = el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
+    if (bordered) style.push(`border:${round(el.strokeWidth)}px ${el.strokeStyle} ${el.strokeColor}`);
+    const radius = cornerRadius(el, 'rectangle');
+    if (radius > 0) style.push(`border-radius:${round(radius)}px`);
+    if (el.padding > 0) style.push(`padding:${round(el.padding)}px`);
+    // border-box once, whatever caused it: the inset and the border eat into the stored width/height
+    // instead of growing the box, so the layer box and the drawn box are the same rectangle.
+    if (bordered || el.padding > 0) style.push('box-sizing:border-box');
     return style.join(';');
 }
