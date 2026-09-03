@@ -9,7 +9,6 @@ import {
     bindingAnchor,
     bindingGap,
     boxCenter,
-    distanceToSegment,
     elbowAnchorScene,
     getElementBounds,
     linearLocalToScene,
@@ -19,6 +18,8 @@ import {
     parsePoints,
     rotatePoint,
 } from './geometry';
+import { ELEMENT_KINDS } from './kinds';
+import { outlineDistance } from './outline';
 import {
     isBindable,
     parseBinding,
@@ -43,12 +44,6 @@ export type B4 = [number, number, number, number];
 // How near (SCENE units) a bound endpoint must sit to its shape for cone-based heading to apply. The router
 // runs zoom-free (server + derive path), so this is maxBindingDistance_simple at zoom 1 = clamp(15/1.5,15,30).
 export const MAX_BINDING_DISTANCE = 15;
-
-// Excalidraw's exact ellipse-projection iteration seed. The literal 0.707 (not Math.SQRT1_2) is the point —
-// matching it byte-for-byte keeps ellipseDistance identical to the source; the more precise constant drifts
-// the result. Hoisted to one place so the biome allowance lives once, not once per `let`.
-// biome-ignore lint/suspicious/noApproximativeNumericConstant: parity with Excalidraw's 0.707 seed
-const ELLIPSE_SEED = 0.707;
 
 // Excalidraw's vectorToHeading: snap a free vector to its dominant axis direction (the `<=` on LEFT and the
 // strict `>` elsewhere are load-bearing — they decide the exit side on exact diagonals).
@@ -105,74 +100,20 @@ export function getHeadingForElbowArrowSnap(
     return headingForPointFromElement(shape, aabb, p);
 }
 
-// Euclidean distance from a scene point to a shape's outline (Excalidraw's distanceToElement). Sharp
-// outlines throughout — the same accepted drift geometry.ts's outline snapping already takes for round
-// rects — so the distance is measured against the rect/diamond edges, or the true ellipse curve.
+// Euclidean distance from a scene point to a shape's outline (Excalidraw's distanceToElement), measured
+// against the outline the registry hands out — so a rounded shape picks its heading and its side from the
+// curve it actually draws.
 export function distanceToElement(shape: VectorShapeElement, p: Point): number {
-    const c = boxCenter(shape);
-    const rp = rotatePoint(p, c, -shape.angle);
-    if (shape.type === 'ellipse') return ellipseDistance(shape, c, rp);
-    const corners = shape.type === 'diamond' ? diamondCorners(shape) : rectCorners(shape);
-    let min = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < corners.length; i++) {
-        min = Math.min(min, distanceToSegment(rp, corners[i], corners[(i + 1) % corners.length]));
-    }
-    return min;
-}
-
-function rectCorners(s: VectorShapeElement): Point[] {
-    return [
-        { x: s.x, y: s.y },
-        { x: s.x + s.width, y: s.y },
-        { x: s.x + s.width, y: s.y + s.height },
-        { x: s.x, y: s.y + s.height },
-    ];
-}
-
-function diamondCorners(s: VectorShapeElement): Point[] {
-    return [
-        { x: s.x + s.width / 2, y: s.y },
-        { x: s.x + s.width, y: s.y + s.height / 2 },
-        { x: s.x + s.width / 2, y: s.y + s.height },
-        { x: s.x, y: s.y + s.height / 2 },
-    ];
-}
-
-// Excalidraw's ellipseDistanceFromPoint: three Newton-style iterations onto the ellipse quadrant, then the
-// distance to the projected point. `rp` is already unrotated into the shape's local frame.
-function ellipseDistance(s: VectorShapeElement, center: Point, rp: Point): number {
-    const a = s.width / 2;
-    const b = s.height / 2;
-    const tpx = rp.x - center.x;
-    const tpy = rp.y - center.y;
-    const px = Math.abs(tpx);
-    const py = Math.abs(tpy);
-    let tx = ELLIPSE_SEED;
-    let ty = ELLIPSE_SEED;
-    for (let i = 0; i < 3; i++) {
-        const ex = ((a * a - b * b) * tx ** 3) / a;
-        const ey = ((b * b - a * a) * ty ** 3) / b;
-        const rx = a * tx - ex;
-        const ry = b * ty - ey;
-        const qx = px - ex;
-        const qy = py - ey;
-        const r = Math.hypot(ry, rx);
-        const q = Math.hypot(qy, qx);
-        tx = Math.min(1, Math.max(0, ((qx * r) / q + ex) / a));
-        ty = Math.min(1, Math.max(0, ((qy * r) / q + ey) / b));
-        const t = Math.hypot(ty, tx);
-        tx /= t;
-        ty /= t;
-    }
-    const mx = a * tx * Math.sign(tpx);
-    const my = b * ty * Math.sign(tpy);
-    return Math.hypot(tpx - mx, tpy - my);
+    const rp = rotatePoint(p, boxCenter(shape), -shape.angle);
+    return outlineDistance(ELEMENT_KINDS[shape.type].outline(shape, 0), rp);
 }
 
 // Heading from the ×2 search cones around the shape's (inflated) AABB centre — a wide shape gets wider
 // UP/DOWN cones. Diamonds use vertex sectors instead. Excalidraw's headingForPointFromElement.
 function headingForPointFromElement(shape: VectorShapeElement, aabb: B4, p: Point): Heading {
-    if (shape.type === 'diamond') return headingForPointFromDiamond(shape, aabb, p);
+    if (ELEMENT_KINDS[shape.type].capabilities.silhouette === 'diamond') {
+        return headingForPointFromDiamond(shape, aabb, p);
+    }
     const mid = centerOf(aabb);
     const topLeft = scaleFromOrigin({ x: aabb[0], y: aabb[1] }, mid, 2);
     const topRight = scaleFromOrigin({ x: aabb[2], y: aabb[1] }, mid, 2);
@@ -309,7 +250,8 @@ function elbowDock(shape: VectorShapeElement, point: Point): Point {
     const gap = bindingGap(shape);
     const center = boxCenter(shape);
     const aabb = aabbForElement(shape);
-    const edgePoint = shape.type === 'rectangle' ? avoidRectangularCorner(shape, point, gap) : point;
+    const boxy = ELEMENT_KINDS[shape.type].capabilities.silhouette === 'box';
+    const edgePoint = boxy ? avoidRectangularCorner(shape, point, gap) : point;
     const isHorizontal = headingIsHorizontal(headingForPointFromElement(shape, aabb, point));
     const resolved = snapToMid(shape, edgePoint, 0.05, gap) ?? point;
 
@@ -355,8 +297,8 @@ function dockIntersection(
 }
 
 // Excalidraw's avoidRectangularCorner: when a point sits in one of the four diagonal corner regions of a
-// rectangle, slide it onto the nearer adjacent edge (offset by the gap) so the dock never lands on the sharp
-// corner. Everything in the shape's unrotated frame, rotated back out. Rectangles only.
+// box silhouette, slide it onto the nearer adjacent edge (offset by the gap) so the dock never lands on the
+// sharp corner. Everything in the shape's unrotated frame, rotated back out. Box silhouettes only.
 function avoidRectangularCorner(shape: VectorShapeElement, p: Point, gap: number): Point {
     const center = boxCenter(shape);
     const np = rotatePoint(p, center, -shape.angle);
@@ -399,7 +341,7 @@ function snapToMid(shape: VectorShapeElement, p: Point, tolerance: number, gap: 
         return rot({ x: x + w + gap, y: center.y });
     if (np.y >= y + h / 2 && np.x > center.x - hThresh && np.x < center.x + hThresh)
         return rot({ x: center.x, y: y + h + gap });
-    if (shape.type === 'diamond') {
+    if (ELEMENT_KINDS[shape.type].capabilities.silhouette === 'diamond') {
         const thr = Math.max(hThresh, vThresh);
         const corners: Point[] = [
             { x: x + w / 4 - gap, y: y + h / 4 - gap },

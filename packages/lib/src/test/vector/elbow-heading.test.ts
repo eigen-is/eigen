@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
+import { distanceToElement, elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
 import {
@@ -13,6 +13,7 @@ import {
     parsePoints,
 } from '../../vector/geometry';
 import {
+    type Corners,
     DEFAULT_ELEMENT_PROPS,
     parseBinding,
     serializeBinding,
@@ -244,5 +245,31 @@ describe('redockBindingsForElbow — to-elbow re-docks a raw-cursor bound end', 
         const { startBinding, endBinding } = redockBindingsForElbow(arrow, new Map([[rect.id, rect]]));
         expect(startBinding).toBe('');
         expect(endBinding).toBe('');
+    });
+});
+
+describe('distanceToElement', () => {
+    // The base fixture is a 100×100 square: `round` makes its outline the inscribed circle (r 50).
+    const square = (corners: Corners) => shapeEl({ id: 's', type: 'rectangle', corners });
+
+    test('measures against the rounded edge, not the sharp corner', () => {
+        const diagonal = { x: 140, y: 140 };
+        expect(distanceToElement(square('round'), diagonal)).toBeGreaterThan(
+            distanceToElement(square('straight'), diagonal),
+        );
+        expect(distanceToElement(square('round'), { x: 150, y: 50 })).toBeCloseTo(50, 6);
+    });
+
+    test('a straight rectangle keeps the sharp-edge answers', () => {
+        expect(distanceToElement(square('straight'), { x: 150, y: 50 })).toBeCloseTo(50, 6);
+        expect(distanceToElement(square('straight'), { x: 140, y: 140 })).toBeCloseTo(Math.hypot(40, 40), 6);
+    });
+
+    // The centre sits INSIDE a curved rect's inset core, where the outline distance is the core distance
+    // PLUS the radius — a core distance clamped at 0 would answer the radius (25) instead.
+    test('a point inside the shape measures out to the edge', () => {
+        expect(distanceToElement(square('straight'), { x: 50, y: 50 })).toBeCloseTo(50, 6);
+        expect(distanceToElement(square('curved'), { x: 50, y: 50 })).toBeCloseTo(50, 6);
+        expect(distanceToElement(square('round'), { x: 50, y: 50 })).toBeCloseTo(50, 6);
     });
 });

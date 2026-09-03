@@ -16,6 +16,11 @@ export type Seg = { a: Point; b: Point };
 const EPS = 1e-7;
 const PROPORTIONAL_RADIUS = 0.25;
 const ADAPTIVE_RADIUS = 32;
+// Excalidraw's exact ellipse-projection iteration seed. The literal 0.707 (not Math.SQRT1_2) is the point —
+// matching it byte-for-byte keeps ellipseEdgeDistance identical to the source; the more precise constant
+// drifts the result.
+// biome-ignore lint/suspicious/noApproximativeNumericConstant: parity with Excalidraw's 0.707 seed
+const ELLIPSE_SEED = 0.707;
 
 // The `round` corner radius: the shape's INRADIUS — the largest radius that keeps the silhouette
 // recognisable, degenerating exactly to the inscribed circle (or a pill, for a rect with w ≠ h).
@@ -107,6 +112,24 @@ export function outlineHits(shape: OutlineShape, a: Point, b: Point): Point[] {
     return hits;
 }
 
+// Distance from a point to the outline. For core ⊕ disc(R) that is |dist(p, core) − R| with dist SIGNED —
+// a point deep inside the core is further from the edge, not nearer. One definition, so a `round` rectangle
+// picks its heading and its side from the curve it actually draws. An empty outline reads 0: a degenerate
+// shape has no edge, and Infinity would poison the caller's cone bounds.
+export function outlineDistance(shape: OutlineShape, p: Point): number {
+    if (shape.kind === 'rounded') return Math.abs(coreDistance(p, shape.core) - shape.radius);
+    if (shape.kind === 'ellipse') return ellipseEdgeDistance(shape, p);
+    let best = Number.POSITIVE_INFINITY;
+    if (shape.kind === 'polygon') {
+        for (const [a, b] of coreEdges(shape.corners)) best = Math.min(best, distToSegment(p, a, b));
+    } else {
+        for (let i = 1; i < shape.points.length; i++) {
+            best = Math.min(best, distToSegment(p, shape.points[i - 1], shape.points[i]));
+        }
+    }
+    return Number.isFinite(best) ? best : 0;
+}
+
 // The stored corner intent → a radius in scene units. `curved` is Excalidraw's adaptive radius (the value
 // today's renderer hard-codes); `round` is the shape's INRADIUS, the largest radius that keeps the
 // silhouette. Kinds pass their own `kind`; nothing outside this module switches on an element type.
@@ -163,11 +186,16 @@ function coreEdges(core: Point[]): [Point, Point][] {
 // level set INSIDE the core (the inward edge offsets), which would admit a phantom hit one radius short
 // of the real outline — the level-set filter needs the region, so an interior point must read 0.
 function distToCore(p: Point, core: Point[]): number {
+    return Math.max(0, coreDistance(p, core));
+}
+
+// Signed distance to the core's boundary: negative inside. outlineDistance needs the sign (an interior
+// point is core-distance PLUS the radius from the edge); coreHits needs it clamped at 0, see distToCore.
+function coreDistance(p: Point, core: Point[]): number {
     if (core.length === 1) return Math.hypot(p.x - core[0].x, p.y - core[0].y);
-    if (core.length > 2 && insideConvex(p, core)) return 0;
     let best = Number.POSITIVE_INFINITY;
     for (const [a, b] of coreEdges(core)) best = Math.min(best, distToSegment(p, a, b));
-    return best;
+    return core.length > 2 && insideConvex(p, core) ? -best : best;
 }
 
 function insideConvex(p: Point, poly: Point[]): boolean {
@@ -310,6 +338,40 @@ function corePath(core: Point[], r: number): string {
 }
 
 // --- primitives ---------------------------------------------------------------------------------
+
+// Excalidraw's ellipseDistanceFromPoint (ported from elbow-heading, verbatim): three Newton-style
+// iterations onto the ellipse quadrant, then the distance to the projected point.
+function ellipseEdgeDistance(shape: { cx: number; cy: number; rx: number; ry: number }, p: Point): number {
+    const a = shape.rx;
+    const b = shape.ry;
+    const tpx = p.x - shape.cx;
+    const tpy = p.y - shape.cy;
+    const px = Math.abs(tpx);
+    const py = Math.abs(tpy);
+    // The iteration divides by |q|, which is 0 at the exact centre (Excalidraw returns NaN there). The
+    // nearest edge point from the centre is the semi-minor axis.
+    if (px === 0 && py === 0) return Math.min(a, b);
+    let tx = ELLIPSE_SEED;
+    let ty = ELLIPSE_SEED;
+    for (let i = 0; i < 3; i++) {
+        const ex = ((a * a - b * b) * tx ** 3) / a;
+        const ey = ((b * b - a * a) * ty ** 3) / b;
+        const rx = a * tx - ex;
+        const ry = b * ty - ey;
+        const qx = px - ex;
+        const qy = py - ey;
+        const r = Math.hypot(ry, rx);
+        const q = Math.hypot(qy, qx);
+        tx = Math.min(1, Math.max(0, ((qx * r) / q + ex) / a));
+        ty = Math.min(1, Math.max(0, ((qy * r) / q + ey) / b));
+        const t = Math.hypot(ty, tx);
+        tx /= t;
+        ty /= t;
+    }
+    const mx = a * tx * Math.sign(tpx);
+    const my = b * ty * Math.sign(tpy);
+    return Math.hypot(tpx - mx, tpy - my);
+}
 
 function segEllipseHits(seg: Seg, cx: number, cy: number, rx: number, ry: number): Point[] {
     if (rx === 0 || ry === 0) return [];

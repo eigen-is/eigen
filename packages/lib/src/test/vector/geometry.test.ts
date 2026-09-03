@@ -53,6 +53,7 @@ import {
 } from '../../vector/geometry';
 import {
     arrowsBoundTo,
+    type Corners,
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
     type VectorArrowElement,
@@ -767,6 +768,38 @@ describe('outlinePoint', () => {
             expect(b.x).toBeCloseTo(a.x);
             expect(b.y).toBeCloseTo(a.y);
         }
+    });
+});
+
+describe('docking on the true outline', () => {
+    // 100×100, so `round` collapses the core to a point and the outline IS the inscribed circle (r 50).
+    const rounded = (corners: Corners) =>
+        shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, corners });
+
+    test('a diagonal ray lands on the corner arc, inside the sharp corner', () => {
+        const sharp = outlinePoint(rounded('straight'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
+        const round = outlinePoint(rounded('round'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
+        expect(sharp.x).toBeCloseTo(100, 6);
+        expect(round.x).toBeLessThan(sharp.x);
+        expect(Math.hypot(round.x - 50, round.y - 50)).toBeCloseTo(50, 6);
+    });
+
+    test('an axis-aligned ray is unchanged by rounding', () => {
+        const sharp = outlinePoint(rounded('straight'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
+        const round = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
+        expect(sharp).toEqual({ x: 50, y: 0 });
+        expect(round).toEqual(sharp);
+    });
+
+    test('the binding gap still applies on a rounded shape', () => {
+        const hit = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 8);
+        expect(hit.y).toBeCloseTo(-8, 6);
+    });
+
+    test('a rotated rounded shape docks in its own frame', () => {
+        const el = { ...rounded('round'), angle: 45 };
+        const hit = outlinePoint(el, { x: 50, y: -200 }, { x: 50, y: 50 }, 0);
+        expect(Math.hypot(hit.x - 50, hit.y - 50)).toBeCloseTo(50, 6);
     });
 });
 

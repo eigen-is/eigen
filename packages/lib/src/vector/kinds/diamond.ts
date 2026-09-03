@@ -1,4 +1,4 @@
-import { getElementBounds, hitTestDiamond } from '../geometry';
+import { boxCenter, getElementBounds, hitTestDiamond, type Point, rotatePoint } from '../geometry';
 import { cornerRadius, diamondOutline } from '../outline';
 import {
     CORNERS,
@@ -27,6 +27,7 @@ export const diamondKind = defineKind<VectorDiamondElement>({
         objectFit: false,
         arrowheads: false,
         bindable: true,
+        silhouette: 'diamond',
         creation: 'box',
         resize: 'box',
     },
@@ -50,6 +51,18 @@ export const diamondKind = defineKind<VectorDiamondElement>({
     hitTest: (el, point) => hitTestDiamond(el, point),
     outline: (el, inflate) =>
         diamondOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'diamond'), inflate),
+    // A bound arrow docks on the diamond's four VERTICES (its tips — Excalidraw's getDiamondBaseCorners),
+    // NOT the midpoints of its slanted edges. Same right/bottom/left/top order as the box default.
+    anchorPoints: (el) => {
+        const { x, y, width: w, height: h } = el;
+        const center = boxCenter(el);
+        return [
+            { x: x + w, y: y + h / 2 },
+            { x: x + w / 2, y: y + h },
+            { x, y: y + h / 2 },
+            { x: x + w / 2, y },
+        ].map((p: Point) => rotatePoint(p, center, el.angle));
+    },
     render: (el) => ({ svg: renderRoughShape(el) }),
     searchText: () => '',
 });

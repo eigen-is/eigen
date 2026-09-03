@@ -64,6 +64,45 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.image.capabilities.creation).toBe('none');
     });
 
+    test('the elbow router reads each silhouette off the kind, never off the type', () => {
+        expect(ELEMENT_KINDS.rectangle.capabilities.silhouette).toBe('box');
+        expect(ELEMENT_KINDS.diamond.capabilities.silhouette).toBe('diamond');
+        expect(ELEMENT_KINDS.ellipse.capabilities.silhouette).toBe('ellipse');
+    });
+
+    test('the dock anchors are the right/bottom/left/top points, whatever the kind derives them from', () => {
+        const anchors = [
+            { x: 100, y: 30 },
+            { x: 50, y: 60 },
+            { x: 0, y: 30 },
+            { x: 50, y: 0 },
+        ];
+        // the rect's edge midpoints and the diamond's tips are the same four points
+        for (const type of ['rectangle', 'ellipse', 'diamond'] as const) {
+            expect(ELEMENT_KINDS[type].anchorPoints(shape({ id: 's', type }))).toEqual(anchors);
+        }
+    });
+
+    test('only the rectangle aims along its corner diagonals; the others use the centre lines', () => {
+        // 100×60 shrunk by 15 at each end along the (100, 60) diagonal
+        expect(ELEMENT_KINDS.rectangle.aimLines(shape({ id: 'r', type: 'rectangle' }))[0][0].x).toBeCloseTo(
+            (15 * 100) / Math.hypot(100, 60),
+            9,
+        );
+        for (const type of ['ellipse', 'diamond'] as const) {
+            expect(ELEMENT_KINDS[type].aimLines(shape({ id: 's', type }))).toEqual([
+                [
+                    { x: 50, y: 0 },
+                    { x: 50, y: 60 },
+                ],
+                [
+                    { x: 0, y: 30 },
+                    { x: 100, y: 30 },
+                ],
+            ]);
+        }
+    });
+
     test('capabilities answer the questions the panel used to ask by type', () => {
         expect(ELEMENT_KINDS.ellipse.capabilities.corners).toBe(false);
         expect(ELEMENT_KINDS.rectangle.capabilities.bindable).toBe(true);

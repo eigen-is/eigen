@@ -43,6 +43,7 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         objectFit: false,
         arrowheads: false,
         bindable: false,
+        silhouette: 'box',
         creation: 'freedraw',
         resize: 'points',
     },

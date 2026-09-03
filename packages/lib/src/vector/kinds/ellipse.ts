@@ -21,6 +21,7 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
         objectFit: false,
         arrowheads: false,
         bindable: true,
+        silhouette: 'ellipse',
         creation: 'box',
         resize: 'box',
     },

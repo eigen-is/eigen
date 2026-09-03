@@ -8,6 +8,7 @@ import {
     diamondOutline,
     ellipseOutline,
     type OutlineBox,
+    outlineDistance,
     outlineHits,
     outlinePath,
     polylineOutline,
@@ -437,5 +438,42 @@ describe('outlinePath', () => {
         expect(outlinePath(rectOutline({ x: 0, y: 0, width: 10, height: 10 }, 0, 0))).toBe(
             'M 0 0 L 10 0 L 10 10 L 0 10 Z',
         );
+    });
+});
+
+describe('outlineDistance', () => {
+    const box: OutlineBox = { x: 0, y: 0, width: 200, height: 100 };
+
+    test('a sharp polygon measures to its nearest edge, inside or out', () => {
+        const shape = rectOutline(box, 0, 0);
+        expect(outlineDistance(shape, { x: 100, y: -10 })).toBeCloseTo(10, 9);
+        expect(outlineDistance(shape, { x: 100, y: 50 })).toBeCloseTo(50, 9);
+        expect(outlineDistance(shape, { x: 220, y: 120 })).toBeCloseTo(Math.hypot(20, 20), 9);
+    });
+
+    test('a rounded shape measures to the arc, so a deep point keeps getting further from the edge', () => {
+        const shape = rectOutline(box, 25, 0);
+        // The centre is inside the inset core: the distance is the core distance (25) PLUS the radius.
+        expect(outlineDistance(shape, { x: 100, y: 50 })).toBeCloseTo(50, 9);
+        expect(outlineDistance(shape, { x: 100, y: -10 })).toBeCloseTo(10, 9);
+        // Diagonally past a corner the rounded edge has pulled AWAY, so the same point sits further out.
+        const corner = { x: 210, y: 110 };
+        expect(outlineDistance(shape, corner)).toBeCloseTo(Math.hypot(35, 35) - 25, 9);
+        expect(outlineDistance(shape, corner)).toBeGreaterThan(outlineDistance(rectOutline(box, 0, 0), corner));
+    });
+
+    test('an ellipse measures to its curve', () => {
+        const shape = ellipseOutline({ x: 0, y: 0, width: 100, height: 100 }, 0);
+        expect(outlineDistance(shape, { x: 150, y: 50 })).toBeCloseTo(50, 6);
+        expect(outlineDistance(shape, { x: 50, y: 50 })).toBeCloseTo(50, 6);
+    });
+
+    test('an open polyline measures to the path itself, and an empty outline reads 0', () => {
+        const path = polylineOutline([
+            { x: 0, y: 0 },
+            { x: 10, y: 0 },
+        ]);
+        expect(outlineDistance(path, { x: 5, y: 4 })).toBeCloseTo(4, 9);
+        expect(outlineDistance(polylineOutline([]), { x: 5, y: 4 })).toBe(0);
     });
 });

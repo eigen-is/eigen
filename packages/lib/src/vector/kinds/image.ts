@@ -21,6 +21,7 @@ export const imageKind = defineKind<VectorImageElement>({
         objectFit: true,
         arrowheads: false,
         bindable: false,
+        silhouette: 'box',
         creation: 'none',
         resize: 'box',
     },

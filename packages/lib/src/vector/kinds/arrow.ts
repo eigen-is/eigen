@@ -68,6 +68,7 @@ export const arrowKind = defineKind<VectorArrowElement>({
         objectFit: false,
         arrowheads: true,
         bindable: false,
+        silhouette: 'box',
         creation: 'polyline',
         resize: 'points',
     },

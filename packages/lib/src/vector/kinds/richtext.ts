@@ -52,6 +52,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         objectFit: false,
         arrowheads: false,
         bindable: false,
+        silhouette: 'box',
         creation: 'box',
         resize: 'box',
     },
