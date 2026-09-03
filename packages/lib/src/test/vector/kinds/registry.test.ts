@@ -5,7 +5,6 @@ import {
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
     isVectorElementType,
-    TOOL_ORDER,
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
 import {
@@ -64,10 +63,10 @@ describe('ELEMENT_KINDS', () => {
             'richtext',
         ]);
         // the hand-written tuple can never drift from the capabilities
-        expect(TOOL_ORDER.filter((type) => ELEMENT_KINDS[type].capabilities.creation !== 'none')).toEqual([
-            ...CREATION_TOOL_TYPES,
-        ]);
-        expect(Object.keys(ELEMENT_KINDS).sort()).toEqual([...TOOL_ORDER].sort());
+        const drawable = Object.entries(ELEMENT_KINDS)
+            .filter(([, kind]) => kind.capabilities.creation !== 'none')
+            .map(([type]) => type);
+        expect(drawable.sort()).toEqual([...CREATION_TOOL_TYPES].sort());
         expect(ELEMENT_KINDS.image.capabilities.creation).toBe('none');
     });
 

@@ -188,8 +188,8 @@ type VectorCanvasProps = {
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
     toggle: (id: string) => void;
-    // Aspect lock, shared with the properties-panel checkbox. Non-text selections map
-    // it to ObjectTransform's 'aspect-default'/'free' resizeMode; text stays forced 'aspect'.
+    // Aspect lock, shared with the properties-panel checkbox: ObjectTransform's 'aspect-default'
+    // (Shift frees) when on, 'free' when off.
     aspectLocked: boolean;
     // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
     // local pointer's scene position (throttled in the editor's use-vector-presence).
@@ -796,8 +796,8 @@ export function VectorCanvas({
 
     // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
     // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
-    // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text) and
-    // self-heals once the face loads. Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
+    // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text).
+    // Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
     // set is re-anchored on the viewport centre preserving each element's relative offset.
     const pasteEigenItems = useCallback(
         (items: EigenClipboardItem[]) => {
@@ -934,7 +934,8 @@ export function VectorCanvas({
                     fontSize,
                     fontFamily,
                     textAlign: toVectorTextAlign(typo.textAlign),
-                    color: meta?.strokeColor,
+                    color: meta?.color,
+                    strokeColor: meta?.strokeColor,
                     fill: meta?.fill,
                     opacity: meta?.opacity,
                 });
@@ -993,7 +994,7 @@ export function VectorCanvas({
 
     // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport centre, with
     // default typography and a locally-measured box (the pasteEigenItems text idiom). Multi-line text is
-    // preserved — textToHtml keeps one paragraph per line. One sealed undo step.
+    // preserved — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
     const pasteTextElement = useCallback(
         (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
@@ -1242,7 +1243,7 @@ export function VectorCanvas({
         containerRef.current?.setPointerCapture(e.pointerId);
 
         // Shape tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already
-        // returned via the tools hook; text was handled above.)
+        // returned via the tools hook, the richtext tool just above.)
         if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse') {
             frozenRef.current = true;
             undoManager?.stopCapturing();
@@ -1548,11 +1549,9 @@ export function VectorCanvas({
                     {ordered.map((el) => {
                         // A line being vertex-dragged is drawn by the drawing preview below instead.
                         if (drawing.hiddenId === el.id) return null;
-                        // The element under edit is drawn only by the overlay textarea (WYSIWYG). An
-                        // arrow keeps its shaft/heads and hides just the label (render text='').
-                        if (editing?.id === el.id) {
-                            return el.type === 'arrow' ? node(renderEl({ ...el, text: '' })) : null;
-                        }
+                        // Only an arrow label opens the overlay, so the element under edit keeps its
+                        // shaft/heads and hides just the label the textarea draws (render text='').
+                        if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
                         return node(renderEl(el));
                     })}
                     {creating && node(creatingElement(creating))}

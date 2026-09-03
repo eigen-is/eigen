@@ -23,7 +23,7 @@ export type SceneToSvgOptions = {
     resolveMedia?: MediaResolver;
     padding?: number;
     // elementToSvg only: false ⇒ the bare fragment, no translate/rotate/opacity, for a caller that places
-    // the element itself from a layer box (sceneLayers).
+    // the element itself. No such caller yet — sceneLayers reads the kind's render directly.
     positioned?: boolean;
 };
 

@@ -228,7 +228,7 @@ export const DEFAULT_LINEAR_ROUNDNESS: Roundness = 'sharp';
 export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
 // Arrows curve by default (Excalidraw parity); the read fallback stays sharp so stored
 // arrows keep their meaning.
-export const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
+const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
 // Canvas-level defaults (the `meta` root).
 export const DEFAULT_SCENE_META: VectorMeta = { background: 'transparent', gridSize: 20 };

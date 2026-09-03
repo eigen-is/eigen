@@ -73,10 +73,10 @@ function dist(a: Point, b: Point): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// The shared geometry of a live preview element (draw draft): the KIND'S OWN create defaults — the same
-// table the commit writes through addElement, so a preview can never drift from the element that lands —
-// plus the gesture's seed and the same normalizeLinear pass (the renderer scales roughness by the box, so
-// a 0×0 box would pop on release).
+// The geometry + base props every live preview element (draw draft) shares. Its callers spread the kind's
+// own create defaults under it — the same table the commit writes through addElement, so a preview can
+// never drift from the element that lands. normalizeLinear runs here because the renderer scales roughness
+// by the box, so a 0×0 box would pop on release.
 function previewBase(origin: Point, points: Point[], seed: number) {
     return {
         id: PREVIEW_ID,

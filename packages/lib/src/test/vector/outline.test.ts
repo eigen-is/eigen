@@ -6,7 +6,6 @@ import {
     cornerRadius,
     diamondOutline,
     ellipseOutline,
-    type OutlineBox,
     outlineDistance,
     outlineHits,
     outlinePath,
@@ -15,6 +14,9 @@ import {
     sharpDiamondOffset,
 } from '../../vector/outline';
 import { DEFAULT_ELEMENT_PROPS, type VectorRectangleElement, type VectorShapeElement } from '../../vector/types';
+
+// The box every outline routine takes; outline.ts keeps its own copy private.
+type OutlineBox = { x: number; y: number; width: number; height: number };
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {

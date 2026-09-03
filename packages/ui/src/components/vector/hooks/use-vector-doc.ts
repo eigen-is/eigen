@@ -269,8 +269,6 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         [deleteElements],
     );
 
-    // Clone elements offset by (dx, dy) in ONE transact, stacked on top preserving their relative
-    // z-order, each with a fresh id + seed. Returns the new ids so the caller reselects the clones.
     const duplicateElements = useCallback(
         (ids: string[], dx: number, dy: number): string[] =>
             docRef.current ? duplicateElementsInDoc(docRef.current, ids, dx, dy) : [],

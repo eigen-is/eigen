@@ -35,7 +35,7 @@ const TOOL_UI: Record<CreationToolType, { icon: LucideIcon; label: string; short
     richtext: { icon: Type, label: 'Text', shortcut: 'T', digit: '8' },
 };
 
-export type VectorToolEntry = {
+type VectorToolEntry = {
     tool: VectorTool;
     icon: LucideIcon;
     label: string;

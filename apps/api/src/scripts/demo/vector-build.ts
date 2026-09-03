@@ -71,7 +71,7 @@ const AVG_ADVANCE =
 
 // Client-parity text measurement: width = widest line's summed advances + kerning (em) × fontSize;
 // height = lines × the font's line height. Mirrors the editor's text-measure so labels sit right.
-export function measureExcalifont(text: string, fontSize: number): { width: number; height: number } {
+function measureExcalifont(text: string, fontSize: number): { width: number; height: number } {
     const lines = text.split('\n');
     let widest = 0;
     for (const line of lines) {
@@ -151,17 +151,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
 
 // The base every element shares; each builder adds its type, box and kind fields.
 function baseElement(id: string): Omit<VectorElementBase, 'type' | 'x' | 'y' | 'width' | 'height' | 'angle'> {
-    return {
-        id,
-        index: '',
-        frameId: DEFAULT_ELEMENT_PROPS.frameId,
-        commentCardIds: DEFAULT_ELEMENT_PROPS.commentCardIds,
-        opacity: DEFAULT_ELEMENT_PROPS.opacity,
-        locked: DEFAULT_ELEMENT_PROPS.locked,
-        strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
-        strokeWidth: DEFAULT_ELEMENT_PROPS.strokeWidth,
-        strokeStyle: DEFAULT_ELEMENT_PROPS.strokeStyle,
-    };
+    return { ...DEFAULT_ELEMENT_PROPS, id, index: '' };
 }
 
 function buildShape(s: SitePlanShape): VectorShapeElement {
@@ -177,8 +167,7 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
         strokeStyle: s.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill(s.fill ?? 'transparent'),
         fillStyle: s.fillStyle ?? DEFAULT_FILL_STYLE,
-        roughness: DEFAULT_SKETCH_PROPS.roughness,
-        seed: DEFAULT_SKETCH_PROPS.seed,
+        ...DEFAULT_SKETCH_PROPS,
     };
     // An ellipse has no corners to treat, so it carries no `corners` field.
     if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };
@@ -203,8 +192,7 @@ function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
         strokeStyle: l.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
         fill: solidFill('transparent'),
         fillStyle: DEFAULT_FILL_STYLE,
-        roughness: DEFAULT_SKETCH_PROPS.roughness,
-        seed: DEFAULT_SKETCH_PROPS.seed,
+        ...DEFAULT_SKETCH_PROPS,
         roundness: l.roundness ?? DEFAULT_LINE_ROUNDNESS,
         points: norm.points,
         pressures: '',
@@ -222,7 +210,7 @@ function buildImage(im: SitePlanImage, i: number): VectorImageElement {
         height: im.height,
         angle: 0,
         mediaName: basename(im.file),
-        corners: SITE_PLAN_STYLE.corners,
+        corners: DEFAULT_CORNERS,
         objectFit: DEFAULT_OBJECT_FIT,
     };
 }
@@ -248,8 +236,7 @@ function buildArrow(
         angle: 0,
         strokeColor: a.stroke ?? DEFAULT_ELEMENT_PROPS.strokeColor,
         strokeStyle: a.strokeStyle ?? DEFAULT_ELEMENT_PROPS.strokeStyle,
-        roughness: DEFAULT_SKETCH_PROPS.roughness,
-        seed: DEFAULT_SKETCH_PROPS.seed,
+        ...DEFAULT_SKETCH_PROPS,
         roundness: DEFAULT_ARROW_PROPS.roundness,
         points: norm.points,
         elbow: a.elbow ?? false,

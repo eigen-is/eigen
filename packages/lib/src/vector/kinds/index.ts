@@ -37,9 +37,9 @@ export function isVectorElementType(v: unknown): v is VectorElementType {
     return typeof v === 'string' && Object.hasOwn(ELEMENT_KINDS, v);
 }
 
-// Toolbar order (Excalidraw's). Every type appears exactly once; the registry test pins that against
-// Object.keys(ELEMENT_KINDS).
-export const TOOL_ORDER: VectorElementType[] = [
+// Toolbar order (Excalidraw's), the order ELEMENT_FIELDS walks the kinds in. Every type appears
+// exactly once — the registry test pins that through ELEMENT_FIELDS.
+const TOOL_ORDER: VectorElementType[] = [
     'rectangle',
     'diamond',
     'ellipse',

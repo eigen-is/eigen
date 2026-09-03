@@ -29,6 +29,7 @@ import {
 // linear element (which then also carries `points` + `roundness`), else a text element. `id` is the
 // element's own id so a paste can remap arrow bindings across the pasted set; an arrow also
 // carries its heads, bindings, label and elbow flag. `fill` is the serialized Fill, verbatim.
+// `strokeColor` is the element's border; a rich-text carrier rides its text colour in `color` beside it.
 export type VectorClipMeta = {
     x: number;
     y: number;
@@ -37,6 +38,7 @@ export type VectorClipMeta = {
     // box a text item), derived so a new kind is carried without editing this list.
     type?: Exclude<VectorElementType, 'image' | 'richtext'>;
     strokeColor?: string;
+    color?: string;
     fill?: string;
     fillStyle?: FillStyle;
     strokeStyle?: StrokeStyle;
@@ -95,7 +97,14 @@ function buildElementClipboardItem(
             box,
             typography: { fontFamily: el.fontFamily, fontSize: el.fontSize, textAlign: el.textAlign },
             meta: {
-                vector: { x: el.x, y: el.y, strokeColor: el.strokeColor, fill: el.fill, opacity: el.opacity },
+                vector: {
+                    x: el.x,
+                    y: el.y,
+                    strokeColor: el.strokeColor,
+                    color: el.color,
+                    fill: el.fill,
+                    opacity: el.opacity,
+                },
             },
         });
     }

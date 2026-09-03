@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1261 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1258 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -437,7 +437,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (330)
+## Types (329)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -682,7 +682,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `OutlineBox` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `OutlineShape` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `ParsedFixedSegments` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `PinPatch` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
@@ -772,7 +771,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (525)
+## Utilities & constants (523)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1116,7 +1115,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CORNERS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `CREATION_TOOL_TYPES` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `DEFAULT_ARROW_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `DEFAULT_ARROW_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_CORNERS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_ELEMENT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_FILL_STYLE` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1249,7 +1247,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `syncInvalidIndices` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `TOOL_ORDER` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `TRANSPARENT_FILL` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `UNBOUND_PIN_CONTEXT` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `unionBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

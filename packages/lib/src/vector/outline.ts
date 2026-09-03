@@ -10,7 +10,7 @@
 import type { Point } from './geometry';
 import type { Corners } from './types';
 
-export type OutlineBox = { x: number; y: number; width: number; height: number };
+type OutlineBox = { x: number; y: number; width: number; height: number };
 type Seg = { a: Point; b: Point };
 
 const EPS = 1e-7;
