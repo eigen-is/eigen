@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { VectorElement, VectorScene } from '@workspace/lib/vector';
-import { drawingPage, emptyPage, renderCanvasPage } from '../../lib/export/canvas/render';
-import { buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
+import { drawingPage, emptyPage, framePages, renderCanvasPage } from '../../lib/export/canvas/render';
+import { buildGoldenDeckScene, buildGoldenVectorScene, GOLDEN_MEDIA_NAME } from '../fixtures/golden-documents';
 
 // Box fields only: a Partial of the whole union would widen `type` on the spread below and stop the
 // result being a VectorElement at all.
@@ -163,5 +163,53 @@ describe('renderCanvasPage', () => {
         const page = drawingPage(buildGoldenVectorScene(), resolveMedia);
         if (!page) throw new Error('expected a page');
         expect(renderCanvasPage(page, 1)).toBe(renderCanvasPage(page, 1));
+    });
+});
+
+describe('framePages', () => {
+    test('one page per frame, in deck order, sized to the frame', () => {
+        const pages = framePages(buildGoldenDeckScene(), noMedia);
+        expect(pages).toHaveLength(10);
+        expect(pages[0].width).toBe(1920);
+        expect(pages[0].height).toBe(1080);
+        // A frame IS the page: its own coordinate space starts at the origin, so nothing shifts.
+        expect(pages[0].originX).toBe(0);
+        expect(pages[0].originY).toBe(0);
+    });
+
+    test('a page holds only its own frame\u2019s layers', () => {
+        const pages = framePages(buildGoldenDeckScene(), resolveMedia);
+        expect(pages[0].layers.map((l) => l.id)).toEqual(['el-1']);
+        expect(pages[1].layers.map((l) => l.id)).toEqual(['el-2']);
+    });
+
+    test('deck order is the frame index, not the stored order', () => {
+        const scene = buildGoldenDeckScene();
+        const pages = framePages({ ...scene, frames: [...scene.frames].reverse() }, resolveMedia);
+        expect(pages[0].layers.map((l) => l.id)).toEqual(['el-1']);
+        expect(pages[9].layers.map((l) => l.id)).toEqual(['el-10']);
+    });
+
+    test('the frame background rides the page', () => {
+        const pages = framePages(buildGoldenDeckScene(), noMedia);
+        expect(pages[0].background).toEqual({ type: 'gradient', from: '#ffffff', to: '#dbe7ff', angle: 45 });
+        expect(pages[3].background).toBeNull();
+    });
+
+    test('an image background resolves through the media resolver at render time', () => {
+        const pages = framePages(buildGoldenDeckScene(), noMedia);
+        const html = renderCanvasPage(pages[2], 0.5, resolveMedia);
+        expect(html).toContain(`background-image:url(${DATA_URI})`);
+        expect(html).toContain('background-size:cover');
+    });
+
+    test('an image background with no resolver paints nothing', () => {
+        const pages = framePages(buildGoldenDeckScene(), noMedia);
+        expect(renderCanvasPage(pages[2], 0.5)).not.toContain('background-image');
+    });
+
+    test('a deck with no frames has no pages', () => {
+        const empty = { elements: [], frames: [], meta: { background: 'transparent', gridSize: 20 } };
+        expect(framePages(empty, noMedia)).toEqual([]);
     });
 });

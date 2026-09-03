@@ -2,15 +2,23 @@ import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
-import type { DeckData, ImageObject, TextObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_RICHTEXT_PROPS,
     DEFAULT_SKETCH_PROPS,
+    FRAME_FIELDS,
+    FRAME_HEIGHT,
+    FRAME_WIDTH,
+    generateNKeysBetween,
+    serializeBackgroundFill,
     serializeFill,
     solidFill,
+    TRANSPARENT_FILL,
     type VectorElement,
+    type VectorFrame,
+    type VectorRichTextElement,
     type VectorScene,
 } from '@workspace/lib/vector';
 import { common, createLowlight } from 'lowlight';
@@ -24,10 +32,10 @@ import type { Mount } from '../../lib/mount';
 // and the golden hashes in document-transform.test.ts stay valid.
 //
 // Two sizes, mirroring heavy-sheets.ts:
-//   - buildGoldenDocJson() / buildGoldenDeck(): small. Deliberately over the preview
+//   - buildGoldenDocJson() / buildGoldenDeckScene(): small. Deliberately over the preview
 //     cap (24 blocks / 10 slides), carrying one media reference, hostile strings the
-//     sanitizer must defang, and the node/object variants each renderer special-cases.
-//   - buildHeavyDocJson(sections) / buildHeavyDeck(slides, objectsPerSlide): far
+//     sanitizer must defang, and the node/element variants each renderer special-cases.
+//   - buildHeavyDocJson(sections) / buildHeavyDeckScene(frames, elementsPerFrame): far
 //     beyond any preview budget, size-tunable, no media — the render cost the
 //     benchmark measures, not the feature coverage.
 
@@ -205,161 +213,155 @@ export function seedEigendoc(doc: Y.Doc, json: JSONContent): void {
     writeEigendocToYjs(doc, json, docSchema);
 }
 
-function textObject(id: string, slideId: string, overrides: Partial<TextObject>): TextObject {
+// A deck is a canvas of frames: one frame per slide, its elements storing frame-relative
+// coordinates. The two stored fills come from the lib codec rather than hand-written JSON, so a
+// codec change moves the fixture with it.
+const TRANSPARENT_FILL_JSON = serializeFill(TRANSPARENT_FILL);
+const SOLID_FILL_JSON = serializeFill({ type: 'solid', color: '#eef2ff', style: 'solid' });
+
+function deckFrame(id: string, index: string, background: BackgroundFill | null): VectorFrame {
     return {
         id,
-        slideId,
-        type: 'text',
+        index,
+        name: '',
+        width: FRAME_WIDTH,
+        height: FRAME_HEIGHT,
+        background: serializeBackgroundFill(background),
+    };
+}
+
+function deckText(
+    id: string,
+    frameId: string,
+    index: string,
+    over: Partial<VectorRichTextElement>,
+): VectorRichTextElement {
+    return {
+        ...DEFAULT_ELEMENT_PROPS,
+        ...DEFAULT_RICHTEXT_PROPS,
+        id,
+        type: 'richtext',
+        index,
+        frameId,
         x: 160,
         y: 120,
         width: 1600,
         height: 400,
         angle: 0,
-        borderColor: '',
-        borderWidth: 0,
-        borderRadius: 0,
-        commentCardIds: [],
-        text: '<p>Slide</p>',
+        strokeColor: 'transparent',
+        html: '<p>Slide</p>',
+        fill: TRANSPARENT_FILL_JSON,
+        corners: 'curved',
         fontFamily: 'Inter',
         fontSize: 64,
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        textAlign: 'left',
-        verticalAlign: 'top',
         color: '#101010',
-        letterSpacing: 0,
-        lineHeight: 1.2,
-        highlightColor: '',
-        background: null,
-        ...overrides,
+        ...over,
     };
 }
 
-function imageObject(id: string, slideId: string): ImageObject {
-    return {
-        id,
-        slideId,
+// 10 frames: the first four carry the fixture's variety (gradient background + big bold title, an
+// image element, an image background, hostile content on a bare frame) and the rest pad past the
+// preview's 8-page cap so the truncation marker has something to truncate.
+export function buildGoldenDeckScene(): VectorScene {
+    const frames: VectorFrame[] = [];
+    const elements: VectorElement[] = [];
+    const keys = generateNKeysBetween(null, null, 10);
+
+    frames.push(deckFrame('frame-1', keys[0], { type: 'gradient', from: '#ffffff', to: '#dbe7ff', angle: 45 }));
+    elements.push(
+        deckText('el-1', 'frame-1', keys[0], {
+            html: '<p>Deck <strong>title</strong></p>',
+            fontSize: 96,
+            fontWeight: 'bold',
+            textAlign: 'center',
+            verticalAlign: 'center',
+        }),
+    );
+
+    frames.push(deckFrame('frame-2', keys[1], { type: 'solid', color: '#f5f5f5' }));
+    elements.push({
+        ...DEFAULT_ELEMENT_PROPS,
+        id: 'el-2',
         type: 'image',
+        index: keys[1],
+        frameId: 'frame-2',
         x: 320,
         y: 200,
         width: 640,
         height: 360,
         angle: 0,
-        borderColor: '#1a5fb4',
-        borderWidth: 4,
-        borderRadius: 12,
-        commentCardIds: [],
+        strokeColor: '#1a5fb4',
+        strokeWidth: 4,
         mediaName: GOLDEN_MEDIA_NAME,
         objectFit: 'contain',
-    };
-}
+        corners: 'round',
+    });
 
-export function buildGoldenDeck(): DeckData {
-    const deck: DeckData = { slides: {}, objects: {}, slideOrder: [] };
+    frames.push(deckFrame('frame-3', keys[2], { type: 'image', mediaName: GOLDEN_MEDIA_NAME, fit: 'cover' }));
+    elements.push(deckText('el-3', 'frame-3', keys[2], { html: '<p>Background image</p>', color: '#ffffff' }));
 
-    const add = (slideId: string, background: BackgroundFill | null, objects: (TextObject | ImageObject)[]) => {
-        for (const object of objects) deck.objects[object.id] = object;
-        deck.slides[slideId] = { id: slideId, objectIds: objects.map((object) => object.id), background };
-        deck.slideOrder.push(slideId);
-    };
+    // Hostile content: an injected script inside a rich-text body.
+    frames.push(deckFrame('frame-4', keys[3], null));
+    elements.push(deckText('el-4', 'frame-4', keys[3], { html: GOLDEN_DECK_XSS }));
 
-    add('slide-1', { type: 'gradient', from: '#ffffff', to: '#dbe7ff', angle: 45 }, [
-        textObject('obj-1', 'slide-1', {
-            text: '<p>Deck <strong>title</strong></p>',
-            fontSize: 96,
-            fontWeight: 'bold',
-            highlightColor: '#ffe08a',
-            textAlign: 'center',
-            verticalAlign: 'center',
-        }),
-    ]);
-    add('slide-2', { type: 'solid', color: '#f5f5f5' }, [imageObject('obj-2', 'slide-2')]);
-    add('slide-3', { type: 'image', mediaName: GOLDEN_MEDIA_NAME, fit: 'cover' }, [
-        textObject('obj-3', 'slide-3', { text: '<p>Background image</p>', color: '#ffffff' }),
-    ]);
-    add('slide-4', null, [
-        // Hostile content: an injected script and an attribute-breakout color.
-        textObject('obj-4', 'slide-4', { text: GOLDEN_DECK_XSS, color: 'red;" onload="alert(1)' }),
-    ]);
     for (let i = 5; i <= 10; i++) {
         const beyond = i > 8 ? ` ${GOLDEN_BEYOND_CAP}` : '';
-        add(`slide-${i}`, { type: 'solid', color: '#ffffff' }, [
-            textObject(`obj-${i}`, `slide-${i}`, {
-                text: `<p>Slide ${i}${beyond}</p>`,
-                background: { type: 'solid', color: '#eef2ff' },
+        frames.push(deckFrame(`frame-${i}`, keys[i - 1], { type: 'solid', color: '#ffffff' }));
+        elements.push(
+            deckText(`el-${i}`, `frame-${i}`, keys[i - 1], {
+                html: `<p>Slide ${i}${beyond}</p>`,
+                fill: SOLID_FILL_JSON,
                 angle: i === 5 ? 15 : 0,
             }),
-        ]);
+        );
     }
 
-    return deck;
+    return { elements, frames, meta: { background: 'transparent', gridSize: 20 } };
 }
 
-// Text objects only — no media, so the deck renders without a seeded media/ folder.
-// Every slide carries a title plus body objects laid out in a fixed grid.
-export function buildHeavyDeck(slides = 60, objectsPerSlide = 6): DeckData {
-    const deck: DeckData = { slides: {}, objects: {}, slideOrder: [] };
-    for (let s = 1; s <= slides; s++) {
-        const slideId = `heavy-slide-${s}`;
-        const objectIds: string[] = [];
-        for (let o = 0; o < objectsPerSlide; o++) {
-            const object = textObject(`heavy-obj-${s}-${o}`, slideId, {
-                x: 160 + (o % 2) * 880,
-                y: 120 + Math.floor(o / 2) * 300,
-                width: 800,
-                height: 260,
-                text:
-                    o === 0
-                        ? `<p>Slide ${s} — <strong>heavy deck</strong></p>`
-                        : `<p>${HEAVY_SENTENCE} Point ${o} of slide ${s}.</p>`,
-                fontSize: o === 0 ? 96 : 40,
-                fontWeight: o === 0 ? 'bold' : 'normal',
-                background: o % 3 === 0 ? { type: 'solid', color: '#eef2ff' } : null,
-            });
-            deck.objects[object.id] = object;
-            objectIds.push(object.id);
+// Rich text only — no media, so the deck renders without a seeded media/ folder. Every frame carries
+// a title plus body elements laid out in a fixed grid.
+export function buildHeavyDeckScene(frameCount = 60, elementsPerFrame = 6): VectorScene {
+    const frames: VectorFrame[] = [];
+    const elements: VectorElement[] = [];
+    const keys = generateNKeysBetween(null, null, frameCount * elementsPerFrame);
+    for (let f = 1; f <= frameCount; f++) {
+        const frameId = `heavy-frame-${f}`;
+        frames.push(
+            deckFrame(frameId, keys[(f - 1) * elementsPerFrame], {
+                type: 'gradient',
+                from: '#ffffff',
+                to: '#dbe7ff',
+                angle: 45,
+            }),
+        );
+        for (let o = 0; o < elementsPerFrame; o++) {
+            elements.push(
+                deckText(`heavy-el-${f}-${o}`, frameId, keys[(f - 1) * elementsPerFrame + o], {
+                    x: 160 + (o % 2) * 880,
+                    y: 120 + Math.floor(o / 2) * 300,
+                    width: 800,
+                    height: 260,
+                    html:
+                        o === 0
+                            ? `<p>Slide ${f} — <strong>heavy deck</strong></p>`
+                            : `<p>${HEAVY_SENTENCE} Point ${o} of slide ${f}.</p>`,
+                    fontSize: o === 0 ? 96 : 40,
+                    fontWeight: o === 0 ? 'bold' : 'normal',
+                    fill: o % 3 === 0 ? SOLID_FILL_JSON : TRANSPARENT_FILL_JSON,
+                }),
+            );
         }
-        deck.slides[slideId] = {
-            id: slideId,
-            objectIds,
-            background: { type: 'gradient', from: '#ffffff', to: '#dbe7ff', angle: 45 },
-        };
-        deck.slideOrder.push(slideId);
     }
-    return deck;
-}
-
-export function seedSlidesDoc(doc: Y.Doc, deck: DeckData): void {
-    doc.transact(() => {
-        const slidesMap = doc.getMap('slides');
-        const objectsMap = doc.getMap('objects');
-        const slideOrder = doc.getArray<string>('slideOrder');
-
-        for (const [objectId, object] of Object.entries(deck.objects)) {
-            const yObject = new Y.Map<unknown>();
-            for (const [field, value] of Object.entries(object)) yObject.set(field, value);
-            objectsMap.set(objectId, yObject);
-        }
-        for (const [slideId, slide] of Object.entries(deck.slides)) {
-            const ySlide = new Y.Map<unknown>();
-            ySlide.set('id', slide.id);
-            ySlide.set('background', slide.background);
-            const objectIds = new Y.Array<string>();
-            objectIds.push(slide.objectIds);
-            ySlide.set('objectIds', objectIds);
-            slidesMap.set(slideId, ySlide);
-        }
-        slideOrder.push(deck.slideOrder);
-    });
+    return { elements, frames, meta: { background: 'transparent', gridSize: 20 } };
 }
 
 // A follow-up edit in its own transaction, the way an editor session writes one, so
 // data.db carries a real update-row history instead of a single consolidated blob.
 export function editGoldenDeckTitle(doc: Y.Doc, text: string): void {
     doc.transact(() => {
-        const title = doc.getMap('objects').get('obj-1') as Y.Map<unknown>;
-        title.set('text', `<p>${text}</p>`);
+        const title = doc.getMap('elements').get('el-1');
+        if (title instanceof Y.Map) title.set('html', `<p>${text}</p>`);
     });
 }
 
@@ -560,19 +562,44 @@ export function buildGoldenVectorScene(): VectorScene {
     return { elements, frames: [], meta: { background: 'transparent', gridSize: 20 } };
 }
 
-// Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element
-// Y.Map under the `elements` root plus the `meta` root. read-vector reads only the
-// ELEMENT_FIELDS keys, so setting every own field is safe.
+// Write a VectorScene into a Y.Doc the way use-canvas-doc.ts persists one: a per-element Y.Map under
+// `elements`, a per-frame Y.Map under `frames`, and the `meta` root. read-vector reads only the
+// whitelisted keys, so setting every own field is safe.
 export function seedVectorDoc(doc: Y.Doc, scene: VectorScene): void {
     doc.transact(() => {
         const elementsMap = doc.getMap('elements');
+        const framesMap = doc.getMap('frames');
         const metaMap = doc.getMap('meta');
         for (const element of scene.elements) {
             const yElement = new Y.Map<unknown>();
             for (const [field, value] of Object.entries(element)) yElement.set(field, value);
             elementsMap.set(element.id, yElement);
         }
+        for (const frame of scene.frames) {
+            const yFrame = new Y.Map<unknown>();
+            // width/height are constants, never stored — FRAME_FIELDS is the allow-list.
+            for (const field of FRAME_FIELDS) yFrame.set(field, frameField(frame, field));
+            framesMap.set(frame.id, yFrame);
+        }
         metaMap.set('background', scene.meta.background);
         metaMap.set('gridSize', scene.meta.gridSize);
     });
 }
+
+function frameField(frame: VectorFrame, field: string): string {
+    switch (field) {
+        case 'id':
+            return frame.id;
+        case 'index':
+            return frame.index;
+        case 'name':
+            return frame.name;
+        case 'background':
+            return frame.background;
+        default:
+            throw new Error(`unknown frame field: ${field}`);
+    }
+}
+
+// A deck and a drawing are the same document; the alias keeps the call sites readable.
+export const seedDeckDoc = seedVectorDoc;

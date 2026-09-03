@@ -8,9 +8,12 @@ import {
     layerBoxCss,
     layerInnerHtml,
     type MediaResolver,
+    orderByFractionalIndex,
+    parseBackgroundFill,
     round,
     sceneBounds,
     sceneLayers,
+    type VectorFrame,
     type VectorScene,
 } from '@workspace/lib/vector';
 
@@ -52,6 +55,20 @@ export function drawingPage(scene: VectorScene, resolveMedia: MediaResolver): Ca
     };
 }
 
+// One page per frame, in deck order. A frame IS the page — 0,0-based and a fixed size — so unlike a
+// drawing there is no content-bounds arithmetic and no origin offset; an element that overhangs is
+// clipped by the page box, exactly as the live canvas clips it.
+export function framePages(scene: VectorScene, resolveMedia: MediaResolver): CanvasPage[] {
+    return orderByFractionalIndex(scene.frames).map((frame: VectorFrame) => ({
+        width: frame.width,
+        height: frame.height,
+        originX: 0,
+        originY: 0,
+        background: parseBackgroundFill(frame.background),
+        layers: sceneLayers(scene, { frameId: frame.id, resolveMedia }),
+    }));
+}
+
 // A page of the given box with nothing on it, for a caller that must produce a page even when the
 // drawing has no bounds to size one from (the preview cache stores only a non-empty body, so an
 // emptied drawing would otherwise keep serving the preview it had when it still had content).
@@ -65,14 +82,16 @@ function sceneBackground(scene: VectorScene): BackgroundFill | null {
     return isTransparentColor(scene.meta.background) ? null : { type: 'solid', color: scene.meta.background };
 }
 
-// One page: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled once.
-export function renderCanvasPage(page: CanvasPage, scale: number): string {
+// One page: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled once. The
+// resolver is only for a frame's IMAGE background — a drawing's background is a colour token, so
+// those callers pass nothing.
+export function renderCanvasPage(page: CanvasPage, scale: number, resolveMedia?: MediaResolver): string {
     const pageStyle = [
         'position:relative',
         'overflow:hidden',
         `width:${round(page.width * scale)}px`,
         `height:${round(page.height * scale)}px`,
-        ...backgroundCss(page.background),
+        ...backgroundCss(page.background, resolveMedia),
     ];
     // scale first, then translate: the shift is expressed in scene units and rides the scale.
     const sceneStyle = [
