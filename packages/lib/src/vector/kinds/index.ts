@@ -113,3 +113,17 @@ export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
     fontSize: 20,
     color: '#1e1e1e',
 };
+
+// The deck's style table: flat and solid in Inter, the way a presentation reads. Same keys, same
+// meaning — a host's table decides how a NEW element looks, never which kinds exist. There is no text
+// alignment here because StyleDefaults has none: a fresh box starts top-left in both apps.
+export const SLIDES_STYLE_DEFAULTS: StyleDefaults = {
+    strokeColor: '#1e1e1e',
+    strokeWidth: 2,
+    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'solid' }),
+    roughness: 0,
+    corners: 'curved',
+    fontFamily: 'Inter',
+    fontSize: 48,
+    color: '#000000',
+};
