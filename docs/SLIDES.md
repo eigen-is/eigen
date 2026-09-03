@@ -10,7 +10,7 @@
 ```
 Y.Array<string>  "slideOrder"  → ordered slide IDs
 Y.Map            "slides"      → slideId → Y.Map { id, objectIds: Y.Array<string>, background }
-Y.Map            "objects"     → objectId → Y.Map { id, slideId, type, x, y, w, h, rotation, ... }
+Y.Map            "objects"     → objectId → Y.Map { id, slideId, type, x, y, width, height, angle, ... }
 ```
 
 **Where the types live**: `SlideItem`, `SlideObject`, `DeckData`, `pxToPercent`, `SLIDE_ASPECT_RATIO`,
@@ -35,7 +35,7 @@ coordinate space into those units.
 `fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`, `color`,
 `letterSpacing`, `lineHeight`, `highlightColor`, `background`
 **Image**: `mediaName` (file name, resolved at render time), `objectFit`
-**Common (BaseObject)**: `x`, `y`, `w`, `h`, `rotation`, `borderColor`, `borderWidth`, `borderRadius`,
+**Common (BaseObject)**: `x`, `y`, `width`, `height`, `angle`, `borderColor`, `borderWidth`, `borderRadius`,
 `commentCardIds` (plain string array — Y.Map card IDs linking to entries in the `comments` Y.Map)
 
 ### Slide Properties
@@ -73,13 +73,7 @@ and following, or all slides.
 - `getVerticalAlignStyle(verticalAlign)` — flexbox alignment for text vertical positioning
 - `ReadOnlySlideObject` — read-only object renderer (used in presentation mode)
 
-Selection chrome (ring + resize handles + rotate handle) is drawn by
-`slide-selection-chrome.tsx` as a canvas-level overlay above all objects, so it
-never clips on rounded objects. The rotate handle drags to rotate around the
-object's center, Shift snaps to 15°, and a live degree readout shows during the
-drag; resizing a rotated object is rotation-aware (the opposite corner stays
-pinned). Alt/Opt-drag an object (or a multi-selection) drops a duplicate and
-leaves the original in place.
+Selection chrome (ring + resize handles + rotate handle) is the shared `ObjectTransform` (`packages/ui/src/components/transform/object-transform.tsx`), mounted by `slide-canvas.tsx` for a single selection as a canvas-level overlay above all objects, so it never clips on rounded objects. The rotate handle drags to rotate around the object's center, Shift snaps to 15°, and a live degree readout shows during the drag; resizing a rotated object is rotation-aware (the opposite corner stays pinned). A multi-selection shows a dashed union ring that drags as a group and has no resize or rotate handles. Alt/Opt-drag an object (or a multi-selection) drops a duplicate and leaves the original in place.
 
 ## Comments & Mobile
 
@@ -97,12 +91,10 @@ panel column takes over the screen when a pane is open, the same as the other do
 
 - `editor.tsx` — main editor, presentation mode, clipboard, panel wiring
 - `slide-canvas.tsx` + `slide-object.tsx` — editing surface and object rendering
-- `slide-selection-chrome.tsx` + `transform-geometry.ts` — selection overlay and the pure rotated-resize math
 - `slide-panel.tsx` / `slide-properties-panel.tsx` — left thumbnails, right properties + slide background
+- `toolbar.tsx`, `slide-thumbnail.tsx`, `slide-object-menu.tsx`, `search-deck.ts` — toolbar, the scaled live-DOM thumbnail, the object context menu, the ⌘F match collector
 - `normalize-deck.ts` — Yjs normalization (dedup objects, default fontFamily)
-- `hooks/` — `use-deck.ts` (Yjs document + comment links), `use-object-drag.ts` (drag/resize/rotate +
-  alt-drag duplicate), `use-snap-lines.ts`, `use-marquee-select.ts`, `use-slide-dnd.ts`,
-  `use-active-comments.ts`
+- `hooks/` — `use-deck.ts` (Yjs document + comment links), `use-object-drag.ts` (move, group move and alt-drag duplicate; resize and rotate live in `ObjectTransform`), `use-snap-lines.ts`, `use-marquee-select.ts`, `use-slide-dnd.ts`, `use-active-comments.ts`, `use-slides-presence.ts` (awareness: cursor, selection, active slide), `use-slides-doc-search.ts` (the ⌘F controller over `search-deck.ts`)
 
 Shared: `packages/ui/src/components/transform/object-transform.tsx` (the selection/resize/rotate chrome, used by docs + slides).
 
