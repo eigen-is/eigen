@@ -2,7 +2,13 @@
 // cannot be half-added.
 
 import { serializeFill, TRANSPARENT_FILL } from '../fill';
-import { BASE_ELEMENT_FIELDS, type ElementOfType, type VectorElementType } from '../types';
+import {
+    BASE_ELEMENT_FIELDS,
+    DEFAULT_ELEMENT_PROPS,
+    type ElementOfType,
+    type VectorElementBase,
+    type VectorElementType,
+} from '../types';
 import { arrowKind } from './arrow';
 import { diamondKind } from './diamond';
 import { ellipseKind } from './ellipse';
@@ -35,6 +41,14 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
 // table. hasOwn, not `in`: `'constructor' in ELEMENT_KINDS` is true and would dispatch to Object's.
 export function isVectorElementType(v: unknown): v is VectorElementType {
     return typeof v === 'string' && Object.hasOwn(ELEMENT_KINDS, v);
+}
+
+// The shared base props a NEW element of this kind is created with, under the kind's own overrides —
+// the two the creation path spreads before the kind's own fields. The panel's reset affordances read
+// the same table, so "reset" restores exactly what "create" would have given: an image's border resets
+// to none, a rectangle's to the shared ink colour.
+export function baseDefaultsFor(type: VectorElementType): Pick<VectorElementBase, keyof typeof DEFAULT_ELEMENT_PROPS> {
+    return { ...DEFAULT_ELEMENT_PROPS, ...ELEMENT_KINDS[type].baseDefaults };
 }
 
 // Toolbar order (Excalidraw's), the order ELEMENT_FIELDS walks the kinds in. Every type appears

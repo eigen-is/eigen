@@ -16,6 +16,7 @@ import {
     arrowShapeFields,
     arrowShapeOf,
     type Box,
+    baseDefaultsFor,
     type Corners,
     computeArrange,
     DEFAULT_FONT_FAMILY,
@@ -34,6 +35,7 @@ import {
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
     serializeFill,
+    TRANSPARENT_COLOR,
     TRANSPARENT_FILL,
     type VectorArrowElement,
     type VectorElement,
@@ -154,6 +156,13 @@ export function CanvasPropertiesPanel({
     // Fill needs a fillable kind, and an OPEN linear element has nothing to fill.
     const showFill = all((el) => caps(el).fill && (!isLinearElement(el) || isClosedPath(parsePoints(el.points))));
     const showStroke = all((el) => caps(el).stroke);
+    // A border can be switched off only where the element still has a body without it; a line or an
+    // arrow IS its stroke, so its colour row offers no None swatch.
+    const strokeOptional = all((el) => caps(el).strokeOptional);
+    // What the Stroke row's reset restores: the default CREATING this kind would have given, so an
+    // image's border resets to none instead of to the shared ink colour. A mixed selection follows the
+    // first element's kind.
+    const strokeReset = has ? baseDefaultsFor(selectedElements[0].type).strokeColor : '';
     const showFillStyle = all((el) => caps(el).fillStyle);
     const showSketch = all((el) => caps(el).roughness);
     // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
@@ -378,7 +387,12 @@ export function CanvasPropertiesPanel({
 
             {showStroke && (
                 <PropertySection title="Stroke">
-                    <ColorRow label="Color" value={strokeColor} onChange={(c) => applyToAll({ strokeColor: c })} />
+                    <ColorRow
+                        label="Color"
+                        value={strokeColor}
+                        onChange={(c) => applyToAll({ strokeColor: c || strokeReset })}
+                        allowNone={strokeOptional}
+                    />
                     <PropertyRow label="Width">
                         <MergedSelect
                             value={numToStr(strokeWidth)}
@@ -506,7 +520,7 @@ export function CanvasPropertiesPanel({
                     <ColorRow
                         label="Background"
                         value={isTransparentColor(meta.background) ? '' : meta.background}
-                        onChange={(c) => updateMeta({ background: c || 'transparent' })}
+                        onChange={(c) => updateMeta({ background: c || TRANSPARENT_COLOR })}
                         showReset
                     />
                 </PropertySection>

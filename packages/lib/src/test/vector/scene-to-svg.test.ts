@@ -436,6 +436,28 @@ describe('sceneToSvg', () => {
         expect(svg).toContain('stroke="#ff0000"');
     });
 
+    test('a transparent stroke paints the fill and no outline at all', () => {
+        // The border switched off in the panel: roughjs is told stroke 'none', so it generates no outline
+        // sets — an invisible stroke="transparent" path would still cost bytes and print at some scales.
+        for (const type of ['rectangle', 'diamond', 'ellipse'] as const) {
+            const svg = sceneToSvg(
+                scene([
+                    goldenShape({
+                        id: 's',
+                        type,
+                        strokeColor: 'transparent',
+                        fill: solidFill('#ff0000'),
+                        fillStyle: 'solid',
+                    }),
+                ]),
+            );
+            expect([type, svg.includes('fill="#ff0000"')]).toEqual([type, true]);
+            expect([type, svg.includes('stroke="transparent"')]).toEqual([type, false]);
+            // every outline path carries fill="none"; only the fillPath survives here
+            expect([type, svg.includes('fill="none"')]).toEqual([type, false]);
+        }
+    });
+
     test('emits stroke-dasharray for a dashed stroke', () => {
         const svg = sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', strokeStyle: 'dashed' })]));
         expect(svg).toContain('stroke-dasharray=');

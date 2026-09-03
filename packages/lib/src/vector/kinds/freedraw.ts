@@ -36,6 +36,7 @@ export const freedrawKind = defineKind<VectorLinearElement>({
         roughness: true,
         corners: false,
         stroke: true,
+        strokeOptional: false,
         typography: false,
         objectFit: false,
         bindable: false,

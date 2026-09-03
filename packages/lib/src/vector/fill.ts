@@ -6,20 +6,23 @@
 import type { BackgroundFill, Fill } from '../types/background';
 import { prop } from './types';
 
-export const TRANSPARENT_FILL: Fill = { type: 'solid', color: 'transparent' };
+// "Paint nothing" as a bare colour: a fill with no paint, a scene with no background, a shape or box
+// whose border is switched off. One token, so the predicate and every writer agree on the spelling.
+export const TRANSPARENT_COLOR = 'transparent';
+
+export const TRANSPARENT_FILL: Fill = { type: 'solid', color: TRANSPARENT_COLOR };
 
 // Colours come from the ColorPicker: hex (#rgb/#rrggbb/#rrggbbaa) or the 'transparent' sentinel.
 // Anything else is rejected; this closes `url(...)` paint-server smuggling into export.
 const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 export function isColorToken(v: unknown): v is string {
-    return typeof v === 'string' && (v === 'transparent' || HEX_COLOR.test(v));
+    return typeof v === 'string' && (v === TRANSPARENT_COLOR || HEX_COLOR.test(v));
 }
 
-// "Paint nothing" — the sentinel a bare colour string carries too, so the scene background and an
-// element's fill answer the question through one predicate.
+// The scene background, an element's fill and a switched-off border all answer through this predicate.
 export function isTransparentColor(color: string): boolean {
-    return color === 'transparent';
+    return color === TRANSPARENT_COLOR;
 }
 
 export function isTransparentFill(fill: Fill): boolean {

@@ -1,7 +1,7 @@
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
     arrowsBoundTo,
-    DEFAULT_ELEMENT_PROPS,
+    baseDefaultsFor,
     DEFAULT_SCENE_META,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
@@ -61,10 +61,10 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
         width: 0,
         height: 0,
         angle: 0,
-        ...DEFAULT_ELEMENT_PROPS,
-        // The kind's overrides of the shared base paint: rich text and images use the stroke as a
-        // border, so a fresh one is unframed until the user picks a stroke colour.
-        ...ELEMENT_KINDS[type].baseDefaults,
+        // The shared base paint under the kind's overrides: rich text and images use the stroke as a
+        // border, so a fresh one is unframed until the user picks a stroke colour. The panel's reset
+        // rows read the same helper, so a reset restores what creation gave.
+        ...baseDefaultsFor(type),
         ...ELEMENT_KINDS[type].defaults(VECTOR_STYLE_DEFAULTS),
     };
 }

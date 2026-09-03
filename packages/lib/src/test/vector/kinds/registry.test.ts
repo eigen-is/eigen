@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { getElementBounds } from '../../../vector/geometry';
 import {
+    baseDefaultsFor,
     CREATION_TOOL_TYPES,
     ELEMENT_FIELDS,
     ELEMENT_KINDS,
@@ -189,6 +190,15 @@ describe('capabilities agree with the stored fields', () => {
         }
     });
 
+    test('the stroke is optional exactly on the kinds that still have a body without it', () => {
+        // NOT derivable from `fill`: a line and a freedraw stroke fill when their path closes (fill:
+        // true) yet ARE their stroke, and an image's body is pixels rather than a Fill (fill: false).
+        const optional = Object.entries(ELEMENT_KINDS)
+            .filter(([, kind]) => kind.capabilities.strokeOptional)
+            .map(([type]) => type);
+        expect(optional.sort()).toEqual(['diamond', 'ellipse', 'image', 'rectangle', 'richtext']);
+    });
+
     test('every kind paints a stroke', () => {
         // strokeColor/Width/Style are BASE fields, so there is nothing to derive this from — it is
         // pinned instead: shapes and linear elements draw the stroke, image and rich text use it as a
@@ -202,8 +212,7 @@ describe('capabilities agree with the stored fields', () => {
 describe('baseDefaults', () => {
     test('a new rich text box or image paints no border until a stroke colour is picked', () => {
         for (const type of ['richtext', 'image'] as const) {
-            const fresh = { ...DEFAULT_ELEMENT_PROPS, ...ELEMENT_KINDS[type].baseDefaults };
-            expect([type, fresh.strokeColor]).toEqual([type, 'transparent']);
+            expect([type, baseDefaultsFor(type).strokeColor]).toEqual([type, 'transparent']);
         }
         const out = ELEMENT_KINDS.richtext.render(richtext({ id: 'rt', ...ELEMENT_KINDS.richtext.baseDefaults }), {});
         expect('html' in out && out.style).not.toContain('border:');
@@ -212,6 +221,18 @@ describe('baseDefaults', () => {
     test('a kind that draws its stroke keeps the shared base defaults', () => {
         for (const type of ['rectangle', 'diamond', 'ellipse', 'freedraw', 'line', 'arrow'] as const) {
             expect([type, ELEMENT_KINDS[type].baseDefaults]).toEqual([type, {}]);
+            expect([type, baseDefaultsFor(type).strokeColor]).toEqual([type, DEFAULT_ELEMENT_PROPS.strokeColor]);
+        }
+    });
+
+    test('baseDefaultsFor answers what creating the kind would give it — what a panel reset restores', () => {
+        // The reset bug: an image whose border was coloured must reset to none, not to the shared ink
+        // colour. The panel reads this, the creation path spreads it, so the two cannot drift.
+        for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
+            expect([type, baseDefaultsFor(kind.type)]).toEqual([
+                type,
+                { ...DEFAULT_ELEMENT_PROPS, ...kind.baseDefaults },
+            ]);
         }
     });
 });

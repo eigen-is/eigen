@@ -39,6 +39,11 @@ export type Capabilities = {
     // draw the stroke, image and rich text use it as their border. It is a capability rather than an
     // ungated panel section so a future kind that paints no stroke has one place to say so.
     stroke: boolean;
+    // Whether the stroke may be switched OFF (the Stroke colour row offers a None swatch). True where
+    // the element still has a body without it — a shape's fill, an image's pixels, a text box's text.
+    // Not derivable from `fill`: a line fills only when its path closes yet IS its stroke, and an
+    // image's body is pixels rather than a Fill.
+    strokeOptional: boolean;
     // The rich-text typography section (font, weight, alignment, spacing, colour, padding). An arrow's
     // label fonts are NOT this: they are measured client-side through the panel's own label path.
     typography: boolean;

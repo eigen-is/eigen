@@ -3,7 +3,7 @@
 
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
-import { gradientVector, isTransparentFill, parseFill } from '../fill';
+import { gradientVector, isTransparentColor, isTransparentFill, parseFill } from '../fill';
 import { isClosedPath, type Point } from '../geometry';
 import { cornerRadius, diamondOutline, outlinePath, rectOutline, sharpDiamondOffset } from '../outline';
 import { isLinearElement, type VectorArrowElement, type VectorLinearElement, type VectorShapeElement } from '../types';
@@ -86,6 +86,9 @@ export function baseRoughOptions(
 
 function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
     const options = baseRoughOptions(el, continuousPath);
+    // A shape with its border switched off (capabilities.strokeOptional): roughjs's own 'none' skips
+    // the outline sets entirely, so the fill still paints and no invisible path is serialized.
+    if (isTransparentColor(el.strokeColor)) options.stroke = 'none';
     options.fillStyle = el.fillStyle;
     options.fill = fillPaint(el);
     if (el.type === 'ellipse') options.curveFitting = 1;
