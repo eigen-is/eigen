@@ -48,6 +48,7 @@ const RICHTEXT_BASE: Omit<VectorRichTextElement, 'id' | 'type'> = {
     letterSpacing: 0,
     lineHeight: 1.2,
     highlightColor: 'transparent',
+    padding: 0,
 };
 
 export function shape(over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorElement {

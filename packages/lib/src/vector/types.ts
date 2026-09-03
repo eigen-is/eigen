@@ -113,6 +113,7 @@ export type VectorRichTextElement = VectorElementBase &
         letterSpacing: number;
         lineHeight: number;
         highlightColor: string;
+        padding: number; // px inset between the box edge and the text; the box keeps its stored size
     };
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE

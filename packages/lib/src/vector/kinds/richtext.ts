@@ -40,6 +40,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         'letterSpacing',
         'lineHeight',
         'highlightColor',
+        'padding',
     ],
     capabilities: {
         fill: true,
@@ -72,6 +73,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         letterSpacing: 0,
         lineHeight: 1.2,
         highlightColor: 'transparent',
+        padding: 0,
     }),
     read: (src, base) => ({
         ...base,
@@ -89,9 +91,11 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         verticalAlign: oneOf(src.get('verticalAlign'), VERTICAL_ALIGNS, 'top'),
         color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
         highlightColor: color(src.get('highlightColor'), 'transparent'),
-        // Bounded so a hostile value can't blow every peer's layout: ±200px tracking, 0.5-10x leading.
+        // Bounded so a hostile value can't blow every peer's layout: ±200px tracking, 0.5-10x leading,
+        // 0-200px inset.
         letterSpacing: clampNum(src.get('letterSpacing'), -200, 200, 0),
         lineHeight: clampNum(src.get('lineHeight'), 0.5, 10, 1.2),
+        padding: clampNum(src.get('padding'), 0, 200, 0),
     }),
     bounds: (el) => getElementBounds(el),
     hitTest: (el, point) => hitTestBox(el, point),
@@ -109,7 +113,7 @@ export const richTextKind = defineKind<VectorRichTextElement>({
 export function richTextStyle(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
-    return [
+    const style = [
         'display:flex',
         'flex-direction:column',
         `justify-content:${justify}`,
@@ -124,5 +128,9 @@ export function richTextStyle(el: VectorRichTextElement): string {
         `color:${el.color}`,
         `letter-spacing:${round(el.letterSpacing)}px`,
         `line-height:${round(el.lineHeight)}`,
-    ].join(';');
+    ];
+    // border-box so the inset eats into the stored width/height instead of growing the box. Both
+    // declarations are omitted at padding 0, so an unpadded box's style string is unchanged.
+    if (el.padding > 0) style.push(`padding:${round(el.padding)}px`, 'box-sizing:border-box');
+    return style.join(';');
 }

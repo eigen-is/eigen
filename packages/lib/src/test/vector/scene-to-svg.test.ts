@@ -65,6 +65,7 @@ export function buildGoldenScene(): VectorScene {
             letterSpacing: 0,
             lineHeight: 1.2,
             highlightColor: 'transparent',
+            padding: 0,
         },
         {
             ...DEFAULT_ELEMENT_PROPS,
@@ -402,6 +403,7 @@ describe('sceneToSvg', () => {
                     letterSpacing: 0,
                     lineHeight: 1.2,
                     highlightColor: 'transparent',
+                    padding: 12,
                 },
             ]),
         );
@@ -409,6 +411,8 @@ describe('sceneToSvg', () => {
         // consumer's own seam), while the style attribute's quotes are escaped.
         expect(svg).toContain('<p>a<b>bold</b></p>');
         expect(svg).toContain('font-family:&apos;Excalifont&apos;, cursive');
+        // padding shrinks the text area inside the stored box rather than growing it
+        expect(svg).toContain('padding:12px;box-sizing:border-box');
     });
 
     test('XML-escapes hostile shape attribute values (stroke color)', () => {

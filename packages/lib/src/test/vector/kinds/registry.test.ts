@@ -111,6 +111,11 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.image.capabilities.objectFit).toBe(true);
     });
 
+    test('rich text carries a padding field, unpadded by default', () => {
+        expect(ELEMENT_KINDS.richtext.fields).toContain('padding');
+        expect(ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS).padding).toBe(0);
+    });
+
     test('searchText covers rich text and arrow labels only, tags stripped', () => {
         expect(
             ELEMENT_KINDS.richtext.searchText(richtext({ id: 'x', html: '<p>hello <strong>world</strong></p>' })),

@@ -339,6 +339,16 @@ describe('readVectorFromDoc', () => {
         expect(txt).toMatchObject({ fontSize: 4 });
     });
 
+    test('clamps richtext padding to the box range', () => {
+        const doc = docWith((elements) => {
+            writeElement(elements, 'ok', { type: 'richtext', index: 'a0', html: 'x', padding: 12 });
+            writeElement(elements, 'neg', { type: 'richtext', index: 'a1', html: 'x', padding: -5 });
+            writeElement(elements, 'huge', { type: 'richtext', index: 'a2', html: 'x', padding: 1e9 });
+        });
+        const padding = readVectorFromDoc(doc).elements.map((el) => el.type === 'richtext' && el.padding);
+        expect(padding).toEqual([12, 0, 200]);
+    });
+
     test('clears a binding whose target is absent or not bindable (doc untouched)', () => {
         const doc = docWith((elements) => {
             writeElement(elements, 'txt', { type: 'richtext', index: 'a0', html: 'x' });
@@ -451,6 +461,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         letterSpacing: 2,
         lineHeight: 1.5,
         highlightColor: '#ffff00',
+        padding: 16,
     });
     const image = base({ id: 'img1', type: 'image', mediaName: 'photo.png', corners: 'curved', objectFit: 'cover' });
     const line = base({
@@ -516,6 +527,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
                 'letterSpacing',
                 'lineHeight',
                 'highlightColor',
+                'padding',
             ],
         },
         { record: image, fields: [...BASE_FIELDS, 'mediaName', 'corners', 'objectFit'] },

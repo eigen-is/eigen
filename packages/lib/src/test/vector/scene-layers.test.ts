@@ -37,6 +37,13 @@ describe('sceneLayers', () => {
         expect('html' in content && content.style).toContain('font-family');
     });
 
+    test('padding rides the box style, and only when the box has some', () => {
+        const padded = sceneLayers(scene([richtext({ id: 't', html: '<p>hi</p>', padding: 12 })]))[0].content;
+        expect('html' in padded && padded.style).toContain('padding:12px;box-sizing:border-box');
+        const plain = sceneLayers(scene([richtext({ id: 't', html: '<p>hi</p>' })]))[0].content;
+        expect('html' in plain && plain.style).not.toContain('padding');
+    });
+
     test('frame mode returns that frame’s elements only, already frame-relative', () => {
         const framed = {
             ...scene([

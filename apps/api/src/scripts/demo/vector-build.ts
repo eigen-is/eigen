@@ -365,6 +365,7 @@ function buildRichText(id: string, text: string, box: RichTextBox): VectorRichTe
         fontStyle: 'normal',
         textDecoration: 'none',
         letterSpacing: 0,
+        padding: 0,
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
         highlightColor: 'transparent',
