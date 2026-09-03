@@ -64,7 +64,7 @@ describe('getTextPreviewMode', () => {
         expect(getTextPreviewMode('image/png', 'photo.png')).toBeNull();
     });
 
-    test('eigenvector is an image preview, not a text preview', () => {
-        expect(getTextPreviewMode('application/eigenvector', 'drawing.eigenvector')).toBeNull();
+    test('eigenvector is a text preview — the compositor renders an HTML body', () => {
+        expect(getTextPreviewMode('application/eigenvector', 'drawing.eigenvector')).toBe('eigenvector');
     });
 });

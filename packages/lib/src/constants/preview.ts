@@ -30,7 +30,18 @@ const EXIFTOOL_EXTENSIONS = new Set([
     '.heif',
 ]);
 
-export type TextPreviewMode = 'markdown' | 'plaintext' | 'code' | 'eigendoc' | 'eigenslides' | 'eigensheets';
+export type TextPreviewMode =
+    | 'markdown'
+    | 'plaintext'
+    | 'code'
+    | 'eigendoc'
+    | 'eigenslides'
+    | 'eigensheets'
+    | 'eigenvector';
+
+// The logical width a canvas preview body is composed at. The drive hero scales a preview from its
+// intrinsic width (drive-preview.tsx), so a drawing of any size previews through one known number.
+export const CANVAS_PREVIEW_WIDTH = 960;
 
 function getExtension(fileName: string): string {
     const dot = fileName.lastIndexOf('.');
@@ -41,6 +52,7 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     if (mimeType === 'application/eigendoc') return 'eigendoc';
     if (mimeType === 'application/eigenslides') return 'eigenslides';
     if (mimeType === 'application/eigensheets') return 'eigensheets';
+    if (mimeType === 'application/eigenvector') return 'eigenvector';
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';
@@ -50,8 +62,8 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
 }
 
 // The subset of text preview modes whose RAW BODY is indexed by drive-wide content
-// search. Eigen container modes (eigendoc/eigenslides/eigensheets) are excluded here —
-// their bodies come from the Yjs loaders via the content-reindex sweep, not a raw read.
+// search. Eigen container modes (eigendoc/eigenslides/eigensheets/eigenvector) are excluded
+// here — their bodies come from the Yjs loaders via the content-reindex sweep, not a raw read.
 export function isSearchableTextFile(mimeType: string, fileName: string): boolean {
     const mode = getTextPreviewMode(mimeType, fileName);
     return mode === 'markdown' || mode === 'plaintext' || mode === 'code';
