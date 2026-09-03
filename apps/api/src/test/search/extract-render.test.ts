@@ -3,13 +3,13 @@ import * as Y from 'yjs';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
 import {
-    buildGoldenDeck,
+    buildGoldenDeckScene,
     buildGoldenDocJson,
     buildGoldenVectorScene,
     GOLDEN_VECTOR_LABEL,
     GOLDEN_VECTOR_TEXT,
+    seedDeckDoc,
     seedEigendoc,
-    seedSlidesDoc,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 import {
@@ -42,16 +42,36 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
-    test('eigenslides: text objects in slide order, image objects skipped', async () => {
+    test('eigenslides: rich text in slide order, tag-free, image elements skipped', async () => {
         const doc = new Y.Doc();
-        seedSlidesDoc(doc, buildGoldenDeck());
+        seedDeckDoc(doc, buildGoldenDeckScene());
 
         const { text, warnings } = await extractCollabText('eigenslides', doc);
-        expect(text).toContain('Deck <strong>title</strong>');
-        expect(text).toContain('Background image');
+        // Reading order is the deck's, and the collector strips tags — the old one indexed raw HTML.
+        expect(text.indexOf('Deck title')).toBeLessThan(text.indexOf('Background image'));
+        expect(text).not.toContain('<strong>');
+        expect(text).toContain('Deck title');
+        // The image element carries no words — its media name is not indexable text.
         expect(text).not.toContain('pixel.png');
         expect(warnings).toEqual([]);
         doc.destroy();
+    });
+
+    // The reader orders elements by fractional index across the whole scene, so a deck whose
+    // z-indices run against its frame order is the only thing that proves the collector reads
+    // frame by frame rather than trusting the reader's array.
+    test('eigenslides: frame order wins over scene-wide z-order', async () => {
+        const scene = buildGoldenDeckScene();
+        const reversed = [...scene.elements].reverse();
+        const doc = new Y.Doc();
+        seedDeckDoc(doc, {
+            ...scene,
+            elements: scene.elements.map((el, i) => ({ ...el, index: reversed[i].index })),
+        });
+
+        const { text } = await extractCollabText('eigenslides', doc);
+        expect(text.indexOf('Deck title')).toBeLessThan(text.indexOf('Background image'));
+        expect(text.startsWith('Deck title\n')).toBe(true);
     });
 
     test('eigensheets: replayed ops and stored values are indexed — formulas stay uncomputed', async () => {
