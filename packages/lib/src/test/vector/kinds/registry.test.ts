@@ -7,7 +7,13 @@ import {
     TOOL_ORDER,
     VECTOR_STYLE_DEFAULTS,
 } from '../../../vector/kinds';
-import { BASE_ELEMENT_FIELDS, isVectorElementType } from '../../../vector/types';
+import {
+    BASE_ELEMENT_FIELDS,
+    DEFAULT_ELEMENT_PROPS,
+    isVectorElementType,
+    type VectorElementBase,
+    type VectorRichTextElement,
+} from '../../../vector/types';
 import { richtext, shape } from '../element-factories';
 
 const TYPES = ['rectangle', 'diamond', 'ellipse', 'image', 'richtext', 'freedraw', 'line', 'arrow'] as const;
@@ -114,6 +120,32 @@ describe('ELEMENT_KINDS', () => {
     test('rich text carries a padding field, unpadded by default', () => {
         expect(ELEMENT_KINDS.richtext.fields).toContain('padding');
         expect(ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS).padding).toBe(0);
+    });
+
+    test('a kind defaults to its OWN element, so a consumer spreads them instead of re-listing fields', () => {
+        const base: VectorElementBase = {
+            ...DEFAULT_ELEMENT_PROPS,
+            id: 't',
+            type: 'richtext',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 40,
+            angle: 0,
+            index: 'a0',
+        };
+        // The annotation is the pin: `defaults` typed as Record<string, unknown> would leave every kind
+        // field missing here, and a typo'd override would not be caught.
+        const el: VectorRichTextElement = {
+            ...base,
+            ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
+            type: 'richtext',
+            html: '<p>hi</p>',
+            textAlign: 'center',
+        };
+        expect(Object.keys(el).sort()).toEqual([...BASE_ELEMENT_FIELDS, ...ELEMENT_KINDS.richtext.fields].sort());
+        expect(el.textAlign).toBe('center');
+        expect(el.lineHeight).toBe(1.2);
     });
 
     test('searchText covers rich text and arrow labels only, tags stripped', () => {

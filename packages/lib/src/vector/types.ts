@@ -171,6 +171,12 @@ export type VectorElement =
     | VectorLinearElement
     | VectorArrowElement;
 
+// The element type a `type` key materializes as, used to narrow the registry per kind. Keyed by
+// MEMBERSHIP rather than `Extract<VectorElement, { type: K }>`, because freedraw and line share one
+// element type whose `type` is the pair — Extract would match neither.
+type OfType<T, K> = T extends { type: infer U } ? (K extends U ? T : never) : never;
+export type ElementOfType<K extends VectorElementType> = OfType<VectorElement, K>;
+
 // A forward binding: an anchor as a proportion (fixedPoint) of the target shape's local w/h, so the
 // anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
 export type Binding = { elementId: string; fixedPoint: [number, number] };

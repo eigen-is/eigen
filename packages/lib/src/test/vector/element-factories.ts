@@ -1,7 +1,7 @@
 // The shared element fixtures for the vector suites. A row is the base fields plus the kind's own
 // style defaults, so a fixture never re-lists what the registry already owns.
 
-import { VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
+import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import {
     DEFAULT_ELEMENT_PROPS,
     type VectorElement,
@@ -21,34 +21,16 @@ const BASE = {
 };
 
 // Typed as the rectangle so `corners` is present, spread-only so the ellipse case doesn't trip the
-// excess-property check on it.
+// excess-property check on it. A fixed seed, since the kind's own default (0) is the writer's placeholder.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...BASE,
-    fill: VECTOR_STYLE_DEFAULTS.fill,
-    fillStyle: VECTOR_STYLE_DEFAULTS.fillStyle,
-    roughness: VECTOR_STYLE_DEFAULTS.roughness,
+    ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
     seed: 1,
-    corners: VECTOR_STYLE_DEFAULTS.corners,
 };
 
 const RICHTEXT_BASE: Omit<VectorRichTextElement, 'id' | 'type'> = {
     ...BASE,
-    fill: VECTOR_STYLE_DEFAULTS.fill,
-    fillStyle: VECTOR_STYLE_DEFAULTS.fillStyle,
-    corners: VECTOR_STYLE_DEFAULTS.corners,
-    html: '',
-    fontFamily: VECTOR_STYLE_DEFAULTS.fontFamily,
-    fontSize: VECTOR_STYLE_DEFAULTS.fontSize,
-    fontWeight: 'normal',
-    fontStyle: 'normal',
-    textDecoration: 'none',
-    textAlign: 'left',
-    verticalAlign: 'top',
-    color: VECTOR_STYLE_DEFAULTS.color,
-    letterSpacing: 0,
-    lineHeight: 1.2,
-    highlightColor: 'transparent',
-    padding: 0,
+    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
 };
 
 export function shape(over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorElement {

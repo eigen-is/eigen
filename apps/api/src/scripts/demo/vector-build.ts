@@ -16,6 +16,7 @@ import {
     DEFAULT_OBJECT_FIT,
     DEFAULT_SKETCH_PROPS,
     ELEMENT_FIELDS,
+    ELEMENT_KINDS,
     elbowBindPoint,
     followBindings,
     generateNKeysBetween,
@@ -336,8 +337,7 @@ function buildText(t: SitePlanText, i: number): VectorRichTextElement {
 }
 
 // Both text builders go through one place: the box the seeder measured plus the typography the drawing
-// is authored in. Written out rather than spread from ELEMENT_KINDS.richtext.defaults() because that
-// returns Record<string, unknown> — spreading it would drop every field's type.
+// is authored in, over the rich-text kind's own defaults.
 type RichTextBox = {
     x: number;
     y: number;
@@ -353,22 +353,13 @@ type RichTextBox = {
 function buildRichText(id: string, text: string, box: RichTextBox): VectorRichTextElement {
     return {
         ...baseElement(id),
+        ...ELEMENT_KINDS.richtext.defaults(SITE_PLAN_STYLE),
         ...box,
         type: 'richtext',
         strokeWidth: 0, // text, not a bordered box
         html: toParagraphs(text),
-        fill: SITE_PLAN_STYLE.fill,
-        fillStyle: SITE_PLAN_STYLE.fillStyle,
-        corners: SITE_PLAN_STYLE.corners,
-        fontFamily: SITE_PLAN_STYLE.fontFamily,
-        fontWeight: 'normal',
-        fontStyle: 'normal',
-        textDecoration: 'none',
-        letterSpacing: 0,
-        padding: 0,
         // The line height measureExcalifont sized the box with, so the text fills exactly that box.
         lineHeight: getFontMetrics(SITE_PLAN_STYLE.fontFamily).lineHeight,
-        highlightColor: 'transparent',
     };
 }
 

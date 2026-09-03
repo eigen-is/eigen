@@ -1,7 +1,7 @@
 // The registry. TypeScript forces every member of VectorElementType to have an entry, so a new kind
 // cannot be half-added.
 
-import { BASE_ELEMENT_FIELDS, type VectorElementType } from '../types';
+import { BASE_ELEMENT_FIELDS, type ElementOfType, type VectorElementType } from '../types';
 import { arrowKind } from './arrow';
 import { diamondKind } from './diamond';
 import { ellipseKind } from './ellipse';
@@ -24,7 +24,11 @@ export type {
 export { defineKind } from './kind';
 export { richTextStyle } from './richtext';
 
-export const ELEMENT_KINDS: Record<VectorElementType, ElementKind> = {
+// Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
+// field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
+export type ElementKindRegistry = { [K in VectorElementType]: ElementKind<ElementOfType<K>> };
+
+export const ELEMENT_KINDS: ElementKindRegistry = {
     rectangle: rectangleKind,
     diamond: diamondKind,
     ellipse: ellipseKind,

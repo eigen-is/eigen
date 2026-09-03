@@ -9,7 +9,7 @@
 
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
-import type { Corners, FillStyle, VectorElement, VectorElementBase, VectorElementType } from '../types';
+import type { Corners, FillStyle, VectorElement, VectorElementBase } from '../types';
 
 // What a host's new elements look like: vector draws rough and hatched in Excalifont, slides flat and
 // solid in Inter. One table per app, not a per-kind fork.
@@ -58,13 +58,18 @@ export type RenderContext = {
 // a div (elementToSvg wraps it in a foreignObject for the SVG arms).
 export type RenderOutput = { svg: string } | { html: string; style: string };
 
+// A kind's OWN stored fields: its element minus the base every kind shares. Distributive, so a
+// union-typed T (the generic registry lookup) yields the union of the members' field sets, not the
+// handful of keys they happen to share.
+export type KindFields<T extends VectorElement> = T extends VectorElement ? Omit<T, keyof VectorElementBase> : never;
+
 export type KindSpec<T extends VectorElement> = {
     type: T['type'];
     is(el: VectorElement): el is T;
     // The stored keys BEYOND the base set. ELEMENT_FIELDS is BASE_ELEMENT_FIELDS plus every kind's.
     fields: readonly string[];
     capabilities: Capabilities;
-    defaults(style: StyleDefaults): Omit<T, keyof VectorElementBase>;
+    defaults(style: StyleDefaults): KindFields<T>;
     read(src: FieldSource, base: VectorElementBase): T | null;
     bounds(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
@@ -77,12 +82,15 @@ export type KindSpec<T extends VectorElement> = {
     searchText(el: T): string;
 };
 
-export type ElementKind = {
-    type: VectorElementType;
+// The registry entry. `defaults` and `read` keep the kind's own element type, so a consumer that names
+// a kind (`ELEMENT_KINDS.richtext`) composes a typed element instead of re-listing its fields; every
+// other method takes the union, so a generic `ELEMENT_KINDS[el.type]` dispatch stays callable.
+export type ElementKind<T extends VectorElement = VectorElement> = {
+    type: T['type'];
     fields: readonly string[];
     capabilities: Capabilities;
-    defaults(style: StyleDefaults): Record<string, unknown>;
-    read(src: FieldSource, base: VectorElementBase): VectorElement | null;
+    defaults(style: StyleDefaults): KindFields<T>;
+    read(src: FieldSource, base: VectorElementBase): T | null;
     bounds(el: VectorElement, route?: Point[]): Bounds;
     hitTest(el: VectorElement, point: Point, threshold: number, route?: Point[]): boolean;
     outline(el: VectorElement, inflate: number): OutlineShape;
@@ -124,7 +132,7 @@ function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
 // Widen a narrow-typed kind into the union-typed registry entry. Each method re-narrows through the
 // kind's own guard, so no call site needs a cast and a mis-dispatch degrades quietly instead of
 // throwing on a render path.
-export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementKind {
+export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementKind<T> {
     return {
         type: spec.type,
         fields: spec.fields,
