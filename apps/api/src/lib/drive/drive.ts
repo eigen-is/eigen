@@ -11,7 +11,6 @@ import {
     parseOwnerId,
 } from '@workspace/lib/types';
 import {
-    DRIVE_EXTENSIONS,
     type DriveACL,
     type DriveACLDelta,
     type DriveAccessCheckResult,
@@ -23,6 +22,7 @@ import {
     type EffectiveMember,
     type EigenDocType,
     isContainerType,
+    withEigenExtension,
 } from '@workspace/lib/types/drive';
 import {
     type ClientFileEventType,
@@ -282,15 +282,25 @@ export default class Drive {
             throw new ApiError(403, 'No write permission');
         }
 
-        const safeName = `${name}${DRIVE_EXTENSIONS[type]}`;
+        const safeName = withEigenExtension(name, type);
         const pathId = await mount.createFolder(parentId, safeName, type);
-        if (type === DRIVE_TYPE_CHAT) {
-            await ChatRoom.create(this, mountId, pathId);
-            if (user) {
-                await this.seedCommentRow(mountId, pathId, parentId, user.email);
+        // Roll the container back when provisioning fails, so a transient storage outage can't
+        // leave a never-announced row that occupies the name and 503s on every open. mount.deletePath
+        // (not Drive.deletePath) for the same reason provisionManagedDbs uses it.
+        try {
+            if (type === DRIVE_TYPE_CHAT) {
+                await ChatRoom.create(this, mountId, pathId);
+                if (user) {
+                    await this.seedCommentRow(mountId, pathId, parentId, user.email);
+                }
+            } else {
+                await CollabDocument.create(this, mountId, pathId);
             }
-        } else {
-            await CollabDocument.create(this, mountId, pathId);
+        } catch (err) {
+            await mount.deletePath(pathId).catch((rollbackErr) => {
+                console.warn(`create rollback failed for ${pathId}:`, rollbackErr);
+            });
+            throw err;
         }
         const created = await mount.getPath(pathId);
         if (!created) throw new ApiError(500, `Failed to create ${type}`);

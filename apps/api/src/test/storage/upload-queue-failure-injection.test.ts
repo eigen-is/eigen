@@ -1,16 +1,19 @@
-import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { MountConfig, S3Config } from '@workspace/lib/types';
-import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
 import { buildStorageKey } from '../../lib/mount/helpers';
-import { Mount } from '../../lib/mount/mount';
-import type { StorageBackend, StorageFile } from '../../lib/storage';
-import { LocalStorage } from '../../lib/storage/local-storage';
+import type { Mount } from '../../lib/mount/mount';
 import { setShutdownDrainDeadline } from '../../lib/sync';
+import {
+    countBackingRows,
+    createFaultMount,
+    type FaultStorage,
+    provisionDoc,
+    shrinkPutTimeout,
+    waitFor,
+} from '../fault-storage-helpers';
 
 // Failure-injection pass over the write-behind upload queue (docs/SYNC.md, upload-queue.ts):
 // process death mid-drain, corrupted staged bytes, and the orphaned-PUT class — a PUT that
@@ -20,23 +23,6 @@ import { setShutdownDrainDeadline } from '../../lib/sync';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-uq-failure-injection-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
-
-const DUMMY_S3: S3Config = {
-    endpoint: 'http://127.0.0.1:1',
-    bucket: 'test',
-    accessKeyId: 'x',
-    secretAccessKey: 'y',
-    region: 'us-east-1',
-    prefix: '',
-};
-
-function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(config: DatabaseConfig<S>, relativePath: string) => {
-        const db = new ManagedDatabase(config, join(baseDir, relativePath));
-        await db.open(0);
-        return db;
-    };
-}
 
 const docSchema = {
     items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }),
@@ -49,116 +35,12 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
-// S3-like backend over a LocalStorage with parkable writes. Unlike sync-resilience's FaultStorage
-// (all-or-nothing hangWrites), each parked write can be released INDIVIDUALLY and in any order —
-// exactly the orphaned-PUT shape: the queue's Promise.race timeout has long since "failed" the
-// attempt, but the request still completes server-side later, with the bytes it captured at send
-// time. Bodies are read up-front like a real PUT streaming the request body, so unlinking the
-// staged copy after send never aborts an in-flight upload.
-class FaultStorage implements StorageBackend {
-    failNextWrites = 0;
-    parkWrites = false;
-    writeCount = 0;
-    private parked: Array<{ land: () => Promise<void>; release: () => void }> = [];
-
-    constructor(private readonly inner: LocalStorage) {}
-
-    get parkedCount(): number {
-        return this.parked.length;
-    }
-
-    // Complete the oldest parked write: its captured bytes land on the backing store NOW — after
-    // whatever else the test let happen in between — and its (long-forgotten) promise resolves.
-    async releaseOldestParked(): Promise<void> {
-        const oldest = this.parked.shift();
-        if (!oldest) throw new Error('no parked write to release');
-        await oldest.land();
-        oldest.release();
-    }
-
-    read(key: string): StorageFile {
-        return this.inner.read(key);
-    }
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        this.writeCount++;
-        const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
-        if (this.failNextWrites > 0) {
-            this.failNextWrites--;
-            throw new Error('injected upload failure (503)');
-        }
-        if (this.parkWrites) {
-            const written = bytes instanceof ArrayBuffer ? bytes.byteLength : bytes.length;
-            await new Promise<void>((release) => {
-                this.parked.push({ land: async () => void (await this.inner.write(key, bytes)), release });
-            });
-            return written;
-        }
-        return this.inner.write(key, bytes);
-    }
-    async delete(key: string): Promise<boolean> {
-        return this.inner.delete(key);
-    }
-    async exists(key: string): Promise<boolean> {
-        return this.inner.exists(key);
-    }
-    async size(key: string): Promise<number | null> {
-        return this.inner.size(key);
-    }
-}
-
 const createdMounts: Mount[] = [];
 
-// Same `id` ⇒ same baseDir + backing dir ⇒ a second call simulates a process restart sharing the
-// prior mount's metadata.db, staging dir, and "S3" object store (as in sync-resilience.test.ts).
 function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
-    const config: MountConfig = {
-        id,
-        name: id,
-        storageType: 's3',
-        isDefault: false,
-        s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
-    };
-    const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
-    const fault = new FaultStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-    (mount as unknown as { storage: StorageBackend }).storage = fault;
+    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
     createdMounts.push(mount);
     return { mount, fault };
-}
-
-function shrinkPutTimeout(mount: Mount, ms: number): void {
-    (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = ms;
-}
-
-async function countRowsInFile(file: StorageFile | null): Promise<number | null> {
-    if (!file || !(await file.exists())) return null;
-    const verifyPath = join(TEST_DIR, `verify-${Math.random().toString(36).slice(2)}.db`);
-    await Bun.write(verifyPath, await file.arrayBuffer());
-    const verify = new Database(verifyPath);
-    const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
-    verify.close();
-    return row.c;
-}
-
-// Rows in the object that actually reached the backing store — deliberately NOT mount.readFile,
-// which is freshest-first and would mask a regressed stored object behind staged bytes.
-async function countBackingRows(mount: Mount, id: string): Promise<number | null> {
-    const m = mount as unknown as { storage: StorageBackend; getStorageKey(id: string): Promise<string> };
-    return countRowsInFile(m.storage.read(await m.getStorageKey(id)));
-}
-
-async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
-    const rootId = (await mount.getRootFolder())!.id;
-    const containerId = await mount.createFolder(rootId, `doc-${Math.random().toString(36).slice(2)}`, 'doc');
-    const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
-    return { containerId, dataDbId };
-}
-
-async function waitFor(cond: () => boolean | Promise<boolean>, timeoutMs = 2_000): Promise<void> {
-    const deadline = Date.now() + timeoutMs;
-    while (!(await cond())) {
-        if (Date.now() > deadline) throw new Error('waitFor timed out');
-        await Bun.sleep(10);
-    }
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
@@ -209,7 +91,7 @@ describe('process death mid-drain', () => {
         await m2.mount.init();
         await m2.mount.drainPendingUploads({ flushNow: true });
         expect(m2.mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(m2.mount, dataDbId)).toBe(2);
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
         expect(readdirSync(m2.mount.stagingDir)).toHaveLength(0);
 
         // The dead process's PUT now lands late. Same key, same staged bytes as the replay —
@@ -218,7 +100,7 @@ describe('process death mid-drain', () => {
         // resume would misread m2's ack (row gone) as a cancel and delete the object.
         m1.mount.uploadQueue?.close();
         await m1.fault.releaseOldestParked();
-        expect(await countBackingRows(m2.mount, dataDbId)).toBe(2);
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
     });
 
     test('death after the PUT landed but before the ack bookkeeping: replay re-PUTs, converges, cleans up', async () => {
@@ -239,14 +121,14 @@ describe('process death mid-drain', () => {
         expect(staged).toHaveLength(1);
         m1.fault.failNextWrites = 0;
         await m1.fault.write(key, Bun.file(join(m1.mount.stagingDir, staged[0])));
-        expect(await countBackingRows(m1.mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBe(1);
 
         // Restart: the leftover row replays; the duplicate PUT is idempotent and the row clears.
         const m2 = createS3Mount('death-pre-ack');
         await m2.mount.init();
         await m2.mount.drainPendingUploads({ flushNow: true });
         expect(m2.mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(m2.mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
         expect(readdirSync(m2.mount.stagingDir)).toHaveLength(0);
     });
 });
@@ -262,7 +144,7 @@ describe('corrupted staged copy', () => {
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
         await m1.mount.drainPendingUploads({ flushNow: true });
-        expect(await countBackingRows(m1.mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBe(1);
 
         // Outage: a new write {1,2} stages + queues but never acks.
         m1.fault.failNextWrites = 9999;
@@ -289,7 +171,7 @@ describe('corrupted staged copy', () => {
 
         // The object is left stale-good: the {2} tail edit is lost with its corrupt staged copy,
         // but the good {1} object survives and the doc reopens cleanly.
-        expect(await countBackingRows(m2.mount, dataDbId)).toBe(1);
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
         const reopened = await m2.mount.openDatabase(docConfig, dataDbId);
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
     });
@@ -329,14 +211,15 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         expect(m1.mount.pendingUploadCount).toBe(0);
         expect(readdirSync(m1.mount.stagingDir)).toHaveLength(0);
         expect(existsSync(m1.mount.getTempPath(dataDbId))).toBe(false);
-        expect(await countBackingRows(m1.mount, dataDbId)).toBe(2); // newest bytes are live
+        expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBe(2); // newest bytes are live
 
         // The orphaned {1} PUT now completes server-side, after the newer object landed. Its
         // settlement re-enqueues the retained {1,2} bytes; wait for that repair to land and ack
         // before simulating the restart (in a real restart the old process is gone).
         await m1.fault.releaseOldestParked();
         await waitFor(
-            async () => (await countBackingRows(m1.mount, dataDbId)) === 2 && m1.mount.pendingUploadCount === 0,
+            async () =>
+                (await countBackingRows(m1.mount, dataDbId, TEST_DIR)) === 2 && m1.mount.pendingUploadCount === 0,
         );
 
         // A later restart+reopen converges on the newest synced bytes {1,2}.
@@ -439,7 +322,7 @@ describe('supersede while a PUT is in flight (no timeout involved)', () => {
         await mount.drainPendingUploads({ flushNow: true });
 
         expect(mount.pendingUploadCount).toBe(0);
-        expect(await countBackingRows(mount, dataDbId)).toBe(2);
+        expect(await countBackingRows(mount, dataDbId, TEST_DIR)).toBe(2);
         await mount.closeDatabase(dataDbId);
         await mount.drainPendingUploads({ flushNow: true });
         expect(readdirSync(mount.stagingDir)).toHaveLength(0); // both staged copies cleaned up

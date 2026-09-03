@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { LoadingState, RequestAccessView } from '@workspace/ui';
+import { EigenDocRouteStatus, RequestAccessView } from '@workspace/ui';
 import { eigenDocEditorValidateSearch } from '@workspace/ui/components/drive';
 import { DriveAccessDialog } from '@workspace/ui/components/drive/drive-access-dialog';
 import { useEigenDocEditorRoute, useLatchedDocSearchTerm } from '@workspace/ui/hooks/use-eigen-doc-editor-route';
@@ -16,7 +16,9 @@ function SheetView() {
     const initialSearchTerm = useLatchedDocSearchTerm(q);
     const {
         docInfo,
-        isLoading,
+        isError,
+        error,
+        refetch,
         path,
         mediaFolderId,
         chatFolderId,
@@ -25,8 +27,8 @@ function SheetView() {
         setAccessDialogOpen,
     } = useEigenDocEditorRoute(ownerId, mountId, pathId);
 
-    if (isLoading) return <LoadingState />;
-    if (!docInfo?.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
+    if (!docInfo) return <EigenDocRouteStatus isError={isError} error={error} onRetry={refetch} />;
+    if (!docInfo.canRead || !path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
     return (
         <>

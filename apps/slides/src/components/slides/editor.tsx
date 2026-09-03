@@ -38,7 +38,7 @@ import {
     NUDGE_STEP,
     NUDGE_STEP_LARGE,
 } from '@workspace/lib/vector';
-import { Column, ColumnLayout, EmptyState, LoadingState, useLayout } from '@workspace/ui';
+import { CollabLoadingState, Column, ColumnLayout, EmptyState, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
@@ -237,6 +237,7 @@ function SlideEditorInner({
         deck,
         isSynced,
         loaded,
+        storageUnavailable,
         activeSlideId,
         setActiveSlideId,
         addSlide,
@@ -967,7 +968,7 @@ function SlideEditorInner({
 
     // Latched: a WS blip keeps the editor mounted (transient selection/preview state survives) — see
     // useCollabDoc. `isSynced` still drives presence + seed-on-sync, unchanged.
-    if (!loaded) return <LoadingState />;
+    if (!loaded) return <CollabLoadingState storageUnavailable={storageUnavailable} />;
 
     if (isPresenting && activeSlide) {
         return (

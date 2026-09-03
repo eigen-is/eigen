@@ -45,9 +45,9 @@ Reliability is the first-class requirement, not a follow-up.
 
 **Non-goals**
 
-- **Degraded-storage / slow-S3 E2E.** That failure class (2026-07-03 nbg1 incident) is the subject
-  of the concurrent create-resilience proposal (`PROPOSAL_CREATE_RESILIENCE.md`); this suite runs on
-  local storage only and never depends on S3.
+- **Degraded-storage / slow-S3 E2E.** That failure class (2026-07-03 nbg1 incident) belongs to the
+  create/open resilience work and its `EIGEN_STORAGE_FAULT` harness ([STORAGE.md](../STORAGE.md#storage-fault-injection-dev-only));
+  this suite runs on local storage only and never depends on S3.
 - Cross-browser matrix. Chromium only in v1; Firefox/WebKit add runtime and flake surface for little
   collab-specific signal.
 - Visual regression / pixel comparison. VERIFICATION.md's screenshot-reading stays the tool for

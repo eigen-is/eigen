@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/lib/auth';
-import { invalidateComments, useCreateChat } from '@workspace/lib/chat';
+import { invalidateComments } from '@workspace/lib/chat';
+import { useCreateDriveItem } from '@workspace/lib/drive';
 import { nanoid } from 'nanoid';
 import { useCallback, useRef } from 'react';
 import * as Y from 'yjs';
@@ -40,7 +41,7 @@ export function useCreateCommentCard(
     mapName: 'comments' | 'tasks' = 'comments',
 ) {
     const queryClient = useQueryClient();
-    const createChat = useCreateChat(ownerId, mountId);
+    const createChat = useCreateDriveItem('chat');
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
     const resolveAttachments = useResolveCardAttachments(ownerId, mountId, mediaFolderId);
@@ -62,7 +63,12 @@ export function useCreateCommentCard(
             const attachments = input.attachments?.length ? await resolveAttachments(input.attachments) : undefined;
 
             const fileName = `comment-${Date.now()}-${nanoid(6)}`;
-            const chatPath = await createChatRef.current.mutateAsync({ parentId: chatFolderId, fileName });
+            const chatPath = await createChatRef.current.mutateAsync({
+                ownerId,
+                mountId,
+                parentId: chatFolderId,
+                fileName,
+            });
 
             const card: CommentCard = {
                 id: nanoid(10),

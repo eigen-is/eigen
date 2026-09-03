@@ -62,6 +62,21 @@ without reading data into memory. Callers stream or buffer as needed (e.g., `fil
 | `rename?`   | `Promise<void>`     | LocalStorage only                            |
 | `deleteDir?`| `Promise<boolean>`  | LocalStorage only                            |
 
+### Storage fault injection (dev only)
+
+`EIGEN_STORAGE_FAULT` (`apps/api/src/lib/storage/fault-storage.ts`) wraps every mount's backend with a delegating one that injects a single fault, so create/open behaviour can be verified against degraded storage without a real outage.
+
+| Value | Effect |
+|-------|--------|
+| `exists-throw` | every `exists()` rejects with `ApiError(503, 'storage unavailable')` — the shape `mount/document-db.ts` raises for an unreachable object |
+| `exists-delay=<ms>` | every `exists()` resolves after `<ms>` |
+
+`read()`/`readRange()` return lazy handles, so the GET itself happens outside the backend and can't be delayed there. The wrapper returns the backend unchanged when the variable is unset, and it stays inert in production (`PRODUCTION=1` / `NODE_ENV=production`) regardless of what the variable says.
+
+```bash
+EIGEN_STORAGE_FAULT=exists-delay=45000 bun --filter '*' dev
+```
+
 **LocalFilesystem** (`apps/api/src/lib/core/local-filesystem.ts`): Separate class for Mail/Contacts with extended fs
 methods (list, listDirs, stat, dirSize, watch, etc). Exposed as `home.fs`.
 
@@ -88,6 +103,16 @@ file-level snapshots described below. Both collab docs and chats opt into it.
 frame grab), each in a Worker that loads sharp, capped by a semaphore so a large export can't spawn one worker
 per file. Supports JPEG, PNG, WebP, GIF, TIFF, HEIC (via heic-convert fallback), and exiftool embedded preview
 extraction. Stored as WebP.
+
+## Creating a container
+
+`Drive.create` (`apps/api/src/lib/drive/drive.ts`) is atomic. It creates the container folder, then provisions it (`ChatRoom.create` or `CollabDocument.create`, plus the comment row a card chat seeds). When provisioning throws, the container row is removed with `mount.deletePath` and the error propagates. That delete is the silent one: the row was never announced, so no SSE goes out, and on a remote mount it cancels the container's queued uploads, so a staged PUT cannot resurrect the object. The name is free again, so an immediate retry with the same name starts clean. A rollback that itself fails is logged and leaves a container nobody has seen; that leftover is what the integrity sweep's orphaned-container scan is for ([PROPOSAL_DATA_INTEGRITY.md](proposals/PROPOSAL_DATA_INTEGRITY.md)).
+
+### Create reconcile
+
+Storage that has gone slow can make a create look failed when it is not: the request times out or 503s while the server keeps writing, and the row lands seconds later. The two create hooks (`useCreateDriveItem` for the drive dialog, comment cards and stickies boards, and `useCreateChatRoom` for the chat wizard) post through `createWithReconcile` (`packages/lib/src/core/drive/reconcile-create.ts`) with a 15 s abort signal. Before posting, the hook lists the folder once and keeps the ids it sees. On an indeterminate failure (abort, network error, 5xx) it polls that listing 3 times, 5 s apart, for the name it sent (the chat wizard can create without naming a parent — the route resolves the lazily-created `chats` folder, an id no client endpoint hands out — so it polls the mount-scoped chat listing instead). A row matches when it carries the expected name and an id the snapshot did not hold: that is exactly "created by this request, or by a concurrent create of the same name", with no clock on either side. A same-name sibling that predates the create is in the snapshot, so it can never pass for ours. A match resolves the mutation as a success. Both the snapshot and the polls run with retries off — the poll loop is the retry, and the listing query's own retry would double the requests against storage that is already struggling. If the snapshot itself fails there is no honest anchor, so reconcile is skipped. A 4xx is never reconciled either: it is the server's definitive no (409 duplicate name). A miss throws `CreateUnconfirmedError`, whose message is the toast copy `onMutationError` shows.
+
+The chat wizard has one honest miss. Its `dedupeName` creates let the server suffix a colliding name (`Name (2)`), so the row that lands is not the name the client sent and no poll could find it. Those creates pass no `expectedName`, so they take no snapshot and run no polls — only the error classification still applies: a 4xx surfaces exactly as the server returned it, and anything indeterminate becomes `CreateUnconfirmedError`, so a chat that may well be in the list reads as slow storage rather than a raw timeout.
 
 ## User Data Layout
 

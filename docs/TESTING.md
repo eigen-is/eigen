@@ -9,7 +9,7 @@ Every workspace has exactly one test folder, `<workspace>/src/test/`. Inside it,
 - **A test covering one module mirrors that module's path.** `packages/lib/src/vector/snap.ts` is tested by `packages/lib/src/test/vector/snap.test.ts`. This is the shape in `packages/lib`, `packages/ui`, `packages/sheet`, `apps/slides` and `apps/stickies`, where tests genuinely target single modules.
 - **A test covering a feature end-to-end gets a feature folder.** `apps/api/src/test/mail/`, `.../drive/`, `.../caldav/`. Most of the API suite boots a Home and drives the real API, so its subject is a feature, not a module — there is no module path to mirror.
 
-Shared harness files (`setup.ts`, `preload.ts`, `contacts-test-helpers.ts`, `fixtures/`, `bench/`) sit at the `src/test/` root, not in a feature folder.
+Shared harness files (`setup.ts`, `preload.ts`, `contacts-test-helpers.ts`, `fault-storage-helpers.ts`, `fixtures/`, `bench/`) sit at the `src/test/` root, not in a feature folder. `fault-storage-helpers.ts` is the one storage double for the resilience suites: a `StorageBackend` over a real `LocalStorage` whose writes and `exists()` probes can fail, stall, hang or be parked, plus `createFaultMount` to build a Mount on it.
 
 Two rules are enforced by `bun scripts/check-test-layout.ts`, which runs as part of `bun run check`:
 

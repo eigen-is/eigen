@@ -3,7 +3,7 @@ import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPane
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { ActiveComments, CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, ColumnLayout, LoadingState, useLayout } from '@workspace/ui';
+import { CollabLoadingState, Column, ColumnLayout, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
@@ -196,7 +196,7 @@ export function VectorEditor({
                     >
                         {/* Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence. */}
                         {!doc.loaded ? (
-                            <LoadingState />
+                            <CollabLoadingState storageUnavailable={doc.storageUnavailable} />
                         ) : (
                             <div className="flex h-full w-full overflow-hidden">
                                 <div className="flex-1 min-w-0">

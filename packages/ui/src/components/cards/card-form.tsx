@@ -1,3 +1,4 @@
+import { wasToasted } from '@workspace/lib/api-error';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import type { ChatAttachment } from '@workspace/lib/types/chat';
 import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
@@ -114,6 +115,11 @@ export function CardForm({
         setIsSubmitting(true);
         try {
             await onSave(patch, attachments, assigneeArg);
+        } catch (error) {
+            // Mutation failures are already toasted by their hook — swallow them and leave the form
+            // open so the user can retry. Anything else (a Yjs write, an anchor callback) is silent
+            // otherwise, so it must surface.
+            if (!wasToasted(error)) throw error;
         } finally {
             setIsSubmitting(false);
         }

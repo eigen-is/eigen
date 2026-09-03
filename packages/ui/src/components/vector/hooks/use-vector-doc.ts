@@ -149,6 +149,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         undoManager,
         synced,
         loaded,
+        storageUnavailable,
     } = useCollabDoc({
         ownerId,
         mountId,
@@ -366,5 +367,6 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         // Latched first-load flag — the editor gates its loading screen on this, not `synced`, so a
         // WS blip never unmounts the canvas (transient selection/preview state survives).
         loaded,
+        storageUnavailable,
     };
 };
