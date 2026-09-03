@@ -1,7 +1,7 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
 // does it draw", so a renderer that positions elements itself (absolutely positioned divs) and one that
-// serializes an SVG document agree by construction. Written for the phase-2 layer canvas — nothing
-// renders from these layers yet; sceneToSvg is the only shipped renderer and it places elements itself.
+// serializes an SVG document agree by construction. The live canvas draws one elementLayer per element
+// (ElementLayer); sceneLayers is the same pass over a whole scene, which the phase-3 compositor consumes.
 
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';

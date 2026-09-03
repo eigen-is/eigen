@@ -4,7 +4,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { Link as LinkIcon, Pencil } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../dialog';
 import { Separator } from '../separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../tooltip';
 
@@ -104,6 +104,8 @@ export function NoteCardDialog({
             }
         >
             <DialogTitle className="flex-1">{title}</DialogTitle>
+            {/* Radix requires a description on every DialogContent; the body below is the card itself. */}
+            <DialogDescription className="sr-only">Card details, attachments and replies.</DialogDescription>
         </DialogHeader>
     );
 
