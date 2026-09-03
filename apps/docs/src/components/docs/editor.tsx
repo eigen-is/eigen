@@ -617,7 +617,7 @@ const TiptapEditor = ({
         for (const item of items) {
             if (item.type === 'text') {
                 insertEigenTextItem(item);
-            } else {
+            } else if (item.type === 'image') {
                 const { width } = readClipboardBox(item);
                 await handleEigenImagePaste(item, width);
             }

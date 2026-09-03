@@ -66,7 +66,26 @@ export type EigenClipboardImageItem = {
     meta?: Record<string, unknown>; // app-private extras only (never geometry)
 };
 
-export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem;
+// A canvas selection as NATIVE elements: whole stored records (the ELEMENT_FIELDS scalars), so a
+// canvas→canvas paste restores exactly what was copied — including every field a future kind adds, which
+// the old per-kind `meta.vector` carrier had to re-list by hand and kept losing (rich text's colour, most
+// recently). Consumers that cannot place elements ignore this item and read the image / text items beside
+// it, or the `svg` flavour. Coordinates are the STORED ones (scene coordinates on an infinite canvas,
+// frame-relative inside a frame) — the one item type that carries position, because pasting a drawing back
+// into a drawing is a paste IN PLACE, not "at the app's default spot".
+export type EigenClipboardElementsItem = {
+    type: 'elements';
+    elements: Record<string, string | number | boolean>[];
+    // '' when the source was an infinite canvas. A paste into the SAME frame offsets the copy; one into a
+    // different frame lands in place.
+    sourceFrameId: string;
+    // The selection's bounding box, so every item on the wire carries both dimensions and
+    // `parseEigenJson`'s filter needs no special case.
+    width: number;
+    height: number;
+};
+
+export type EigenClipboardItem = EigenClipboardTextItem | EigenClipboardImageItem | EigenClipboardElementsItem;
 
 export type EigenClipboardData = {
     version: 1;

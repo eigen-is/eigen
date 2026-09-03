@@ -76,7 +76,8 @@ export function buildTextClipboardItem(args: {
 // Read the typed geometry off any item. Consumers size/rotate from this — there is no `meta` sniff
 // to fall back to (geometry is only ever on the typed fields).
 export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
-    return { width: item.width, height: item.height, angle: item.angle };
+    // The elements item's box is the selection's bounds — a whole set, so it carries no rotation.
+    return { width: item.width, height: item.height, angle: item.type === 'elements' ? undefined : item.angle };
 }
 
 // A text item with a real payload, not an empty carrier. Vector shapes ride the wire as empty text

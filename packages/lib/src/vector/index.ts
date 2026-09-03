@@ -1,4 +1,5 @@
 export * from './arrange';
+export * from './clipboard';
 export * from './comments';
 export { elbowBindPoint, redockBindingsForElbow } from './elbow-heading';
 export * from './elbow-pins';
