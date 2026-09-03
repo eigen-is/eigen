@@ -1,3 +1,4 @@
+import { getBackgroundStyle } from '@workspace/lib/background';
 import {
     classifyPaste,
     clipboardTextItemHasContent,
@@ -33,7 +34,9 @@ import {
     DEFAULT_FONT_FAMILY,
     DEFAULT_FONT_SIZE,
     elementBounds,
+    elementsInFrame,
     fitImageSize,
+    frameSnapExtras,
     getElementsBounds,
     type ImageSize,
     isLinearElement,
@@ -41,6 +44,7 @@ import {
     type MarqueeMode,
     marqueeMode,
     orderByFractionalIndex,
+    parseBackgroundFill,
     parsePoints,
     resizeLinear,
     SNAP_SCREEN_THRESHOLD,
@@ -51,14 +55,11 @@ import {
     type TextAlign,
     type VectorArrowElement,
     type VectorElement,
-    type VectorMeta,
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
 import { Image as ImageIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { WebsocketProvider } from 'y-websocket';
-import type * as Y from 'yjs';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useFilePasteTarget } from '../../hooks/use-file-paste-target';
@@ -70,7 +71,7 @@ import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
-import type { NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
+import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
 import { applyZOrder, deleteSelection, duplicateSelection, useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import type { PublishCursor } from './hooks/use-canvas-presence';
 import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
@@ -96,6 +97,7 @@ import {
     type VectorClipMeta,
 } from './tools/clipboard';
 import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
+import { homeToFrame } from './tools/frame-scope';
 import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
@@ -159,8 +161,13 @@ export type CanvasImageInsert = {
 };
 
 type CanvasEditorProps = {
-    elements: VectorElement[];
-    meta: VectorMeta;
+    // The host's document: the scene and every writer, taken whole rather than threaded prop by prop.
+    doc: CanvasDoc;
+    // 'infinite' is the drawing canvas; 'frame' bounds it to one page — the canvas then renders,
+    // hit-tests, snaps and creates inside `frameId` only, and a pan can't push the page off screen.
+    viewport: 'infinite' | 'frame';
+    // The active frame, '' on the infinite canvas — the home stamped on every new element.
+    frameId?: string;
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
     // Tool lock (Q / padlock): a placement keeps the current tool active; threaded like `tool`, toggled here on Q.
@@ -170,20 +177,6 @@ type CanvasEditorProps = {
     // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
     ownerId: string;
     mountId: string;
-    addElement: (partial: NewVectorElement) => string | undefined;
-    // Batch add (paste) — the whole set in ONE transact / one undo step.
-    addElements: (partials: NewVectorElement[]) => string[];
-    updateElement: (id: string, fields: VectorElementPatch) => void;
-    // Non-undoable single-element update — the cross-mount pending→real image swap, so the paste stays
-    // one undo step (peers still receive it).
-    updateElementUntracked: (id: string, fields: VectorElementPatch) => void;
-    updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
-    deleteElements: (ids: string[]) => void;
-    // Non-undoable delete — cleanup of a failed optimistic image insert, so the failed paste/drop
-    // leaves no undo step that resurrects a broken pending element.
-    deleteElementsUntracked: (ids: string[]) => void;
-    duplicateElements: (ids: string[], dx: number, dy: number) => string[];
-    undoManager: Y.UndoManager | null;
     // Selection is lifted to the editor so the properties panel and canvas share one source (the
     // slides editor/canvas idiom).
     selectedIds: string[];
@@ -192,9 +185,8 @@ type CanvasEditorProps = {
     // Aspect lock, shared with the properties-panel checkbox: ObjectTransform's 'aspect-default'
     // (Shift frees) when on, 'free' when off.
     aspectLocked: boolean;
-    // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
+    // Awareness: doc.provider drives the CursorLayer's own subscription; publishCursor pushes the
     // local pointer's scene position (throttled in the editor's use-canvas-presence).
-    provider: WebsocketProvider | null;
     publishCursor: PublishCursor;
     // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
     imageInsertRef?: { current: CanvasImageInsert | null };
@@ -205,8 +197,9 @@ type CanvasEditorProps = {
 // exactly one Yjs transact fires per completed gesture (UX-RULING 5), with stopCapturing() at each
 // gesture start so one gesture = one undo step.
 export function CanvasEditor({
-    elements,
-    meta,
+    doc,
+    viewport,
+    frameId = '',
     tool,
     setTool,
     toolLocked,
@@ -214,23 +207,42 @@ export function CanvasEditor({
     canEdit,
     ownerId,
     mountId,
-    addElement,
-    addElements,
-    updateElement,
-    updateElementUntracked,
-    updateElements,
-    deleteElements,
-    deleteElementsUntracked,
-    duplicateElements,
-    undoManager,
     selectedIds,
     setSelectedIds,
     toggle,
     aspectLocked,
-    provider,
     publishCursor,
     imageInsertRef,
 }: CanvasEditorProps) {
+    const {
+        elements,
+        meta,
+        frames,
+        addElement: addElementRaw,
+        addElements: addElementsRaw,
+        updateElement,
+        updateElementUntracked,
+        updateElements,
+        deleteElements,
+        deleteElementsUntracked,
+        duplicateElements,
+        undoManager,
+        provider,
+    } = doc;
+    // The page this canvas is bounded to, if any: its extent drives the fit/clamp/snap math and its
+    // background paints — and clips — the layers.
+    const frame = viewport === 'frame' ? frames.find((f) => f.id === frameId) : undefined;
+    // In frame mode the viewport's scene space IS the frame's space (elements store frame-relative
+    // coordinates), so an insert needs no translation — only the home frame stamped on it. Every
+    // insert path (drag-create, image drop/paste/picker, clipboard) goes through these two.
+    const addElement = useCallback(
+        (partial: NewVectorElement) => addElementRaw(homeToFrame(partial, frameId)),
+        [addElementRaw, frameId],
+    );
+    const addElements = useCallback(
+        (partials: NewVectorElement[]) => addElementsRaw(partials.map((p) => homeToFrame(p, frameId))),
+        [addElementsRaw, frameId],
+    );
     const {
         containerRef,
         clientToScene,
@@ -243,7 +255,11 @@ export function CanvasEditor({
         resetZoom,
         frozenRef,
         zoom,
-    } = useViewport();
+    } = useViewport({
+        mode: viewport,
+        frame: frame ? { width: frame.width, height: frame.height } : undefined,
+        resetKey: frameId,
+    });
     // Coarse pointers (finger/stylus) get a fatter hit-slop and drive the touch gesture policy below.
     const coarse = useIsCoarsePointer();
     // Images resolve/upload through the container's media/ folder (the provider the editor wraps
@@ -297,11 +313,19 @@ export function CanvasEditor({
     // "Some text surface owns the keyboard and the pointer" — every gate that used to read `editing`.
     const textEditing = editing !== null || richTextEditId !== null;
 
-    const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
+    // The elements this canvas renders, hit-tests, marquees, snaps to and selects-all: one frame's in
+    // frame mode, the whole scene otherwise. NOT the comment/search paths — both must reach an element
+    // on another frame, so both read the host's `elements`.
+    const visibleElements = useMemo(
+        () => (viewport === 'frame' ? elementsInFrame(elements, frameId) : elements),
+        [viewport, elements, frameId],
+    );
+    const ordered = useMemo(() => orderByFractionalIndex(visibleElements), [visibleElements]);
 
-    // All elements by id (committed scene) — the map an elbow arrow reads (arrowRoute) to resolve its
-    // bound shapes and derive its route. Hit/marquee/label paths use it; the render path overlays previews.
-    const committedById = useMemo(() => new Map(ordered.map((el) => [el.id, el])), [ordered]);
+    // All elements by id — the map an elbow arrow reads (arrowRoute) to resolve its bound shapes and
+    // derive its route. Deliberately spans the WHOLE scene: an elbow arrow inside a frame still routes
+    // around a bound shape outside it. Hit/marquee/label paths use it; the render path overlays previews.
+    const committedById = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
 
     // Element boxes by id for the shared CursorLayer's remote selection rings — rebuilt only when the
     // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
@@ -388,7 +412,7 @@ export function CanvasEditor({
     // would otherwise be swallowed as a keystroke inside the in-place editor.
     useCanvasKeyboard({
         enabled: canEdit && !textEditing,
-        elements,
+        elements: visibleElements,
         selectedIds,
         tool,
         setTool,
@@ -510,19 +534,29 @@ export function CanvasEditor({
     // renderer's source of truth, and the measurement util stays the sole dim writer). Re-validated
     // against the LIVE element at resolve time: a newer edit (text/font/size) owns the dims, so a
     // slow load can never write stale dims over it — and the single .then can't loop.
+    // What this canvas sees (frame-scoped in frame mode) — the snap builder, the resize/move selection
+    // paths and the label heal read it. `elementsRef` stays the WHOLE scene: a pending image on another
+    // frame is still this tab's to sweep.
+    const visibleRef = useRef(visibleElements);
+    visibleRef.current = visibleElements;
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
 
-    // Snap targets = every OTHER element's edges/centre (rotated → centre only). Infinite canvas, so no
-    // canvas-edge guides (slides seeds those). Threshold is screen-space: SNAP_SCREEN_THRESHOLD / zoom
-    // keeps the snap radius a constant pixel distance at any zoom.
+    // Snap targets = every OTHER visible element's edges/centre (rotated → centre only), plus the
+    // frame's own edges and centre lines when there is one — an object aligns to the page the way it
+    // aligns to its neighbours. The infinite canvas has no edges to seed. Threshold is screen-space:
+    // SNAP_SCREEN_THRESHOLD / zoom keeps the snap radius a constant pixel distance at any zoom.
     const buildSnapTargets = useCallback(
-        (excludeIds: Set<string>) =>
-            computeSnapTargets(
-                elementsRef.current.map((el) => ({ id: el.id, box: elementBox(el) })),
+        (excludeIds: Set<string>) => {
+            const extras = frame ? frameSnapExtras(frame) : undefined;
+            return computeSnapTargets(
+                visibleRef.current.map((el) => ({ id: el.id, box: elementBox(el) })),
                 excludeIds,
-            ),
-        [],
+                extras?.extraV,
+                extras?.extraH,
+            );
+        },
+        [frame],
     );
 
     // Resize-time snapping, fed to ObjectTransform's snapBox seam (the resize half of snapping; move snaps in
@@ -534,7 +568,7 @@ export function CanvasEditor({
             if (b.angle !== 0) return b;
             const id = selectedIds.length === 1 ? selectedIds[0] : null;
             if (!id) return b;
-            const startEl = elementsRef.current.find((el) => el.id === id);
+            const startEl = visibleRef.current.find((el) => el.id === id);
             if (!startEl) return b;
             const start = elementBox(startEl);
             const EPS = 0.001;
@@ -585,7 +619,7 @@ export function CanvasEditor({
             if (isVectorFontLoaded(fontSize, fontFamily)) return;
             loadVectorFont(fontSize, fontFamily)
                 .then(() => {
-                    const el = elementsRef.current.find((x) => x.id === id);
+                    const el = visibleRef.current.find((x) => x.id === id);
                     if (el?.type !== 'arrow') return; // deleted meanwhile — nothing to heal
                     if (el.text !== text || el.fontSize !== fontSize || el.fontFamily !== fontFamily) return;
                     // A label's height derives from its line count, so only labelWidth is measured.
@@ -642,7 +676,7 @@ export function CanvasEditor({
         richTextEditRef.current = null;
         setRichTextEditId(null);
         if (!id) return;
-        const el = elementsRef.current.find((e) => e.id === id);
+        const el = visibleRef.current.find((e) => e.id === id);
         if (el?.type === 'richtext' && stripTagsServer(el.html).trim() === '') {
             // Seal FIRST: without it, the delete lands inside Y.UndoManager's 500ms captureTimeout and
             // merges into the session's last keystroke, so whether it is its own undo step would depend
@@ -1199,7 +1233,7 @@ export function CanvasEditor({
 
     // Menu ops act on the full selection, wired to the same writes as ⌘[/] , ⌘D, and Delete so the
     // menu and the keyboard stay one behavior (one sealed undo step each).
-    const onMenuArrange = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
+    const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, updateElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
     // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
@@ -1515,7 +1549,7 @@ export function CanvasEditor({
                     const patches = g.ids
                         .filter((id) => previews[id])
                         .map((id) => {
-                            const el = elementsRef.current.find((e) => e.id === id);
+                            const el = visibleRef.current.find((e) => e.id === id);
                             const fields: VectorElementPatch = { x: previews[id].x, y: previews[id].y };
                             if (farEnough && el?.type === 'arrow')
                                 Object.assign(fields, unbindDraggedArrow(el, movedIds));
@@ -1565,12 +1599,64 @@ export function CanvasEditor({
     const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
 
     const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
-    const background = isTransparentColor(meta.background) ? undefined : meta.background;
+    // The scene's own paint is the INFINITE canvas's background. A frame paints its own (below) and
+    // the surface around it stays the app's, so a letterboxed page reads as a page.
+    const background = viewport === 'infinite' && !isTransparentColor(meta.background) ? meta.background : undefined;
 
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
     // threaded in one place, not per callsite.
     const node = (el: VectorElement) => (
         <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} />
+    );
+
+    // Every element's layer, in z-order, plus the in-flight create and freehand/vertex drafts.
+    const layers = (
+        <>
+            {ordered.map((el) => {
+                // A line being vertex-dragged is drawn by the drawing preview below instead.
+                if (drawing.hiddenId === el.id) return null;
+                // Only an arrow label opens the overlay, so the element under edit keeps its
+                // shaft/heads and hides just the label the textarea draws (render text='').
+                if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
+                // The box being edited draws nothing of its own: the in-place editor inside its layer
+                // IS the rendering, painted with the same CSS the renderer would have emitted.
+                if (el.id === richTextEditId) {
+                    const Editor = ELEMENT_KIND_UI[el.type].InPlaceEditor;
+                    return Editor ? (
+                        <ElementLayer key={el.id} el={renderEl(el)} resolveMedia={resolveMediaUrl} byId={renderById}>
+                            <Editor
+                                element={el}
+                                onChange={(fields) => updateElement(el.id, fields)}
+                                onExit={closeRichText}
+                            />
+                        </ElementLayer>
+                    ) : null;
+                }
+                return node(renderEl(el));
+            })}
+            {creating && node(creatingElement(creating))}
+            {/* Live freehand/line draft, or a point-edit reshape — the SAME render path. */}
+            {drawing.previewElement && node(drawing.previewElement)}
+        </>
+    );
+
+    // A frame is a page: it paints its own background and CLIPS what overhangs it. The infinite canvas
+    // has no such box — its layers sit straight on the scene.
+    const frameLayers = frame ? (
+        <div
+            className="absolute overflow-hidden"
+            style={{
+                left: 0,
+                top: 0,
+                width: frame.width,
+                height: frame.height,
+                ...getBackgroundStyle(parseBackgroundFill(frame.background), resolveMediaUrl),
+            }}
+        >
+            {layers}
+        </div>
+    ) : (
+        layers
     );
 
     return (
@@ -1602,36 +1688,7 @@ export function CanvasEditor({
             {/* The scene: plain SCENE units, one layer div per element. pointer-events-none — hit
                 testing is geometry math on the container, never DOM hit testing. */}
             <div className="pointer-events-none absolute inset-0 origin-top-left" style={{ transform: sceneTransform }}>
-                {ordered.map((el) => {
-                    // A line being vertex-dragged is drawn by the drawing preview below instead.
-                    if (drawing.hiddenId === el.id) return null;
-                    // Only an arrow label opens the overlay, so the element under edit keeps its
-                    // shaft/heads and hides just the label the textarea draws (render text='').
-                    if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
-                    // The box being edited draws nothing of its own: the in-place editor inside its layer
-                    // IS the rendering, painted with the same CSS the renderer would have emitted.
-                    if (el.id === richTextEditId) {
-                        const Editor = ELEMENT_KIND_UI[el.type].InPlaceEditor;
-                        return Editor ? (
-                            <ElementLayer
-                                key={el.id}
-                                el={renderEl(el)}
-                                resolveMedia={resolveMediaUrl}
-                                byId={renderById}
-                            >
-                                <Editor
-                                    element={el}
-                                    onChange={(fields) => updateElement(el.id, fields)}
-                                    onExit={closeRichText}
-                                />
-                            </ElementLayer>
-                        ) : null;
-                    }
-                    return node(renderEl(el));
-                })}
-                {creating && node(creatingElement(creating))}
-                {/* Live freehand/line draft, or a point-edit reshape — the SAME render path. */}
-                {drawing.previewElement && node(drawing.previewElement)}
+                {frameLayers}
             </div>
             {/* Scene-space chrome stays SVG: guides and bind affordances ride rotation/zoom for free. */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
@@ -1674,7 +1731,7 @@ export function CanvasEditor({
                                 // A linear element rescales its points to the new box through resizeLinear,
                                 // reading the COMMITTED element so the total scale is exact.
                                 if (next.width !== start.width || next.height !== start.height) {
-                                    const base = elementsRef.current.find((b) => b.id === single.id);
+                                    const base = visibleRef.current.find((b) => b.id === single.id);
                                     if (base && isLinearElement(base)) {
                                         const r = resizeLinear(base, next);
                                         fields.width = r.width;

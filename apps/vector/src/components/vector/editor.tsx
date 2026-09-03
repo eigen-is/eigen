@@ -3,6 +3,7 @@ import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPane
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { ActiveComments, CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { CollabLoadingState, Column, ColumnLayout, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -55,7 +56,7 @@ export function VectorEditor({
     // Small screens view the scene, never edit it (the slides canEdit split: file menu, share and
     // comments keep canWrite); tablets sit above the breakpoint.
     const canEdit = canWrite && !isMobile;
-    const doc = useCanvasDoc(ownerId, path.mountId, path.id);
+    const doc = useCanvasDoc(ownerId, path.mountId, path.id, VECTOR_STYLE_DEFAULTS);
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
     // Awareness: publish this user's identity + selection, get a throttled cursor publisher for the
@@ -209,29 +210,19 @@ export function VectorEditor({
                             <div className="flex h-full w-full overflow-hidden">
                                 <div className="flex-1 min-w-0">
                                     <CanvasEditor
-                                        elements={doc.elements}
-                                        meta={doc.meta}
+                                        doc={doc}
+                                        viewport="infinite"
+                                        canEdit={canEdit}
+                                        ownerId={ownerId}
+                                        mountId={path.mountId}
                                         tool={tool}
                                         setTool={setTool}
                                         toolLocked={toolLocked}
                                         setToolLocked={setToolLocked}
-                                        canEdit={canEdit}
-                                        ownerId={ownerId}
-                                        mountId={path.mountId}
-                                        addElement={doc.addElement}
-                                        addElements={doc.addElements}
-                                        updateElement={doc.updateElement}
-                                        updateElementUntracked={doc.updateElementUntracked}
-                                        updateElements={doc.updateElements}
-                                        deleteElements={doc.deleteElements}
-                                        deleteElementsUntracked={doc.deleteElementsUntracked}
-                                        duplicateElements={doc.duplicateElements}
-                                        undoManager={doc.undoManager}
                                         selectedIds={selectedIds}
                                         setSelectedIds={setSelectedIds}
                                         toggle={toggle}
                                         aspectLocked={aspectLocked}
-                                        provider={doc.provider}
                                         publishCursor={publishCursor}
                                         imageInsertRef={imageInsertRef}
                                     />

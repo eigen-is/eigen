@@ -10,7 +10,7 @@ import {
     generateNKeysBetween,
     isVectorElementType,
     readVectorFromDoc,
-    VECTOR_STYLE_DEFAULTS,
+    type StyleDefaults,
     type VectorArrowElement,
     type VectorElementType,
     type VectorFrame,
@@ -21,7 +21,7 @@ import {
     type VectorScene,
     type VectorShapeElement,
 } from '@workspace/lib/vector';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { duplicateElementsInDoc, hasSeed, newElementId, topmostIndex } from './element-writes';
 import {
@@ -53,8 +53,9 @@ export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>
 export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 
 // Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
-// the registry — a new kind needs no entry here.
-function elementDefaults(type: VectorElementType): Record<string, unknown> {
+// the registry, styled by the HOST's table (vector draws rough and hatched, slides flat and solid) —
+// a new kind needs no entry here, and a new host only a table.
+function elementDefaults(type: VectorElementType, style: StyleDefaults): Record<string, unknown> {
     return {
         x: 0,
         y: 0,
@@ -65,7 +66,7 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
         // border, so a fresh one is unframed until the user picks a stroke colour. The panel's reset
         // rows read the same helper, so a reset restores what creation gave.
         ...baseDefaultsFor(type),
-        ...ELEMENT_KINDS[type].defaults(VECTOR_STYLE_DEFAULTS),
+        ...ELEMENT_KINDS[type].defaults(style),
     };
 }
 
@@ -123,8 +124,11 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
     }
 }
 
-export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) => {
+export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, defaults: StyleDefaults) => {
     const [scene, setScene] = useState<VectorScene>({ elements: [], frames: [], meta: DEFAULT_SCENE_META });
+    // The host's style table, read at write time so the add callbacks stay dependency-free.
+    const defaultsRef = useRef(defaults);
+    defaultsRef.current = defaults;
 
     // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the two
     // element roots with default trackedOrigins, so UNTRACKED_ORIGIN writes escape capture (below).
@@ -171,7 +175,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
         // seedless kind drops the key (the write loop skips undefined).
         const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
         const record: Record<string, unknown> = {
-            ...elementDefaults(partial.type),
+            ...elementDefaults(partial.type, defaultsRef.current),
             ...partial,
             id,
             type: partial.type,
@@ -208,7 +212,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
                 const id = newElementId();
                 const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
                 const record: Record<string, unknown> = {
-                    ...elementDefaults(partial.type),
+                    ...elementDefaults(partial.type, defaultsRef.current),
                     ...partial,
                     id,
                     type: partial.type,
@@ -366,3 +370,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
         unsyncedEdits,
     };
 };
+
+// Everything a canvas host owns of its document: the scene, every writer, the collab lifecycle. The
+// editor takes it whole rather than fifteen threaded props.
+export type CanvasDoc = ReturnType<typeof useCanvasDoc>;
