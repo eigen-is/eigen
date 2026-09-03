@@ -79,6 +79,11 @@ export function useViewport() {
 
     const groupTransform = `translate(${scrollX * zoom} ${scrollY * zoom}) scale(${zoom})`;
 
+    // The scene div's CSS transform: the same mapping groupTransform applies inside the overlay SVG,
+    // so layer boxes are plain SCENE units and the two surfaces stay registered at any zoom.
+    // transform-origin must be 0 0 at the callsite (the SVG group's origin is the container corner).
+    const sceneTransform = `translate(${scrollX * zoom}px, ${scrollY * zoom}px) scale(${zoom})`;
+
     // Incremental pan by a screen-px delta (space-drag / middle-mouse); scroll is scene units.
     const panBy = useCallback((dxPx: number, dyPx: number) => {
         setViewport((v) => ({ ...v, scrollX: v.scrollX + dxPx / v.zoom, scrollY: v.scrollY + dyPx / v.zoom }));
@@ -137,6 +142,7 @@ export function useViewport() {
         screenDeltaToScene,
         boxToStyle,
         groupTransform,
+        sceneTransform,
         panBy,
         pinch,
         resetZoom,

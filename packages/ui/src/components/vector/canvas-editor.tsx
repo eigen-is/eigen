@@ -69,7 +69,7 @@ import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { pointerCursor } from './cursor';
-import { ElementNode } from './element-node';
+import { ElementLayer } from './element-layer';
 import type { NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
 import { applyZOrder, deleteSelection, duplicateSelection, useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import type { PublishCursor } from './hooks/use-canvas-presence';
@@ -236,6 +236,7 @@ export function CanvasEditor({
         screenDeltaToScene,
         boxToStyle,
         groupTransform,
+        sceneTransform,
         panBy,
         pinch,
         resetZoom,
@@ -346,7 +347,7 @@ export function CanvasEditor({
         [hasPreviews, hasArrows, ordered, previews],
     );
     // The map the render path feeds an elbow arrow's route: preview boxes when a shape is mid-drag (the
-    // snake follows live), else the committed scene — its per-frame identity is the ElementNode memo's cue.
+    // snake follows live), else the committed scene — its per-frame identity is the ElementLayer memo's cue.
     const renderById = previewById ?? committedById;
 
     // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
@@ -1515,7 +1516,7 @@ export function CanvasEditor({
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
     // threaded in one place, not per callsite.
     const node = (el: VectorElement) => (
-        <ElementNode key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} />
+        <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} />
     );
 
     return (
@@ -1544,21 +1545,25 @@ export function CanvasEditor({
             onPaste={onPaste}
             {...fileDropProps}
         >
+            {/* The scene: plain SCENE units, one layer div per element. pointer-events-none — hit
+                testing is geometry math on the container, never DOM hit testing. */}
+            <div className="pointer-events-none absolute inset-0 origin-top-left" style={{ transform: sceneTransform }}>
+                {ordered.map((el) => {
+                    // A line being vertex-dragged is drawn by the drawing preview below instead.
+                    if (drawing.hiddenId === el.id) return null;
+                    // Only an arrow label opens the overlay, so the element under edit keeps its
+                    // shaft/heads and hides just the label the textarea draws (render text='').
+                    if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
+                    return node(renderEl(el));
+                })}
+                {creating && node(creatingElement(creating))}
+                {/* Live freehand/line draft, or a point-edit reshape — the SAME render path. */}
+                {drawing.previewElement && node(drawing.previewElement)}
+            </div>
+            {/* Scene-space chrome stays SVG: guides and bind affordances ride rotation/zoom for free. */}
             <svg className="pointer-events-none absolute inset-0 h-full w-full" xmlns={SVG_NS}>
                 <g transform={groupTransform}>
-                    {ordered.map((el) => {
-                        // A line being vertex-dragged is drawn by the drawing preview below instead.
-                        if (drawing.hiddenId === el.id) return null;
-                        // Only an arrow label opens the overlay, so the element under edit keeps its
-                        // shaft/heads and hides just the label the textarea draws (render text='').
-                        if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
-                        return node(renderEl(el));
-                    })}
-                    {creating && node(creatingElement(creating))}
-                    {/* Live freehand/line draft, or a point-edit reshape — the SAME elementToSvg path. */}
-                    {drawing.previewElement && node(drawing.previewElement)}
                     <SnapGuides lines={snapLines} />
-                    {/* Bind-target chrome — SVG in the scene group, so it rides rotation/roundness/zoom. */}
                     {drawing.bindingOutline}
                     {drawing.snapDots}
                     {drawing.focusIndicators}

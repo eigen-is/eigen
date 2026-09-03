@@ -1,0 +1,96 @@
+// One scene element as its own memoized, absolutely positioned layer: a div carrying the element's
+// box (left/top/width/height + rotate about the box centre, which is CSS's default transform-origin)
+// holding either the kind's unpositioned SVG fragment or its rich-text div. The SAME lib render path
+// previews, embeds, export and the print compositor use — elementLayer is the one definition of where
+// an element goes and what it draws.
+
+import {
+    arrowRoute,
+    ELEMENT_FIELDS,
+    elementLayer,
+    layerInnerHtml,
+    type MediaResolver,
+    type Point,
+    type VectorElement,
+} from '@workspace/lib/vector';
+import { memo } from 'react';
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+type ElementLayerProps = {
+    el: VectorElement;
+    resolveMedia?: MediaResolver;
+    // The whole scene map, so an elbow arrow can resolve its bound shapes and derive its route.
+    byId?: Map<string, VectorElement>;
+};
+
+// Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
+// a Yjs tick materializes fresh objects through readVectorFromDoc, so those need the field compare —
+// every ELEMENT_FIELDS value is a scalar/string, so it is exact. Only changed elements re-run the
+// kind's render — rough path generation is the expensive part.
+function sameElement(a: VectorElement, b: VectorElement): boolean {
+    if (a === b) return true;
+    // Widened, not copied: this runs per element per frame, so a spread here would allocate twice a frame.
+    const ra: Record<string, unknown> = a;
+    const rb: Record<string, unknown> = b;
+    for (const field of ELEMENT_FIELDS) {
+        if (ra[field] !== rb[field]) return false;
+    }
+    return true;
+}
+
+function samePoints(a: Point[] | undefined, b: Point[] | undefined): boolean {
+    if (a === b) return true;
+    if (!a || !b || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i].x !== b[i].x || a[i].y !== b[i].y) return false;
+    }
+    return true;
+}
+
+export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps): boolean {
+    if (prev.resolveMedia !== next.resolveMedia) return false;
+    if (!sameElement(prev.el, next.el)) return false;
+    // Same element fields AND the same scene map → identical output (the pan/zoom/drag common case).
+    // Only when the map changes identity might an elbow arrow need re-routing though its OWN fields
+    // are unchanged (a BOUND SHAPE moved) — fall to comparing the derived route so it re-renders then.
+    if (prev.byId === next.byId) return true;
+    return samePoints(arrowRoute(prev.el, prev.byId), arrowRoute(next.el, next.byId));
+}
+
+export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId }: ElementLayerProps) {
+    const layer = elementLayer(el, { resolveMedia, route: arrowRoute(el, byId) });
+    if (!layer) return null;
+    const { box, content } = layer;
+    const style: React.CSSProperties = {
+        left: box.x,
+        top: box.y,
+        width: box.width,
+        height: box.height,
+        transform: box.angle === 0 ? undefined : `rotate(${box.angle}deg)`,
+        opacity: layer.opacity === 100 ? undefined : layer.opacity / 100,
+    };
+    // Rich text IS the layer's own body (one styled div); everything else is an SVG fragment in an
+    // overflow-visible viewport, because roughjs overshoots its box and an elbow route spills past it.
+    if (!('svg' in content)) {
+        return (
+            <div
+                data-element-id={el.id}
+                className="absolute"
+                style={style}
+                dangerouslySetInnerHTML={{ __html: layerInnerHtml(content) }}
+            />
+        );
+    }
+    return (
+        <div data-element-id={el.id} className="absolute" style={style}>
+            {/* min-*-px: a horizontal arrow's box is 0 high, and a zero-extent SVG viewport disables
+                rendering entirely (SVG 2 §8.2). Overflow is visible, so the floor never clips. */}
+            <svg
+                className="absolute inset-0 h-full min-h-px w-full min-w-px overflow-visible"
+                xmlns={SVG_NS}
+                dangerouslySetInnerHTML={{ __html: content.svg }}
+            />
+        </div>
+    );
+}, sameLayerProps);
