@@ -33,8 +33,8 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const offlineBadge = (props.offline || props.storageUnavailable) && (
         <Popover>
             <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label={label} className="h-8 w-8 text-destructive">
-                    <WifiOff className="h-4 w-4" />
+                <Button variant="ghost" size="icon" aria-label={label} className="h-8 w-8">
+                    <WifiOff className="h-4 w-4 text-destructive" />
                 </Button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-auto text-sm">
