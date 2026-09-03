@@ -10,6 +10,7 @@
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
 import type { Corners, VectorElement, VectorElementBase } from '../types';
+import type { YMapLike } from './read-fields';
 
 // What a host's new elements look like: vector draws rough and hatched in Excalifont, slides flat and
 // solid in Inter. One table per app, not a per-kind fork.
@@ -62,9 +63,6 @@ export type Capabilities = {
 // The base fields a kind may start a new element with other than the shared table's value.
 export type BasePaintDefaults = Partial<Pick<VectorElementBase, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>>;
 
-// A per-element Y.Map, or anything else exposing its `get` (the reader's only requirement).
-export type FieldSource = { get(key: string): unknown };
-
 export type RenderContext = {
     resolveMedia?: (mediaName: string) => string | null;
     // An elbow arrow's derived route; without it the arrow falls back to its stored endpoints.
@@ -94,7 +92,7 @@ export type KindSpec<T extends VectorElement> = {
     // Capabilities that depend on the ELEMENT rather than the kind, layered over the static table.
     // Omit where every element of the kind answers the same.
     capabilitiesOf?(el: T): Partial<Capabilities>;
-    read(src: FieldSource, base: VectorElementBase): T | null;
+    read(src: YMapLike, base: VectorElementBase): T | null;
     // Omit for the rotated-box default (only a routed arrow spills past its box).
     bounds?(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
@@ -120,7 +118,7 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     capabilitiesOf(el: VectorElement): Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
     baseDefaults: BasePaintDefaults;
-    read(src: FieldSource, base: VectorElementBase): T | null;
+    read(src: YMapLike, base: VectorElementBase): T | null;
     bounds(el: VectorElement, route?: Point[]): Bounds;
     hitTest(el: VectorElement, point: Point, threshold: number, route?: Point[]): boolean;
     outline(el: VectorElement, inflate: number): OutlineShape;

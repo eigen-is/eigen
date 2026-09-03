@@ -1,43 +1,24 @@
 import { getBackgroundStyle } from '@workspace/lib/background';
 import {
-    classifyPaste,
-    clipboardTextItemHasContent,
-    EIGEN_CLIPBOARD_RENDER_ATTR,
-    extractClipboardSvgMetadata,
-    inlineClipboardSvgMedia,
-    needsReUpload,
-    readClipboardBox,
-    readEigenClipboardAsync,
-    reUploadImage,
-    svgToImageDataUri,
-    svgToImageFile,
-    writeEigenClipboard,
-    writeEigenClipboardAsync,
-} from '@workspace/lib/clipboard';
-import {
     isPendingMediaName,
     useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { stripTagsServer, textToParagraphHtml } from '@workspace/lib/html';
-import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
+import { stripTagsServer } from '@workspace/lib/html';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     arrowRoute,
-    type Bounds,
     type Box,
     computeSnapTargets,
-    DEFAULT_FONT_FAMILY,
-    DEFAULT_FONT_SIZE,
     elementBounds,
     elementsInFrame,
     fitImageSize,
     frameSnapExtras,
     getElementsBounds,
+    IMAGE_CASCADE_OFFSET,
     type ImageSize,
     isLinearElement,
     isTransparentColor,
@@ -52,7 +33,6 @@ import {
     type SnapTargets,
     sceneBounds,
     snapBoxToTargets,
-    type TextAlign,
     type VectorArrowElement,
     type VectorElement,
 } from '@workspace/lib/vector';
@@ -71,6 +51,7 @@ import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
+import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
 import type { CanvasDoc, NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
 import { applyZOrder, deleteSelection, duplicateSelection, useCanvasKeyboard } from './hooks/use-canvas-keyboard';
 import type { PublishCursor } from './hooks/use-canvas-presence';
@@ -82,20 +63,8 @@ import { ELEMENT_KIND_UI } from './kinds';
 import { arrowLabelEditing, type EditingState } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
-import {
-    buildPreviewById,
-    followArrowPreview,
-    type PastedArrow,
-    remapPastedArrows,
-    unbindDraggedArrow,
-} from './tools/binding';
-import {
-    buildSelectionData,
-    readVectorMeta,
-    selectionPlainText,
-    toVectorTextAlign,
-    type VectorClipMeta,
-} from './tools/clipboard';
+import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
+import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
 import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
 import { homeToFrame } from './tools/frame-scope';
 import { SnapGuides } from './tools/snap-guides';
@@ -110,26 +79,11 @@ const MIN_ELEMENT_SIZE = 1;
 // The box a click with the rich-text tool places, in scene units. It arrives empty and selected.
 const NEW_RICHTEXT_SIZE = { width: 200, height: 40 };
 // Image drop/paste SIZING (natural-size-that-fits, 80% viewport cap, never upscale, unreadable →
-// default box) is the shared `fitImageSize` helper — vector is its reference behavior. Only the
-// CASCADE offset stays vector-side.
-// Each subsequent image in a multi-file drop staggers by this many scene units so a stack of
-// natural-size images stays visible (⌘D's +10 is for identical duplicates; images need more).
-const IMAGE_CASCADE_OFFSET = 20;
+// default box) is the shared `fitImageSize` helper — vector is its reference behavior; the cascade
+// offset is the shared IMAGE_CASCADE_OFFSET.
 // A bound arrow dragged alone unbinds only past this SCREEN distance, so a click-select never detaches it
 // (Excalidraw's DRAGGING_THRESHOLD).
 const ARROW_UNBIND_SCREEN = 10;
-
-function elementBox(el: VectorElement): Box {
-    return { x: el.x, y: el.y, width: el.width, height: el.height, angle: el.angle };
-}
-
-function boundsToBox(b: Bounds): Box {
-    return { x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY, angle: 0 };
-}
-
-function boxToBounds(b: Box): Bounds {
-    return { minX: b.x, minY: b.y, maxX: b.x + b.width, maxY: b.y + b.height };
-}
 
 // pointerId gates move/up to the pointer that started the gesture — on touch, a second finger's
 // events would otherwise drive (and prematurely commit) the first finger's gesture.
@@ -312,6 +266,9 @@ export function CanvasEditor({
     richTextEditRef.current = richTextEditId;
     // "Some text surface owns the keyboard and the pointer" — every gate that used to read `editing`.
     const textEditing = editing !== null || richTextEditId !== null;
+    // The same answer for listeners bound once (the clipboard hook's), which can't read state.
+    const textEditingRef = useRef(false);
+    textEditingRef.current = textEditing;
 
     // The elements this canvas renders, hit-tests, marquees, snaps to and selects-all: one frame's in
     // frame mode, the whole scene otherwise. NOT the comment/search paths — both must reach an element
@@ -829,373 +786,31 @@ export function CanvasEditor({
         void insertImageFiles(files, viewportCenterScene());
     }, imagesEnabled);
 
-    // The clipboard PRODUCER (typed items + the self-contained SVG flavour) + plain-text flavor live in
-    // ./tools/clipboard; the canvas calls them with the live z-order, selection, background and path resolver.
-    const buildData = useCallback(
-        (): EigenClipboardData => buildSelectionData(ordered, selectedIds, meta, resolveMediaPath),
-        [ordered, selectedIds, meta, resolveMediaPath],
-    );
-    const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
-
-    // The eigen `svg` field references images BY NAME and renders blank outside eigen's server-side
-    // inliner. For the async menu-copy path only, build a foreign-visible `<img src="data:svg…">` whose
-    // images are inlined as base64 data URIs, so a plain contenteditable pastes the drawing as an image.
-    // Bytes come from the credentialed media resolver; over the soft cap (or on inline failure) we skip
-    // the flavour and write today's payload. The sync ⌘C path stays byte-free (a copy event can't fetch).
-    const fetchMediaBlob = useCallback(
-        async (name: string): Promise<Blob | null> => {
-            const url = resolveMediaUrl(name);
-            if (!url) return null;
-            try {
-                const res = await fetch(url, { credentials: 'include' });
-                return res.ok ? await res.blob() : null;
-            } catch {
-                return null;
-            }
-        },
-        [resolveMediaUrl],
-    );
-    const foreignImgHtml = useCallback(
-        async (svg: string | undefined): Promise<string | undefined> => {
-            if (!svg) return undefined;
-            const inlined = await inlineClipboardSvgMedia(svg, fetchMediaBlob);
-            // Mark the img so hasRichHtmlBeyondMarker ignores it — else a shape-only vector copy reads
-            // as rich HTML and a non-media host persists the base64 SVG as a figure.
-            return inlined
-                ? `<img ${EIGEN_CLIPBOARD_RENDER_ATTR}="" src="${await svgToImageDataUri(inlined)}">`
-                : undefined;
-        },
-        [fetchMediaBlob],
-    );
-
-    // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
-    // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
-    // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text).
-    // Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
-    // set is re-anchored on the viewport centre preserving each element's relative offset.
-    const pasteEigenItems = useCallback(
-        (items: EigenClipboardItem[]) => {
-            if (!items.length) return;
-            const anchor = viewportCenterScene();
-
-            // Translate the vector-origin items (those carrying scene coords) so their bounding-box
-            // centre lands on the viewport; cross-app items (no meta.vector) cascade from the anchor.
-            const positioned = items.map((item) => ({ item, meta: readVectorMeta(item), box: readClipboardBox(item) }));
-            const withCoords = positioned.filter(
-                (p): p is typeof p & { meta: NonNullable<typeof p.meta> } => p.meta != null,
-            );
-            let dx = 0;
-            let dy = 0;
-            if (withCoords.length) {
-                let minX = Number.POSITIVE_INFINITY;
-                let minY = Number.POSITIVE_INFINITY;
-                let maxX = Number.NEGATIVE_INFINITY;
-                let maxY = Number.NEGATIVE_INFINITY;
-                for (const { meta, box } of withCoords) {
-                    minX = Math.min(minX, meta.x);
-                    minY = Math.min(minY, meta.y);
-                    maxX = Math.max(maxX, meta.x + box.width);
-                    maxY = Math.max(maxY, meta.y + box.height);
-                }
-                dx = anchor.x - (minX + maxX) / 2;
-                dy = anchor.y - (minY + maxY) / 2;
-            }
-
-            const partials: NewVectorElement[] = [];
-            const crossMount: { index: number; item: EigenClipboardImageItem }[] = [];
-            // Each pasted element's partial index → its source id (for the remap map), and the arrows whose
-            // bindings are remapped across the pasted set once the clones have ids.
-            const cloneIds = new Map<number, string>();
-            const arrowRemaps: PastedArrow[] = [];
-            let cascade = 0;
-            const placeAt = (meta: VectorClipMeta | null, w: number, h: number) => {
-                if (meta) return { x: meta.x + dx, y: meta.y + dy };
-                const off = cascade * IMAGE_CASCADE_OFFSET;
-                cascade += 1;
-                return { x: anchor.x - w / 2 + off, y: anchor.y - h / 2 + off };
-            };
-
-            for (const { item, meta, box } of positioned) {
-                const angle = box.angle ?? 0;
-                if (item.type === 'image') {
-                    const w = box.width;
-                    const h = box.height;
-                    const pos = placeAt(meta, w, h);
-                    const index = partials.length;
-                    if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
-                        // Optimistic add with a pending name; the real name swaps in a late transact.
-                        partials.push({
-                            type: 'image',
-                            ...pos,
-                            width: w,
-                            height: h,
-                            angle,
-                            mediaName: `pending:${crypto.randomUUID()}`,
-                        });
-                        crossMount.push({ index, item });
-                    } else {
-                        partials.push({ type: 'image', ...pos, width: w, height: h, angle, mediaName: item.mediaName });
-                    }
-                    continue;
-                }
-                // Shape or linear carrier (a text item whose meta.vector names a shape/freedraw/line/arrow
-                // type). A linear element additionally restores its `points` (undefined for shapes); an
-                // arrow also restores its heads + label and is queued for the binding remap below.
-                if (meta?.type) {
-                    // A linear carrier without points would read back as nothing (read-vector drops it).
-                    if ((meta.type === 'freedraw' || meta.type === 'line' || meta.type === 'arrow') && !meta.points)
-                        continue;
-                    const w = box.width;
-                    const h = box.height;
-                    const pos = placeAt(meta, w, h);
-                    const index = partials.length;
-                    if (meta.id) cloneIds.set(index, meta.id);
-                    const partial: NewVectorElement = {
-                        type: meta.type,
-                        ...pos,
-                        width: w,
-                        height: h,
-                        angle,
-                        strokeColor: meta.strokeColor,
-                        fill: meta.fill,
-                        strokeStyle: meta.strokeStyle,
-                        strokeWidth: meta.strokeWidth,
-                        roughness: meta.roughness,
-                        opacity: meta.opacity,
-                        corners: meta.corners,
-                        roundness: meta.roundness,
-                        points: meta.points,
-                    };
-                    if (meta.type === 'freedraw') {
-                        partial.pressures = meta.pressures;
-                        partial.simulatePressure = meta.simulatePressure;
-                    }
-                    if (meta.type === 'arrow') {
-                        partial.startArrowhead = meta.startArrowhead;
-                        partial.endArrowhead = meta.endArrowhead;
-                        partial.elbow = meta.elbow;
-                        partial.fixedSegments = meta.fixedSegments;
-                        partial.text = meta.text;
-                        partial.fontSize = meta.fontSize;
-                        partial.fontFamily = meta.fontFamily;
-                        partial.labelWidth = meta.labelWidth;
-                        arrowRemaps.push({
-                            index,
-                            startBinding: meta.startBinding ?? '',
-                            endBinding: meta.endBinding ?? '',
-                        });
-                    }
-                    partials.push(partial);
-                    continue;
-                }
-                // Real text item → a rich-text box, sized locally from the text (never the wire size).
-                // An empty text item is another app's contentless carrier (a shape from a foreign doc)
-                // — skip it.
-                if (!clipboardTextItemHasContent(item)) continue;
-                const typo = item.typography ?? {};
-                const fontFamily = typo.fontFamily ?? DEFAULT_FONT_FAMILY;
-                const fontSize = typo.fontSize ?? DEFAULT_FONT_SIZE;
-                const { width: w, height: h } = measureVectorText(item.text, fontSize, fontFamily);
-                const pos = placeAt(meta, w, h);
-                partials.push({
-                    type: 'richtext',
-                    ...pos,
-                    width: w,
-                    height: h,
-                    angle,
-                    html: textToParagraphHtml(item.text),
-                    fontSize,
-                    fontFamily,
-                    textAlign: toVectorTextAlign(typo.textAlign),
-                    color: meta?.color,
-                    strokeColor: meta?.strokeColor,
-                    fill: meta?.fill,
-                    opacity: meta?.opacity,
-                });
-            }
-
-            if (!partials.length) return;
-            undoManager?.stopCapturing();
-            const ids = addElements(partials); // ONE transact for all adds
-            // Remap each pasted arrow's bindings now that the clones have ids — no stopCapturing between the
-            // add and this update, so the whole paste stays ONE undo step.
-            const remap = remapPastedArrows(arrowRemaps, cloneIds, ids);
-            if (remap.length) updateElements(remap);
-            undoManager?.stopCapturing();
-            if (!ids.length) return;
-            setSelectedIds(ids);
-
-            // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
-            // (late transact) or drop the element on failure — the shipped M4 optimistic-insert idiom.
-            for (const { index, item } of crossMount) {
-                const id = ids[index];
-                if (!id || !mediaFolderId) continue;
-                reUploadImage(
-                    item.sourcePathId,
-                    item.sourceOwnerId,
-                    item.sourceMountId,
-                    mediaFolderId,
-                    uploadFile.mutateAsync,
-                    item.mediaName,
-                )
-                    .then((result) => {
-                        if (!result) {
-                            deleteElementsUntracked([id]);
-                            return;
-                        }
-                        // Untracked: this technical swap is NOT its own undo step, so the whole
-                        // cross-mount paste is a single ⌘Z (reverts the insert; peers converge via its
-                        // inverse). Redo re-adds the element at its recorded pending name — the same
-                        // accepted optimistic-insert redo edge as the sheets fix.
-                        updateElementUntracked(id, { mediaName: result.mediaName });
-                    })
-                    .catch(() => {});
-            }
-        },
-        [
-            viewportCenterScene,
-            mediaFolderId,
-            addElements,
-            updateElements,
-            setSelectedIds,
-            undoManager,
-            updateElementUntracked,
-            deleteElementsUntracked,
-            uploadFile.mutateAsync,
-        ],
-    );
-
-    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport centre, with
-    // default typography and a locally-measured box (the pasteEigenItems text idiom). Multi-line text is
-    // preserved — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
-    const pasteTextElement = useCallback(
-        (text: string, textAlign: TextAlign = 'left') => {
-            const anchor = viewportCenterScene();
-            const { width: w, height: h } = measureVectorText(text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
-            undoManager?.stopCapturing();
-            const id = addElement({
-                type: 'richtext',
-                x: anchor.x - w / 2,
-                y: anchor.y - h / 2,
-                width: w,
-                height: h,
-                angle: 0,
-                html: textToParagraphHtml(text),
-                fontSize: DEFAULT_FONT_SIZE,
-                fontFamily: DEFAULT_FONT_FAMILY,
-                textAlign,
-            });
-            undoManager?.stopCapturing();
-            if (id) setSelectedIds([id]);
-        },
-        [viewportCenterScene, addElement, setSelectedIds, undoManager],
-    );
-
-    // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
-    // text, or the flattened text of pasted HTML, becomes one rich-text box. Prose alignment rides in
-    // text/html as a block text-align; carry it through toVectorTextAlign (justify→left). Returns true
-    // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
-    const pasteNonEigenText = useCallback(
-        (html: string, plain: string): boolean => {
-            const content = plain || htmlToPlainText(html);
-            if (!content.trim()) return false;
-            pasteTextElement(content, html ? toVectorTextAlign(readDominantTextAlign(html) ?? undefined) : 'left');
-            return true;
-        },
-        [pasteTextElement],
-    );
-
-    // ⌘C / ⌘X / ⌘V via document-level ClipboardEvent listeners (the slides idiom — native events are
-    // required to write the MIME flavors and to read the DataTransfer synchronously). Gated
-    // canEdit && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
-    // clipboard (the typing-target invariant). Eigen items are consumed FIRST; a non-eigen paste falls
-    // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
-    useEffect(() => {
-        const onCopyEvent = (e: ClipboardEvent) => {
-            if (
-                isTypingTarget() ||
-                !canEdit ||
-                editingRef.current ||
-                richTextEditRef.current ||
-                selectedIds.length === 0
-            )
-                return;
-            const data = buildData();
-            if (!data.items.length) return;
-            e.preventDefault();
-            writeEigenClipboard(e, data, plainText());
-        };
-        const onCutEvent = (e: ClipboardEvent) => {
-            if (
-                isTypingTarget() ||
-                !canEdit ||
-                editingRef.current ||
-                richTextEditRef.current ||
-                selectedIds.length === 0
-            )
-                return;
-            const data = buildData();
-            if (!data.items.length) return;
-            e.preventDefault();
-            writeEigenClipboard(e, data, plainText());
-            // One sealed undo step (deleteSelection stopCaptures on both sides).
-            deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
-        };
-        const onPasteEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canEdit || editingRef.current || richTextEditRef.current) return;
-            const cd = e.clipboardData;
-            if (!cd) return;
-            const paste = classifyPaste(cd);
-            // Eigen items are consumed FIRST (before the SVG rung) so a vector→vector paste restores
-            // native elements instead of landing as one flat image.
-            if (paste.eigen) {
-                e.preventDefault();
-                e.stopPropagation();
-                pasteEigenItems(paste.eigen.items);
-                return;
-            }
-            // A bare SVG on the clipboard: ours (element JSON in `<metadata>`) restores native elements;
-            // any other SVG inserts as an image via the media path. OS files still fall through.
-            if (paste.svg) {
-                e.preventDefault();
-                e.stopPropagation();
-                // Ours (element JSON in <metadata>) restores native elements; any other SVG inserts as
-                // an image. The native-vs-image split is vector-local, so we read the metadata here.
-                const restored = extractClipboardSvgMetadata(paste.svg.svg);
-                if (restored) pasteEigenItems(restored.items);
-                else void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
-                return;
-            }
-            // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
-            if (paste.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new rich-text box; only claim the event when
-            // content is actually consumed, else it falls through to the OS-file path.
-            if (pasteNonEigenText(paste.html, paste.text)) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        };
-        document.addEventListener('copy', onCopyEvent);
-        document.addEventListener('cut', onCutEvent);
-        document.addEventListener('paste', onPasteEvent, true);
-        return () => {
-            document.removeEventListener('copy', onCopyEvent);
-            document.removeEventListener('cut', onCutEvent);
-            document.removeEventListener('paste', onPasteEvent, true);
-        };
-    }, [
+    // ⌘C/⌘X/⌘V, the menu clipboard rows and the whole paste ladder live in the sibling hook (the
+    // canvas only hands it the scene, the selection and the frame-stamped writers).
+    const { onMenuCopy, onMenuCut, onMenuPaste } = useCanvasClipboard({
         canEdit,
+        textEditingRef,
+        viewport,
+        frameId,
+        ordered,
+        meta,
         selectedIds,
-        buildData,
-        plainText,
-        pasteEigenItems,
-        pasteNonEigenText,
-        insertImageFiles,
-        viewportCenterScene,
-        deleteElements,
         setSelectedIds,
+        addElement,
+        addElements,
+        updateElements,
+        updateElementUntracked,
+        deleteElements,
+        deleteElementsUntracked,
         undoManager,
-    ]);
+        viewportCenterScene,
+        insertImageFiles,
+        mediaFolderId,
+        resolveMediaPath,
+        resolveMediaUrl,
+        uploadFile: uploadFile.mutateAsync,
+    });
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
     // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;
@@ -1235,47 +850,6 @@ export function CanvasEditor({
     const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, updateElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
-    // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
-    // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as
-    // the keyboard path, so the two stay one behavior.
-    const onMenuCopy = () => {
-        const data = buildData();
-        if (!data.items.length) return;
-        // The inliner promise goes straight into the writer: the clipboard write must start inside
-        // the user gesture (Safari/Firefox), not after the media fetch resolves.
-        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg)).catch(() => {});
-    };
-    const onMenuCut = () => {
-        const data = buildData();
-        if (!data.items.length) return;
-        // Delete only once the async write lands — a denied/failed clipboard write must not destroy
-        // the selection (the content would exist nowhere but the undo stack).
-        void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg))
-            .then(() => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager))
-            .catch(() => {});
-    };
-    const onMenuPaste = () => {
-        (async () => {
-            const data = await readEigenClipboardAsync();
-            if (data) {
-                pasteEigenItems(data.items);
-                return;
-            }
-            // Non-eigen clipboard: mirror the keyboard path's plain-text fallback (same
-            // pasteNonEigenText policy). OS-file image paste stays ⌘V-only (the async API exposes no
-            // File objects for the drop pipeline).
-            let html = '';
-            let text = '';
-            for (const clip of await navigator.clipboard.read()) {
-                if (!html && clip.types.includes('text/html')) html = await (await clip.getType('text/html')).text();
-                if (!text && clip.types.includes('text/plain')) text = await (await clip.getType('text/plain')).text();
-            }
-            pasteNonEigenText(html, text);
-        })().catch(() => {
-            /* clipboard read denied or unavailable */
-        });
-    };
-
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
     // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
     // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).

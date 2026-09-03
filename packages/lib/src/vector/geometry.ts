@@ -37,6 +37,9 @@ const DEG_TO_RAD = Math.PI / 180;
 export const NUDGE_STEP = 1;
 export const NUDGE_STEP_LARGE = 5;
 export const DUPLICATE_OFFSET = 10;
+// A multi-image drop/paste staggers by this much instead, so a stack of natural-size images stays
+// visible (the duplicate step is for identical copies; images need more).
+export const IMAGE_CASCADE_OFFSET = 20;
 
 export function boxCenter(box: Box): Point {
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };

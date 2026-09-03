@@ -21,7 +21,7 @@ const HTML_MARKER = 'data-eigen-clipboard';
 // Marks the foreign-visible `<img>` a vector copy appends after the marker span (an inlined SVG render).
 // It exists only so a non-eigen host renders something; `hasRichHtmlBeyondMarker` must ignore it, or a
 // shape-only vector copy reads as rich HTML and lands as a persisted figure. One source, used on both
-// the write side (vector-canvas) and the ignore side (hasRichHtmlBeyondMarker).
+// the write side (the canvas' clipboard hook) and the ignore side (hasRichHtmlBeyondMarker).
 export const EIGEN_CLIPBOARD_RENDER_ATTR = 'data-eigen-clipboard-render';
 
 // Geometry carried on every placeable clipboard item, in the source app's document-space units.
@@ -80,9 +80,9 @@ export function readClipboardBox(item: EigenClipboardItem): ClipboardBox {
     return { width: item.width, height: item.height, angle: item.type === 'elements' ? undefined : item.angle };
 }
 
-// A text item with a real payload, not an empty carrier. Vector shapes ride the wire as empty text
-// items (buildTextClipboardItem with text: ''); every consumer skips those so a foreign shape never
-// lands as a blank paragraph/cell. The one home for that carrier convention.
+// A text item with a real payload, not an empty carrier. No eigen app writes one today, but the wire is
+// forgeable and any producer may, so every consumer skips them and a contentless item never lands as a
+// blank paragraph/cell. The one home for that convention.
 export function clipboardTextItemHasContent(item: EigenClipboardTextItem): boolean {
     return item.text.trim().length > 0;
 }
