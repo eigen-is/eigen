@@ -61,7 +61,9 @@ describe('CollabDocument close linger', () => {
             return original(...args);
         };
 
-        const doc = await new CollabDocument(home.drive, path, { closeLingerMs }).init();
+        const doc = new CollabDocument(home.drive, path);
+        (doc as unknown as { closeLingerMs: number }).closeLingerMs = closeLingerMs;
+        await doc.init();
         return {
             doc,
             calls: () => closeCalls,
@@ -76,7 +78,7 @@ describe('CollabDocument close linger', () => {
         try {
             const conn = makeSpyConn();
             doc.subscribe(home.user, conn);
-            doc.unsubscribe(home.user, conn);
+            doc.unsubscribe(conn);
 
             expect(calls()).toBe(0);
             await Bun.sleep(150);
@@ -92,7 +94,7 @@ describe('CollabDocument close linger', () => {
         try {
             const first = makeSpyConn();
             doc.subscribe(home.user, first);
-            doc.unsubscribe(home.user, first);
+            doc.unsubscribe(first);
             expect(calls()).toBe(0);
 
             await Bun.sleep(20);
@@ -106,7 +108,7 @@ describe('CollabDocument close linger', () => {
             expect(calls()).toBe(0);
 
             // The linger re-arms once the reused session ends.
-            doc.unsubscribe(home.user, second);
+            doc.unsubscribe(second);
             await Bun.sleep(200);
             expect(calls()).toBe(1);
         } finally {
@@ -120,7 +122,7 @@ describe('CollabDocument close linger', () => {
         try {
             const conn = makeSpyConn();
             doc.subscribe(home.user, conn);
-            doc.unsubscribe(home.user, conn);
+            doc.unsubscribe(conn);
             doc.destruct();
 
             await Bun.sleep(150);

@@ -102,6 +102,13 @@ describe('Home.init partial-failure teardown (AUDIT 13)', () => {
         expect(queuedError?.message).toBe('mail boom');
     });
 
+    test('a second init() after a failed one re-rejects instead of hanging', async () => {
+        const home = new LeakProbeHome(Promise.resolve());
+
+        await expect(home.init()).rejects.toThrow('mail boom');
+        await expect(home.init()).rejects.toThrow('mail boom');
+    });
+
     test('a settings.load() failure rejects queued init() callers and tears the instance down', async () => {
         const home = new CorruptSettingsHome();
 

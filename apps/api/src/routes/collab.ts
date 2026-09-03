@@ -31,12 +31,8 @@ type CollabWsData = {
 function cleanupSession(data: CollabWsData, ws: ServerWebSocket<undefined>) {
     if (data.pingInterval) clearInterval(data.pingInterval);
     data.pingInterval = undefined;
-    if (data.user && data.collabDocument) {
-        try {
-            data.collabDocument.unsubscribe(data.user, ws);
-        } catch (err) {
-            console.error('Error unsubscribing from document:', err);
-        }
+    if (data.collabDocument) {
+        data.collabDocument.unsubscribe(ws);
     }
     data.collabDocument = undefined;
 }
@@ -180,10 +176,8 @@ export const collabRouter = new Elysia({
 
         async open(ws) {
             const data = ws.data as unknown as CollabWsData;
-            let resolve: () => void;
-            data.opened = new Promise((r) => {
-                resolve = r;
-            });
+            const { promise, resolve } = Promise.withResolvers<void>();
+            data.opened = promise;
 
             let stopHeartbeat: (() => void) | undefined;
             try {
@@ -236,7 +230,7 @@ export const collabRouter = new Elysia({
                 }
             } finally {
                 stopHeartbeat?.();
-                resolve!();
+                resolve();
             }
         },
 
