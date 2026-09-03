@@ -14,7 +14,7 @@ import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
 import { duplicateElementsInDoc } from './element-writes';
 
-export function newFrameId(): string {
+function newFrameId(): string {
     return `fr-${nanoid(10)}`;
 }
 
@@ -81,14 +81,16 @@ export function deleteFrameInDoc(doc: Y.Doc, id: string): void {
 }
 
 // A copy of the frame directly after it, holding copies of its elements. Element cloning goes through
-// duplicateElementsInDoc, so arrow bindings remap across the copied set exactly as ⌘D does.
+// duplicateElementsInDoc, so arrow bindings remap across the copied set exactly as ⌘D does. Returns ''
+// when the frame is gone (a peer deleted it mid-click) rather than writing a blank copy of nothing.
 export function duplicateFrameInDoc(doc: Y.Doc, id: string): string {
+    const framesMap = doc.getMap('frames');
+    const source = framesMap.get(id);
+    if (!(source instanceof Y.Map)) return '';
     const copyId = newFrameId();
     doc.transact(() => {
-        const framesMap = doc.getMap('frames');
-        const source = framesMap.get(id);
-        const name = source instanceof Y.Map ? strField(source, 'name') : '';
-        const background = source instanceof Y.Map ? strField(source, 'background') : '';
+        const name = strField(source, 'name');
+        const background = strField(source, 'background');
         writeFrame(framesMap, { id: copyId, index: keyAfter(framesMap, id), name, background });
 
         const sourceIds = elementsInFrame(readVectorFromDoc(doc).elements, id).map((el) => el.id);

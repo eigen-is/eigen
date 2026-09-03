@@ -1,7 +1,7 @@
 // Viewport math for a BOUNDED canvas. The infinite canvas needs none of this — it scrolls forever and
 // opens at the origin — but a frame is a page: it opens fitted, and a pan may never push it off screen.
-// Pure, so both the live hook and the deck shell's thumbnails resolve the same numbers. Scroll is in
-// SCENE units and scene maps to px as (scene + scroll) * zoom, the canvas-wide convention.
+// Pure, so every host resolves the same numbers. Scroll is in SCENE units and scene maps to px as
+// (scene + scroll) * zoom, the canvas-wide convention.
 
 export type CanvasViewport = { zoom: number; scrollX: number; scrollY: number };
 export type Extent = { width: number; height: number };
@@ -33,14 +33,6 @@ export function fitFrameViewport(container: Extent, frame: Extent, padding = FRA
     return clampFrameViewport({ zoom, scrollX: 0, scrollY: 0 }, container, frame);
 }
 
-// The frame's own edges and centre lines as snap targets, so an object aligns to the page the way it
-// aligns to its neighbours (computeSnapTargets' extraV/extraH seam).
-export function frameSnapExtras(frame: Extent): { extraV: number[]; extraH: number[] } {
-    return {
-        extraV: [0, frame.width / 2, frame.width],
-        extraH: [0, frame.height / 2, frame.height],
-    };
-}
 // The scene layer's CSS transform and the overlay group's SVG transform: ONE mapping in two syntaxes,
 // applied with transform-origin 0 0 at both callsites, so the two surfaces stay registered at any zoom.
 export function sceneTransform(v: CanvasViewport): string {

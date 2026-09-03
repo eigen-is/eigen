@@ -1,7 +1,8 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
 // does it draw", so a renderer that positions elements itself (absolutely positioned divs) and one that
 // serializes an SVG document agree by construction. The live canvas draws one elementLayer per element
-// (ElementLayer); sceneLayers is the same pass over a whole scene, which the phase-3 compositor consumes.
+// (ElementLayer); sceneLayers is the same pass over a whole scene, for a host that lays a whole page out
+// at once.
 
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';

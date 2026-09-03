@@ -159,6 +159,12 @@ function adjustRoughness(el: VectorShapeElement | VectorLinearElement | VectorAr
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);
 }
 
+// The DOM-box kinds (image, rich text) use the stroke fields as a BORDER rather than a drawn outline,
+// so "does this one paint a border" is one predicate, not a repeated pair of tests.
+export function isBordered(el: { strokeWidth: number; strokeColor: string }): boolean {
+    return el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
+}
+
 // The stroke-style vocabulary as roughjs `strokeLineDash` / an SVG `stroke-dasharray`: one dash table,
 // shared by the drawing kinds and by the image's border.
 export function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {

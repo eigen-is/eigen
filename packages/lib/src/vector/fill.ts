@@ -43,16 +43,7 @@ export function serializeFill(fill: Fill): string {
 }
 
 export function solidFill(color: string, style: FillStyle = DEFAULT_FILL_STYLE): string {
-    return serializeFill({ type: 'solid', color: isColorToken(color) ? color : 'transparent', style });
-}
-
-// The panel edits the two halves separately, so each write preserves the other one.
-export function withFillPaint(fill: Fill, paint: FillPaint): Fill {
-    return { ...paint, style: fill.style };
-}
-
-export function withFillStyle(fill: Fill, style: FillStyle): Fill {
-    return { ...fill, style };
+    return serializeFill({ type: 'solid', color: isColorToken(color) ? color : TRANSPARENT_COLOR, style });
 }
 
 function fillStyleOf(value: unknown): FillStyle {

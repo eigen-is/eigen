@@ -42,6 +42,9 @@ export function readElementsClipboardItem(
     if (!item || !Array.isArray(item.elements)) return null;
     const elements: VectorElement[] = [];
     for (const record of item.elements) {
+        // A forged wire can hold anything, including a null entry — `record[key]` would throw inside the
+        // host's paste handler, after its preventDefault, and swallow the paste silently.
+        if (!record || typeof record !== 'object') continue;
         // The document reader IS the trust boundary: enums, clamps and colour tokens all apply.
         const el = readElementFromFields({ get: (key: string) => record[key] });
         if (el) elements.push(el);

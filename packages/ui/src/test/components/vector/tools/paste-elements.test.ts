@@ -1,7 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS, type VectorElement } from '@workspace/lib/vector';
+import { Window } from 'happy-dom';
 import { planElementsPaste } from '../../../../components/vector/tools/paste-elements';
+
+// A pasted rich-text partial goes through the LightEditor sanitizer, which needs a DOM.
+const window = new Window();
+// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
+const g = globalThis as any;
+g.DOMParser = window.DOMParser;
+g.document = window.document;
+g.Node = window.Node;
 
 const BASE = { ...DEFAULT_ELEMENT_PROPS, x: 10, y: 20, width: 100, height: 60, angle: 0 };
 
@@ -22,6 +31,15 @@ const image = (id: string, mediaName: string): VectorElement => ({
     type: 'image',
     index: 'a1',
     mediaName,
+});
+
+const richtext = (id: string, html: string): VectorElement => ({
+    ...BASE,
+    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
+    id,
+    type: 'richtext',
+    index: 'a3',
+    html,
 });
 
 const arrow = (id: string, startBinding: string): VectorElement => ({
@@ -47,6 +65,20 @@ const imageItem = (mediaName: string, sourceParentId: string): EigenClipboardIma
 });
 
 describe('planElementsPaste', () => {
+    test('a forged rich-text payload is sanitized before it can reach the document', () => {
+        // Any web page can write our clipboard MIME, so the html on the wire is hostile until proven
+        // otherwise. It is cleaned HERE, so nothing dangerous is ever stored in the Y.Doc.
+        const el = richtext('t1', '<p>keep <em>this</em></p><script>alert(1)</script><img src=x onerror=alert(1)>');
+        const partial = planElementsPaste([el], [], 'media-1').partials[0];
+        expect(partial.html).toBe('<p>keep <em>this</em></p>');
+    });
+
+    test('images are dropped when the container has no media folder to resolve them against', () => {
+        const plan = planElementsPaste([rect('r1'), image('i1', 'pic.png')], [imageItem('pic.png', 'other')], null);
+        expect(plan.partials.map((p) => p.type)).toEqual(['rectangle']);
+        expect(plan.crossMount).toEqual([]);
+    });
+
     test('a partial is the whole stored record minus what the writer allocates', () => {
         const el = rect('r1');
         const { partials } = planElementsPaste([el], [], 'media-1');

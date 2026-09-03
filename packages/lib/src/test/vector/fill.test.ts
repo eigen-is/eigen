@@ -8,8 +8,6 @@ import {
     serializeBackgroundFill,
     serializeFill,
     solidFill,
-    withFillPaint,
-    withFillStyle,
 } from '../../vector/fill';
 
 describe('parseFill', () => {
@@ -54,22 +52,6 @@ describe('parseFill', () => {
         expect(parseFill('{"type":"solid","color":"#ff0000","style":"tartan"}').style).toBe('solid');
         expect(parseFill('{"type":"solid","color":"#ff0000"}').style).toBe('solid');
         expect(solidFill('#ff0000', 'zigzag')).toBe('{"type":"solid","color":"#ff0000","style":"zigzag"}');
-    });
-
-    test('each half is edited without disturbing the other', () => {
-        const gradient = parseFill('{"type":"gradient","from":"#000000","to":"#ffffff","angle":45,"style":"zigzag"}');
-        expect(withFillPaint(gradient, { type: 'solid', color: '#ff0000' })).toEqual({
-            type: 'solid',
-            color: '#ff0000',
-            style: 'zigzag',
-        });
-        expect(withFillStyle(gradient, 'hachure')).toEqual({
-            type: 'gradient',
-            from: '#000000',
-            to: '#ffffff',
-            angle: 45,
-            style: 'hachure',
-        });
     });
 
     test('solidFill and isTransparentFill agree on the no-fill sentinel', () => {

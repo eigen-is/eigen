@@ -41,8 +41,6 @@ import {
     type VectorElement,
     type VectorLinearElement,
     type VectorMeta,
-    withFillPaint,
-    withFillStyle,
 } from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
@@ -128,8 +126,8 @@ type CanvasPropertiesPanelProps = {
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     undoManager: Y.UndoManager | null;
-    // The scene's own settings, edited with nothing selected. The frame background panel the deck shell
-    // needs is a different surface and lands with it, which is why the row is infinite-mode only.
+    // The scene's own settings, edited with nothing selected. A frame paints its own background through
+    // the Fill codec, which is a different surface, so the row is infinite-mode only.
     meta: VectorMeta;
     updateMeta: (fields: Partial<VectorMeta>) => void;
     viewport: 'infinite' | 'frame';
@@ -395,7 +393,7 @@ export function CanvasPropertiesPanel({
                     mixed={isMixed(fillRaw)}
                     onChange={(next) => {
                         const paint: FillPaint = next === null || next.type === 'image' ? TRANSPARENT_FILL : next;
-                        applyFill((fill) => withFillPaint(fill, paint));
+                        applyFill((fill) => ({ ...paint, style: fill.style }));
                     }}
                     allowedTypes={['solid', 'gradient']}
                 >
@@ -403,7 +401,7 @@ export function CanvasPropertiesPanel({
                         <PropertyRow label="Style">
                             <MergedSelect
                                 value={fillStyle}
-                                onChange={(v) => applyFill((fill) => withFillStyle(fill, v))}
+                                onChange={(v) => applyFill((fill) => ({ ...fill, style: v }))}
                                 options={FILL_STYLE_OPTIONS}
                             />
                         </PropertyRow>
@@ -531,8 +529,8 @@ export function CanvasPropertiesPanel({
 
             {!has && viewport === 'infinite' && (
                 <PropertySection title="Canvas">
-                    {/* The scene background is a plain colour (meta.background), not a Fill — the frame
-                        background panel that speaks Fill lands with the deck shell. */}
+                    {/* The scene background is a plain colour (meta.background), not a Fill — a frame's
+                        background is the widened Fill codec and gets its own row. */}
                     <ColorRow
                         label="Background"
                         value={isTransparentColor(meta.background) ? '' : meta.background}

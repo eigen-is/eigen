@@ -96,6 +96,12 @@ describe('frame writes', () => {
         expect(scene.elements.find((el) => el.frameId === copy)).toMatchObject({ x: 40, y: 60 });
     });
 
+    test('duplicateFrame of a frame a peer already deleted writes nothing', () => {
+        const { doc, ids } = docWithFrames(1);
+        expect(duplicateFrameInDoc(doc, 'gone')).toBe('');
+        expect(readVectorFromDoc(doc).frames.map((f) => f.id)).toEqual(ids);
+    });
+
     test('duplicateFrame remaps an arrow bound inside the frame onto the copies', () => {
         const { doc, ids } = docWithFrames(1);
         addElement(doc, 'shape', ids[0]);

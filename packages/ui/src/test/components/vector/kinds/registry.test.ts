@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { CREATION_TOOL_TYPES, ELEMENT_KINDS, isVectorElementType, type VectorElementType } from '@workspace/lib/vector';
 import { VECTOR_TOOLS } from '../../../../components/vector/hooks/use-tool';
 import { ELEMENT_KIND_UI } from '../../../../components/vector/kinds';
+import { creatingElement, isBoxTool } from '../../../../components/vector/tools/create-shape';
 
 // The kind vocabulary, from the one table that owns it.
 function vectorElementTypes(): VectorElementType[] {
@@ -35,15 +36,25 @@ describe('ELEMENT_KIND_UI', () => {
         }
     });
 
-    test('a kind carries its own panel rows exactly when a capability calls for them', () => {
-        // The generic rows (fill, stroke, corners, opacity) are the panel's; a kind entry exists only for
-        // what they cannot express — rich text's typography and the image's fit.
+    test('only rich text and the image carry their own panel rows', () => {
+        // The generic rows (fill, stroke, corners, opacity) gate on capabilities and are the panel's; a
+        // PanelSection exists only for what they cannot express — rich text's typography, the image's fit.
         for (const type of vectorElementTypes()) {
-            const caps = ELEMENT_KINDS[type].capabilities;
-            expect([type, Boolean(ELEMENT_KIND_UI[type].PanelSection)]).toEqual([
-                type,
-                caps.typography || caps.objectFit,
-            ]);
+            const own = type === 'richtext' || type === 'image';
+            expect([type, Boolean(ELEMENT_KIND_UI[type].PanelSection)]).toEqual([type, own]);
+        }
+    });
+
+    test('every kind the registry marks box-creatable previews as itself', () => {
+        // isBoxTool answers from the registry, creatingElement composes per kind off its own literal
+        // tuple: a kind that gained `creation: 'box'` without joining the tuple would preview as a
+        // rectangle, which is exactly what this catches.
+        const box = { x: 0, y: 0, width: 10, height: 10, angle: 0 };
+        for (const type of vectorElementTypes()) {
+            if (ELEMENT_KINDS[type].capabilities.creation !== 'box') continue;
+            expect([type, isBoxTool(type)]).toEqual([type, true]);
+            if (!isBoxTool(type)) continue;
+            expect(creatingElement({ type, seed: 1, box }).type).toBe(type);
         }
     });
 

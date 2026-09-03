@@ -62,6 +62,21 @@ describe('the elements clipboard item', () => {
         expect(readElementsClipboardItem([item])?.elements).toEqual([]);
     });
 
+    test('a forged null record is skipped, not thrown on', () => {
+        // A throw here lands inside the host's paste handler, AFTER its preventDefault — the paste
+        // would vanish with no element and no browser fallback.
+        const good = buildElementsClipboardItem([shape({ id: 'r', type: 'rectangle' })], '');
+        const item: EigenClipboardElementsItem = {
+            type: 'elements',
+            width: 1,
+            height: 1,
+            sourceFrameId: '',
+            // biome-ignore lint/suspicious/noExplicitAny: forging a wire the type forbids is the point
+            elements: [null as any, 'nope' as any, ...(good?.elements ?? [])],
+        };
+        expect(readElementsClipboardItem([item])?.elements.map((el) => el.id)).toEqual(['r']);
+    });
+
     test('a hostile field value is clamped by the reader, not trusted', () => {
         const item = buildElementsClipboardItem(
             [shape({ id: 'r', type: 'rectangle' })],

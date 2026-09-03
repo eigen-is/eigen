@@ -4,7 +4,6 @@ import {
     clampFrameViewport,
     FRAME_FIT_PADDING,
     fitFrameViewport,
-    frameSnapExtras,
     groupTransform,
     sceneTransform,
 } from '../../vector/viewport';
@@ -60,10 +59,6 @@ describe('clampFrameViewport', () => {
         const fitted = fitFrameViewport(container, FRAME);
         expect(clampFrameViewport(fitted, container, FRAME)).toEqual(fitted);
     });
-});
-
-test('frameSnapExtras seeds the frame edges and centre lines', () => {
-    expect(frameSnapExtras(FRAME)).toEqual({ extraV: [0, 960, 1920], extraH: [0, 540, 1080] });
 });
 
 describe('sceneTransform / groupTransform', () => {

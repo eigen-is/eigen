@@ -14,8 +14,9 @@
 // media listing captured before the paste's own re-upload, missed, and fell back to a 4:3 default.
 // Forged wires are filtered at the read seam (parseEigenJson), so consumers carry no fallbacks.
 //
-// No `x`/`y`: paste anchors at each app's own default/cursor/viewport-centre, so absolute scene
-// position is not carried.
+// No `x`/`y` on the image and text items: paste anchors at each app's own default/cursor/viewport-centre.
+// The `elements` item is the exception, and says why on itself — pasting a drawing back into a drawing is
+// a paste IN PLACE, so it carries the stored coordinates.
 
 // Best-effort cross-app text styling. Canonical names shared with slides/vector and the properties
 // panel; `fontFamily` is the EIGEN_FONTS name (per the fontFamily value canon), not a CSS stack.

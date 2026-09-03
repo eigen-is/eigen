@@ -13,8 +13,8 @@ type CanvasDocSearchArgs = {
     elements: VectorElement[];
     frames: VectorFrame[];
     meta: VectorMeta;
-    // What "reveal" means is the host's: vector selects the element, a deck shell activates its frame
-    // first. Keep it stable (useCallback) or the controller identity churns on every render.
+    // What "reveal" means is the host's: the vector app selects the element, a paged host would activate
+    // its frame first. Keep it stable (useCallback) or the controller identity churns on every render.
     onReveal: (el: VectorElement) => void;
     // Where a match is, in the host's vocabulary ("Slide 3"); omitted on the infinite canvas.
     contextOf?: (el: VectorElement) => string | undefined;

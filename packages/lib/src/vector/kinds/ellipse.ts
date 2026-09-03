@@ -17,8 +17,6 @@ export const ellipseKind = defineKind<VectorEllipseElement>({
         corners: false,
         stroke: true,
         strokeOptional: true,
-        typography: false,
-        objectFit: false,
         bindable: true,
         silhouette: 'ellipse',
         creation: 'box',

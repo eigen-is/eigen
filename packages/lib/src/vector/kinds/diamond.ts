@@ -16,8 +16,6 @@ export const diamondKind = defineKind<VectorDiamondElement>({
         corners: true,
         stroke: true,
         strokeOptional: true,
-        typography: false,
-        objectFit: false,
         bindable: true,
         silhouette: 'diamond',
         creation: 'box',

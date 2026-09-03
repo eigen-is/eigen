@@ -32,7 +32,7 @@ import {
     Strikethrough,
     Underline,
 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { InPlaceEditorProps, KindPanelSectionProps } from './index';
 
 // The box the user types in IS the box the renderer paints: same CSS string, applied through
@@ -44,7 +44,9 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
     // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it
     // mid-session. React never manages this attribute, so nothing fights over it.
     const css = element.type === 'richtext' ? richTextCssText(element) : '';
-    useEffect(() => {
+    // Layout effect, not an effect: the box would otherwise paint once unstyled before the CSS lands,
+    // flashing the text at the app's font on every session open.
+    useLayoutEffect(() => {
         boxRef.current?.setAttribute('style', css);
     }, [css]);
 
@@ -83,8 +85,8 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
 const RICHTEXT_DEFAULTS = ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS);
 
 export function RichTextPanelSection({ elements, onChange }: KindPanelSectionProps) {
+    // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
     const boxes = elements.filter((el): el is VectorRichTextElement => el.type === 'richtext');
-    if (boxes.length === 0) return null;
     const fontFamily = getMergedValue(boxes, (el) => el.fontFamily);
     const fontSize = getMergedValue(boxes, (el) => el.fontSize);
     const fontWeight = getMergedValue(boxes, (el) => el.fontWeight);

@@ -18,7 +18,7 @@ import {
 import { useCallback, useMemo, useRef } from 'react';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
-import type { VectorElementPatch } from './use-canvas-doc';
+import { sealed, type VectorElementPatch } from './use-canvas-doc';
 import { VECTOR_TOOLS, type VectorTool } from './use-tool';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
@@ -57,16 +57,14 @@ function computeZOrder(ordered: VectorElement[], selectedIds: string[], op: ZOp)
 }
 
 // Duplicate the selection (⌘D and the object context menu share this) — offsets each copy by +10,+10,
-// seals the undo group on both sides so it's one step, and reselects the new copies.
+// one sealed undo step, and reselects the new copies.
 export function duplicateSelection(
     selectedIds: string[],
     duplicateElements: (ids: string[], dx: number, dy: number) => string[],
     setSelection: (ids: string[]) => void,
     undoManager: Y.UndoManager | null,
 ): void {
-    undoManager?.stopCapturing();
-    const ids = duplicateElements(selectedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET);
-    undoManager?.stopCapturing();
+    const ids = sealed(undoManager, () => duplicateElements(selectedIds, DUPLICATE_OFFSET, DUPLICATE_OFFSET));
     if (ids.length) setSelection(ids);
 }
 
@@ -78,15 +76,13 @@ export function deleteSelection(
     setSelection: (ids: string[]) => void,
     undoManager: Y.UndoManager | null,
 ): void {
-    undoManager?.stopCapturing();
-    deleteElements(selectedIds);
-    undoManager?.stopCapturing();
+    sealed(undoManager, () => deleteElements(selectedIds));
     setSelection([]);
 }
 
 // The z-order write, shared by the keyboard brackets and the properties panel's Arrange buttons so
-// the fractional-index math lives in one place. Seals the undo group on both sides (one step) and
-// no-ops when the block is already at the edge.
+// the fractional-index math lives in one place. One sealed undo step, and a no-op when the block is
+// already at the edge.
 export function applyZOrder(
     op: ZOp,
     elements: VectorElement[],
@@ -96,16 +92,13 @@ export function applyZOrder(
 ): void {
     const patches = computeZOrder(orderByFractionalIndex(elements), selectedIds, op);
     if (!patches.length) return;
-    undoManager?.stopCapturing();
-    updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } })));
-    undoManager?.stopCapturing();
+    sealed(undoManager, () => updateElements(patches.map((p) => ({ id: p.id, fields: { index: p.index } }))));
 }
 
-type VectorKeyboardParams = {
+type CanvasKeyboardParams = {
     enabled: boolean;
     elements: VectorElement[];
     selectedIds: string[];
-    tool: VectorTool;
     setTool: (t: VectorTool) => void;
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
@@ -128,7 +121,7 @@ const NUDGES = [
     ['Shift+ArrowDown', 0, NUDGE_STEP_LARGE],
 ] as const;
 
-export function useCanvasKeyboard(params: VectorKeyboardParams) {
+export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     const { enabled, elements, selectedIds, undoManager } = params;
     const hasSelection = selectedIds.length > 0;
 
@@ -173,9 +166,9 @@ export function useCanvasKeyboard(params: VectorKeyboardParams) {
     const toggleLock = useCallback(() => live.current.setToolLocked(!live.current.toolLocked), []);
     useHotkey('Q', toggleLock, on);
 
-    // Discrete ops seal the undo group on BOTH sides (see deleteSelection/duplicateSelection): a
-    // nudge inside the 500ms capture window then can't merge into them. Nudges themselves carry no
-    // seal, so rapid taps still coalesce.
+    // Discrete ops go through `sealed` (see deleteSelection/duplicateSelection): a nudge inside the
+    // 500ms capture window then can't merge into them. Nudges themselves are unsealed, so rapid taps
+    // still coalesce into one step.
     const del = useCallback(() => {
         const p = live.current;
         deleteSelection(p.selectedIds, p.deleteElements, p.setSelection, p.undoManager);

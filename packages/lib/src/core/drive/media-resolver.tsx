@@ -4,7 +4,9 @@ import { getDrivePreviewUrl } from '../api';
 import { useFolderLookup } from './hooks/reads';
 import { useUploadFile } from './hooks/writes';
 
-const PENDING_PREFIX = 'pending:';
+// The optimistic-insert sentinel: a media name that exists only in this tab until its upload lands.
+// Exported because every host that adds an image optimistically writes one (vector's paste paths).
+export const PENDING_PREFIX = 'pending:';
 
 export function isPendingMediaName(name: string): boolean {
     return name.startsWith(PENDING_PREFIX);

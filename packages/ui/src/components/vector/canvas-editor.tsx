@@ -16,7 +16,6 @@ import {
     elementBounds,
     elementsInFrame,
     fitImageSize,
-    frameSnapExtras,
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     type ImageSize,
@@ -32,6 +31,7 @@ import {
     SNAP_SCREEN_THRESHOLD,
     type SnapLine,
     type SnapTargets,
+    SVG_NS,
     sceneBounds,
     snapBoxToTargets,
     type VectorArrowElement,
@@ -50,6 +50,7 @@ import { FileDropOverlay } from '../file-drop-overlay';
 import { HintPill } from '../hint-pill';
 import { readImageSize, readImageSizeFromUrl } from '../media/read-image-size';
 import type { ZOp } from '../properties-panel/z-order';
+import { CanvasObjectMenu } from './canvas-object-menu';
 import { pointerCursor } from './cursor';
 import { ElementLayer } from './element-layer';
 import { useCanvasClipboard } from './hooks/use-canvas-clipboard';
@@ -66,14 +67,11 @@ import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-me
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
 import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
-import { type CreatingState, creatingElement, newShapeBox, normalizeRect } from './tools/create-shape';
-import { homeToFrame } from './tools/frame-scope';
+import { type CreatingState, creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
-import { VectorObjectMenu } from './vector-object-menu';
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
@@ -155,8 +153,9 @@ type CanvasEditorProps = {
     searchActiveId?: string | null;
 };
 
-// The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
-// move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
+// The live, interactive canvas surface — one absolutely positioned layer per element, with the
+// scene-space overlay and the screen-space chrome above it: pan/zoom viewport, tool-driven
+// drag-create, selection, move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
 // exactly one Yjs transact fires per completed gesture (UX-RULING 5), with stopCapturing() at each
 // gesture start so one gesture = one undo step.
 export function CanvasEditor({
@@ -200,14 +199,16 @@ export function CanvasEditor({
     // background paints — and clips — the layers.
     const frame = viewport === 'frame' ? frames.find((f) => f.id === frameId) : undefined;
     // In frame mode the viewport's scene space IS the frame's space (elements store frame-relative
-    // coordinates), so an insert needs no translation — only the home frame stamped on it. Every
-    // insert path (drag-create, image drop/paste/picker, clipboard) goes through these two.
+    // coordinates), so an insert needs no translation — only the home frame stamped on it. Every insert
+    // path (drag-create, image drop/paste/picker, clipboard) goes through these two, so no callsite can
+    // forget it. `frameId` sits AFTER the spread on purpose: a pasted element carries the SOURCE frame's
+    // id and must land in the frame being pasted into.
     const addElement = useCallback(
-        (partial: NewVectorElement) => addElementRaw(homeToFrame(partial, frameId)),
+        (partial: NewVectorElement) => addElementRaw({ ...partial, frameId }),
         [addElementRaw, frameId],
     );
     const addElements = useCallback(
-        (partials: NewVectorElement[]) => addElementsRaw(partials.map((p) => homeToFrame(p, frameId))),
+        (partials: NewVectorElement[]) => addElementsRaw(partials.map((p) => ({ ...p, frameId }))),
         [addElementsRaw, frameId],
     );
     const {
@@ -354,6 +355,7 @@ export function CanvasEditor({
         toolLocked,
         canEdit,
         zoom,
+        viewportRef,
         coarse,
         ordered,
         byId: committedById,
@@ -414,7 +416,6 @@ export function CanvasEditor({
         enabled: canEdit && !textEditing,
         elements: visibleElements,
         selectedIds,
-        tool,
         setTool,
         toolLocked,
         setToolLocked,
@@ -547,15 +548,13 @@ export function CanvasEditor({
     // aligns to its neighbours. The infinite canvas has no edges to seed. Threshold is screen-space:
     // SNAP_SCREEN_THRESHOLD / zoom keeps the snap radius a constant pixel distance at any zoom.
     const buildSnapTargets = useCallback(
-        (excludeIds: Set<string>) => {
-            const extras = frame ? frameSnapExtras(frame) : undefined;
-            return computeSnapTargets(
+        (excludeIds: Set<string>) =>
+            computeSnapTargets(
                 visibleRef.current.map((el) => ({ id: el.id, box: elementBox(el) })),
                 excludeIds,
-                extras?.extraV,
-                extras?.extraH,
-            );
-        },
+                frame && [0, frame.width / 2, frame.width],
+                frame && [0, frame.height / 2, frame.height],
+            ),
         [frame],
     );
 
@@ -945,7 +944,7 @@ export function CanvasEditor({
         // Box tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already returned via
         // the tools hook.) Rich text drags out like a shape; a click under the threshold places the
         // default box instead of discarding it — see finishGesture.
-        if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse' || tool === 'richtext') {
+        if (isBoxTool(tool)) {
             frozenRef.current = true;
             undoManager?.stopCapturing();
             setSelectedIds([]);
@@ -1471,7 +1470,7 @@ export function CanvasEditor({
             <HintPill className="bottom-3 right-3" title="Reset zoom" onClick={resetZoom}>
                 {Math.round(zoom * 100)}%
             </HintPill>
-            <VectorObjectMenu
+            <CanvasObjectMenu
                 contextMenu={objectContextMenu}
                 onArrange={onMenuArrange}
                 onCopy={onMenuCopy}

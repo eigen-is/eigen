@@ -1,10 +1,9 @@
-import { isTransparentColor } from '../fill';
 import { hitTestBox } from '../geometry';
 import { cornerRadius, outlinePath, rectOutline } from '../outline';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_OBJECT_FIT, OBJECT_FITS, type VectorImageElement } from '../types';
 import { defineKind } from './kind';
 import { oneOf, str } from './read-fields';
-import { dashArray, escapeXml, round, svgId } from './render-utils';
+import { dashArray, escapeXml, isBordered, round, svgId } from './render-utils';
 
 export const imageKind = defineKind<VectorImageElement>({
     type: 'image',
@@ -18,8 +17,6 @@ export const imageKind = defineKind<VectorImageElement>({
         corners: true,
         stroke: true,
         strokeOptional: true,
-        typography: false,
-        objectFit: true,
         bindable: false,
         silhouette: 'box',
         creation: 'none',
@@ -51,9 +48,8 @@ export const imageKind = defineKind<VectorImageElement>({
         const d = outlinePath(rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, radius, 0));
         // The stroke fields are this kind's BORDER (types.ts), the way they are rich text's. It is drawn
         // after the picture, so a border never sits under the pixels it frames.
-        const bordered = el.strokeWidth > 0 && !isTransparentColor(el.strokeColor);
         const dash = dashArray(el.strokeStyle, el.strokeWidth);
-        const border = bordered
+        const border = isBordered(el)
             ? `<path d="${d}" fill="none" stroke="${escapeXml(el.strokeColor)}" stroke-width="${round(el.strokeWidth)}"${dash ? ` stroke-dasharray="${dash.map(round).join(' ')}"` : ''}/>`
             : '';
         if (radius <= 0) return { svg: `${image}${border}` };
