@@ -5,8 +5,12 @@
 
 import { moveEndpoints, renormalize } from './elbow-pins';
 import { elbowRoutingContext } from './elbow-route';
-import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
+// The registry imports geometry's box primitives and geometry dispatches through the registry: one
+// deliberate cycle. Safe because every export on both sides is a hoisted `function` declaration and no
+// module body calls across the cycle while either is still evaluating (test/vector/kinds/cycle.test.ts
+// pins both entry orders).
+import { ELEMENT_KINDS } from './kinds';
 import {
     type Arrowhead,
     isBindable,
@@ -109,31 +113,11 @@ export function getElementsBounds(boxes: Box[]): Bounds {
     return boxes.map(getElementBounds).reduce(unionBounds);
 }
 
-// Element bounds, arrow-aware: an arrow unions its rotated label rect into the box bounds, so a
-// wide label on a short arrow is not clipped by the viewBox nor missed by marquee/ring. Every other
-// element is exactly its box AABB. `arrowRoute` (the derived elbow polyline) replaces the stored box for an
-// elbow arrow, whose bends spill outside the 2-endpoint box.
+// Element bounds, kind-aware: an arrow unions its rotated label rect into the box bounds; every other
+// element is exactly its box AABB. `arrowRoute` (the derived elbow polyline) replaces the stored box for
+// an elbow arrow, whose bends spill outside the 2-endpoint box.
 export function elementBounds(el: VectorElement, arrowRoute?: Point[]): Bounds {
-    if (el.type !== 'arrow') return getElementBounds(el);
-    const base = arrowRoute ? pointsBounds(arrowRoute.map((p) => linearLocalToScene(el, p))) : getElementBounds(el);
-    const label = arrowLabelBox(el, arrowRoute);
-    if (!label) return base;
-    const hw = label.width / 2;
-    const hh = label.height / 2;
-    const corners: Point[] = [
-        { x: label.center.x - hw, y: label.center.y - hh },
-        { x: label.center.x + hw, y: label.center.y - hh },
-        { x: label.center.x + hw, y: label.center.y + hh },
-        { x: label.center.x - hw, y: label.center.y + hh },
-    ].map((c) => linearLocalToScene(el, c));
-    const xs = corners.map((c) => c.x);
-    const ys = corners.map((c) => c.y);
-    return unionBounds(base, {
-        minX: Math.min(...xs),
-        minY: Math.min(...ys),
-        maxX: Math.max(...xs),
-        maxY: Math.max(...ys),
-    });
+    return ELEMENT_KINDS[el.type].bounds(el, arrowRoute);
 }
 
 // Map a scene point into the box's unrotated local frame, so every hit-test works on an
@@ -181,7 +165,7 @@ const CLOSE_PATH_THRESHOLD = 8;
 // Excalidraw's getElementHitThreshold: a linear/arrow element is grabbed within the LARGER of the
 // zoom-scaled screen threshold (0.85× — Excalidraw's tested floor; lower gets FP-flaky at high zoom)
 // and half the drawn ink width plus 0.1. Replaces an additive threshold+ink that grew both together.
-const LINEAR_HIT_SCREEN_FACTOR = 0.85;
+export const LINEAR_HIT_SCREEN_FACTOR = 0.85;
 
 // Hit tolerance in screen px (Excalidraw's DEFAULT_COLLISION_THRESHOLD); hosts divide by zoom so an
 // element's grab radius is a constant on-screen distance at any zoom. One source so hover/hit-testing
@@ -324,21 +308,7 @@ export function isClosedPath(points: Point[]): boolean {
 // `arrowRoute` is the derived elbow polyline (local frame); pass it for an elbow arrow so the hit-test runs
 // against the routed segments, not the straight 2-point line. Ignored for every other element.
 export function hitTestElement(element: VectorElement, point: Point, threshold: number, arrowRoute?: Point[]): boolean {
-    switch (element.type) {
-        case 'ellipse':
-            return hitTestEllipse(element, point);
-        case 'diamond':
-            return hitTestDiamond(element, point);
-        case 'rectangle':
-        case 'richtext':
-        case 'image':
-            return hitTestBox(element, point);
-        case 'freedraw':
-        case 'line':
-            return hitTestLinear(element, point, threshold);
-        case 'arrow':
-            return hitTestArrow(element, point, threshold, arrowRoute);
-    }
+    return ELEMENT_KINDS[element.type].hitTest(element, point, threshold, arrowRoute);
 }
 
 // A linear element's local frame ↔ scene mapping. The renderer places every vertex at
@@ -353,37 +323,6 @@ export function linearLocalToScene(box: Box, local: Point): Point {
     return rotatePoint({ x: box.x + local.x, y: box.y + local.y }, boxCenter(box), box.angle);
 }
 
-// Unrotate the probe into the element's local frame, then measure to the polyline. Tolerance is the
-// larger of the 0.85-scaled screen threshold and the drawn ink half-width (+0.1) per LINEAR_HIT_SCREEN_FACTOR;
-// a closed, filled path is also hit anywhere inside.
-function hitTestLinear(element: VectorLinearElement, point: Point, threshold: number): boolean {
-    const points = parsePoints(element.points);
-    if (points.length === 0) return false;
-    const p = linearSceneToLocal(element, point);
-
-    const inkHalf =
-        element.type === 'freedraw' ? (element.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2 : element.strokeWidth / 2;
-    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, inkHalf + 0.1)) return true;
-    return isClosedPath(points) && !isTransparentFill(parseFill(element.fill)) && pointInPolygon(p, points);
-}
-
-// An arrow is hit on its polyline (like a line) OR inside its label rect — both measured in the arrow's
-// local frame (the label rotates with the arrow), so a wide label on a short arrow is still selectable.
-// `route` is the derived elbow polyline; when given the hit runs against it instead of the stored points.
-function hitTestArrow(el: VectorArrowElement, point: Point, threshold: number, route?: Point[]): boolean {
-    const points = route ?? parsePoints(el.points);
-    if (points.length === 0) return false;
-    const p = linearSceneToLocal(el, point);
-    if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, el.strokeWidth / 2 + 0.1))
-        return true;
-    const label = arrowLabelBox(el, route);
-    return (
-        label !== null &&
-        Math.abs(p.x - label.center.x) <= label.width / 2 &&
-        Math.abs(p.y - label.center.y) <= label.height / 2
-    );
-}
-
 // Point-to-segment distance (Excalidraw's distanceToLineSegment): project onto the segment, clamp the
 // parameter to [0,1], measure to the clamped foot.
 export function distanceToSegment(p: Point, a: Point, b: Point): number {
@@ -395,7 +334,7 @@ export function distanceToSegment(p: Point, a: Point, b: Point): number {
 }
 
 // Even-odd ray cast, for inside-hits on a closed filled path.
-function pointInPolygon(p: Point, points: Point[]): boolean {
+export function pointInPolygon(p: Point, points: Point[]): boolean {
     let inside = false;
     for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
         const a = points[i];
@@ -405,7 +344,7 @@ function pointInPolygon(p: Point, points: Point[]): boolean {
     return inside;
 }
 
-function pointsBounds(points: Point[]): Bounds {
+export function pointsBounds(points: Point[]): Bounds {
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;

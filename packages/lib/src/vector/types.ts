@@ -189,7 +189,7 @@ export type VectorMeta = { background: string; gridSize: number };
 export type VectorScene = { elements: VectorElement[]; frames: VectorFrame[]; meta: VectorMeta };
 
 // The base half of the write/read whitelist. Each kind adds its own; the union (ELEMENT_FIELDS) is
-// assembled at the bottom of this file.
+// assembled from the registry in kinds/index.ts.
 export const BASE_ELEMENT_FIELDS = [
     'id',
     'type',
@@ -210,6 +210,7 @@ export const BASE_ELEMENT_FIELDS = [
 
 export const DEFAULT_FONT_SIZE = 20;
 export const DEFAULT_FONT_FAMILY = 'Excalifont';
+export const DEFAULT_FILL_STYLE: FillStyle = 'solid';
 export const DEFAULT_CORNERS: Corners = 'curved';
 export const DEFAULT_OBJECT_FIT: ObjectFit = 'contain';
 // Freedraw draws sharp (Excalidraw stores freedraw roundness null); the reader also falls back to this
@@ -448,40 +449,3 @@ export function arrowShapeFields(shape: ArrowShape): { elbow: boolean; roundness
     if (shape === 'elbow') return { elbow: true };
     return { elbow: false, roundness: shape === 'curved' ? 'round' : 'sharp' };
 }
-
-// The write/read whitelist, one-for-one with the slides OBJECT_FIELDS idiom: the base fields plus
-// every kind's own. Every doc.transact write iterates it; the reader materializes only these keys.
-export const ELEMENT_FIELDS = [
-    ...BASE_ELEMENT_FIELDS,
-    'fill',
-    'fillStyle',
-    'roughness',
-    'seed',
-    'corners',
-    'objectFit',
-    'mediaName',
-    'html',
-    'fontFamily',
-    'fontSize',
-    'fontWeight',
-    'fontStyle',
-    'textDecoration',
-    'textAlign',
-    'verticalAlign',
-    'color',
-    'letterSpacing',
-    'lineHeight',
-    'highlightColor',
-    'roundness',
-    'points',
-    'pressures',
-    'simulatePressure',
-    'elbow',
-    'fixedSegments',
-    'startArrowhead',
-    'endArrowhead',
-    'startBinding',
-    'endBinding',
-    'text',
-    'labelWidth',
-] as const;

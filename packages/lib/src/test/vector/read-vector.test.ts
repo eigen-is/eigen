@@ -1,14 +1,24 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { isValidFractionalIndex } from '../../vector/fractional-index';
+import { ELEMENT_FIELDS } from '../../vector/kinds';
 import { readVectorFromDoc } from '../../vector/read-vector';
-import { DEFAULT_CORNERS, DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META, ELEMENT_FIELDS } from '../../vector/types';
+import { DEFAULT_CORNERS, DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META } from '../../vector/types';
 
 function writeElement(map: Y.Map<unknown>, id: string, fields: Record<string, unknown>) {
     const m = new Y.Map();
     m.set('id', id);
     for (const [k, v] of Object.entries(fields)) m.set(k, v);
     map.set(id, m);
+}
+
+function writeFrame(doc: Y.Doc, id: string, index = 'a0') {
+    doc.transact(() => {
+        const f = new Y.Map();
+        f.set('id', id);
+        f.set('index', index);
+        doc.getMap('frames').set(id, f);
+    });
 }
 
 function docWith(build: (elements: Y.Map<unknown>, meta: Y.Map<unknown>) => void): Y.Doc {
@@ -553,6 +563,8 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     test('every ELEMENT_FIELDS key round-trips through readVectorFromDoc', () => {
         for (const { record, fields } of cases) {
             const doc = docWith((elements) => writeElement(elements, String(record.id), record));
+            // every fixture sits in 'frame1'; without the frame the reader re-homes the dangling frameId
+            writeFrame(doc, 'frame1');
             const [el] = readVectorFromDoc(doc).elements;
             const got: Record<string, unknown> = Object.fromEntries(Object.entries(el));
             for (const field of fields) {
@@ -663,6 +675,27 @@ describe('readVectorFromDoc — the canvas model', () => {
             corners: 'round',
             verticalAlign: 'center',
         });
+    });
+
+    test('a frameId whose frame is gone re-homes to the lowest-index frame', () => {
+        const doc = new Y.Doc();
+        doc.transact(() => {
+            writeElement(doc.getMap('elements'), 'a', { type: 'rectangle', index: 'a0', frameId: 'ghost' });
+            writeElement(doc.getMap('elements'), 'b', { type: 'rectangle', index: 'a1', frameId: 'f2' });
+        });
+        writeFrame(doc, 'f2', 'a1');
+        writeFrame(doc, 'f1', 'a0');
+        const [a, b] = readVectorFromDoc(doc).elements;
+        expect(a.frameId).toBe('f1');
+        expect(b.frameId).toBe('f2');
+    });
+
+    test('with no frames at all a dangling frameId falls back to the infinite canvas', () => {
+        const doc = new Y.Doc();
+        doc.transact(() =>
+            writeElement(doc.getMap('elements'), 'a', { type: 'rectangle', index: 'a0', frameId: 'ghost' }),
+        );
+        expect(readVectorFromDoc(doc).elements[0].frameId).toBe('');
     });
 
     test('the hand text kind no longer exists', () => {

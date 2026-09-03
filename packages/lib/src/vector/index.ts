@@ -8,6 +8,7 @@ export * from './fractional-index';
 export * from './frames';
 export * from './geometry';
 export * from './image-fit';
+export * from './kinds';
 export * from './media-refs';
 export * from './outline';
 export * from './read-vector';
