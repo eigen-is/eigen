@@ -26,6 +26,7 @@ import {
     marqueeMode,
     orderByFractionalIndex,
     parseBackgroundFill,
+    parseIdList,
     parsePoints,
     resizeLinear,
     SNAP_SCREEN_THRESHOLD,
@@ -38,7 +39,7 @@ import {
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
-import { Image as ImageIcon } from 'lucide-react';
+import { Image as ImageIcon, MessageSquare } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isTypingTarget } from '../../hooks/is-typing-target';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
@@ -144,6 +145,10 @@ type CanvasEditorProps = {
     publishCursor: PublishCursor;
     // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
     imageInsertRef?: { current: CanvasImageInsert | null };
+    // Comments. A commented element flags its top-right corner; clicking the flag opens the first card
+    // (the host reveals it). Omitting onOpenCard hides the flags, omitting onAddComment the menu row.
+    onOpenCard?: (cardId: string) => void;
+    onAddComment?: (elementId: string) => void;
 };
 
 // The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
@@ -167,6 +172,8 @@ export function CanvasEditor({
     aspectLocked,
     publishCursor,
     imageInsertRef,
+    onOpenCard,
+    onAddComment,
 }: CanvasEditorProps) {
     const {
         elements,
@@ -278,6 +285,20 @@ export function CanvasEditor({
         [viewport, elements, frameId],
     );
     const ordered = useMemo(() => orderByFractionalIndex(visibleElements), [visibleElements]);
+
+    // The flagged elements: those carrying at least one comment card, with the corner the flag sits on
+    // (a zero-size box, so boxToStyle maps it to the screen point at render time).
+    const commentedElements = useMemo(
+        () =>
+            ordered.flatMap((el) => {
+                const [cardId] = parseIdList(el.commentCardIds);
+                const box = elementBox(el);
+                return cardId
+                    ? [{ id: el.id, cardId, corner: { x: box.x + box.width, y: box.y, width: 0, height: 0, angle: 0 } }]
+                    : [];
+            }),
+        [ordered],
+    );
 
     // All elements by id — the map an elbow arrow reads (arrowRoute) to resolve its bound shapes and
     // derive its route. Deliberately spans the WHOLE scene: an elbow arrow inside a frame still routes
@@ -850,6 +871,8 @@ export function CanvasEditor({
     const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, updateElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
+    // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
+    const menuItemId = objectContextMenu.item;
     // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
     // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
     // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
@@ -1273,6 +1296,23 @@ export function CanvasEditor({
                 </g>
             </svg>
             <div className="pointer-events-none absolute inset-0">
+                {/* Comment flags: screen-space like the selection ring, so they keep their size at any zoom. */}
+                {onOpenCard &&
+                    commentedElements.map(({ id, cardId, corner }) => {
+                        const { left, top } = boxToStyle(corner);
+                        return (
+                            <button
+                                key={id}
+                                type="button"
+                                className="pointer-events-auto absolute -translate-y-1/2 translate-x-1/2 rounded-full bg-background p-0.5 text-muted-foreground shadow"
+                                style={{ left, top }}
+                                onClick={() => onOpenCard(cardId)}
+                                title="Open comment"
+                            >
+                                <MessageSquare className="h-3 w-3" />
+                            </button>
+                        );
+                    })}
                 {showTransform && single && (
                     <ObjectTransform
                         box={elementBox(single)}
@@ -1389,6 +1429,7 @@ export function CanvasEditor({
                 onPaste={onMenuPaste}
                 onDuplicate={onMenuDuplicate}
                 onDelete={onMenuDelete}
+                onComment={onAddComment && menuItemId ? () => onAddComment(menuItemId) : undefined}
             />
         </div>
     );

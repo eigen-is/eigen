@@ -1,9 +1,14 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCommentCards, useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
 import { MediaResolverProvider } from '@workspace/lib/drive';
-import type { ActiveComments, CardAttachmentDraft } from '@workspace/lib/types/comments';
+import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
+import {
+    elementForCommentCard,
+    VECTOR_STYLE_DEFAULTS,
+    withCommentCard,
+    withoutCommentCard,
+} from '@workspace/lib/vector';
 import { CollabLoadingState, Column, ColumnLayout, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -14,6 +19,7 @@ import {
     CanvasEditor,
     type CanvasImageInsert,
     CanvasPropertiesPanel,
+    useCanvasComments,
     useCanvasDoc,
     useCanvasPresence,
     useSelection,
@@ -32,12 +38,6 @@ type VectorEditorProps = {
     onAccessDialogOpen: () => void;
     initialChatName?: string;
 };
-
-// A document-level comment attaches to the whole vector document, not to any element (no
-// element anchoring — that would reintroduce the Y.Array field ELEMENT_FIELDS eliminated). So every
-// card in the `comments` Y.Map is "active"; there are no orphans and no per-element
-// anchor text.
-const EMPTY_ANCHOR_TEXTS: Map<string, string> = new Map();
 
 // The live scene plus pointer/keyboard interaction. Tool and selection state are lifted here so the
 // toolbar, canvas, and properties panel share one source (the slides editor/canvas idiom); viewport
@@ -76,14 +76,11 @@ export function VectorEditor({
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds.join(','), allImageSelected);
 
-    // Document-level comments + activity (the slides PanelColumn shape). Every card in the `comments`
-    // Y.Map is active — read them here so the "active" set is derived independently of the lifecycle's
-    // own card read (the slides idiom, where useActiveComments is the independent anchor source).
+    // Comments + activity (the slides PanelColumn shape). Read the cards here so the "active" set is
+    // derived independently of the lifecycle's own card read (the slides idiom). A card anchored to an
+    // element takes that element's text as its panel row; every card stays active either way (D2.13).
     const cards = useCommentCards(doc.yjsDoc, 'comments');
-    const activeComments = useMemo<ActiveComments>(
-        () => ({ ids: new Set(Object.keys(cards)), anchorTexts: EMPTY_ANCHOR_TEXTS }),
-        [cards],
-    );
+    const activeComments = useCanvasComments(doc.elements, cards);
 
     const { panel, commentPanelOpen, activityPanelOpen, mobilePanelOpen, toggleComments, toggleActivity, closePanels } =
         useDocumentPanels(isMobile);
@@ -114,40 +111,71 @@ export function VectorEditor({
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
     const [addOpen, setAddOpen] = useState(false);
+    // The element the pending "New comment" anchors to — set by the canvas menu's Comment row, null for
+    // a card raised from the panel (which stays document-level).
+    const [commentAnchorId, setCommentAnchorId] = useState<string | null>(null);
+
+    const addCommentTo = useCallback((elementId: string) => {
+        setCommentAnchorId(elementId);
+        setAddOpen(true);
+    }, []);
+
+    const closeAdd = useCallback((open: boolean) => {
+        setAddOpen(open);
+        if (!open) setCommentAnchorId(null);
+    }, []);
+
+    // Opening a card reveals its anchor element; mobile hides the canvas, so there it just opens.
+    const openCard = useCallback(
+        (cardId: string) => {
+            const el = elementForCommentCard(doc.elements, cardId);
+            if (el) setSelectedIds([el.id]);
+            setOpenCardId(cardId);
+        },
+        [doc.elements, setSelectedIds, setOpenCardId],
+    );
 
     // Toolbar "Add image": the picker lives here, placement goes through the canvas' published
     // insert surface (placement needs the live viewport).
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const imageInsertRef = useRef<CanvasImageInsert | null>(null);
 
-    // Document-level create: the card anchors to the document (no anchor callback), so it lands in the
-    // `comments` Y.Map and is active by construction.
+    // A comment raised from an element anchors to it; one raised from the panel stays document-level,
+    // which is what every vector comment was before elements could carry them.
     const handleSaveNew = useCallback(
         async (
             patch: { title?: string; description?: string; color?: string },
             attachments?: CardAttachmentDraft[],
             assignee?: string | null,
         ) => {
+            const anchorId = commentAnchorId;
             const card = await createCard({ ...patch, attachments });
+            if (card && anchorId) {
+                const el = doc.elements.find((e) => e.id === anchorId);
+                if (el) doc.updateElement(anchorId, { commentCardIds: withCommentCard(el, card.id) });
+            }
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
             }
+            setCommentAnchorId(null);
             setAddOpen(false);
         },
-        [createCard, assignComment],
+        [commentAnchorId, createCard, assignComment, doc.elements, doc.updateElement],
     );
 
-    // Document-level delete: there is no host anchor to strip, so Delete removes the card from the
-    // `comments` Y.Map directly. The .eigenchat + comments.db row persist server-side.
+    // Delete drops the card from the `comments` Y.Map and strips it from its anchor element, so no
+    // element keeps a flag for a card that is gone. The .eigenchat + comments.db row persist server-side.
     const deleteCard = useCallback(
         (cardId: string) => {
             const yjsDoc = doc.yjsDoc;
             if (!yjsDoc) return;
+            const anchor = elementForCommentCard(doc.elements, cardId);
             yjsDoc.transact(() => {
                 yjsDoc.getMap('comments').delete(cardId);
             });
+            if (anchor) doc.updateElement(anchor.id, { commentCardIds: withoutCommentCard(anchor, cardId) });
         },
-        [doc.yjsDoc],
+        [doc.yjsDoc, doc.elements, doc.updateElement],
     );
 
     const panelProps = {
@@ -160,7 +188,8 @@ export function VectorEditor({
         filter: commentFilter,
         activeComments,
         commentContextMenu,
-        onOpenCard: setOpenCardId,
+        // The mobile pane hides the canvas, so its element reveal would go unseen there.
+        onOpenCard: isMobile ? setOpenCardId : openCard,
         onAddComment: canWrite && chatFolderId ? () => setAddOpen(true) : undefined,
     };
 
@@ -225,6 +254,8 @@ export function VectorEditor({
                                         aspectLocked={aspectLocked}
                                         publishCursor={publishCursor}
                                         imageInsertRef={imageInsertRef}
+                                        onOpenCard={openCard}
+                                        onAddComment={canWrite && chatFolderId ? addCommentTo : undefined}
                                     />
                                 </div>
                                 {/* Right side: the comment/activity pane wins over the properties panel
@@ -269,7 +300,7 @@ export function VectorEditor({
 
                 <CardFormDialog
                     open={addOpen}
-                    onOpenChange={setAddOpen}
+                    onOpenChange={closeAdd}
                     onSave={handleSaveNew}
                     allowAttachments={!!mediaFolderId}
                     members={members}

@@ -3,6 +3,7 @@
 // Delete) so the two apps' menus read byte-identically. The ops act on the canvas' full selection,
 // wired host-side to the clipboard producer/consumer, applyZOrder / duplicateElements / deleteElements.
 
+import { CommentMenuItems } from '../comments';
 import {
     ArrangeMenuItems,
     ClipboardMenuItems,
@@ -10,7 +11,13 @@ import {
     ObjectActionMenuItems,
     type useContextMenu,
 } from '../context-menu';
-import { DropdownMenuSeparator } from '../dropdown-menu';
+import {
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '../dropdown-menu';
 import type { ZOp } from '../properties-panel/z-order';
 
 type VectorObjectMenuProps = {
@@ -22,6 +29,8 @@ type VectorObjectMenuProps = {
     onPaste: () => void;
     onDuplicate: () => void;
     onDelete: () => void;
+    // Raises a comment on the right-clicked element; omitted when the user can't comment.
+    onComment?: () => void;
 };
 
 export function VectorObjectMenu({
@@ -32,6 +41,7 @@ export function VectorObjectMenu({
     onPaste,
     onDuplicate,
     onDelete,
+    onComment,
 }: VectorObjectMenuProps) {
     return (
         <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
@@ -42,6 +52,23 @@ export function VectorObjectMenu({
                     <ClipboardMenuItems onCopy={onCopy} onCut={onCut} onPaste={onPaste} />
                     <DropdownMenuSeparator />
                     <ObjectActionMenuItems onDuplicate={onDuplicate} onDelete={onDelete} />
+                    {onComment && (
+                        <>
+                            <DropdownMenuSeparator />
+                            {/* The shared "Add comment" row, so the label + icon match every other host;
+                                the card's own rows live in the comment panel, not on the canvas menu. */}
+                            <CommentMenuItems
+                                primitives={{
+                                    Item: DropdownMenuItem,
+                                    Sub: DropdownMenuSub,
+                                    SubTrigger: DropdownMenuSubTrigger,
+                                    SubContent: DropdownMenuSubContent,
+                                }}
+                                item={null}
+                                onAddComment={onComment}
+                            />
+                        </>
+                    )}
                 </>
             )}
         </ContextMenuAnchor>
