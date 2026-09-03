@@ -1,14 +1,7 @@
 // Touch / stylus gesture policy for the vector canvas, ported from Excalidraw (App.tsx:8398-8432 spike
 // discard, 8446-8453 penMode latch, 8578-8588 palm-rejection allowlist, 9061 pinch-pin-mid-freedraw).
 // The canvas only DISPATCHES into these handlers; all touch LOGIC lives here so the canvas file stays
-// flat (CANVAS.md's rule that vector-canvas.tsx must not grow). Three behaviors:
-//   - penMode latch: the first stylus pointerdown flips a session-scoped penMode; while it's on a finger
-//     can no longer draw/create (palm rejection) but still selects and pans. A mouse is never affected.
-//   - two-finger pan + pinch-zoom: a second touch aborts the one-finger gesture (a freehand spike is
-//     discarded, a real stroke finalizes) and both fingers then drive pan/pinch through the viewport,
-//     which stays the single zoom owner.
-//   - double-tap: two quick stationary taps enter text editing via the SAME entry a mouse double-click
-//     uses; a touch that DRAGS never taps, so a drag can never enter text editing.
+// flat. The behaviours are documented in docs/CANVAS.md § Touch / stylus policy.
 
 import { type MutableRefObject, useRef } from 'react';
 import type { VectorTool } from '../hooks/use-tool';
@@ -30,9 +23,9 @@ export function touchIgnoredDuringPen(penDrawing: boolean): boolean {
 }
 
 // A finger keeps operating these tools even after a pen has latched penMode (Excalidraw's allowlist,
-// App.tsx:8580-8585 — selection/lasso/text/image; ours is select + text). Every other tool draws or
+// App.tsx:8580-8585 — selection/lasso/text/image; ours is select + rich text). Every other tool draws or
 // creates, so a finger is locked out of it while a pen is in use.
-const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'text']);
+const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'richtext']);
 export function touchAllowedInPenMode(tool: VectorTool): boolean {
     return PEN_MODE_TOUCH_ALLOWED.has(tool);
 }

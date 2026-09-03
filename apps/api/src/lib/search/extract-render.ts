@@ -1,7 +1,7 @@
 import type { JSONContent } from '@tiptap/core';
 import type { Sheet } from '@workspace/lib/sheets';
 import type { DeckData } from '@workspace/lib/slides';
-import type { VectorScene } from '@workspace/lib/vector';
+import type { ElementKindRegistry, VectorScene } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { ExtractTextJob, TransformWarning } from '../document/transform/protocol';
 import { CONTENT_INDEX_MAX_BYTES } from './limits';
@@ -87,14 +87,14 @@ function collectSheetsText(sheets: Sheet[], cap: number): string {
     return out.parts.join(' ');
 }
 
-// Every text element's text and every arrow's label, in z-order, joined with newlines
-// — the two fields a drawing carries words in. Empty labels contribute nothing.
-function collectVectorText(scene: VectorScene, cap: number): string {
+// `kinds` rides in from the caller's dynamic import, which is what keeps the vector engine out of an
+// eigendoc extract.
+function collectVectorText(scene: VectorScene, kinds: ElementKindRegistry, cap: number): string {
     const out: CappedText = { parts: [], bytes: 0 };
     for (const element of scene.elements) {
-        if ((element.type === 'text' || element.type === 'arrow') && element.text) {
-            if (!appendCapped(out, element.text, cap)) return out.parts.join('\n');
-        }
+        const text = kinds[element.type].searchText(element);
+        if (text === '') continue;
+        if (!appendCapped(out, text, cap)) return out.parts.join('\n');
     }
     return out.parts.join('\n');
 }
@@ -123,8 +123,9 @@ export async function extractCollabText(
             return { text: collectSheetsText(sheets, CONTENT_INDEX_MAX_BYTES), warnings: [] };
         }
         case 'eigenvector': {
-            const { readVectorFromDoc } = await import('@workspace/lib/vector');
-            return { text: collectVectorText(readVectorFromDoc(doc), CONTENT_INDEX_MAX_BYTES), warnings: [] };
+            const { ELEMENT_KINDS, readVectorFromDoc } = await import('@workspace/lib/vector');
+            const scene = readVectorFromDoc(doc);
+            return { text: collectVectorText(scene, ELEMENT_KINDS, CONTENT_INDEX_MAX_BYTES), warnings: [] };
         }
     }
 }

@@ -66,7 +66,11 @@ describe('Eigenvector export route — response contract', () => {
 
         const svg = await res.text();
         expect(svg.startsWith('<svg')).toBe(true);
-        // The text element and the bound arrow label both render, XML-escaped by the serializer.
+        // A rich-text box rides in a <foreignObject>, which the export sanitizer keeps only because
+        // the vector transform declares it an HTML integration point — without that the box's markup
+        // is dropped and the drawing exports wordless.
+        expect(svg).toContain('<foreignObject');
+        // The rich-text box and the bound arrow label both render, the payload still escaped.
         expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
         expect(svg).toContain(GOLDEN_VECTOR_LABEL);
         // Fonts are inlined for the families the text actually uses (Excalifont here).
@@ -131,6 +135,39 @@ describe('Eigenvector export — SVG media sanitization', () => {
         expect(embedded).not.toContain('<script');
         expect(embedded).not.toContain('onload');
         expect(embedded).not.toContain('169.254.169.254');
+    }, 120_000);
+});
+
+describe('Eigenvector export — rich-text HTML sanitization', () => {
+    test('a hostile rich-text body exports with scripts, handlers and external refs stripped', async () => {
+        // `html` is raw TipTap markup any collaborator can write, and the reader only caps and cleans it
+        // (no tag filtering), so the assembled SVG must go through DOMPurify before it is served.
+        const created = await seedVector('Evil Text', false);
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, created.id);
+        const scene = buildGoldenVectorScene();
+        seedVectorDoc(collab.doc, {
+            ...scene,
+            elements: scene.elements.map((el) =>
+                el.type === 'richtext'
+                    ? {
+                          ...el,
+                          html:
+                              '<p onclick="alert(1)">safe<img src=x onerror="alert(2)">' +
+                              '<script>alert(3)</script><a href="javascript:alert(4)">link</a></p>',
+                      }
+                    : el,
+            ),
+        });
+
+        const res = await exportRequest(created.id, 'svg');
+        expect(res.status).toBe(200);
+        const svg = await res.text();
+        expect(svg).toContain('safe');
+        expect(svg).not.toContain('<script');
+        expect(svg).not.toContain('onerror');
+        expect(svg).not.toContain('onclick');
+        expect(svg).not.toContain('javascript:');
     }, 120_000);
 });
 

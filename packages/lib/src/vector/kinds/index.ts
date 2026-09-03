@@ -1,0 +1,91 @@
+// The registry. TypeScript forces every member of VectorElementType to have an entry, so a new kind
+// cannot be half-added.
+
+import { serializeFill, TRANSPARENT_FILL } from '../fill';
+import { BASE_ELEMENT_FIELDS, type ElementOfType, type VectorElementType } from '../types';
+import { arrowKind } from './arrow';
+import { diamondKind } from './diamond';
+import { ellipseKind } from './ellipse';
+import { freedrawKind } from './freedraw';
+import { imageKind } from './image';
+import type { ElementKind, StyleDefaults } from './kind';
+import { lineKind } from './line';
+import { rectangleKind } from './rectangle';
+import { richTextKind } from './richtext';
+
+export type { ElementKind, RenderOutput, StyleDefaults } from './kind';
+export { defineKind } from './kind';
+
+// Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
+// field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
+export type ElementKindRegistry = { [K in VectorElementType]: ElementKind<ElementOfType<K>> };
+
+export const ELEMENT_KINDS: ElementKindRegistry = {
+    rectangle: rectangleKind,
+    diamond: diamondKind,
+    ellipse: ellipseKind,
+    image: imageKind,
+    richtext: richTextKind,
+    freedraw: freedrawKind,
+    line: lineKind,
+    arrow: arrowKind,
+};
+
+// The registry answers the vocabulary question too, so a stored `type` is validated against the one
+// table. hasOwn, not `in`: `'constructor' in ELEMENT_KINDS` is true and would dispatch to Object's.
+export function isVectorElementType(v: unknown): v is VectorElementType {
+    return typeof v === 'string' && Object.hasOwn(ELEMENT_KINDS, v);
+}
+
+// Toolbar order (Excalidraw's), the order ELEMENT_FIELDS walks the kinds in. Every type appears
+// exactly once — the registry test pins that through ELEMENT_FIELDS.
+const TOOL_ORDER: VectorElementType[] = [
+    'rectangle',
+    'diamond',
+    'ellipse',
+    'arrow',
+    'line',
+    'freedraw',
+    'richtext',
+    'image',
+];
+
+// The kinds a tool can create, in toolbar order — VECTOR_TOOLS derives from this instead of hand-listing
+// tools next to icons. The literal tuple is what gives `CreationToolType` a narrow union, so a UI table
+// keyed by it is exhaustive-checked; the registry test pins the tuple against the capabilities so the two
+// can never disagree.
+const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'richtext'] as const;
+
+export type CreationToolType = (typeof CREATION_ORDER)[number];
+export const CREATION_TOOL_TYPES: readonly CreationToolType[] = CREATION_ORDER;
+
+// The stored-key whitelist every writer iterates and the reader materializes: the base fields plus every
+// kind's own, in declaration order, de-duplicated. A new kind extends it by existing.
+export const ELEMENT_FIELDS: readonly string[] = buildElementFields();
+
+function buildElementFields(): string[] {
+    const out: string[] = [...BASE_ELEMENT_FIELDS];
+    const seen = new Set<string>(out);
+    for (const type of TOOL_ORDER) {
+        for (const field of ELEMENT_KINDS[type].fields) {
+            if (seen.has(field)) continue;
+            seen.add(field);
+            out.push(field);
+        }
+    }
+    return out;
+}
+
+// The vector app's style table: roughness 1, hachure, Excalifont, curved corners. Slides' table lands
+// with the slides shell.
+export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
+    strokeColor: '#1e1e1e',
+    strokeWidth: 2,
+    fill: serializeFill(TRANSPARENT_FILL),
+    fillStyle: 'hachure',
+    roughness: 1,
+    corners: 'curved',
+    fontFamily: 'Excalifont',
+    fontSize: 20,
+    color: '#1e1e1e',
+};

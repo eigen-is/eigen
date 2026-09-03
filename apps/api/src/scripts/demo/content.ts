@@ -9,7 +9,7 @@
 // the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
 // email, so ids may be random per rebuild. All names, acts and vendors are fictional.
 
-import type { Arrowhead, FillStyle, Roundness, StrokeStyle } from '@workspace/lib/vector';
+import type { Arrowhead, Corners, FillStyle, Roundness, StrokeStyle } from '@workspace/lib/vector';
 
 export type LeadRole =
     | 'director'
@@ -361,7 +361,7 @@ export type SitePlanShape = {
     stroke?: string; // default DEFAULT_ELEMENT_PROPS.strokeColor
     strokeStyle?: StrokeStyle;
     strokeWidth?: number;
-    roundness?: Roundness; // default round
+    corners?: Corners; // default curved
     ground?: boolean; // drawn beneath the lines too, for an outline that must never catch a click meant for what it encloses
 };
 
@@ -551,7 +551,7 @@ export const SITE_PLAN = {
             fontSize: 18,
             ...STAGE,
             fillStyle: 'cross-hatch',
-            roundness: 'sharp',
+            corners: 'straight',
         },
         {
             key: 'wind-cover',
@@ -764,7 +764,7 @@ export const SITE_PLAN = {
             width: 220,
             height: 206,
             fill: '#ffffff',
-            roundness: 'sharp',
+            corners: 'straight',
         },
         // Legend swatches.
         {

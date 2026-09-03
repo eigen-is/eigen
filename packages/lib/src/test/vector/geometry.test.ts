@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { elbowRoute } from '../../vector/elbow-route';
+import { solidFill } from '../../vector/fill';
 import {
     anchorToScene,
     applyResize,
@@ -46,17 +47,19 @@ import {
     rotatePoint,
     sampleArrowCurve,
     serializePoints,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
 import {
     arrowsBoundTo,
+    type Corners,
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
+    type VectorRectangleElement,
     type VectorShapeElement,
 } from '../../vector/types';
 
@@ -148,7 +151,7 @@ describe('hitTestDiamond', () => {
 });
 
 describe('hitTestElement', () => {
-    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image'): VectorElement => {
+    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'richtext' | 'image'): VectorElement => {
         const base = {
             ...DEFAULT_ELEMENT_PROPS,
             id: 'e',
@@ -157,13 +160,31 @@ describe('hitTestElement', () => {
             width: 100,
             height: 60,
             angle: 0,
-            seed: 1,
             index: 'a0',
-        };
-        if (type === 'text')
-            return { ...base, type, text: 'hi', fontSize: 20, fontFamily: 'Excalifont', textAlign: 'left' };
-        if (type === 'image') return { ...base, type, mediaName: 'x.png' };
-        return { ...base, type, roundness: 'sharp' };
+            fill: solidFill('transparent'),
+            fillStyle: 'solid',
+            corners: 'straight',
+        } satisfies Omit<VectorRectangleElement, 'type' | 'roughness' | 'seed'>;
+        if (type === 'richtext')
+            return {
+                ...base,
+                type,
+                html: '<p>hi</p>',
+                fontFamily: 'Excalifont',
+                fontSize: 20,
+                fontWeight: 'normal',
+                fontStyle: 'normal',
+                textDecoration: 'none',
+                textAlign: 'left',
+                verticalAlign: 'top',
+                color: '#1e1e1e',
+                letterSpacing: 0,
+                lineHeight: 1.2,
+                highlightColor: 'transparent',
+                padding: 0,
+            };
+        if (type === 'image') return { ...base, type, mediaName: 'x.png', objectFit: 'contain' };
+        return { ...base, type, roughness: 1, seed: 1 };
     };
 
     test('dispatches shape geometry per type — corner hits a rectangle but not an ellipse', () => {
@@ -171,7 +192,7 @@ describe('hitTestElement', () => {
         expect(hitTestElement(make('rectangle'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('ellipse'), { x: 0, y: 0 }, 0)).toBe(false);
         expect(hitTestElement(make('diamond'), { x: 0, y: 0 }, 0)).toBe(false);
-        expect(hitTestElement(make('text'), { x: 0, y: 0 }, 0)).toBe(true);
+        expect(hitTestElement(make('richtext'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('image'), { x: 0, y: 0 }, 0)).toBe(true);
     });
 });
@@ -182,6 +203,9 @@ const linear = (over: Partial<VectorLinearElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'l',
     type: 'line',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,
@@ -416,8 +440,8 @@ describe('hitTestElement — linear', () => {
 
     test('a closed, filled line is hit inside the polygon; transparent is outline-only', () => {
         const points = '[[0,0],[100,0],[50,80],[0,0]]';
-        const filled = linear({ points, backgroundColor: '#ff0000', width: 100, height: 80 });
-        const open = linear({ points, backgroundColor: 'transparent', width: 100, height: 80 });
+        const filled = linear({ points, fill: solidFill('#ff0000'), width: 100, height: 80 });
+        const open = linear({ points, fill: solidFill('transparent'), width: 100, height: 80 });
         expect(hitTestElement(filled, { x: 50, y: 30 }, 1)).toBe(true);
         expect(hitTestElement(open, { x: 50, y: 30 }, 1)).toBe(false);
     });
@@ -608,16 +632,24 @@ describe('marqueeHits', () => {
 
 // --- Arrows: bindings, endpoints, heads, labels ---------------------------------------
 
-const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
+const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
     y: 0,
     width: 100,
     height: 60,
     angle: 0,
-    seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    roughness: 1,
+    seed: 1,
+    corners: 'straight',
+};
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...SHAPE_BASE,
     ...over,
 });
 
@@ -625,6 +657,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'ar',
     type: 'arrow',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,
@@ -736,6 +769,38 @@ describe('outlinePoint', () => {
             expect(b.x).toBeCloseTo(a.x);
             expect(b.y).toBeCloseTo(a.y);
         }
+    });
+});
+
+describe('docking on the true outline', () => {
+    // 100×100, so `round` collapses the core to a point and the outline IS the inscribed circle (r 50).
+    const rounded = (corners: Corners) =>
+        shapeEl({ id: 's', type: 'rectangle', x: 0, y: 0, width: 100, height: 100, corners });
+
+    test('a diagonal ray lands on the corner arc, inside the sharp corner', () => {
+        const sharp = outlinePoint(rounded('straight'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
+        const round = outlinePoint(rounded('round'), { x: 300, y: 300 }, { x: 50, y: 50 }, 0);
+        expect(sharp.x).toBeCloseTo(100, 6);
+        expect(round.x).toBeLessThan(sharp.x);
+        expect(Math.hypot(round.x - 50, round.y - 50)).toBeCloseTo(50, 6);
+    });
+
+    test('an axis-aligned ray is unchanged by rounding', () => {
+        const sharp = outlinePoint(rounded('straight'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
+        const round = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 0);
+        expect(sharp).toEqual({ x: 50, y: 0 });
+        expect(round).toEqual(sharp);
+    });
+
+    test('the binding gap still applies on a rounded shape', () => {
+        const hit = outlinePoint(rounded('round'), { x: 50, y: -100 }, { x: 50, y: 50 }, 8);
+        expect(hit.y).toBeCloseTo(-8, 6);
+    });
+
+    test('a rotated rounded shape docks in its own frame', () => {
+        const el = { ...rounded('round'), angle: 45 };
+        const hit = outlinePoint(el, { x: 50, y: -200 }, { x: 50, y: 50 }, 0);
+        expect(Math.hypot(hit.x - 50, hit.y - 50)).toBeCloseTo(50, 6);
     });
 });
 
@@ -1392,10 +1457,10 @@ describe('projectFixedPointOntoDiagonal', () => {
     });
 });
 
-describe('shapeSideMidpoints', () => {
+describe('shapeAnchorPoints', () => {
     test('rect/ellipse → right, bottom, left, top edge midpoints (Excalidraw order)', () => {
         const rect = shapeEl({ id: 'r', type: 'rectangle', x: 0, y: 0, width: 200, height: 100 });
-        expect(shapeSideMidpoints(rect)).toEqual([
+        expect(shapeAnchorPoints(rect)).toEqual([
             { x: 200, y: 50 },
             { x: 100, y: 100 },
             { x: 0, y: 50 },
@@ -1405,7 +1470,7 @@ describe('shapeSideMidpoints', () => {
 
     test('diamond → its four vertices/tips (right, bottom, left, top)', () => {
         const dia = shapeEl({ id: 'd', type: 'diamond', x: 0, y: 0, width: 200, height: 100 });
-        expect(shapeSideMidpoints(dia)).toEqual([
+        expect(shapeAnchorPoints(dia)).toEqual([
             { x: 200, y: 50 },
             { x: 100, y: 100 },
             { x: 0, y: 50 },

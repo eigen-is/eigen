@@ -327,7 +327,7 @@ describe('seed-demo', () => {
 
             // Site plan: a vector drawing built straight into the container's Y.Doc from SITE_PLAN
             // (no fixture). It reads back through the shipped reader with surviving shape bindings,
-            // elbow arrows, measured text, and every image pointing at a media file that landed.
+            // elbow arrows, measured rich text, and every image pointing at a media file that landed.
             const vectorName = `${SITE_PLAN.name}.eigenvector`;
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId, vectorName);
             const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
@@ -353,7 +353,11 @@ describe('seed-demo', () => {
             });
             expect(boundArrows.length).toBeGreaterThanOrEqual(6);
             expect(scene.elements.filter((el) => el.type === 'arrow' && el.elbow).length).toBeGreaterThanOrEqual(3);
-            for (const text of scene.elements.filter((el) => el.type === 'text')) {
+            // Every label is a measured rich-text box. The count floor keeps the size loop honest —
+            // a builder that stopped emitting text would otherwise iterate nothing and pass.
+            const richText = scene.elements.filter((el) => el.type === 'richtext');
+            expect(richText.length).toBeGreaterThanOrEqual(40);
+            for (const text of richText) {
                 expect(text.width).toBeGreaterThan(0);
                 expect(text.height).toBeGreaterThan(0);
             }

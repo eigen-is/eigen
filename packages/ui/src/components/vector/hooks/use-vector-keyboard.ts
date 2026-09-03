@@ -17,7 +17,7 @@ import {
 } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { useZOrderHotkeys, type ZOp } from '../../properties-panel/z-order';
-import type { VectorTool } from './use-tool';
+import { VECTOR_TOOLS, type VectorTool } from './use-tool';
 import type { VectorElementPatch } from './use-vector-doc';
 
 // Fractional-index rewrites for a z-order change. The selection moves as a block relative to the
@@ -123,25 +123,13 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     // Undo/redo through the doc's own UndoManager (⌘Z / ⌘⇧Z / ⌘Y).
     useYjsUndoHotkeys(undoManager, enabled);
 
-    // Tools — single keys, so the lib's ignoreInputs default keeps them off while typing elsewhere.
-    useHotkey('V', () => setTool('select'), { enabled });
-    useHotkey('1', () => setTool('select'), { enabled });
-    useHotkey('R', () => setTool('rectangle'), { enabled });
-    useHotkey('2', () => setTool('rectangle'), { enabled });
-    useHotkey('D', () => setTool('diamond'), { enabled });
-    useHotkey('3', () => setTool('diamond'), { enabled });
-    useHotkey('O', () => setTool('ellipse'), { enabled });
-    useHotkey('4', () => setTool('ellipse'), { enabled });
-    useHotkey('A', () => setTool('arrow'), { enabled });
-    useHotkey('5', () => setTool('arrow'), { enabled });
-    useHotkey('L', () => setTool('line'), { enabled });
-    useHotkey('6', () => setTool('line'), { enabled });
-    useHotkey('P', () => setTool('freedraw'), { enabled });
-    useHotkey('7', () => setTool('freedraw'), { enabled });
-    useHotkey('T', () => setTool('text'), { enabled });
-    useHotkey('8', () => setTool('text'), { enabled });
-    useHotkey('E', () => setTool('eraser'), { enabled });
-    useHotkey('0', () => setTool('eraser'), { enabled });
+    // Tools — single keys, so the lib's ignoreInputs default keeps them off while typing elsewhere. The
+    // letter and the digit come from VECTOR_TOOLS, the one table the toolbar reads, so a new tool binds
+    // itself. A module constant, so the hook count and order are fixed across renders.
+    for (const { tool, shortcut, digit } of VECTOR_TOOLS) {
+        useHotkey(shortcut, () => setTool(tool), { enabled });
+        useHotkey(digit, () => setTool(tool), { enabled });
+    }
 
     // Tool lock — keeps the selected tool active after a placement (Excalidraw's Q padlock).
     useHotkey('Q', () => setToolLocked(!toolLocked), { enabled });

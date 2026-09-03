@@ -20,6 +20,7 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
+import { textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
@@ -36,7 +37,7 @@ import {
     getElementsBounds,
     type ImageSize,
     isLinearElement,
-    isTransparent,
+    isTransparentColor,
     type MarqueeMode,
     marqueeMode,
     orderByFractionalIndex,
@@ -51,7 +52,6 @@ import {
     type VectorArrowElement,
     type VectorElement,
     type VectorMeta,
-    type VectorTextElement,
 } from '@workspace/lib/vector';
 import { ObjectTransform } from '@workspace/ui/components/transform/object-transform';
 import { cn } from '@workspace/ui/lib/utils';
@@ -77,7 +77,7 @@ import type { NewVectorElement, VectorElementPatch } from './hooks/use-vector-do
 import { applyZOrder, deleteSelection, duplicateSelection, useVectorKeyboard } from './hooks/use-vector-keyboard';
 import type { PublishCursor } from './hooks/use-vector-presence';
 import { useViewport } from './hooks/use-viewport';
-import { arrowLabelEditing, type EditingState, newTextEditing, textEditing } from './text-editing';
+import { arrowLabelEditing, type EditingState } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import {
@@ -104,9 +104,8 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 // Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
-// fontSize clamp for resize-scaling of text (a resize maps width ratio → fontSize).
-const MIN_FONT_SIZE = 4;
-const MAX_FONT_SIZE = 400;
+// The box a click with the rich-text tool places, in scene units. It arrives empty and selected.
+const NEW_RICHTEXT_SIZE = { width: 200, height: 40 };
 // Image drop/paste SIZING (natural-size-that-fits, 80% viewport cap, never upscale, unreadable →
 // default box) is the shared `fitImageSize` helper — vector is its reference behavior. Only the
 // CASCADE offset stays vector-side.
@@ -127,10 +126,6 @@ function boundsToBox(b: Bounds): Box {
 
 function boxToBounds(b: Box): Bounds {
     return { minX: b.x, minY: b.y, maxX: b.x + b.width, maxY: b.y + b.height };
-}
-
-function clampFontSize(size: number): number {
-    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size));
 }
 
 // pointerId gates move/up to the pointer that started the gesture — on touch, a second finger's
@@ -193,8 +188,8 @@ type VectorCanvasProps = {
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
     toggle: (id: string) => void;
-    // Aspect lock, shared with the properties-panel checkbox. Non-text selections map
-    // it to ObjectTransform's 'aspect-default'/'free' resizeMode; text stays forced 'aspect'.
+    // Aspect lock, shared with the properties-panel checkbox: ObjectTransform's 'aspect-default'
+    // (Shift frees) when on, 'free' when off.
     aspectLocked: boolean;
     // Awareness: the provider drives the CursorLayer's own subscription; publishCursor pushes the
     // local pointer's scene position (throttled in the editor's use-vector-presence).
@@ -487,18 +482,8 @@ export function VectorCanvas({
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [frozenRef, setTool, setSelectedIds]);
 
-    // Open the overlay on a new text element, an existing one, or an arrow's label. The session shapes
-    // live in the pure text-editing module; the canvas only picks the selection and opens.
-    const openNewText = (x: number, y: number) => {
-        setSelectedIds([]);
-        setEditing(newTextEditing(x, y));
-    };
-
-    const openEditExisting = (el: VectorTextElement) => {
-        setSelectedIds([el.id]);
-        setEditing(textEditing(el));
-    };
-
+    // Open the overlay on an arrow's label — the one plain-text path left on the canvas. The session
+    // shape lives in the pure text-editing module; the canvas only picks the selection and opens.
     const openEditArrowLabel = (el: VectorArrowElement) => {
         const ed = arrowLabelEditing(el, arrowRoute(el, committedById));
         if (!ed) return; // a degenerate arrow (< 2 points) has no label anchor
@@ -582,27 +567,19 @@ export function VectorCanvas({
         },
     });
 
-    const healTextDims = useCallback(
+    const healLabelWidth = useCallback(
         (id: string, text: string, fontSize: number, fontFamily: string) => {
             if (isVectorFontLoaded(fontSize, fontFamily)) return;
             loadVectorFont(fontSize, fontFamily)
                 .then(() => {
                     const el = elementsRef.current.find((x) => x.id === id);
-                    if (el?.type !== 'text' && el?.type !== 'arrow') return; // deleted meanwhile — nothing to heal
+                    if (el?.type !== 'arrow') return; // deleted meanwhile — nothing to heal
                     if (el.text !== text || el.fontSize !== fontSize || el.fontFamily !== fontFamily) return;
+                    // A label's height derives from its line count, so only labelWidth is measured.
                     const healed = measureVectorText(text, fontSize, fontFamily);
-                    // A text element stores width + height; an arrow's label height derives from its line
-                    // count, so only labelWidth is measured (the sole width source, like text elements' width).
-                    if (el.type === 'arrow') {
-                        if (healed.width === el.labelWidth) return;
-                        undoManager?.stopCapturing();
-                        updateElement(id, { labelWidth: healed.width });
-                        undoManager?.stopCapturing();
-                        return;
-                    }
-                    if (healed.width === el.width && healed.height === el.height) return;
+                    if (healed.width === el.labelWidth) return;
                     undoManager?.stopCapturing();
-                    updateElement(id, { width: healed.width, height: healed.height });
+                    updateElement(id, { labelWidth: healed.width });
                     undoManager?.stopCapturing();
                 })
                 .catch(() => {});
@@ -610,10 +587,9 @@ export function VectorCanvas({
         [updateElement, undoManager],
     );
 
-    // One editing session → exactly one Yjs write (or zero for an empty new element). stopCapturing
-    // on both sides so the session is its own undo step. The measurement util is the sole writer of
-    // the stored width/height. Read the live session from a ref (not a closure) so the callback stays
-    // stable and side effects run once, never inside a state updater.
+    // One editing session → exactly one Yjs write. stopCapturing on both sides so the session is its own
+    // undo step. Read the live session from a ref (not a closure) so the callback stays stable and side
+    // effects run once, never inside a state updater.
     const commitEditing = useCallback(
         (text: string) => {
             const ed = editingRef.current;
@@ -621,64 +597,21 @@ export function VectorCanvas({
             setEditing(null);
             if (!ed) return;
             const empty = text.trim().length === 0;
-            if (ed.kind === 'arrow') {
-                // The arrow already exists — write the label in place: `text` + measured `labelWidth`
-                // (height derives from the line count) in one sealed transact. An empty label
-                // clears both to ''/0 and never deletes the arrow; a still-empty label is a no-op.
-                // updateElement no-ops on a Yjs map the arrow's remote deletion already removed.
-                if (!(ed.isNew && empty)) {
-                    const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
-                    undoManager?.stopCapturing();
-                    updateElement(ed.id, { text: empty ? '' : text, labelWidth });
-                    undoManager?.stopCapturing();
-                    if (!empty) healTextDims(ed.id, text, ed.fontSize, ed.fontFamily);
-                }
-                setSelectedIds([ed.id]);
-                setTool('select');
-                return;
+            // The arrow already exists — write the label in place: `text` + measured `labelWidth`
+            // (height derives from the line count) in one sealed transact. An empty label clears both
+            // to ''/0 and never deletes the arrow; a still-empty label is a no-op. updateElement no-ops
+            // on a Yjs map the arrow's remote deletion already removed.
+            if (!(ed.isNew && empty)) {
+                const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
+                undoManager?.stopCapturing();
+                updateElement(ed.id, { text: empty ? '' : text, labelWidth });
+                undoManager?.stopCapturing();
+                if (!empty) healLabelWidth(ed.id, text, ed.fontSize, ed.fontFamily);
             }
-            if (ed.isNew) {
-                if (!empty) {
-                    const { width, height } = measureVectorText(text, ed.fontSize, ed.fontFamily);
-                    undoManager?.stopCapturing();
-                    // One addElement transact. Per-field LWW on concurrent text edits is accepted v1
-                    // (same as slides' text object): the later commit wins the `text` field whole.
-                    const id = addElement({
-                        type: 'text',
-                        x: ed.x,
-                        y: ed.y,
-                        width,
-                        height,
-                        text,
-                        fontSize: ed.fontSize,
-                        fontFamily: ed.fontFamily,
-                        textAlign: ed.textAlign,
-                    });
-                    undoManager?.stopCapturing();
-                    if (id) {
-                        setSelectedIds([id]);
-                        healTextDims(id, text, ed.fontSize, ed.fontFamily);
-                    }
-                }
-                // empty → zero Yjs writes, no element, no undo step
-            } else if (empty) {
-                undoManager?.stopCapturing();
-                deleteElements([ed.id]);
-                undoManager?.stopCapturing();
-                setSelectedIds([]);
-            } else {
-                const { width, height } = measureVectorText(text, ed.fontSize, ed.fontFamily);
-                undoManager?.stopCapturing();
-                updateElement(ed.id, { text, width, height }); // per-field LWW, accepted v1
-                undoManager?.stopCapturing();
-                setSelectedIds([ed.id]);
-                healTextDims(ed.id, text, ed.fontSize, ed.fontFamily);
-            }
-            // A text-tool session reverts to select (a double-click session was already select); the tool
-            // lock keeps the text tool active for repeated placement.
-            if (!toolLocked) setTool('select');
+            setSelectedIds([ed.id]);
+            setTool('select');
         },
-        [addElement, updateElement, deleteElements, undoManager, setSelectedIds, setTool, toolLocked, healTextDims],
+        [updateElement, undoManager, setSelectedIds, setTool, healLabelWidth],
     );
 
     // A paste carries no coordinates (unlike a drop), so it anchors on the visible viewport center.
@@ -863,8 +796,8 @@ export function VectorCanvas({
 
     // Element clipboard CONSUMER: eigen items → new elements. Images size from the TYPED width/height
     // (authoritative; angle applied; cross-mount re-uploads into our media/ then swaps the pending name
-    // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text) and
-    // self-heals once the face loads. Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
+    // in a late transact). Text re-measures its dims LOCALLY (typed size is never written onto text).
+    // Shapes rebuild from meta.vector. All ADDS run in ONE transact; the
     // set is re-anchored on the viewport centre preserving each element's relative offset.
     const pasteEigenItems = useCallback(
         (items: EigenClipboardItem[]) => {
@@ -895,7 +828,6 @@ export function VectorCanvas({
             }
 
             const partials: NewVectorElement[] = [];
-            const textHeals: { index: number; text: string; fontSize: number; fontFamily: string }[] = [];
             const crossMount: { index: number; item: EigenClipboardImageItem }[] = [];
             // Each pasted element's partial index → its source id (for the remap map), and the arrows whose
             // bindings are remapped across the pasted set once the clones have ids.
@@ -951,12 +883,13 @@ export function VectorCanvas({
                         height: h,
                         angle,
                         strokeColor: meta.strokeColor,
-                        backgroundColor: meta.backgroundColor,
+                        fill: meta.fill,
                         fillStyle: meta.fillStyle,
                         strokeStyle: meta.strokeStyle,
                         strokeWidth: meta.strokeWidth,
                         roughness: meta.roughness,
                         opacity: meta.opacity,
+                        corners: meta.corners,
                         roundness: meta.roundness,
                         points: meta.points,
                     };
@@ -982,28 +915,28 @@ export function VectorCanvas({
                     partials.push(partial);
                     continue;
                 }
-                // Real text element — re-measure dims locally (never the wire size). An empty text
-                // item is another app's contentless carrier (a shape from a foreign doc) — skip it.
+                // Real text item → a rich-text box, sized locally from the text (never the wire size).
+                // An empty text item is another app's contentless carrier (a shape from a foreign doc)
+                // — skip it.
                 if (!clipboardTextItemHasContent(item)) continue;
                 const typo = item.typography ?? {};
                 const fontFamily = typo.fontFamily ?? DEFAULT_FONT_FAMILY;
                 const fontSize = typo.fontSize ?? DEFAULT_FONT_SIZE;
-                const textAlign = toVectorTextAlign(typo.textAlign);
                 const { width: w, height: h } = measureVectorText(item.text, fontSize, fontFamily);
                 const pos = placeAt(meta, w, h);
-                textHeals.push({ index: partials.length, text: item.text, fontSize, fontFamily });
                 partials.push({
-                    type: 'text',
+                    type: 'richtext',
                     ...pos,
                     width: w,
                     height: h,
                     angle,
-                    text: item.text,
+                    html: textToParagraphHtml(item.text),
                     fontSize,
                     fontFamily,
-                    textAlign,
+                    textAlign: toVectorTextAlign(typo.textAlign),
+                    color: meta?.color,
                     strokeColor: meta?.strokeColor,
-                    backgroundColor: meta?.backgroundColor,
+                    fill: meta?.fill,
                     opacity: meta?.opacity,
                 });
             }
@@ -1019,11 +952,6 @@ export function VectorCanvas({
             if (!ids.length) return;
             setSelectedIds(ids);
 
-            // Text: heal dims once the face resolves (late transact each, self-sealing + live-validated).
-            for (const { index, text, fontSize, fontFamily } of textHeals) {
-                const id = ids[index];
-                if (id) healTextDims(id, text, fontSize, fontFamily);
-            }
             // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
             // (late transact) or drop the element on failure — the shipped M4 optimistic-insert idiom.
             for (const { index, item } of crossMount) {
@@ -1058,43 +986,40 @@ export function VectorCanvas({
             updateElements,
             setSelectedIds,
             undoManager,
-            healTextDims,
             updateElementUntracked,
             deleteElementsUntracked,
             uploadFile.mutateAsync,
         ],
     );
 
-    // Plain-text paste (no eigen payload, no OS files) → ONE text element at the viewport centre, with
-    // default typography and locally-measured dims (the pasteEigenItems text idiom). Multi-line text is
-    // preserved — measureVectorText and the renderer both split on \n. One sealed undo step.
+    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport centre, with
+    // default typography and a locally-measured box (the pasteEigenItems text idiom). Multi-line text is
+    // preserved — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
     const pasteTextElement = useCallback(
         (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
             const { width: w, height: h } = measureVectorText(text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
             undoManager?.stopCapturing();
             const id = addElement({
-                type: 'text',
+                type: 'richtext',
                 x: anchor.x - w / 2,
                 y: anchor.y - h / 2,
                 width: w,
                 height: h,
                 angle: 0,
-                text,
+                html: textToParagraphHtml(text),
                 fontSize: DEFAULT_FONT_SIZE,
                 fontFamily: DEFAULT_FONT_FAMILY,
                 textAlign,
             });
             undoManager?.stopCapturing();
-            if (!id) return;
-            setSelectedIds([id]);
-            healTextDims(id, text, DEFAULT_FONT_SIZE, DEFAULT_FONT_FAMILY);
+            if (id) setSelectedIds([id]);
         },
-        [viewportCenterScene, addElement, setSelectedIds, undoManager, healTextDims],
+        [viewportCenterScene, addElement, setSelectedIds, undoManager],
     );
 
     // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
-    // text, or the flattened text of pasted HTML, becomes one text element. Prose alignment rides in
+    // text, or the flattened text of pasted HTML, becomes one rich-text box. Prose alignment rides in
     // text/html as a block text-align; carry it through toVectorTextAlign (justify→left). Returns true
     // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
     const pasteNonEigenText = useCallback(
@@ -1156,7 +1081,7 @@ export function VectorCanvas({
             }
             // No eigen/SVG payload. OS files fall through to useFilePasteTarget (image drop path).
             if (paste.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new text element; only claim the event when
+            // Plain text (or the text of pasted HTML) → a new rich-text box; only claim the event when
             // content is actually consumed, else it falls through to the OS-file path.
             if (pasteNonEigenText(paste.html, paste.text)) {
                 e.preventDefault();
@@ -1186,16 +1111,14 @@ export function VectorCanvas({
     ]);
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). frozenRef: no new session over a live gesture. Empty canvas → new text (Excalidraw's
-    // openNewText); else edit the hit text/arrow label.
+    // the tap-tap). frozenRef: no new session over a live gesture. Only an arrow label opens; a
+    // rich-text box has no in-place editor.
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!canEdit || tool !== 'select' || editing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
         const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
-        if (hitEl?.type === 'text') openEditExisting(hitEl);
-        else if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
-        else if (!hitEl) openNewText(p.x, p.y);
+        if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
@@ -1305,27 +1228,22 @@ export function VectorCanvas({
         // the event for those tools and the canvas does nothing more.
         if (drawing.onPointerDown(e, p)) return;
 
-        // Text tool: click places a caret (no drag-create, no capture). A click that hits an existing
-        // text element edits THAT element instead of stacking a fresh empty on top.
-        if (tool === 'text') {
-            // Cancel the pointerdown: the compatibility mousedown fires AFTER this dispatch (and
-            // after the overlay mounts + focuses its textarea), and its focus default re-hit-tests
-            // at the cursor — which sits exactly on the new textarea's top-left boundary pixel. A
-            // miss lands on this non-focusable div, blurs the textarea, and the blur-commit
-            // discards the empty session instantly (intermittent dead clicks). Canceling also
-            // keeps mousedown's caret-placement from destroying the select-all on existing text.
+        // Rich-text tool: a click places an EMPTY box at the point and selects it (no drag-create, no
+        // capture). There is no in-place editor, so nothing opens over it.
+        if (tool === 'richtext') {
             e.preventDefault();
-            const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
-            const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
-            if (hitEl?.type === 'text') openEditExisting(hitEl);
-            else openNewText(p.x, p.y);
+            undoManager?.stopCapturing();
+            const id = addElement({ type: 'richtext', x: p.x, y: p.y, angle: 0, ...NEW_RICHTEXT_SIZE });
+            undoManager?.stopCapturing();
+            if (id) setSelectedIds([id]);
+            if (!toolLocked) setTool('select');
             return;
         }
 
         containerRef.current?.setPointerCapture(e.pointerId);
 
         // Shape tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already
-        // returned via the tools hook; text was handled above.)
+        // returned via the tools hook, the richtext tool just above.)
         if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse') {
             frozenRef.current = true;
             undoManager?.stopCapturing();
@@ -1592,7 +1510,7 @@ export function VectorCanvas({
     const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
 
     const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
-    const background = isTransparent(meta.background) ? undefined : meta.background;
+    const background = isTransparentColor(meta.background) ? undefined : meta.background;
 
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
     // threaded in one place, not per callsite.
@@ -1631,12 +1549,9 @@ export function VectorCanvas({
                     {ordered.map((el) => {
                         // A line being vertex-dragged is drawn by the drawing preview below instead.
                         if (drawing.hiddenId === el.id) return null;
-                        // The element under edit is drawn only by the overlay textarea (WYSIWYG). An
-                        // arrow keeps its shaft/heads and hides just the label (render text='').
-                        if (editing?.id === el.id) {
-                            const isArrow = editing.kind === 'arrow' && el.type === 'arrow';
-                            return isArrow ? node(renderEl({ ...el, text: '' })) : null;
-                        }
+                        // Only an arrow label opens the overlay, so the element under edit keeps its
+                        // shaft/heads and hides just the label the textarea draws (render text='').
+                        if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
                         return node(renderEl(el));
                     })}
                     {creating && node(creatingElement(creating))}
@@ -1656,11 +1571,8 @@ export function VectorCanvas({
                         boxToStyle={boxToStyle}
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate
-                        // Text has derived dims + no wrap, so only corners, aspect ALWAYS locked
-                        // regardless of the checkbox; a resize maps the width ratio → fontSize, then
-                        // re-measures (see onCommit). Every other type follows the shared aspect lock:
-                        // 'aspect-default' (Shift frees) when checked, else 'free'.
-                        resizeMode={single.type === 'text' ? 'aspect' : aspectLocked ? 'aspect-default' : 'free'}
+                        // The shared aspect lock: 'aspect-default' (Shift frees) when checked, else 'free'.
+                        resizeMode={aspectLocked ? 'aspect-default' : 'free'}
                         minSize={MIN_ELEMENT_SIZE}
                         snapBox={resizeSnapBox}
                         onTransform={(next) => {
@@ -1680,19 +1592,7 @@ export function VectorCanvas({
                             if (next.x !== start.x) fields.x = next.x;
                             if (next.y !== start.y) fields.y = next.y;
                             if (next.angle !== start.angle) fields.angle = next.angle;
-                            if (single.type === 'text') {
-                                // Resize scales fontSize by the width ratio, then RE-MEASURES the
-                                // dims at that size — never the Box arithmetic dims (they'd drift off
-                                // the renderer's layout). The measurement util is the only dim writer.
-                                if (next.width !== start.width && start.width > 0) {
-                                    const size = clampFontSize(single.fontSize * (next.width / start.width));
-                                    const { width, height } = measureVectorText(single.text, size, single.fontFamily);
-                                    fields.fontSize = size;
-                                    fields.width = width;
-                                    fields.height = height;
-                                    healTextDims(single.id, single.text, size, single.fontFamily);
-                                }
-                            } else if (isLinearElement(single)) {
+                            if (isLinearElement(single)) {
                                 // A linear element rescales its points to the new box through resizeLinear,
                                 // reading the COMMITTED element so the total scale is exact.
                                 if (next.width !== start.width || next.height !== start.height) {

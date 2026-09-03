@@ -1,4 +1,5 @@
 import type { BackgroundFill } from '../types/background';
+import { FRAME_ASPECT_RATIO, FRAME_HEIGHT, FRAME_WIDTH } from '../vector/frames';
 
 type BaseObject = {
     id: string;
@@ -51,9 +52,10 @@ export type DeckData = {
     slideOrder: string[];
 };
 
-export const SLIDE_ASPECT_RATIO = 16 / 9;
-export const SLIDE_BASE_WIDTH = 1920;
-export const SLIDE_BASE_HEIGHT = 1080;
+// Slide space is frame space: one owner of the numbers (vector/frames.ts), aliased here.
+export const SLIDE_ASPECT_RATIO = FRAME_ASPECT_RATIO;
+export const SLIDE_BASE_WIDTH = FRAME_WIDTH;
+export const SLIDE_BASE_HEIGHT = FRAME_HEIGHT;
 
 export function pxToPercent(val: number, axis: 'x' | 'y'): number {
     return (val / (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT)) * 100;

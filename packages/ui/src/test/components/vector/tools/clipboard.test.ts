@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import { extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorMeta } from '@workspace/lib/vector';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_SKETCH_PROPS,
+    solidFill,
+    type VectorElement,
+    type VectorMeta,
+} from '@workspace/lib/vector';
 import { buildSelectionData } from '../../../../components/vector/tools/clipboard';
 
 // The svg flavour policy: every selection ships a self-contained SVG (element JSON in <metadata>). An
@@ -13,6 +20,7 @@ const meta: VectorMeta = { background: 'transparent', gridSize: 20 };
 
 const rect = (id: string, index: string): VectorElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     id,
     type: 'rectangle',
     x: 0,
@@ -22,7 +30,9 @@ const rect = (id: string, index: string): VectorElement => ({
     angle: 0,
     seed: 1,
     index,
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    corners: 'straight',
 });
 
 const image = (id: string, index: string): VectorElement => ({
@@ -34,9 +44,31 @@ const image = (id: string, index: string): VectorElement => ({
     width: 80,
     height: 80,
     angle: 0,
-    seed: 2,
     index,
     mediaName: 'photo.png',
+    corners: 'straight',
+    objectFit: 'contain',
+});
+
+const richtext = (id: string, index: string): VectorElement => ({
+    ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_RICHTEXT_PROPS,
+    id,
+    type: 'richtext',
+    x: 0,
+    y: 200,
+    width: 120,
+    height: 40,
+    angle: 0,
+    index,
+    html: '<p>hello</p>',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    corners: 'straight',
+    fontFamily: 'Excalifont',
+    fontSize: 20,
+    strokeColor: '#111111',
+    color: '#e03131',
 });
 
 const mediaPath = {
@@ -76,9 +108,25 @@ describe('buildSelectionData', () => {
         expect(data.svg).not.toContain('pending.png');
     });
 
+    test('a rich-text box carries its text colour beside its border colour, svg round-trip too', () => {
+        // The text colour is `color`; `strokeColor` is the box border. Restoring the border as the text
+        // colour is what lost it — both ride meta.vector, distinctly.
+        const data = buildSelectionData([richtext('t1', 'a0')], ['t1'], meta, () => undefined);
+        const vector = data.items[0]?.meta?.vector as { color?: string; strokeColor?: string };
+        expect(vector.color).toBe('#e03131');
+        expect(vector.strokeColor).toBe('#111111');
+        const restored = extractClipboardSvgMetadata(data.svg ?? '')?.items[0]?.meta?.vector as {
+            color?: string;
+            strokeColor?: string;
+        };
+        expect(restored.color).toBe('#e03131');
+        expect(restored.strokeColor).toBe('#111111');
+    });
+
     test('an elbow arrow carries its elbow flag in meta.vector, through the svg round-trip too', () => {
         const arrow: VectorElement = {
             ...DEFAULT_ELEMENT_PROPS,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'a1',
             type: 'arrow',
             x: 0,

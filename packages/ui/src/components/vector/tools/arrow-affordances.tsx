@@ -12,10 +12,11 @@ import {
     bindingDistance,
     boundEndpoint,
     focusSnapPoint,
+    isBindable,
     type Point,
     parseBinding,
     parsePoints,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
     type VectorArrowElement,
     type VectorElement,
     type VectorShapeElement,
@@ -46,10 +47,6 @@ function clampUnit(n: number): number {
     return Math.min(1, Math.max(0, n));
 }
 
-function isBindableShape(el: VectorElement | undefined): el is VectorShapeElement {
-    return el !== undefined && (el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse');
-}
-
 // The side-midpoint snap dots over a bind candidate: all four rendered, the one nearest the pointer
 // within bindingDistance + strokeWidth/2 filled in the accent, the rest ghosted. For a NON-elbow arrow the
 // dots are suppressed while the cursor is buried inside the shape (Excalidraw's !isPointInElement); for an
@@ -68,7 +65,7 @@ export function SnapDots({
     // Excalidraw draws nothing when the cursor is buried inside a NON-elbow bindable (interactiveScene's
     // `!cursorIsInsideBindable || isElbow` gate); an elbow always draws.
     if (!elbow && pointInsideShape(shape, pointer)) return null;
-    const mids = shapeSideMidpoints(shape);
+    const mids = shapeAnchorPoints(shape);
     const r = SNAP_DOT_SCREEN_R / zoom;
     const highlightWithin = bindingDistance(zoom) + shape.strokeWidth / 2;
     // The dot nearest the pointer is the one the dock will snap to.
@@ -127,7 +124,7 @@ function focusEnds(
         const binding = parseBinding(end === 'start' ? arrow.startBinding : arrow.endBinding);
         if (!binding) continue;
         const shape = byId.get(binding.elementId);
-        if (!isBindableShape(shape)) continue;
+        if (!shape || !isBindable(shape)) continue;
         const anchor = anchorToScene(shape, binding.fixedPoint);
         const endpoint = boundEndpoint(arrow, end, shape);
         if (dist(anchor, endpoint) * zoom < minScreenGap) continue;

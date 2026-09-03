@@ -13,9 +13,9 @@ describe('getBackgroundStyle', () => {
         });
     });
 
-    test('gradient → linear-gradient backgroundImage in oklab', () => {
+    test('gradient → linear-gradient backgroundImage', () => {
         expect(getBackgroundStyle({ type: 'gradient', from: '#ffffff', to: 'transparent', angle: 180 })).toEqual({
-            backgroundImage: 'linear-gradient(180deg in oklab, #ffffff, transparent)',
+            backgroundImage: 'linear-gradient(180deg, #ffffff, transparent)',
         });
     });
 

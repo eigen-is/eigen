@@ -14,6 +14,10 @@ export const EIGEN_FONTS: EigenFont[] = [
     { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400] },
 ];
 
+// The vocabulary a stored `fontFamily` must be one of — a name, never a CSS stack. Readers validate
+// against this so an unrecognised value falls back instead of reaching a CSS declaration.
+export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((f) => f.name);
+
 export function getFontFamily(fontName: string): string {
     const font = EIGEN_FONTS.find((f) => f.name === fontName);
     return font?.family ?? `'${fontName}', sans-serif`;

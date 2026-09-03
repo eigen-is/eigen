@@ -2,7 +2,13 @@
 // rectangle/diamond/ellipse is being dragged out. Pulled out of vector-canvas.tsx (the canvas only
 // dispatches) alongside the other gesture modules (line.ts, freedraw.ts, eraser.ts).
 
-import { type Box, DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_ROUNDNESS, type VectorElement } from '@workspace/lib/vector';
+import {
+    type Box,
+    DEFAULT_ELEMENT_PROPS,
+    ELEMENT_KINDS,
+    VECTOR_STYLE_DEFAULTS,
+    type VectorElement,
+} from '@workspace/lib/vector';
 
 const CREATING_ID = '__creating__';
 
@@ -28,17 +34,24 @@ export function newShapeBox(sx: number, sy: number, dx: number, dy: number, from
 }
 
 export function creatingElement(c: CreatingState): VectorElement {
-    return {
+    const box = {
         id: CREATING_ID,
-        type: c.type,
         x: c.box.x,
         y: c.box.y,
         width: c.box.width,
         height: c.box.height,
         angle: 0,
         ...DEFAULT_ELEMENT_PROPS,
-        roundness: DEFAULT_SHAPE_ROUNDNESS,
-        seed: c.seed,
         index: 'a0',
     };
+    // The preview takes its style from the same kind defaults the committed element will (addElement),
+    // so the two can't drift; only the gesture's seed carries over. One branch per kind, because an
+    // ellipse has no corners to treat and the field is not part of its model.
+    if (c.type === 'ellipse') {
+        return { ...box, ...ELEMENT_KINDS.ellipse.defaults(VECTOR_STYLE_DEFAULTS), type: 'ellipse', seed: c.seed };
+    }
+    if (c.type === 'diamond') {
+        return { ...box, ...ELEMENT_KINDS.diamond.defaults(VECTOR_STYLE_DEFAULTS), type: 'diamond', seed: c.seed };
+    }
+    return { ...box, ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS), type: 'rectangle', seed: c.seed };
 }

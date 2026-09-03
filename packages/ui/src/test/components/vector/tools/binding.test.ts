@@ -6,11 +6,13 @@ import {
     boundEndpoint,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SKETCH_PROPS,
     parseBinding,
     projectFixedPointOntoDiagonal,
     rotatePoint,
     serializeBinding,
-    shapeSideMidpoints,
+    shapeAnchorPoints,
+    solidFill,
     type VectorArrowElement,
     type VectorElement,
     type VectorShapeElement,
@@ -27,10 +29,12 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
 
 const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     type: 'rectangle',
     // A filled shape binds anywhere inside (a transparent one binds only in the outline band), so a
     // dropped-inside endpoint reaches it.
-    backgroundColor: '#dddddd',
+    fill: solidFill('#dddddd'),
+    fillStyle: 'solid',
     x: 0,
     y: 0,
     width: 200,
@@ -38,12 +42,13 @@ const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>
     angle: 0,
     seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    corners: 'straight',
     ...over,
 });
 
 const arrow = (over: Partial<VectorArrowElement> & { points: string }): VectorArrowElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     ...DEFAULT_ARROW_PROPS,
     id: 'ar',
     type: 'arrow',
@@ -125,7 +130,7 @@ describe('bindArrow — outside side-midpoint drop snaps the anchor onto the dot
         for (const angle of [0, 30]) {
             test(`${end} end, ${angle}° rect: anchor rests on the right-edge midpoint`, () => {
                 const shape = rect({ id: 'shape', angle });
-                const rightMid = shapeSideMidpoints(shape)[0]; // right, bottom, left, top order
+                const rightMid = shapeAnchorPoints(shape)[0]; // right, bottom, left, top order
                 // 5px outside the right edge (local (205,50)) — outside the fill, within the snap band.
                 const drop = rotatePoint({ x: 205, y: 50 }, { x: 100, y: 50 }, angle);
                 // The free end sits far along the right edge's outward normal, so the chord crosses the right

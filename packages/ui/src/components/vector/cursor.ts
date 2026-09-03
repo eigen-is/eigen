@@ -14,7 +14,7 @@ export function pointerCursor(state: {
     const { panning, panMode, tool, hoveringSelectable } = state;
     if (panning) return 'grabbing';
     if (panMode) return 'grab';
-    if (tool === 'text') return 'text';
+    if (tool === 'richtext') return 'text';
     if (tool !== 'select') return 'crosshair';
     return hoveringSelectable ? 'move' : 'default';
 }

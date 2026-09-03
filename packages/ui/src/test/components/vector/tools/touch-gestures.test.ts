@@ -25,7 +25,7 @@ describe('isFreedrawSpike', () => {
 describe('touchAllowedInPenMode', () => {
     test('a finger still selects and types while a pen is in use', () => {
         expect(touchAllowedInPenMode('select')).toBe(true);
-        expect(touchAllowedInPenMode('text')).toBe(true);
+        expect(touchAllowedInPenMode('richtext')).toBe(true);
     });
 
     test('a finger is locked out of every draw/create tool in penMode', () => {
