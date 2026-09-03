@@ -180,7 +180,6 @@ describe('hitTestElement', () => {
                 color: '#1e1e1e',
                 letterSpacing: 0,
                 lineHeight: 1.2,
-                highlightColor: 'transparent',
                 padding: 0,
             };
         if (type === 'image') return { ...base, type, mediaName: 'x.png', objectFit: 'contain' };

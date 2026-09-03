@@ -439,7 +439,6 @@ export function buildGoldenVectorScene(): VectorScene {
             color: '#1e1e1e',
             letterSpacing: 0,
             lineHeight: 1.2,
-            highlightColor: 'transparent',
             padding: 0,
         },
         {

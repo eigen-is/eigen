@@ -536,7 +536,6 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         color: '#0a0b0c',
         letterSpacing: 2,
         lineHeight: 1.5,
-        highlightColor: '#ffff00',
         padding: 16,
     });
     const image = base({ id: 'img1', type: 'image', mediaName: 'photo.png', corners: 'curved', objectFit: 'cover' });
@@ -602,7 +601,6 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
                 'color',
                 'letterSpacing',
                 'lineHeight',
-                'highlightColor',
                 'padding',
             ],
         },
@@ -659,6 +657,18 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
                 expect(got[field]).toEqual(record[field]);
             }
         }
+    });
+});
+
+describe('readVectorFromDoc — rich text', () => {
+    // There is no per-box marker colour: it is redundant with the box `fill`, and a real highlight is a
+    // TipTap mark inside `html`. A value left in a document written by an older build is dropped.
+    test('a stored highlightColor is not read back onto the element', () => {
+        const doc = docWith((elements) =>
+            writeElement(elements, 'rich1', { type: 'richtext', html: '<p>hi</p>', highlightColor: '#ffff00' }),
+        );
+        const [el] = readVectorFromDoc(doc).elements;
+        expect(el).not.toHaveProperty('highlightColor');
     });
 });
 

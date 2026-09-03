@@ -38,7 +38,6 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         'color',
         'letterSpacing',
         'lineHeight',
-        'highlightColor',
         'padding',
     ],
     capabilities: {
@@ -78,7 +77,6 @@ export const richTextKind = defineKind<VectorRichTextElement>({
         textAlign: oneOf(src.get('textAlign'), TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
         verticalAlign: oneOf(src.get('verticalAlign'), VERTICAL_ALIGNS, DEFAULT_RICHTEXT_PROPS.verticalAlign),
         color: color(src.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
-        highlightColor: color(src.get('highlightColor'), DEFAULT_RICHTEXT_PROPS.highlightColor),
         // Bounded so a hostile value can't blow every peer's layout: ±200px tracking, 0.5-10x leading,
         // 0-200px inset.
         letterSpacing: clampNum(src.get('letterSpacing'), -200, 200, DEFAULT_RICHTEXT_PROPS.letterSpacing),
@@ -95,8 +93,8 @@ export const richTextKind = defineKind<VectorRichTextElement>({
 });
 
 // The box's paint + typography as CSS, the one body the foreignObject wrapper and the live layer
-// renderer share. `highlightColor` is deliberately absent: it is a text mark applied inside `html`, and
-// painting it on the box is what gave slides its full-width highlight bug.
+// renderer share. There is no highlight colour: a marker highlight is a text mark applied inside `html`,
+// and painting one on the box is what gave slides its full-width highlight bug.
 function richTextStyle(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';

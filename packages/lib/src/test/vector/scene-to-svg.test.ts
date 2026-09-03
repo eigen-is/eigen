@@ -63,7 +63,6 @@ export function buildGoldenScene(): VectorScene {
             color: '#1e1e1e',
             letterSpacing: 0,
             lineHeight: 1.2,
-            highlightColor: 'transparent',
             padding: 0,
         },
         {
@@ -400,7 +399,6 @@ describe('sceneToSvg', () => {
                     color: '#1e1e1e',
                     letterSpacing: 0,
                     lineHeight: 1.2,
-                    highlightColor: 'transparent',
                     padding: 12,
                 },
             ]),

@@ -114,7 +114,6 @@ export type VectorRichTextElement = VectorElementBase & {
     color: string;
     letterSpacing: number;
     lineHeight: number;
-    highlightColor: string;
     padding: number; // px inset between the box edge and the text; the box keeps its stored size
 };
 
@@ -262,7 +261,6 @@ export const DEFAULT_RICHTEXT_PROPS = {
     verticalAlign: 'top',
     letterSpacing: 0,
     lineHeight: 1.2,
-    highlightColor: 'transparent',
     padding: 0,
 } satisfies Pick<
     VectorRichTextElement,
@@ -273,7 +271,6 @@ export const DEFAULT_RICHTEXT_PROPS = {
     | 'verticalAlign'
     | 'letterSpacing'
     | 'lineHeight'
-    | 'highlightColor'
     | 'padding'
 >;
 

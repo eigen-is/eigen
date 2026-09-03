@@ -39,7 +39,6 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
     const color = getMergedValue(boxes, (el) => el.color);
     const letterSpacing = getMergedValue(boxes, (el) => el.letterSpacing);
     const lineHeight = getMergedValue(boxes, (el) => el.lineHeight);
-    const highlightColor = getMergedValue(boxes, (el) => el.highlightColor);
     const padding = getMergedValue(boxes, (el) => el.padding);
 
     return (
@@ -179,12 +178,6 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
 
             <PropertySection title="Color">
                 <ColorRow label="Text" value={color} onChange={(c) => onChange({ color: c || '#000000' })} />
-                <ColorRow
-                    label="Highlight"
-                    value={highlightColor}
-                    onChange={(c) => onChange({ highlightColor: c })}
-                    showReset
-                />
             </PropertySection>
         </>
     );
