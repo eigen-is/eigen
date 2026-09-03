@@ -149,6 +149,10 @@ type CanvasEditorProps = {
     // (the host reveals it). Omitting onOpenCard hides the flags, omitting onAddComment the menu row.
     onOpenCard?: (cardId: string) => void;
     onAddComment?: (elementId: string) => void;
+    // ⌘F: every matching element rings, the stepped-to one rings brighter and flashes. Both come from
+    // the host's useCanvasDocSearch — the canvas only paints them.
+    searchMatchedIds?: ReadonlySet<string>;
+    searchActiveId?: string | null;
 };
 
 // The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
@@ -174,6 +178,8 @@ export function CanvasEditor({
     imageInsertRef,
     onOpenCard,
     onAddComment,
+    searchMatchedIds,
+    searchActiveId,
 }: CanvasEditorProps) {
     const {
         elements,
@@ -298,6 +304,13 @@ export function CanvasEditor({
                     : [];
             }),
         [ordered],
+    );
+
+    // The ringed elements. Only what this canvas renders: a match on another frame is revealed by the
+    // host activating that frame, and the ring follows.
+    const matchedElements = useMemo(
+        () => (searchMatchedIds ? ordered.filter((el) => searchMatchedIds.has(el.id)) : []),
+        [ordered, searchMatchedIds],
     );
 
     // All elements by id — the map an elbow arrow reads (arrowRoute) to resolve its bound shapes and
@@ -1313,6 +1326,22 @@ export function CanvasEditor({
                             </button>
                         );
                     })}
+                {/* ⌘F match rings, in the same screen-space chrome layer as the selection ring. */}
+                {matchedElements.map((el) => (
+                    <div
+                        key={el.id}
+                        className={cn(
+                            'pointer-events-none absolute',
+                            el.id === searchActiveId
+                                ? 'eigen-search-ring-active eigen-search-flash'
+                                : 'eigen-search-ring',
+                        )}
+                        style={{
+                            ...boxToStyle(elementBox(el)),
+                            transform: el.angle ? `rotate(${el.angle}deg)` : undefined,
+                        }}
+                    />
+                ))}
                 {showTransform && single && (
                     <ObjectTransform
                         box={elementBox(single)}

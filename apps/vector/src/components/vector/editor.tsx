@@ -15,12 +15,14 @@ import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } fro
 import { useContextMenu } from '@workspace/ui/components/context-menu';
 import { DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { useAspectLock } from '@workspace/ui/components/properties-panel';
+import { DocSearchProvider } from '@workspace/ui/components/search/doc-search-provider';
 import {
     CanvasEditor,
     type CanvasImageInsert,
     CanvasPropertiesPanel,
     useCanvasComments,
     useCanvasDoc,
+    useCanvasDocSearch,
     useCanvasPresence,
     useSelection,
     useTool,
@@ -37,6 +39,7 @@ type VectorEditorProps = {
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    initialSearchTerm?: string;
 };
 
 // The live scene plus pointer/keyboard interaction. Tool and selection state are lifted here so the
@@ -51,6 +54,7 @@ export function VectorEditor({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    initialSearchTerm,
 }: VectorEditorProps) {
     const { isMobile } = useLayout();
     // Small screens view the scene, never edit it (the slides canEdit split: file menu, share and
@@ -82,8 +86,28 @@ export function VectorEditor({
     const cards = useCommentCards(doc.yjsDoc, 'comments');
     const activeComments = useCanvasComments(doc.elements, cards);
 
-    const { panel, commentPanelOpen, activityPanelOpen, mobilePanelOpen, toggleComments, toggleActivity, closePanels } =
-        useDocumentPanels(isMobile);
+    const {
+        panel,
+        commentPanelOpen,
+        activityPanelOpen,
+        mobilePanelOpen,
+        toggleComments,
+        toggleActivity,
+        closePanels,
+        onSearchOpenChange,
+    } = useDocumentPanels(isMobile);
+
+    // ⌘F over the scene: a reveal selects the matching element (stable, or the controller churns).
+    const {
+        controller: docSearchController,
+        matchedIds: searchMatchedIds,
+        activeId: searchActiveId,
+    } = useCanvasDocSearch({
+        elements: doc.elements,
+        frames: doc.frames,
+        meta: doc.meta,
+        onReveal: useCallback((el) => setSelectedIds([el.id]), [setSelectedIds]),
+    });
 
     const lifecycle = useCommentLifecycle({
         ownerId,
@@ -109,6 +133,10 @@ export function VectorEditor({
     // Host-owned so the filter survives panel close/reopen.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
+
+    // A w-64 sibling occupies the right edge whenever the comment/activity pane or the properties
+    // panel is up — inset the find bar clear of it (the slides rule).
+    const rightPanelShown = (!isMobile && !!panel) || showPanel;
 
     const [addOpen, setAddOpen] = useState(false);
     // The element the pending "New comment" anchors to — set by the canvas menu's Comment row, null for
@@ -204,96 +232,109 @@ export function VectorEditor({
                 <UnsyncedEditsGuard active={doc.unsyncedEdits} />
                 {/* The comment/activity pane hides the canvas on mobile (a Column sibling below); keep
                     the canvas mounted (hidden wrapper) so Yjs state + selection survive a pane visit. */}
+                {/* Hiding takes the find bar with it: it floats in this wrapper, outside the Column. */}
                 <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
-                    <Column
-                        id="editor"
-                        width="flex"
-                        className="flex-1 h-full"
-                        toolbarBorder="always"
-                        toolbar={
-                            <Toolbar
-                                path={path}
-                                canWrite={canWrite}
-                                canEdit={canEdit}
-                                offline={doc.offline}
-                                storageUnavailable={doc.loaded && doc.storageUnavailable}
-                                undoManager={doc.undoManager}
-                                tool={tool}
-                                setTool={setTool}
-                                toolLocked={toolLocked}
-                                setToolLocked={setToolLocked}
-                                onInsertImage={canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined}
-                                onAccessDialogOpen={onAccessDialogOpen}
-                                onToggleCommentPanel={toggleComments}
-                                commentPanelOpen={commentPanelOpen}
-                                assignedCommentCount={assignedCount}
-                                onToggleActivityPanel={toggleActivity}
-                                activityPanelOpen={activityPanelOpen}
-                            />
-                        }
+                    <DocSearchProvider
+                        controller={docSearchController}
+                        initialSearchTerm={initialSearchTerm}
+                        onOpenChange={onSearchOpenChange}
+                        // right-68 = the w-64 right panel + the bar's own gutter.
+                        barClassName={cn('top-14', rightPanelShown && 'right-68')}
                     >
-                        {/* Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence. */}
-                        {!doc.loaded ? (
-                            <CollabLoadingState storageUnavailable={doc.storageUnavailable} />
-                        ) : (
-                            <div className="flex h-full w-full overflow-hidden">
-                                <div className="flex-1 min-w-0">
-                                    <CanvasEditor
-                                        doc={doc}
-                                        viewport="infinite"
-                                        canEdit={canEdit}
-                                        ownerId={ownerId}
-                                        mountId={path.mountId}
-                                        tool={tool}
-                                        setTool={setTool}
-                                        toolLocked={toolLocked}
-                                        setToolLocked={setToolLocked}
-                                        selectedIds={selectedIds}
-                                        setSelectedIds={setSelectedIds}
-                                        toggle={toggle}
-                                        aspectLocked={aspectLocked}
-                                        publishCursor={publishCursor}
-                                        imageInsertRef={imageInsertRef}
-                                        onOpenCard={openCard}
-                                        onAddComment={canWrite && chatFolderId ? addCommentTo : undefined}
-                                    />
-                                </div>
-                                {/* Right side: the comment/activity pane wins over the properties panel
+                        <Column
+                            id="editor"
+                            width="flex"
+                            className="flex-1 h-full"
+                            toolbarBorder="always"
+                            toolbar={
+                                <Toolbar
+                                    path={path}
+                                    canWrite={canWrite}
+                                    canEdit={canEdit}
+                                    offline={doc.offline}
+                                    storageUnavailable={doc.loaded && doc.storageUnavailable}
+                                    undoManager={doc.undoManager}
+                                    tool={tool}
+                                    setTool={setTool}
+                                    toolLocked={toolLocked}
+                                    setToolLocked={setToolLocked}
+                                    onInsertImage={
+                                        canEdit && mediaFolderId ? () => setImagePickerOpen(true) : undefined
+                                    }
+                                    onAccessDialogOpen={onAccessDialogOpen}
+                                    onToggleCommentPanel={toggleComments}
+                                    commentPanelOpen={commentPanelOpen}
+                                    assignedCommentCount={assignedCount}
+                                    onToggleActivityPanel={toggleActivity}
+                                    activityPanelOpen={activityPanelOpen}
+                                />
+                            }
+                        >
+                            {/* Latched: a WS blip keeps the canvas mounted; `doc.synced` still gates presence. */}
+                            {!doc.loaded ? (
+                                <CollabLoadingState storageUnavailable={doc.storageUnavailable} />
+                            ) : (
+                                <div className="flex h-full w-full overflow-hidden">
+                                    <div className="flex-1 min-w-0">
+                                        <CanvasEditor
+                                            doc={doc}
+                                            viewport="infinite"
+                                            canEdit={canEdit}
+                                            ownerId={ownerId}
+                                            mountId={path.mountId}
+                                            tool={tool}
+                                            setTool={setTool}
+                                            toolLocked={toolLocked}
+                                            setToolLocked={setToolLocked}
+                                            selectedIds={selectedIds}
+                                            setSelectedIds={setSelectedIds}
+                                            toggle={toggle}
+                                            aspectLocked={aspectLocked}
+                                            publishCursor={publishCursor}
+                                            imageInsertRef={imageInsertRef}
+                                            onOpenCard={openCard}
+                                            onAddComment={canWrite && chatFolderId ? addCommentTo : undefined}
+                                            searchMatchedIds={searchMatchedIds}
+                                            searchActiveId={searchActiveId}
+                                        />
+                                    </div>
+                                    {/* Right side: the comment/activity pane wins over the properties panel
                                     (the slides arrangement); mobile hosts the pane as an outside sibling. */}
-                                {!isMobile && panel ? (
-                                    <PanelColumn activePanel={panel} {...panelProps} />
-                                ) : showPanel ? (
-                                    <CanvasPropertiesPanel
-                                        elements={doc.elements}
-                                        selectedElements={selectedElements}
-                                        updateElements={doc.updateElements}
-                                        undoManager={doc.undoManager}
-                                        meta={doc.meta}
-                                        updateMeta={doc.updateMeta}
-                                        viewport="infinite"
-                                        aspectLocked={aspectLocked}
-                                        onAspectLockChange={setAspectLocked}
-                                    />
-                                ) : null}
-                            </div>
-                        )}
+                                    {!isMobile && panel ? (
+                                        <PanelColumn activePanel={panel} {...panelProps} />
+                                    ) : showPanel ? (
+                                        <CanvasPropertiesPanel
+                                            elements={doc.elements}
+                                            selectedElements={selectedElements}
+                                            updateElements={doc.updateElements}
+                                            undoManager={doc.undoManager}
+                                            meta={doc.meta}
+                                            updateMeta={doc.updateMeta}
+                                            viewport="infinite"
+                                            aspectLocked={aspectLocked}
+                                            onAspectLockChange={setAspectLocked}
+                                        />
+                                    ) : null}
+                                </div>
+                            )}
 
-                        {mediaFolderId && (
-                            <DrivePickerWithUpload
-                                open={imagePickerOpen}
-                                onOpenChange={setImagePickerOpen}
-                                title="Add image"
-                                mimeFilter={['image/*']}
-                                multiSelect
-                                onPickFromDrive={(paths) =>
-                                    void imageInsertRef.current?.insertDrivePaths(paths).catch(() => {})
-                                }
-                                onPickFromDevice={(files) => imageInsertRef.current?.insertFiles(files)}
-                                accept="image/*"
-                                multiple
-                            />
-                        )}
-                    </Column>
+                            {mediaFolderId && (
+                                <DrivePickerWithUpload
+                                    open={imagePickerOpen}
+                                    onOpenChange={setImagePickerOpen}
+                                    title="Add image"
+                                    mimeFilter={['image/*']}
+                                    multiSelect
+                                    onPickFromDrive={(paths) =>
+                                        void imageInsertRef.current?.insertDrivePaths(paths).catch(() => {})
+                                    }
+                                    onPickFromDevice={(files) => imageInsertRef.current?.insertFiles(files)}
+                                    accept="image/*"
+                                    multiple
+                                />
+                            )}
+                        </Column>
+                    </DocSearchProvider>
                 </div>
 
                 {mobilePanelOpen && panel && <PanelColumn activePanel={panel} {...panelProps} />}
