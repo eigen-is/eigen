@@ -101,6 +101,33 @@ describe('extractCollabText', () => {
         doc.destroy();
     });
 
+    // Yjs maps iterate in insertion order, so seeding the scene backwards is the only way to
+    // prove the body follows the fractional index rather than however the doc happened to grow.
+    test('eigenvector: rich text and arrow labels come out in z-order, tags stripped', async () => {
+        const scene = buildGoldenVectorScene();
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, { ...scene, elements: [...scene.elements].reverse() });
+
+        const { text } = await extractCollabText('eigenvector', doc);
+        // v-text (index a2) sits below v-arrow (a5), so its body comes first whatever the map order was.
+        expect(text).toBe(`${GOLDEN_VECTOR_TEXT}\n${GOLDEN_VECTOR_LABEL}`);
+        // The index carries plain text: the stored `<p>Vector &lt;sketch&gt;</p>` arrives unwrapped
+        // and unescaped, so a search for "sketch" matches.
+        expect(text).not.toContain('<p>');
+        expect(text).not.toContain('&lt;');
+        doc.destroy();
+    });
+
+    test('eigenvector: a shape with no text contributes nothing at all', async () => {
+        const scene = buildGoldenVectorScene();
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, { ...scene, elements: scene.elements.filter((el) => el.type === 'rectangle') });
+
+        const { text } = await extractCollabText('eigenvector', doc);
+        expect(text).toBe('');
+        doc.destroy();
+    });
+
     // The cap is a byte budget: the extracted body is cloned to the main thread and
     // inserted into FTS, so it must hold for one huge leaf and for text where a
     // character is not a byte.
