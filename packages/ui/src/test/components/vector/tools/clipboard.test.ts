@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { extractClipboardSvgMetadata } from '@workspace/lib/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorMeta } from '@workspace/lib/vector';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SKETCH_PROPS,
+    solidFill,
+    type VectorElement,
+    type VectorMeta,
+} from '@workspace/lib/vector';
 import { buildSelectionData } from '../../../../components/vector/tools/clipboard';
 
 // The svg flavour policy: every selection ships a self-contained SVG (element JSON in <metadata>). An
@@ -13,6 +19,7 @@ const meta: VectorMeta = { background: 'transparent', gridSize: 20 };
 
 const rect = (id: string, index: string): VectorElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     id,
     type: 'rectangle',
     x: 0,
@@ -22,7 +29,9 @@ const rect = (id: string, index: string): VectorElement => ({
     angle: 0,
     seed: 1,
     index,
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    corners: 'straight',
 });
 
 const image = (id: string, index: string): VectorElement => ({
@@ -34,9 +43,10 @@ const image = (id: string, index: string): VectorElement => ({
     width: 80,
     height: 80,
     angle: 0,
-    seed: 2,
     index,
     mediaName: 'photo.png',
+    corners: 'straight',
+    objectFit: 'contain',
 });
 
 const mediaPath = {
@@ -79,6 +89,7 @@ describe('buildSelectionData', () => {
     test('an elbow arrow carries its elbow flag in meta.vector, through the svg round-trip too', () => {
         const arrow: VectorElement = {
             ...DEFAULT_ELEMENT_PROPS,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'a1',
             type: 'arrow',
             x: 0,

@@ -11,9 +11,10 @@ import {
     type Box,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FILL_STYLE,
     DEFAULT_LINE_ROUNDNESS,
     DEFAULT_LINEAR_ROUNDNESS,
-    DEFAULT_TEXT_PROPS,
+    DEFAULT_SKETCH_PROPS,
     elbowBindPoint,
     elbowRoutingContext,
     elementToSvg,
@@ -27,6 +28,7 @@ import {
     parsePoints,
     renormalize,
     serializePressures,
+    solidFill,
     unpinSegment,
     type VectorArrowElement,
     type VectorElement,
@@ -83,6 +85,7 @@ function linearBase(origin: Point, points: Point[], seed: number) {
         id: PREVIEW_ID,
         angle: 0,
         ...DEFAULT_ELEMENT_PROPS,
+        ...DEFAULT_SKETCH_PROPS,
         roundness: DEFAULT_LINEAR_ROUNDNESS,
         seed,
         index: 'a0',
@@ -95,6 +98,8 @@ function previewElement(type: 'freedraw' | 'line', origin: Point, points: Point[
     return {
         ...linearBase(origin, points, seed),
         type,
+        fill: solidFill('transparent'),
+        fillStyle: DEFAULT_FILL_STYLE,
         roundness: type === 'line' ? DEFAULT_LINE_ROUNDNESS : DEFAULT_LINEAR_ROUNDNESS,
         // The live preview always simulates; real per-point pressure is written on commit (finishFreedraw).
         pressures: '',
@@ -109,11 +114,6 @@ function arrowElement(origin: Point, points: Point[], seed: number): VectorArrow
         ...linearBase(origin, points, seed),
         type: 'arrow',
         ...DEFAULT_ARROW_PROPS,
-        // The label fields the reader reaches out of DEFAULT_TEXT_PROPS (never its textAlign, which the
-        // arrow model has no field for) — so the provisional can't drift from read-vector's defaults.
-        text: DEFAULT_TEXT_PROPS.text,
-        fontSize: DEFAULT_TEXT_PROPS.fontSize,
-        fontFamily: DEFAULT_TEXT_PROPS.fontFamily,
     };
 }
 

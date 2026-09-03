@@ -2,26 +2,21 @@
 // only DISPATCHES (the ground-rule that the canvas file must not grow). A session drives the TextOverlay
 // and is committed back by the canvas' commitEditing.
 //
-// A `text` element stays LOCAL (id never written) until its first commit — an empty discard writes
-// nothing; re-editing an existing one commits one update, or deletes it when committed empty. An `arrow`
-// session edits a live arrow's label field in place (the arrow already exists): commit writes `text` +
-// `labelWidth`, empty clears both, and never deletes the arrow.
+// The arrow label is the only plain-text path left on the canvas: the session edits a live arrow's label
+// field in place (the arrow already exists), so commit writes `text` + `labelWidth`, empty clears both,
+// and it never deletes the arrow. Rich text gets its own in-place editor.
 
 import {
     arrowLabelBox,
     arrowLabelCenter,
-    DEFAULT_ELEMENT_PROPS,
-    DEFAULT_FONT_FAMILY,
-    DEFAULT_FONT_SIZE,
     linearLocalToScene,
     type Point,
     type TextAlign,
     type VectorArrowElement,
-    type VectorTextElement,
 } from '@workspace/lib/vector';
 
 export type EditingState = {
-    kind: 'text' | 'arrow';
+    kind: 'arrow';
     id: string;
     isNew: boolean;
     x: number;
@@ -35,44 +30,6 @@ export type EditingState = {
     textAlign: TextAlign;
     strokeColor: string;
 };
-
-// A fresh, still-LOCAL text element at the scene point (text-tool click on empty canvas / a non-text hit).
-export function newTextEditing(x: number, y: number): EditingState {
-    return {
-        kind: 'text',
-        id: '__new_text__',
-        isNew: true,
-        x,
-        y,
-        width: 0,
-        height: 0,
-        angle: 0,
-        text: '',
-        fontSize: DEFAULT_FONT_SIZE,
-        fontFamily: DEFAULT_FONT_FAMILY,
-        textAlign: 'left',
-        strokeColor: DEFAULT_ELEMENT_PROPS.strokeColor,
-    };
-}
-
-// An existing text element (text-tool click that hits it, or select-tool double-click).
-export function textEditing(el: VectorTextElement): EditingState {
-    return {
-        kind: 'text',
-        id: el.id,
-        isNew: false,
-        x: el.x,
-        y: el.y,
-        width: el.width,
-        height: el.height,
-        angle: el.angle,
-        text: el.text,
-        fontSize: el.fontSize,
-        fontFamily: el.fontFamily,
-        textAlign: el.textAlign,
-        strokeColor: el.strokeColor,
-    };
-}
 
 // An arrow's label (select-tool double-click), centered on the label anchor — the polyline's
 // index-midpoint in the arrow's local frame, mapped to the scene. The box is the committed

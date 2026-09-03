@@ -30,9 +30,9 @@ export function touchIgnoredDuringPen(penDrawing: boolean): boolean {
 }
 
 // A finger keeps operating these tools even after a pen has latched penMode (Excalidraw's allowlist,
-// App.tsx:8580-8585 — selection/lasso/text/image; ours is select + text). Every other tool draws or
+// App.tsx:8580-8585 — selection/lasso/text/image; ours is select + rich text). Every other tool draws or
 // creates, so a finger is locked out of it while a pen is in use.
-const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'text']);
+const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'richtext']);
 export function touchAllowedInPenMode(tool: VectorTool): boolean {
     return PEN_MODE_TOUCH_ALLOWED.has(tool);
 }

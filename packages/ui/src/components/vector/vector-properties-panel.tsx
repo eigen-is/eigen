@@ -14,28 +14,30 @@ import {
     arrowShapeFields,
     arrowShapeOf,
     type Box,
+    type Corners,
     computeArrange,
     DEFAULT_FONT_FAMILY,
+    ELEMENT_KINDS,
     type FillStyle,
     isClosedPath,
     isLinearElement,
-    isTransparent,
+    isTransparentFill,
     normalizeLinear,
+    parseFill,
     parsePoints,
     type Roundness,
     redockBindingsForElbow,
     resizeLinear,
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
+    solidFill,
     type VectorArrowElement,
     type VectorElement,
     type VectorElementType,
     type VectorLinearElement,
-    type VectorTextElement,
 } from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
-    AlignmentPicker,
     AlignSection,
     ColorRow,
     getMergedValue,
@@ -60,7 +62,7 @@ const TYPE_LABELS: Record<VectorElementType, string> = {
     rectangle: 'Rectangle',
     diamond: 'Diamond',
     ellipse: 'Ellipse',
-    text: 'Text',
+    richtext: 'Text',
     image: 'Image',
     freedraw: 'Freehand',
     line: 'Line',
@@ -77,6 +79,12 @@ const ROUGHNESS_OPTIONS: { value: string; label: string }[] = [
 const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
     { value: 'sharp', label: 'Sharp' },
     { value: 'round', label: 'Rounded' },
+];
+// The box kinds' corner treatment — a different question from a shaft's curvature, hence its own row.
+const CORNERS_OPTIONS: { value: Corners; label: string }[] = [
+    { value: 'straight', label: 'Straight' },
+    { value: 'curved', label: 'Curved' },
+    { value: 'round', label: 'Round' },
 ];
 // The arrow-type row — derived from the canonical ARROW_SHAPES vocabulary so the two never drift.
 const ARROW_SHAPE_LABELS: Record<ArrowShape, string> = { sharp: 'Sharp', curved: 'Curved', elbow: 'Elbow' };
@@ -102,6 +110,14 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
     { value: 'bar', label: 'Bar' },
     { value: 'circle', label: 'Circle' },
 ];
+
+// The solid colour the Fill swatch shows: '' for transparent (an unset swatch) and for a gradient,
+// which has no single colour — the gradient row is phase 2. undefined on a kind that has no fill.
+function fillColorOf(el: VectorElement): string | undefined {
+    if (!ELEMENT_KINDS[el.type].capabilities.fill || el.type === 'arrow' || el.type === 'image') return undefined;
+    const fill = parseFill(el.fill);
+    return fill.type === 'solid' && !isTransparentFill(fill) ? fill.color : '';
+}
 
 // A width/height change on a linear element must rescale its points through resizeLinear, not
 // overwrite the box; the box fills each unset field from the element so x/y/angle-only changes pass through.
@@ -146,15 +162,10 @@ export function VectorPropertiesPanel({
     const showFill = has && selectedElements.every((el) => isShape(el.type) || isClosedLinear(el));
     // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
     const anyFreedraw = selectedElements.some((el) => el.type === 'freedraw');
-    // Edges (roundness) apply to rectangles/diamonds and lines/arrows (round curve vs sharp shaft),
-    // never freedraw.
-    const allEdged =
-        has &&
-        selectedElements.every(
-            (el) => el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line' || el.type === 'arrow',
-        );
-    const textEls = selectedElements.filter((el): el is VectorTextElement => el.type === 'text');
-    const allText = has && textEls.length === selectedElements.length;
+    // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
+    // an arrow carries (round curve vs sharp polyline), never freedraw.
+    const allCorners = has && selectedElements.every((el) => ELEMENT_KINDS[el.type].capabilities.corners);
+    const allRoundable = has && selectedElements.every((el) => el.type === 'line' || el.type === 'arrow');
     // Arrowheads apply to arrows only (both ends selectable per selection).
     const arrowEls = selectedElements.filter((el): el is VectorArrowElement => el.type === 'arrow');
     const allArrow = has && arrowEls.length === selectedElements.length;
@@ -217,26 +228,7 @@ export function VectorPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
-    // Font family / size changes MUST re-measure and store width/height (the server renderer trusts
-    // stored dims) — and only after the resulting face is loaded, or measureText returns
-    // fallback-font garbage. Per-element dims (each text differs) in the ONE transact as the font.
-    const applyTextFont = async (patch: { fontSize?: number; fontFamily?: string }) => {
-        if (!textEls.length) return;
-        await Promise.all(
-            textEls.map((el) => loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily)),
-        );
-        const patches = textEls.map((el) => {
-            const fontSize = patch.fontSize ?? el.fontSize;
-            const fontFamily = patch.fontFamily ?? el.fontFamily;
-            const { width, height } = measureVectorText(el.text, fontSize, fontFamily);
-            return { id: el.id, fields: { ...patch, width, height } };
-        });
-        undoManager?.stopCapturing();
-        updateElements(patches);
-        undoManager?.stopCapturing();
-    };
-
-    // The arrow-label mirror of applyTextFont: a font family / size change re-measures each
+    // A font family / size change re-measures each
     // arrow's own label and writes `labelWidth` (the sole width source, height derives from the line
     // count) in the SAME transact as the font — after the face loads, or measureText reads fallback
     // metrics. Per-element widths (each label differs) in one undo step.
@@ -266,10 +258,7 @@ export function VectorPropertiesPanel({
             op,
         );
         if (!patches.length) return;
-        // Text dims are DERIVED from fontSize (the measurement util is the sole dim writer), so
-        // match-size patches must never write width/height onto a text element; align/distribute
-        // (x/y-only) still applies. A linear element's width/height goes through resizeLinearTo so its
-        // points scale with the box.
+        // A linear element's width/height goes through resizeLinearTo so its points scale with the box.
         undoManager?.stopCapturing();
         updateElements(
             patches.map((p) => {
@@ -277,16 +266,13 @@ export function VectorPropertiesPanel({
                 if (el && isLinearElement(el)) {
                     return { id: p.id, fields: resizeLinearTo(el, p) };
                 }
-                if (el?.type === 'text') return { id: p.id, fields: { x: p.x, y: p.y } };
                 return { id: p.id, fields: { x: p.x, y: p.y, width: p.width, height: p.height } };
             }),
         );
         undoManager?.stopCapturing();
     };
 
-    // Numeric transform — x/y/angle write straight through applyToAll; width/height are
-    // disabled for text (its dims are DERIVED from fontSize via the measurement util, the sole dim
-    // writer), so applyToAll never receives them for a text selection.
+    // Numeric transform — x/y/angle write straight through applyToAll.
     const tx = getMergedValue(selectedElements, (el) => Math.round(el.x));
     const ty = getMergedValue(selectedElements, (el) => Math.round(el.y));
     const tWidth = getMergedValue(selectedElements, (el) => Math.round(el.width));
@@ -296,19 +282,24 @@ export function VectorPropertiesPanel({
     const strokeColor = getMergedValue(selectedElements, (el) => el.strokeColor);
     const strokeWidth = getMergedValue(selectedElements, (el) => el.strokeWidth);
     const strokeStyle = getMergedValue(selectedElements, (el) => el.strokeStyle);
-    const fillRaw = getMergedValue(selectedElements, (el) => el.backgroundColor);
-    const fill: MergedValue<string> = isMixed(fillRaw) ? fillRaw : fillRaw && !isTransparent(fillRaw) ? fillRaw : '';
-    const fillStyle = getMergedValue(selectedElements, (el) => el.fillStyle);
-    const roughness = getMergedValue(selectedElements, (el) => el.roughness);
-    const roundness = getMergedValue(selectedElements, (el) =>
-        el.type === 'rectangle' || el.type === 'diamond' || el.type === 'line' || el.type === 'arrow'
-            ? el.roundness
+    const fill: MergedValue<string> = getMergedValue(selectedElements, fillColorOf);
+    const fillStyle = getMergedValue(selectedElements, (el) =>
+        ELEMENT_KINDS[el.type].capabilities.fillStyle && el.type !== 'arrow' && el.type !== 'image'
+            ? el.fillStyle
             : undefined,
     );
+    const roughness = getMergedValue(selectedElements, (el) =>
+        el.type === 'image' || el.type === 'richtext' ? undefined : el.roughness,
+    );
+    const corners = getMergedValue(selectedElements, (el) =>
+        el.type === 'rectangle' || el.type === 'diamond' || el.type === 'image' || el.type === 'richtext'
+            ? el.corners
+            : undefined,
+    );
+    const roundness = getMergedValue(selectedElements, (el) =>
+        el.type === 'line' || el.type === 'arrow' ? el.roundness : undefined,
+    );
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
-    const fontFamily = getMergedValue(textEls, (el) => el.fontFamily);
-    const fontSize = getMergedValue(textEls, (el) => el.fontSize);
-    const textAlign = getMergedValue(textEls, (el) => el.textAlign);
     const arrowShape = getMergedValue(arrowEls, (el) => arrowShapeOf(el));
     const startArrowhead = getMergedValue(arrowEls, (el) => el.startArrowhead);
     const endArrowhead = getMergedValue(arrowEls, (el) => el.endArrowhead);
@@ -330,50 +321,12 @@ export function VectorPropertiesPanel({
                 height={tHeight}
                 angle={tAngle}
                 onChange={applyTransform}
-                // Text dims are derived — disable W/H (and, with them, the aspect checkbox); size
-                // lives in fontSize. A linear element's W/H stay ENABLED — applyTransform routes them
-                // through resizeLinear so its points scale with the box.
-                // ANY text in the selection disables W/H: the write reaches every selected element,
-                // and text dims are derived (measurement util is the sole writer).
-                sizeDisabled={textEls.length > 0}
                 // An elbow arrow's route lives in the unrotated local frame, so it pins angle 0 — the
                 // Angle input is disabled for a pure-elbow selection (W/H stay editable).
                 angleDisabled={allElbow}
                 aspectLocked={aspectLocked}
                 onAspectLockChange={onAspectLockChange}
             />
-
-            {allText && (
-                <PropertySection title="Text">
-                    <ColorRow label="Color" value={strokeColor} onChange={(c) => applyToAll({ strokeColor: c })} />
-                    <PropertyRow label="Font">
-                        <FontPicker
-                            value={isMixed(fontFamily) ? DEFAULT_FONT_FAMILY : (fontFamily ?? DEFAULT_FONT_FAMILY)}
-                            onChange={(f) => {
-                                applyTextFont({ fontFamily: f }).catch(() => {});
-                            }}
-                            className="h-7 w-full text-xs"
-                        />
-                    </PropertyRow>
-                    <PropertyRow label="Size">
-                        <MergedNumberInput
-                            value={fontSize}
-                            onChange={(v) => {
-                                applyTextFont({ fontSize: v }).catch(() => {});
-                            }}
-                            min={8}
-                            max={200}
-                            step={1}
-                        />
-                    </PropertyRow>
-                    <PropertyRow label="Align">
-                        <AlignmentPicker
-                            value={isMixed(textAlign) ? undefined : textAlign}
-                            onChange={(a) => applyToAll({ textAlign: a })}
-                        />
-                    </PropertyRow>
-                </PropertySection>
-            )}
 
             {allArrowLabeled && (
                 <PropertySection title="Text">
@@ -411,7 +364,7 @@ export function VectorPropertiesPanel({
                             <ColorRow
                                 label="Color"
                                 value={fill}
-                                onChange={(c) => applyToAll({ backgroundColor: c })}
+                                onChange={(c) => applyToAll({ fill: solidFill(c) })}
                                 showReset
                             />
                             <PropertyRow label="Style">
@@ -476,7 +429,7 @@ export function VectorPropertiesPanel({
                                 )}
                             </>
                         ) : (
-                            allEdged && (
+                            allRoundable && (
                                 <PropertyRow label="Edges">
                                     <MergedSelect
                                         value={roundness}
@@ -485,6 +438,15 @@ export function VectorPropertiesPanel({
                                     />
                                 </PropertyRow>
                             )
+                        )}
+                        {allCorners && (
+                            <PropertyRow label="Corners">
+                                <MergedSelect
+                                    value={corners}
+                                    onChange={(v) => applyToAll({ corners: v })}
+                                    options={CORNERS_OPTIONS}
+                                />
+                            </PropertyRow>
                         )}
                     </PropertySection>
                 </>

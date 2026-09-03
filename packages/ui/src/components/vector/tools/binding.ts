@@ -16,16 +16,18 @@ import {
     hitTestDiamond,
     hitTestEllipse,
     isBindable,
-    isTransparent,
+    isTransparentFill,
     linearLocalToScene,
     moveEndpoints,
     type PinPatch,
     type Point,
     parseBinding,
+    parseFill,
     parsePoints,
     projectFixedPointOntoDiagonal,
     remapBinding,
     serializeBinding,
+    solidFill,
     type VectorArrowElement,
     type VectorElement,
     type VectorShapeElement,
@@ -50,7 +52,7 @@ function insideShape(shape: VectorShapeElement, point: Point, pad: number): bool
 // Whether a dragged endpoint at `point` should bind to a shape: a filled shape binds anywhere inside or
 // within the reach band outside; a transparent one binds only in the band AROUND its outline.
 function reaches(shape: VectorShapeElement, point: Point, distance: number): boolean {
-    if (!isTransparent(shape.backgroundColor)) return insideShape(shape, point, distance);
+    if (!isTransparentFill(parseFill(shape.fill))) return insideShape(shape, point, distance);
     return insideShape(shape, point, distance) && !insideShape(shape, point, -distance);
 }
 
@@ -83,7 +85,7 @@ export function bindingOutlineElement(shape: VectorShapeElement, zoom: number): 
         strokeColor: 'currentColor',
         strokeWidth: 2 / zoom,
         strokeStyle: 'solid',
-        backgroundColor: 'transparent',
+        fill: solidFill('transparent'),
         roughness: 0,
         opacity: 100,
     };

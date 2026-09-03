@@ -6,11 +6,13 @@ import {
     boundEndpoint,
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SKETCH_PROPS,
     parseBinding,
     projectFixedPointOntoDiagonal,
     rotatePoint,
     serializeBinding,
     shapeSideMidpoints,
+    solidFill,
     type VectorArrowElement,
     type VectorElement,
     type VectorShapeElement,
@@ -27,10 +29,12 @@ function dist(a: { x: number; y: number }, b: { x: number; y: number }): number 
 
 const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>): VectorShapeElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     type: 'rectangle',
     // A filled shape binds anywhere inside (a transparent one binds only in the outline band), so a
     // dropped-inside endpoint reaches it.
-    backgroundColor: '#dddddd',
+    fill: solidFill('#dddddd'),
+    fillStyle: 'solid',
     x: 0,
     y: 0,
     width: 200,
@@ -38,12 +42,13 @@ const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>
     angle: 0,
     seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    corners: 'straight',
     ...over,
 });
 
 const arrow = (over: Partial<VectorArrowElement> & { points: string }): VectorArrowElement => ({
     ...DEFAULT_ELEMENT_PROPS,
+    ...DEFAULT_SKETCH_PROPS,
     ...DEFAULT_ARROW_PROPS,
     id: 'ar',
     type: 'arrow',

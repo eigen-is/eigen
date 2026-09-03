@@ -5,10 +5,12 @@
 // (pasteEigenItems) stays in the canvas and reads the same `meta.vector` shape.
 
 import { buildImageClipboardItem, buildTextClipboardItem, embedClipboardSvgMetadata } from '@workspace/lib/clipboard';
+import { stripTagsServer } from '@workspace/lib/html';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     type Arrowhead,
+    type Corners,
     eigenMediaHref,
     type FillStyle,
     isLinearElement,
@@ -25,19 +27,20 @@ import {
 // relative layout before it is re-anchored on the viewport. `type` present ⇒ restore a shape or a
 // linear element (which then also carries `points` + `roundness`), else a text element. `id` is the
 // element's own id so a paste can remap arrow bindings across the pasted set; an arrow also
-// carries its heads, bindings, label and elbow flag.
+// carries its heads, bindings, label and elbow flag. `fill` is the serialized Fill, verbatim.
 export type VectorClipMeta = {
     x: number;
     y: number;
     id?: string;
     type?: 'rectangle' | 'diamond' | 'ellipse' | 'freedraw' | 'line' | 'arrow';
     strokeColor?: string;
-    backgroundColor?: string;
+    fill?: string;
     fillStyle?: FillStyle;
     strokeStyle?: StrokeStyle;
     strokeWidth?: number;
     roughness?: number;
     opacity?: number;
+    corners?: Corners;
     roundness?: Roundness;
     points?: string;
     pressures?: string;
@@ -83,19 +86,13 @@ function buildElementClipboardItem(
             meta: { vector: { x: el.x, y: el.y } },
         });
     }
-    if (el.type === 'text') {
+    if (el.type === 'richtext') {
         return buildTextClipboardItem({
-            text: el.text,
+            text: stripTagsServer(el.html),
             box,
             typography: { fontFamily: el.fontFamily, fontSize: el.fontSize, textAlign: el.textAlign },
             meta: {
-                vector: {
-                    x: el.x,
-                    y: el.y,
-                    strokeColor: el.strokeColor,
-                    backgroundColor: el.backgroundColor,
-                    opacity: el.opacity,
-                },
+                vector: { x: el.x, y: el.y, strokeColor: el.strokeColor, fill: el.fill, opacity: el.opacity },
             },
         });
     }
@@ -108,15 +105,20 @@ function buildElementClipboardItem(
         id: el.id,
         type: el.type,
         strokeColor: el.strokeColor,
-        backgroundColor: el.backgroundColor,
-        fillStyle: el.fillStyle,
         strokeStyle: el.strokeStyle,
         strokeWidth: el.strokeWidth,
         roughness: el.roughness,
         opacity: el.opacity,
-        roundness: el.roundness,
     };
-    if (isLinearElement(el)) vector.points = el.points;
+    if (el.type !== 'arrow') {
+        vector.fill = el.fill;
+        vector.fillStyle = el.fillStyle;
+    }
+    if (el.type === 'rectangle' || el.type === 'diamond') vector.corners = el.corners;
+    if (isLinearElement(el)) {
+        vector.points = el.points;
+        vector.roundness = el.roundness;
+    }
     if (el.type === 'freedraw') {
         vector.pressures = el.pressures;
         vector.simulatePressure = el.simulatePressure;
@@ -171,7 +173,7 @@ export function buildSelectionData(
     const selected = ordered.filter((el) => selectedIds.includes(el.id));
     const svg = embedClipboardSvgMetadata(
         sceneToSvg(
-            { elements: selected, meta },
+            { elements: selected, frames: [], meta },
             { resolveMedia: (name) => (resolveMediaPath(name) ? eigenMediaHref(name) : null) },
         ),
         { version: 1, items },
@@ -179,13 +181,15 @@ export function buildSelectionData(
     return { version: 1, items, svg };
 }
 
-// Concatenated plain text of the selected TEXT elements — the only flavor written alongside eigen JSON
-// (text copies carry text/plain, image/shape/linear copies carry neither). undefined when the
-// selection has no text element.
+// Concatenated plain text of the selected RICH TEXT elements — the only flavor written alongside eigen
+// JSON (text copies carry text/plain, image/shape/linear copies carry neither). undefined when the
+// selection has no rich-text element.
 export function selectionPlainText(ordered: VectorElement[], selectedIds: string[]): string | undefined {
     const texts: string[] = [];
     for (const el of ordered) {
-        if (selectedIds.includes(el.id) && el.type === 'text' && el.text.length > 0) texts.push(el.text);
+        if (!selectedIds.includes(el.id) || el.type !== 'richtext') continue;
+        const text = stripTagsServer(el.html);
+        if (text.length > 0) texts.push(text);
     }
     return texts.length ? texts.join('\n') : undefined;
 }

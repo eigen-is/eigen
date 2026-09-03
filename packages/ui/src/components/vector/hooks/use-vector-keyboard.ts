@@ -138,8 +138,8 @@ export function useVectorKeyboard(params: VectorKeyboardParams) {
     useHotkey('6', () => setTool('line'), { enabled });
     useHotkey('P', () => setTool('freedraw'), { enabled });
     useHotkey('7', () => setTool('freedraw'), { enabled });
-    useHotkey('T', () => setTool('text'), { enabled });
-    useHotkey('8', () => setTool('text'), { enabled });
+    useHotkey('T', () => setTool('richtext'), { enabled });
+    useHotkey('8', () => setTool('richtext'), { enabled });
     useHotkey('E', () => setTool('eraser'), { enabled });
     useHotkey('0', () => setTool('eraser'), { enabled });
 

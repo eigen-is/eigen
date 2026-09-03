@@ -1,27 +1,25 @@
 import { useCollabDoc } from '@workspace/lib/collab';
 import {
     arrowsBoundTo,
-    DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_LINE_ROUNDNESS,
-    DEFAULT_LINEAR_ROUNDNESS,
     DEFAULT_SCENE_META,
-    DEFAULT_SHAPE_ROUNDNESS,
-    DEFAULT_TEXT_PROPS,
     ELEMENT_FIELDS,
+    ELEMENT_KINDS,
     followBindings,
     generateKeyBetween,
     generateNKeysBetween,
     isValidFractionalIndex,
+    isVectorElementType,
     readVectorFromDoc,
     remapBinding,
+    VECTOR_STYLE_DEFAULTS,
     type VectorArrowElement,
     type VectorElementType,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorRichTextElement,
     type VectorScene,
     type VectorShapeElement,
-    type VectorTextElement,
 } from '@workspace/lib/vector';
 import { nanoid } from 'nanoid';
 import { useCallback, useState } from 'react';
@@ -38,7 +36,7 @@ const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 // subset of any element variant's fields (the union members share the geometry base). id/type
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
-    Partial<Omit<VectorTextElement, 'id' | 'type'>> &
+    Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
     Partial<Omit<VectorImageElement, 'id' | 'type'>> &
     Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
     Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
@@ -47,26 +45,24 @@ export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>
 // the rest from lib defaults and generates id/seed/index.
 export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 
-// Per-type default record, keyed only by ELEMENT_FIELDS members (the allow-list is authoritative).
+// Per-type defaults: the geometry box, the shared base props, and the kind's own fields straight from
+// the registry — a new kind needs no entry here.
 function elementDefaults(type: VectorElementType): Record<string, unknown> {
-    const base = { x: 0, y: 0, width: 0, height: 0, angle: 0, ...DEFAULT_ELEMENT_PROPS };
-    if (type === 'text') return { ...base, ...DEFAULT_TEXT_PROPS };
-    if (type === 'image') return { ...base, mediaName: '' };
-    // Both arrive with real points from the gesture. Freedraw is sharp; a new line curves (Excalidraw parity).
-    if (type === 'freedraw')
-        return { ...base, roundness: DEFAULT_LINEAR_ROUNDNESS, points: '[]', pressures: '', simulatePressure: true };
-    if (type === 'line') return { ...base, roundness: DEFAULT_LINE_ROUNDNESS, points: '[]' };
-    // An arrow is a line plus heads, forward bindings and an optional label (text/fontSize/fontFamily).
-    if (type === 'arrow')
-        return {
-            ...base,
-            points: '[]',
-            text: DEFAULT_TEXT_PROPS.text,
-            fontSize: DEFAULT_TEXT_PROPS.fontSize,
-            fontFamily: DEFAULT_TEXT_PROPS.fontFamily,
-            ...DEFAULT_ARROW_PROPS,
-        };
-    return { ...base, roundness: DEFAULT_SHAPE_ROUNDNESS };
+    return {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        angle: 0,
+        ...DEFAULT_ELEMENT_PROPS,
+        ...ELEMENT_KINDS[type].defaults(VECTOR_STYLE_DEFAULTS),
+    };
+}
+
+// Only the roughjs kinds declare a seed; writing one onto an image or a rich-text box is exactly the
+// drift the ELEMENT_FIELDS whitelist exists to prevent.
+function hasSeed(type: unknown): boolean {
+    return isVectorElementType(type) && ELEMENT_KINDS[type].fields.includes('seed');
 }
 
 // Live topmost fractional index in the map. Skips non-map entries and malformed index strings —
@@ -138,7 +134,7 @@ function followBoundArrows(doc: Y.Doc, elementsMap: Y.Map<unknown>, patchedIds: 
 }
 
 export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) => {
-    const [scene, setScene] = useState<VectorScene>({ elements: [], meta: DEFAULT_SCENE_META });
+    const [scene, setScene] = useState<VectorScene>({ elements: [], frames: [], meta: DEFAULT_SCENE_META });
 
     // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the two
     // element roots with default trackedOrigins, so UNTRACKED_ORIGIN writes escape capture (below).
@@ -178,8 +174,9 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         if (!doc) return;
         const id = `el-${nanoid(10)}`;
         // Honor a caller-supplied seed so a drag-create preview and its committed element share
-        // the same roughjs jitter (no visual pop on release); otherwise generate one.
-        const seed = partial.seed ?? Math.floor(Math.random() * 2 ** 31);
+        // the same roughjs jitter (no visual pop on release); otherwise generate one. undefined on a
+        // seedless kind drops the key (the write loop skips undefined).
+        const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
         const record: Record<string, unknown> = {
             ...elementDefaults(partial.type),
             ...partial,
@@ -216,7 +213,7 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
             const keys = generateNKeysBetween(topmostIndex(elementsMap), null, partials.length);
             partials.forEach((partial, i) => {
                 const id = `el-${nanoid(10)}`;
-                const seed = partial.seed ?? Math.floor(Math.random() * 2 ** 31);
+                const seed = hasSeed(partial.type) ? (partial.seed ?? Math.floor(Math.random() * 2 ** 31)) : undefined;
                 const record: Record<string, unknown> = {
                     ...elementDefaults(partial.type),
                     ...partial,
@@ -329,8 +326,10 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
                     if (v !== undefined) clone.set(field, v);
                 }
                 clone.set('id', id);
-                clone.set('seed', Math.floor(Math.random() * 2 ** 31));
+                if (hasSeed(src.get('type'))) clone.set('seed', Math.floor(Math.random() * 2 ** 31));
                 clone.set('index', keys[i]);
+                // A copy starts with no comments; the cards belong to the element that was commented on.
+                clone.set('commentCardIds', '');
                 if (src.get('type') === 'arrow') {
                     const sb = src.get('startBinding');
                     const eb = src.get('endBinding');

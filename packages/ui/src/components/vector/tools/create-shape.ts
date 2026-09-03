@@ -2,7 +2,15 @@
 // rectangle/diamond/ellipse is being dragged out. Pulled out of vector-canvas.tsx (the canvas only
 // dispatches) alongside the other gesture modules (line.ts, freedraw.ts, eraser.ts).
 
-import { type Box, DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_ROUNDNESS, type VectorElement } from '@workspace/lib/vector';
+import {
+    type Box,
+    DEFAULT_CORNERS,
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FILL_STYLE,
+    DEFAULT_SKETCH_PROPS,
+    solidFill,
+    type VectorElement,
+} from '@workspace/lib/vector';
 
 const CREATING_ID = '__creating__';
 
@@ -28,17 +36,21 @@ export function newShapeBox(sx: number, sy: number, dx: number, dy: number, from
 }
 
 export function creatingElement(c: CreatingState): VectorElement {
-    return {
+    const box = {
         id: CREATING_ID,
-        type: c.type,
         x: c.box.x,
         y: c.box.y,
         width: c.box.width,
         height: c.box.height,
         angle: 0,
         ...DEFAULT_ELEMENT_PROPS,
-        roundness: DEFAULT_SHAPE_ROUNDNESS,
+        ...DEFAULT_SKETCH_PROPS,
+        fill: solidFill('transparent'),
+        fillStyle: DEFAULT_FILL_STYLE,
         seed: c.seed,
         index: 'a0',
     };
+    // An ellipse has no corners to treat, so the field is not part of its model.
+    if (c.type === 'ellipse') return { ...box, type: 'ellipse' };
+    return { ...box, type: c.type, corners: DEFAULT_CORNERS };
 }

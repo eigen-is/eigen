@@ -12,6 +12,7 @@ import {
     bindingDistance,
     boundEndpoint,
     focusSnapPoint,
+    isBindable,
     type Point,
     parseBinding,
     parsePoints,
@@ -44,10 +45,6 @@ function dist(a: Point, b: Point): number {
 
 function clampUnit(n: number): number {
     return Math.min(1, Math.max(0, n));
-}
-
-function isBindableShape(el: VectorElement | undefined): el is VectorShapeElement {
-    return el !== undefined && (el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse');
 }
 
 // The side-midpoint snap dots over a bind candidate: all four rendered, the one nearest the pointer
@@ -127,7 +124,7 @@ function focusEnds(
         const binding = parseBinding(end === 'start' ? arrow.startBinding : arrow.endBinding);
         if (!binding) continue;
         const shape = byId.get(binding.elementId);
-        if (!isBindableShape(shape)) continue;
+        if (!shape || !isBindable(shape)) continue;
         const anchor = anchorToScene(shape, binding.fixedPoint);
         const endpoint = boundEndpoint(arrow, end, shape);
         if (dist(anchor, endpoint) * zoom < minScreenGap) continue;
