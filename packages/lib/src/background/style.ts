@@ -20,7 +20,7 @@ export function getBackgroundStyle(
             return { backgroundColor: fill.color };
         case 'gradient':
             return {
-                backgroundImage: `linear-gradient(${fill.angle}deg in oklab, ${fill.from}, ${fill.to})`,
+                backgroundImage: `linear-gradient(${fill.angle}deg, ${fill.from}, ${fill.to})`,
             };
         case 'image': {
             if (!fill.mediaName) return {};
