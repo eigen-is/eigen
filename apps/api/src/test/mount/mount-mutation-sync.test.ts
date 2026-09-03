@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import type { MountConfig } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
-import { buildStorageKey, createDefaultMountConfig } from '../../lib/mount/helpers';
+import { buildStorageKey } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { setShutdownDrainDeadline } from '../../lib/sync';
 import { countRowsInFile, createFaultMount, createGetLocalDatabase, type FaultStorage } from '../fault-storage-helpers';
+import { createTestMountConfig } from '../mount-test-helpers';
 
 // Regression net for AUDIT_MOUNT § P1 (finding 2a + siblings): a cached document DB syncs to a
 // STALE storage key after move/rename/trash/delete on the `local` backend (keys are the hierarchical
@@ -33,7 +34,7 @@ async function createMount(id: string, storageType: MountConfig['storageType']):
     const mount = new Mount(
         OWNER_ID,
         TEST_DIR,
-        createDefaultMountConfig(id, storageType),
+        createTestMountConfig(id, storageType),
         createGetLocalDatabase(TEST_DIR),
     );
     await mount.init();

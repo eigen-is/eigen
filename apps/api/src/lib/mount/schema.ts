@@ -11,11 +11,12 @@ export const paths = sqliteTable('paths', {
     parentId: text('parentId'),
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
+    // NULL = the folder-size cache was invalidated; recomputed lazily (invalidateSizesFrom / computeFolderSizeInTx).
     size: integer('size').default(0),
     thumbnail: text('thumbnail'),
     acl: text('acl', { mode: 'json' }).$type<DriveACL[] | null>(),
     visibility: text('visibility').$type<DriveVisibility>().default('private'),
-    sharingRestricted: integer('sharingRestricted').notNull().default(0),
+    sharingRestricted: integer('sharingRestricted', { mode: 'boolean' }).notNull().default(false),
     details: text('details', { mode: 'json' }).$type<DrivePathDetails>(),
     hash: text('hash'),
     createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),

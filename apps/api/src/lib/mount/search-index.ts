@@ -23,13 +23,13 @@ export function clearPathContent(mount: Mount, pathId: string): void {
 // the cap). The dirty bit is only ever set on a real body write, so this is the work-list;
 // `limit` keeps one drain turn (and its id-hydrate) bounded.
 export function getContentDirtyPaths(mount: Mount, reindexCapSeconds: number, limit: number): DrivePath[] {
-    const dirty = mount.db.all(sql`
+    const dirty = mount.db.all<{ id: string }>(sql`
         SELECT id FROM paths
         WHERE contentDirty = 1
           AND trashedAt IS NULL
           AND (contentIndexedAt IS NULL OR contentIndexedAt < (unixepoch() - ${reindexCapSeconds}))
         LIMIT ${limit}
-    `) as { id: string }[];
+    `);
     if (dirty.length === 0) return [];
     const ids = dirty.map((r) => r.id);
     const rows = mount.db.select().from(paths).where(inArray(paths.id, ids)).all();
@@ -40,13 +40,17 @@ export function getContentDirtyPaths(mount: Mount, reindexCapSeconds: number, li
 // dirty. A never-indexed row reads as due-now (0) so a row that slipped in mid-drain is never
 // stranded. Drives the reindexer's self-timer in place of a poll.
 export function earliestPendingReindexAt(mount: Mount, reindexCapSeconds: number): number | null {
-    const row = mount.db.all(sql`
+    const row = mount.db.all<{ dueSec: number | null }>(sql`
         SELECT MIN(CASE WHEN contentIndexedAt IS NULL THEN 0 ELSE contentIndexedAt + ${reindexCapSeconds} END) AS dueSec
         FROM paths
         WHERE contentDirty = 1 AND trashedAt IS NULL
-    `) as { dueSec: number | null }[];
+    `);
     const dueSec = row[0]?.dueSec;
     return dueSec == null ? null : dueSec * 1000;
+}
+
+export function markContentDirty(mount: Mount, pathId: string): void {
+    mount.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, pathId)).run();
 }
 
 export function markContentIndexed(mount: Mount, pathId: string): void {
@@ -65,7 +69,7 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
 
     // Pass 1a: name hits, FTS-ranked. docContainerDescendantIds keeps eigendoc internals
     // (data.db, embedded media, embedded chats) out — same exclusion as the body pass.
-    const nameRanked = mount.db.all(sql`
+    const nameRanked = mount.db.all<{ id: string }>(sql`
         SELECT p.id AS id
         FROM paths_fts
         JOIN paths p ON p.rowid = paths_fts.rowid
@@ -75,10 +79,10 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
           AND p.parentId NOT IN (${docContainerDescendantIds})
         ORDER BY bm25(paths_fts), p.updatedAt DESC, p.id DESC
         LIMIT ${opts.limit}
-    `) as { id: string }[];
+    `);
 
     // Pass 1b: body hits via the sibling content index.
-    const bodyRanked = mount.db.all(sql`
+    const bodyRanked = mount.db.all<{ id: string }>(sql`
         SELECT p.id AS id
         FROM paths_content_fts
         JOIN path_content pc ON pc.rowid = paths_content_fts.rowid
@@ -89,7 +93,7 @@ export function searchPaths(mount: Mount, opts: { q: string; limit: number }): D
           AND p.parentId NOT IN (${docContainerDescendantIds})
         ORDER BY bm25(paths_content_fts), p.updatedAt DESC, p.id DESC
         LIMIT ${opts.limit}
-    `) as { id: string }[];
+    `);
 
     // Merge: name hits first, then body-only hits. The name boost is structural — a
     // file whose name matches always outranks one matched only on body. Dedup by id.
@@ -122,6 +126,6 @@ export async function markContainerContentDirty(mount: Mount, dataDbPathId: stri
     const dataDb = await mount.getPath(dataDbPathId);
     if (dataDb?.name !== 'data.db' || !dataDb.parentId) return;
     mount.reindexQueue?.bumpGeneration(dataDb.parentId);
-    await mount.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, dataDb.parentId));
+    markContentDirty(mount, dataDb.parentId);
     mount.reindexQueue?.kick();
 }

@@ -180,8 +180,10 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 // (getTextPreviewMode) so the rule lives in exactly one place. Raw bun:sqlite
                 // query/prepare on the migration db.
                 const files = db
-                    .query(`SELECT id, name, mimeType FROM paths WHERE type = 'file' AND trashedAt IS NULL`)
-                    .all() as { id: string; name: string; mimeType: string }[];
+                    .query<{ id: string; name: string; mimeType: string }, []>(
+                        `SELECT id, name, mimeType FROM paths WHERE type = 'file' AND trashedAt IS NULL`,
+                    )
+                    .all();
                 const mark = db.prepare(`UPDATE paths SET contentDirty = 1 WHERE id = ?`);
                 for (const f of files) {
                     if (isSearchableTextFile(f.mimeType, f.name)) mark.run(f.id);
@@ -232,7 +234,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 };
 
                 const parents = db
-                    .query(`
+                    .query<{ parentId: string }, []>(`
                         SELECT DISTINCT parentId FROM (
                             SELECT parentId FROM paths
                             WHERE trashedFrom IS NULL AND parentId IS NOT NULL
@@ -240,15 +242,15 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                             HAVING COUNT(*) > 1
                         )
                     `)
-                    .all() as { parentId: string }[];
+                    .all();
 
-                const cohortInParent = db.query(
+                const cohortInParent = db.query<{ id: string; name: string }, [string]>(
                     `SELECT id, name FROM paths WHERE parentId = ? AND trashedFrom IS NULL ORDER BY createdAt ASC, rowid ASC`,
                 );
                 const rename = db.prepare(`UPDATE paths SET name = ? WHERE id = ?`);
 
                 for (const { parentId } of parents) {
-                    const rows = cohortInParent.all(parentId) as { id: string; name: string }[];
+                    const rows = cohortInParent.all(parentId);
                     // Every lower-name in the parent's dedup cohort, so a generated suffix collides
                     // with nothing live now or after a folder restore.
                     const taken = new Set(rows.map((r) => lower(r.name)));
@@ -260,6 +262,8 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                         if (g) g.push(r);
                         else groups.set(key, [r]);
                     }
+                    // The " (n)" suffix rule is inlined, not getUniqueFileName: a later change to that
+                    // shared helper must not alter what v7 did to already-migrated rows.
                     for (const group of groups.values()) {
                         for (const dup of group.slice(1)) {
                             const { base, ext } = split(dup.name);

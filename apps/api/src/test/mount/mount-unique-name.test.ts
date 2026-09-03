@@ -4,8 +4,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { MOUNT_DB_CONFIG } from '../../lib/mount/db-config';
-import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
+import { createTestMountConfig } from '../mount-test-helpers';
 
 const UNIQUE_INDEX = 'idx_paths_unique_active_name';
 const INDEX_DDL = `CREATE UNIQUE INDEX IF NOT EXISTS ${UNIQUE_INDEX} ON paths(parentId, LOWER(name)) WHERE trashedAt IS NULL;`;
@@ -175,7 +175,7 @@ describe('concurrent same-name create → exactly one 409', () => {
     });
 
     async function raceOnBackend(storageType: 'local' | 'local-key'): Promise<void> {
-        const config = createDefaultMountConfig(`race-${storageType}`, storageType);
+        const config = createTestMountConfig(`race-${storageType}`, storageType);
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -206,7 +206,7 @@ describe('concurrent same-name create → exactly one 409', () => {
     // The index also constrains UPDATEs: a raced rename/move that would collide must surface as the
     // same 409 the create path raises, not a raw UNIQUE-constraint 500.
     async function renameRaceOnBackend(storageType: 'local' | 'local-key'): Promise<void> {
-        const config = createDefaultMountConfig(`rename-race-${storageType}`, storageType);
+        const config = createTestMountConfig(`rename-race-${storageType}`, storageType);
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -240,7 +240,7 @@ describe('concurrent same-name create → exactly one 409', () => {
     // idx_paths_unique_active_name violation to 409. A duplicate paths.id (PRIMARY KEY) through the
     // same insert seam is a real bug, not a name race — it must re-throw raw, not become a 409.
     test('a duplicate paths.id violation re-throws raw instead of mapping to 409', async () => {
-        const config = createDefaultMountConfig('pk-precision', 'local-key');
+        const config = createTestMountConfig('pk-precision', 'local-key');
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -330,7 +330,7 @@ describe('v7 dedup covers the folder restore-from-trash cohort', () => {
         const mount = new Mount(
             'owner',
             TEST_DIR,
-            createDefaultMountConfig(mountId, 'local-key'),
+            createTestMountConfig(mountId, 'local-key'),
             getLocalDatabase(TEST_DIR),
         );
         await mount.init();
@@ -364,7 +364,7 @@ describe('NFC filename normalization on write', () => {
     // same name collides on the unique index instead of forking a look-alike twin. On a path-based mount
     // it also keeps the stored name and the on-disk key in agreement — both derive from the same string.
     async function nfcDedupOnBackend(storageType: 'local' | 'local-key'): Promise<void> {
-        const config = createDefaultMountConfig(`nfc-dedup-${storageType}`, storageType);
+        const config = createTestMountConfig(`nfc-dedup-${storageType}`, storageType);
         const mount = new Mount('owner', TEST_DIR, config, getLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;

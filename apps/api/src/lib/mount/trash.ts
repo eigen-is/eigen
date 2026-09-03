@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
@@ -25,7 +25,6 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
     await closeCachedDbsUnder(mount, pathId);
 
     return mount.withPathLock(pathId, async () => {
-        // Path-based storage: move file/folder to .trash/
         let trashKey: string | undefined;
         if (mount.isPathBased && mount.storage.rename) {
             const oldKey = await mount.resolveStoragePath(pathId);
@@ -33,7 +32,8 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
             await mount.storage.rename(oldKey, trashKey);
         }
 
-        // Direct DB update — do NOT use updatePath()
+        // Not updatePath(): it validates the name, asserts uniqueness against active siblings and
+        // renames storage — none of which a trash write wants.
         const now = new Date();
         await mount.db
             .update(paths)
@@ -52,8 +52,10 @@ export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath
 
         await mount.invalidateSizesFrom(item.parentId);
 
+        // getPath, not getActivePath: the row this returns is the trashed one.
         const updated = await mount.getPath(pathId);
-        return updated!;
+        if (!updated) throw new ApiError(500, 'Path not found after update');
+        return updated;
     });
 }
 
@@ -83,24 +85,16 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
     const root = await mount.getRootFolder();
     if (!root) throw new ApiError(500, 'Root folder not found');
 
-    // Determine target parent
     let targetParentId = root.id;
     const originalParent = await mount.getPath(row.trashedFrom);
     if (originalParent && !originalParent.trashedAt) {
         targetParentId = originalParent.id;
     }
 
-    // Check name conflict and auto-rename if needed. A legacy row named `.trash` (pre-guard)
-    // is treated like a conflict — restoring it verbatim would alias the real trash dir.
+    // A legacy row named `.trash` (pre-guard) counts as a conflict too — restoring it verbatim
+    // would alias the real trash dir. The row is still trashed, so it never matches itself.
     let restoreName = row.name;
-    let conflict = isReservedName(restoreName);
-    if (!conflict) {
-        try {
-            await mount.assertUniqueName(targetParentId, restoreName, pathId);
-        } catch {
-            conflict = true;
-        }
-    }
+    const conflict = isReservedName(restoreName) || (await mount.getChildByName(targetParentId, restoreName)) !== null;
     if (conflict) {
         const siblings = await mount.db
             .select({ name: paths.name })
@@ -112,7 +106,6 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
     }
 
     return mount.withPathLock(pathId, async () => {
-        // Path-based storage: move back from .trash/
         if (mount.isPathBased && mount.storage.rename) {
             const currentKey = await mount.resolveStoragePath(pathId);
             const parentPath = await mount.resolveStoragePath(targetParentId);
@@ -120,8 +113,8 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
             await mount.storage.rename(currentKey, targetKey);
         }
 
-        // Direct DB update. The conflict-free restoreName was computed outside this lock, so a
-        // raced same-name create can still trip the unique index here → the same 409 as create.
+        // The conflict-free restoreName was computed outside this lock, so a raced same-name
+        // create can still trip the unique index here → the same 409 as create.
         const now = new Date();
         try {
             await mount.db
@@ -148,20 +141,28 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
         // Rows trashed while contentDirty=1 were skipped by the drain (trashedAt filter) — re-drive it.
         mount.reindexQueue?.kick();
 
-        const updated = await mount.getPath(pathId);
-        return updated!;
+        return mount.getActivePath(pathId);
     });
+}
+
+// Every descendant of parentId, transitively. sql.raw emits a bare column name — an
+// interpolated ${paths.parentId} renders table-qualified, which is invalid behind the `p.`
+// alias and in a SET clause.
+function descendantsOf(parentId: string): SQL {
+    return sql`
+        WITH RECURSIVE descendants AS (
+            SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
+            UNION ALL
+            SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
+        )
+    `;
 }
 
 // Recursively set trashedAt on all non-trashed descendants
 function trashDescendants(mount: Mount, parentId: string, now: Date): void {
     const epoch = Math.floor(now.getTime() / 1000);
     mount.db.run(sql`
-        WITH RECURSIVE descendants AS (
-            SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
-            UNION ALL
-            SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
-        )
+        ${descendantsOf(parentId)}
         UPDATE ${paths}
         SET ${sql.raw('trashedAt')} = ${epoch}, ${sql.raw('updatedAt')} = ${epoch}
         WHERE id IN (SELECT id FROM descendants) AND ${paths.trashedAt} IS NULL
@@ -172,11 +173,7 @@ function trashDescendants(mount: Mount, parentId: string, now: Date): void {
 function restoreDescendants(mount: Mount, parentId: string, now: Date): void {
     const epoch = Math.floor(now.getTime() / 1000);
     mount.db.run(sql`
-        WITH RECURSIVE descendants AS (
-            SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
-            UNION ALL
-            SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
-        )
+        ${descendantsOf(parentId)}
         UPDATE ${paths}
         SET ${sql.raw('trashedAt')} = NULL, ${sql.raw('updatedAt')} = ${epoch}
         WHERE id IN (SELECT id FROM descendants)
@@ -211,20 +208,14 @@ export async function permanentlyDeleteFromTrash(mount: Mount, pathId: string): 
     await mount.deletePath(pathId);
 }
 
-export async function purgeTrash(mount: Mount, maxAgeDays?: number): Promise<void> {
-    let items: DrivePath[];
-    if (maxAgeDays !== undefined) {
-        const cutoffEpoch = Math.floor((Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) / 1000);
-        const results = await mount.db
-            .select()
-            .from(paths)
-            .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
-            .all();
-        items = results.map((r) => mount.toDrivePath(r));
-    } else {
-        items = await listTrash(mount);
-    }
-    for (const item of items) {
-        await permanentlyDeleteFromTrash(mount, item.id);
+export async function purgeTrash(mount: Mount, maxAgeDays: number): Promise<void> {
+    const cutoffEpoch = Math.floor((Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) / 1000);
+    const expired = await mount.db
+        .select({ id: paths.id })
+        .from(paths)
+        .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
+        .all();
+    for (const row of expired) {
+        await permanentlyDeleteFromTrash(mount, row.id);
     }
 }

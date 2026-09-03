@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
-import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { countRowsInFile, createGetLocalDatabase } from '../fault-storage-helpers';
+import { createTestMountConfig } from '../mount-test-helpers';
 
 // Regression net for AUDIT_STORAGE item 4 (design note 2026-07-05): an openDatabase landing in
 // closeDatabase's async close window built a fresh ManagedDatabase over the closing instance's
@@ -95,12 +95,7 @@ class GatedLocalStorage extends LocalStorage {
 const createdMounts: Mount[] = [];
 
 async function createGatedLocalMount(id: string): Promise<{ mount: Mount; storage: GatedLocalStorage }> {
-    const mount = new Mount(
-        OWNER_ID,
-        TEST_DIR,
-        createDefaultMountConfig(id, 'local'),
-        createGetLocalDatabase(TEST_DIR),
-    );
+    const mount = new Mount(OWNER_ID, TEST_DIR, createTestMountConfig(id, 'local'), createGetLocalDatabase(TEST_DIR));
     const storage = new GatedLocalStorage(join(TEST_DIR, 'mounts', id));
     mount.storage = storage;
     await mount.init();

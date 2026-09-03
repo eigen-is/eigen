@@ -153,6 +153,7 @@ export class UploadQueue {
                 this.db.delete(pendingUploads).where(eq(pendingUploads.storageKey, row.storageKey)).run();
             }
         }
+        // Best-effort: a readdir/unlink fault leaves orphans on disk but must not block the queue start.
         try {
             for (const entry of fs.readdirSync(this.stagingDir)) {
                 if (!referenced.has(entry)) fs.unlinkSync(path.join(this.stagingDir, entry));
@@ -245,14 +246,7 @@ export class UploadQueue {
         if (!(await file.exists())) {
             // staged copy vanished mid-flight (cancelled, or superseded before inFlight was set);
             // the keyed delete only drops a row still pointing at this staging
-            if (!this.closing) {
-                this.db
-                    .delete(pendingUploads)
-                    .where(
-                        and(eq(pendingUploads.storageKey, storageKey), eq(pendingUploads.stagingPath, storedStaging)),
-                    )
-                    .run();
-            }
+            if (!this.closing) this.deletePendingRow(storageKey, storedStaging);
             return;
         }
         if (!isSqliteFile(stagingPath)) {
@@ -262,10 +256,7 @@ export class UploadQueue {
             // When tearing down, leave both for boot replay to re-check and drop.
             console.error(`[sync] dropping corrupt staged copy for ${storageKey} (${stagingPath})`);
             if (this.closing) return;
-            this.db
-                .delete(pendingUploads)
-                .where(and(eq(pendingUploads.storageKey, storageKey), eq(pendingUploads.stagingPath, storedStaging)))
-                .run();
+            this.deletePendingRow(storageKey, storedStaging);
             await bestEffortUnlink(stagingPath);
             return;
         }
@@ -369,6 +360,14 @@ export class UploadQueue {
             }
         }
         await bestEffortUnlink(stagingPath);
+    }
+
+    // Drop the pending row only while it still points at THIS staged copy, so a newer enqueue survives.
+    private deletePendingRow(storageKey: string, storedStaging: string): void {
+        this.db
+            .delete(pendingUploads)
+            .where(and(eq(pendingUploads.storageKey, storageKey), eq(pendingUploads.stagingPath, storedStaging)))
+            .run();
     }
 
     // A PUT that outlived the client-side ceiling is an ORPHAN: its request keeps running and can

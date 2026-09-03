@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import type { ContentExtractor } from '../../lib/mount/content-reindex-queue';
-import { buildStorageKey, createDefaultMountConfig } from '../../lib/mount/helpers';
+import { buildStorageKey } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { getUploadSemaphore, setShutdownDrainDeadline } from '../../lib/sync';
@@ -20,6 +20,7 @@ import {
     FaultStorage,
     provisionDoc,
 } from '../fault-storage-helpers';
+import { createTestMountConfig } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-sync-resilience-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -76,7 +77,7 @@ describe('Phase 1a — crash-recovery durability (Gap 1)', () => {
         const mount = new Mount(
             OWNER_ID,
             TEST_DIR,
-            createDefaultMountConfig('crash-recovery', 'local'),
+            createTestMountConfig('crash-recovery', 'local'),
             createGetLocalDatabase(TEST_DIR),
         );
         await mount.init();
@@ -618,7 +619,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         const mount = new Mount(
             OWNER_ID,
             TEST_DIR,
-            createDefaultMountConfig(`reindex-teardown-${Date.now()}`, 'local'),
+            createTestMountConfig(`reindex-teardown-${Date.now()}`, 'local'),
             createGetLocalDatabase(TEST_DIR),
             extract,
         );
@@ -656,7 +657,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         const mount = new Mount(
             OWNER_ID,
             TEST_DIR,
-            createDefaultMountConfig(`prune-race-${Date.now()}`, 'local'),
+            createTestMountConfig(`prune-race-${Date.now()}`, 'local'),
             createGetLocalDatabase(TEST_DIR),
         );
         await mount.init(); // schedules the setTimeout(prune, 0) — still pending (a macrotask)
@@ -716,7 +717,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         const mount = new Mount(
             OWNER_ID,
             TEST_DIR,
-            createDefaultMountConfig(`reindex-close-timeout-${Date.now()}`, 'local'),
+            createTestMountConfig(`reindex-close-timeout-${Date.now()}`, 'local'),
             createGetLocalDatabase(TEST_DIR),
             extract,
         );

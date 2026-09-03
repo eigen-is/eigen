@@ -10,10 +10,10 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getHome } from '../../lib/home';
-import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { fileEvents } from '../../lib/mount/schema';
 import { getUserById } from '../../lib/user';
+import { createTestMountConfig } from '../mount-test-helpers';
 import type { TestContext } from '../setup';
 import {
     assertJson,
@@ -137,7 +137,7 @@ describe('FileHistory', () => {
     let metaDb: ManagedDatabase<SchemaType>;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig(MOUNT_ID, 'local-key');
+        const config = createTestMountConfig(MOUNT_ID, 'local-key');
         const { getter, captured } = createGetLocalDatabase(TEST_DIR);
         mount = new Mount(OWNER_ID, TEST_DIR, config, getter);
         await mount.init();
@@ -299,7 +299,7 @@ describe('FileHistory old-row prune', () => {
     let metaDb: ManagedDatabase<SchemaType>;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-prune-old', 'local-key');
+        const config = createTestMountConfig('test-prune-old', 'local-key');
         const { getter, captured } = createGetLocalDatabase(TEST_DIR);
         mount = new Mount(OWNER_ID, TEST_DIR, config, getter);
         await mount.init();

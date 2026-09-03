@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
-import { eq } from 'drizzle-orm';
 import { ApiError } from '../core';
 import { writeTempWithHash } from '../drive/streaming';
 import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
-import { paths } from './schema';
+import { markContentDirty } from './search-index';
 
 // Recursive same-mount copy on one storage backend — the fast path next to the
 // cross-mount bridge in drive/copy-across.ts. Containers are recreated (typed) and
@@ -18,8 +17,12 @@ export async function copyPath(
     name: string,
     actor?: { id: string; email: string },
 ): Promise<DrivePath> {
-    const src = await mount.getPath(srcPathId);
-    if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
+    const src = await mount.getActivePath(srcPathId);
+    const copiedFrom = {
+        sourceOwnerId: mount.history.ownerId,
+        sourceMountId: mount.history.mountId,
+        sourcePathId: srcPathId,
+    };
 
     if (isContainerType(src.type)) {
         const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
@@ -27,16 +30,7 @@ export async function copyPath(
         const containerType: DriveContainerType | undefined = isEigenDoc ? src.type : undefined;
         const newId = await mount.createFolder(destParentId, name, containerType);
         if (actor) {
-            mount.history.record({
-                pathId: newId,
-                eventType: 'copied',
-                actor,
-                details: {
-                    sourceOwnerId: mount.history.ownerId,
-                    sourceMountId: mount.history.mountId,
-                    sourcePathId: srcPathId,
-                },
-            });
+            mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
         }
         const children = await mount.listFolder(srcPathId);
         for (const child of children) {
@@ -49,12 +43,10 @@ export async function copyPath(
         // for the new container, so mark it dirty here and kick the reindexer to extract its
         // body. Plain folders have no body and stay unmarked.
         if (isEigenDoc) {
-            await mount.db.update(paths).set({ contentDirty: 1 }).where(eq(paths.id, newId)).run();
+            markContentDirty(mount, newId);
             mount.reindexQueue?.markDirty(newId);
         }
-        const created = await mount.getPath(newId);
-        if (!created) throw new ApiError(500, 'Failed to copy folder');
-        return created;
+        return mount.getActivePath(newId);
     }
 
     // Freshest-first source: readFile surfaces an un-acked pending upload's staged bytes (a
@@ -68,20 +60,9 @@ export async function copyPath(
     try {
         const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
         if (actor) {
-            mount.history.record({
-                pathId: newId,
-                eventType: 'copied',
-                actor,
-                details: {
-                    sourceOwnerId: mount.history.ownerId,
-                    sourceMountId: mount.history.mountId,
-                    sourcePathId: srcPathId,
-                },
-            });
+            mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
         }
-        const created = await mount.getPath(newId);
-        if (!created) throw new ApiError(500, 'Failed to copy file');
-        return created;
+        return await mount.getActivePath(newId);
     } finally {
         await mount.cleanupTemp(tempId);
     }

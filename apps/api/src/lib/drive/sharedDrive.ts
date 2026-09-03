@@ -17,7 +17,7 @@ import type CollabDocument from '../collab/collabDocument';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
-import type { MimeOptions, Mount } from '../mount';
+import type { Mount } from '../mount';
 import type { StorageFile } from '../storage';
 import type { User } from '../user';
 import { getMemberships, type Memberships } from '../user/';
@@ -102,18 +102,14 @@ export default class SharedDrive {
         return (await this.canRead(mountId, root.id, this.user, memberships)) ? root : null;
     }
 
-    public async getMimeTypeContents(mimeType: string, options?: MimeOptions): Promise<DrivePath[]> {
+    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
         await this.requireTeamMembership();
-        return this.sharedDrive.getMimeTypeContents(mimeType, options);
+        return this.sharedDrive.getMimeTypeContents(mimeType);
     }
 
-    public async getMountMimeTypeContents(
-        mountId: string,
-        mimeType: string,
-        options?: MimeOptions,
-    ): Promise<DrivePath[]> {
+    public async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
         await this.requireTeamMembership();
-        return this.sharedDrive.getMountMimeTypeContents(mountId, mimeType, options);
+        return this.sharedDrive.getMountMimeTypeContents(mountId, mimeType);
     }
 
     public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
