@@ -63,7 +63,6 @@ const richtext = (id: string, index: string): VectorElement => ({
     index,
     html: '<p>hello</p>',
     fill: solidFill('transparent'),
-    fillStyle: 'solid',
     corners: 'straight',
     fontFamily: 'Excalifont',
     fontSize: 20,

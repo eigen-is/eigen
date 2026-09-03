@@ -170,3 +170,48 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.rectangle.searchText(shape({ id: 'r', type: 'rectangle' }))).toBe('');
     });
 });
+
+describe('capabilities agree with the stored fields', () => {
+    test('fill, corners, objectFit and typography are derivable from each kind own fields', () => {
+        for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
+            const fields = kind.fields;
+            expect([type, kind.capabilities.fill]).toEqual([type, fields.includes('fill')]);
+            expect([type, kind.capabilities.fillStyle]).toEqual([type, fields.includes('fillStyle')]);
+            expect([type, kind.capabilities.corners]).toEqual([type, fields.includes('corners')]);
+            expect([type, kind.capabilities.objectFit]).toEqual([type, fields.includes('objectFit')]);
+            // An arrow carries fontFamily/fontSize for its LABEL, which the panel edits through its own
+            // measured path (applyArrowFont) — not through the rich-text typography section.
+            expect([type, kind.capabilities.typography]).toEqual([
+                type,
+                fields.includes('fontFamily') && type !== 'arrow',
+            ]);
+            expect([type, kind.capabilities.roughness]).toEqual([type, fields.includes('roughness')]);
+        }
+    });
+
+    test('every kind paints a stroke', () => {
+        // strokeColor/Width/Style are BASE fields, so there is nothing to derive this from — it is
+        // pinned instead: shapes and linear elements draw the stroke, image and rich text use it as a
+        // border. A kind that answers false here must have a renderer that ignores the fields.
+        for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
+            expect([type, kind.capabilities.stroke]).toEqual([type, true]);
+        }
+    });
+});
+
+describe('baseDefaults', () => {
+    test('a new rich text box or image paints no border until a stroke colour is picked', () => {
+        for (const type of ['richtext', 'image'] as const) {
+            const fresh = { ...DEFAULT_ELEMENT_PROPS, ...ELEMENT_KINDS[type].baseDefaults };
+            expect([type, fresh.strokeColor]).toEqual([type, 'transparent']);
+        }
+        const out = ELEMENT_KINDS.richtext.render(richtext({ id: 'rt', ...ELEMENT_KINDS.richtext.baseDefaults }), {});
+        expect('html' in out && out.style).not.toContain('border:');
+    });
+
+    test('a kind that draws its stroke keeps the shared base defaults', () => {
+        for (const type of ['rectangle', 'diamond', 'ellipse', 'freedraw', 'line', 'arrow'] as const) {
+            expect([type, ELEMENT_KINDS[type].baseDefaults]).toEqual([type, {}]);
+        }
+    });
+});

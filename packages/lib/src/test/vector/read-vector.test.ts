@@ -522,7 +522,8 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
     const richtext = base({
         id: 'rich1',
         type: 'richtext',
-        ...paint,
+        // rich text carries `fill` without `fillStyle` — a hachured text box is not a thing
+        fill: paint.fill,
         html: '<p>hello</p>',
         corners: 'straight',
         fontFamily: 'Inter',
@@ -588,7 +589,7 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
             record: richtext,
             fields: [
                 ...BASE_FIELDS,
-                ...PAINT_FIELDS,
+                'fill',
                 'html',
                 'corners',
                 'fontFamily',

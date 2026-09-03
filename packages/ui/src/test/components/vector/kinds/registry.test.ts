@@ -35,6 +35,18 @@ describe('ELEMENT_KIND_UI', () => {
         }
     });
 
+    test('a kind carries its own panel rows exactly when a capability calls for them', () => {
+        // The generic rows (fill, stroke, corners, opacity) are the panel's; a kind entry exists only for
+        // what they cannot express — rich text's typography and the image's fit.
+        for (const type of vectorElementTypes()) {
+            const caps = ELEMENT_KINDS[type].capabilities;
+            expect([type, Boolean(ELEMENT_KIND_UI[type].PanelSection)]).toEqual([
+                type,
+                caps.typography || caps.objectFit,
+            ]);
+        }
+    });
+
     // Un-todo in Task 8, which fills the slot.
     test.todo('only rich text has an in-place editor', () => {
         for (const type of vectorElementTypes()) {

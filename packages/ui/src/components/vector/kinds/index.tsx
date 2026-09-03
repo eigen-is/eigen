@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import type { VectorElementPatch } from '../hooks/use-canvas-doc';
+import { ImagePanelSection } from './image';
+import { RichTextPanelSection } from './richtext';
 
 // Mounted inside the element's own layer while it is being edited on the canvas. `onChange` writes
 // straight through (unsealed, so keystrokes coalesce into one undo step); `onExit` ends the session.
@@ -52,6 +54,11 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     arrow: { icon: MoveUpRight, label: 'Arrow', shortcut: { letter: 'A', digit: '5' } },
     line: { icon: Minus, label: 'Line', shortcut: { letter: 'L', digit: '6' } },
     freedraw: { icon: Pencil, label: 'Draw', shortcut: { letter: 'P', digit: '7' } },
-    richtext: { icon: Type, label: 'Text', shortcut: { letter: 'T', digit: '8' } },
-    image: { icon: ImageIcon, label: 'Image' },
+    richtext: {
+        icon: Type,
+        label: 'Text',
+        shortcut: { letter: 'T', digit: '8' },
+        PanelSection: RichTextPanelSection,
+    },
+    image: { icon: ImageIcon, label: 'Image', PanelSection: ImagePanelSection },
 };

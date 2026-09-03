@@ -35,12 +35,24 @@ export type Capabilities = {
     // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
     roughness: boolean;
     corners: boolean;
+    // The Stroke rows (colour / width / style). True on every kind today: shapes and linear elements
+    // draw the stroke, image and rich text use it as their border. It is a capability rather than an
+    // ungated panel section so a future kind that paints no stroke has one place to say so.
+    stroke: boolean;
+    // The rich-text typography section (font, weight, alignment, spacing, colour, padding). An arrow's
+    // label fonts are NOT this: they are measured client-side through the panel's own label path.
+    typography: boolean;
+    // The image fit row (`objectFit`).
+    objectFit: boolean;
     bindable: boolean;
     // Which family the elbow router's heading heuristics follow — the silhouette, not the exact outline.
     // A new bindable kind picks one of the three instead of adding a branch to elbow-heading.
     silhouette: 'box' | 'diamond' | 'ellipse';
     creation: 'box' | 'polyline' | 'freedraw' | 'none';
 };
+
+// The base fields a kind may start a new element with other than the shared table's value.
+export type BasePaintDefaults = Partial<Pick<VectorElementBase, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>>;
 
 // A per-element Y.Map, or anything else exposing its `get` (the reader's only requirement).
 export type FieldSource = { get(key: string): unknown };
@@ -67,6 +79,10 @@ export type KindSpec<T extends VectorElement> = {
     fields: readonly string[];
     capabilities: Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
+    // Overrides of the shared base defaults for a NEW element of this kind. The DOM-box kinds use the
+    // stroke as a BORDER, and a fresh box paints none until the user picks a colour (slides' borderWidth
+    // 0, same intent). Omit where the base table already answers.
+    baseDefaults?: BasePaintDefaults;
     read(src: FieldSource, base: VectorElementBase): T | null;
     // Omit for the rotated-box default (only a routed arrow spills past its box).
     bounds?(el: T, route?: Point[]): Bounds;
@@ -89,6 +105,7 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     fields: readonly string[];
     capabilities: Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
+    baseDefaults: BasePaintDefaults;
     read(src: FieldSource, base: VectorElementBase): T | null;
     bounds(el: VectorElement, route?: Point[]): Bounds;
     hitTest(el: VectorElement, point: Point, threshold: number, route?: Point[]): boolean;
@@ -138,6 +155,7 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         fields: spec.fields,
         capabilities: spec.capabilities,
         defaults: spec.defaults,
+        baseDefaults: spec.baseDefaults ?? {},
         read: spec.read,
         bounds: (el, route) => (spec.is(el) && spec.bounds ? spec.bounds(el, route) : getElementBounds(el)),
         hitTest: (el, point, threshold, route) => (spec.is(el) ? spec.hitTest(el, point, threshold, route) : false),

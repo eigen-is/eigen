@@ -67,7 +67,8 @@ export function VectorEditor({
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),
         [doc.elements, selectedIds],
     );
-    const showPanel = canEdit && selectedElements.length > 0;
+    // Always mounted while editing: with nothing selected the panel edits the canvas itself.
+    const showPanel = canEdit;
 
     // Aspect lock, lifted here so the panel checkbox and the canvas' ObjectTransform
     // resizeMode share one ephemeral setting. Default ON for image-only selections.
@@ -245,6 +246,9 @@ export function VectorEditor({
                                         selectedElements={selectedElements}
                                         updateElements={doc.updateElements}
                                         undoManager={doc.undoManager}
+                                        meta={doc.meta}
+                                        updateMeta={doc.updateMeta}
+                                        viewport="infinite"
                                         aspectLocked={aspectLocked}
                                         onAspectLockChange={setAspectLocked}
                                     />

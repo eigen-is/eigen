@@ -97,24 +97,26 @@ export type VectorImageElement = VectorElementBase & {
 
 // The one text kind: TipTap HTML in a box, styled by the typography fields slides' TextObject carried.
 // `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background.
-export type VectorRichTextElement = VectorElementBase &
-    Fillable & {
-        type: 'richtext';
-        html: string;
-        corners: Corners;
-        fontFamily: string;
-        fontSize: number;
-        fontWeight: FontWeight;
-        fontStyle: FontStyle;
-        textDecoration: TextDecoration;
-        textAlign: TextAlign;
-        verticalAlign: VerticalAlign;
-        color: string;
-        letterSpacing: number;
-        lineHeight: number;
-        highlightColor: string;
-        padding: number; // px inset between the box edge and the text; the box keeps its stored size
-    };
+// `fill` without `fillStyle`: a hachured text box is not a thing, so it carries the colour/gradient
+// half of Fillable only.
+export type VectorRichTextElement = VectorElementBase & {
+    type: 'richtext';
+    fill: string;
+    html: string;
+    corners: Corners;
+    fontFamily: string;
+    fontSize: number;
+    fontWeight: FontWeight;
+    fontStyle: FontStyle;
+    textDecoration: TextDecoration;
+    textAlign: TextAlign;
+    verticalAlign: VerticalAlign;
+    color: string;
+    letterSpacing: number;
+    lineHeight: number;
+    highlightColor: string;
+    padding: number; // px inset between the box edge and the text; the box keeps its stored size
+};
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
 // to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).

@@ -16,6 +16,7 @@ import {
     type VectorFrame,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorMeta,
     type VectorRichTextElement,
     type VectorScene,
     type VectorShapeElement,
@@ -61,6 +62,9 @@ function elementDefaults(type: VectorElementType): Record<string, unknown> {
         height: 0,
         angle: 0,
         ...DEFAULT_ELEMENT_PROPS,
+        // The kind's overrides of the shared base paint: rich text and images use the stroke as a
+        // border, so a fresh one is unframed until the user picks a stroke colour.
+        ...ELEMENT_KINDS[type].baseDefaults,
         ...ELEMENT_KINDS[type].defaults(VECTOR_STYLE_DEFAULTS),
     };
 }
@@ -316,6 +320,18 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
         [updateFrames],
     );
 
+    // The scene's own settings (background, grid). One sealed write, like every discrete panel op.
+    const updateMeta = useCallback((fields: Partial<VectorMeta>) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        doc.transact(() => {
+            const metaMap = doc.getMap('meta');
+            for (const [key, value] of Object.entries(fields)) {
+                if (value !== undefined) metaMap.set(key, value);
+            }
+        });
+    }, []);
+
     return {
         elements: scene.elements,
         frames: scene.frames,
@@ -334,6 +350,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string) =
         moveFrame,
         updateFrame,
         updateFrames,
+        updateMeta,
         undoManager,
         // Exposed for awareness (cursors + remote selections).
         provider,

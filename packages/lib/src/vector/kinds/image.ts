@@ -16,6 +16,9 @@ export const imageKind = defineKind<VectorImageElement>({
         fillStyle: false,
         roughness: false,
         corners: true,
+        stroke: true,
+        typography: false,
+        objectFit: true,
         bindable: false,
         silhouette: 'box',
         creation: 'none',
@@ -25,6 +28,8 @@ export const imageKind = defineKind<VectorImageElement>({
         corners: style.corners,
         objectFit: DEFAULT_OBJECT_FIT,
     }),
+    // The stroke is this kind's border, so a pasted picture arrives unframed.
+    baseDefaults: { strokeColor: 'transparent' },
     read: (src, base) => ({
         ...base,
         type: 'image',

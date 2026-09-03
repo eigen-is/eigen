@@ -1,10 +1,12 @@
-// The right-side w-64 properties panel for the vector editor — mirrors how slides mounts
-// SlidePropertiesPanel (non-empty selection + canEdit). It edits every selected element through
-// the shared MIXED conventions: '—' in number inputs / color swatches / select placeholders and a
-// data-mixed attribute on toggles. Each control change is one updateElements transact across the
-// selection (one undo step, stopCapturing sealed on both sides). Field scoping: fill /
-// fill style / sketch are shapes-only, edges rect+diamond-only, font controls text-only, and
-// strokeColor doubles as the text color.
+// The right-side w-64 properties panel for the canvas engine. It is mounted whenever the user can edit
+// — with nothing selected it edits the canvas itself (the background row). It edits every selected
+// element through the shared MIXED conventions: '—' in number inputs / color swatches / select
+// placeholders and a data-mixed attribute on toggles. Each control change is one updateElements transact
+// across the selection (one undo step, stopCapturing sealed on both sides).
+//
+// Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `stroke` the Stroke
+// section, `roughness` the Sketch section, `corners` the Shape section. What a capability cannot express
+// — rich text's typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
 
 import {
     ARROW_SHAPES,
@@ -21,6 +23,7 @@ import {
     type FillStyle,
     isClosedPath,
     isLinearElement,
+    isTransparentColor,
     isTransparentFill,
     normalizeLinear,
     parseFill,
@@ -30,15 +33,17 @@ import {
     resizeLinear,
     STROKE_WIDTH_OPTIONS,
     type StrokeStyle,
-    solidFill,
+    serializeFill,
+    TRANSPARENT_FILL,
     type VectorArrowElement,
     type VectorElement,
-    type VectorElementType,
     type VectorLinearElement,
+    type VectorMeta,
 } from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignSection,
+    BackgroundFillBlock,
     ColorRow,
     getMergedValue,
     isMixed,
@@ -56,18 +61,8 @@ import {
 import type * as Y from 'yjs';
 import type { VectorElementPatch } from './hooks/use-canvas-doc';
 import { applyZOrder } from './hooks/use-canvas-keyboard';
+import { ELEMENT_KIND_UI } from './kinds';
 import { loadVectorFont, measureVectorText } from './text-measure';
-
-const TYPE_LABELS: Record<VectorElementType, string> = {
-    rectangle: 'Rectangle',
-    diamond: 'Diamond',
-    ellipse: 'Ellipse',
-    richtext: 'Text',
-    image: 'Image',
-    freedraw: 'Freehand',
-    line: 'Line',
-    arrow: 'Arrow',
-};
 
 // Discrete presets, the Excalidraw constants: strokeWidth 1/2/4 (STROKE_WIDTH_OPTIONS,
 // shared from lib), roughness 0/1/2.
@@ -111,14 +106,6 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
     { value: 'circle', label: 'Circle' },
 ];
 
-// The solid colour the Fill swatch shows: '' for transparent (an unset swatch) and for a gradient,
-// which has no single swatch colour. undefined on a kind that has no fill.
-function fillColorOf(el: VectorElement): string | undefined {
-    if (!ELEMENT_KINDS[el.type].capabilities.fill || !('fill' in el)) return undefined;
-    const fill = parseFill(el.fill);
-    return fill.type === 'solid' && !isTransparentFill(fill) ? fill.color : '';
-}
-
 // A width/height change on a linear element must rescale its points through resizeLinear, not
 // overwrite the box; the box fills each unset field from the element so x/y/angle-only changes pass through.
 function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Partial<Box>) {
@@ -137,6 +124,11 @@ type CanvasPropertiesPanelProps = {
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     undoManager: Y.UndoManager | null;
+    // The scene's own settings, edited with nothing selected. The frame background panel the deck shell
+    // needs is a different surface and lands with it, which is why the row is infinite-mode only.
+    meta: VectorMeta;
+    updateMeta: (fields: Partial<VectorMeta>) => void;
+    viewport: 'infinite' | 'frame';
     // Aspect lock, owned by the editor so the panel checkbox and the canvas'
     // ObjectTransform resizeMode share one ephemeral setting.
     aspectLocked: boolean;
@@ -148,29 +140,32 @@ export function CanvasPropertiesPanel({
     selectedElements,
     updateElements,
     undoManager,
+    meta,
+    updateMeta,
+    viewport,
     aspectLocked,
     onAspectLockChange,
 }: CanvasPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
     const has = selectedElements.length > 0;
-    // Paint sections (Stroke / Fill / Sketch) are the roughjs-drawn kinds — capabilities.roughness is
-    // exactly that family. An image and a rich-text box are DOM boxes; this path paints neither.
-    const allPaintable = has && selectedElements.every((el) => ELEMENT_KINDS[el.type].capabilities.roughness);
+    const caps = (el: VectorElement) => ELEMENT_KINDS[el.type].capabilities;
+    const all = (pick: (el: VectorElement) => boolean) => has && selectedElements.every(pick);
     // Fill needs a fillable kind, and an OPEN linear element has nothing to fill.
-    const showFill =
-        has &&
-        selectedElements.every(
-            (el) =>
-                ELEMENT_KINDS[el.type].capabilities.fill &&
-                (!isLinearElement(el) || isClosedPath(parsePoints(el.points))),
-        );
-    // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
-    const anyFreedraw = selectedElements.some((el) => el.type === 'freedraw');
+    const showFill = all((el) => caps(el).fill && (!isLinearElement(el) || isClosedPath(parsePoints(el.points))));
+    const showStroke = all((el) => caps(el).stroke);
+    const showFillStyle = all((el) => caps(el).fillStyle);
+    const showSketch = all((el) => caps(el).roughness);
     // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
     // an arrow carries (round curve vs sharp polyline), never freedraw.
-    const allCorners = has && selectedElements.every((el) => ELEMENT_KINDS[el.type].capabilities.corners);
-    const allRoundable = has && selectedElements.every((el) => el.type === 'line' || el.type === 'arrow');
+    const showCorners = all((el) => caps(el).corners);
+    // One kind selected ⇒ its own rows; a mixed selection shows only the generic ones.
+    const soleKind =
+        has && selectedElements.every((el) => el.type === selectedElements[0].type) ? selectedElements[0].type : null;
+    const KindSection = soleKind ? ELEMENT_KIND_UI[soleKind].PanelSection : undefined;
+    // Stroke Style (dashed/dotted) is meaningless for a freehand stroke — hide it if any is selected.
+    const anyFreedraw = selectedElements.some((el) => el.type === 'freedraw');
+    const allRoundable = all((el) => el.type === 'line' || el.type === 'arrow');
     // Arrowheads apply to arrows only (both ends selectable per selection).
     const arrowEls = selectedElements.filter((el): el is VectorArrowElement => el.type === 'arrow');
     const allArrow = has && arrowEls.length === selectedElements.length;
@@ -285,7 +280,11 @@ export function CanvasPropertiesPanel({
     const strokeColor = getMergedValue(selectedElements, (el) => el.strokeColor);
     const strokeWidth = getMergedValue(selectedElements, (el) => el.strokeWidth);
     const strokeStyle = getMergedValue(selectedElements, (el) => el.strokeStyle);
-    const fill: MergedValue<string> = getMergedValue(selectedElements, fillColorOf);
+    // The fill merges as the STORED string and is parsed once, so a gradient survives the merge intact.
+    const fillRaw: MergedValue<string> = getMergedValue(selectedElements, (el) => ('fill' in el ? el.fill : undefined));
+    // A transparent solid is "no fill", which is BackgroundFillBlock's `null` — one vocabulary.
+    const parsedFill = typeof fillRaw === 'string' ? parseFill(fillRaw) : null;
+    const fillValue = parsedFill && !isTransparentFill(parsedFill) ? parsedFill : null;
     const fillStyle = getMergedValue(selectedElements, (el) =>
         ELEMENT_KINDS[el.type].capabilities.fillStyle && 'fillStyle' in el ? el.fillStyle : undefined,
     );
@@ -303,27 +302,34 @@ export function CanvasPropertiesPanel({
     const arrowFontFamily = getMergedValue(arrowEls, (el) => el.fontFamily);
     const arrowFontSize = getMergedValue(arrowEls, (el) => el.fontSize);
 
-    const title =
-        selectedElements.length === 1 ? TYPE_LABELS[selectedElements[0].type] : `${selectedElements.length} elements`;
+    // The kind's own label, from the registry — a second table here would drift from the toolbar's.
+    const title = !has
+        ? 'Canvas'
+        : selectedElements.length === 1
+          ? ELEMENT_KIND_UI[selectedElements[0].type].label
+          : `${selectedElements.length} elements`;
 
     // Sections follow the canonical order documented on PropertiesPanel — geometry, content, paint,
-    // appearance, actions. Text and the shape paint sections never coexist (a selection is all-text
-    // or all-shapes), so they read as one slot.
+    // appearance, actions.
     return (
         <PropertiesPanel title={title}>
-            <TransformSection
-                x={tx}
-                y={ty}
-                width={tWidth}
-                height={tHeight}
-                angle={tAngle}
-                onChange={applyTransform}
-                // An elbow arrow's route lives in the unrotated local frame, so it pins angle 0 — the
-                // Angle input is disabled for a pure-elbow selection (W/H stay editable).
-                angleDisabled={allElbow}
-                aspectLocked={aspectLocked}
-                onAspectLockChange={onAspectLockChange}
-            />
+            {has && (
+                <TransformSection
+                    x={tx}
+                    y={ty}
+                    width={tWidth}
+                    height={tHeight}
+                    angle={tAngle}
+                    onChange={applyTransform}
+                    // An elbow arrow's route lives in the unrotated local frame, so it pins angle 0 — the
+                    // Angle input is disabled for a pure-elbow selection (W/H stay editable).
+                    angleDisabled={allElbow}
+                    aspectLocked={aspectLocked}
+                    onAspectLockChange={onAspectLockChange}
+                />
+            )}
+
+            {KindSection && <KindSection elements={selectedElements} onChange={applyToAll} />}
 
             {allArrowLabeled && (
                 <PropertySection title="Text">
@@ -354,79 +360,67 @@ export function CanvasPropertiesPanel({
                 </PropertySection>
             )}
 
-            {allPaintable && (
-                <>
-                    {showFill && (
-                        <PropertySection title="Fill">
-                            <ColorRow
-                                label="Color"
-                                value={fill}
-                                onChange={(c) => applyToAll({ fill: solidFill(c) })}
-                                showReset
+            {showFill && (
+                /* BackgroundFillBlock IS the section (solid or two-stop linear gradient); the hachure
+                   row lives in Sketch below, where the rest of the roughjs paint is. */
+                <BackgroundFillBlock
+                    title="Fill"
+                    value={fillValue}
+                    mixed={isMixed(fillRaw)}
+                    onChange={(next) =>
+                        applyToAll({
+                            fill: serializeFill(next === null || next.type === 'image' ? TRANSPARENT_FILL : next),
+                        })
+                    }
+                    allowedTypes={['solid', 'gradient']}
+                />
+            )}
+
+            {showStroke && (
+                <PropertySection title="Stroke">
+                    <ColorRow label="Color" value={strokeColor} onChange={(c) => applyToAll({ strokeColor: c })} />
+                    <PropertyRow label="Width">
+                        <MergedSelect
+                            value={numToStr(strokeWidth)}
+                            onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
+                            options={STROKE_WIDTH_OPTIONS}
+                        />
+                    </PropertyRow>
+                    {/* A freehand stroke is a filled outline, not a dashable line — hide Style. */}
+                    {!anyFreedraw && (
+                        <PropertyRow label="Style">
+                            <MergedSelect
+                                value={strokeStyle}
+                                onChange={(v) => applyToAll({ strokeStyle: v })}
+                                options={STROKE_STYLE_OPTIONS}
                             />
-                            <PropertyRow label="Style">
-                                <MergedSelect
-                                    value={fillStyle}
-                                    onChange={(v) => applyToAll({ fillStyle: v })}
-                                    options={FILL_STYLE_OPTIONS}
-                                />
-                            </PropertyRow>
-                        </PropertySection>
+                        </PropertyRow>
                     )}
+                </PropertySection>
+            )}
 
-                    <PropertySection title="Stroke">
-                        <ColorRow label="Color" value={strokeColor} onChange={(c) => applyToAll({ strokeColor: c })} />
-                        <PropertyRow label="Width">
-                            <MergedSelect
-                                value={numToStr(strokeWidth)}
-                                onChange={(v) => applyToAll({ strokeWidth: Number(v) })}
-                                options={STROKE_WIDTH_OPTIONS}
-                            />
-                        </PropertyRow>
-                        {/* A freehand stroke is a filled outline, not a dashable line — hide Style. */}
-                        {!anyFreedraw && (
-                            <PropertyRow label="Style">
-                                <MergedSelect
-                                    value={strokeStyle}
-                                    onChange={(v) => applyToAll({ strokeStyle: v })}
-                                    options={STROKE_STYLE_OPTIONS}
-                                />
-                            </PropertyRow>
-                        )}
-                    </PropertySection>
-
-                    <PropertySection title="Sketch">
-                        <PropertyRow label="Rough">
-                            <MergedSelect
-                                value={numToStr(roughness)}
-                                onChange={(v) => applyToAll({ roughness: Number(v) })}
-                                options={ROUGHNESS_OPTIONS}
-                            />
-                        </PropertyRow>
-                        {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines & shapes keep Edges. An
+            {showSketch && (
+                <PropertySection title="Sketch">
+                    <PropertyRow label="Rough">
+                        <MergedSelect
+                            value={numToStr(roughness)}
+                            onChange={(v) => applyToAll({ roughness: Number(v) })}
+                            options={ROUGHNESS_OPTIONS}
+                        />
+                    </PropertyRow>
+                    {/* Arrows carry the 3-way Type row (sharp/curved/elbow); lines & shapes keep Edges. An
                             elbow reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is
                             always orthogonal, so roundness is free to mean the corners. */}
-                        {allArrow ? (
-                            <>
-                                <PropertyRow label="Type">
-                                    <MergedSelect
-                                        value={arrowShape}
-                                        onChange={applyArrowShape}
-                                        options={ARROW_SHAPE_OPTIONS}
-                                    />
-                                </PropertyRow>
-                                {allElbow && (
-                                    <PropertyRow label="Edges">
-                                        <MergedSelect
-                                            value={roundness}
-                                            onChange={(v) => applyToAll({ roundness: v })}
-                                            options={EDGES_OPTIONS}
-                                        />
-                                    </PropertyRow>
-                                )}
-                            </>
-                        ) : (
-                            allRoundable && (
+                    {allArrow ? (
+                        <>
+                            <PropertyRow label="Type">
+                                <MergedSelect
+                                    value={arrowShape}
+                                    onChange={applyArrowShape}
+                                    options={ARROW_SHAPE_OPTIONS}
+                                />
+                            </PropertyRow>
+                            {allElbow && (
                                 <PropertyRow label="Edges">
                                     <MergedSelect
                                         value={roundness}
@@ -434,19 +428,42 @@ export function CanvasPropertiesPanel({
                                         options={EDGES_OPTIONS}
                                     />
                                 </PropertyRow>
-                            )
-                        )}
-                        {allCorners && (
-                            <PropertyRow label="Corners">
+                            )}
+                        </>
+                    ) : (
+                        allRoundable && (
+                            <PropertyRow label="Edges">
                                 <MergedSelect
-                                    value={corners}
-                                    onChange={(v) => applyToAll({ corners: v })}
-                                    options={CORNERS_OPTIONS}
+                                    value={roundness}
+                                    onChange={(v) => applyToAll({ roundness: v })}
+                                    options={EDGES_OPTIONS}
                                 />
                             </PropertyRow>
-                        )}
-                    </PropertySection>
-                </>
+                        )
+                    )}
+                    {/* The hachure/zigzag pattern is roughjs paint, so it sits with the rest of it. */}
+                    {showFillStyle && (
+                        <PropertyRow label="Fill">
+                            <MergedSelect
+                                value={fillStyle}
+                                onChange={(v) => applyToAll({ fillStyle: v })}
+                                options={FILL_STYLE_OPTIONS}
+                            />
+                        </PropertyRow>
+                    )}
+                </PropertySection>
+            )}
+
+            {showCorners && (
+                <PropertySection title="Shape">
+                    <PropertyRow label="Corners">
+                        <MergedSelect
+                            value={corners}
+                            onChange={(v) => applyToAll({ corners: v })}
+                            options={CORNERS_OPTIONS}
+                        />
+                    </PropertyRow>
+                </PropertySection>
             )}
 
             {allArrow && (
@@ -468,21 +485,38 @@ export function CanvasPropertiesPanel({
                 </PropertySection>
             )}
 
-            <PropertySection title="Appearance">
-                <PropertyRow label="Opacity">
-                    <MergedNumberInput
-                        value={opacity}
-                        onChange={(v) => applyToAll({ opacity: v })}
-                        min={0}
-                        max={100}
-                        step={10}
-                    />
-                </PropertyRow>
-            </PropertySection>
+            {has && (
+                <PropertySection title="Appearance">
+                    <PropertyRow label="Opacity">
+                        <MergedNumberInput
+                            value={opacity}
+                            onChange={(v) => applyToAll({ opacity: v })}
+                            min={0}
+                            max={100}
+                            step={10}
+                        />
+                    </PropertyRow>
+                </PropertySection>
+            )}
 
-            <PropertySection title="Arrange">
-                <ZOrderButtons onApply={handleZOrderApply} />
-            </PropertySection>
+            {!has && viewport === 'infinite' && (
+                <PropertySection title="Canvas">
+                    {/* The scene background is a plain colour (meta.background), not a Fill — the frame
+                        background panel that speaks Fill lands with the deck shell. */}
+                    <ColorRow
+                        label="Background"
+                        value={isTransparentColor(meta.background) ? '' : meta.background}
+                        onChange={(c) => updateMeta({ background: c || 'transparent' })}
+                        showReset
+                    />
+                </PropertySection>
+            )}
+
+            {has && (
+                <PropertySection title="Arrange">
+                    <ZOrderButtons onApply={handleZOrderApply} />
+                </PropertySection>
+            )}
 
             {selectedElements.length >= 2 && <AlignSection count={selectedElements.length} onApply={handleAlign} />}
         </PropertiesPanel>
