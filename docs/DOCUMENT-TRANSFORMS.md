@@ -40,7 +40,7 @@ Every operation follows the same layout: a Worker-pure module per type behind a 
 | Operation | Main-thread entry | Worker-pure modules | Detail doc |
 |---|---|---|---|
 | Preview  | `preview/preview-document.ts` | `preview/eigen{doc,slides,sheets,vector}-render.ts` | [PREVIEWS.md](PREVIEWS.md) |
-| Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,slides,sheets,vector}/{render,transform}.ts`, `export/canvas/render.ts` | [EXPORT.md](EXPORT.md) |
+| Export   | `export/export-document.ts` (`runDocumentExport` + the format→envelope table) | `export/{doc,sheets,vector}/{render,transform}.ts`, `export/canvas/{render,transform}.ts` (both canvas types) | [EXPORT.md](EXPORT.md) |
 | Import / convert | `import/import-document.ts` | `import/{doc,sheets}/transform.ts` | [EXPORT.md](EXPORT.md), [SHEETS.md](SHEETS.md) |
 | Search extraction | `search/extract-text.ts` | `search/extract-render.ts` | [SEARCH.md](SEARCH.md) |
 

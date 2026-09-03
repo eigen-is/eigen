@@ -272,11 +272,9 @@ const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'my-ty
 | `Mod+S`              | Save (Inline Editor)      | `use-editor-save.ts`            |
 | `Escape`             | Close preview             | `file-preview.tsx`               |
 | `ArrowLeft/Right`    | Navigate preview          | `file-preview.tsx`               |
-| `Mod+Z`              | Undo (Stickies, Slides)   | `board.tsx`, `slides/editor.tsx` |
-| `Mod+Y` / `Mod+Shift+Z` | Redo (Stickies, Slides) | `board.tsx`, `slides/editor.tsx` |
-| `Delete`/`Backspace` | Delete selected (Slides)  | `slides/editor.tsx`              |
-| `Escape`             | Deselect (Slides)         | `slides/editor.tsx`              |
-| `Arrow keys`         | Nudge selected (Slides)   | `slides/editor.tsx`              |
+| `Mod+Z`              | Undo (Stickies)           | `board.tsx`                      |
+| `Mod+Y` / `Mod+Shift+Z` | Redo (Stickies)        | `board.tsx`                      |
+| Canvas keymap (slides + vector) | tools, nudge, delete, duplicate, z-order, layered Escape | `vector/hooks/use-canvas-keyboard.ts` — see [CANVAS.md](CANVAS.md) |
 
 Use `@tanstack/react-hotkeys` for global shortcuts and `formatForDisplay()` for tooltip labels. Keep manual
 listeners for stateful navigation (`use-keyboard-list-navigation.ts`) and framework-specific contexts (Tiptap).

@@ -97,9 +97,8 @@ the same:
 |---|---|---|---|
 | Docs | `useProseMirrorSearchController` (`packages/ui/.../components/search/prosemirror-search-controller.ts`) | ProseMirror walk; paints via `prosemirror-search` decorations; `reveal` sets a text selection + scrolls | ✓ |
 | Sheets | `apps/sheets/src/components/sheets/hooks/use-search-controller.ts` | adapter over `packages/sheet` `collectMatches`, iterating **all tabs**; `reveal` reuses scroll-and-select | ✓ |
-| Slides | `apps/slides/src/components/slides/hooks/use-slides-doc-search.ts` | in-memory scan of the deck | — |
 | Stickies | `apps/stickies/src/components/stickies/hooks/use-stickies-doc-search.ts` | Y.Doc scan of `tasks` / `columns`; `reveal` scrolls to + flashes the card | — |
-| Vector | `packages/ui/src/components/vector/hooks/use-canvas-doc-search.ts` | `searchScene` over every element kind's `searchText` (rich text plain-texted, arrow labels), frame then z-order; match ids ARE element ids, and `reveal` hands the host the element so it can select it | — |
+| Slides, Vector | `packages/ui/src/components/vector/hooks/use-canvas-doc-search.ts` | `searchScene` over every element kind's `searchText` (rich text plain-texted, arrow labels), frame then z-order; match ids ARE element ids, and `reveal` hands the host the element so it can select it. Slides passes a `contextOf` that labels each match with its slide ("Slide 3"), reveals by activating that element's frame first, and rings the rail thumbnails that hold a match | — |
 | Drive markdown editor | `useProseMirrorSearchController` + `use-codemirror-search-controller.ts` (`apps/drive/src/components/editor/`) | the shared PM controller in WYSIWYG mode, the CodeMirror one in source mode | ✓ |
 | Drive code editor | `apps/drive/src/components/editor/use-codemirror-search-controller.ts` | `buildSearchRegex` over the plain CodeMirror doc; `reveal` selects + scrolls the range | ✓ |
 

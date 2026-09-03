@@ -83,14 +83,18 @@ mount indexes, so recency is the cross-mount tiebreak.
 read by every folder listing. An `AFTER DELETE ON paths` trigger drops the content row with its
 path, so lifecycle is automatic.
 
-**Extraction.** `apps/api/src/lib/search/extract-text.ts` dispatches on mime type. The three collab
-types (doc, slides, sheets) extract inside the one-shot document-transform Worker — the background
+**Extraction.** `apps/api/src/lib/search/extract-text.ts` dispatches on mime type. The four collab
+types (doc, sheets, slides, vector) extract inside the one-shot document-transform Worker — the background
 `extract-text` op runs `lib/search/extract-render.ts` over the same `*FromDoc` readers of the
 [document content layer](DOCUMENT-CONTENT-LAYER.md) that preview and export use, so search's idea of
 "document text" cannot drift from them, and a heavy extraction never blocks the event loop (own 30 s
 deadline, background queue quota — see [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). Thin collectors
-flatten each shape (ProseMirror JSON → text, slide text objects, the **sparse** `celldata` display
-values), cut to the `CONTENT_INDEX_MAX_BYTES` UTF-8 byte budget (~100 KB) at a code-point boundary.
+flatten each shape (ProseMirror JSON → text, the **sparse** `celldata` display values), cut to the
+`CONTENT_INDEX_MAX_BYTES` UTF-8 byte budget (~100 KB) at a code-point boundary. A deck and a drawing
+are the same document, so **one** collector serves both: `collectCanvasText` walks each element kind's
+own `searchText` in reading order — frame by frame, then z-order inside a frame — which is
+`searchScene`'s rule, so the index and the in-document find bar cannot disagree about what a canvas
+says.
 Stickies and chat stay light main-thread reads (`readStickiesContent`, `readChatContent` — card and
 column text; chat is relational, not Yjs, and takes the **newest** ~100 KB by paging backwards on
 `createdAt`). Plain files are eligible via the canonical `isSearchableTextFile` and read through

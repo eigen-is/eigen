@@ -20,18 +20,21 @@ apps/api/src/lib/document/
   sheets.ts   # readSheetsFromDoc(ydoc) → { sheets, recalcError }
               #   + writeSheetsToYjs(doc, sheets)
               #   + writeSheetsSnapshotToYjs(doc, snapshotJson) — commits already-serialized JSON
-  slides.ts   # readDeckFromDoc(ydoc) → DeckData    [no writer]
   stickies.ts # readStickiesContent(mount, path) → { tasks, columns } — main thread, search only
   chat.ts     # readChatContent(mount, path, capBytes) → string — main thread, search only
   media.ts    # listDocumentMedia / buildPreviewUrlMap (main thread) + toDataUriMap (Worker side)
   collab-types.ts  # COLLAB_DOCUMENT_TYPES — drive MIME → transform documentType (one map)
+
+# Both canvas types read through packages/lib instead: readVectorFromDoc(ydoc) → VectorScene
+# (packages/lib/src/vector/read-vector.ts, imported over the React-free ./vector subpath), because
+# the engine's reader is shared FE/BE and is the scene's trust boundary. See CANVAS.md.
 ```
 
 | Type | Y.Doc reader | Reader returns | Writer |
 |---|---|---|---|
 | `.eigendoc` | `readEigendocFromDoc` | `JSONContent` | `writeEigendocToYjs` / `writeEigendocUpdateToYjs` |
 | `.eigensheets` | `readSheetsFromDoc` | `{ sheets, recalcError }` (replayed — see below) | `writeSheetsToYjs` / `writeSheetsSnapshotToYjs` |
-| `.eigenslides` | `readDeckFromDoc` | `DeckData` | – |
+| `.eigenslides` / `.eigenvector` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` — `{ elements, frames, meta }` | – |
 | `.eigenstickies` | `readStickiesContent` (Mount-side, main thread) | `{ tasks, columns }` — card + column text | – |
 | `.eigenchat` | `readChatContent` (Mount-side, main thread) | `string` — newest messages, capped at `capBytes` | – |
 
@@ -123,8 +126,8 @@ collab session holds the document open. No such liveness check exists on `Drive`
 
 | Surface | Files |
 |---|---|
-| Export (HTML/PDF/DOCX/XLSX) | Worker: `lib/export/{doc,sheets,slides}/transform.ts` (calls the `*FromDoc` readers); main thread: `lib/export/export-document.ts` |
-| Preview generation | Worker: `lib/preview/eigen{doc,sheets,slides}-render.ts` (calls the `*FromDoc` readers); main thread: `lib/preview/preview-document.ts` |
+| Export (HTML/PDF/DOCX/XLSX) | Worker: `lib/export/{doc,sheets,canvas,vector}/transform.ts` (calls the `*FromDoc` readers); main thread: `lib/export/export-document.ts` |
+| Preview generation | Worker: `lib/preview/eigen{doc,sheets,slides,vector}-render.ts` (calls the `*FromDoc` readers); main thread: `lib/preview/preview-document.ts` |
 | Search extraction | Worker: `lib/search/extract-render.ts` (the `extract-text` op, calls the `*FromDoc` readers); main thread: `lib/search/extract-text.ts` — mime dispatch plus the stickies/chat/plain-file arms (`readStickiesContent` / `readChatContent` from this layer) |
 | Import dispatcher | `lib/import/import-document.ts` (calls writers) |
 | Pure converters | `lib/import/{doc/{from-docx,transform}.ts, sheets/{from-xlsx,transform}.ts}` |
@@ -148,7 +151,7 @@ Export has a matching dispatcher: `lib/export/export-document.ts` owns the whole
 - **Op-push primitive for sheets writes** (replaces snapshot-replace) — unblocks safe XLSX
   import into open documents and any future scripting / batch tools.
 - **Live-safe doc writer** — same idea via y-prosemirror.
-- **No `writeSlidesToYjs`** — slides import / round-trip not yet supported.
+- **No canvas writer** — slides / vector import and round-trip are not yet supported.
 
 ## See also
 
