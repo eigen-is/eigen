@@ -54,7 +54,9 @@
         "useLiteralKeys": "off"
       },
       "suspicious": {
-        "noAssignInExpressions": "off"
+        "noAssignInExpressions": "off",
+        // Recommended only warns; the tree is at zero and `any` breaks the Eden Treaty type chain.
+        "noExplicitAny": "error"
       },
       "a11y": {
         "recommended": false

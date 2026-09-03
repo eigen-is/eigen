@@ -23,8 +23,9 @@ Two things that aren't written down anywhere else: the API serves every app from
   touching (e.g., `docs/COMMENTS.md` before adding comment features, `docs/EXPORT.md` before changing export).
   Don't assume you know the conventions — verify them
 - **Always run `bun run check`** after changes — lint, typecheck, the `getHome()` import guard, the shared-primitives
-  index check, the docs link check, and every workspace's tests. When multiple agents run in parallel, only the main agent should run
-  check — concurrent runs cause deadlocks
+  index check, the docs link check, the ratcheting standards gate (`scripts/check-standards.ts` — see
+  [CODE-STANDARDS.md § Standards Gates](docs/CODE-STANDARDS.md#standards-gates)), and every workspace's tests. When
+  multiple agents run in parallel, only the main agent should run check — concurrent runs cause deadlocks
 - **Code goes in the right layer** — hooks/mutations in `packages/lib/src/core/[domain]/hooks/`, shared types in
   `packages/lib/src/types/`, shared UI in `packages/ui/`, app-specific code in `apps/`. Rule of thumb: if two or
   more apps need it, it belongs in `packages/`. Never put `useQuery`, `useMutation`, error toasts, or `try/catch` +

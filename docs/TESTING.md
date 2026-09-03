@@ -101,7 +101,4 @@ steps:
   - bun --filter '*' test
 ```
 
-The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set plus
-`bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, and `bun scripts/check-docs-links.ts`
-(relative markdown links and backtick'd `apps/`|`packages/`|`docker/`|`scripts/` paths must resolve on disk):
-lint → typecheck → home-import check → test-layout check → docs-link check → `primitives:check` → test.
+The CI job runs on `ubuntu-latest` with a 15-minute timeout. Locally `bun run check` is the same set plus `bun scripts/check-home-imports.ts`, `bun scripts/check-test-layout.ts`, `bun scripts/check-docs-links.ts` (relative markdown links and backtick'd `apps/`|`packages/`|`docker/`|`scripts/` paths must resolve on disk), and `bun scripts/check-standards.ts` (the ratcheting code-standards gate — see [CODE-STANDARDS.md § Standards Gates](CODE-STANDARDS.md#standards-gates)): lint → typecheck → home-import check → test-layout check → docs-link check → standards check → `primitives:check` → test.

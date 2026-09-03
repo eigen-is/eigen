@@ -314,3 +314,11 @@ Before declaring any task complete, review every changed file against this list:
 - Does the new code match the patterns and naming of its neighbors?
 - Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a
   `// Why:` comment? (See § Z-Index / Layering)
+
+## Standards Gates
+
+The mechanical rules on this page are enforced, not just documented. Biome carries what it can express (`noExplicitAny` is an error, and `noRestrictedImports` rejects extension-suffixed workspace specifiers and `lib → ui/sheet` imports). Everything else runs through `bun scripts/check-standards.ts`, part of `bun run check`. It scans non-test, non-generated `.ts`/`.tsx` under `apps/` and `packages/` (`packages/sheet` is a fork with its own conventions and is skipped) and counts nine metrics.
+
+Four are hard zeros — any hit fails: `"use client"` directives, imports reaching past a package barrel (`@workspace/lib/core/…`, `@workspace/lib/src/…`, `@workspace/ui/src/…`, extension-suffixed specifiers), `export type` re-exports from a `packages/lib/src/core/**/index.ts` barrel, and `useQuery`/`useMutation`/`useInfiniteQuery`/`toast.error`/`toast.success` calls in an app outside a `hooks/` folder.
+
+The other five ratchet: `as Type` casts, `interface` declarations (module augmentation excepted — it only merges through interfaces), `biome-ignore` suppressions, JSDoc blocks, and raw Tailwind colour utilities. Their allowance lives in `scripts/standards-baseline.json`, so a count can fall but never rise. After a cleanup run `bun run standards:update` to write the new, lower numbers; the script refuses to raise a baseline. `bun run standards -- --verbose` prints the per-file breakdown.
