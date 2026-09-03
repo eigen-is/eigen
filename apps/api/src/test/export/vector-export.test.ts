@@ -66,7 +66,11 @@ describe('Eigenvector export route — response contract', () => {
 
         const svg = await res.text();
         expect(svg.startsWith('<svg')).toBe(true);
-        // The text element and the bound arrow label both render, XML-escaped by the serializer.
+        // A rich-text box rides in a <foreignObject>, which the export sanitizer keeps only because
+        // the vector transform declares it an HTML integration point — without that the box's markup
+        // is dropped and the drawing exports wordless.
+        expect(svg).toContain('<foreignObject');
+        // The rich-text box and the bound arrow label both render, the payload still escaped.
         expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
         expect(svg).toContain(GOLDEN_VECTOR_LABEL);
         // Fonts are inlined for the families the text actually uses (Excalifont here).

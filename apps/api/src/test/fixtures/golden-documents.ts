@@ -1,10 +1,17 @@
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { escapeHtml } from '@workspace/lib/html';
 import type { DeckData, ImageObject, TextObject } from '@workspace/lib/slides';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DEFAULT_ELEMENT_PROPS, type VectorElement, type VectorScene } from '@workspace/lib/vector';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    DEFAULT_SKETCH_PROPS,
+    solidFill,
+    type VectorElement,
+    type VectorScene,
+} from '@workspace/lib/vector';
 import { common, createLowlight } from 'lowlight';
 import * as Y from 'yjs';
 import { writeEigendocToYjs } from '../../lib/document/doc';
@@ -370,17 +377,21 @@ export async function seedDocumentMedia(
 
 // Deterministic eigenvector fixture for the transform work (preview round-trip and
 // search extraction). Mirrors the deck fixture idiom: literal fields, fixed seeds and
-// fractional indices, one media reference, one text element plus a bound arrow with a
+// fractional indices, one media reference, one rich-text box plus a bound arrow with a
 // label — the two sources the extractor joins. Every type the serializer special-cases
-// appears once (shape, ellipse, text, freedraw, line, bound labelled arrow, image).
+// appears once (shape, ellipse, rich text, freedraw, line, bound labelled arrow, image).
 export const GOLDEN_VECTOR_TEXT = 'Vector <sketch>';
 export const GOLDEN_VECTOR_LABEL = 'Bound label';
 
 export function buildGoldenVectorScene(): VectorScene {
     const base = { ...DEFAULT_ELEMENT_PROPS, angle: 0 };
+    // The fill codec's transparent solid — what every element painted before `fill` existed.
+    const filled = { fill: solidFill('transparent'), fillStyle: 'solid' } as const;
     const elements: VectorElement[] = [
         {
             ...base,
+            ...filled,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'v-rect',
             type: 'rectangle',
             x: 0,
@@ -389,10 +400,12 @@ export function buildGoldenVectorScene(): VectorScene {
             height: 60,
             seed: 1,
             index: 'a0',
-            roundness: 'sharp',
+            corners: 'straight',
         },
         {
             ...base,
+            ...filled,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'v-ellipse',
             type: 'ellipse',
             x: 140,
@@ -401,25 +414,38 @@ export function buildGoldenVectorScene(): VectorScene {
             height: 80,
             seed: 2,
             index: 'a1',
-            roundness: 'round',
         },
         {
             ...base,
+            ...filled,
             id: 'v-text',
-            type: 'text',
+            type: 'richtext',
             x: 0,
             y: 100,
             width: 160,
             height: 50,
-            seed: 3,
             index: 'a2',
-            text: GOLDEN_VECTOR_TEXT,
+            // The XSS payload rides in as escaped markup, the way the editor stores it: the
+            // search collector must strip the <p> back off and the export must keep it escaped.
+            html: `<p>${escapeHtml(GOLDEN_VECTOR_TEXT)}</p>`,
+            corners: 'straight',
             fontSize: 20,
             fontFamily: 'Excalifont',
+            fontWeight: 'normal',
+            fontStyle: 'normal',
+            textDecoration: 'none',
             textAlign: 'left',
+            verticalAlign: 'top',
+            color: '#1e1e1e',
+            letterSpacing: 0,
+            lineHeight: 1.2,
+            highlightColor: 'transparent',
+            padding: 0,
         },
         {
             ...base,
+            ...filled,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'v-freedraw',
             type: 'freedraw',
             x: 0,
@@ -435,6 +461,8 @@ export function buildGoldenVectorScene(): VectorScene {
         },
         {
             ...base,
+            ...filled,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'v-line',
             type: 'line',
             x: 140,
@@ -450,6 +478,7 @@ export function buildGoldenVectorScene(): VectorScene {
         },
         {
             ...base,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'v-arrow',
             type: 'arrow',
             elbow: false,
@@ -479,14 +508,16 @@ export function buildGoldenVectorScene(): VectorScene {
             y: 340,
             width: 120,
             height: 120,
-            seed: 7,
             index: 'a6',
             mediaName: GOLDEN_MEDIA_NAME,
+            corners: 'straight',
+            objectFit: 'contain',
         },
         // A bound elbow arrow (no label) — its orthogonal route is DERIVED at render time, so preview
         // and export exercise the server-side elbowRoute path end-to-end.
         {
             ...base,
+            ...DEFAULT_SKETCH_PROPS,
             id: 'v-elbow',
             type: 'arrow',
             elbow: true,
@@ -509,7 +540,7 @@ export function buildGoldenVectorScene(): VectorScene {
             labelWidth: 0,
         },
     ];
-    return { elements, meta: { background: 'transparent', gridSize: 20 } };
+    return { elements, frames: [], meta: { background: 'transparent', gridSize: 20 } };
 }
 
 // Write a VectorScene into a Y.Doc the way use-vector-doc.ts persists one: a per-element
