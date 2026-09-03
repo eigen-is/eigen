@@ -2,7 +2,12 @@
 // text look", so the deck shell and the drawing app cannot drift. The box background is the generic Fill
 // row, its border the generic Stroke row — this section is the text itself.
 
-import { DEFAULT_FONT_FAMILY, type VectorRichTextElement } from '@workspace/lib/vector';
+import {
+    DEFAULT_FONT_FAMILY,
+    ELEMENT_KINDS,
+    VECTOR_STYLE_DEFAULTS,
+    type VectorRichTextElement,
+} from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignmentPicker,
@@ -25,6 +30,9 @@ import {
     Underline,
 } from 'lucide-react';
 import type { KindPanelSectionProps } from './index';
+
+// What a reset restores: the values CREATING a box would have given it, never a literal typed here.
+const RICHTEXT_DEFAULTS = ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS);
 
 export function RichTextPanelSection({ elements, onChange }: KindPanelSectionProps) {
     const boxes = elements.filter((el): el is VectorRichTextElement => el.type === 'richtext');
@@ -177,7 +185,11 @@ export function RichTextPanelSection({ elements, onChange }: KindPanelSectionPro
             </PropertySection>
 
             <PropertySection title="Color">
-                <ColorRow label="Text" value={color} onChange={(c) => onChange({ color: c || '#000000' })} />
+                <ColorRow
+                    label="Text"
+                    value={color}
+                    onChange={(c) => onChange({ color: c || RICHTEXT_DEFAULTS.color })}
+                />
             </PropertySection>
         </>
     );
