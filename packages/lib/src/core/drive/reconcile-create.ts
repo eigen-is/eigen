@@ -5,7 +5,7 @@ import { AppError } from '../api-error';
 // the request times out or 5xx's while the server keeps writing and the row lands seconds later.
 // The create hooks give the request 15s, then poll the listing for ~10s before calling it a failure.
 export const CREATE_TIMEOUT_MS = 15_000;
-export const RECONCILE_ATTEMPTS = 3;
+const RECONCILE_ATTEMPTS = 3;
 const RECONCILE_DELAY_MS = 5_000;
 
 // The create failed AND the item never showed up. Carries the copy the toast shows (onMutationError
@@ -32,23 +32,27 @@ export async function createWithReconcile<T extends { id: string; name: string }
     create,
     listFolder,
     expectedName,
-    delayMs = RECONCILE_DELAY_MS,
+    delayMs = RECONCILE_DELAY_MS, // test seam
 }: {
     create: () => Promise<T>;
     listFolder: () => Promise<T[]>;
-    expectedName: string;
+    // Omitted when the stored name can differ from the one sent (chat's dedupeName): nothing could
+    // honestly match, so the create runs with no snapshot and no polls, error handling unchanged.
+    expectedName?: string;
     delayMs?: number;
 }): Promise<T> {
-    const knownIds = await listFolder()
-        .then((items) => new Set(items.map((item) => item.id)))
-        .catch(() => null);
+    // Names are stored NFC (Mount's validateName), so compare against the normalized form.
+    const target = expectedName?.normalize('NFC');
+    const knownIds = target
+        ? await listFolder()
+              .then((items) => new Set(items.map((item) => item.id)))
+              .catch(() => null)
+        : null;
     try {
         return await create();
     } catch (error) {
         if (error instanceof AppError && error.status >= 400 && error.status < 500) throw error;
-        if (knownIds) {
-            // Names are stored NFC (Mount's validateName), so compare against the normalized form.
-            const target = expectedName.normalize('NFC');
+        if (target && knownIds) {
             for (let attempt = 0; attempt < RECONCILE_ATTEMPTS; attempt++) {
                 if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
                 const items = await listFolder().catch(() => []);

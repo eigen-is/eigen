@@ -17,10 +17,8 @@ import {
 } from '../fault-storage-helpers';
 import { collectSSE, getTestContext } from '../setup';
 
-// Create must be atomic: when provisioning a container's managed dbs (or a card chat's comment-index
-// row) fails on degraded storage, the container row must not survive. A surviving row is announced
-// over SSE, occupies the name, and 503s on every later open — the phantom-row shape the rollback in
-// Drive.create closes. The mount here is a real Drive mount whose storage is a FaultStorage.
+// Drive.create over a FaultStorage mount: a provisioning failure must leave no container row, since a
+// surviving row occupies the name and 503s on every later open.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-create-resilience-${Date.now()}`);
 const MOUNT_ID = 'fault-create';

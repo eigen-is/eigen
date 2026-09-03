@@ -8,10 +8,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLayout } from '../components/layout/app/layout-context';
 
 type EigenDocEditorRoute = {
-    // Routes gate on docInfo, not on a loading flag: a failed background refetch of a document we
-    // already have must not unmount the open editor, and `isLoading` dips false between retry
-    // attempts — reading it would flash the request-access screen mid-retry. Until docInfo lands,
-    // the route renders EigenDocRouteStatus with the three fields below.
+    // Routes gate on docInfo, not a loading flag: a failed background refetch must not unmount an
+    // open editor, and isLoading dips false between retries. Until it lands, render EigenDocRouteStatus.
     docInfo: CollabDocumentInfo | undefined;
     isError: boolean;
     error: Error | null;

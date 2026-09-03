@@ -1,16 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
-import {
-    DRIVE_MIME_CHAT,
-    DRIVE_MIME_DOC,
-    DRIVE_MIME_SHEETS,
-    DRIVE_MIME_SLIDES,
-    DRIVE_MIME_STICKIES,
-    DRIVE_MIME_VECTOR,
-    type DrivePath,
-    type EigenDocType,
-    withEigenExtension,
-} from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType, withEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -314,15 +304,6 @@ export function useRenamePath(
     });
 }
 
-const EIGENDOC_MIME: Record<EigenDocType, string> = {
-    doc: DRIVE_MIME_DOC,
-    stickies: DRIVE_MIME_STICKIES,
-    slides: DRIVE_MIME_SLIDES,
-    sheets: DRIVE_MIME_SHEETS,
-    chat: DRIVE_MIME_CHAT,
-    vector: DRIVE_MIME_VECTOR,
-};
-
 // CREATE EIGEN DOCUMENT — the create waits CREATE_TIMEOUT_MS, then reconciles against the parent
 // listing rather than reporting a failure for an item slow storage did land. See reconcile-create.ts.
 export function useCreateDriveItem(type: EigenDocType) {
@@ -357,7 +338,7 @@ export function useCreateDriveItem(type: EigenDocType) {
                 variables.ownerId,
                 variables.mountId,
                 variables.parentId,
-                EIGENDOC_MIME[type],
+                EIGEN_DOC_TYPE_INFO[type].mime,
             ),
         onError: onMutationError,
     });

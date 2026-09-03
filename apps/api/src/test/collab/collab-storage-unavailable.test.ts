@@ -9,10 +9,8 @@ import type { User } from '../../lib/user';
 import { createFaultMount, registerFaultMount, settleContainer, unregisterFaultMount } from '../fault-storage-helpers';
 import { getTestContext } from '../setup';
 
-// A document whose storage object is unreachable must not look like an access denial: the open path
-// raises ApiError(503) and the WS route closes 1013 'storage-unavailable', the client's cue to show
-// "retrying". Every other failed open keeps 1008. Needs a real listening server — app.handle() never
-// completes the upgrade, so the close code only travels over a genuine WS.
+// Unreachable storage closes the collab WS with 1013 'storage-unavailable', every other failed open
+// with 1008. Needs a real listening server: app.handle() never completes the upgrade.
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-collab-unavailable-${Date.now()}`);
 const MOUNT_ID = 'fault-collab';

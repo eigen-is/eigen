@@ -1,4 +1,3 @@
-import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,7 +7,7 @@ import type { DatabaseConfig } from '../../lib/core';
 import { buildStorageKey, createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { setShutdownDrainDeadline } from '../../lib/sync';
-import { createFaultMount, createGetLocalDatabase, type FaultStorage } from '../fault-storage-helpers';
+import { countRowsInFile, createFaultMount, createGetLocalDatabase, type FaultStorage } from '../fault-storage-helpers';
 
 // Regression net for AUDIT_MOUNT § P1 (finding 2a + siblings): a cached document DB syncs to a
 // STALE storage key after move/rename/trash/delete on the `local` backend (keys are the hierarchical
@@ -51,15 +50,7 @@ function createS3Mount(id: string): { mount: Mount; backing: FaultStorage } {
 // Row count in the on-storage copy of data.db, read through the mount's storage at its CURRENT
 // resolved key (getStorageKey). If a sync wrote to a stale key, this reads the pre-mutation object.
 async function countStoredRows(mount: Mount, dataDbId: string): Promise<number | null> {
-    const file = await mount.readFile(dataDbId);
-    if (!file) return null;
-    const verifyPath = join(TEST_DIR, `verify-${Math.random().toString(36).slice(2)}.db`);
-    await Bun.write(verifyPath, await file.arrayBuffer());
-    const verify = new Database(verifyPath);
-    const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
-    verify.close();
-    rmSync(verifyPath, { force: true });
-    return row.c;
+    return countRowsInFile(await mount.readFile(dataDbId), TEST_DIR);
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));

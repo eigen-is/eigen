@@ -14,15 +14,15 @@ const WS_PROVIDER_OPTIONS = { resyncInterval: 5000, connect: true } as const;
 // How long to stay disconnected after a storage-unavailable close before trying again.
 const STORAGE_RETRY_MS = 5_000;
 
-export interface CollabDocContext {
+export type CollabDocContext = {
     doc: Y.Doc;
     provider: WebsocketProvider;
     // Null unless the host declared an `undoScope`; docs (y-prosemirror history) and sheets (engine
     // op-stack) own undo elsewhere, so they get none.
     undoManager: Y.UndoManager | null;
-}
+};
 
-export interface UseCollabDocOptions {
+export type UseCollabDocOptions = {
     ownerId: string;
     mountId: string;
     pathId: string;
@@ -39,9 +39,9 @@ export interface UseCollabDocOptions {
     // Runs on every provider 'sync' event. `synced` is already tracked by the hook; use this for
     // sync-gated work (seed-if-empty, snapshot load).
     onSync?: (ctx: CollabDocContext, synced: boolean) => void;
-}
+};
 
-export interface CollabDoc {
+export type CollabDoc = {
     // Reactive — null until the effect creates the doc, and again during a pathId switch. Use for
     // rendering, gating, and passing to peer hooks (comment lifecycle, presence).
     doc: Y.Doc | null;
@@ -59,11 +59,10 @@ export interface CollabDoc {
     // (destroying y-prosemirror undo history / transient selection); the mounted doc converges on
     // reconnect. The pathId-swap loading gate still works: the cleanup resets it before the new doc.
     loaded: boolean;
-    // True between a WS close carrying COLLAB_STORAGE_UNAVAILABLE_CLOSE (the route's answer when the
-    // document's storage is unreachable) and the next successful sync. The hook keeps retrying in the
-    // background, so this only changes what the loading screen says.
+    // Set by a COLLAB_STORAGE_UNAVAILABLE_CLOSE close, cleared by the next sync; the hook keeps
+    // retrying, so this only changes what the loading screen says.
     storageUnavailable: boolean;
-}
+};
 
 export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
     const { ownerId, mountId, pathId } = options;
@@ -112,12 +111,10 @@ export function useCollabDoc(options: UseCollabDocOptions): CollabDoc {
         };
         provider.on('sync', handleSync);
 
-        // y-websocket's backoff only grows for sockets that never opened; ours DID open (the route
-        // runs after the 101 and closes from inside open()), so its retry timer stays at 100ms and
-        // every retry re-pays the failing storage load. It emits 'connection-close' before arming
-        // that timer and setupWS is gated on shouldConnect, so disconnecting here cancels it; we
-        // reconnect ourselves after a pause. disconnect() re-enters this handler with a null event,
-        // which the code check ignores.
+        // y-websocket only backs off for sockets that never opened; ours did (the route closes from
+        // inside open()), so it would retry every 100ms against the failing storage. It emits this
+        // event before arming that timer, so disconnect() here cancels it and we reconnect after a
+        // pause. disconnect() re-enters with a null event, which the code check ignores.
         let retryTimer: ReturnType<typeof setTimeout> | undefined;
         const handleConnectionClose = (event: CloseEvent | null) => {
             if (event?.code !== COLLAB_STORAGE_UNAVAILABLE_CLOSE) return;

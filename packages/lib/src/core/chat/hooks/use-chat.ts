@@ -135,7 +135,7 @@ export function useFindChatByMembers(ownerId: string, emails: string[]) {
 export function useCreateChatRoom(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({
+        mutationFn: ({
             parentId,
             fileName,
             members,
@@ -145,20 +145,16 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
             fileName: string;
             members: string[];
             dedupeName?: boolean;
-        }): Promise<DrivePath> => {
-            const create = async () => {
-                const response = await chatApi({ ownerId })({ mountId }).rooms.post(
-                    { parentId, fileName, members, dedupeName },
-                    { fetch: { signal: AbortSignal.timeout(CREATE_TIMEOUT_MS) } },
-                );
-                if (response.error) throw new AppError(response);
-                return response.data;
-            };
-            // dedupeName lets the server suffix a colliding name (`Name (2)`), so the row that
-            // lands is not the name we sent and nothing can honestly match — skip reconcile.
-            if (dedupeName) return create();
-            return createWithReconcile({
-                create,
+        }): Promise<DrivePath> =>
+            createWithReconcile({
+                create: async () => {
+                    const response = await chatApi({ ownerId })({ mountId }).rooms.post(
+                        { parentId, fileName, members, dedupeName },
+                        { fetch: { signal: AbortSignal.timeout(CREATE_TIMEOUT_MS) } },
+                    );
+                    if (response.error) throw new AppError(response);
+                    return response.data;
+                },
                 // The wizard can omit parentId (the route resolves the lazily-created `chats`
                 // folder, an id no client endpoint hands out), so reconcile over the mount-scoped
                 // chat listing, narrowed to the folder whenever the caller did name one.
@@ -169,9 +165,9 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
                     );
                     return parentId ? chats.filter((chat) => chat.parentId === parentId) : chats;
                 },
-                expectedName: withEigenExtension(fileName, 'chat'),
-            });
-        },
+                // dedupeName lets the server suffix a colliding name (`Name (2)`), so no reconcile.
+                expectedName: dedupeName ? undefined : withEigenExtension(fileName, 'chat'),
+            }),
         // Refresh the parent folder, the sidebar aggregate, and the by-members family.
         onSuccess: (data) => {
             invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);

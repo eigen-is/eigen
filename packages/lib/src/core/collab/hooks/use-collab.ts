@@ -15,10 +15,8 @@ export function useCollabDocumentInfo(ownerId: string, mountId: string, pathId: 
 
             if (response.error) {
                 const error = new AppError(response);
-                // 401/403 are the server's verdict on this user, and canRead:false is how the route
-                // renders RequestAccessView. Anything else (500, 503, network) is a failure, not a
-                // verdict — throw it so the query retries and the route shows the error instead of
-                // asking for access to a document the user may already have.
+                // Only 401/403 are a verdict on this user (→ RequestAccessView). Anything else is a
+                // failure: throw, so the route shows an error instead of asking for access.
                 if (error.status === 401 || error.status === 403) {
                     return { canRead: false, canWrite: false, path: null, folderContents: null };
                 }

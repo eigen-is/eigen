@@ -7,10 +7,9 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { type DatabaseConfig, ManagedDatabase } from '../../lib/core';
 import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
-import type { StorageBackend } from '../../lib/storage';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
-import { createGetLocalDatabase } from '../fault-storage-helpers';
+import { countRowsInFile, createGetLocalDatabase } from '../fault-storage-helpers';
 
 // Regression net for AUDIT_STORAGE item 4 (design note 2026-07-05): an openDatabase landing in
 // closeDatabase's async close window built a fresh ManagedDatabase over the closing instance's
@@ -103,7 +102,7 @@ async function createGatedLocalMount(id: string): Promise<{ mount: Mount; storag
         createGetLocalDatabase(TEST_DIR),
     );
     const storage = new GatedLocalStorage(join(TEST_DIR, 'mounts', id));
-    (mount as unknown as { storage: StorageBackend }).storage = storage;
+    mount.storage = storage;
     await mount.init();
     createdMounts.push(mount);
     return { mount, storage };
@@ -111,15 +110,7 @@ async function createGatedLocalMount(id: string): Promise<{ mount: Mount; storag
 
 // Row count in the on-storage copy of data.db at its CURRENT resolved key.
 async function countStoredRows(mount: Mount, dataDbId: string): Promise<number | null> {
-    const file = await mount.readFile(dataDbId);
-    if (!file) return null;
-    const verifyPath = join(TEST_DIR, `verify-${Math.random().toString(36).slice(2)}.db`);
-    await Bun.write(verifyPath, await file.arrayBuffer());
-    const verify = new Database(verifyPath);
-    const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
-    verify.close();
-    rmSync(verifyPath, { force: true });
-    return row.c;
+    return countRowsInFile(await mount.readFile(dataDbId), TEST_DIR);
 }
 
 async function provisionDoc(

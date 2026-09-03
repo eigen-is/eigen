@@ -5,13 +5,10 @@ import type { StorageBackend, StorageFile } from './types';
 
 type FaultKind = 'exists-throw' | 'exists-delay';
 
-// Dev-only fault injection: every mount's backend delegates to the real one but fails or stalls on
-// the exists() probe a create/open makes, so degraded-storage behaviour is reproducible without an
-// outage. read()/readRange() are synchronous handle factories — the GET happens when Bun consumes
-// the returned file, outside this class — so there is nothing to inject on the read path.
+// Dev-only: fails or stalls the exists() probe every create/open makes, so degraded storage is
+// reproducible without an outage. read()/readRange() hand out lazy handles, so nothing to inject there.
 class StorageFaultInjector implements StorageBackend {
-    // These must be present exactly when the inner backend has them: a mount reads getPath's
-    // presence to pick the path-based vs temp-copy path, and mkdir/rename/deleteDir the same way.
+    // Present exactly when the inner backend has them — Mount branches on getPath's presence.
     readonly readRange: StorageBackend['readRange'];
     readonly getPath: StorageBackend['getPath'];
     readonly mkdir: StorageBackend['mkdir'];
@@ -43,20 +40,18 @@ class StorageFaultInjector implements StorageBackend {
     }
 
     async exists(key: string): Promise<boolean> {
-        // 503 matches what document-db.ts raises for an unreachable storage object, so the failure
-        // reaches Drive.create/openDatabase in the shape a real outage produces.
+        // Same 503 shape as a real outage (S3Storage.exists, document-db.ts).
         if (this.kind === 'exists-throw') throw new ApiError(503, 'storage unavailable');
         await Bun.sleep(this.ms);
         return this.inner.exists(key);
     }
 
-    async size(key: string): Promise<number | null> {
+    size(key: string): Promise<number | null> {
         return this.inner.size(key);
     }
 }
 
-// EIGEN_STORAGE_FAULT=exists-throw | exists-delay=<ms>. Never active in production, whatever the
-// variable says.
+// EIGEN_STORAGE_FAULT=exists-throw | exists-delay=<ms>; inert in production whatever the variable says.
 export function wrapWithStorageFault(backend: StorageBackend): StorageBackend {
     const spec = process.env['EIGEN_STORAGE_FAULT'];
     if (!spec || isProduction()) return backend;
