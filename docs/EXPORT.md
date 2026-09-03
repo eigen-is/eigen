@@ -16,7 +16,7 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 - **PDF**: HTML fed to WeasyPrint subprocess
 
 Eigenslides and eigensheets reuse the same HTML→PDF pipeline (sheets also export native XLSX), and
-eigenvector exports its own SVG (PDF = that SVG on a WeasyPrint page) — see their sections below.
+eigenvector exports its own SVG (PDF = the same drawing recomposed as HTML layers on a WeasyPrint page) — see their sections below.
 
 Every eigendoc/eigenslides/eigensheets export runs its Yjs reconstruction, rendering and sanitization in the
 one-shot document-transform Worker ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)): the
@@ -270,11 +270,13 @@ Eigenvector (`.eigenvector`) drawings export as SVG and PDF via the same route:
 | Format | Pipeline |
 |--------|----------|
 | `svg`  | `sceneToSvg` (the shared `packages/lib/src/vector` serializer previews/embeds also use), media as `data:` URIs, the used `@font-face` blocks spliced into `<defs><style>`, then `sanitizeExportHtml` |
-| `pdf`  | The same SVG (fonts in the wrapping page's `<style>` instead) on a minimal white page sized `@page` to the drawing → WeasyPrint. An empty drawing is a 400 |
+| `pdf`  | The drawing as compositor layers (`export/canvas/render.ts` — `drawingPage` + `renderCanvasPage`), fonts in the wrapping page's `<style>`, on a minimal white page sized `@page` to the drawing → WeasyPrint. Rich text prints because it is an HTML div here; WeasyPrint ignores the `<foreignObject>` the svg arm uses. An empty drawing is a 400 |
 
 `renderEigenvectorExport` lives in `export/vector/transform.ts` and runs in the document-transform Worker like the other types; `collectExportMedia` prepares the media on the main thread. Media previews serve SVG bytes as-is, so `prepareMedia` (`export/media.ts`) passes `image/svg+xml` media through `sanitizeExportHtml` before it is embedded — a nested `<image href>` inside an SVG data: URI reaches WeasyPrint's fetcher, the same SSRF the assembled document already closes. A transparent drawing keeps its transparency in the SVG download and exports on white paper for PDF.
 
 ```
+apps/api/src/lib/export/canvas/
+  render.ts      # Worker-pure compositor: a CanvasPage of sceneLayers → absolutely-positioned HTML
 apps/api/src/lib/export/vector/
   transform.ts   # Worker-side: materialized scene + media → SVG bytes, or the PDF wrapper HTML
 # serializer: packages/lib/src/vector/scene-to-svg.ts (sceneToSvg, shared FE/BE)

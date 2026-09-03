@@ -8,6 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SKETCH_PROPS,
+    serializeFill,
     solidFill,
     type VectorElement,
     type VectorScene,
@@ -509,7 +510,7 @@ export function buildGoldenVectorScene(): VectorScene {
             height: 120,
             index: 'a6',
             mediaName: GOLDEN_MEDIA_NAME,
-            corners: 'straight',
+            corners: 'round',
             objectFit: 'contain',
         },
         // A bound elbow arrow (no label) — its orthogonal route is DERIVED at render time, so preview
@@ -537,6 +538,23 @@ export function buildGoldenVectorScene(): VectorScene {
             fontSize: 20,
             fontFamily: 'Excalifont',
             labelWidth: 0,
+        },
+        // A gradient fill painted through the hachure sketch: phase 0 proved WeasyPrint honours an
+        // SVG linearGradient as `stroke=` on the fill-sketch paths, but ONLY when the <defs> lives
+        // inside the element's own <svg>. The export golden is what keeps that true.
+        {
+            ...base,
+            ...DEFAULT_SKETCH_PROPS,
+            id: 'v-gradient',
+            type: 'rectangle',
+            x: 260,
+            y: 340,
+            width: 120,
+            height: 80,
+            seed: 9,
+            index: 'a8',
+            corners: 'curved',
+            fill: serializeFill({ type: 'gradient', from: '#e60076', to: '#2563eb', angle: 45, style: 'hachure' }),
         },
     ];
     return { elements, frames: [], meta: { background: 'transparent', gridSize: 20 } };

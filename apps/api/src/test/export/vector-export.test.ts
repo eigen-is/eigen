@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { exportDocument } from '../../lib/export/export-document';
+import { exportDocument, runDocumentExport } from '../../lib/export/export-document';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
@@ -171,6 +171,86 @@ describe('Eigenvector export — rich-text HTML sanitization', () => {
     }, 120_000);
 });
 
+describe('Eigenvector export — the pdf-html document (what WeasyPrint is handed)', () => {
+    // One render for every assertion below: the document is deterministic, and a transform Worker
+    // per test would be seven more spawns for the same bytes.
+    let rendered: Promise<string> | null = null;
+    function pdfHtml(): Promise<string> {
+        rendered ??= (async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const { mount, path } = await home.drive.resolveFile(mountId, vectorPath.id);
+            const bytes = await runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path);
+            return bytes.toString('utf-8');
+        })();
+        return rendered;
+    }
+
+    test('the drawing prints as compositor layers, not as one inline svg', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('<div class="canvas-page"');
+        expect(html).toContain('transform-origin:0 0');
+        // The old arm put the whole drawing in a single root <svg> with a viewBox.
+        expect(html).not.toContain('viewBox=');
+    }, 120_000);
+
+    test('rich text prints as HTML — the thing foreignObject could never give WeasyPrint', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('<p>Vector &lt;sketch&gt;</p>');
+        expect(html).not.toContain('<foreignObject');
+    }, 120_000);
+
+    test('a gradient fill carries its own <defs> inside its own element svg', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('<linearGradient');
+        expect(html).toContain('#e60076');
+        // Phase 0: url(#id) across two <svg> elements renders NOTHING in WeasyPrint. Each gradient
+        // must therefore be defined in the same <svg> that references it.
+        const svgs = html.split('<svg ');
+        const withGradient = svgs.filter((chunk) => chunk.includes('<linearGradient'));
+        expect(withGradient.length).toBeGreaterThan(0);
+        for (const chunk of withGradient) expect(chunk).toContain('url(#');
+    }, 120_000);
+
+    test('paint references survive the sanitizer because they are attributes, not CSS', async () => {
+        const html = await pdfHtml();
+        // sanitize.ts rewrites every non-data url() it finds in a `style` attribute or a <style>
+        // block to `url()`. A gradient or a clip expressed in CSS would therefore reach WeasyPrint
+        // as `url()` and paint nothing — silently. These attribute forms are what keeps that safe.
+        expect(html).toMatch(/(?:fill|stroke)="url\(#/);
+        expect(html).toContain('clip-path="url(#');
+        expect(html).not.toContain('url()');
+    }, 120_000);
+
+    test('a round-cornered image clips through the shared outline path', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('<clipPath');
+        // Mime-agnostic on purpose: collectExportMedia embeds the SCREEN PREVIEW of each media
+        // child (webp today), not the stored bytes. What matters is that it is a data: URI.
+        expect(html).toMatch(/href="data:image\/[a-z+]+;base64,/);
+    }, 120_000);
+
+    test('fonts ride the wrapping document and every reference is a data: URI', async () => {
+        const html = await pdfHtml();
+        expect(html).toContain('@font-face');
+        expect(html).toContain('data:font/woff2;base64,');
+        expect(html).not.toContain('href="http');
+        expect(html).not.toContain('src="http');
+    }, 120_000);
+
+    test('the page is sized to the drawing', async () => {
+        const html = await pdfHtml();
+        expect(html).toMatch(/@page \{ size: [\d.]+px [\d.]+px; margin: 0; \}/);
+    }, 120_000);
+
+    test('an empty drawing is still a 400', async () => {
+        const home = await getHome(ctx.alice.user.id);
+        const { mount, path } = await home.drive.resolveFile(mountId, emptyPath.id);
+        await expect(
+            runDocumentExport({ documentType: 'eigenvector', format: 'pdf-html' }, mount, path),
+        ).rejects.toThrow('The drawing is empty');
+    }, 60_000);
+});
+
 const suite = (await isWeasyPrintAvailable()) ? describe : describe.skip;
 
 suite('Eigenvector export route — PDF (WeasyPrint end-to-end)', () => {
@@ -181,5 +261,10 @@ suite('Eigenvector export route — PDF (WeasyPrint end-to-end)', () => {
         expect(res.headers.get('content-disposition')).toBe('attachment; filename="Vector Contract.pdf"');
         const pdf = Buffer.from(await res.arrayBuffer());
         expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+        // A page WeasyPrint renders nothing onto is ~770 bytes (measured); this drawing's page —
+        // roughjs paths, a subsetted Excalifont and the raster image — is ~9.5 kB. The floor is what
+        // stops "renders nothing" from passing; the structural assertions above are what pin the
+        // content, since the exact byte count moves with the host's WeasyPrint and font stack.
+        expect(pdf.byteLength).toBeGreaterThan(5_000);
     }, 120_000);
 });

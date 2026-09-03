@@ -54,6 +54,7 @@ describe('drawingPage', () => {
             'v-arrow',
             'v-image',
             'v-elbow',
+            'v-gradient',
         ]);
     });
 });
