@@ -455,7 +455,7 @@ describe('Vector previews are text previews', () => {
         vectorPathId = created.id;
 
         const empty = await drivePost(token, ownerId, mountId, `folder/${root.id}/create/vector`, {
-            fileName: 'Empty Drawing',
+            fileName: 'Empty Preview Drawing',
         });
         emptyVectorPathId = empty.id;
     });
@@ -473,10 +473,14 @@ describe('Vector previews are text previews', () => {
         expect(res.status).toBe(404);
     }, 120_000);
 
-    test('an empty drawing has no preview at all', async () => {
-        // renderEigenvectorPreviewBody returns '' for a drawing with no bounds; getOrCacheText's
-        // `if (!body) return null` turns that into the route's 404, so nothing empty is cached.
+    test('an empty drawing previews as an empty page, not as a 404', async () => {
+        // getOrCacheText caches only a non-empty body, so a bodyless empty drawing would keep
+        // serving the preview it had before it was emptied.
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${emptyVectorPathId}/text-preview`);
-        expect(res.status).toBe(404);
+        expect(res.status).toBe(200);
+        const value = await res.json();
+        expect(value.mode).toBe('eigenvector');
+        expect(value.body).toContain('<div class="canvas-page"');
+        expect(value.body).not.toContain('<svg');
     }, 120_000);
 });

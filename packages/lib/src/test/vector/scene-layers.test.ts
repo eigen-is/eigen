@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
-import { elementLayer, layerInnerHtml, sceneLayers } from '../../vector/scene-layers';
+import { elementLayer, layerBoxCss, layerInnerHtml, sceneLayers } from '../../vector/scene-layers';
 import {
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
@@ -175,5 +175,37 @@ describe('elementLayer', () => {
 
     test('layerInnerHtml passes an svg fragment through untouched', () => {
         expect(layerInnerHtml({ svg: '<path d="M0 0"/>' })).toBe('<path d="M0 0"/>');
+    });
+});
+
+// One definition of the layer box, so the live canvas and the compositor that prints the same
+// drawing cannot drift: the compositor serializes these declarations into a style attribute and the
+// canvas hands the very same values to React.
+describe('layerBoxCss', () => {
+    const box = { x: 12.5, y: -3.25, width: 40, height: 20, angle: 0 };
+
+    test('the origin rides in a translate, never in left/top', () => {
+        expect(layerBoxCss({ box, opacity: 100 })).toEqual({
+            width: '40px',
+            height: '20px',
+            transform: 'translate(12.5px,-3.25px)',
+        });
+    });
+
+    test('rotation composes after the translate, on the default box-centre origin', () => {
+        expect(layerBoxCss({ box: { ...box, angle: 30 }, opacity: 100 }).transform).toBe(
+            'translate(12.5px,-3.25px) rotate(30deg)',
+        );
+    });
+
+    test('opacity rides on the layer, and only below full', () => {
+        expect(layerBoxCss({ box, opacity: 40 }).opacity).toBe('0.4');
+        expect(layerBoxCss({ box, opacity: 100 }).opacity).toBeUndefined();
+    });
+
+    test('every length is rounded to two decimals, so a float box serializes identically twice', () => {
+        expect(
+            layerBoxCss({ box: { x: 1.23456, y: 0, width: 9.87654, height: 1, angle: 7.777 }, opacity: 100 }),
+        ).toEqual({ width: '9.88px', height: '1px', transform: 'translate(1.23px,0px) rotate(7.78deg)' });
     });
 });

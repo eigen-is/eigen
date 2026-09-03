@@ -1,10 +1,13 @@
-import { CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
+import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
 import { readVectorFromDoc, type VectorScene } from '@workspace/lib/vector';
 import DOMPurify from 'isomorphic-dompurify';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
-import { drawingPage, renderCanvasPage } from '../export/canvas/render';
+import { type CanvasPage, drawingPage, emptyPage, renderCanvasPage } from '../export/canvas/render';
+import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard } from './preview-marker';
+
+const EMPTY_PREVIEW_HEIGHT = 120;
 
 // Materialized doc → the drawing as one compositor page, the same HTML the PDF export prints.
 // Runs inside the transform Worker (worker.ts owns execution; the main-thread orchestration lives
@@ -12,29 +15,43 @@ import { applyPreviewByteGuard } from './preview-marker';
 // imports it, and the compositor's roughjs/perfect-freehand deps stay DOM-free. Media resolves
 // through the URL map the main thread prepared (the Worker has no Mount).
 //
-// The reader is the trust boundary for every scalar field (XML-invalid characters stripped, colours
-// reduced to hex or 'transparent', coordinates clamped) — but NOT for a rich-text box's `html`,
-// which it caps and cleans without filtering tags. Each body therefore goes through DOMPurify here,
-// per element rather than over the assembled page, so the page's own markup is never rewritten.
+// The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The
+// reader is the trust boundary for every scalar field (XML-invalid characters stripped, colours
+// reduced to hex or 'transparent', coordinates clamped) but NOT for a rich-text box's `html`, which
+// it caps and cleans without filtering tags: each of those goes through the shared ref restriction
+// first, so a collaborator's `<img src=https://…>` or `background:url(https://…)` cannot beacon
+// every viewer. The assembled page then goes through DOMPurify as a whole, after the compositor has
+// added the media hrefs and `url(#…)` gradient refs of its own that must survive.
 export function renderEigenvectorPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
     const scene = sanitizeRichText(readVectorFromDoc(doc));
-    const page = drawingPage(scene, { resolveMedia: (mediaName) => mediaUrls.get(mediaName) ?? null });
+    const page = drawingPage(scene, (mediaName) => mediaUrls.get(mediaName) ?? null);
+    // An empty drawing still previews as a page: getOrCacheText stores only a non-empty body, so
+    // nothing here would leave an emptied drawing serving the preview it had when it had content.
+    const html = page
+        ? renderPreviewPage(page)
+        : renderCanvasPage(emptyPage(scene, CANVAS_PREVIEW_WIDTH, EMPTY_PREVIEW_HEIGHT), 1);
     const warnings: TransformWarning[] = [];
-    // An empty drawing has no bounds to size a page from; the pane shows its own empty state.
-    if (!page) return { body: '', warnings };
-    return {
-        body: applyPreviewByteGuard(renderCanvasPage(page, CANVAS_PREVIEW_WIDTH / page.width), warnings),
-        warnings,
-    };
+    return { body: applyPreviewByteGuard(DOMPurify.sanitize(html, { FORCE_BODY: true }), warnings), warnings };
 }
 
-// Every element that carries an `html` body, with that body filtered.
+function renderPreviewPage(page: CanvasPage): string {
+    // Fit the whole page: scaled on width alone, a tall narrow drawing magnifies unboundedly.
+    const scale = Math.min(CANVAS_PREVIEW_WIDTH / page.width, CANVAS_PREVIEW_HEIGHT / page.height);
+    // A page fitted by height composes narrower than CANVAS_PREVIEW_WIDTH, and drive-preview.tsx
+    // scales the body from exactly that intrinsic width. Widen the page in SCENE units and shift its
+    // origin by half the difference: the box comes out full width with the drawing centred in it.
+    const width = CANVAS_PREVIEW_WIDTH / scale;
+    return renderCanvasPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
+}
+
+// Every element that carries an `html` body, with that body filtered: DOMPurify plus the shared
+// restriction to data: refs, so nothing a collaborator wrote in it can fetch from anywhere.
 function sanitizeRichText(scene: VectorScene): VectorScene {
     return {
         ...scene,
-        elements: scene.elements.map((el) => ('html' in el ? { ...el, html: DOMPurify.sanitize(el.html) } : el)),
+        elements: scene.elements.map((el) => ('html' in el ? { ...el, html: sanitizeExportHtml(el.html) } : el)),
     };
 }

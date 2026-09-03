@@ -16,7 +16,7 @@ export * from './outline';
 export * from './read-vector';
 export * from './scene-layers';
 export type { MediaResolver, SceneToSvgOptions } from './scene-to-svg';
-export { elementToSvg, sceneToSvg } from './scene-to-svg';
+export { DEFAULT_PADDING, elementToSvg, sceneToSvg } from './scene-to-svg';
 export * from './search-scene';
 export * from './snap';
 export * from './types';

@@ -5,7 +5,7 @@
 > `packages/ui`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-1294 primitives across 6 kinds. `packages/sheet` internals are excluded.
+1298 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -439,7 +439,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (336)
+## Types (337)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -687,6 +687,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FontWeight` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `ImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
 | `Layer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
+| `LayerBoxCss` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `MarqueeMode` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `MediaResolver` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `ObjectFit` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -780,7 +781,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 
-## Utilities & constants (550)
+## Utilities & constants (553)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -933,6 +934,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `matchesCommentFilter` | `@workspace/lib/comments` | packages/lib/src/core/comments/filter.ts |
 | `readCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
 | `writeCardToDoc` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-create-comment-card.ts |
+| `CANVAS_PREVIEW_HEIGHT` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `CANVAS_PREVIEW_WIDTH` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `COLLAB_STORAGE_UNAVAILABLE_CLOSE` | `@workspace/lib/constants` | packages/lib/src/constants/collab.ts |
 | `DOCX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
@@ -1141,6 +1143,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_LINE_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_LINEAR_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_OBJECT_FIT` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
 | `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SKETCH_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1201,6 +1204,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isTransparentFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isValidFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
 | `isVectorElementType` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
+| `layerBoxCss` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `layerInnerHtml` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `LINEAR_HIT_SCREEN_FACTOR` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `linearLocalToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |

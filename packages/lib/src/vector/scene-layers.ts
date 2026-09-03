@@ -1,14 +1,13 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
-// does it draw", so a renderer that positions elements itself (absolutely positioned divs) and one that
-// serializes an SVG document agree by construction. Written for the phase-2 layer canvas — nothing
-// renders from these layers yet; sceneToSvg is the only shipped renderer and it places elements itself.
+// does it draw", so the live canvas (a div per layer) and the compositor that prints the same drawing
+// agree by construction. sceneToSvg is the third renderer; it places elements itself.
 
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
 import type { Point } from './geometry';
 import { ELEMENT_KINDS, type RenderOutput } from './kinds';
-import { escapeXml } from './kinds/render-utils';
+import { escapeXml, round } from './kinds/render-utils';
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
 
@@ -47,6 +46,24 @@ export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}):
         box: { x: el.x, y: el.y, width: el.width, height: el.height, angle: el.angle },
         opacity: el.opacity,
         content,
+    };
+}
+
+export type LayerBoxCss = { width: string; height: string; transform: string; opacity?: string };
+
+// The layer's box as CSS: one derivation, set as React style props by the live canvas and serialized
+// into a style attribute by the compositor, so what a user sees is what prints. The origin rides in a
+// transform rather than in left/top because a browser pixel-snaps a fractional box origin before
+// painting the layer's own <svg>; transforms are not snapped. transform-origin stays the default box
+// centre and translate is origin-independent, so `translate(x,y) rotate(a)` is the single-<svg>
+// renderer's `translate(x y) rotate(a w/2 h/2)` exactly.
+export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): LayerBoxCss {
+    const rotate = box.angle === 0 ? '' : ` rotate(${round(box.angle)}deg)`;
+    return {
+        width: `${round(box.width)}px`,
+        height: `${round(box.height)}px`,
+        transform: `translate(${round(box.x)}px,${round(box.y)}px)${rotate}`,
+        ...(opacity === 100 ? null : { opacity: `${round(opacity / 100)}` }),
     };
 }
 

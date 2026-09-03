@@ -276,15 +276,14 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
     return null;
 }
 
+// A collab container previews from its Yjs document, every other file from its bytes; the mime map
+// is the one list of which is which.
 export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
-    if (
-        drivePath.type === 'doc' ||
-        drivePath.type === 'slides' ||
-        drivePath.type === 'sheets' ||
-        drivePath.type === 'vector'
-    )
-        return getCollabPreview(mount, drivePath);
-    return getFileTextPreview(mount, drivePath);
+    const documentType = COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '');
+    if (!documentType) return getFileTextPreview(mount, drivePath);
+    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
+        generateDocumentPreview(documentType, mount, drivePath, priority),
+    );
 }
 
 async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
@@ -303,12 +302,4 @@ async function getFileTextPreview(mount: Mount, drivePath: DrivePath): Promise<S
         }
         return (await generateTextPreview(content, mode, drivePath.name)).body;
     });
-}
-
-async function getCollabPreview(mount: Mount, drivePath: DrivePath): Promise<ServedTextPreview | null> {
-    const documentType = COLLAB_DOCUMENT_TYPES.get(drivePath.mimeType || '');
-    if (!documentType) return null;
-    return getOrCacheText(mount.previewsDir, drivePath.id, textCacheName(drivePath), documentType, (priority) =>
-        generateDocumentPreview(documentType, mount, drivePath, priority),
-    );
 }

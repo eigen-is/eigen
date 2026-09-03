@@ -59,10 +59,9 @@ describe('layerStyle', () => {
         expect(layerStyle({ box, opacity: 100 })).toEqual({
             left: 0,
             top: 0,
-            width: 40,
-            height: 20,
-            transform: 'translate(12.5px, -3.25px)',
-            opacity: undefined,
+            width: '40px',
+            height: '20px',
+            transform: 'translate(12.5px,-3.25px)',
         });
     });
 
@@ -70,12 +69,12 @@ describe('layerStyle', () => {
         // transform-origin is the box centre, and translate is origin-independent, so this is the old
         // renderer's `translate(x y) rotate(angle w/2 h/2)` exactly.
         expect(layerStyle({ box: { ...box, angle: 30 }, opacity: 100 }).transform).toBe(
-            'translate(12.5px, -3.25px) rotate(30deg)',
+            'translate(12.5px,-3.25px) rotate(30deg)',
         );
     });
 
     test('opacity rides on the layer, and only below full', () => {
-        expect(layerStyle({ box, opacity: 40 }).opacity).toBe(0.4);
+        expect(layerStyle({ box, opacity: 40 }).opacity).toBe('0.4');
         expect(layerStyle({ box, opacity: 100 }).opacity).toBeUndefined();
     });
 });

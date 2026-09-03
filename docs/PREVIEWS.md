@@ -65,16 +65,16 @@ stale content after an inline edit.
 | `eigendoc`     | Yjs blobs → transform Worker → PM JSON (first 20 blocks) → tiptap static renderer → HTML |
 | `eigenslides`  | Yjs blobs → transform Worker → first 8 slides → positioned divs with container-query sizing |
 | `eigensheets`  | Yjs blobs → transform Worker → bounded first-sheet HTML table (`renderSheetsPreviewHtml`) |
-| `eigenvector`  | Yjs blobs → transform Worker → `drawingPage` + `renderCanvasPage` (`export/canvas/render.ts`) → one HTML page composed at `CANVAS_PREVIEW_WIDTH` (960px), media as `/preview` URLs, each rich-text `html` DOMPurified per element |
+| `eigenvector`  | Yjs blobs → transform Worker → `drawingPage` + `renderCanvasPage` (`export/canvas/render.ts`) → one HTML page fitted to `CANVAS_PREVIEW_WIDTH` × `CANVAS_PREVIEW_HEIGHT` (960×540) and centred in a full-width box, media as `/preview` URLs. A drawing with nothing in it composes an `emptyPage` rather than no body, so an emptied drawing stops serving the preview it had. Filtered twice: each rich-text `html` through `sanitizeExportHtml` (the shared ref restriction — a collaborator's `<img src=https://…>` or `background:url(https://…)` would otherwise beacon every viewer of the folder), then the assembled page through DOMPurify |
 
 Plaintext is deliberately **not** `<pre>`: `eigen-prose` paints every `<pre>` as a dark, non-wrapping
 code block, and a `.txt` file should read like rendered markdown instead.
 
-The `eigendoc`/`eigenslides`/`eigensheets`/`eigenvector` modes load the file's Yjs document (via `getCollabPreview` in `preview-cache.ts`) rather than raw file text. The first three render only a compact slice — see Compact Previews below.
+The `eigendoc`/`eigenslides`/`eigensheets`/`eigenvector` modes load the file's Yjs document rather than raw file text. The first three render only a compact slice — see Compact Previews below.
 
-`getTextPreview` (`preview-cache.ts`) is the single entry point. It splits on path type: eigen-native containers (`doc`, `slides`, `sheets`, `vector`) go through `getCollabPreview` to the Worker-side `preview/eigen{doc,slides,sheets,vector}-render.ts` bodies, everything else reads the file as text and calls `generateTextPreview`. Both sides go through the same `getOrCacheText` read-through cache, so caching, in-flight sharing and stale-while-revalidate behave identically.
+`getTextPreview` (`preview-cache.ts`) is the single entry point. It splits on `COLLAB_DOCUMENT_TYPES`, the one list of which mimes are collab containers: those go to the Worker-side `preview/eigen{doc,slides,sheets,vector}-render.ts` bodies, everything else reads the file as text and calls `generateTextPreview`. Both sides go through the same `getOrCacheText` read-through cache, so caching, in-flight sharing and stale-while-revalidate behave identically.
 
-Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered with `dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM. Its `staleTime` is deliberately short — **30 s** — so that when the server hands back a stale-while-revalidate body, the next refetch trigger (window focus or remount) picks up the fresh one. The `eigenvector` body is the exception on both counts: it is a self-contained page div carrying its own box, background and absolutely-positioned layers, so the lightbox only centres it and the drive hero scales it from its known intrinsic width (`CANVAS_PREVIEW_WIDTH`, the same machinery `eigenslides` uses with `SLIDE_BASE_WIDTH` and `eigendoc` with `A4_WIDTH_PX`) inside a `.drive-preview-canvas` wrapper rather than a prose one.
+Body is consumed via the `useTextPreview()` hook (TanStack Query) and rendered with `dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM. Its `staleTime` is deliberately short — **30 s** — so that when the server hands back a stale-while-revalidate body, the next refetch trigger (window focus or remount) picks up the fresh one. The `eigenvector` body is the exception on both counts: it is a self-contained page div carrying its own box, background and absolutely-positioned layers, so the lightbox only centres it and the drive hero scales it from its known intrinsic width (`CANVAS_PREVIEW_WIDTH`, the same machinery `eigenslides` uses with `SLIDE_BASE_WIDTH` and `eigendoc` with `A4_WIDTH_PX`) with no wrapper class at all rather than a prose one.
 
 Shared `eigen-prose.css` in `packages/ui/src/styles/` provides prose typography + Catppuccin code highlighting,
 used by both previews and the docs editor.
@@ -217,7 +217,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + heic-convert + exiftool) |
 | `apps/api/src/lib/shared/video-thumbnail.ts`                              | ffmpeg-based video frame extractor + `isFfmpegAvailable`   |
 | `apps/api/src/lib/preview/video-preview.ts`                               | `isVideoCandidate` MIME gate                               |
-| `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()`, `CANVAS_PREVIEW_WIDTH` |
+| `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()`, `CANVAS_PREVIEW_WIDTH`, `CANVAS_PREVIEW_HEIGHT` |
 | `apps/api/src/lib/drive/drive.ts`                                         | `resolveFile()` → ACL-checked `{ mount, path }` for preview/export/thumb routes |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |

@@ -13,7 +13,11 @@ import { escapeXml, round } from './kinds/render-utils';
 import type { VectorElement, VectorScene } from './types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const DEFAULT_PADDING = 10;
+
+// The margin left around a drawing, so a standalone SVG and a compositor page frame it alike.
+// sceneBounds is the geometric union of the element boxes and the derived elbow routes; it does not
+// inflate for roughjs's overshoot, which is what this padding absorbs.
+export const DEFAULT_PADDING = 10;
 
 // A foreignObject clips to its own rect, so text a hair wider than the box the client measured would
 // lose its wrapped line; overflow="visible" keeps it drawn, the way slides' absolutely-positioned text

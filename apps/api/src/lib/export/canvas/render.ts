@@ -2,8 +2,10 @@ import { backgroundCss } from '@workspace/lib/background';
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import {
+    DEFAULT_PADDING,
     isTransparentColor,
     type Layer,
+    layerBoxCss,
     layerInnerHtml,
     type MediaResolver,
     sceneBounds,
@@ -12,14 +14,8 @@ import {
 } from '@workspace/lib/vector';
 
 // The canvas compositor: a page of sceneLayers as an HTML string, for the PDF export and the
-// preview body. The live canvas (packages/ui element-layer.tsx) places a layer with exactly this
-// box — left/top 0 plus `translate(x,y) rotate(a)`, whose default transform-origin is the box
-// centre — so what a user sees is what prints. Worker-pure: no Mount, no preview cache, no DOM.
-//
-// The page scales as a WHOLE (one transform on the scene wrapper) rather than re-unitising each
-// length, because a layer's body is authored in scene pixels by packages/lib — a roughjs path in
-// the element's local frame, or richTextCssText's `font-size:20px`. Phase 0 measured a scene
-// `transform: scale()` as correct in WeasyPrint.
+// preview body. A layer carries the same box CSS the live canvas sets (layerBoxCss), so what a user
+// sees is what prints. Worker-pure: no Mount, no preview cache, no DOM.
 //
 // A kind points at its own gradient with `fill="url(#g-<id>)"` / `stroke="url(#…)"` and clips an
 // image with `clip-path="url(#…)"` — SVG ATTRIBUTES, never a CSS declaration. That is load-bearing
@@ -27,12 +23,6 @@ import {
 // <style> block to `url()`, so a gradient moved into CSS would silently stop painting in the PDF.
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-
-// The margin sceneToSvg leaves around a drawing, so a page and a standalone SVG frame it alike.
-// sceneBounds is the geometric union of the element boxes and the derived elbow routes; it does not
-// inflate for roughjs's overshoot, which is what this padding absorbs (the layers are
-// overflow-visible either way, so an overshoot past the page is clipped by the page, not lost).
-const PAGE_PADDING = 10;
 
 // A page in SCENE units plus the offset that brings its top-left to (0,0): a frame is (0,0)-based
 // so its origin is zero, a frameless drawing's content bounds start wherever the user drew.
@@ -45,23 +35,33 @@ export type CanvasPage = {
     layers: Layer[];
 };
 
-// The whole drawing as one page, or null when there is nothing to size a page from. (Frames get
-// their own feeder with the slides shell; a drawing has no frames today — spec D7.)
-export function drawingPage(scene: VectorScene, opts: { resolveMedia?: MediaResolver } = {}): CanvasPage | null {
+// The whole drawing as one page, or null when there is nothing to size a page from.
+export function drawingPage(scene: VectorScene, resolveMedia: MediaResolver): CanvasPage | null {
     if (scene.elements.length === 0) return null;
     // byId feeds the derived elbow route, whose bends spill past the stored endpoints, to the bounds.
     const byId = new Map(scene.elements.map((el) => [el.id, el]));
     const bounds = sceneBounds(scene.elements, byId);
     return {
-        width: round(bounds.maxX - bounds.minX + PAGE_PADDING * 2),
-        height: round(bounds.maxY - bounds.minY + PAGE_PADDING * 2),
-        originX: round(bounds.minX - PAGE_PADDING),
-        originY: round(bounds.minY - PAGE_PADDING),
-        // The scene background is a colour token; 'transparent' is no paint at all, not a
-        // `background-color: transparent` declaration.
-        background: isTransparentColor(scene.meta.background) ? null : { type: 'solid', color: scene.meta.background },
-        layers: sceneLayers(scene, { resolveMedia: opts.resolveMedia }),
+        width: round(bounds.maxX - bounds.minX + DEFAULT_PADDING * 2),
+        height: round(bounds.maxY - bounds.minY + DEFAULT_PADDING * 2),
+        originX: round(bounds.minX - DEFAULT_PADDING),
+        originY: round(bounds.minY - DEFAULT_PADDING),
+        background: sceneBackground(scene),
+        layers: sceneLayers(scene, { resolveMedia }),
     };
+}
+
+// A page of the given box with nothing on it, for a caller that must produce a page even when the
+// drawing has no bounds to size one from (the preview cache stores only a non-empty body, so an
+// emptied drawing would otherwise keep serving the preview it had when it still had content).
+export function emptyPage(scene: VectorScene, width: number, height: number): CanvasPage {
+    return { width, height, originX: 0, originY: 0, background: sceneBackground(scene), layers: [] };
+}
+
+// The scene background is a colour token; 'transparent' is no paint at all, not a
+// `background-color: transparent` declaration.
+function sceneBackground(scene: VectorScene): BackgroundFill | null {
+    return isTransparentColor(scene.meta.background) ? null : { type: 'solid', color: scene.meta.background };
 }
 
 // One page: a clipped box at `scale`, holding the scene at 1:1 with the whole thing scaled once.
@@ -90,17 +90,12 @@ export function renderCanvasPage(page: CanvasPage, scale: number): string {
 }
 
 function renderLayer(layer: Layer): string {
-    const { box } = layer;
-    const rotate = box.angle === 0 ? '' : ` rotate(${round(box.angle)}deg)`;
     const layerStyle = [
         'position:absolute',
         'top:0',
         'left:0',
-        `width:${round(box.width)}px`,
-        `height:${round(box.height)}px`,
-        `transform:translate(${round(box.x)}px,${round(box.y)}px)${rotate}`,
+        ...Object.entries(layerBoxCss(layer)).map(([property, value]) => `${property}:${value}`),
     ];
-    if (layer.opacity !== 100) layerStyle.push(`opacity:${round(layer.opacity / 100)}`);
     // Rich text IS the layer's body (layerInnerHtml wraps it in its styled div); everything else is
     // an unpositioned kind fragment that needs an SVG viewport, overflow-visible because roughjs
     // overshoots its box and an elbow route spills past it. min-*-px: a horizontal arrow's box is
@@ -124,8 +119,6 @@ function renderLayer(layer: Layer): string {
     return `<div style="${style(layerStyle)}">${body}</div>`;
 }
 
-// Every value in a generated declaration list is a number or a reader-validated colour token, so
-// this escape is a no-op today — it is here so a future declaration can never break out of style="".
 function style(declarations: string[]): string {
     return escapeHtml(declarations.join(';'));
 }

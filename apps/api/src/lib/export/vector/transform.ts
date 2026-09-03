@@ -49,7 +49,7 @@ export function renderEigenvectorExport(
     const paperScene = isTransparentColor(scene.meta.background)
         ? { ...scene, meta: { ...scene.meta, background: PDF_PAPER } }
         : scene;
-    const page = drawingPage(paperScene, { resolveMedia: (mediaName) => dataUriMap.get(mediaName) ?? null });
+    const page = drawingPage(paperScene, (mediaName) => dataUriMap.get(mediaName) ?? null);
     // Nothing to print, and nothing to size a page from.
     if (!page) throw new ApiError(400, 'The drawing is empty');
     // A collaborator can put arbitrary strings in the schemaless scene — including a rich-text box's

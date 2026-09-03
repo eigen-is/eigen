@@ -39,9 +39,11 @@ export type TextPreviewMode =
     | 'eigensheets'
     | 'eigenvector';
 
-// The logical width a canvas preview body is composed at. The drive hero scales a preview from its
-// intrinsic width (drive-preview.tsx), so a drawing of any size previews through one known number.
+// The logical box a canvas preview body is composed at: the drive hero scales a preview from its
+// intrinsic width (drive-preview.tsx), so a drawing of any size previews through one known number,
+// and the height caps how far a tall, narrow drawing may be magnified. 16:9, the hero's own ratio.
 export const CANVAS_PREVIEW_WIDTH = 960;
+export const CANVAS_PREVIEW_HEIGHT = 540;
 
 function getExtension(fileName: string): string {
     const dot = fileName.lastIndexOf('.');
