@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { elbowRoute } from '../../vector/elbow-route';
+import { solidFill } from '../../vector/fill';
 import {
     anchorToScene,
     applyResize,
@@ -57,6 +58,7 @@ import {
     type VectorArrowElement,
     type VectorElement,
     type VectorLinearElement,
+    type VectorRectangleElement,
     type VectorShapeElement,
 } from '../../vector/types';
 
@@ -148,7 +150,7 @@ describe('hitTestDiamond', () => {
 });
 
 describe('hitTestElement', () => {
-    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image'): VectorElement => {
+    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'richtext' | 'image'): VectorElement => {
         const base = {
             ...DEFAULT_ELEMENT_PROPS,
             id: 'e',
@@ -157,13 +159,30 @@ describe('hitTestElement', () => {
             width: 100,
             height: 60,
             angle: 0,
-            seed: 1,
             index: 'a0',
-        };
-        if (type === 'text')
-            return { ...base, type, text: 'hi', fontSize: 20, fontFamily: 'Excalifont', textAlign: 'left' };
-        if (type === 'image') return { ...base, type, mediaName: 'x.png' };
-        return { ...base, type, roundness: 'sharp' };
+            fill: solidFill('transparent'),
+            fillStyle: 'solid',
+            corners: 'straight',
+        } satisfies Omit<VectorRectangleElement, 'type' | 'roughness' | 'seed'>;
+        if (type === 'richtext')
+            return {
+                ...base,
+                type,
+                html: '<p>hi</p>',
+                fontFamily: 'Excalifont',
+                fontSize: 20,
+                fontWeight: 'normal',
+                fontStyle: 'normal',
+                textDecoration: 'none',
+                textAlign: 'left',
+                verticalAlign: 'top',
+                color: '#1e1e1e',
+                letterSpacing: 0,
+                lineHeight: 1.2,
+                highlightColor: 'transparent',
+            };
+        if (type === 'image') return { ...base, type, mediaName: 'x.png', objectFit: 'contain' };
+        return { ...base, type, roughness: 1, seed: 1 };
     };
 
     test('dispatches shape geometry per type — corner hits a rectangle but not an ellipse', () => {
@@ -171,7 +190,7 @@ describe('hitTestElement', () => {
         expect(hitTestElement(make('rectangle'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('ellipse'), { x: 0, y: 0 }, 0)).toBe(false);
         expect(hitTestElement(make('diamond'), { x: 0, y: 0 }, 0)).toBe(false);
-        expect(hitTestElement(make('text'), { x: 0, y: 0 }, 0)).toBe(true);
+        expect(hitTestElement(make('richtext'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('image'), { x: 0, y: 0 }, 0)).toBe(true);
     });
 });
@@ -182,6 +201,9 @@ const linear = (over: Partial<VectorLinearElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'l',
     type: 'line',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,
@@ -416,8 +438,8 @@ describe('hitTestElement — linear', () => {
 
     test('a closed, filled line is hit inside the polygon; transparent is outline-only', () => {
         const points = '[[0,0],[100,0],[50,80],[0,0]]';
-        const filled = linear({ points, backgroundColor: '#ff0000', width: 100, height: 80 });
-        const open = linear({ points, backgroundColor: 'transparent', width: 100, height: 80 });
+        const filled = linear({ points, fill: solidFill('#ff0000'), width: 100, height: 80 });
+        const open = linear({ points, fill: solidFill('transparent'), width: 100, height: 80 });
         expect(hitTestElement(filled, { x: 50, y: 30 }, 1)).toBe(true);
         expect(hitTestElement(open, { x: 50, y: 30 }, 1)).toBe(false);
     });
@@ -608,16 +630,24 @@ describe('marqueeHits', () => {
 
 // --- Arrows: bindings, endpoints, heads, labels ---------------------------------------
 
-const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
+const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
     y: 0,
     width: 100,
     height: 60,
     angle: 0,
-    seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    roughness: 1,
+    seed: 1,
+    corners: 'straight',
+};
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...SHAPE_BASE,
     ...over,
 });
 
@@ -625,6 +655,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'ar',
     type: 'arrow',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,

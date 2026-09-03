@@ -14,6 +14,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'ar',
     type: 'arrow',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 0,

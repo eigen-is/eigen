@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { solidFill } from '../../vector/fill';
 // The shipped sharp implementation, for the radius-0 parity check.
 import { outlineIntersections, type Point } from '../../vector/geometry';
 import {
@@ -19,18 +20,26 @@ import {
     sharpDiamondOffset,
     sharpRectOffset,
 } from '../../vector/outline';
-import { DEFAULT_ELEMENT_PROPS, type VectorShapeElement } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, type VectorRectangleElement, type VectorShapeElement } from '../../vector/types';
 
-const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
+const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
     y: 0,
     width: 100,
     height: 60,
     angle: 0,
-    seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    roughness: 1,
+    seed: 1,
+    corners: 'straight',
+};
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...SHAPE_BASE,
     ...over,
 });
 

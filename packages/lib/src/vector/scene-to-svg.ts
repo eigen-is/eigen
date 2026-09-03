@@ -7,8 +7,10 @@ import { getStroke } from 'perfect-freehand';
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
 import { getFontFamily } from '../constants/fonts';
+import type { Fill } from '../types/background';
 import { headingIsHorizontal, vectorToHeading } from './elbow-heading';
 import { arrowRoute, sceneBounds } from './elbow-route';
+import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx, getVerticalOffset } from './font-metrics';
 import { orderByFractionalIndex } from './fractional-index';
 import type { Box, Point } from './geometry';
@@ -20,26 +22,21 @@ import {
     parsePoints,
     parsePressures,
 } from './geometry';
+import { cornerRadius, roundedDiamondPath, roundedRectPath, sharpDiamondOffset } from './outline';
 import {
     type Arrowhead,
     isLinearElement,
-    isTransparent,
     type VectorArrowElement,
     type VectorElement,
     type VectorImageElement,
     type VectorLinearElement,
+    type VectorRichTextElement,
     type VectorScene,
     type VectorShapeElement,
-    type VectorTextElement,
 } from './types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_PADDING = 10;
-
-// Radius policy — a renderer constant, never stored. Rectangles use Excalidraw's
-// ADAPTIVE radius (cap 32), diamonds the PROPORTIONAL radius (0.25).
-const PROPORTIONAL_RADIUS = 0.25;
-const ADAPTIVE_RADIUS = 32;
 
 // Resolve an image element's media reference to an <image> href (data: URI or URL). The
 // host (FE/BE) supplies it; unresolvable media renders nothing.
@@ -67,7 +64,7 @@ export function sceneToSvg(scene: VectorScene, opts: SceneToSvgOptions = {}): st
     const height = round(bounds.maxY - bounds.minY + padding * 2);
 
     let body = '';
-    if (!isTransparent(scene.meta.background)) {
+    if (!isTransparentFill({ type: 'solid', color: scene.meta.background })) {
         body += `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="${escapeXml(scene.meta.background)}"/>`;
     }
     for (const el of ordered) {
@@ -93,8 +90,8 @@ export function elementToSvg(
         case 'diamond':
         case 'ellipse':
             return renderShape(new RoughGenerator(), el);
-        case 'text':
-            return renderText(el);
+        case 'richtext':
+            return renderRichText(el);
         case 'image':
             return renderImage(el, opts);
         case 'freedraw':
@@ -120,7 +117,7 @@ function renderFreedraw(gen: RoughGenerator, el: VectorLinearElement): string {
     // Closed + filled: the roughjs fill of the raw polygon, layered under the stroke (Excalidraw's
     // order). points-on-curve simplify isn't vendored — the raw points are the fill polygon.
     let fill = '';
-    if (isClosedPath(points) && !isTransparent(el.backgroundColor)) {
+    if (isClosedPath(points) && !isTransparentFill(parseFill(el.fill))) {
         const options = linearRoughOptions(el, points);
         options.stroke = 'none';
         fill = drawableToSvg(gen.polygon(coords, options));
@@ -370,21 +367,36 @@ function med(a: number[], b: number[]): number[] {
     return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 }
 
-function renderText(el: VectorTextElement): string {
-    const lineHeightPx = getLineHeightPx(el.fontFamily, el.fontSize);
-    const verticalOffset = getVerticalOffset(el.fontFamily, el.fontSize, lineHeightPx);
-    const anchor = el.textAlign === 'center' ? 'middle' : el.textAlign === 'right' ? 'end' : 'start';
-    const hx = el.textAlign === 'center' ? el.width / 2 : el.textAlign === 'right' ? el.width : 0;
-    const fontFamily = escapeXml(getFontFamily(el.fontFamily));
-    const fill = escapeXml(el.strokeColor);
-    const lines = el.text.replace(/\r\n?/g, '\n').split('\n');
+// Rich text is HTML, so its SVG form is a foreignObject. The `html` is emitted verbatim: the reader has
+// already stripped XML-invalid control characters and capped the bytes, and every consumer that renders
+// into a live document (preview, export) runs DOMPurify at its own seam — sanitising twice is not the job
+// of the serializer.
+function renderRichText(el: VectorRichTextElement): string {
+    return `${groupOpen(el)}<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}"><div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(richTextStyle(el))}">${el.html}</div></foreignObject></g>`;
+}
 
-    let out = groupOpen(el);
-    for (let i = 0; i < lines.length; i++) {
-        const y = round(i * lineHeightPx + verticalOffset);
-        out += `<text x="${round(hx)}" y="${y}" font-family="${fontFamily}" font-size="${el.fontSize}px" fill="${fill}" text-anchor="${anchor}" style="white-space: pre;">${escapeXml(lines[i])}</text>`;
-    }
-    return `${out}</g>`;
+// The box's typography as CSS, the one body both this wrapper and (phase 2) the live layer renderer use.
+// `highlightColor` is deliberately absent: it is a text mark applied inside `html`, and painting it on the
+// box is what gave slides its full-width highlight bug.
+function richTextStyle(el: VectorRichTextElement): string {
+    const justify =
+        el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
+    return [
+        'display:flex',
+        'flex-direction:column',
+        `justify-content:${justify}`,
+        'width:100%',
+        'height:100%',
+        `font-family:${getFontFamily(el.fontFamily)}`,
+        `font-size:${el.fontSize}px`,
+        `font-weight:${el.fontWeight}`,
+        `font-style:${el.fontStyle}`,
+        `text-decoration:${el.textDecoration}`,
+        `text-align:${el.textAlign}`,
+        `color:${el.color}`,
+        `letter-spacing:${round(el.letterSpacing)}px`,
+        `line-height:${round(el.lineHeight)}`,
+    ].join(';');
 }
 
 function renderImage(el: VectorImageElement, opts: SceneToSvgOptions): string {
@@ -407,39 +419,24 @@ function groupOpen(el: VectorElement, extra = ''): string {
 }
 
 function shapeDrawable(gen: RoughGenerator, el: VectorShapeElement): Drawable {
-    const rounded = el.roundness === 'round' && (el.type === 'rectangle' || el.type === 'diamond');
+    if (el.type === 'ellipse') {
+        return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, roughOptions(el, false));
+    }
+    const box = { x: 0, y: 0, width: el.width, height: el.height };
+    const radius = cornerRadius(el, el.type);
+    const rounded = radius > 0;
     const options = roughOptions(el, rounded);
-
-    if (el.type === 'rectangle') {
-        if (!rounded) return gen.rectangle(0, 0, el.width, el.height, options);
-        const w = el.width;
-        const h = el.height;
-        const r = adaptiveCornerRadius(Math.min(w, h));
-        const d = `M ${r} 0 L ${w - r} 0 Q ${w} 0, ${w} ${r} L ${w} ${h - r} Q ${w} ${h}, ${w - r} ${h} L ${r} ${h} Q 0 ${h}, 0 ${h - r} L 0 ${r} Q 0 0, ${r} 0`;
-        return gen.path(d, options);
+    // Straight corners keep roughjs's own rectangle/polygon generators; a rounded one is the shared
+    // outline path, the same curve docking intersects.
+    if (!rounded) {
+        if (el.type === 'rectangle') return gen.rectangle(0, 0, el.width, el.height, options);
+        return gen.polygon(
+            sharpDiamondOffset(box, 0).map((p): [number, number] => [p.x, p.y]),
+            options,
+        );
     }
-
-    if (el.type === 'diamond') {
-        const p = diamondPoints(el.width, el.height);
-        if (!rounded) {
-            return gen.polygon(
-                [
-                    [p.topX, p.topY],
-                    [p.rightX, p.rightY],
-                    [p.bottomX, p.bottomY],
-                    [p.leftX, p.leftY],
-                ],
-                options,
-            );
-        }
-        const vr = Math.abs(p.topX - p.leftX) * PROPORTIONAL_RADIUS;
-        const hr = Math.abs(p.rightY - p.topY) * PROPORTIONAL_RADIUS;
-        const d = `M ${p.topX + vr} ${p.topY + hr} L ${p.rightX - vr} ${p.rightY - hr} C ${p.rightX} ${p.rightY}, ${p.rightX} ${p.rightY}, ${p.rightX - vr} ${p.rightY + hr} L ${p.bottomX + vr} ${p.bottomY - hr} C ${p.bottomX} ${p.bottomY}, ${p.bottomX} ${p.bottomY}, ${p.bottomX - vr} ${p.bottomY - hr} L ${p.leftX + vr} ${p.leftY + hr} C ${p.leftX} ${p.leftY}, ${p.leftX} ${p.leftY}, ${p.leftX + vr} ${p.leftY - hr} L ${p.topX - vr} ${p.topY + hr} C ${p.topX} ${p.topY}, ${p.topX} ${p.topY}, ${p.topX + vr} ${p.topY + hr}`;
-        return gen.path(d, options);
-    }
-
-    // ellipse — center at (w/2, h/2), full width/height as diameters, plus curveFitting:1
-    return gen.ellipse(el.width / 2, el.height / 2, el.width, el.height, options);
+    const d = el.type === 'rectangle' ? roundedRectPath(box, radius) : roundedDiamondPath(box, radius);
+    return gen.path(d, options);
 }
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
@@ -471,17 +468,25 @@ function baseRoughOptions(
 function roughOptions(el: VectorShapeElement, continuousPath: boolean): Options {
     const options = baseRoughOptions(el, continuousPath);
     options.fillStyle = el.fillStyle;
-    options.fill = isTransparent(el.backgroundColor) ? undefined : el.backgroundColor;
+    options.fill = fillPaint(parseFill(el.fill));
     if (el.type === 'ellipse') options.curveFitting = 1;
     return options;
+}
+
+// roughjs paints one colour. A gradient paints as its first stop until the renderer emits a real
+// <linearGradient>; transparent means no fill at all.
+function fillPaint(fill: Fill): string | undefined {
+    if (isTransparentFill(fill)) return undefined;
+    return fill.type === 'solid' ? fill.color : fill.from;
 }
 
 // A line/freedraw fills only when its path loops (Excalidraw's generateRoughOptions line arm).
 function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
     const options = baseRoughOptions(el, false);
-    if (isClosedPath(points) && !isTransparent(el.backgroundColor)) {
+    const fill = parseFill(el.fill);
+    if (isClosedPath(points) && !isTransparentFill(fill)) {
         options.fillStyle = el.fillStyle;
-        options.fill = el.backgroundColor;
+        options.fill = fillPaint(fill);
     }
     return options;
 }
@@ -491,13 +496,9 @@ function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
 function adjustRoughness(el: VectorShapeElement | VectorLinearElement | VectorArrowElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);
-    const roundable = el.type === 'rectangle' || el.type === 'diamond';
+    const rounded = (el.type === 'rectangle' || el.type === 'diamond') && el.corners !== 'straight';
     const linear = isLinearElement(el);
-    if (
-        (minSize >= 20 && maxSize >= 50) ||
-        (minSize >= 15 && el.roundness === 'round' && roundable) ||
-        (linear && maxSize >= 50)
-    ) {
+    if ((minSize >= 20 && maxSize >= 50) || (minSize >= 15 && rounded) || (linear && maxSize >= 50)) {
         return el.roughness;
     }
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);
@@ -507,27 +508,6 @@ function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: 
     if (strokeStyle === 'dashed') return [8, 8 + strokeWidth];
     if (strokeStyle === 'dotted') return [1.5, 6 + strokeWidth];
     return undefined;
-}
-
-function adaptiveCornerRadius(x: number): number {
-    const cutoff = ADAPTIVE_RADIUS / PROPORTIONAL_RADIUS;
-    return x <= cutoff ? x * PROPORTIONAL_RADIUS : ADAPTIVE_RADIUS;
-}
-
-// +1 avoids zero-length sides that make rough throw (Excalidraw's getDiamondPoints).
-function diamondPoints(width: number, height: number) {
-    const topX = Math.floor(width / 2) + 1;
-    const rightY = Math.floor(height / 2) + 1;
-    return {
-        topX,
-        topY: 0,
-        rightX: width,
-        rightY,
-        bottomX: topX,
-        bottomY: height,
-        leftX: 0,
-        leftY: rightY,
-    };
 }
 
 // Fill sets come before the outline in `sets`, so drawing in order layers fill under stroke.

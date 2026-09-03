@@ -9,31 +9,32 @@ import {
     type VectorArrowElement,
 } from '../../vector/types';
 
-const arrow = (over: Partial<VectorArrowElement>): VectorArrowElement =>
-    ({
-        ...DEFAULT_ELEMENT_PROPS,
-        id: 'a',
-        type: 'arrow',
-        x: 0,
-        y: 0,
-        width: 10,
-        height: 10,
-        angle: 0,
-        seed: 1,
-        index: 'a0',
-        roundness: 'sharp',
-        elbow: false,
-        fixedSegments: '',
-        startArrowhead: 'none',
-        endArrowhead: 'arrow',
-        startBinding: '',
-        endBinding: '',
-        text: '',
-        fontSize: 20,
-        fontFamily: 'Excalifont',
-        labelWidth: 0,
-        ...over,
-    }) as VectorArrowElement;
+const arrow = (over: Partial<VectorArrowElement>): VectorArrowElement => ({
+    ...DEFAULT_ELEMENT_PROPS,
+    id: 'a',
+    type: 'arrow',
+    x: 0,
+    y: 0,
+    width: 10,
+    height: 10,
+    angle: 0,
+    roughness: 1,
+    seed: 1,
+    index: 'a0',
+    roundness: 'sharp',
+    elbow: false,
+    fixedSegments: '',
+    startArrowhead: 'none',
+    endArrowhead: 'arrow',
+    startBinding: '',
+    endBinding: '',
+    text: '',
+    fontSize: 20,
+    fontFamily: 'Excalifont',
+    labelWidth: 0,
+    points: '[[0,0],[10,10]]',
+    ...over,
+});
 
 describe('arrowShapeFields', () => {
     test("'elbow' sets only the flag — roundness is the elbow's CORNER style (a separate Edges row), never touched", () => {

@@ -1,24 +1,34 @@
 import { describe, expect, test } from 'bun:test';
 import { elbowRoute } from '../../vector/elbow-route';
+import { solidFill } from '../../vector/fill';
 import type { Bounds, Point } from '../../vector/geometry';
 import {
     DEFAULT_ELEMENT_PROPS,
     serializeBinding,
     type VectorArrowElement,
     type VectorElement,
+    type VectorRectangleElement,
     type VectorShapeElement,
 } from '../../vector/types';
 
-const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
+const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...DEFAULT_ELEMENT_PROPS,
     x: 0,
     y: 0,
     width: 100,
     height: 100,
     angle: 0,
-    seed: 1,
     index: 'a0',
-    roundness: 'sharp',
+    fill: solidFill('transparent'),
+    fillStyle: 'solid',
+    roughness: 1,
+    seed: 1,
+    corners: 'straight',
+};
+
+const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
+    ...SHAPE_BASE,
     ...over,
 });
 
@@ -26,6 +36,7 @@ const arrowEl = (over: Partial<VectorArrowElement> & { points: string }): Vector
     ...DEFAULT_ELEMENT_PROPS,
     id: 'ar',
     type: 'arrow',
+    roughness: 1,
     x: 0,
     y: 0,
     width: 100,

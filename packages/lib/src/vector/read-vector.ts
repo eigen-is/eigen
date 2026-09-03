@@ -4,27 +4,40 @@
 
 import type * as Y from 'yjs';
 import { validateElbowPoints } from './elbow-pins';
+import { parseBackgroundFill, parseFill, serializeBackgroundFill, serializeFill } from './fill';
 import { orderByFractionalIndex, syncInvalidIndices } from './fractional-index';
+import { FRAME_HEIGHT, FRAME_WIDTH, type VectorFrame } from './frames';
 import { parsePoints, parsePressures, serializePoints, serializePressures } from './geometry';
 import {
     ARROWHEADS,
+    CORNERS,
     DEFAULT_ARROW_PROPS,
+    DEFAULT_CORNERS,
     DEFAULT_ELEMENT_PROPS,
+    DEFAULT_FONT_FAMILY,
+    DEFAULT_FONT_SIZE,
     DEFAULT_LINEAR_ROUNDNESS,
+    DEFAULT_OBJECT_FIT,
     DEFAULT_SCENE_META,
-    DEFAULT_SHAPE_ROUNDNESS,
-    DEFAULT_TEXT_PROPS,
+    DEFAULT_SKETCH_PROPS,
     FILL_STYLES,
     type FixedSegment,
+    FONT_STYLES,
+    FONT_WEIGHTS,
     isBindable,
     isVectorElementType,
+    OBJECT_FITS,
     parseBinding,
     parseFixedSegments,
+    parseIdList,
     ROUNDNESS,
     STROKE_STYLES,
     serializeBinding,
     serializeFixedSegments,
+    serializeIdList,
     TEXT_ALIGNS,
+    TEXT_DECORATIONS,
+    VERTICAL_ALIGNS,
     type VectorElement,
     type VectorElementBase,
     type VectorScene,
@@ -42,8 +55,10 @@ const MAX_FONT_SIZE = 400;
 
 export function readVectorFromDoc(doc: Y.Doc): VectorScene {
     const elementsMap = doc.getMap('elements');
+    const framesMap = doc.getMap('frames');
     const metaMap = doc.getMap('meta');
 
+    const frames = readFrames(framesMap);
     const elements: VectorElement[] = [];
     for (const value of elementsMap.values()) {
         const el = readElement(value);
@@ -58,7 +73,27 @@ export function readVectorFromDoc(doc: Y.Doc): VectorScene {
 
     const background = color(metaMap.get('background'), DEFAULT_SCENE_META.background);
     const gridSize = num(metaMap.get('gridSize'), DEFAULT_SCENE_META.gridSize);
-    return { elements: ordered, meta: { background, gridSize } };
+    return { elements: ordered, frames, meta: { background, gridSize } };
+}
+
+// Frames are ordered by fractional index like elements, and heal the same way. Every frame is
+// 16:9, so the size is the constant, never a stored field.
+function readFrames(framesMap: Y.Map<unknown>): VectorFrame[] {
+    const frames: VectorFrame[] = [];
+    for (const value of framesMap.values()) {
+        if (!isYMapLike(value)) continue;
+        const id = value.get('id');
+        if (typeof id !== 'string' || id === '') continue;
+        frames.push({
+            id,
+            index: str(value.get('index'), ''),
+            name: cleanStr(value.get('name'), ''),
+            width: FRAME_WIDTH,
+            height: FRAME_HEIGHT,
+            background: serializeBackgroundFill(parseBackgroundFill(str(value.get('background'), ''))),
+        });
+    }
+    return syncInvalidIndices(orderByFractionalIndex(frames));
 }
 
 function readElement(value: unknown): VectorElement | null {
@@ -76,38 +111,65 @@ function readElement(value: unknown): VectorElement | null {
         width: size(value.get('width')),
         height: size(value.get('height')),
         angle: num(value.get('angle'), 0),
-        strokeColor: color(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
-        backgroundColor: color(value.get('backgroundColor'), DEFAULT_ELEMENT_PROPS.backgroundColor),
-        fillStyle: oneOf(value.get('fillStyle'), FILL_STYLES, DEFAULT_ELEMENT_PROPS.fillStyle),
-        strokeWidth: num(value.get('strokeWidth'), DEFAULT_ELEMENT_PROPS.strokeWidth),
-        strokeStyle: oneOf(value.get('strokeStyle'), STROKE_STYLES, DEFAULT_ELEMENT_PROPS.strokeStyle),
-        roughness: num(value.get('roughness'), DEFAULT_ELEMENT_PROPS.roughness),
-        seed: num(value.get('seed'), 0),
+        index: str(value.get('index'), ''),
+        frameId: str(value.get('frameId'), ''),
+        commentCardIds: serializeIdList(parseIdList(str(value.get('commentCardIds'), ''))),
         opacity: Math.min(100, Math.max(0, num(value.get('opacity'), DEFAULT_ELEMENT_PROPS.opacity))),
         locked: bool(value.get('locked'), DEFAULT_ELEMENT_PROPS.locked),
-        index: str(value.get('index'), ''),
+        strokeColor: color(value.get('strokeColor'), DEFAULT_ELEMENT_PROPS.strokeColor),
+        strokeWidth: num(value.get('strokeWidth'), DEFAULT_ELEMENT_PROPS.strokeWidth),
+        strokeStyle: oneOf(value.get('strokeStyle'), STROKE_STYLES, DEFAULT_ELEMENT_PROPS.strokeStyle),
+    };
+
+    // roughjs tuning rides the six sketched kinds, never image or rich text.
+    const sketch = {
+        roughness: num(value.get('roughness'), DEFAULT_SKETCH_PROPS.roughness),
+        seed: num(value.get('seed'), DEFAULT_SKETCH_PROPS.seed),
+    };
+    const paint = {
+        fill: fill(value.get('fill')),
+        fillStyle: oneOf(value.get('fillStyle'), FILL_STYLES, 'solid'),
     };
 
     switch (base.type) {
         case 'rectangle':
         case 'diamond':
-        case 'ellipse':
             return {
                 ...base,
+                ...sketch,
+                ...paint,
                 type: base.type,
-                roundness: oneOf(value.get('roundness'), ROUNDNESS, DEFAULT_SHAPE_ROUNDNESS),
+                corners: oneOf(value.get('corners'), CORNERS, DEFAULT_CORNERS),
             };
-        case 'text':
+        case 'ellipse':
+            return { ...base, ...sketch, ...paint, type: 'ellipse' };
+        case 'richtext':
             return {
                 ...base,
-                type: 'text',
-                text: cleanStr(value.get('text'), DEFAULT_TEXT_PROPS.text),
+                ...paint,
+                type: 'richtext',
+                html: capBytes(cleanStr(value.get('html'), ''), MAX_HTML_BYTES),
+                corners: oneOf(value.get('corners'), CORNERS, DEFAULT_CORNERS),
+                fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_FONT_FAMILY),
                 fontSize: fontSize(value.get('fontSize')),
-                fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
-                textAlign: oneOf(value.get('textAlign'), TEXT_ALIGNS, DEFAULT_TEXT_PROPS.textAlign),
+                fontWeight: oneOf(value.get('fontWeight'), FONT_WEIGHTS, 'normal'),
+                fontStyle: oneOf(value.get('fontStyle'), FONT_STYLES, 'normal'),
+                textDecoration: oneOf(value.get('textDecoration'), TEXT_DECORATIONS, 'none'),
+                textAlign: oneOf(value.get('textAlign'), TEXT_ALIGNS, 'left'),
+                verticalAlign: oneOf(value.get('verticalAlign'), VERTICAL_ALIGNS, 'top'),
+                color: color(value.get('color'), DEFAULT_ELEMENT_PROPS.strokeColor),
+                highlightColor: color(value.get('highlightColor'), 'transparent'),
+                letterSpacing: num(value.get('letterSpacing'), 0),
+                lineHeight: Math.min(10, Math.max(0.5, num(value.get('lineHeight'), 1.2))),
             };
         case 'image':
-            return { ...base, type: 'image', mediaName: str(value.get('mediaName'), '') };
+            return {
+                ...base,
+                type: 'image',
+                mediaName: str(value.get('mediaName'), ''),
+                corners: oneOf(value.get('corners'), CORNERS, DEFAULT_CORNERS),
+                objectFit: oneOf(value.get('objectFit'), OBJECT_FITS, DEFAULT_OBJECT_FIT),
+            };
         case 'freedraw':
         case 'line': {
             // A linear element without points is meaningless — skip it like an unknown type. Coords are
@@ -125,6 +187,8 @@ function readElement(value: unknown): VectorElement | null {
             const useReal = !simulate && pressures.length > 0 && pressures.length === clamped.length;
             return {
                 ...base,
+                ...sketch,
+                ...paint,
                 type: base.type,
                 roundness: oneOf(value.get('roundness'), ROUNDNESS, DEFAULT_LINEAR_ROUNDNESS),
                 points: serializePoints(clamped),
@@ -143,6 +207,7 @@ function readElement(value: unknown): VectorElement | null {
             const elbow = bool(value.get('elbow'), DEFAULT_ARROW_PROPS.elbow);
             return {
                 ...base,
+                ...sketch,
                 type: 'arrow',
                 // An elbow arrow's route is derived in the unrotated local frame, so it pins angle 0 (the
                 // panel hides rotation for it) — the reader forces it regardless of what a peer stored.
@@ -158,9 +223,9 @@ function readElement(value: unknown): VectorElement | null {
                 endArrowhead: oneOf(value.get('endArrowhead'), ARROWHEADS, DEFAULT_ARROW_PROPS.endArrowhead),
                 startBinding: binding(value.get('startBinding')),
                 endBinding: binding(value.get('endBinding')),
-                text: cleanStr(value.get('text'), DEFAULT_TEXT_PROPS.text),
+                text: cleanStr(value.get('text'), DEFAULT_ARROW_PROPS.text),
                 fontSize: fontSize(value.get('fontSize')),
-                fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_TEXT_PROPS.fontFamily),
+                fontFamily: cleanStr(value.get('fontFamily'), DEFAULT_ARROW_PROPS.fontFamily),
                 // Non-negative and capped at MAX_COORD like the spatial fields — a hostile 1e9 would
                 // otherwise blow the shared viewBox (elementBounds unions the label rect) for every peer.
                 labelWidth: Math.min(
@@ -247,7 +312,7 @@ function size(v: unknown): number {
 }
 
 function fontSize(v: unknown): number {
-    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, num(v, DEFAULT_TEXT_PROPS.fontSize)));
+    return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, num(v, DEFAULT_FONT_SIZE)));
 }
 
 function clampCoord(n: number): number {
@@ -274,6 +339,25 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 function color(v: unknown, fallback: string): string {
     return typeof v === 'string' && (v === 'transparent' || HEX_COLOR.test(v)) ? v : fallback;
+}
+
+// A stored fill is re-serialized through the codec, so a malformed peer write materializes as the
+// transparent solid fill instead of reaching roughjs as a paint-server string.
+function fill(v: unknown): string {
+    return serializeFill(parseFill(str(v, '')));
+}
+
+// Rich text is the first byte-capped string field: one pasted document must not be able to make every
+// peer's read, render and export unbounded.
+const MAX_HTML_BYTES = 64 * 1024;
+
+function capBytes(value: string, maxBytes: number): string {
+    const bytes = new TextEncoder().encode(value);
+    if (bytes.length <= maxBytes) return value;
+    let end = maxBytes;
+    // step back off a continuation byte so the truncation lands on a code-point boundary
+    while (end > 0 && (bytes[end] & 0b1100_0000) === 0b1000_0000) end--;
+    return new TextDecoder().decode(bytes.subarray(0, end));
 }
 
 function bool(v: unknown, fallback: boolean): boolean {

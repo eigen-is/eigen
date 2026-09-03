@@ -5,11 +5,11 @@
 
 import { moveEndpoints, renormalize } from './elbow-pins';
 import { elbowRoutingContext } from './elbow-route';
+import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
 import {
     type Arrowhead,
     isBindable,
-    isTransparent,
     parseBinding,
     serializeBinding,
     type VectorArrowElement,
@@ -330,7 +330,7 @@ export function hitTestElement(element: VectorElement, point: Point, threshold: 
         case 'diamond':
             return hitTestDiamond(element, point);
         case 'rectangle':
-        case 'text':
+        case 'richtext':
         case 'image':
             return hitTestBox(element, point);
         case 'freedraw':
@@ -364,7 +364,7 @@ function hitTestLinear(element: VectorLinearElement, point: Point, threshold: nu
     const inkHalf =
         element.type === 'freedraw' ? (element.strokeWidth * FREEDRAW_SIZE_FACTOR) / 2 : element.strokeWidth / 2;
     if (distanceToPolyline(points, p) <= Math.max(threshold * LINEAR_HIT_SCREEN_FACTOR, inkHalf + 0.1)) return true;
-    return isClosedPath(points) && !isTransparent(element.backgroundColor) && pointInPolygon(p, points);
+    return isClosedPath(points) && !isTransparentFill(parseFill(element.fill)) && pointInPolygon(p, points);
 }
 
 // An arrow is hit on its polyline (like a line) OR inside its label rect — both measured in the arrow's

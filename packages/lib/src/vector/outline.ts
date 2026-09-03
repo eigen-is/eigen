@@ -8,6 +8,7 @@
 // gap-rounded corners there (≤ gap·(√2−1) ≈ 2.5px at gap 6). That discontinuity is deliberate.
 
 import type { Point } from './geometry';
+import type { Corners } from './types';
 
 export type OutlineBox = { x: number; y: number; width: number; height: number };
 export type Seg = { a: Point; b: Point };
@@ -110,7 +111,7 @@ export function outlineHits(shape: OutlineShape, a: Point, b: Point): Point[] {
 // today's renderer hard-codes); `round` is the shape's INRADIUS, the largest radius that keeps the
 // silhouette. Kinds pass their own `kind`; nothing outside this module switches on an element type.
 export function cornerRadius(
-    el: { width: number; height: number; corners: 'straight' | 'curved' | 'round' },
+    el: { width: number; height: number; corners: Corners },
     kind: 'rectangle' | 'diamond' = 'rectangle',
 ): number {
     const box = { x: 0, y: 0, width: el.width, height: el.height };
