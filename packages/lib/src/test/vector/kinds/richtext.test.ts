@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { serializeFill, solidFill } from '../../../vector/fill';
-import { ELEMENT_KINDS } from '../../../vector/kinds';
+import { ELEMENT_KINDS, richTextCssText } from '../../../vector/kinds';
 import type { VectorRichTextElement } from '../../../vector/types';
 import { richtext } from '../element-factories';
 
@@ -47,6 +47,11 @@ describe('rich text box paint', () => {
     test('box-sizing is emitted once when both padding and a border are present', () => {
         const style = styleOf(richtext({ id: 'rt1', padding: 12, strokeColor: '#111', strokeWidth: 1 }));
         expect(style.match(/box-sizing:border-box/g)?.length).toBe(1);
+    });
+
+    test('richTextCssText is exactly the style the renderer emits', () => {
+        const el = richtext({ id: 'rt1', fill: solidFill('#ffcc00'), padding: 8 });
+        expect(styleOf(el)).toBe(richTextCssText(el));
     });
 
     test('the box still spills its text and keeps its typography', () => {

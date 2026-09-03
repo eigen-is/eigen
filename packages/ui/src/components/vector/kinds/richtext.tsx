@@ -1,13 +1,16 @@
-// Rich text's UI entry. The typography rows, ported from slides' TextProperties: one home for "how does
-// text look", so the deck shell and the drawing app cannot drift. The box background is the generic Fill
-// row, its border the generic Stroke row — this section is the text itself.
+// Rich text's UI entry: the in-place editor the canvas mounts inside the element's own layer, and the
+// typography rows ported from slides' TextProperties — one home for "how does text look", so the deck
+// shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
+// generic Stroke row; this section is the text itself.
 
 import {
     DEFAULT_FONT_FAMILY,
     ELEMENT_KINDS,
+    richTextCssText,
     VECTOR_STYLE_DEFAULTS,
     type VectorRichTextElement,
 } from '@workspace/lib/vector';
+import { LightEditor } from '@workspace/ui/components/editor/light-editor';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
     AlignmentPicker,
@@ -29,7 +32,52 @@ import {
     Strikethrough,
     Underline,
 } from 'lucide-react';
-import type { KindPanelSectionProps } from './index';
+import { useEffect, useRef } from 'react';
+import type { InPlaceEditorProps, KindPanelSectionProps } from './index';
+
+// The box the user types in IS the box the renderer paints: same CSS string, applied through
+// setAttribute because React's `style` prop takes an object and an object form of the builder would be a
+// second source of truth for typography and paint. Every keystroke writes `html` straight through, so
+// the session coalesces into one undo step and peers see it live.
+export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEditorProps) {
+    const boxRef = useRef<HTMLDivElement>(null);
+    // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it
+    // mid-session. React never manages this attribute, so nothing fights over it.
+    const css = element.type === 'richtext' ? richTextCssText(element) : '';
+    useEffect(() => {
+        boxRef.current?.setAttribute('style', css);
+    }, [css]);
+
+    if (element.type !== 'richtext') return null;
+    return (
+        <div
+            ref={boxRef}
+            className="pointer-events-auto"
+            // The canvas hit-tests on the container; a pointer inside the editor is the editor's, and a
+            // double-click here must not re-open a session over the open one.
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+                // The text-edit layer of the layered Escape stack (CANVAS.md): claimed here, so the
+                // canvas' own document listener never sees it while a session is open.
+                if (e.key === 'Escape') {
+                    e.stopPropagation();
+                    onExit();
+                }
+            }}
+        >
+            <LightEditor
+                content={element.html}
+                onChange={(html) => onChange({ html })}
+                toolbar="floating"
+                proseStyle={false}
+                className="min-h-0 break-words"
+                containerClassName="relative flex flex-col w-full"
+                onReady={({ editor }) => editor.chain().focus('end').run()}
+            />
+        </div>
+    );
+}
 
 // What a reset restores: the values CREATING a box would have given it, never a literal typed here.
 const RICHTEXT_DEFAULTS = ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS);

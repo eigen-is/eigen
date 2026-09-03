@@ -1,10 +1,10 @@
-// Shape drag-create geometry — the box math and the live preview element the canvas draws while a
-// rectangle/diamond/ellipse is being dragged out. Pulled out of canvas-editor.tsx (the canvas only
+// Box drag-create geometry — the box math and the live preview element the canvas draws while a
+// rectangle/diamond/ellipse/rich-text box is being dragged out. Pulled out of canvas-editor.tsx (the canvas only
 // dispatches) alongside the other gesture modules (line.ts, freedraw.ts, eraser.ts).
 
 import {
     type Box,
-    DEFAULT_ELEMENT_PROPS,
+    baseDefaultsFor,
     ELEMENT_KINDS,
     VECTOR_STYLE_DEFAULTS,
     type VectorElement,
@@ -12,7 +12,7 @@ import {
 
 const CREATING_ID = '__creating__';
 
-export type CreatingState = { type: 'rectangle' | 'diamond' | 'ellipse'; seed: number; box: Box };
+export type CreatingState = { type: 'rectangle' | 'diamond' | 'ellipse' | 'richtext'; seed: number; box: Box };
 
 // Axis-aligned box from two corner points (also the marquee rect); direction is dropped.
 export function normalizeRect(x0: number, y0: number, x1: number, y1: number): Box {
@@ -41,7 +41,9 @@ export function creatingElement(c: CreatingState): VectorElement {
         width: c.box.width,
         height: c.box.height,
         angle: 0,
-        ...DEFAULT_ELEMENT_PROPS,
+        // The same base paint the committed element gets (addElement reads the same helper), so a kind
+        // whose stroke is a border — rich text — previews unframed instead of popping on release.
+        ...baseDefaultsFor(c.type),
         index: 'a0',
     };
     // The preview takes its style from the same kind defaults the committed element will (addElement),
@@ -52,6 +54,18 @@ export function creatingElement(c: CreatingState): VectorElement {
     }
     if (c.type === 'diamond') {
         return { ...box, ...ELEMENT_KINDS.diamond.defaults(VECTOR_STYLE_DEFAULTS), type: 'diamond', seed: c.seed };
+    }
+    if (c.type === 'richtext') {
+        // An empty text box paints nothing, so the drag needs an outline to size against. Preview-only:
+        // the committed box keeps the kind's own (transparent) border.
+        return {
+            ...box,
+            ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
+            type: 'richtext',
+            strokeColor: VECTOR_STYLE_DEFAULTS.strokeColor,
+            strokeWidth: 1,
+            strokeStyle: 'dashed',
+        };
     }
     return { ...box, ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS), type: 'rectangle', seed: c.seed };
 }

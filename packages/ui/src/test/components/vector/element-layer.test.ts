@@ -34,6 +34,13 @@ describe('sameLayerProps', () => {
         expect(sameLayerProps({ el, resolveMedia: () => null }, { el, resolveMedia: () => null })).toBe(false);
     });
 
+    test('an in-place editor mounted in the layer always re-renders', () => {
+        const el = rect();
+        // children is a fresh React node every parent render; the layer hosting an editor must follow it.
+        expect(sameLayerProps({ el }, { el, children: 'editor' })).toBe(false);
+        expect(sameLayerProps({ el, children: 'a' }, { el, children: 'b' })).toBe(false);
+    });
+
     test('a new scene map re-renders only when the derived route actually changed', () => {
         const el = rect();
         const a = new Map([[el.id, el]]);

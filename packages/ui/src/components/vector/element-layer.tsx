@@ -22,6 +22,9 @@ type ElementLayerProps = {
     resolveMedia?: MediaResolver;
     // The whole scene map, so an elbow arrow can resolve its bound shapes and derive its route.
     byId?: Map<string, VectorElement>;
+    // An in-place editor for this element. While present the layer takes pointer events and the kind's
+    // own body is not drawn — the editor IS what the user sees.
+    children?: React.ReactNode;
 };
 
 // Pan/zoom and drag re-render without touching elements, so identity settles those in one compare;
@@ -49,6 +52,8 @@ function samePoints(a: Point[] | undefined, b: Point[] | undefined): boolean {
 }
 
 export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps): boolean {
+    // A hosted editor is a fresh node every parent render; never memoize it away.
+    if (prev.children !== next.children) return false;
     if (prev.resolveMedia !== next.resolveMedia) return false;
     if (!sameElement(prev.el, next.el)) return false;
     // Same element fields AND the same scene map → identical output (the pan/zoom/drag common case).
@@ -58,7 +63,7 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     return samePoints(arrowRoute(prev.el, prev.byId), arrowRoute(next.el, next.byId));
 }
 
-export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId }: ElementLayerProps) {
+export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId, children }: ElementLayerProps) {
     const layer = elementLayer(el, { resolveMedia, route: arrowRoute(el, byId) });
     if (!layer) return null;
     const { box, content } = layer;
@@ -70,6 +75,13 @@ export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId 
         transform: box.angle === 0 ? undefined : `rotate(${box.angle}deg)`,
         opacity: layer.opacity === 100 ? undefined : layer.opacity / 100,
     };
+    if (children) {
+        return (
+            <div data-element-id={el.id} className="pointer-events-auto absolute" style={style}>
+                {children}
+            </div>
+        );
+    }
     // Rich text IS the layer's own body (one styled div); everything else is an SVG fragment in an
     // overflow-visible viewport, because roughjs overshoots its box and an elbow route spills past it.
     if (!('svg' in content)) {

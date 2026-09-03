@@ -20,7 +20,7 @@ import {
     useUploadFile,
     useZombieMediaSweep,
 } from '@workspace/lib/drive';
-import { textToParagraphHtml } from '@workspace/lib/html';
+import { stripTagsServer, textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import { useIsCoarsePointer } from '@workspace/lib/media';
 import type { EigenClipboardData, EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
@@ -77,6 +77,7 @@ import { hitTestTopmost, marqueeSelect } from './hooks/use-selection';
 import { useSpaceHeld } from './hooks/use-space-held';
 import type { VectorTool } from './hooks/use-tool';
 import { useViewport } from './hooks/use-viewport';
+import { ELEMENT_KIND_UI } from './kinds';
 import { arrowLabelEditing, type EditingState } from './text-editing';
 import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
@@ -270,6 +271,10 @@ export function CanvasEditor({
     // cursor signals draggability with `move` (the suite convention — slides/docs). Item E.
     const [hoveringSelectable, setHoveringSelectable] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
+    // In-place rich-text editing. Separate from `editing` (the arrow-label TextOverlay session) because
+    // the two never coexist and each owns a different commit contract: a label commits once on close,
+    // a rich-text box writes on every change.
+    const [richTextEditId, setRichTextEditId] = useState<string | null>(null);
     // The object context menu (right-click) — the singleton surface; item is the right-clicked
     // element id, its ops act on the selection below.
     const objectContextMenu = useContextMenu<string>();
@@ -287,6 +292,10 @@ export function CanvasEditor({
     // open — the freeze safety-net below and commitEditing both consult it.
     const editingRef = useRef<EditingState | null>(null);
     editingRef.current = editing;
+    const richTextEditRef = useRef<string | null>(null);
+    richTextEditRef.current = richTextEditId;
+    // "Some text surface owns the keyboard and the pointer" — every gate that used to read `editing`.
+    const textEditing = editing !== null || richTextEditId !== null;
 
     const ordered = useMemo(() => orderByFractionalIndex(elements), [elements]);
 
@@ -373,11 +382,12 @@ export function CanvasEditor({
         return out;
     };
 
-    // Every canvas hotkey (V/R/D/O/T, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
-    // off while a text overlay is open — the textarea's native undo/typing owns keys in-session; we
-    // don't rely on the hotkey lib's input-target detection alone (UX-RULING, commit-trigger).
+    // Every canvas hotkey (V/R/D/O/T, Q, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
+    // off while ANY text surface is open — the textarea's native undo/typing owns keys in-session, and
+    // the lib's ignoreInputs default does not cover a ProseMirror contenteditable, so a tool letter
+    // would otherwise be swallowed as a keystroke inside the in-place editor.
     useCanvasKeyboard({
-        enabled: canEdit && !editing,
+        enabled: canEdit && !textEditing,
         elements,
         selectedIds,
         tool,
@@ -394,12 +404,12 @@ export function CanvasEditor({
     // Freeze the viewport while an overlay is open (same latch as gestures): a pan/zoom would
     // desync the overlay from the element it sits over.
     useEffect(() => {
-        if (!editing) return;
+        if (!textEditing) return;
         frozenRef.current = true;
         return () => {
             frozenRef.current = false;
         };
-    }, [editing, frozenRef]);
+    }, [textEditing, frozenRef]);
 
     // Safety net: any pointerup ends the freeze, clears the transform-start latch, and drops
     // leftover previews — ObjectTransform's Escape-cancel and no-move paths fire no onCommit, so
@@ -415,7 +425,7 @@ export function CanvasEditor({
             // own pointerup and every intra-textarea caret click must NOT unfreeze it (else wheel
             // zoom, a re-opened session, or a spurious move gesture leak in mid-edit). The editing
             // effect below clears the freeze when the session ends.
-            if (editingRef.current) return;
+            if (editingRef.current || richTextEditRef.current) return;
             frozenRef.current = false;
             transformStartedRef.current = false;
             setPreviews((p) => (Object.keys(p).length ? {} : p));
@@ -423,7 +433,9 @@ export function CanvasEditor({
             setSnapLines((l) => (l.length ? [] : l));
         };
         const onBlur = () => {
-            if (editingRef.current) return; // the textarea's own onBlur commits the session
+            // The textarea's own onBlur commits a label session; a rich-text session is ended by its
+            // own click-away/Escape, and neither may lose the viewport freeze here.
+            if (editingRef.current || richTextEditRef.current) return;
             finishRef.current();
             touchResetRef.current();
             clear();
@@ -615,6 +627,33 @@ export function CanvasEditor({
         [updateElement, undoManager, setSelectedIds, setTool, healLabelWidth],
     );
 
+    // Open an in-place rich-text session. Seal first, so the session's writes are their own undo step.
+    const openRichText = (id: string) => {
+        undoManager?.stopCapturing();
+        setSelectedIds([id]);
+        setRichTextEditId(id);
+    };
+
+    // Close it: an empty box is deleted (a rich-text box with no text is invisible chrome), otherwise the
+    // trailing seal closes the session's coalesced writes. Reads the LIVE element — the session wrote
+    // through updateElement, so React state may be one tick behind.
+    const closeRichText = useCallback(() => {
+        const id = richTextEditRef.current;
+        richTextEditRef.current = null;
+        setRichTextEditId(null);
+        if (!id) return;
+        const el = elementsRef.current.find((e) => e.id === id);
+        if (el?.type === 'richtext' && stripTagsServer(el.html).trim() === '') {
+            // Seal FIRST: without it, the delete lands inside Y.UndoManager's 500ms captureTimeout and
+            // merges into the session's last keystroke, so whether it is its own undo step would depend
+            // on how fast the user clicked away.
+            undoManager?.stopCapturing();
+            deleteElements([id]);
+            setSelectedIds([]);
+        }
+        undoManager?.stopCapturing();
+    }, [deleteElements, setSelectedIds, undoManager]);
+
     // A paste carries no coordinates (unlike a drop), so it anchors on the visible viewport center.
     const viewportCenterScene = useCallback(() => {
         const rect = containerRef.current?.getBoundingClientRect();
@@ -742,7 +781,7 @@ export function CanvasEditor({
 
     // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
     // this is normally present) and is closed while a text overlay owns paste + the pointer.
-    const imagesEnabled = canEdit && !!mediaFolderId && !editing;
+    const imagesEnabled = canEdit && !!mediaFolderId && !textEditing;
     // The drop hook stays ALWAYS enabled so dragover/drop are always preventDefault'd — a disabled
     // hook skips that, letting the BROWSER navigate to a file dropped while read-only or mid-text-edit
     // (destroying the editor + uncommitted text). The insertion gate lives in the callback instead;
@@ -1040,14 +1079,28 @@ export function CanvasEditor({
     // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
     useEffect(() => {
         const onCopyEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canEdit || editingRef.current || selectedIds.length === 0) return;
+            if (
+                isTypingTarget() ||
+                !canEdit ||
+                editingRef.current ||
+                richTextEditRef.current ||
+                selectedIds.length === 0
+            )
+                return;
             const data = buildData();
             if (!data.items.length) return;
             e.preventDefault();
             writeEigenClipboard(e, data, plainText());
         };
         const onCutEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canEdit || editingRef.current || selectedIds.length === 0) return;
+            if (
+                isTypingTarget() ||
+                !canEdit ||
+                editingRef.current ||
+                richTextEditRef.current ||
+                selectedIds.length === 0
+            )
+                return;
             const data = buildData();
             if (!data.items.length) return;
             e.preventDefault();
@@ -1056,7 +1109,7 @@ export function CanvasEditor({
             deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
         };
         const onPasteEvent = (e: ClipboardEvent) => {
-            if (isTypingTarget() || !canEdit || editingRef.current) return;
+            if (isTypingTarget() || !canEdit || editingRef.current || richTextEditRef.current) return;
             const cd = e.clipboardData;
             if (!cd) return;
             const paste = classifyPaste(cd);
@@ -1112,14 +1165,15 @@ export function CanvasEditor({
     ]);
 
     // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). frozenRef: no new session over a live gesture. Only an arrow label opens; a
-    // rich-text box has no in-place editor.
+    // the tap-tap). frozenRef: no new session over a live gesture. An arrow opens the label overlay;
+    // any kind with an in-place editor opens that instead, inside its own layer.
     const openTextAtClient = (clientX: number, clientY: number) => {
-        if (!canEdit || tool !== 'select' || editing || frozenRef.current) return;
+        if (!canEdit || tool !== 'select' || textEditing || frozenRef.current) return;
         const p = clientToScene(clientX, clientY);
         const hit = hitTestTopmost(ordered, p, zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl?.type === 'arrow') openEditArrowLabel(hitEl);
+        else if (hitEl && ELEMENT_KIND_UI[hitEl.type].InPlaceEditor) openRichText(hitEl.id);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
@@ -1129,7 +1183,7 @@ export function CanvasEditor({
     // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
     const onContextMenu = (e: React.MouseEvent) => {
         // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
-        if (!canEdit || editing || frozenRef.current) return;
+        if (!canEdit || textEditing || frozenRef.current) return;
         // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
         // mid-draft — the draft keeps floating and the next left click keeps placing points.
         if (drawing.multiPointDraft) {
@@ -1211,6 +1265,10 @@ export function CanvasEditor({
         containerRef.current?.focus();
         // Touch gestures get first dibs (a second finger must intercept even while frozen).
         if (touch.onPointerDown(e)) return;
+        // A pointerdown that reaches the CONTAINER is outside the editor (the editor stops its own), so
+        // it ends the session; the session's viewport freeze is lifted by its effect on the next render,
+        // so this click only closes — the following one selects or draws.
+        if (richTextEditRef.current) closeRichText();
         if (frozenRef.current) return; // a gesture is already active (defensive)
         if (panMode || e.button === 1) {
             e.preventDefault();
@@ -1229,23 +1287,12 @@ export function CanvasEditor({
         // the event for those tools and the canvas does nothing more.
         if (drawing.onPointerDown(e, p)) return;
 
-        // Rich-text tool: a click places an EMPTY box at the point and selects it (no drag-create, no
-        // capture). There is no in-place editor, so nothing opens over it.
-        if (tool === 'richtext') {
-            e.preventDefault();
-            undoManager?.stopCapturing();
-            const id = addElement({ type: 'richtext', x: p.x, y: p.y, angle: 0, ...NEW_RICHTEXT_SIZE });
-            undoManager?.stopCapturing();
-            if (id) setSelectedIds([id]);
-            if (!toolLocked) setTool('select');
-            return;
-        }
-
         containerRef.current?.setPointerCapture(e.pointerId);
 
-        // Shape tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already
-        // returned via the tools hook, the richtext tool just above.)
-        if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse') {
+        // Box tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already returned via
+        // the tools hook.) Rich text drags out like a shape; a click under the threshold places the
+        // default box instead of discarding it — see finishGesture.
+        if (tool === 'rectangle' || tool === 'diamond' || tool === 'ellipse' || tool === 'richtext') {
             frozenRef.current = true;
             undoManager?.stopCapturing();
             setSelectedIds([]);
@@ -1328,7 +1375,7 @@ export function CanvasEditor({
         // the tools hook, which consumes the move.
         if (drawing.onPointerMove(e)) return;
         // Hover affordance (idle select): one hitTestTopmost on this same move path (no separate scanner) flips the `move` cursor; a gesture never pays for it.
-        if (!g && tool === 'select' && !editing) {
+        if (!g && tool === 'select' && !textEditing) {
             const over = hitTestTopmost(ordered, scene, zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
         }
@@ -1425,20 +1472,27 @@ export function CanvasEditor({
             const c = creating;
             setCreating(null);
             if (!toolLocked) setTool('select');
-            if (c && (c.box.width >= CREATE_MIN_SIZE || c.box.height >= CREATE_MIN_SIZE)) {
-                const id = addElement({
-                    type: c.type,
-                    x: c.box.x,
-                    y: c.box.y,
-                    width: Math.max(MIN_ELEMENT_SIZE, c.box.width),
-                    height: Math.max(MIN_ELEMENT_SIZE, c.box.height),
-                    seed: c.seed,
-                });
-                if (id) setSelectedIds([id]);
-                // Trailing seal: a nudge inside the 500ms capture window must not merge into
-                // this gesture's undo step (nudges deliberately carry no leading stopCapturing).
-                undoManager?.stopCapturing();
-            }
+            if (!c) return;
+            // A drag under the threshold is a CLICK: a shape is discarded, a rich-text box is placed at
+            // its default size, because a click is how you start typing.
+            const clicked = c.box.width < CREATE_MIN_SIZE && c.box.height < CREATE_MIN_SIZE;
+            if (clicked && c.type !== 'richtext') return;
+            const box = clicked ? { ...c.box, ...NEW_RICHTEXT_SIZE } : c.box;
+            const id = addElement({
+                type: c.type,
+                x: box.x,
+                y: box.y,
+                width: Math.max(MIN_ELEMENT_SIZE, box.width),
+                height: Math.max(MIN_ELEMENT_SIZE, box.height),
+                seed: c.seed,
+            });
+            if (id) setSelectedIds([id]);
+            // Trailing seal: a nudge inside the 500ms capture window must not merge into
+            // this gesture's undo step (nudges deliberately carry no leading stopCapturing).
+            undoManager?.stopCapturing();
+            // A kind with an in-place editor opens it on creation — an empty box you cannot type into is
+            // not a text tool.
+            if (id && ELEMENT_KIND_UI[c.type].InPlaceEditor) openRichText(id);
             return;
         }
         if (g.kind === 'move') {
@@ -1507,7 +1561,7 @@ export function CanvasEditor({
         ((single.type === 'arrow' && single.elbow) || parsePoints(single.points).length <= 2);
     // Chrome is suppressed during a create/marquee drag (grip flicker), a vertex drag (drawing.hiddenId —
     // else a stale box lingers over the reshaping point draft), or a text overlay; a move keeps it.
-    const showChrome = !creating && !marquee && !editing && !drawing.active && !drawing.hiddenId;
+    const showChrome = !creating && !marquee && !textEditing && !drawing.active && !drawing.hiddenId;
     const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
 
     const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
@@ -1554,6 +1608,25 @@ export function CanvasEditor({
                     // Only an arrow label opens the overlay, so the element under edit keeps its
                     // shaft/heads and hides just the label the textarea draws (render text='').
                     if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
+                    // The box being edited draws nothing of its own: the in-place editor inside its layer
+                    // IS the rendering, painted with the same CSS the renderer would have emitted.
+                    if (el.id === richTextEditId) {
+                        const Editor = ELEMENT_KIND_UI[el.type].InPlaceEditor;
+                        return Editor ? (
+                            <ElementLayer
+                                key={el.id}
+                                el={renderEl(el)}
+                                resolveMedia={resolveMediaUrl}
+                                byId={renderById}
+                            >
+                                <Editor
+                                    element={el}
+                                    onChange={(fields) => updateElement(el.id, fields)}
+                                    onExit={closeRichText}
+                                />
+                            </ElementLayer>
+                        ) : null;
+                    }
                     return node(renderEl(el));
                 })}
                 {creating && node(creatingElement(creating))}

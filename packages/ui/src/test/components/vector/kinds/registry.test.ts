@@ -47,8 +47,7 @@ describe('ELEMENT_KIND_UI', () => {
         }
     });
 
-    // Un-todo in Task 8, which fills the slot.
-    test.todo('only rich text has an in-place editor', () => {
+    test('only rich text has an in-place editor', () => {
         for (const type of vectorElementTypes()) {
             expect(Boolean(ELEMENT_KIND_UI[type].InPlaceEditor)).toBe(type === 'richtext');
         }

@@ -20,7 +20,7 @@ import {
 import type { ComponentType } from 'react';
 import type { VectorElementPatch } from '../hooks/use-canvas-doc';
 import { ImagePanelSection } from './image';
-import { RichTextPanelSection } from './richtext';
+import { RichTextInPlaceEditor, RichTextPanelSection } from './richtext';
 
 // Mounted inside the element's own layer while it is being edited on the canvas. `onChange` writes
 // straight through (unsealed, so keystrokes coalesce into one undo step); `onExit` ends the session.
@@ -58,6 +58,7 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
         icon: Type,
         label: 'Text',
         shortcut: { letter: 'T', digit: '8' },
+        InPlaceEditor: RichTextInPlaceEditor,
         PanelSection: RichTextPanelSection,
     },
     image: { icon: ImageIcon, label: 'Image', PanelSection: ImagePanelSection },

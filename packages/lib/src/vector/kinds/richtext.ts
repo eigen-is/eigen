@@ -87,16 +87,16 @@ export const richTextKind = defineKind<VectorRichTextElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
-    render: (el) => ({ html: el.html, style: richTextStyle(el) }),
+    render: (el) => ({ html: el.html, style: richTextCssText(el) }),
     // The search collector and ⌘F both read plain text; stripTagsServer is the React/DOM-free stripper
     // (core/html.ts), so this works in the API Worker as well as the browser.
     searchText: (el) => stripTagsServer(el.html).trim(),
 });
 
-// The box's paint + typography as CSS, the one body the foreignObject wrapper and the live layer
-// renderer share. There is no highlight colour: a marker highlight is a text mark applied inside `html`,
+// The box's paint + typography as CSS, the one body the foreignObject wrapper, the live layer renderer
+// and the in-place editor share. There is no highlight colour: a marker highlight is a text mark applied inside `html`,
 // and painting one on the box is what gave slides its full-width highlight bug.
-function richTextStyle(el: VectorRichTextElement): string {
+export function richTextCssText(el: VectorRichTextElement): string {
     const justify =
         el.verticalAlign === 'center' ? 'center' : el.verticalAlign === 'bottom' ? 'flex-end' : 'flex-start';
     const style = [
