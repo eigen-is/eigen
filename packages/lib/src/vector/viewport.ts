@@ -41,3 +41,25 @@ export function frameSnapExtras(frame: Extent): { extraV: number[]; extraH: numb
         extraH: [0, frame.height / 2, frame.height],
     };
 }
+// The scene layer's CSS transform and the overlay group's SVG transform: ONE mapping in two syntaxes,
+// applied with transform-origin 0 0 at both callsites, so the two surfaces stay registered at any zoom.
+export function sceneTransform(v: CanvasViewport): string {
+    return `translate(${v.scrollX * v.zoom}px, ${v.scrollY * v.zoom}px) scale(${v.zoom})`;
+}
+
+export function groupTransform(v: CanvasViewport): string {
+    return `translate(${v.scrollX * v.zoom} ${v.scrollY * v.zoom}) scale(${v.zoom})`;
+}
+
+// Screen-space chrome (selection ring, comment flags, peer cursors) is laid out at the viewport React
+// last rendered; a live gesture runs ahead of that. This is the correction that carries that layout
+// onto `live` — scene positions and scene-sized boxes land exactly right, screen-sized details (a
+// border, a grip) ride the scale until the gesture commits. '' when the two agree: the resting case.
+export function chromeTransform(rendered: CanvasViewport, live: CanvasViewport): string {
+    if (live.zoom === rendered.zoom && live.scrollX === rendered.scrollX && live.scrollY === rendered.scrollY)
+        return '';
+    const scale = live.zoom / rendered.zoom;
+    const dx = (live.scrollX - rendered.scrollX) * live.zoom;
+    const dy = (live.scrollY - rendered.scrollY) * live.zoom;
+    return `translate(${dx}px, ${dy}px) scale(${scale})`;
+}
