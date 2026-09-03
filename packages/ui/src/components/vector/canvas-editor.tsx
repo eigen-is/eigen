@@ -958,7 +958,6 @@ export function CanvasEditor({
                         angle,
                         strokeColor: meta.strokeColor,
                         fill: meta.fill,
-                        fillStyle: meta.fillStyle,
                         strokeStyle: meta.strokeStyle,
                         strokeWidth: meta.strokeWidth,
                         roughness: meta.roughness,

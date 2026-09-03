@@ -162,7 +162,6 @@ describe('hitTestElement', () => {
             angle: 0,
             index: 'a0',
             fill: solidFill('transparent'),
-            fillStyle: 'solid',
             corners: 'straight',
         } satisfies Omit<VectorRectangleElement, 'type' | 'roughness' | 'seed'>;
         if (type === 'richtext')
@@ -203,7 +202,6 @@ const linear = (over: Partial<VectorLinearElement> & { points: string }): Vector
     id: 'l',
     type: 'line',
     fill: solidFill('transparent'),
-    fillStyle: 'solid',
     roughness: 1,
     x: 0,
     y: 0,
@@ -641,7 +639,6 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     angle: 0,
     index: 'a0',
     fill: solidFill('transparent'),
-    fillStyle: 'solid',
     roughness: 1,
     seed: 1,
     corners: 'straight',

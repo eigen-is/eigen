@@ -9,15 +9,14 @@
 
 import { type Bounds, boxCenter, getElementBounds, type Point, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
-import type { Corners, FillStyle, VectorElement, VectorElementBase } from '../types';
+import type { Corners, VectorElement, VectorElementBase } from '../types';
 
 // What a host's new elements look like: vector draws rough and hatched in Excalifont, slides flat and
 // solid in Inter. One table per app, not a per-kind fork.
 export type StyleDefaults = {
     strokeColor: string;
     strokeWidth: number;
-    fill: string; // a serialized Fill
-    fillStyle: FillStyle;
+    fill: string; // a serialized Fill — paint AND hatch style
     roughness: number;
     corners: Corners;
     fontFamily: string;
@@ -30,7 +29,11 @@ export type StyleDefaults = {
 // One entry per question something actually asks — a capability nothing reads is a second list waiting
 // to disagree with the code that does the work.
 export type Capabilities = {
+    // Whether the kind paints a Fill at all. GEOMETRY-DEPENDENT on the linear kinds (an open stroke has
+    // nothing to fill), so read it through capabilitiesOf(el), never off this table.
     fill: boolean;
+    // Whether the kind's renderer honours the hatch style HALF of that fill. Rich text paints its box
+    // background as CSS and an arrow's fill is its arrowheads', so neither hatches.
     fillStyle: boolean;
     // Also "is this kind drawn by roughjs at all": the sketch paint rows follow it.
     roughness: boolean;
@@ -88,6 +91,9 @@ export type KindSpec<T extends VectorElement> = {
     // stroke as a BORDER, and a fresh box paints none until the user picks a colour (slides' borderWidth
     // 0, same intent). Omit where the base table already answers.
     baseDefaults?: BasePaintDefaults;
+    // Capabilities that depend on the ELEMENT rather than the kind, layered over the static table.
+    // Omit where every element of the kind answers the same.
+    capabilitiesOf?(el: T): Partial<Capabilities>;
     read(src: FieldSource, base: VectorElementBase): T | null;
     // Omit for the rotated-box default (only a routed arrow spills past its box).
     bounds?(el: T, route?: Point[]): Bounds;
@@ -109,6 +115,9 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     type: T['type'];
     fields: readonly string[];
     capabilities: Capabilities;
+    // The capabilities of ONE element — the static table with the kind's per-element overrides applied.
+    // capabilitiesOf(el) in kinds/index.ts is what consumers call.
+    capabilitiesOf(el: VectorElement): Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
     baseDefaults: BasePaintDefaults;
     read(src: FieldSource, base: VectorElementBase): T | null;
@@ -159,6 +168,10 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         type: spec.type,
         fields: spec.fields,
         capabilities: spec.capabilities,
+        capabilitiesOf: (el) =>
+            spec.is(el) && spec.capabilitiesOf
+                ? { ...spec.capabilities, ...spec.capabilitiesOf(el) }
+                : spec.capabilities,
         defaults: spec.defaults,
         baseDefaults: spec.baseDefaults ?? {},
         read: spec.read,

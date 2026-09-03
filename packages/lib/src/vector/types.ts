@@ -17,6 +17,8 @@ export type VectorElementType =
 
 // The runtime value lists are the single source; the union types derive from them, so a grown
 // list and its type can never drift. read-vector's validators consume the same arrays.
+// The hatch style is HALF OF THE FILL, not a field of its own: it rides the stored `fill` JSON beside
+// the paint (types/background.ts derives `Fill` from the pair), so a kind that fills carries one field.
 export const FILL_STYLES = ['hachure', 'cross-hatch', 'solid', 'zigzag'] as const;
 export const STROKE_STYLES = ['solid', 'dashed', 'dotted'] as const;
 export const ROUNDNESS = ['sharp', 'round'] as const;
@@ -72,8 +74,9 @@ export type VectorElementBase = {
     strokeStyle: StrokeStyle;
 };
 
-// A serialized Fill (see fill.ts): a JSON scalar, '' or malformed ⇒ the transparent solid fill.
-type Fillable = { fill: string; fillStyle: FillStyle };
+// A serialized Fill — paint + hatch style (see fill.ts): a JSON scalar, '' or malformed ⇒ the
+// transparent solid fill.
+type Fillable = { fill: string };
 
 // Everything roughjs draws by hand. Image and rich text are DOM boxes, so they carry neither (a stored
 // field nothing reads is drift — the same rule that keeps `corners` off the ellipse).
@@ -96,26 +99,26 @@ export type VectorImageElement = VectorElementBase & {
 };
 
 // The one text kind: TipTap HTML in a box, styled by the typography fields slides' TextObject carried.
-// `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background.
-// `fill` without `fillStyle`: a hachured text box is not a thing, so it carries the colour/gradient
-// half of Fillable only.
-export type VectorRichTextElement = VectorElementBase & {
-    type: 'richtext';
-    fill: string;
-    html: string;
-    corners: Corners;
-    fontFamily: string;
-    fontSize: number;
-    fontWeight: FontWeight;
-    fontStyle: FontStyle;
-    textDecoration: TextDecoration;
-    textAlign: TextAlign;
-    verticalAlign: VerticalAlign;
-    color: string;
-    letterSpacing: number;
-    lineHeight: number;
-    padding: number; // px inset between the box edge and the text; the box keeps its stored size
-};
+// `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background. A hachured text
+// box is not a thing, so its renderer paints the fill's paint half and ignores the hatch style
+// (capabilities.fillStyle: false) — the stored field is the same one every fillable kind carries.
+export type VectorRichTextElement = VectorElementBase &
+    Fillable & {
+        type: 'richtext';
+        html: string;
+        corners: Corners;
+        fontFamily: string;
+        fontSize: number;
+        fontWeight: FontWeight;
+        fontStyle: FontStyle;
+        textDecoration: TextDecoration;
+        textAlign: TextAlign;
+        verticalAlign: VerticalAlign;
+        color: string;
+        letterSpacing: number;
+        lineHeight: number;
+        padding: number; // px inset between the box edge and the text; the box keeps its stored size
+    };
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
 // to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).

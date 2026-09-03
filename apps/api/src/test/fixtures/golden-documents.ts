@@ -386,7 +386,7 @@ export const GOLDEN_VECTOR_LABEL = 'Bound label';
 export function buildGoldenVectorScene(): VectorScene {
     const base = { ...DEFAULT_ELEMENT_PROPS, angle: 0 };
     // The fill codec's transparent solid — what every element painted before `fill` existed.
-    const filled = { fill: solidFill('transparent'), fillStyle: 'solid' } as const;
+    const filled = { fill: solidFill('transparent') } as const;
     const elements: VectorElement[] = [
         {
             ...base,

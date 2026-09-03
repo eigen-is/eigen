@@ -13,12 +13,15 @@ import {
 import { richtext, scene, shape } from './element-factories';
 
 // Freedraw/line/arrow rows carry the paint + roughjs fields the shared defaults no longer hold.
-const LINEAR_PAINT = { fill: solidFill('transparent'), fillStyle: 'solid', roughness: 1 } as const;
+const LINEAR_PAINT = { fill: solidFill('transparent'), roughness: 1 } as const;
 
 // The golden is pinned on the flat style (sharp corners, no hachure) so a change to the vector app's
 // style table can never rewrite it; everything else comes from the shared fixtures. Spread-only so the
 // ellipse case doesn't trip the excess-property check on `corners`.
-const GOLDEN_STYLE: Pick<VectorRectangleElement, 'corners' | 'fillStyle'> = { corners: 'straight', fillStyle: 'solid' };
+const GOLDEN_STYLE: Pick<VectorRectangleElement, 'corners' | 'fill'> = {
+    corners: 'straight',
+    fill: solidFill('transparent'),
+};
 
 const goldenShape = (over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorElement =>
     shape({ ...GOLDEN_STYLE, ...over });
@@ -339,8 +342,7 @@ export function buildGoldenScene(): VectorScene {
             y: 0,
             seed: 21,
             index: 'aI',
-            fill: '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45}',
-            fillStyle: 'solid',
+            fill: '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45,"style":"solid"}',
         }),
         goldenShape({
             id: 'gr2',
@@ -349,8 +351,7 @@ export function buildGoldenScene(): VectorScene {
             y: 80,
             seed: 22,
             index: 'aJ',
-            fill: '{"type":"gradient","from":"#ffd43b","to":"#1e1e1e","angle":180}',
-            fillStyle: 'hachure',
+            fill: '{"type":"gradient","from":"#ffd43b","to":"#1e1e1e","angle":180,"style":"hachure"}',
         }),
     ]);
 }
@@ -431,7 +432,7 @@ describe('sceneToSvg', () => {
 
     test('renders a fill (fillSketch/fillPath) using the background color', () => {
         const svg = sceneToSvg(
-            scene([goldenShape({ id: 's', type: 'rectangle', fill: solidFill('#ff0000'), fillStyle: 'hachure' })]),
+            scene([goldenShape({ id: 's', type: 'rectangle', fill: solidFill('#ff0000', 'hachure') })]),
         );
         expect(svg).toContain('stroke="#ff0000"');
     });
@@ -446,8 +447,7 @@ describe('sceneToSvg', () => {
                         id: 's',
                         type,
                         strokeColor: 'transparent',
-                        fill: solidFill('#ff0000'),
-                        fillStyle: 'solid',
+                        fill: solidFill('#ff0000', 'solid'),
                     }),
                 ]),
             );
@@ -635,16 +635,17 @@ describe('linear preserveVertices at cartoon roughness', () => {
 // renders nothing. Solid fills reference it from `fill=`, sketch fills (hachure/cross-hatch/zigzag are
 // stroked paths) from `stroke=`.
 describe('gradient fills', () => {
-    const gradient = '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45}';
+    const gradient = '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45,"style":"solid"}';
+    const hachured = '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45,"style":"hachure"}';
 
     test('a solid-styled gradient shape emits one element-scoped linearGradient and points fill at it', () => {
-        const svg = elementToSvg(goldenShape({ id: 'g1', type: 'rectangle', fill: gradient, fillStyle: 'solid' }));
+        const svg = elementToSvg(goldenShape({ id: 'g1', type: 'rectangle', fill: gradient }));
         expect(svg).toContain('<linearGradient id="fill-g1"');
         expect(svg).toContain('fill="url(#fill-g1)"');
     });
 
     test('a hachure gradient paints the sketch STROKES with the same gradient', () => {
-        const svg = elementToSvg(goldenShape({ id: 'g2', type: 'rectangle', fill: gradient, fillStyle: 'hachure' }));
+        const svg = elementToSvg(goldenShape({ id: 'g2', type: 'rectangle', fill: hachured }));
         expect(svg).toContain('<linearGradient id="fill-g2"');
         expect(svg).toContain('stroke="url(#fill-g2)"');
     });

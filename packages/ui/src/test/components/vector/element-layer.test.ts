@@ -8,7 +8,6 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     id: 'r1',
     type: 'rectangle',
     fill: solidFill('#dddddd'),
-    fillStyle: 'solid',
     x: 0,
     y: 0,
     width: 10,

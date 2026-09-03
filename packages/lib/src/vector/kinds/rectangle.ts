@@ -1,6 +1,6 @@
 import { boxCenter, hitTestBox, type Point, rotatePoint } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
-import { CORNERS, DEFAULT_CORNERS, DEFAULT_FILL_STYLE, FILL_STYLES, type VectorRectangleElement } from '../types';
+import { CORNERS, DEFAULT_CORNERS, type VectorRectangleElement } from '../types';
 import { defineKind } from './kind';
 import { fillField, oneOf, roughness, seed } from './read-fields';
 import { renderRoughShape } from './render-utils';
@@ -12,7 +12,7 @@ const DIAGONAL_SHRINK = 15;
 export const rectangleKind = defineKind<VectorRectangleElement>({
     type: 'rectangle',
     is: (el): el is VectorRectangleElement => el.type === 'rectangle',
-    fields: ['fill', 'fillStyle', 'corners', 'roughness', 'seed'],
+    fields: ['fill', 'corners', 'roughness', 'seed'],
     capabilities: {
         fill: true,
         fillStyle: true,
@@ -28,7 +28,6 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
     },
     defaults: (style) => ({
         fill: style.fill,
-        fillStyle: style.fillStyle,
         corners: style.corners,
         roughness: style.roughness,
         seed: 0, // the writer replaces it with a random one; 0 keeps `defaults` pure
@@ -37,7 +36,6 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
         ...base,
         type: 'rectangle',
         fill: fillField(src.get('fill')),
-        fillStyle: oneOf(src.get('fillStyle'), FILL_STYLES, DEFAULT_FILL_STYLE),
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
         roughness: roughness(src.get('roughness')),
         seed: seed(src.get('seed')),

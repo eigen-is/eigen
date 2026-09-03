@@ -8,6 +8,7 @@
 // section, `roughness` the Sketch section, `corners` the Shape section. What a capability cannot express
 // — rich text's typography, the image's fit — comes from the kind's own PanelSection in ELEMENT_KIND_UI.
 
+import type { Fill, FillPaint } from '@workspace/lib/types/background';
 import {
     ARROW_SHAPES,
     type ArrangeOp,
@@ -18,11 +19,10 @@ import {
     type Box,
     baseDefaultsFor,
     type Corners,
+    capabilitiesOf,
     computeArrange,
     DEFAULT_FONT_FAMILY,
-    ELEMENT_KINDS,
     type FillStyle,
-    isClosedPath,
     isLinearElement,
     isTransparentColor,
     isTransparentFill,
@@ -41,6 +41,8 @@ import {
     type VectorElement,
     type VectorLinearElement,
     type VectorMeta,
+    withFillPaint,
+    withFillStyle,
 } from '@workspace/lib/vector';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
@@ -151,23 +153,25 @@ export function CanvasPropertiesPanel({
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
     const has = selectedElements.length > 0;
-    const caps = (el: VectorElement) => ELEMENT_KINDS[el.type].capabilities;
     const all = (pick: (el: VectorElement) => boolean) => has && selectedElements.every(pick);
-    // Fill needs a fillable kind, and an OPEN linear element has nothing to fill.
-    const showFill = all((el) => caps(el).fill && (!isLinearElement(el) || isClosedPath(parsePoints(el.points))));
-    const showStroke = all((el) => caps(el).stroke);
+    // Every row gates on capabilitiesOf(el) — per ELEMENT, never off the kind's static table, because an
+    // open freedraw paints no fill and so offers none.
+    const showFill = all((el) => capabilitiesOf(el).fill);
+    const showStroke = all((el) => capabilitiesOf(el).stroke);
     // A border can be switched off only where the element still has a body without it; a line or an
     // arrow IS its stroke, so its colour row offers no None swatch.
-    const strokeOptional = all((el) => caps(el).strokeOptional);
+    const strokeOptional = all((el) => capabilitiesOf(el).strokeOptional);
     // What the Stroke row's reset restores: the default CREATING this kind would have given, so an
     // image's border resets to none instead of to the shared ink colour. A mixed selection follows the
     // first element's kind.
     const strokeReset = has ? baseDefaultsFor(selectedElements[0].type).strokeColor : '';
-    const showFillStyle = all((el) => caps(el).fillStyle);
-    const showSketch = all((el) => caps(el).roughness);
+    // The hatch row sits INSIDE the Fill block — it is the other half of the same stored fill — and shows
+    // only for the kinds whose renderer honours it.
+    const showFillStyle = showFill && all((el) => capabilitiesOf(el).fillStyle);
+    const showSketch = all((el) => capabilitiesOf(el).roughness);
     // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
     // an arrow carries (round curve vs sharp polyline), never freedraw.
-    const showCorners = all((el) => caps(el).corners);
+    const showCorners = all((el) => capabilitiesOf(el).corners);
     // One kind selected ⇒ its own rows; a mixed selection shows only the generic ones.
     const soleKind =
         has && selectedElements.every((el) => el.type === selectedElements[0].type) ? selectedElements[0].type : null;
@@ -256,6 +260,19 @@ export function CanvasPropertiesPanel({
         undoManager?.stopCapturing();
     };
 
+    // The two halves of the stored fill are edited separately, so each write preserves the other ON EACH
+    // ELEMENT: re-painting a mixed-hatch selection must not collapse it to one hatch. One undo step.
+    const applyFill = (next: (fill: Fill) => Fill) => {
+        if (!selectedIds.length) return;
+        undoManager?.stopCapturing();
+        updateElements(
+            selectedElements
+                .filter((el) => 'fill' in el)
+                .map((el) => ({ id: el.id, fields: { fill: serializeFill(next(parseFill(el.fill))) } })),
+        );
+        undoManager?.stopCapturing();
+    };
+
     const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, updateElements, undoManager);
 
     // Align / distribute / match-size over the shared arrange math. One transact, one undo step.
@@ -295,13 +312,13 @@ export function CanvasPropertiesPanel({
     const parsedFill = typeof fillRaw === 'string' ? parseFill(fillRaw) : null;
     const fillValue = parsedFill && !isTransparentFill(parsedFill) ? parsedFill : null;
     const fillStyle = getMergedValue(selectedElements, (el) =>
-        ELEMENT_KINDS[el.type].capabilities.fillStyle && 'fillStyle' in el ? el.fillStyle : undefined,
+        capabilitiesOf(el).fillStyle && 'fill' in el ? parseFill(el.fill).style : undefined,
     );
     const roughness = getMergedValue(selectedElements, (el) =>
-        ELEMENT_KINDS[el.type].capabilities.roughness && 'roughness' in el ? el.roughness : undefined,
+        capabilitiesOf(el).roughness && 'roughness' in el ? el.roughness : undefined,
     );
     const corners = getMergedValue(selectedElements, (el) =>
-        ELEMENT_KINDS[el.type].capabilities.corners && 'corners' in el ? el.corners : undefined,
+        capabilitiesOf(el).corners && 'corners' in el ? el.corners : undefined,
     );
     const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
@@ -370,19 +387,28 @@ export function CanvasPropertiesPanel({
             )}
 
             {showFill && (
-                /* BackgroundFillBlock IS the section (solid or two-stop linear gradient); the hachure
-                   row lives in Sketch below, where the rest of the roughjs paint is. */
+                /* BackgroundFillBlock IS the section: the paint (solid or two-stop linear gradient) plus,
+                   for the kinds roughjs hatches, the hatch style — both halves of the one stored fill. */
                 <BackgroundFillBlock
                     title="Fill"
                     value={fillValue}
                     mixed={isMixed(fillRaw)}
-                    onChange={(next) =>
-                        applyToAll({
-                            fill: serializeFill(next === null || next.type === 'image' ? TRANSPARENT_FILL : next),
-                        })
-                    }
+                    onChange={(next) => {
+                        const paint: FillPaint = next === null || next.type === 'image' ? TRANSPARENT_FILL : next;
+                        applyFill((fill) => withFillPaint(fill, paint));
+                    }}
                     allowedTypes={['solid', 'gradient']}
-                />
+                >
+                    {showFillStyle && (
+                        <PropertyRow label="Style">
+                            <MergedSelect
+                                value={fillStyle}
+                                onChange={(v) => applyFill((fill) => withFillStyle(fill, v))}
+                                options={FILL_STYLE_OPTIONS}
+                            />
+                        </PropertyRow>
+                    )}
+                </BackgroundFillBlock>
             )}
 
             {showStroke && (
@@ -454,16 +480,6 @@ export function CanvasPropertiesPanel({
                                 />
                             </PropertyRow>
                         )
-                    )}
-                    {/* The hachure/zigzag pattern is roughjs paint, so it sits with the rest of it. */}
-                    {showFillStyle && (
-                        <PropertyRow label="Fill">
-                            <MergedSelect
-                                value={fillStyle}
-                                onChange={(v) => applyToAll({ fillStyle: v })}
-                                options={FILL_STYLE_OPTIONS}
-                            />
-                        </PropertyRow>
                     )}
                 </PropertySection>
             )}

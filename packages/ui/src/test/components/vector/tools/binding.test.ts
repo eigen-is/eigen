@@ -34,7 +34,6 @@ const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>
     // A filled shape binds anywhere inside (a transparent one binds only in the outline band), so a
     // dropped-inside endpoint reaches it.
     fill: solidFill('#dddddd'),
-    fillStyle: 'solid',
     x: 0,
     y: 0,
     width: 200,
