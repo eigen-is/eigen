@@ -1,5 +1,6 @@
 export { CanvasEditor, type CanvasImageInsert } from './canvas-editor';
 export { CanvasPropertiesPanel } from './canvas-properties-panel';
+export { FrameThumbnail, FrameView } from './frame-view';
 export { useActiveFrame } from './hooks/use-active-frame';
 export { useCanvasComments } from './hooks/use-canvas-comments';
 export type { NewVectorElement, VectorElementPatch } from './hooks/use-canvas-doc';
