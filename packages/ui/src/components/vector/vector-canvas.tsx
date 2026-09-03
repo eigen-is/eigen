@@ -1286,8 +1286,9 @@ export function VectorCanvas({
         // Touch gestures get first dibs (a second finger must intercept even while frozen).
         if (touch.onPointerDown(e)) return;
         if (frozenRef.current) return; // a gesture is already active (defensive)
-        // Pan: space-drag or middle mouse.
-        if (spaceHeld || e.button === 1) {
+        // Pan: space-drag, middle mouse, or any primary drag when the scene is view-only (one-finger
+        // pan on a phone).
+        if (spaceHeld || e.button === 1 || (!canWrite && e.button === 0)) {
             e.preventDefault();
             containerRef.current?.setPointerCapture(e.pointerId);
             frozenRef.current = true;
@@ -1593,7 +1594,8 @@ export function VectorCanvas({
     const showChrome = !creating && !marquee && !editing && !drawing.active && !drawing.hiddenId;
     const showTransform = showChrome && canWrite && single !== null && !singleLinear2pt;
 
-    const cursor = pointerCursor({ panning, spaceHeld, tool, hoveringSelectable });
+    // View-only: every drag pans, so the surface rests on the grab cursor.
+    const cursor = pointerCursor({ panning, spaceHeld: spaceHeld || !canWrite, tool, hoveringSelectable });
     const background = isTransparent(meta.background) ? undefined : meta.background;
 
     // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is

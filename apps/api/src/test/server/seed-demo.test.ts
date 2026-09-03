@@ -6,7 +6,13 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import { orderByFractionalIndex, parseBinding, readVectorFromDoc } from '@workspace/lib/vector';
+import {
+    elementBounds,
+    orderByFractionalIndex,
+    parseBinding,
+    readVectorFromDoc,
+    unionBounds,
+} from '@workspace/lib/vector';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
@@ -331,6 +337,11 @@ describe('seed-demo', () => {
             const vectorDataDb = findContainerDataDb(metadataDb, mountsDir, mountId!, vectorName);
             const scene = readVectorFromDoc(await loadCollabDoc(vectorDataDb));
             expect(scene.elements.length).toBeGreaterThanOrEqual(60);
+
+            // The editor opens on the scene origin, so the drawing is stored centred on it.
+            const bounds = scene.elements.map((el) => elementBounds(el)).reduce(unionBounds);
+            expect(Math.abs(bounds.minX + bounds.maxX)).toBeLessThanOrEqual(1);
+            expect(Math.abs(bounds.minY + bounds.maxY)).toBeLessThanOrEqual(1);
 
             // Z-order: the fence outline sits under everything (a click inside it lands on what it
             // encloses), and the wind-cover ring sits just under the stage it rings.

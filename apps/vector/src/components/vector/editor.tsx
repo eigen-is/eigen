@@ -45,12 +45,15 @@ const EMPTY_ANCHOR_TEXTS: Map<string, string> = new Map();
 export function VectorEditor({
     ownerId,
     path,
-    canWrite,
+    canWrite: hasWriteAccess,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
 }: VectorEditorProps) {
+    const { isMobile } = useLayout();
+    // Phones are view-only for now (no touch editing); tablets sit above the breakpoint and keep the editor.
+    const canWrite = hasWriteAccess && !isMobile;
     const doc = useVectorDoc(ownerId, path.mountId, path.id);
     const { tool, setTool, toolLocked, setToolLocked } = useTool();
     const { selectedIds, setSelectedIds, toggle } = useSelection();
@@ -58,7 +61,6 @@ export function VectorEditor({
     // canvas. Selection is threaded from here (the editor owns selectedIds).
     const { user } = useAuth();
     const publishCursor = useVectorPresence(doc.provider, user, selectedIds);
-    const { isMobile } = useLayout();
 
     const selectedElements = useMemo(
         () => doc.elements.filter((el) => selectedIds.includes(el.id)),

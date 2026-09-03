@@ -13,6 +13,7 @@ import {
     DEFAULT_SHAPE_ROUNDNESS,
     ELEMENT_FIELDS,
     elbowBindPoint,
+    elementBounds,
     followBindings,
     generateNKeysBetween,
     getLineHeightPx,
@@ -20,6 +21,7 @@ import {
     type Point,
     serializeBinding,
     shapeSideMidpoints,
+    unionBounds,
     type VectorArrowElement,
     type VectorElement,
     type VectorImageElement,
@@ -105,6 +107,16 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     for (const [i, el] of ordered.entries()) {
         el.index = keys[i];
         el.seed = Math.floor(seed() * 2 ** 31);
+    }
+
+    // The spec is authored top-left-positive; the editor opens on the scene origin, so shift the
+    // drawing to sit centred on it. Linear points and binding anchors are element-relative and ride along.
+    const bounds = ordered.map((el) => elementBounds(el)).reduce(unionBounds);
+    const dx = Math.round((bounds.minX + bounds.maxX) / 2);
+    const dy = Math.round((bounds.minY + bounds.maxY) / 2);
+    for (const el of ordered) {
+        el.x -= dx;
+        el.y -= dy;
     }
 
     // Every object is built with only ELEMENT_FIELDS keys, so a plain entries walk is the write

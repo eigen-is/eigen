@@ -134,6 +134,8 @@ demo settings (`guests.openSignup: false`, `defaultMountMaxSizeMB: 50`, `maxUplo
   the container's `media/` subfolder via `createFileFromData`, matching each image element's `mediaName`.
   Arrows bind to shapes by key (`{ shape, side, along? }`) and settle through the lib's own `followBindings`,
   so they read back exactly as an editor would store them; shapes take an `angle`, lines a `freedraw` flag.
+  The spec is authored top-left-positive; the builder shifts the finished drawing so its bounding box is
+  centred on the scene origin, where the editor opens.
   To eyeball a layout change without a browser, build a fresh Y.Doc with `buildVectorDoc`, run it through
   `readVectorFromDoc` + `sceneToSvg` (the same renderer the app and previews use), and open the SVG.
 - **Site photos in `images/`.** `demo/fixtures/images/*.webp` (five of the maintainer's own

@@ -3,7 +3,7 @@
 // overlay share the container origin, so viewport-relative px = (scene + scroll) * zoom.
 
 import type { Box } from '@workspace/lib/vector';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 30;
@@ -29,6 +29,25 @@ export function useViewport() {
     const frozenRef = useRef(false);
 
     const { zoom, scrollX, scrollY } = viewport;
+
+    // Scene origin at the container centre on open. Waits for a real size: a mobile comment deep
+    // link mounts the canvas inside a hidden wrapper, which measures 0 until the pane closes.
+    useLayoutEffect(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const centre = () => {
+            const { width, height } = el.getBoundingClientRect();
+            if (width === 0 || height === 0) return false;
+            setViewport((v) => ({ ...v, scrollX: width / 2 / v.zoom, scrollY: height / 2 / v.zoom }));
+            return true;
+        };
+        if (centre()) return;
+        const observer = new ResizeObserver(() => {
+            if (centre()) observer.disconnect();
+        });
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
 
     const clientToScene = useCallback(
         (clientX: number, clientY: number) => {
