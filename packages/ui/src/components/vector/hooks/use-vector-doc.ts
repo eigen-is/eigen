@@ -148,8 +148,10 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         provider,
         undoManager,
         synced,
+        offline,
         loaded,
         storageUnavailable,
+        unsyncedEdits,
     } = useCollabDoc({
         ownerId,
         mountId,
@@ -364,9 +366,11 @@ export const useVectorDoc = (ownerId: string, mountId: string, pathId: string) =
         // the effect runs; the editor gates comment reads on `synced` like the rest of the panel.
         yjsDoc,
         synced,
+        offline,
         // Latched first-load flag — the editor gates its loading screen on this, not `synced`, so a
         // WS blip never unmounts the canvas (transient selection/preview state survives).
         loaded,
         storageUnavailable,
+        unsyncedEdits,
     };
 };

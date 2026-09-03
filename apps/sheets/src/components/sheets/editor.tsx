@@ -15,7 +15,13 @@ import type { CardAttachmentDraft } from '@workspace/lib/types/comments';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { fitImageSize, type ImageSize } from '@workspace/lib/vector';
 import { type Image as SheetImage, Workbook, type WorkbookInstance } from '@workspace/sheet';
-import { CollabLoadingState, DocumentShareCluster, FileDropOverlay, useLayout } from '@workspace/ui';
+import {
+    CollabLoadingState,
+    DocumentShareCluster,
+    FileDropOverlay,
+    UnsyncedEditsGuard,
+    useLayout,
+} from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import type { CommentContextMenuItem } from '@workspace/ui/components/comments';
 import { CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
@@ -85,7 +91,9 @@ function SheetEditorInner({
         snapshotVersion,
         loadFailed,
         synced,
+        offline,
         storageUnavailable,
+        unsyncedEdits,
         handleOp,
         onDataChange,
         docRef,
@@ -303,6 +311,8 @@ function SheetEditorInner({
         () => (
             <DocumentShareCluster
                 canWrite={canWrite}
+                offline={offline}
+                storageUnavailable={storageUnavailable}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onToggleCommentPanel={toggleComments}
                 commentPanelOpen={commentPanelOpen}
@@ -314,6 +324,8 @@ function SheetEditorInner({
         ),
         [
             canWrite,
+            offline,
+            storageUnavailable,
             onAccessDialogOpen,
             commentPanelOpen,
             activityPanelOpen,
@@ -334,6 +346,7 @@ function SheetEditorInner({
 
     return (
         <>
+            <UnsyncedEditsGuard active={unsyncedEdits} />
             {mediaFolderId && (
                 <DrivePickerWithUpload
                     open={imagePickerOpen}

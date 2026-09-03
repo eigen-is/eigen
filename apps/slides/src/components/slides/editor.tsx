@@ -38,7 +38,7 @@ import {
     NUDGE_STEP,
     NUDGE_STEP_LARGE,
 } from '@workspace/lib/vector';
-import { CollabLoadingState, Column, ColumnLayout, EmptyState, useLayout } from '@workspace/ui';
+import { CollabLoadingState, Column, ColumnLayout, EmptyState, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { type CommentContextMenuItem, CommentLifecycleDialogs, PanelColumn } from '@workspace/ui/components/comments';
 import { useContextMenu } from '@workspace/ui/components/context-menu';
@@ -236,8 +236,10 @@ function SlideEditorInner({
     const {
         deck,
         isSynced,
+        offline,
         loaded,
         storageUnavailable,
+        unsyncedEdits,
         activeSlideId,
         setActiveSlideId,
         addSlide,
@@ -1033,6 +1035,7 @@ function SlideEditorInner({
 
     return (
         <ColumnLayout>
+            <UnsyncedEditsGuard active={unsyncedEdits} />
             {/* Hiding takes the find bar with it: it floats in this wrapper, outside the pane's Column. */}
             <div className={cn('flex-1 min-w-0 h-full', mobilePanelOpen && 'hidden')}>
                 <DocSearchProvider
@@ -1051,6 +1054,8 @@ function SlideEditorInner({
                             <Toolbar
                                 path={path}
                                 canWrite={canWrite}
+                                offline={offline}
+                                storageUnavailable={storageUnavailable}
                                 undoManager={undoManager}
                                 onAccessDialogOpen={onAccessDialogOpen}
                                 onAddText={handleAddText}

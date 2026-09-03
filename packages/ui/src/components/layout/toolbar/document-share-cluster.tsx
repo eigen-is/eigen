@@ -1,7 +1,9 @@
 import { useIsMobile } from '@workspace/lib/media';
-import { Activity, MessageSquare, Pencil, UserRoundPlus } from 'lucide-react';
+import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
+import { Button } from '../../button';
 import { CountBadge } from '../../count-badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
 import { FindInDocumentButton, FindInDocumentMenuItem, useFindBarRefocus } from '../../search/find-in-document-button';
 import { DocumentModeButton } from './document-mode-button';
 import { KebabTrigger } from './kebab-trigger';
@@ -18,14 +20,41 @@ type DocumentShareClusterProps = {
     watchTarget?: { ownerId: string; mountId: string; pathId: string };
     onToggleActivityPanel?: () => void;
     activityPanelOpen?: boolean;
+    // Collab socket down after first load: edits stay local until it reconnects.
+    offline?: boolean;
+    // The server's storage is failing and the collab socket is retrying; edits stay local meanwhile.
+    storageUnavailable?: boolean;
 };
 
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
+    // One icon for both ways edits can be stuck in the tab; the outage explains itself, so it wins.
+    const label = props.storageUnavailable ? 'Storage unavailable' : 'Offline';
+    const offlineBadge = (props.offline || props.storageUnavailable) && (
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label={label} className="h-8 w-8">
+                    <WifiOff className="h-4 w-4 text-destructive" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-auto text-sm">
+                {props.storageUnavailable
+                    ? 'Storage is temporarily unavailable, retrying. Edits will sync when it is back.'
+                    : 'Offline, will sync when back online'}
+            </PopoverContent>
+        </Popover>
+    );
 
     // Mobile: collapse the icon row into a kebab. Its own useFindBarRefocus keeps the find-bar
     // keystroke subscription off the desktop cluster (which would otherwise churn the Watch queries).
-    if (isMobile) return <MobileClusterKebab {...props} />;
+    if (isMobile) {
+        return (
+            <>
+                {offlineBadge}
+                <MobileClusterKebab {...props} />
+            </>
+        );
+    }
 
     const {
         canWrite,
@@ -41,6 +70,7 @@ export function DocumentShareCluster(props: DocumentShareClusterProps) {
 
     return (
         <>
+            {offlineBadge}
             {onRename && <TooltipButton icon={Pencil} tooltipText="Edit" onClick={onRename} />}
             {/* Null-safe: renders nothing when the surface has no DocSearchProvider */}
             <FindInDocumentButton />

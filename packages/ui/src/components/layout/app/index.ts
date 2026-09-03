@@ -15,3 +15,4 @@ export { LoadingState } from './loading-state';
 export { RequestAccessView } from './request-access-view';
 export { SettingsPage } from './settings-page';
 export { Topbar } from './topbar';
+export { UnsyncedEditsGuard } from './unsynced-edits-guard';

@@ -48,7 +48,7 @@ import type { CardAttachmentDraft, CommentCard } from '@workspace/lib/types/comm
 import type { DocCommentSearch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DEFAULT_IMAGE_BOX } from '@workspace/lib/vector';
-import { CollabLoadingState, Column, useLayout } from '@workspace/ui';
+import { CollabLoadingState, Column, UnsyncedEditsGuard, useLayout } from '@workspace/ui';
 import { CardFormDialog } from '@workspace/ui/components/cards';
 import { renderPresenceCaret } from '@workspace/ui/components/collab';
 import {
@@ -205,8 +205,10 @@ export const CollaborativeEditor = ({
     const {
         doc: yDoc,
         provider,
+        offline,
         loaded,
         storageUnavailable,
+        unsyncedEdits,
     } = useCollabDoc({
         ownerId: path.ownerId,
         mountId: path.mountId,
@@ -227,12 +229,15 @@ export const CollaborativeEditor = ({
             mediaFolderId={mediaFolderId}
             chatFolderId={chatFolderId}
         >
+            <UnsyncedEditsGuard active={unsyncedEdits} />
             <TiptapEditor
                 key={path.id}
                 path={path}
                 yDoc={yDoc}
                 provider={provider}
                 canWrite={canWrite}
+                offline={offline}
+                storageUnavailable={storageUnavailable}
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
@@ -248,6 +253,8 @@ const TiptapEditor = ({
     provider,
     path,
     canWrite,
+    offline,
+    storageUnavailable,
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
@@ -258,6 +265,8 @@ const TiptapEditor = ({
     provider: WebsocketProvider;
     path: DrivePath;
     canWrite: boolean;
+    offline: boolean;
+    storageUnavailable: boolean;
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
@@ -876,6 +885,8 @@ const TiptapEditor = ({
                                     editor={editor}
                                     path={path}
                                     canWrite={canWrite}
+                                    offline={offline}
+                                    storageUnavailable={storageUnavailable}
                                     canUndo={canUndo}
                                     canRedo={canRedo}
                                     onAccessDialogOpen={onAccessDialogOpen}

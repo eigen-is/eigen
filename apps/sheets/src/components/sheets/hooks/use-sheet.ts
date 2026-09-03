@@ -61,11 +61,11 @@ export function useSheet(
     // top via onInit/onSync. No UndoManager — the sheet engine's own op stack owns undo. The op-log
     // (readyForOps gating, echo suppression, flush-on-unmount, replay) is NOT collab-scaffold
     // duplication, so it stays here over the shared lifecycle.
-    const { docRef, provider, synced, storageUnavailable } = useCollabDoc({
+    const { docRef, provider, synced, offline, storageUnavailable, unsyncedEdits } = useCollabDoc({
         ownerId,
         mountId,
         pathId,
-        onInit: ({ doc }) => {
+        onInit: ({ doc, provider }) => {
             readyForOpsRef.current = false;
             loadedRef.current = false;
             latestDataRef.current = null;
@@ -126,7 +126,11 @@ export function useSheet(
             };
             stateMap.observe(handleState);
 
-            const handleBeforeUnload = () => flushSnapshot();
+            // Offline the flush can't reach the server anyway, and its local write would arm the
+            // shared hook's beforeunload guard on a sheet with nothing to lose.
+            const handleBeforeUnload = () => {
+                if (provider.wsconnected) flushSnapshot();
+            };
             window.addEventListener('beforeunload', handleBeforeUnload);
 
             return () => {
@@ -173,7 +177,9 @@ export function useSheet(
         snapshotVersion,
         loadFailed,
         synced,
+        offline,
         storageUnavailable,
+        unsyncedEdits,
         handleOp,
         onDataChange,
         docRef,
