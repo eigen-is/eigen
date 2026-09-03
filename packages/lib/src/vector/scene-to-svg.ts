@@ -15,6 +15,13 @@ import type { VectorElement, VectorScene } from './types';
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const DEFAULT_PADDING = 10;
 
+// A foreignObject clips to its own rect, so text a hair wider than the box the client measured would
+// lose its wrapped line; overflow="visible" keeps it drawn, the way slides' absolutely-positioned text
+// box does. The class-scoped reset rides inside the wrapper because a standalone SVG (download, <img>
+// embed) has none of the app's CSS, where the UA's 1em <p> margins would shift the text out of its box.
+const HTML_WRAPPER_CLASS = 'eigen-vector-text';
+const HTML_WRAPPER_RESET = `<style>.${HTML_WRAPPER_CLASS} p{margin:0}</style>`;
+
 // Resolve an image element's media reference to an <image> href (data: URI or URL). The
 // host (FE/BE) supplies it; unresolvable media renders nothing.
 export type MediaResolver = (mediaName: string) => string | null;
@@ -72,7 +79,7 @@ export function elementToSvg(
     const body =
         'svg' in out
             ? out.svg
-            : `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}"><div xmlns="http://www.w3.org/1999/xhtml" style="${escapeXml(out.style)}">${out.html}</div></foreignObject>`;
+            : `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${HTML_WRAPPER_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`;
     if (body === '') return '';
     if (opts.positioned === false) return body;
     return `${groupOpen(el)}${body}</g>`;

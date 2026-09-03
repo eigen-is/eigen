@@ -104,6 +104,9 @@ function richTextStyle(el: VectorRichTextElement): string {
         `justify-content:${justify}`,
         'width:100%',
         'height:100%',
+        // Text wider than the stored box spills rather than being cut off (the foreignObject around it
+        // is overflow="visible" for the same reason).
+        'overflow:visible',
         `font-family:${getFontFamily(el.fontFamily)}`,
         `font-size:${el.fontSize}px`,
         `font-weight:${el.fontWeight}`,

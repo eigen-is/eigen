@@ -86,6 +86,17 @@ function measureExcalifont(text: string, fontSize: number): { width: number; hei
     return { width: widest * fontSize, height: lines.length * getLineHeightPx(FONT, fontSize) };
 }
 
+// A rich-text box is laid out by the browser's HTML shaper, which runs a little wider than this
+// advance table; at exactly the measured width a one-line label wraps. 8% slack keeps the demo's
+// labels on one line. Arrow labels are SVG <text> (no wrapping), so they measure unpadded.
+const RICH_TEXT_SLACK = 1.08;
+
+// The box a rich-text element gets for a measured string: the measurement plus the shaping slack.
+function measureRichTextBox(text: string, fontSize: number): { width: number; height: number } {
+    const { width, height } = measureExcalifont(text, fontSize);
+    return { width: width * RICH_TEXT_SLACK, height };
+}
+
 // mulberry32 — a tiny deterministic PRNG, one draw per element (matches addElement's seed range).
 function mulberry32(seed: number): () => number {
     let a = seed >>> 0;
@@ -294,7 +305,7 @@ function sidePoint(shape: VectorShapeElement, end: { side: SitePlanSide; along?:
 
 function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorRichTextElement {
     const fontSize = s.fontSize ?? DEFAULT_LABEL_SIZE;
-    const { width, height } = measureExcalifont(s.label, fontSize);
+    const { width, height } = measureRichTextBox(s.label, fontSize);
     return buildRichText(`el-${s.key}-label`, s.label, {
         x: shape.x + shape.width / 2 - width / 2,
         y: shape.y + shape.height / 2 - height / 2,
@@ -309,7 +320,7 @@ function buildLabel(s: SitePlanShape, shape: VectorShapeElement): VectorRichText
 }
 
 function buildText(t: SitePlanText, i: number): VectorRichTextElement {
-    const { width, height } = measureExcalifont(t.text, t.fontSize);
+    const { width, height } = measureRichTextBox(t.text, t.fontSize);
     return buildRichText(`el-text-${i}`, t.text, {
         x: t.x,
         y: t.y,
