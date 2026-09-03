@@ -76,7 +76,7 @@ packages/lib/src/vector/              # React-free shared core — BE-safe subpa
 
 packages/ui/src/components/vector/    # the interactive editor — Eigen/shadcn chrome
   vector-editor.tsx                   # full editor layout (toolbar + canvas + panels)
-  vector-canvas.tsx                   # interactive SVG surface + overlays
+  canvas-editor.tsx                   # interactive SVG surface + overlays
   vector-renderer.tsx                 # read-only SVG (wraps sceneToSvg) for embeds/thumbnails
   text-overlay.tsx                    # HTML overlay for text editing (NOT foreignObject)
   freehand-overlay.tsx                # canvas layer for active freehand input
@@ -84,7 +84,7 @@ packages/ui/src/components/vector/    # the interactive editor — Eigen/shadcn 
   toolbar.tsx  properties-panel.tsx   # shadcn TooltipButton / Dialog / shared primitives
   tools/                              # select, shape, draw, line, arrow, text, eraser, pan
   hooks/
-    use-vector-doc.ts                 # Yjs doc (mirrors slides use-deck.ts)
+    use-canvas-doc.ts                 # Yjs doc (mirrors slides use-deck.ts)
     use-viewport.ts  use-selection.ts  use-tool.ts  use-snap.ts
 
 packages/ui/src/components/transform/ # NEW shared ObjectTransform primitive (Goal 3)
@@ -186,7 +186,7 @@ Creation stays generic via `Drive.create(..., 'vector', user)` and the existing 
 
 **Superseded for slides by [PROPOSAL_CANVAS_ENGINE.md](PROPOSAL_CANVAS_ENGINE.md) (2026-09-03), which shares the model as well as the renderer. Kept as the record of the cheaper middle.** **Idea, not scheduled.** Distinct from both the sub-resource embed above and the inline-block alternative it rejects: rather than putting a *whole drawing* into a slide, give slides its own `rectangle`/`diamond`/`ellipse` object types and paint them with vector's renderer. Each app keeps the text engine it is good at — slides its rich HTML prose, vector its measured SVG text — and they share one shape-and-image renderer. This is the cheap middle between the "re-render slides on the vector engine" non-goal and a full drawing embed, and it does not compete with either: a whole diagram you want to edit as a unit is still a `drawings/` sub-resource.
 
-It works because `elementToSvg` is already a per-element renderer and the live vector canvas already goes through it (`packages/ui/src/components/vector/vector-canvas.tsx:207` — `dangerouslySetInnerHTML={{ __html: elementToSvg(el, { resolveMedia }) }}`), so editor and export output are byte-identical by construction. Slides' `ReadOnlySlideObject` already switches on `obj.type` and already injects HTML for its text branch, so a shape branch sits directly beside it. `renderShape` emits only roughjs `<path>` inside a `<g transform>` — no `foreignObject`, no filters — which DOMPurify keeps under its default profile.
+It works because `elementToSvg` is already a per-element renderer and the live vector canvas already goes through it (`packages/ui/src/components/vector/canvas-editor.tsx:207` — `dangerouslySetInnerHTML={{ __html: elementToSvg(el, { resolveMedia }) }}`), so editor and export output are byte-identical by construction. Slides' `ReadOnlySlideObject` already switches on `obj.type` and already injects HTML for its text branch, so a shape branch sits directly beside it. `renderShape` emits only roughjs `<path>` inside a `<g transform>` — no `foreignObject`, no filters — which DOMPurify keeps under its default profile.
 
 The work: extend the `SlideObject` union; grow `OBJECT_FIELDS` by the shape scalars (`strokeColor`, `backgroundColor`, `fillStyle`, `strokeWidth`, `strokeStyle`, `roughness`, `seed`, `roundness` — all scalars, so no `Y.Array` normalization); a near-pass-through `SlideShapeObject → VectorShapeElement` adapter (the geometry names already match since U2a); a render branch in `slide-object.tsx` and `export/slides/render.ts`; reuse vector's existing shape controls in the properties panel. `seed` is load-bearing — it is what makes roughjs output deterministic across renders and peers, so the editor and the PDF agree.
 
@@ -209,7 +209,7 @@ Three caveats: **SVG gradients do not interpolate the way the CSS ones do**, so 
 
 ### Canvas performance — what scales with element count and what doesn't
 
-The per-element `Y.Map` earns its keep: **what crosses the wire is independent of how many objects the canvas holds.** Moving one object writes two keys on one nested map, an add writes that element's ≤23 fields, a delete removes one key from the top-level map, and a group op over k elements is one transact. Nothing is proportional to n. Writes are also **one transact per completed gesture, not per frame** (`vector-canvas.tsx` — drag/resize/rotate previews are local React state), so dragging 100 objects across the canvas is a single update on pointerup. The trade-off is that peers see the jump, not the motion; awareness carries cursors and selection, not in-flight geometry.
+The per-element `Y.Map` earns its keep: **what crosses the wire is independent of how many objects the canvas holds.** Moving one object writes two keys on one nested map, an add writes that element's ≤23 fields, a delete removes one key from the top-level map, and a group op over k elements is one transact. Nothing is proportional to n. Writes are also **one transact per completed gesture, not per frame** (`canvas-editor.tsx` — drag/resize/rotate previews are local React state), so dragging 100 objects across the canvas is a single update on pointerup. The trade-off is that peers see the jump, not the motion; awareness carries cursors and selection, not in-flight geometry.
 
 | Layer | Cost of changing one object |
 |---|---|
@@ -269,11 +269,11 @@ Already solved — no new assets. The four Eigen fonts (`EIGEN_FONTS` in `../../
 | `../../packages/lib/src/vector/read-vector.ts` | `readVectorFromDoc(Y.Doc)` (Worker-safe) |
 | `../../packages/ui/src/components/transform/object-transform.tsx` | **shared** selection/resize/rotate primitive |
 | `packages/ui/src/components/vector/vector-editor.tsx` | full editor layout |
-| `../../packages/ui/src/components/vector/vector-canvas.tsx` | interactive SVG surface + overlays |
+| `../../packages/ui/src/components/vector/canvas-editor.tsx` | interactive SVG surface + overlays |
 | `packages/ui/src/components/vector/vector-renderer.tsx` | read-only SVG (embeds/thumbnails) |
 | `../../packages/ui/src/components/vector/text-overlay.tsx` | HTML text-editing overlay |
 | `packages/ui/src/components/vector/tools/*.ts` | select/shape/draw/line/arrow/text/eraser/pan |
-| `../../packages/ui/src/components/vector/hooks/use-vector-doc.ts` | Yjs doc (mirrors `use-deck.ts`) |
+| `../../packages/ui/src/components/vector/hooks/use-canvas-doc.ts` | Yjs doc (mirrors `use-deck.ts`) |
 | `packages/ui/src/components/vector/hooks/{use-viewport,use-selection,use-tool,use-snap}.ts` | interaction state |
 | `apps/vector/…` | standalone app shell (mirrors `../../apps/slides`) |
 | `apps/api/src/lib/document/vector.ts` | doc materializer |
@@ -312,7 +312,7 @@ Honest estimates — this is a multi-month program. The first 80% (model, shapes
 | Phase | Scope | Ships |
 |---|---|---|
 | **0 — Core model + renderer** (2–3 wk) | `../../packages/lib/src/vector` subpath: `VectorElement` union, defaults, geometry/bounds/hit-testing, fractional-index helpers, and `sceneToSvg()` with roughjs. Unit tests (geometry, index repair, SVG snapshot). Read-only `VectorRenderer`. | A drawing can be rendered from data, FE and BE, with tests. |
-| **1 — Standalone app + core interaction** (3–4 wk) | `../../apps/vector` + full `.eigenvector` registration. `VectorCanvas`, pan/zoom viewport, select/move/**resize/rotate via the new shared `ObjectTransform`**, shape + text tools (HTML overlay editing), `use-vector-doc` Yjs, properties panel, snap lines, `Y.UndoManager`, rubber-band multi-select, shortcuts. | Usable single-user + collab drawing of shapes and text. |
+| **1 — Standalone app + core interaction** (3–4 wk) | `../../apps/vector` + full `.eigenvector` registration. `VectorCanvas`, pan/zoom viewport, select/move/**resize/rotate via the new shared `ObjectTransform`**, shape + text tools (HTML overlay editing), `use-canvas-doc` Yjs, properties panel, snap lines, `Y.UndoManager`, rubber-band multi-select, shortcuts. | Usable single-user + collab drawing of shapes and text. |
 | **2 — Freehand + styles + awareness** (2–3 wk) | perfect-freehand draw tool (canvas overlay input, RDP simplify before commit), line + eraser tools, stroke/fill styles, remote awareness cursors/selections. | Whiteboarding feel; multi-user cursors. |
 | **3 — Arrows + bindings** (3–4 wk) | Arrow tool, snap-to-element connection points, reactive endpoint recalculation on bound-element move/resize/delete, arrow labels. **Straight arrows only.** | Diagramming. Flagged rabbit-hole (see Risks). |
 | **4 — Pipeline** (2 wk) | Preview (`eigenvector-render`), export (svg/pdf), search extraction — the full server checklist. | Drive previews, export, search parity. |
