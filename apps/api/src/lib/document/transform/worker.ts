@@ -35,8 +35,8 @@ async function renderPreview(
             return renderEigenslidesPreviewBody(doc, request.mediaUrls);
         }
         case 'eigenvector': {
-            const { renderEigenvectorPreview } = await import('../../preview/eigenvector-render');
-            return renderEigenvectorPreview(doc, request.mediaUrls);
+            const { renderEigenvectorPreviewBody } = await import('../../preview/eigenvector-render');
+            return renderEigenvectorPreviewBody(doc, request.mediaUrls);
         }
     }
 }
