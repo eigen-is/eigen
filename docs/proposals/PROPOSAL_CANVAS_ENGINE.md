@@ -22,7 +22,7 @@
 
 ## Current state (recap)
 
-Everything below was verified against main at 25c9d6d4a on 2026-09-03.
+Everything below was verified against main at 25c9d6d4a and re-checked at f7bebdc14, both on 2026-09-03.
 
 **The two editors side by side.**
 
@@ -30,7 +30,7 @@ Everything below was verified against main at 25c9d6d4a on 2026-09-03.
 |---|---|---|
 | Object kinds | `text` (TipTap HTML), `image` | `rectangle`, `diamond`, `ellipse`, `text`, `image`, `freedraw`, `line`, `arrow` |
 | Geometry fields | `x, y, width, height, angle`, px in 1920×1080, degrees | same names, scene units, degrees |
-| Z-order | position in a per-slide `objectIds` Y.Array (`use-deck.ts:343`) | fractional `index` string (`use-vector-doc.ts:194`) |
+| Z-order | position in a per-slide `objectIds` Y.Array (`use-deck.ts:343`) | fractional `index` string (`packages/lib/src/vector/fractional-index.ts`, stepped in `use-vector-keyboard.ts:27`) |
 | Yjs roots | `slides`, `objects`, `slideOrder` (+ `comments`) | `elements`, `meta` (+ `comments`) |
 | Live render | absolutely positioned divs, percent geometry, `cqw`/`cqh` units (`slide-object.tsx:27`) | one `<svg>`, one `<g>` per element from `elementToSvg` (`element-node.tsx:40`) |
 | Text | `LightEditor` in place, every keystroke streams to Yjs (`slide-object.tsx:238`) | `<textarea>` overlay, one write on commit, client-measured width (`text-overlay.tsx`, `text-measure.ts`) |
@@ -41,13 +41,13 @@ Everything below was verified against main at 25c9d6d4a on 2026-09-03.
 | Export | HTML + PDF through a compositor with a `SizeUnit` abstraction (`export/slides/render.ts`) | SVG, and PDF as inline `<svg>` in a WeasyPrint page (`export/vector/transform.ts:47`) |
 | Preview | HTML body, first 8 slides | SVG image |
 | Mobile | view-only, canvas unmounted | view-only, one-finger pan |
-| Tests | 2 files | geometry, routing, reader, clipboard, snap |
+| Tests | 2 files (`search-deck`, `normalize-deck`) | lib: geometry, elbow routing, reader, `sceneToSvg`, snap, fractional index; ui: clipboard, binding, touch gestures |
 
-**What is already shared** (the [CANVAS.md](../CANVAS.md) inventory): `ObjectTransform` with its `boxToStyle` / `screenDeltaToScene` / `snapBox` seams, `snap.ts`, `marqueeMode` / `marqueeHits`, `computeArrange`, `TransformSection` / `AlignSection` / `ZOrderButtons` / `useZOrderHotkeys`, `ColorRow` / `MergedSelect` / `FontPicker` / `BackgroundFillBlock`, the context-menu item groups, `CursorLayer` + awareness helpers, `useCollabDoc`, the comment card model, the typed clipboard, `classifyPaste`, the media upload hooks, `EIGEN_FONTS`, `NUDGE_STEP` / `DUPLICATE_OFFSET`. The geometry field names already match because of the earlier canonical-object work.
+**What is already shared** (the [CANVAS.md](../CANVAS.md) inventory, plus a few primitives the code shares that CANVAS.md does not name yet): `ObjectTransform` with its `boxToStyle` / `screenDeltaToScene` / `snapBox` seams, `snap.ts`, `marqueeMode` / `marqueeHits`, `computeArrange`, `TransformSection` / `AlignSection` / `ZOrderButtons` / `useZOrderHotkeys`, `ColorRow` / `MergedSelect` / `FontPicker` / `BackgroundFillBlock`, the context-menu item groups, `CursorLayer` + awareness helpers, `useCollabDoc`, the comment card model, the typed clipboard, `classifyPaste`, the media upload hooks, `EIGEN_FONTS`, `NUDGE_STEP` / `DUPLICATE_OFFSET`. The geometry field names already match because of the earlier canonical-object work.
 
-**What exists twice.** The duplication audit counted roughly 1,200 lines of parallel host code: the drag-move loop (~120), clipboard producers and consumers (~150), z-order (~130, and on two different models), text edit entry and exit (~90), keyboard wiring (~70), image insert placement (~60), delete, duplicate, nudge, marquee, snap-guide rendering, presence wiring, Escape stacks and the two pointer-to-model converters. Two behaviours disagree today: additive select is Shift in vector and ⌘ in slides (`slide-object.tsx:166`), and vector collapses a non-contiguous z-order block into one gap while slides steps each id one slot (`use-deck.ts:336`).
+**What exists twice.** The duplication audit counted roughly 1,200 lines of parallel host code: the drag-move loop (~120), clipboard producers and consumers (~150), z-order (~130, and on two different models), text edit entry and exit (~90), keyboard wiring (~70), image insert placement (~60), delete, duplicate, nudge, marquee, snap-guide rendering, presence wiring, Escape stacks and the two pointer-to-model converters. Two behaviours disagree today: additive select is Shift in vector and ⌘ or Ctrl in slides (`slide-object.tsx:166`), and vector collapses a non-contiguous z-order block into one gap (`use-vector-keyboard.ts:27`) while slides steps each id one slot (`use-deck.ts:336`).
 
-**The pipelines.** One Worker protocol with per-type arms (`document/transform/protocol.ts`). Two readers (`document/slides.ts`, `lib/vector/read-vector.ts`). Two export renderers. Two preview renderers. Two search collectors. One font registry, but two ways of sizing text: vector stores client-measured widths so the server never measures; slides lets CSS wrap text in the box, which is why slides needs a box layout engine (WeasyPrint) and vector does not. WeasyPrint renders inline `<svg>` (vector's PDF proves it) and 2D CSS transforms, but not container queries (`export/slides/render.ts:114`) and not HTML inside `foreignObject`.
+**The pipelines.** One Worker protocol with per-type arms (`document/transform/protocol.ts`). Two readers (`document/slides.ts`, `lib/vector/read-vector.ts`). Two export renderers. Two preview renderers. Two search collectors in one file (`search/extract-render.ts`); the slides one indexes the stored TipTap HTML as-is, tags included, while the slides find bar strips them with `stripTagsServer`. One font registry, but two ways of sizing text: vector stores client-measured widths so the server never measures; slides lets CSS wrap text in the box, which is why slides needs a box layout engine (WeasyPrint) and vector does not. WeasyPrint renders inline `<svg>` (vector's PDF proves it) and 2D CSS transforms, but not container queries (`export/slides/render.ts:114`) and not HTML inside `foreignObject`.
 
 **Precedent.** Figma Slides is a 1920×1080 frame on the Figma canvas, non-resizable, non-rotatable, in slide rows. Excalidraw+ turns frames into slides and exports PDF and PPTX from them. tldraw renders every shape as DOM. Keynote and PowerPoint are shape models with connectors and rich text per shape. "A deck is fixed frames over a drawing model" is the industry's shape, not a novelty.
 
@@ -73,7 +73,7 @@ Everything below was verified against main at 25c9d6d4a on 2026-09-03.
 
 ### 1 — One element model
 
-`packages/lib/src/vector/types.ts` stays the engine's model. The engine keeps the name vector; there is no directory or subpath rename (open question 4). Changes:
+`packages/lib/src/vector/types.ts` stays the engine's model. The engine keeps the name vector; there is no directory or subpath rename (open question 3). Changes:
 
 - **`frameId: string`** on every element, `''` for none. Coordinates are frame-relative when set (section 2).
 - **`richtext`** element (section 3).
@@ -83,7 +83,7 @@ Everything below was verified against main at 25c9d6d4a on 2026-09-03.
 - **`BackgroundFill | null`** (`packages/lib/src/types/background.ts`) on frames and on `richtext`. Shape fill stays `backgroundColor` + `fillStyle` until phase 4, which lands the gradient design already written in PROPOSAL_VECTOR § Gradient fills.
 - **`meta`** stays (`background`, `gridSize`) and finally gets a writer: a canvas background row in the panel with nothing selected.
 
-The Y.Doc layout is the same for both types: `elements` (Y.Map of per-element Y.Map), `frames` (Y.Map of per-frame Y.Map), `meta`, `comments`. `EIGEN_DOC_TYPE_INFO` declares `yjsRoots: { elements: 'map', frames: 'map', meta: 'map' }` for both (`packages/lib/src/types/drive.ts:104,139`). `readVectorFromDoc` reads both and validates the new fields the way it validates the old ones (enum checks, clamps, a byte cap on `html`).
+The Y.Doc layout is the same for both types: `elements` (Y.Map of per-element Y.Map), `frames` (Y.Map of per-frame Y.Map), `meta`, `comments`. `EIGEN_DOC_TYPE_INFO` declares `yjsRoots: { elements: 'map', frames: 'map', meta: 'map' }` for both (`packages/lib/src/types/drive.ts:114,149`). `readVectorFromDoc` reads both and validates the new fields the way it validates the old ones (enum checks, clamps), plus a byte cap on `html`, which would be the first string field the reader caps; today `cleanStr` only strips control characters.
 
 Deleted: `packages/lib/src/slides/` (`types.ts`, `fields.ts`), `apps/api/src/lib/document/slides.ts`, `apps/slides/.../normalize-deck.ts`. `SLIDE_BASE_WIDTH`, `SLIDE_BASE_HEIGHT` and `SLIDE_ASPECT_RATIO` move next to the frame type.
 
@@ -91,10 +91,10 @@ Deleted: `packages/lib/src/slides/` (`types.ts`, `fields.ts`), `apps/api/src/lib
 
 - **Root `frames`.** Per frame a Y.Map `{ id, index, name, width, height, background }`. `index` is a fractional index from the same helper the elements use, so deck order is a sort, a reorder is one write, and concurrent reorders from two tabs merge instead of fighting over an array.
 - **Slides pins them.** Every frame is `SLIDE_BASE_WIDTH × SLIDE_BASE_HEIGHT`, never moved, resized or rotated (the Figma Slides rule). The vector app does not show frames in this program.
-- **Membership is one scalar.** `frameId` on the element replaces the per-slide `objectIds` array. That removes the whole parent-holds-child-ids corruption class `normalizeParentChildRefs` repairs today (an object referenced by two slides, or by none). An element whose `frameId` names no frame is re-homed at read time to the lowest-index frame, derived from the same doc state on every peer, never written. `normalize-deck.ts` goes; `normalize-refs.ts` stays for stickies.
+- **Membership is one scalar.** `frameId` on the element replaces the per-slide `objectIds` array. That removes the whole parent-holds-child-ids corruption class `normalizeParentChildRefs` repairs today (an object referenced by two slides, or by none). In a document that has frames, an element whose `frameId` names no frame (including `''`) is re-homed at read time to the lowest-index frame, derived from the same doc state on every peer, never written; in a frameless drawing `''` is simply the canvas. `normalize-deck.ts` goes; `normalize-refs.ts` stays for stickies.
 - **Z-order stays global.** A frame's elements sort by their fractional `index`. Moving an element to another frame keeps its index.
 - **Frame-relative coordinates.** An element in a frame stores `x, y` relative to the frame origin, so every slide is `0..1920 × 0..1080` and a duplicated frame is a plain copy. The engine adds the frame origin through one seam (`elementOrigin(el, frames)`) in bounds and hit-testing, so a later vector round can lay frames out on the infinite canvas without touching the tools.
-- **Frame ops** on the doc hook: `addFrame(afterId?)`, `deleteFrame(id)` (deletes its elements in the same transact), `duplicateFrame(id)` (through `duplicateElements`, so arrow bindings remap to the copies), `moveFrame(id, afterId)`, `updateFrame(id, fields)`, `updateFrames(ids, fields)` for the apply-to scope. Undo can bring a frame back; the shell follows the active frame, and if it vanishes, activates the nearest neighbour by index.
+- **Frame ops** on the doc hook: `addFrame(afterId?)`, `deleteFrame(id)` (deletes its elements in the same transact), `duplicateFrame(id)` (through `duplicateElements`, so arrow bindings remap to the copies), `moveFrame(id, afterId)`, `updateFrame(id, fields)`, `updateFrames(ids, fields)` for the apply-to scope. The vector doc hook's `undoScope` grows from `[elements, meta]` to include `frames` (`use-vector-doc.ts:159`); `useCollabDoc` tracks only the roots the host names, so without this frame ops are not undoable. Undo can bring a frame back; the shell follows the active frame, and if it vanishes, activates the nearest neighbour by index.
 
 ### 3 — The `richtext` element
 
@@ -102,12 +102,12 @@ Deleted: `packages/lib/src/slides/` (`types.ts`, `fields.ts`), `apps/api/src/lib
 - **Bindable.** `isBindable` grows to `richtext` and `image`, so an arrow docks on the box outline exactly as on a rectangle, and elbow routing treats the box as an obstacle. This is the feature the whole proposal exists for.
 - **Render.** The element's layer is a div holding the HTML and the inline style `getTextStyle` produces today (slides' `slide-object.tsx` text branch, moved into the engine). Only `sceneToSvg`, which serves SVG export and the clipboard SVG, wraps it in a `<foreignObject>`; browsers render that, and it is the one surface where rich text rides inside SVG.
 - **Edit.** Double-click mounts `LightEditor` in place inside the layer (`toolbar="floating"`, `proseStyle={false}`), slides' pattern today; hand text keeps its `TextOverlay`. Writes keep slides' discipline: every `onChange` writes `html`, so collaborators see typing, and unlike hand text there is no measurement to commit. Escape and click-away exit; empty on exit deletes the element (vector's rule).
-- **No measurement.** The HTML wraps inside the box; overflow stays visible (slides today). Search reads `htmlToPlainText(html)`; the comment anchor text is the first 80 characters of that.
-- **Hand `text` stays.** Measured plain text in the hand font, and arrow labels. In slides it sits under Insert as the second text tool (open question 2).
+- **No measurement.** The HTML wraps inside the box; overflow stays visible (slides today). Search plain-texts `html` with `stripTagsServer` from the React-free `@workspace/lib/html` leaf, which the find bar and the server collector can both import (`htmlToPlainText` is DOM-only); the comment anchor text is the first 80 characters of that.
+- **Hand `text` stays.** Measured plain text in the hand font, and arrow labels. In slides it sits under Insert as the second text tool (open question 1).
 
 ### 4 — Rendering: an HTML base, one `<svg>` per element
 
-The scene is a div, not an `<svg>`. `useViewport`'s group transform (`translate(scroll) scale(zoom)`) goes on that div. Each element is one absolutely positioned layer, in z-order by DOM order: `left`, `top`, `width`, `height` and `transform: rotate(angle)` from the element's box, holding either an `<svg overflow="visible">` with `elementToSvg(el, { positioned: false })` (the fragment minus the translate and rotate it bakes into its `<g>` today) or, for rich text, the HTML div. Layers are `pointer-events: none`; the canvas container keeps the pointer events and hit-testing stays the geometry math, so lines, hollow shapes and arrows keep their exact thresholds. The selection chrome, snap guides and cursors stay in the overlay SVG. Frame mode adds a frame background layer and clips the scene div to the frame.
+The scene is a div, not an `<svg>`. `useViewport`'s group transform (`translate(scroll) scale(zoom)`) goes on that div. Each element is one absolutely positioned layer, in z-order by DOM order: `left`, `top`, `width`, `height` and `transform: rotate(angle)` from the element's box, holding either an `<svg overflow="visible">` with `elementToSvg(el, { positioned: false })` (the fragment minus the translate and rotate it bakes into its `<g>` today) or, for rich text, the HTML div. Layers are `pointer-events: none`; the canvas container keeps the pointer events and hit-testing stays the geometry math, so lines, hollow shapes and arrows keep their exact thresholds. Two exceptions: a rich text layer takes pointer events while it is being edited, so `LightEditor` gets the clicks, and in present mode, so links work. The selection chrome, snap guides and cursors stay in the overlay SVG. Frame mode adds a frame background layer and clips the scene div to the frame.
 
 - **Why.** It is the structure slides already has, the structure the export compositor emits for WeasyPrint, and tldraw's proven model. Rich text is native HTML, edited in place, and HTML never sits inside SVG on the live path. Live canvas, thumbnail, present mode and export share one layer shape, so what you see is what prints.
 - **Thumbnails** become `FrameThumbnail`: the same read-only element layers inside a container scaled by `transform: scale(thumbWidth / SLIDE_BASE_WIDTH)`, memoised on the frame's element tuple (slides' scaled render today, without the `cqw`/`cqh` unit conversion). **Present mode** is the same at full screen. **Drive preview** is the server compositor's body. `sceneToSvg` stays for vector's SVG export and the clipboard SVG. `pxToPercent`, the container-query units and `ReadOnlySlideObject` go away.
@@ -121,11 +121,11 @@ The scene is a div, not an `<svg>`. `useViewport`'s group transform (`translate(
 - **`useViewport` gains frame mode.** `fitFrame(width, height)` sets zoom and scroll so the frame fills the container with a letterbox. Wheel zoom stays (zooming into a slide is useful); pan is clamped to the frame and reset on frame switch. On phones the frame fits and one finger pans, vector's rule. Everything downstream already goes through `clientToScene` / `boxToStyle`, so the gesture loop, `ObjectTransform`, snap guides, marquee, presence and the text overlay need no change. Frame mode seeds the frame edges and centre as snap targets through the existing `extraV` / `extraH` (slides' rule today).
 - **Element scope.** `visibleElements` is the active frame's elements in frame mode, all elements otherwise. Select-all, marquee, hit-test, clipboard, presence and search read the scoped list. New elements get the active `frameId` and frame-relative coordinates.
 - **One answer to the two disagreements.** Additive select is Shift (vector, Excalidraw, Figma). Z-order stepping is vector's block collapse.
-- **Deleted from slides.** `slide-canvas.tsx`, `slide-object.tsx`, `use-object-drag.ts`, `use-marquee-select.ts`, `use-snap-lines.ts`, `use-deck.ts` (replaced by the engine's doc hook plus the frame ops), `normalize-deck.ts`, the DOM thumbnail, and most of `editor.tsx`. About 2,500 lines out, about 600 in for the shell.
+- **Deleted from slides.** `slide-canvas.tsx`, `slide-object.tsx`, `use-object-drag.ts`, `use-marquee-select.ts`, `use-snap-lines.ts`, `use-deck.ts` (replaced by the engine's doc hook plus the frame ops), `normalize-deck.ts`, the DOM thumbnail, and most of `editor.tsx`. About 3,000 lines out (the nine files are 2,983 today), about 600 in for the shell.
 
 ### 6 — The deck shell (`apps/slides`)
 
-Keeps the route, `SlidePanel` (thumbnails via `FrameThumbnail`, dnd reorder writing the frame `index`), present mode (the frame SVG full-screen, same keys), `SlideBackgroundPanel` (`BackgroundFillBlock` + apply-to over frames), the toolbar (File / Edit / Insert from the shared `ToolbarMenu`, tool buttons from the engine's tool list), and the mobile layout (thumbnail list + present). The properties panel is the engine's panel plus the rich text section (today's `TextProperties` rows) and, with nothing selected, the frame background panel.
+Keeps the route, `SlidePanel` (thumbnails via `FrameThumbnail`, dnd reorder writing the frame `index`), present mode (the frame's layers full-screen, same controls: click forward, right-click back, Escape out), `SlideBackgroundPanel` (`BackgroundFillBlock` + apply-to over frames), the toolbar (File / Edit / Insert from the shared `ToolbarMenu`, tool buttons from the engine's tool list), and the mobile layout (thumbnail list + present). The properties panel is the engine's panel plus the rich text section (today's `TextProperties` rows) and, with nothing selected, the frame background panel.
 
 ### 7 — Comments, search, presence
 
@@ -142,10 +142,10 @@ A typed `elements` item on `EigenClipboardData` (`packages/lib/src/types/clipboa
 - **Reader.** `readVectorFromDoc` returns `VectorScene { elements, frames, meta }`, validates the new fields and re-homes dangling `frameId`s. `document/slides.ts` is deleted.
 - **`sceneToSvg(scene, { frameId? })`.** With a frame: the frame is the viewBox, the background comes from its `BackgroundFill` (solid rect; gradient as a `<linearGradient>`; image as `<image>` through `resolveMedia`), and `richtext` renders as `foreignObject` (SVG export and clipboard only).
 - **Export compositor.** `apps/api/src/lib/export/canvas/render.ts`, grown from today's `export/slides/render.ts`. Per frame a page; per element in z-order the same layer the live canvas renders: an absolutely positioned `<svg overflow="visible">` holding `elementToSvg(el, { positioned: false })`, or the rich text `<div>`. `SizeUnit` stays (`cqw`/`cqh` for the responsive HTML cards, px for PDF). It serves slides HTML, slides PDF and vector PDF (one page sized to the content bounds; this replaces the inline-svg wrapper so rich text in a drawing prints). Vector SVG stays `sceneToSvg`. Fonts and media are inlined as today.
-- **Preview.** Slides: the compositor body for the first 8 frames (today's rule). Vector: the `sceneToSvg` image, unchanged.
-- **Search extraction.** One collector over hand text, rich text and arrow labels in frame order.
+- **Preview.** Slides: the compositor body for the first 8 frames (today's rule). Vector: the `sceneToSvg` image, unchanged until phase 4 puts rich text in vector; from then on vector's preview is the compositor body too, because the drive preview shows the SVG through an `<img>` and rich text inside an image-loaded SVG is nothing to rely on.
+- **Search extraction.** One collector over hand text, rich text and arrow labels in frame order, stripping tags with `stripTagsServer`. That also fixes today's slides collector, which indexes the raw HTML.
 - **Media.** Enumeration stays folder-based; `mediaName` fields and the frame background image are unchanged.
-- **Registry.** Both entries declare the same `yjsRoots`; `TextPreviewMode` keeps `eigenslides`.
+- **Registry.** Both entries declare the same `yjsRoots`; `TextPreviewMode` (`packages/lib/src/constants/preview.ts`) keeps `eigenslides` and gains `eigenvector` when vector's preview moves to the compositor body.
 
 ### 10 — Style defaults per host
 
@@ -166,8 +166,8 @@ Each phase is its own branch and is mergeable on its own. Estimates are honest, 
 | Phase | Scope | Ships | Estimate |
 |---|---|---|---|
 | **0 — Spike + contract** | A perf and crispness check of the HTML base (500 shapes + 50 rich text boxes, three browsers, zoom in and out). A WeasyPrint golden for the per-element compositor (roughjs paths in positioned `<svg>`s, `overflow: visible`, padding as the fallback). The contract in [CANVAS.md](../CANVAS.md): element fields, frames, `richtext`, the clipboard item. | Numbers and a written contract | 1 wk |
-| **1 — The host** | The HTML base (section 4) and `CanvasEditor` with viewport mode, element scope, tools filter and style defaults. Per-element comments and ⌘F in vector. Shift additive select. Vector runs on it. | Vector unchanged for users, plus per-element comments and ⌘F | 2–3 wk |
-| **2 — The model** | `frames` root, `frameId`, `richtext`, `objectFit`, `borderRadius`, `BackgroundFill` on frames and rich text, the clipboard `elements` item, reader + `sceneToSvg` + search collector, registry `yjsRoots`, demo seed builders updated. | The engine can hold a deck; no deck UI yet | 1–2 wk |
+| **1 — The host** | The HTML base (section 4) and `CanvasEditor` with viewport mode, element scope, tools filter and style defaults. `commentCardIds` on elements (the one model field this phase needs), per-element comments and ⌘F in vector. Shift additive select. Vector runs on it. | Vector unchanged for users, plus per-element comments and ⌘F | 2–3 wk |
+| **2 — The model** | `frames` root, `frameId`, `richtext`, `objectFit`, `borderRadius`, `BackgroundFill` on frames and rich text, the clipboard `elements` item, reader + `sceneToSvg` + search collector, registry `yjsRoots`, the demo builders under `apps/api/src/scripts/demo/` updated (the vector site plan is content-built; the deck is a byte-copied fixture that has to be re-authored). | The engine can hold a deck; no deck UI yet | 1–2 wk |
 | **3 — Slides on the engine** | The deck shell rebuilt: `SlidePanel` over frames, `FrameThumbnail`, present mode, background panel, rich text in-place editing, the export compositor, preview, search, comments, presence. The old slides editor deleted. | Slides with shapes, arrows and everything else | 3–5 wk |
 | **4 — Parity polish** | Gradient fills for shapes (PROPOSAL_VECTOR design), the last-used style store, the `meta` background row, rich text in vector's Insert menu. | Both apps at parity | 1–2 wk |
 
@@ -186,10 +186,10 @@ Later, each its own proposal: frames in vector and presenting a drawing; SVG-nat
 - **Roughjs strokes overflow the element box.** Each element's `<svg>` needs `overflow: visible` (live) and, if WeasyPrint ignores that, padding (PDF), or shapes look shaved. PROPOSAL_VECTOR flagged this; the phase-0 golden proves it.
 - **Gradient interpolation.** Slides draws CSS gradients in oklab on screen and drops that for WeasyPrint, so screen and PDF already differ. SVG gradients interpolate in sRGB. Decision below: sRGB everywhere.
 - **Phase 3 is a rewrite of the slides editor.** Mitigation: phases 1 and 2 land first with vector as the live proof, so phase 3 is deletion plus a shell, and every deck behaviour has a Playwright leg.
-- **Two text kinds in one app.** A rich text box and a hand text element look and behave differently. Open question 2 settles the tool layout.
+- **Two text kinds in one app.** A rich text box and a hand text element look and behave differently. Open question 1 settles the tool layout.
 - **Two write disciplines in one host.** Hand text commits once; rich text streams. Acceptable because rich text has no measured side effect. To be documented in CANVAS.md.
 - **Undo across frames.** Undo can resurrect or remove the active frame; the shell follows (section 2).
-- **Demo data.** The demo deck seed and the vector site-plan builder must be regenerated; there is no migration.
+- **Demo data.** The vector site plan is rebuilt from `content.ts` by `vector-build.ts`; the demo deck (`sponsor-pitch.eigenslides`) is a byte-copied fixture with no builder, so it has to be re-authored or a deck builder written. There is no migration.
 - **SVG-native rich text, the later option.** With a fixed frame, text layout could be resolved once on the client into `tspan` runs (bold, italic, links, list bullets), which would make thumbnails, preview and PDF pure SVG and drop the HTML compositor. It is a text layout engine, roughly 1–2k lines, and it changes nothing in this proposal's model, only the `richtext` renderer. Not now.
 
 ## Recommendation
