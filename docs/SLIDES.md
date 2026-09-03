@@ -55,7 +55,7 @@ type BackgroundFill =
 ```
 
 `getBackgroundStyle(fill, resolveMediaUrl?)` from `@workspace/lib/background` turns a fill into CSS:
-gradients render as `linear-gradient(<angle>deg in oklab, from, to)`, images as a `background-image` sized
+gradients render as `linear-gradient(<angle>deg, from, to)` (sRGB interpolation), images as a `background-image` sized
 `cover` or `contain`. `isSameFill` backs the "mixed" state when a multi-selection disagrees.
 
 Editing UI is the shared `BackgroundFillBlock`

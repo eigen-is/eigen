@@ -93,6 +93,7 @@ Each app anchors a card to host content differently:
 | Docs     | TipTap mark `data-comment-id="<cardId>"` on a text range                |
 | Slides   | `BaseObject.commentCardIds: string[]` on the slide object               |
 | Sheets   | `Cell.commentCardIds?: string[]` on the cell                            |
+| Vector   | `VectorElementBase.commentCardIds` on the element — a JSON id string    |
 
 A card with no anchor is "orphaned" — its Y.Map entry, `.eigenchat`, and `comments.db` row all
 persist (enabling undo/redo + Y.Doc version revert), but it is hidden from the comment panel.
@@ -304,13 +305,15 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   `!isMobile`, hides nothing and passes no `onOpenChange`, and its toolbar toggle is absent on mobile.
   Giving stickies the mobile pane is recorded as next-round work in
   [MOBILE.md](MOBILE.md).
-  **Vector is the fifth host and is document-level**: cards live in the doc's `comments` Y.Map with no
-  element anchoring (every card is active by construction; `anchorTexts` empty). Because there is no
-  in-canvas anchor to add against, `PanelColumn` grew an optional `onAddComment` — a "New comment"
-  button in the comments-pane toolbar that only renders when a host passes it; content-anchored hosts
-  omit it and are unaffected. Vector's card delete removes the map entry directly and is deliberately
-  outside the canvas `UndoManager` scope (tracking the comments map would let ⌘Z resurrect cards
-  mid-edit — every host keeps comment maps untracked).
+  **Vector is the fifth host**: cards live in the doc's `comments` Y.Map and anchor per element through
+  `VectorElementBase.commentCardIds` — a JSON id **string**, not slides' array, because every stored
+  canvas field is a scalar. A card raised from the canvas object menu anchors to that element; one
+  raised from the pane stays document-level, so `PanelColumn` keeps its optional `onAddComment` — a
+  "New comment" button in the comments-pane toolbar that only renders when a host passes it;
+  content-anchored hosts omit it and are unaffected. Vector's card delete removes the map entry and
+  strips the id from its anchor element, and is deliberately outside the canvas `UndoManager` scope
+  (tracking the comments map would let ⌘Z resurrect cards mid-edit — every host keeps comment maps
+  untracked).
 - **Open state**: `useDocumentPanels(isMobile)` (`@workspace/lib/comments`) owns the comments/activity
   pair for docs, slides and sheets — one `panel: 'comments' | 'activity' | null` slot, so the two can
   never both be open. Host-owned like `useCommentFilter`. It also returns `mobilePanelOpen` and the
@@ -420,6 +423,18 @@ Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dial
 - Delete is a board-level helper `deleteCardFromBoard(cardId)` that walks columns + removes the
   Y.Map entry in one `transact` (single undo step, no orphan column refs).
 
+### Vector
+
+- `VectorElementBase.commentCardIds` is a JSON id string on the element (`parseIdList` /
+  `serializeIdList`); `withCommentCard` / `withoutCommentCard` are the two writers.
+- `useCanvasComments(elements, cards)` builds the `ActiveComments` projection: every card is active,
+  and `commentAnchorTexts` gives each anchored card the element's own `searchText` (first anchor wins,
+  falling back to the kind's UI label).
+- A commented element flags its top-right corner on the canvas; clicking the flag opens its first
+  card, and opening a card from the panel selects its anchor element.
+- On Add Comment from the canvas object menu the anchor callback appends the card id to that element;
+  from the pane the card stays document-level.
+
 ## Active vs orphaned comments
 
 The Y.Doc is the source of truth for which cards are "active":
@@ -427,6 +442,9 @@ The Y.Doc is the source of truth for which cards are "active":
 - Anchor absent (user removed it) → orphan; Y.Map entry, `.eigenchat`, and `comments.db` row all
   persist for undo/redo and version revert. CommentPanel hides orphans by intersecting
   `activeCardIds` with `cards`.
+- **The canvas is the exception**: every card in a vector document's `comments` map is active, so a
+  card whose anchor element was deleted degrades to a document-level comment instead of disappearing
+  from the panel. Its row then falls back to the kind's label rather than an anchor text.
 
 ## Key files
 
@@ -444,6 +462,7 @@ The Y.Doc is the source of truth for which cards are "active":
 | `packages/lib/src/docs/eigendoc/nodes/comment-mark.ts`              | TipTap mark schema (attr `cardId`)            |
 | `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
+| `packages/lib/src/vector/comments.ts`                               | Canvas anchoring helpers over `commentCardIds` |
 | `packages/ui/src/components/cards/`                          | Shared CardFormDialog + CardDialog |
 | `packages/ui/src/components/comments/`                       | PanelColumn + CommentPanel + ActivityPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
 | `packages/ui/src/components/notes/`                          | NoteCard + NoteCardDialog                     |
