@@ -1,6 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
@@ -43,12 +42,9 @@ export async function finalizeUpload(
         args.hash,
         args.tempId,
     );
-    if (originalName) {
-        await mount.updatePath(pathId, { details: { originalName } });
-    }
-
-    const uploadedFile = await mount.getPath(pathId);
-    if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
+    const uploadedFile = originalName
+        ? await mount.updatePath(pathId, { details: { originalName } })
+        : await mount.getActivePath(pathId);
     drive.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
     // History row only — fan-out is the caller's job, so a multi-file upload
     // notifies watchers once per batch instead of once per file.
@@ -89,7 +85,7 @@ export function regenerateThumbnailAsync(
             if (!thumbnail) return;
             const current = await mount.getPath(pathId);
             if (!current) return;
-            await mount.updatePath(pathId, {
+            const updated = await mount.updatePath(pathId, {
                 thumbnail: thumbnail.fileName,
                 details: {
                     ...(current.details ?? {}),
@@ -98,8 +94,6 @@ export function regenerateThumbnailAsync(
                     ...(thumbnail.duration !== undefined && { duration: thumbnail.duration }),
                 },
             });
-            const updated = await mount.getPath(pathId);
-            if (!updated) return;
             drive.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         } finally {
             await onCleanup?.();

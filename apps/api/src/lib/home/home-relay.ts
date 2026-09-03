@@ -29,7 +29,6 @@ import type {
     UpdateEventArgs,
 } from '../calendar/types';
 import { getAvatarsDir } from '../config/paths';
-import type { MimeOptions } from '../mount';
 import type { User } from '../user';
 import { getMemberships, getUserByEmail, updateUser } from '../user/';
 import { atHome, getHome, getTeamHome } from './get-home';
@@ -303,9 +302,9 @@ export async function pullTeamMounts(
 
 // Mime-filtered contents of a team drive, aggregated over its mounts. Team membership grants read
 // of everything in the mount by design, so the caller-side membership check is the only gate.
-export async function pullMimeContents(ownerId: string, mimeType: string, options?: MimeOptions): Promise<DrivePath[]> {
+export async function pullMimeContents(ownerId: string, mimeType: string): Promise<DrivePath[]> {
     const home = await getTeamHome(ownerId);
-    return home.drive.getMimeTypeContents(mimeType, options);
+    return home.drive.getMimeTypeContents(mimeType);
 }
 
 // FTS search over a team drive's own mounts (name + body). Same design as pullMimeContents: team

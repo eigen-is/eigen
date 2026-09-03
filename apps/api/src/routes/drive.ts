@@ -527,16 +527,15 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/mime/:mimeType',
         async ({ params, query, user }) => {
             const mimeType = params.mimeType.replace('-', '/');
-            const options = { excludeDocumentChildren: true };
 
             if (!query.teams) {
                 const drive = await getSharedDrive(params.ownerId, user);
-                return await drive.getMimeTypeContents(mimeType, options);
+                return await drive.getMimeTypeContents(mimeType);
             }
 
             // Aggregation reads other homes (team mounts), so it is self-only.
             requireSelf(params.ownerId, user.id);
-            return await aggregateMimeContents(user, mimeType, options);
+            return await aggregateMimeContents(user, mimeType);
         },
         { auth: true, query: t.Object({ teams: t.Optional(t.String()) }) },
     )
@@ -545,9 +544,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/mime/:mimeType',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.getMountMimeTypeContents(params.mountId, params.mimeType.replace('-', '/'), {
-                excludeDocumentChildren: true,
-            });
+            return await drive.getMountMimeTypeContents(params.mountId, params.mimeType.replace('-', '/'));
         },
         { auth: true },
     )

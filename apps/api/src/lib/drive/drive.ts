@@ -43,7 +43,7 @@ import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } 
 import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
-import { createDefaultMountConfig, createMountConfig, type MimeOptions, Mount } from '../mount';
+import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
 import type { StorageFile } from '../storage';
@@ -524,9 +524,7 @@ export default class Drive {
         // Old chain BEFORE the move — reading via either chain qualifies a watcher
         const oldChain = user ? await mount.getBreadcrumb(pathId) : [];
 
-        await mount.updatePath(pathId, { parentId: targetParentId });
-        const movedPath = await mount.getPath(pathId);
-        if (!movedPath) throw new ApiError(500, 'Failed to move path');
+        const movedPath = await mount.updatePath(pathId, { parentId: targetParentId });
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
         if (user && oldParentId) {
             mount.history.record({
@@ -562,14 +560,11 @@ export default class Drive {
         const item = await mount.getActivePath(pathId);
         const oldName = item.name;
 
-        await mount.updatePath(pathId, { name: newName });
-        const renamedItem = await mount.getPath(pathId);
-        if (renamedItem) {
-            // Propagate the POST-rename snapshot so each recipient's shared_paths mirror picks up
-            // the new name (mirrors updateACL). actor stays null — a rename must not email shares.
-            await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
-            this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
-        }
+        const renamedItem = await mount.updatePath(pathId, { name: newName });
+        // Propagate the POST-rename snapshot so each recipient's shared_paths mirror picks up
+        // the new name (mirrors updateACL). actor stays null — a rename must not email shares.
+        await propagateSharedPathChange(renamedItem, renamedItem.acl, renamedItem.acl, null);
+        this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
         if (user) {
             await this.recordFileEvent(mountId, pathId, user, { eventType: 'renamed', details: { oldName, newName } });
         }
@@ -698,13 +693,10 @@ export default class Drive {
         return { mount, path };
     }
 
-    async getMimeTypeContents(
-        mimeType: string,
-        options: MimeOptions = { excludeDocumentChildren: true },
-    ): Promise<DrivePath[]> {
+    async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            const mountResults = await mount.getPathsByMimeType(mimeType, options);
+            const mountResults = await mount.getPathsByMimeType(mimeType);
             allResults.push(...mountResults);
         }
 
@@ -713,13 +705,9 @@ export default class Drive {
         return [...allResults, ...sharedResults.filter((r) => !seen.has(r.id))];
     }
 
-    async getMountMimeTypeContents(
-        mountId: string,
-        mimeType: string,
-        options: MimeOptions = { excludeDocumentChildren: true },
-    ): Promise<DrivePath[]> {
+    async getMountMimeTypeContents(mountId: string, mimeType: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
-        return mount.getPathsByMimeType(mimeType, options);
+        return mount.getPathsByMimeType(mimeType);
     }
 
     // Called by: GET /search/:ownerId — owner-only (route gates with requireSelf), no SharedDrive wrapper.
@@ -835,25 +823,22 @@ export default class Drive {
         if (visibility !== undefined) updates.visibility = visibility;
         if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
         const oldACL = item.acl;
-        await mount.updatePath(pathId, updates);
-        const updatedItem = await mount.getPath(pathId);
-        if (updatedItem) {
-            await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
-            this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
-            if (actor) {
-                const { added, removed } = diffACLEmails(oldACL, normalizedACL);
-                if (added.length || removed.length) {
-                    await this.recordFileEvent(mountId, pathId, actor, {
-                        eventType: 'acl-changed',
-                        details: { added, removed },
-                    });
-                }
+        const updatedItem = await mount.updatePath(pathId, updates);
+        await propagateSharedPathChange(updatedItem, oldACL, normalizedACL, actor ?? null, options);
+        this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+        if (actor) {
+            const { added, removed } = diffACLEmails(oldACL, normalizedACL);
+            if (added.length || removed.length) {
+                await this.recordFileEvent(mountId, pathId, actor, {
+                    eventType: 'acl-changed',
+                    details: { added, removed },
+                });
             }
-            // A revoked read must drop the user's live collab socket now, not whenever they
-            // next disconnect. All connections (owner + shared users) live in this owner-home
-            // Drive's `documents` registry, so this is a local close — no home-relay needed.
-            await this.documents.enforceReadAccessBelow(mount, pathId);
         }
+        // A revoked read must drop the user's live collab socket now, not whenever they
+        // next disconnect. All connections (owner + shared users) live in this owner-home
+        // Drive's `documents` registry, so this is a local close — no home-relay needed.
+        await this.documents.enforceReadAccessBelow(mount, pathId);
     }
 
     // Returns all individual users who have effective access to a path,

@@ -217,8 +217,8 @@ export function isDocumentType(type: DrivePathType) {
 
 // Every Eigen container type except plain folders. Single source of truth for
 // "is this an Eigen-managed document/chat" — used by WebDAV write-protect
-// (mount internals are read-only) and by the excludeDocumentChildren CTE in
-// mount.ts. Same set as isDocumentType; an alias of EIGEN_DOC_TYPES (kept under
+// (mount internals are read-only) and by the docContainerDescendantIds CTE in
+// mount/helpers.ts. Same set as isDocumentType; an alias of EIGEN_DOC_TYPES (kept under
 // this name for the SQL-IN call sites) so the two lists can't drift.
 export const EIGEN_DOCUMENT_TYPES = EIGEN_DOC_TYPES;
 

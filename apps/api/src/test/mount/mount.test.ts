@@ -11,12 +11,14 @@ import {
     type ContentExtractor,
     ContentReindexQueue,
 } from '../../lib/mount/content-reindex-queue';
-import { buildStorageKey, createDefaultMountConfig } from '../../lib/mount/helpers';
+import { buildStorageKey } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { paths } from '../../lib/mount/schema';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
 import { parseSnapshotTimestamp } from '../../lib/versioning/timestamp';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import { createTestMountConfig } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
@@ -78,7 +80,7 @@ describe('downloadToTemp', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-download-to-temp', 'local-key');
+        const config = createTestMountConfig('test-download-to-temp', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
@@ -138,7 +140,7 @@ describe('snapshotContainerDataDb concurrency', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-snapshot-concurrency', 'local-key');
+        const config = createTestMountConfig('test-snapshot-concurrency', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
@@ -149,17 +151,17 @@ describe('snapshotContainerDataDb concurrency', () => {
         const data = Buffer.from('container-data-db-bytes');
         await mount.createFile(container, 'data.db', 'application/octet-stream', data.length, data);
 
-        // Without the container lock these race on createFolder('versions') and the
-        // timestamped copy, producing duplicate 'versions' folders or a duplicate-name
+        // Without the container lock these race on creating the versions folder and the
+        // timestamped copy, producing duplicate versions folders or a duplicate-name
         // insert. snapshotContainerDataDb self-locks, so they serialize cleanly.
         const results = await Promise.all(
             Array.from({ length: 5 }, () => mount.snapshotContainerDataDb(container, DEFAULT_RETENTION)),
         );
 
         const children = await mount.listFolder(container);
-        expect(children.filter((c) => c.name === 'versions')).toHaveLength(1);
+        expect(children.filter((c) => c.name === VERSIONS_FOLDER_NAME)).toHaveLength(1);
 
-        const versionsId = children.find((c) => c.name === 'versions')!.id;
+        const versionsId = children.find((c) => c.name === VERSIONS_FOLDER_NAME)!.id;
         const snaps = await mount.listFolder(versionsId);
         expect(snaps.length).toBeGreaterThanOrEqual(1);
         // Everything left in versions/ is a real, parseable snapshot — no garbage.
@@ -174,7 +176,7 @@ describe('replaceContainerDataDb', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-replace-datadb', 'local-key');
+        const config = createTestMountConfig('test-replace-datadb', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
@@ -210,7 +212,7 @@ describe('Mount (local-key storage)', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-local-key', 'local-key');
+        const config = createTestMountConfig('test-local-key', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -275,6 +277,15 @@ describe('Mount (local-key storage)', () => {
         await mount.updatePath(folderId, { name: 'NewName' });
         const folder = await mount.getPath(folderId);
         expect(folder!.name).toBe('NewName');
+    });
+
+    test('updatePath returns the updated row', async () => {
+        const srcId = await mount.createFolder(rootId, 'ReturnSrc');
+        const dstId = await mount.createFolder(rootId, 'ReturnDst');
+        const fileId = await mount.createFile(srcId, 'moved.txt', 'text/plain', 1, Buffer.from('a'));
+        const moved = await mount.updatePath(fileId, { name: 'renamed.txt', parentId: dstId });
+        expect(moved.name).toBe('renamed.txt');
+        expect(moved.parentId).toBe(dstId);
     });
 
     test('delete file', async () => {
@@ -344,7 +355,7 @@ describe('Mount (local path-based storage)', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-local', 'local');
+        const config = createTestMountConfig('test-local', 'local');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -462,7 +473,7 @@ describe('Name validation', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-validate', 'local');
+        const config = createTestMountConfig('test-validate', 'local');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -622,7 +633,7 @@ describe('Trash query filtering', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-trash-filter', 'local-key');
+        const config = createTestMountConfig('test-trash-filter', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -742,7 +753,7 @@ describe('trashPath (local-key storage)', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-trash-lk', 'local-key');
+        const config = createTestMountConfig('test-trash-lk', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -839,7 +850,7 @@ describe('trashPath (local-key storage)', () => {
     });
 
     test('listTrash returns only trashedFrom IS NOT NULL items, ordered by trashedAt desc', async () => {
-        const config2 = createDefaultMountConfig('test-trash-list-lk', 'local-key');
+        const config2 = createTestMountConfig('test-trash-list-lk', 'local-key');
         const mount2 = new Mount(OWNER_ID, TEST_DIR, config2, createGetLocalDatabase(TEST_DIR));
         await mount2.init();
         const root2 = (await mount2.getRootFolder())!;
@@ -865,7 +876,7 @@ describe('trashPath (local path-based storage)', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-trash-local', 'local');
+        const config = createTestMountConfig('test-trash-local', 'local');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -985,7 +996,7 @@ describe('restorePath (local-key storage)', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-restore-lk', 'local-key');
+        const config = createTestMountConfig('test-restore-lk', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -1107,7 +1118,7 @@ describe('restorePath (local path-based storage)', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-restore-local', 'local');
+        const config = createTestMountConfig('test-restore-local', 'local');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -1205,7 +1216,7 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-perm-delete', 'local-key');
+        const config = createTestMountConfig('test-perm-delete', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -1254,8 +1265,8 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(await mount.getPath(childId)).toBeNull();
     });
 
-    test('purgeTrash() with no args deletes all trashed items', async () => {
-        const config2 = createDefaultMountConfig('test-purge-all', 'local-key');
+    test('purgeTrash(0) deletes every expired trashed item', async () => {
+        const config2 = createTestMountConfig('test-purge-all', 'local-key');
         const mount2 = new Mount(OWNER_ID, TEST_DIR, config2, createGetLocalDatabase(TEST_DIR));
         await mount2.init();
         const root2 = (await mount2.getRootFolder())!;
@@ -1268,7 +1279,12 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         const trashBefore = await mount2.listTrash();
         expect(trashBefore.length).toBe(2);
 
-        await mount2.purgeTrash();
+        // Backdate a minute: the cutoff is a strict `<` on second-granularity trashedAt.
+        const trashedAt = new Date(Date.now() - 60 * 1000);
+        await mount2.updatePath(f1, { trashedAt });
+        await mount2.updatePath(f2, { trashedAt });
+
+        await mount2.purgeTrash(0);
 
         expect(await mount2.getPath(f1)).toBeNull();
         expect(await mount2.getPath(f2)).toBeNull();
@@ -1277,16 +1293,16 @@ describe('permanentlyDeleteFromTrash and purgeTrash', () => {
         expect(trashAfter.length).toBe(0);
     });
 
-    test('purgeTrash() on empty trash — no error', async () => {
-        const config3 = createDefaultMountConfig('test-purge-empty', 'local-key');
+    test('purgeTrash(0) on empty trash — no error', async () => {
+        const config3 = createTestMountConfig('test-purge-empty', 'local-key');
         const mount3 = new Mount(OWNER_ID, TEST_DIR, config3, createGetLocalDatabase(TEST_DIR));
         await mount3.init();
 
-        await expect(mount3.purgeTrash()).resolves.toBeUndefined();
+        await expect(mount3.purgeTrash(0)).resolves.toBeUndefined();
     });
 
     test('purgeTrash(30) deletes old items, keeps recent ones', async () => {
-        const config4 = createDefaultMountConfig('test-purge-age', 'local-key');
+        const config4 = createTestMountConfig('test-purge-age', 'local-key');
         const mount4 = new Mount(OWNER_ID, TEST_DIR, config4, createGetLocalDatabase(TEST_DIR));
         await mount4.init();
         const root4 = (await mount4.getRootFolder())!;
@@ -1324,7 +1340,7 @@ describe('Folder sizes', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-folder-sizes', 'local-key');
+        const config = createTestMountConfig('test-folder-sizes', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -1475,7 +1491,7 @@ describe('Folder sizes', () => {
     });
 
     test('path-based move invalidates both chains', async () => {
-        const config = createDefaultMountConfig('test-folder-sizes-local', 'local');
+        const config = createTestMountConfig('test-folder-sizes-local', 'local');
         const m = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await m.init();
         const root = (await m.getRootFolder())!;
@@ -1560,7 +1576,7 @@ describe('Managed-db open vs create', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-open-create', 'local-key');
+        const config = createTestMountConfig('test-open-create', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
@@ -1611,7 +1627,7 @@ describe('Managed-db open vs create', () => {
     // the unsynced tail, and a surviving temp is the Phase 1a unclean-shutdown marker the next
     // open adopts + re-syncs. Deleting it would silently serve stale storage bytes on reopen.
     test('close() with a failing final sync rejects but leaves the crash-recovery temp', async () => {
-        const config = createDefaultMountConfig('test-failed-close', 'local');
+        const config = createTestMountConfig('test-failed-close', 'local');
         const failMount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await failMount.init();
         const failRootId = (await failMount.getRootFolder())!.id;
@@ -1653,7 +1669,7 @@ describe('content search (upsertPathContent / clearPathContent / searchPaths bod
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-content-search', 'local-key');
+        const config = createTestMountConfig('test-content-search', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
@@ -1693,7 +1709,7 @@ describe('content index dirty marks', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-content-dirty', 'local-key');
+        const config = createTestMountConfig('test-content-dirty', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;
@@ -1763,7 +1779,7 @@ describe('trash/restore content reindex', () => {
             onExtract?.();
             return body;
         };
-        const config = createDefaultMountConfig('test-restore-reindex', 'local-key');
+        const config = createTestMountConfig('test-restore-reindex', 'local-key');
         const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR), extract);
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -1802,7 +1818,7 @@ describe('content reindex failure handling', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-reindex-retry', 'local-key');
+        const config = createTestMountConfig('test-reindex-retry', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;

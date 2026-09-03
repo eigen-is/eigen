@@ -14,7 +14,7 @@ export const sharedPaths = sqliteTable('shared_paths', {
     thumbnail: text('thumbnail'),
     acl: text('acl', { mode: 'json' }).$type<DriveACL[] | null>(),
     visibility: text('visibility').$type<DriveVisibility>().default('private'),
-    sharingRestricted: integer('sharingRestricted').notNull().default(0),
+    sharingRestricted: integer('sharingRestricted', { mode: 'boolean' }).notNull().default(false),
     details: text('details', { mode: 'json' }).$type<DrivePathDetails>(),
     createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),

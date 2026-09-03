@@ -47,7 +47,7 @@ export async function receiveSharedPathChange(
             .set({
                 acl: newACL,
                 visibility: path.visibility,
-                sharingRestricted: path.sharingRestricted ? 1 : 0,
+                sharingRestricted: path.sharingRestricted,
                 name: path.name,
                 size: path.size,
                 thumbnail: path.thumbnail,
@@ -72,7 +72,7 @@ export async function receiveSharedPathChange(
                 thumbnail: path.thumbnail,
                 acl: newACL,
                 visibility: path.visibility,
-                sharingRestricted: path.sharingRestricted ? 1 : 0,
+                sharingRestricted: path.sharingRestricted,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             })
@@ -129,7 +129,7 @@ function sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): 
         thumbnail: r.thumbnail,
         acl: r.acl,
         visibility: r.visibility ?? 'private',
-        sharingRestricted: !!r.sharingRestricted,
+        sharingRestricted: r.sharingRestricted,
         details: r.details ?? null,
         trashedAt: null,
         createdAt: r.createdAt ?? new Date(),

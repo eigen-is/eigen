@@ -16,7 +16,7 @@ export async function findChatsByMembers(drive: Drive, user: User, emails: strin
 
     // Own paths carry the caller's ownerId, mirror rows the foreign owner's — that split
     // drives the two matching strategies below.
-    const candidates = await drive.getMimeTypeContents(DRIVE_MIME_CHAT, { excludeDocumentChildren: true });
+    const candidates = await drive.getMimeTypeContents(DRIVE_MIME_CHAT);
 
     // Repeat sharers appear across many rows — resolve each owner once per request.
     const ownerCache = new Map<string, User | null>();

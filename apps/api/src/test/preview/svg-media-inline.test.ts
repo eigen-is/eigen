@@ -6,9 +6,9 @@ import { eigenMediaHref } from '@workspace/lib/vector';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
 import { getFontFaceCSSForFamilies } from '../../lib/export/fonts';
 import { collectExportMedia } from '../../lib/export/media';
-import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { inlineSvgMediaRefs, SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
+import { createTestMountConfig } from '../mount-test-helpers';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-svg-inline-${Date.now()}`);
@@ -50,7 +50,7 @@ describe('inlineSvgMediaRefs', () => {
 
     beforeAll(async () => {
         mkdirSync(TEST_DIR, { recursive: true });
-        const config = createDefaultMountConfig('test-svg-inline', 'local-key');
+        const config = createTestMountConfig('test-svg-inline', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;
@@ -152,7 +152,7 @@ describe('inlineSvgMediaRefs font injection', () => {
 
     beforeAll(async () => {
         mkdirSync(dir, { recursive: true });
-        const config = createDefaultMountConfig('test-svg-fonts', 'local-key');
+        const config = createTestMountConfig('test-svg-fonts', 'local-key');
         mount = new Mount(OWNER_ID, dir, config, createGetLocalDatabase(dir));
         await mount.init();
         folderId = (await mount.getRootFolder())!.id;
@@ -263,7 +263,7 @@ describe('export media path (prepareMedia + sanitizeExportHtml)', () => {
 
     beforeAll(async () => {
         mkdirSync(dir, { recursive: true });
-        const config = createDefaultMountConfig('test-svg-inline-export', 'local-key');
+        const config = createTestMountConfig('test-svg-inline-export', 'local-key');
         mount = new Mount(OWNER_ID, dir, config, createGetLocalDatabase(dir));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;

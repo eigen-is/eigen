@@ -1,7 +1,6 @@
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { pullDriveSearch, pullMimeContents } from '../home/home-relay';
-import type { MimeOptions } from '../mount';
 import type { User } from '../user';
 import { getMemberships } from '../user';
 import { getDrive, getSharedDrive } from './get-drive';
@@ -19,12 +18,12 @@ function mergeById(lists: DrivePath[][]): DrivePath[] {
 }
 
 // Personal mime contents + every team the caller belongs to; newest first.
-export async function aggregateMimeContents(user: User, mimeType: string, options: MimeOptions): Promise<DrivePath[]> {
+export async function aggregateMimeContents(user: User, mimeType: string): Promise<DrivePath[]> {
     const drive = await getDrive(user);
-    const personal = await drive.getMimeTypeContents(mimeType, options);
+    const personal = await drive.getMimeTypeContents(mimeType);
     const { teamIds } = await getMemberships(user.id);
     const teamResults = await Promise.all(
-        teamIds.map((teamId) => pullMimeContents(teamOwnerId(teamId), mimeType, options).catch(() => [])),
+        teamIds.map((teamId) => pullMimeContents(teamOwnerId(teamId), mimeType).catch(() => [])),
     );
     return mergeById([personal, ...teamResults]).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
 }

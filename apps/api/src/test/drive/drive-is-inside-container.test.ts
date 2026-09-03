@@ -3,8 +3,8 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { DRIVE_TYPE_FOLDER, type DrivePath, isContainerType } from '@workspace/lib/types';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
-import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
+import { createTestMountConfig } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-iic-${Date.now()}`);
 const OWNER_ID = 'test-owner-iic';
@@ -39,7 +39,7 @@ describe('Mount.getBreadcrumb (powers Drive.isInsideContainer)', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-iic', 'local-key');
+        const config = createTestMountConfig('test-iic', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         rootId = (await mount.getRootFolder())!.id;

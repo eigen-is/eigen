@@ -2,8 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
-import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import { createTestMountConfig } from '../mount-test-helpers';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-copy-${Date.now()}`);
 const OWNER_ID = 'test-owner-copy';
@@ -35,7 +36,7 @@ describe('Mount.copyPath', () => {
     let rootId: string;
 
     beforeAll(async () => {
-        const config = createDefaultMountConfig('test-copy', 'local-key');
+        const config = createTestMountConfig('test-copy', 'local-key');
         mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
         await mount.init();
         const root = await mount.getRootFolder();
@@ -83,7 +84,7 @@ describe('Mount.copyPath', () => {
         // Build a container-shaped dir: type 'doc' with data.db + versions/
         const docId = await mount.createFolder(rootId, 'My Doc.eigendoc', 'doc');
         await mount.createFile(docId, 'data.db', 'application/octet-stream', 4, Buffer.from('YJS!'));
-        const versionsId = await mount.createFolder(docId, 'versions');
+        const versionsId = await mount.createFolder(docId, VERSIONS_FOLDER_NAME);
         await mount.createFile(versionsId, '2020.db', 'application/octet-stream', 3, Buffer.from('old'));
 
         const copied = await mount.copyPath(docId, rootId, 'My Doc copy.eigendoc');

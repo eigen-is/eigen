@@ -37,34 +37,35 @@ async function openDocumentDb<S extends SchemaType>(
     pathId: string,
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
-    if (!mount.documentDbs.has(pathId)) {
-        mount.documentDbs.set(
-            pathId,
-            createAsyncSingleton(async () => {
-                // Captured synchronously with the map-set and first getter() call below (one
-                // synchronous block): any close that grabs THIS factory as its getter registers
-                // strictly after this capture, so the captured close can never transitively
-                // await this factory — exactly one entry to wait on, no loop, no cycle.
-                const closing = mount.closingDocumentDbs.get(pathId);
-                // An in-flight close of the same pathId still owns files the fresh instance
-                // would share — the live temp (local/s3) or the backing file's journals
-                // (local-key) — so building over it loses the tail. Backend-unconditional.
-                // The close's error stays with its own caller; the open builds regardless.
-                if (closing) await closing.catch(() => {});
-                // Clean up the map entry if the factory throws — otherwise a
-                // failed createDatabase leaves a getter behind whose closed-over
-                // `mode` would silently steer the next openDatabase down the
-                // create path.
-                try {
-                    return await buildDocumentDb(mount, config, pathId, mode);
-                } catch (err) {
-                    mount.documentDbs.delete(pathId);
-                    throw err;
-                }
-            }),
-        );
+    let getter = mount.documentDbs.get(pathId);
+    if (!getter) {
+        getter = createAsyncSingleton(async () => {
+            // Captured synchronously with the map-set and first getter() call below (one
+            // synchronous block): any close that grabs THIS factory as its getter registers
+            // strictly after this capture, so the captured close can never transitively
+            // await this factory — exactly one entry to wait on, no loop, no cycle.
+            const closing = mount.closingDocumentDbs.get(pathId);
+            // An in-flight close of the same pathId still owns files the fresh instance
+            // would share — the live temp (local/s3) or the backing file's journals
+            // (local-key) — so building over it loses the tail. Backend-unconditional.
+            // The close's error stays with its own caller; the open builds regardless.
+            if (closing) await closing.catch(() => {});
+            // Clean up the map entry if the factory throws — otherwise a
+            // failed createDatabase leaves a getter behind whose closed-over
+            // `mode` would silently steer the next openDatabase down the
+            // create path.
+            try {
+                return await buildDocumentDb(mount, config, pathId, mode);
+            } catch (err) {
+                mount.documentDbs.delete(pathId);
+                throw err;
+            }
+        });
+        mount.documentDbs.set(pathId, getter);
     }
-    return mount.documentDbs.get(pathId)!() as Promise<ManagedDatabase<S>>;
+    // Seam: documentDbs is one heterogeneous cache (ManagedDatabase<SchemaType>), so the caller's
+    // schema S can only be re-attached here — the config that built the entry carries it.
+    return getter() as Promise<ManagedDatabase<S>>;
 }
 
 async function buildDocumentDb<S extends SchemaType>(
@@ -74,7 +75,12 @@ async function buildDocumentDb<S extends SchemaType>(
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
     const storageKey = await mount.getStorageKey(pathId);
-    const localPath = mount.needsTempCopy ? mount.getTempPath(pathId) : mount.storage.getPath!(storageKey);
+    // local-key is the only backend that skips the temp copy, and its LocalStorage always exposes
+    // getPath (optional on StorageBackend because s3 has no local file).
+    let localPath: string;
+    if (mount.needsTempCopy) localPath = mount.getTempPath(pathId);
+    else if (mount.storage.getPath) localPath = mount.storage.getPath(storageKey);
+    else throw new Error(`Mount.${mode}Database ${pathId}: storage backend exposes no local path`);
 
     if (mode === 'create') {
         if (await mount.storage.exists(storageKey)) {
@@ -84,13 +90,14 @@ async function buildDocumentDb<S extends SchemaType>(
         throw new ApiError(503, `Storage object for ${pathId} not available`);
     }
 
-    const onSnapshot: SyncCallbacks['onSnapshot'] = config.snapshot
+    const snapshot = config.snapshot;
+    const onSnapshot: SyncCallbacks['onSnapshot'] = snapshot
         ? async () => {
               const path = await mount.getPath(pathId);
               // standalone or already-deleted: 'taken' so the watermark advances and the
               // tick doesn't re-probe every 30s ('skipped' is strictly for lock contention).
               if (!path?.parentId) return 'taken';
-              return mount.trySnapshotContainerDataDb(path.parentId, config.snapshot!.policy);
+              return mount.trySnapshotContainerDataDb(path.parentId, snapshot.policy);
           }
         : undefined;
 
@@ -203,13 +210,10 @@ async function buildDocumentDb<S extends SchemaType>(
         managed.markDirty();
     }
 
-    // For temp-copy backends (s3, path-based local), push the
-    // freshly-created schema to storage before returning.
-    // Local-key writes go straight to the backing file so no
-    // flush is needed. Without this, the storage object only
-    // appears on the next 30s sync — and an API restart in
-    // that window would make subsequent strict openDatabase
-    // calls throw.
+    // For temp-copy backends (s3, path-based local), push the freshly-created schema to storage before
+    // returning. Local-key writes go straight to the backing file so no flush is needed. Without this, the
+    // storage object only appears on the next 30s sync — and an API restart in that window would make
+    // subsequent strict openDatabase calls throw.
     if (mode === 'create' && mount.needsTempCopy) {
         await managed.flush();
     }

@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
-import { createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { isExiftoolCandidate } from '../../lib/preview/exiftool-preview';
 import { getTextPreview } from '../../lib/preview/preview-cache';
 import { isVideoCandidate } from '../../lib/preview/video-preview';
 import { generateImagePreview, saveThumbnail } from '../../lib/shared/thumbnails';
+import { createTestMountConfig } from '../mount-test-helpers';
 import { authedRequest, driveGet, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 describe('Preview', () => {
@@ -386,7 +386,7 @@ describe('getTextPreview (stale-while-revalidate)', () => {
         const tmpDir = `/tmp/eigen-stale-preview-test-${Date.now()}`;
         mkdirSync(tmpDir, { recursive: true });
 
-        const config = createDefaultMountConfig('test-stale-preview', 'local-key');
+        const config = createTestMountConfig('test-stale-preview', 'local-key');
         const mount = new Mount('test-owner-id', tmpDir, config, createGetLocalDatabase(tmpDir));
         await mount.init();
         const rootId = (await mount.getRootFolder())!.id;

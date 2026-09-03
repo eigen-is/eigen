@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOCUMENT_TYPES } from '@workspace/lib/types/drive';
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
 import { ApiError } from '../core';
 
@@ -13,11 +13,13 @@ export function isReservedName(name: string): boolean {
     return name.normalize('NFKC').toLowerCase() === '.trash';
 }
 
+// Control bytes (incl. NUL) are rejected in both names and WebDAV path segments — a name creatable
+// via the API must stay reachable over WebDAV, which rejects this range per RFC 4918.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control chars is the point
+export const CONTROL_CHARS = /[\x00-\x1f]/;
+
 export function validateName(name: string): string {
-    // Reject control bytes (incl. NUL) so a name creatable via the API stays reachable
-    // over WebDAV, where resolvePath rejects the same [\x00-\x1f] range (RFC 4918).
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: mirrors resolvePath's control-char guard
-    const hasControlChar = /[\x00-\x1f]/.test(name);
+    const hasControlChar = CONTROL_CHARS.test(name);
     if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || hasControlChar) {
         throw new ApiError(400, `Invalid file or folder name: "${name}"`);
     }
@@ -50,23 +52,26 @@ export const docContainerDescendantIds = sql`
     SELECT id FROM doc_tree
 `;
 
-// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL. Its violation is what
-// closes the concurrent same-name races (create INSERTs, rename/move/restore UPDATEs); the sites map
-// it to a 409 via rethrowDuplicateActiveName.
-const UNIQUE_ACTIVE_NAME_INDEX = 'idx_paths_unique_active_name';
-
-// True only for the losing racer tripping that index. bun:sqlite names the expression index in the
-// message (`UNIQUE constraint failed: index 'idx_paths_unique_active_name'`); match on it so an
-// unrelated UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
-function isDuplicateActiveNameError(e: unknown): boolean {
-    return e instanceof Error && e.message.includes(`index '${UNIQUE_ACTIVE_NAME_INDEX}'`);
+// Subquery: `pathId` plus every ancestor up to the mount root. Embedded as `id IN (…)` so one
+// query fetches a whole chain (resolveStoragePath walks it down, getBreadcrumb walks it up).
+export function ancestorIds(pathId: string): SQL {
+    return sql`
+        WITH RECURSIVE ancestors AS (
+            SELECT id, parentId FROM paths WHERE id = ${pathId}
+            UNION ALL
+            SELECT p.id, p.parentId FROM paths p JOIN ancestors a ON p.id = a.parentId
+        )
+        SELECT id FROM ancestors
+    `;
 }
 
-// Rethrow, translating the index violation into the SAME 409 assertUniqueName raises. Shared by the
-// create INSERTs and the rename/move/restore UPDATEs — single-threaded callers pass assertUniqueName's
-// SELECT first, so only the race tail lands here.
+// The v7 partial unique index (parentId, LOWER(name)) WHERE trashedAt IS NULL closes the concurrent
+// same-name races the create INSERTs and rename/move/restore UPDATEs can't; translate its violation
+// into the SAME 409 assertUniqueName raises (single-threaded callers pass that SELECT first, so only
+// the race tail lands here). Match on the index name bun:sqlite puts in the message so an unrelated
+// UNIQUE (the id PRIMARY KEY) still surfaces as a real error rather than a spurious 409.
 export function rethrowDuplicateActiveName(e: unknown, name: string): never {
-    if (isDuplicateActiveNameError(e)) {
+    if (e instanceof Error && e.message.includes(`index 'idx_paths_unique_active_name'`)) {
         throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
     }
     throw e;
@@ -114,25 +119,19 @@ export function isViableRecoveryTemp(tempPath: string, knownSize: number): boole
     return !(knownSize >= RECOVERY_COLLAPSE_FLOOR_BYTES && tempSize < knownSize * RECOVERY_COLLAPSE_RATIO);
 }
 
-export function createDefaultMountConfig(
-    id: string = 'default',
-    storageType: MountConfig['storageType'] = 'local',
-): MountConfig {
-    return {
-        id,
-        name: 'My Drive',
-        storageType,
-        isDefault: true,
-        s3Config: storageType === 's3' ? getS3Config() : undefined,
-    };
+const DEFAULT_MOUNT_NAME = 'My Drive';
+const DEFAULT_MOUNT_ID = 'default';
+
+export function createDefaultMountConfig(): MountConfig {
+    return { id: DEFAULT_MOUNT_ID, name: DEFAULT_MOUNT_NAME, storageType: 'local', isDefault: true };
 }
 
 export function createMountConfig(id: string, settings: MountSettings): MountConfig {
     return {
         id,
-        name: settings.name ?? (id === 'default' ? 'My Drive' : id),
+        name: settings.name ?? (id === DEFAULT_MOUNT_ID ? DEFAULT_MOUNT_NAME : id),
         storageType: settings.storageType,
-        isDefault: id === 'default',
+        isDefault: id === DEFAULT_MOUNT_ID,
         maxSizeMB: settings.maxSizeMB,
         s3Config: settings.s3Config ?? (settings.storageType === 's3' ? getS3Config() : undefined),
     };
