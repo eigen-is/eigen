@@ -2,7 +2,6 @@ import { getDriveItemThumbnail } from '@workspace/lib/api';
 import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
-import { SLIDE_BASE_WIDTH } from '@workspace/lib/slides';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -70,11 +69,11 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
 }
 
 // The width a mode composes at, so the hero scales by containerW / that width: text modes render
-// into an A4 page, slides have a 16:9 base width, a drawing composes at CANVAS_PREVIEW_WIDTH. Sheets
-// vary with their content — null falls back to measuring the rendered body.
+// into an A4 page, a deck and a drawing both compose at CANVAS_PREVIEW_WIDTH. Sheets vary with
+// their content — null falls back to measuring the rendered body.
 const INTRINSIC_WIDTH: Record<TextPreviewMode, number | null> = {
     eigendoc: A4_WIDTH_PX,
-    eigenslides: SLIDE_BASE_WIDTH,
+    eigenslides: CANVAS_PREVIEW_WIDTH,
     eigensheets: null,
     eigenvector: CANVAS_PREVIEW_WIDTH,
     markdown: A4_WIDTH_PX,
@@ -84,7 +83,7 @@ const INTRINSIC_WIDTH: Record<TextPreviewMode, number | null> = {
 
 // eigen-prose for rendered prose, drive-preview-code for raw <pre><code> blocks — eigen-prose's
 // <pre> rule paints a dark code-block background that is wrong for a whole-file code thumbnail.
-// Slides and drawings need none: those bodies carry their own box and their own paint.
+// A deck and a drawing need none: a compositor page carries its own box and its own paint.
 const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
     eigendoc: 'eigen-prose tiptap',
     eigenslides: '',

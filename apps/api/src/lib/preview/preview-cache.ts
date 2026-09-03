@@ -31,7 +31,8 @@ function screenCacheName(drivePath: DrivePath, ext: 'webp' | 'svg'): string {
 // f3: sheets previews render off-thread with the row/column/cell budget.
 // f4: merges and conditional formatting clip to the render window (spans, window-scoped
 //     aggregates, formula-rule ceiling).
-const TEXT_FORMAT = 'f4';
+// f5: a deck previews as canvas compositor pages, not slide divs.
+const TEXT_FORMAT = 'f5';
 
 function textCacheName(drivePath: DrivePath): string {
     return `${drivePath.id}-${versionStamp(drivePath.updatedAt)}.${TEXT_FORMAT}.json`;

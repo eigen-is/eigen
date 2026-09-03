@@ -1,10 +1,11 @@
 import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
-import { readVectorFromDoc, type VectorScene } from '@workspace/lib/vector';
+import { readVectorFromDoc } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
 import { type CanvasPage, drawingPage, emptyPage, renderCanvasPage } from '../export/canvas/render';
 import { sanitizeExportHtml } from '../export/sanitize';
 import { applyPreviewByteGuard } from './preview-marker';
+import { sanitizeSceneHtml } from './sanitize-scene';
 
 const EMPTY_PREVIEW_HEIGHT = 120;
 
@@ -25,7 +26,7 @@ export function renderEigenvectorPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
 ): { body: string; warnings: TransformWarning[] } {
-    const scene = sanitizeRichText(readVectorFromDoc(doc));
+    const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
     const page = drawingPage(scene, (mediaName) => mediaUrls.get(mediaName) ?? null);
     // An empty drawing still previews as a page: getOrCacheText stores only a non-empty body, so
     // nothing here would leave an emptied drawing serving the preview it had when it had content.
@@ -45,13 +46,4 @@ function renderPreviewPage(page: CanvasPage): string {
     // origin by half the difference: the box comes out full width with the drawing centred in it.
     const width = CANVAS_PREVIEW_WIDTH / scale;
     return renderCanvasPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
-}
-
-// Every element that carries an `html` body, with that body filtered: DOMPurify plus the shared
-// restriction to data: refs, so nothing a collaborator wrote in it can fetch from anywhere.
-function sanitizeRichText(scene: VectorScene): VectorScene {
-    return {
-        ...scene,
-        elements: scene.elements.map((el) => ('html' in el ? { ...el, html: sanitizeExportHtml(el.html) } : el)),
-    };
 }
