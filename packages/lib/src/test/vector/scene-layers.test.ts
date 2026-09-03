@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
-import { elementLayer, layerBoxCss, layerInnerHtml, sceneLayers } from '../../vector/scene-layers';
+import { elementLayer, layerBoxCss, layerInnerHtml, RICH_TEXT_CLASS, sceneLayers } from '../../vector/scene-layers';
 import {
     DEFAULT_ARROW_PROPS,
     DEFAULT_ELEMENT_PROPS,
@@ -166,7 +166,20 @@ describe('elementLayer', () => {
 
     test('layerInnerHtml wraps rich text in the same styled div the foreignObject arm emits', () => {
         const html = layerInnerHtml({ html: '<p>hi</p>', style: 'color:#111;width:100%' });
-        expect(html).toBe('<div style="color:#111;width:100%"><p>hi</p></div>');
+        expect(html).toBe(`<div class="${RICH_TEXT_CLASS}" style="color:#111;width:100%"><p>hi</p></div>`);
+    });
+
+    test('a rich-text body carries the shared class, so lists and quotes are styled', () => {
+        const layer = elementLayer(richtext({ id: 't', html: '<ul><li>one</li></ul>' }));
+        expect(layer).not.toBeNull();
+        const html = layer === null ? '' : layerInnerHtml(layer.content);
+        expect(html.startsWith(`<div class="${RICH_TEXT_CLASS}" style="`)).toBe(true);
+        expect(html).toContain('<ul><li>one</li></ul>');
+    });
+
+    test('an svg body is the fragment itself, unwrapped', () => {
+        const layer = elementLayer(shape({ id: 'r', type: 'rectangle' }));
+        expect(layer === null ? '' : layerInnerHtml(layer.content)).not.toContain(RICH_TEXT_CLASS);
     });
 
     test('layerInnerHtml escapes the style attribute', () => {

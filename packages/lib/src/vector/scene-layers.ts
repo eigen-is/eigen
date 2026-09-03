@@ -1,6 +1,6 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
-// does it draw", so the live canvas (a div per layer) and the compositor that prints the same drawing
-// agree by construction. sceneToSvg is the third renderer; it places elements itself.
+// does it draw", so the live canvas (one absolutely positioned div per element), the server compositor
+// (the same boxes as HTML) and the standalone SVG serializer agree by construction.
 
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';
@@ -67,11 +67,18 @@ export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): L
     };
 }
 
-// The layer's body as one HTML string: an svg fragment passes through, rich text gets the styled wrapper
-// div the foreignObject arm emits. No class and no <p> reset here — those exist so a standalone SVG
-// carries its own typography; a live layer sits in the app, whose CSS already resets block margins.
+// The class every rich-text body wraps in. It carries the descendant rules an inline style cannot
+// reach — list markers, blockquote rule, link underline (packages/ui/src/styles/canvas-text.css,
+// embedded standalone by the export and preview documents).
+export const RICH_TEXT_CLASS = 'eigen-canvas-text';
+
+// The layer's body as one HTML string: an svg fragment passes through, rich text gets the styled
+// wrapper div. No <p> reset here — a live layer sits in the app, whose CSS already resets block
+// margins; a standalone SVG carries its own (scene-to-svg.ts).
 export function layerInnerHtml(content: RenderOutput): string {
-    return 'svg' in content ? content.svg : `<div style="${escapeXml(content.style)}">${content.html}</div>`;
+    return 'svg' in content
+        ? content.svg
+        : `<div class="${RICH_TEXT_CLASS}" style="${escapeXml(content.style)}">${content.html}</div>`;
 }
 
 export function sceneLayers(scene: VectorScene, opts: SceneLayersOptions = {}): Layer[] {

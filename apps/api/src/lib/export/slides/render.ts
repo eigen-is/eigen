@@ -88,7 +88,7 @@ export function renderSlideObjectHtml(
             ? `<span style="background-color:${escapeHtml(obj.highlightColor)};box-decoration-break:clone;-webkit-box-decoration-break:clone">${safeText}</span>`
             : safeText;
 
-        return `<div style="${styles.join(';')}"><div style="width:100%;height:100%;display:flex;align-items:${alignItems}"><div class="slide-text" style="white-space:pre-wrap;word-break:break-word;width:100%;${textStyles.join(';')}">${textContent}</div></div></div>`;
+        return `<div style="${styles.join(';')}"><div style="width:100%;height:100%;display:flex;align-items:${alignItems}"><div class="eigen-canvas-text" style="white-space:pre-wrap;word-break:break-word;width:100%;${textStyles.join(';')}">${textContent}</div></div></div>`;
     }
 
     if (obj.type === 'image') {

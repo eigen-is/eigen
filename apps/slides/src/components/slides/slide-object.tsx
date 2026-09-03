@@ -101,7 +101,7 @@ export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
             {obj.type === 'text' && (
                 <div className="w-full h-full flex" style={getVerticalAlignStyle(vAlign)}>
                     <div
-                        className="slide-text break-words w-full"
+                        className="eigen-canvas-text break-words w-full"
                         style={getTextStyle(obj)}
                         dangerouslySetInnerHTML={{ __html: buildTextHtml(obj) }}
                     />
@@ -219,7 +219,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                     style={getVerticalAlignStyle(verticalAlign)}
                 >
                     <div
-                        className="slide-text break-words w-full"
+                        className="eigen-canvas-text break-words w-full"
                         style={textStyle}
                         dangerouslySetInnerHTML={{ __html: buildTextHtml(obj) }}
                     />
@@ -232,7 +232,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                     style={getVerticalAlignStyle(verticalAlign)}
                     onMouseDown={(e) => e.stopPropagation()}
                 >
-                    <div className="slide-text w-full max-h-full overflow-hidden" style={textStyle}>
+                    <div className="eigen-canvas-text w-full max-h-full overflow-hidden" style={textStyle}>
                         <LightEditor
                             content={stripTrailingEmptyBlocks(obj.text)}
                             onChange={(html) => onUpdate(obj.id, { text: stripTrailingEmptyBlocks(html) })}

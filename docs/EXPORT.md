@@ -256,8 +256,9 @@ main thread and hands the deck to `renderEigenslidesExport` (`slides/transform.t
 
 Text objects store HTML (TipTap output). `render.ts` runs `obj.text` through `DOMPurify` and `escapeHtml`s
 the highlight color before embedding, so the same value that's safely shown by the FE canvas is also safe
-inside the export. The `.slide-text` typography rules live in `packages/ui/src/styles/slide-text.css` and
-are imported via `with { type: 'text' }` from `transform.ts` so canvas and export render identically.
+inside the export. The `.eigen-canvas-text` typography rules — the list markers, blockquote rule and link
+underline an element's inline style cannot reach — live in `packages/ui/src/styles/canvas-text.css` and are
+imported via `with { type: 'text' }` by the export documents so canvas and export render identically.
 
 ### File Structure
 

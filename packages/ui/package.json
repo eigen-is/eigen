@@ -51,7 +51,7 @@
     ".": "./src/index.ts",
     "./globals.css": "./src/styles/globals.css",
     "./styles/eigen-prose.css": "./src/styles/eigen-prose.css",
-    "./styles/slide-text.css": "./src/styles/slide-text.css",
+    "./styles/canvas-text.css": "./src/styles/canvas-text.css",
     "./assets/fonts/excalifont/Excalifont-Regular.woff2": "./src/assets/fonts/excalifont/Excalifont-Regular.woff2",
     "./assets/fonts/inter/Inter-Variable.woff2": "./src/assets/fonts/inter/Inter-Variable.woff2",
     "./assets/fonts/inter/Inter-Variable-Italic.woff2": "./src/assets/fonts/inter/Inter-Variable-Italic.woff2",

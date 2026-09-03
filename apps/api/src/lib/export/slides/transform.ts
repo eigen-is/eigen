@@ -1,7 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import type { DeckData } from '@workspace/lib/slides';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
-import slideTextCSSRaw from '@workspace/ui/styles/slide-text.css' with { type: 'text' };
+import slideTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { toDataUriMap } from '../../document/media';
 import { readDeckFromDoc } from '../../document/slides';

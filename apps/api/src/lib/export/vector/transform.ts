@@ -1,5 +1,7 @@
 import { escapeHtml } from '@workspace/lib/html';
 import { isTransparentColor, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
+// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
+import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
 import { spliceAfterSvgOpenTag, toDataUriMap } from '../../document/media';
@@ -82,7 +84,9 @@ function usedFontFamilies(scene: VectorScene): Set<string> {
 }
 
 // A minimal page sized to the drawing so WeasyPrint prints one PDF page the size of the artwork,
-// with the same font faces the screen uses. The body arrives already sanitized; the wrapper is ours.
+// with the same font faces the screen uses. canvas-text.css rides along because the reset below zeroes
+// every padding, which would otherwise pull a rich-text box's list markers outside its box. The body
+// arrives already sanitized; the wrapper is ours.
 function wrapInPdfDocument(title: string, body: string, width: number, height: number): string {
     return `<!DOCTYPE html>
 <html lang="en">
@@ -93,7 +97,8 @@ function wrapInPdfDocument(title: string, body: string, width: number, height: n
 @page { size: ${width}px ${height}px; margin: 0; }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { margin: 0; }
-svg { display: block; }</style>
+svg { display: block; }
+${canvasTextCSSRaw}</style>
 </head>
 <body>
     ${body}

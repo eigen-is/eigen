@@ -1,7 +1,7 @@
 @import "tailwindcss";
 @import "./fonts.css";
 @import "./eigen-prose.css";
-@import "./slide-text.css";
+@import "./canvas-text.css";
 
 /* @source is relative to THIS file — the repo root is four levels up, not three.
    The old three-up globs pointed at nonexistent dirs, so classes used ONLY in
