@@ -25,3 +25,21 @@ export const FRAME_FIELDS: readonly string[] = ['id', 'index', 'name', 'backgrou
 export function elementsInFrame<T extends { frameId: string }>(elements: T[], frameId: string): T[] {
     return elements.filter((el) => el.frameId === frameId);
 }
+
+// The frame the shell should activate. `lastIndex` is the position the active frame held; when it is
+// gone (a peer's delete, an undo of the add) the frame that now occupies that position takes over,
+// clamped to the ends — deleting the last slide steps BACK rather than off the end. '' means the deck
+// has no frames at all, which is a state only an empty document is in.
+export function nearestFrameId(frames: VectorFrame[], activeId: string, lastIndex: number): string {
+    if (frames.length === 0) return '';
+    if (frames.some((frame) => frame.id === activeId)) return activeId;
+    const at = Math.min(Math.max(lastIndex, 0), frames.length - 1);
+    return frames[at].id;
+}
+
+// The frame and every frame after it, in stored order — the "this and following" scope. An unknown
+// id selects nothing rather than the whole deck, so a stale id can't apply a change everywhere.
+export function framesFrom(frames: VectorFrame[], frameId: string): VectorFrame[] {
+    const at = frames.findIndex((frame) => frame.id === frameId);
+    return at === -1 ? [] : frames.slice(at);
+}

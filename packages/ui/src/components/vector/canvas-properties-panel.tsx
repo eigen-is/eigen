@@ -60,6 +60,7 @@ import {
     type ZOp,
     ZOrderButtons,
 } from '@workspace/ui/components/properties-panel';
+import type { ReactNode } from 'react';
 import type * as Y from 'yjs';
 import type { VectorElementPatch } from './hooks/use-canvas-doc';
 import { applyZOrder } from './hooks/use-canvas-keyboard';
@@ -126,11 +127,17 @@ type CanvasPropertiesPanelProps = {
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     undoManager: Y.UndoManager | null;
-    // The scene's own settings, edited with nothing selected. A frame paints its own background through
-    // the Fill codec, which is a different surface, so the row is infinite-mode only.
+    // The scene's own settings, edited with nothing selected. In frame mode the scene background row
+    // is not the question a user is asking — the FRAME's background is — so a host in frame mode
+    // supplies its own section instead (the deck's SlideBackgroundPanel, whose apply-to scope speaks
+    // deck words the engine must not).
     meta: VectorMeta;
     updateMeta: (fields: Partial<VectorMeta>) => void;
     viewport: 'infinite' | 'frame';
+    // Panel title with nothing selected; defaults to the canvas.
+    emptyTitle?: string;
+    // Rendered instead of the canvas rows with nothing selected.
+    emptySection?: ReactNode;
     // Aspect lock, owned by the editor so the panel checkbox and the canvas'
     // ObjectTransform resizeMode share one ephemeral setting.
     aspectLocked: boolean;
@@ -145,6 +152,8 @@ export function CanvasPropertiesPanel({
     meta,
     updateMeta,
     viewport,
+    emptyTitle,
+    emptySection,
     aspectLocked,
     onAspectLockChange,
 }: CanvasPropertiesPanelProps) {
@@ -328,7 +337,7 @@ export function CanvasPropertiesPanel({
 
     // The kind's own label, from the registry — a second table here would drift from the toolbar's.
     const title = !has
-        ? 'Canvas'
+        ? (emptyTitle ?? 'Canvas')
         : selectedElements.length === 1
           ? ELEMENT_KIND_UI[selectedElements[0].type].label
           : `${selectedElements.length} elements`;
@@ -527,18 +536,20 @@ export function CanvasPropertiesPanel({
                 </PropertySection>
             )}
 
-            {!has && viewport === 'infinite' && (
-                <PropertySection title="Canvas">
-                    {/* The scene background is a plain colour (meta.background), not a Fill — a frame's
-                        background is the widened Fill codec and gets its own row. */}
-                    <ColorRow
-                        label="Background"
-                        value={isTransparentColor(meta.background) ? '' : meta.background}
-                        onChange={(c) => updateMeta({ background: c || TRANSPARENT_COLOR })}
-                        showReset
-                    />
-                </PropertySection>
-            )}
+            {!has &&
+                (emptySection ??
+                    (viewport === 'infinite' && (
+                        <PropertySection title="Canvas">
+                            {/* The scene background is a plain colour (meta.background), not a Fill — a
+                                frame's background is a Fill and its panel is the host's. */}
+                            <ColorRow
+                                label="Background"
+                                value={isTransparentColor(meta.background) ? '' : meta.background}
+                                onChange={(c) => updateMeta({ background: c || TRANSPARENT_COLOR })}
+                                showReset
+                            />
+                        </PropertySection>
+                    )))}
 
             {has && (
                 <PropertySection title="Arrange">

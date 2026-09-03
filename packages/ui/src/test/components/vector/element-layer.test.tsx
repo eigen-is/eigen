@@ -91,14 +91,14 @@ describe('the layer box', () => {
     test('an unrotated layer translates to its box origin and leaves left/top at zero', () => {
         const html = renderToStaticMarkup(<ElementLayer el={rect(box)} />);
         expect(html).toContain('left:0;top:0;width:40px;height:20px');
-        expect(html).toContain('transform:translate(12.5px, -3.25px)');
+        expect(html).toContain('transform:translate(12.5px,-3.25px)');
     });
 
     test('a rotated layer composes rotate after translate, pivoting on the default centre origin', () => {
         // transform-origin is the box centre, and translate is origin-independent, so this is the old
         // renderer's `translate(x y) rotate(angle w/2 h/2)` exactly.
         const html = renderToStaticMarkup(<ElementLayer el={rect({ ...box, angle: 30 })} />);
-        expect(html).toContain('transform:translate(12.5px, -3.25px) rotate(30deg)');
+        expect(html).toContain('transform:translate(12.5px,-3.25px) rotate(30deg)');
     });
 
     test('opacity rides on the layer, and only below full', () => {

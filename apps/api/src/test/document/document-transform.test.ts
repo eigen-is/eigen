@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { decodeSheetsSnapshot, encodeSheetsSnapshot, type Sheet } from '@workspace/lib/sheets';
-import type { ImageObject, TextObject } from '@workspace/lib/slides';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { eq } from 'drizzle-orm';
@@ -12,7 +11,7 @@ import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import * as collabSchema from '../../lib/collab/schema';
 import { ApiError } from '../../lib/core/errors';
 import { readEigendocFromDoc, writeEigendocToYjs, writeEigendocUpdateToYjs } from '../../lib/document/doc';
-import { buildEigenMediaRefMap, buildPreviewUrlMap } from '../../lib/document/media';
+import { buildPreviewUrlMap } from '../../lib/document/media';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
 import { captureCollabSource } from '../../lib/document/transform/collab-source';
 import {
@@ -34,20 +33,18 @@ import type { Mount } from '../../lib/mount';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import { renderEigensheetsPreviewBody } from '../../lib/preview/eigensheets-render';
 import { renderEigenslidesPreviewBody } from '../../lib/preview/eigenslides-render';
-import { renderEigenvectorPreview } from '../../lib/preview/eigenvector-render';
-import { getScreenPreview } from '../../lib/preview/preview-cache';
+import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
 import type { User } from '../../lib/user';
 import {
-    buildGoldenDeck,
+    buildGoldenDeckScene,
     buildGoldenDocJson,
     buildGoldenVectorScene,
     editGoldenDeckTitle,
     GOLDEN_BEYOND_CAP,
     GOLDEN_MEDIA_NAME,
-    GOLDEN_VECTOR_TEXT,
+    seedDeckDoc,
     seedDocumentMedia,
     seedEigendoc,
-    seedSlidesDoc,
     seedVectorDoc,
 } from '../fixtures/golden-documents';
 import { buildGoldenDocx, GOLDEN_DOCX_IMAGE_NAME } from '../fixtures/golden-docx';
@@ -663,13 +660,16 @@ describe('document transform (xlsx import)', () => {
 // move off-thread is proven byte-identical. Regenerate only
 // for an intentional renderer change. The embedded media data URI comes from the
 // screen-preview pipeline (sharp → WebP), so a preview-encoder change moves the
-// export hashes legitimately.
+// export hashes legitimately. The deck hashes were re-recorded when the deck moved onto the canvas
+// compositor: a slide is a `canvas-page` of scene layers now, so the bytes differ by construction —
+// and again when every screen-rendered page gained the shared `.page-fit` wrapper, which the preview
+// body now carries too so the lightbox and the drive hero can scale a page below its own width.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'f61e8785cd4e3b3872e5fcf6ee817abdae5e2ed4119a113dc17342fd922e6b44';
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
 const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f4b1308435d2d2f9d140c4ed62b81a1e9cb281dee8d68aee3a880258e87edf3b';
-const GOLDEN_DECK_PREVIEW_SHA256 = '351d31560954f2490f67bd5aeba11f24d083e3646c78b25599e0fef816c65616';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = '7b584e034fcf9fe42b2dc2dd6d20d9f4af4bb1c21444875c985dacfe59bd9644';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '4c70de4e940fd61e27152e00f718546b37747bc22f5f1acbc5d53d8c753f6aec';
+const GOLDEN_DECK_PREVIEW_SHA256 = '311befb5e41d44764a652b426ce83f96293ccccb9adffe14e16412c50b0c5c50';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '90aedd5ee8392ed455dcd90d8ad069b0c4c16c5866879f8c03614a54e0e76c4c';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '1f82eecdcf9b60057fbcba2eec06355945d869676f947b80a59ca05bf4f8659e';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
@@ -693,7 +693,7 @@ async function seedGoldenDocument(
     const home = await getHome(ctx.alice.user.id);
     const collab = await home.drive.getCollabDocument(mountId, created.id);
     if (type === 'doc') seedEigendoc(collab.doc, buildGoldenDocJson());
-    else seedSlidesDoc(collab.doc, buildGoldenDeck());
+    else seedDeckDoc(collab.doc, buildGoldenDeckScene());
     edit?.(collab.doc);
 
     const resolved = await home.drive.resolveFile(mountId, created.id);
@@ -855,11 +855,12 @@ describe('document transform (eigenslides)', () => {
         expect(body).toBe(direct.body);
         expect(response.ok && response.warnings).toEqual(direct.warnings);
 
-        // First 8 slides with the truncated marker, media as an embed URL.
+        // First 8 slides as compositor pages, with the truncated marker and media as an embed URL.
+        expect(body.match(/class="canvas-page"/g)).toHaveLength(8);
         expect(body).toContain('Deck <strong>title</strong>');
         expect(body).not.toContain(GOLDEN_BEYOND_CAP);
         expect(body).toContain('Preview truncated');
-        expect(body).toMatch(/<img src="http:\/\/localhost\/drive\/[^"]+\/preview"/);
+        expect(body).toMatch(/href="http:\/\/localhost\/drive\/[^"]+\/preview"/);
         expect(body).not.toMatch(/<script/i);
         expect(body).not.toMatch(/"\s*onload/i);
         expect(sha256(normalizeMediaUrls(body))).toBe(GOLDEN_DECK_PREVIEW_SHA256);
@@ -874,13 +875,14 @@ describe('document transform (eigenslides)', () => {
         expect(preview.body).toBe(body);
     }, 120_000);
 
-    test('html export is byte-identical to the pre-move pipeline', async () => {
+    test('html export matches the pinned golden bytes', async () => {
         const result = await exportDocument(golden.mount, golden.path, 'html');
         expect(sha256(result.data)).toBe(GOLDEN_DECK_EXPORT_HTML_SHA256);
     }, 120_000);
 
-    test('pdf-html export is byte-identical to the pre-move pipeline', async () => {
-        // Fixed-size PDF mode: px geometry instead of container queries.
+    test('pdf-html export matches the pinned golden bytes', async () => {
+        // The PDF arm keeps each page unscaled on its own sheet; only the screen arm wraps a page
+        // in the container-query fit box.
         const html = await runDocumentExport(
             { documentType: 'eigenslides', format: 'pdf-html' },
             golden.mount,
@@ -888,30 +890,6 @@ describe('document transform (eigenslides)', () => {
         );
         expect(sha256(html)).toBe(GOLDEN_DECK_EXPORT_PDF_HTML_SHA256);
     }, 120_000);
-
-    test('an image object naming a prototype key renders empty, not a crash', () => {
-        // mediaName is document data — an unknown name must resolve to null, never to
-        // something off Object.prototype.
-        const deck = buildGoldenDeck();
-        (deck.objects['obj-2'] as ImageObject).mediaName = 'toString';
-        const doc = new Y.Doc();
-        seedSlidesDoc(doc, deck);
-        expect(renderEigenslidesPreviewBody(doc, new Map()).body).not.toContain('<img');
-    });
-
-    test('byte guard replaces an oversized body with the truncated notice, never a sliced string', () => {
-        // The cap counts slides, not bytes — one enormous text object sails through
-        // the 8-slide limit and only the byte guard stands between it and the cache.
-        const deck = buildGoldenDeck();
-        (deck.objects['obj-1'] as TextObject).text = `<p>${'x'.repeat(9_000_000)}</p>`;
-        const doc = new Y.Doc();
-        seedSlidesDoc(doc, deck);
-
-        const { body, warnings } = renderEigenslidesPreviewBody(doc, new Map());
-        expect(warnings.some((warning) => warning.code === 'byte-guard-truncated')).toBe(true);
-        expect(body).toContain('Preview truncated');
-        expect(body.length).toBeLessThan(1000);
-    }, 60_000);
 
     test('a corrupt update blob surfaces as a warning, never a failed export', async () => {
         // The export side of the shared worker.ts blob-skip path (preview side: the
@@ -945,10 +923,9 @@ describe('document transform (eigenslides)', () => {
     }, 120_000);
 });
 
-// Vector's preview is not an HTML body: the Worker renders the drawing's own SVG and it
-// is served as-is on the image-preview path, so this suite proves the SVG round-trip
-// (Worker == main thread), the resolved media href, and the SVG content type — not a
-// { body, mode } text envelope.
+// Vector's preview body is one compositor page of HTML, the same markup the PDF export prints,
+// so this suite proves the page round-trip (Worker == main thread) and the /preview media URL the
+// main thread resolved.
 async function seedGoldenVector(fileName: string): Promise<{ mount: Mount; path: DrivePath }> {
     const created = await drivePost<DrivePath>(
         ctx.alice.user.sessionToken,
@@ -973,12 +950,12 @@ describe('document transform (eigenvector)', () => {
         golden = await seedGoldenVector('golden-vector');
     });
 
-    test('Worker preview equals the main thread, and the route serves it as an SVG image', async () => {
+    test('Worker preview equals the main thread', async () => {
         const { mount, path } = golden;
-        const mediaUrls = await buildEigenMediaRefMap(mount, path);
+        const mediaUrls = await buildPreviewUrlMap(mount, path);
         // Main-thread execution of the exact Worker pipeline against the Worker run.
         const persisted = await readPersistedDoc(mount, path);
-        const direct = renderEigenvectorPreview(persisted, mediaUrls);
+        const direct = renderEigenvectorPreviewBody(persisted, mediaUrls);
         persisted.destroy();
 
         const response = await documentTransformRunner.run(
@@ -989,37 +966,14 @@ describe('document transform (eigenvector)', () => {
         expect(body).toBe(direct.body);
         expect(response.ok && response.warnings).toEqual(direct.warnings);
 
-        // The body is the drawing's own SVG — no rasterisation, no HTML wrapper, no
-        // truncated-block sanitizer. The image element rides its `eigen-media:` name ref
-        // (inlined at serve time), and hostile text is XML-escaped by the serializer itself.
-        expect(body.startsWith('<svg')).toBe(true);
+        // The body is a compositor page — the same HTML the PDF export prints, not an SVG
+        // document. Its image rides the /preview URL the main thread prepared, and hostile text
+        // stays escaped through DOMPurify and the serializer.
+        expect(body.startsWith('<div class="page-fit"')).toBe(true);
         expect(body).toContain('Vector &lt;sketch&gt;');
         expect(body).not.toContain('<sketch>');
-        expect(body).toMatch(/<image[^>]+href="eigen-media:pixel\.png"/);
-
-        // The /preview route serves those bytes through the same svg-media-inline pass a stored
-        // .svg takes (getScreenPreview): the eigen-media ref becomes the sibling's data: URI and
-        // the Excalifont face is injected — an <img>-hosted SVG never fetches external URLs.
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${mountId}/file/${path.id}/preview`,
-        );
-        expect(res.status).toBe(200);
-        expect(res.headers.get('content-type')).toContain('image/svg+xml');
-        const served = await res.text();
-        expect(served).toContain('Vector &lt;sketch&gt;');
-        expect(served).toMatch(/<image[^>]+href="data:image\//);
-        expect(served).not.toContain('eigen-media:');
-        expect(served).toContain('font-family: "Excalifont"');
-    }, 120_000);
-
-    test('getScreenPreview caches and serves the drawing as an image/svg+xml buffer', async () => {
-        const result = await getScreenPreview(golden.mount, golden.path, 'unused-embed');
-        if (result?.type !== 'image') throw new Error(`expected an image preview, got ${JSON.stringify(result)}`);
-        expect(result.contentType).toBe('image/svg+xml');
-        const svg = result.data.toString('utf-8');
-        expect(svg.startsWith('<svg')).toBe(true);
-        expect(svg).toContain(GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;'));
+        expect(body).toMatch(/<image[^>]+href="https?:\/\/[^"]+\/file\/[^"]+\/preview"/);
+        expect(body).not.toContain('eigen-media:');
     }, 120_000);
 });
 

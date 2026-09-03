@@ -20,7 +20,7 @@ comments / tasks Y.Map        chatName (PK), status, resolvedBy,     useCommentC
      }                                                                CommentCard
 ```
 
-Each container document (eigendoc, eigenstickies, eigenslides, eigensheets) stores `comments.db`
+Each container document (eigendoc, eigenstickies, eigenslides, eigensheets, eigenvector) stores `comments.db`
 alongside `data.db`. Comment chats live as `.eigenchat` folders in the container's `chat/` directory.
 
 ```
@@ -57,7 +57,7 @@ the same fact.
 
 Cards live in a Y.Map keyed by `id`. The map name is per-app:
 - **Stickies**: `tasks` (unchanged for backwards compatibility)
-- **Docs / Slides / Sheets**: `comments`
+- **Docs / Slides / Sheets / Vector**: `comments`
 
 Color lives on the Y.Doc card — undoable via the Y.UndoManager, collaborative via y-websocket, no
 REST round-trip on color change.
@@ -91,9 +91,8 @@ Each app anchors a card to host content differently:
 |----------|-------------------------------------------------------------------------|
 | Stickies | Column membership: `columnsMap.<col>.taskIds` contains the cardId       |
 | Docs     | TipTap mark `data-comment-id="<cardId>"` on a text range                |
-| Slides   | `BaseObject.commentCardIds: string[]` on the slide object               |
 | Sheets   | `Cell.commentCardIds?: string[]` on the cell                            |
-| Vector   | `VectorElementBase.commentCardIds` on the element — a JSON id string    |
+| Slides / Vector | `VectorElementBase.commentCardIds` on the element — a JSON id string |
 
 A card with no anchor is "orphaned" — its Y.Map entry, `.eigenchat`, and `comments.db` row all
 persist (enabling undo/redo + Y.Doc version revert), but it is hidden from the comment panel.
@@ -252,7 +251,7 @@ prop, board + panel pass `entry?.assignee`).
 
 ### CommentLifecycleMenuItems (`packages/ui/src/components/comments/comment-lifecycle-menu-items.tsx`)
 
-Binds every comment row — view, **edit**, colour, assign, resolve/re-open, delete — to a `useCommentLifecycle` bundle, so all hosts offer the same actions from one wiring and a new row lands everywhere at once. A host passes only what its anchor decides: the `item` under the cursor, `canWrite`, and its own `onAddComment`/`onDelete` (those strip or write the host anchor). Every mutating row is gated on `canWrite` here, not per app. Three hosts render it: `<CommentContextMenu>` (docs, stickies, vector, the panel rows), slides' `SlideObjectMenu`, and the sheet's cell menu via `hooks.commentLifecycle`. Selecting a row closes the host menu on its own — every row is a real menu item, and `ContextMenuAnchor` turns Radix's close into the singleton menu's `close()`.
+Binds every comment row — view, **edit**, colour, assign, resolve/re-open, delete — to a `useCommentLifecycle` bundle, so all hosts offer the same actions from one wiring and a new row lands everywhere at once. A host passes only what its anchor decides: the `item` under the cursor, `canWrite`, and its own `onAddComment`/`onDelete` (those strip or write the host anchor). Every mutating row is gated on `canWrite` here, not per app. Two hosts render it: `<CommentContextMenu>` (docs, stickies, the two canvas apps, the panel rows) and the sheet's cell menu via `hooks.commentLifecycle`. Selecting a row closes the host menu on its own — every row is a real menu item, and `ContextMenuAnchor` turns Radix's close into the singleton menu's `close()`.
 
 **Edit** calls `lifecycle.openCardForEdit(cardId)`, which opens `<CardDialog>` straight in its edit form. Edit mode lives in the lifecycle bundle (`openCardEditing` / `setOpenCardEditing`) pinned to a card id, so opening a different card lands in view mode with no reset effect.
 
@@ -287,7 +286,7 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   drop their own width. Mount it outside any `<ColumnLayout mobileColumn="…">` — a `Column` self-hides
   when its id doesn't match, so a host that wraps it gets no pane at all, silently. Props are pure
   projection plus one `onOpenCard(cardId)`. On mobile every host passes plain `setOpenCardId`: the editor
-  is hidden while the pane is up, so scroll-to-mark (docs) and the slide + object reveal (slides) would
+  is hidden while the pane is up, so scroll-to-mark (docs) and the slide + element reveal (slides) would
   drive a view nobody can see, and an activity row's card opens over the Activity pane rather than
   switching it to Comments under the dialog. On desktop docs and slides pass their reveal, and docs'
   activity tap still switches to Comments. `activeComments` is the one optional prop — an activity-only
@@ -305,12 +304,12 @@ Properties-panel overlay showing all comments for a document. The caller passes 
   `!isMobile`, hides nothing and passes no `onOpenChange`, and its toolbar toggle is absent on mobile.
   Giving stickies the mobile pane is recorded as next-round work in
   [MOBILE.md](MOBILE.md).
-  **Vector is the fifth host**: cards live in the doc's `comments` Y.Map and anchor per element through
-  `VectorElementBase.commentCardIds` — a JSON id **string**, not slides' array, because every stored
+  **Both canvas apps are the fifth host** — slides and vector share one anchoring path, and slides adds the deck's own reveal (opening a card activates that element's slide, then selects it). Cards live in the doc's `comments` Y.Map and anchor per element through
+  `VectorElementBase.commentCardIds` — a JSON id **string**, not an array, because every stored
   canvas field is a scalar. A card raised from the canvas object menu anchors to that element; one
   raised from the pane stays document-level, so `PanelColumn` keeps its optional `onAddComment` — a
   "New comment" button in the comments-pane toolbar that only renders when a host passes it;
-  content-anchored hosts omit it and are unaffected. Vector's card delete removes the map entry and
+  content-anchored hosts omit it and are unaffected. The canvas' card delete removes the map entry and
   strips the id from its anchor element, and is deliberately outside the canvas `UndoManager` scope
   (tracking the comments map would let ⌘Z resurrect cards mid-edit — every host keeps comment maps
   untracked).
@@ -393,13 +392,14 @@ Optional `onResolve`/`onAssign` for apps that surface resolve/assign at the dial
 - On selection right-click → CardFormDialog opens with the selected text as `initialTitle`. On save,
   `useCreateCommentCard`'s `anchorInTransact` callback runs `editor.chain().setComment(card.id)`.
 
-### Slides
+### Slides and Vector (the canvas)
 
-- `BaseObject.commentCardIds: string[]` stored as plain JS array in the Y.Map.
-- `useActiveComments(deck)` scans objects; anchor text is first 100 chars of text objects or
-  `"Image"` for image objects.
-- Indicator triangle on each anchored object pulls `card.color`; first-unresolved wins.
-- On Add Comment: anchor callback calls `addCommentToObject(objId, card.id)`.
+- `VectorElementBase.commentCardIds` — a JSON id string on the element; `withCommentCard` /
+  `withoutCommentCard` (`packages/lib/src/vector/comments.ts`) own the encoding and are idempotent.
+- `useCanvasComments(elements, cards)` builds the panel rows; a card's anchor text is the anchoring
+  element's own `searchText`, falling back to the kind's UI label so a row is never blank.
+- A commented element flags its top-right corner in `card.color`; clicking the flag opens the first card.
+- On Add Comment: the anchor callback writes the new card id onto the element in the same transact.
 
 ### Sheets
 
@@ -460,16 +460,14 @@ The Y.Doc is the source of truth for which cards are "active":
 | `packages/lib/src/types/comments.ts`                                | `CommentCard` type                            |
 | `packages/lib/src/types/chat.ts`                                    | `CommentEntry` type (server projection)       |
 | `packages/lib/src/docs/eigendoc/nodes/comment-mark.ts`              | TipTap mark schema (attr `cardId`)            |
-| `packages/lib/src/slides/types.ts`                                  | `BaseObject.commentCardIds`                   |
 | `packages/lib/src/sheets/types.ts`                                  | `Cell.commentCardIds`                         |
-| `packages/lib/src/vector/comments.ts`                               | Canvas anchoring helpers over `commentCardIds` |
+| `packages/lib/src/vector/comments.ts`                               | Canvas anchoring helpers over `commentCardIds` (slides + vector) |
 | `packages/ui/src/components/cards/`                          | Shared CardFormDialog + CardDialog |
 | `packages/ui/src/components/comments/`                       | PanelColumn + CommentPanel + ActivityPanel + CommentThread + CommentMenuItems + CommentContextMenu + CreatedByMeta |
 | `packages/ui/src/components/notes/`                          | NoteCard + NoteCardDialog                     |
 | `apps/docs/src/components/docs/editor.tsx`                          | Docs editor integration                       |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`          | ProseMirror plugins (interaction + decorations) |
-| `apps/slides/src/components/slides/editor.tsx`                      | Slides editor integration                     |
-| `apps/slides/src/components/slides/hooks/use-active-comments.ts`    | Scan objects for cardIds                      |
+| `apps/slides/src/components/slides/editor.tsx`                      | Slides editor integration (the canvas anchoring path) |
 | `apps/sheets/src/components/sheets/editor.tsx`                      | Sheets editor integration                     |
 | `apps/sheets/src/components/sheets/hooks/use-active-comments.ts`    | Scan cell matrix for cardIds                  |
 | `apps/stickies/src/components/stickies/board.tsx`                   | Stickies board adoption                       |

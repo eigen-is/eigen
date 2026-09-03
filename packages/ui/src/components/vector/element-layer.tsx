@@ -10,6 +10,7 @@ import {
     ELEMENT_FIELDS,
     elementLayer,
     type Layer,
+    layerBoxCss,
     layerInnerHtml,
     type MediaResolver,
     type Point,
@@ -64,22 +65,11 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     return samePoints(arrowRoute(prev.el, prev.byId), arrowRoute(next.el, next.byId));
 }
 
-// The box as CSS. The origin rides in a transform, not in left/top, because the browser pixel-snaps a
-// fractional box origin before painting the layer's own <svg> — that put every element up to half a
-// pixel off the exact float coordinates the single-<svg> renderer drew at. Transforms are not snapped.
-// transform-origin stays the default box centre and translate is origin-independent, so
-// `translate(x,y) rotate(a)` is the old renderer's `translate(x y) rotate(a w/2 h/2)` exactly. No
-// will-change: promoting 500 layers to their own composited surface costs more memory than it buys.
-function layerStyle({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): React.CSSProperties {
-    const rotate = box.angle === 0 ? '' : ` rotate(${box.angle}deg)`;
-    return {
-        left: 0,
-        top: 0,
-        width: box.width,
-        height: box.height,
-        transform: `translate(${box.x}px, ${box.y}px)${rotate}`,
-        opacity: opacity === 100 ? undefined : opacity / 100,
-    };
+// The box as CSS: lib's layerBoxCss with left/top pinned at zero, because the origin rides in the
+// transform (see layerBoxCss for why). No will-change: promoting 500 layers to their own composited
+// surface costs more memory than it buys.
+function layerStyle(layer: Pick<Layer, 'box' | 'opacity'>): React.CSSProperties {
+    return { left: 0, top: 0, ...layerBoxCss(layer) };
 }
 
 export const ElementLayer = memo(function ElementLayer({ el, resolveMedia, byId, children }: ElementLayerProps) {

@@ -1,8 +1,7 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
-import { getTextPreviewMode } from '@workspace/lib/constants';
+import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
-import { SLIDE_BASE_WIDTH } from '@workspace/lib/slides';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -69,25 +68,41 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
     );
 }
 
+// The width a mode composes at, so the hero scales by containerW / that width: text modes render
+// into an A4 page, a deck and a drawing both compose at CANVAS_PREVIEW_WIDTH. Sheets vary with
+// their content — null falls back to measuring the rendered body.
+const INTRINSIC_WIDTH: Record<TextPreviewMode, number | null> = {
+    eigendoc: A4_WIDTH_PX,
+    eigenslides: CANVAS_PREVIEW_WIDTH,
+    eigensheets: null,
+    eigenvector: CANVAS_PREVIEW_WIDTH,
+    markdown: A4_WIDTH_PX,
+    plaintext: A4_WIDTH_PX,
+    code: A4_WIDTH_PX,
+};
+
+// eigen-prose for rendered prose, drive-preview-code for raw <pre><code> blocks — eigen-prose's
+// <pre> rule paints a dark code-block background that is wrong for a whole-file code thumbnail.
+// A deck and a drawing need none: a compositor page carries its own box and its own paint.
+const WRAPPER_CLASS: Record<TextPreviewMode, string> = {
+    eigendoc: 'eigen-prose tiptap',
+    eigenslides: '',
+    eigensheets: 'eigensheets-preview',
+    eigenvector: '',
+    markdown: 'eigen-prose',
+    plaintext: 'eigen-prose',
+    code: 'drive-preview-code',
+};
+
 // Scale a server-rendered HTML preview down to fit the thumbnail panel.
-// Eigendoc and eigenslides have a known intrinsic width (A4, 16:9 base) — we
-// render at that width and scale by containerW / intrinsicWidth. Other modes
-// (sheets, code, text) reflow to the container so we measure scrollWidth.
 function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }) {
     const { data } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const [scale, setScale] = useState(1);
 
-    // Text-based modes (eigendoc, markdown, plaintext, code) all render into an A4 page
-    // with 2cm padding so thumbnails are proportional miniatures. Slides have a 16:9 base
-    // width. Sheets vary in width — fall back to scrollWidth measurement.
-    const intrinsicWidth =
-        data?.mode === 'eigenslides'
-            ? SLIDE_BASE_WIDTH
-            : data?.mode && data.mode !== 'eigensheets'
-              ? A4_WIDTH_PX
-              : null;
+    const intrinsicWidth = data ? INTRINSIC_WIDTH[data.mode] : null;
+    // The A4 page's own margin, so a text thumbnail is a proportional miniature of the printed page.
     const intrinsicPadding = intrinsicWidth === A4_WIDTH_PX ? '2cm' : undefined;
 
     useEffect(() => {
@@ -114,26 +129,11 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
 
     if (!data?.body) return null;
 
-    const mode = data.mode;
-    // eigen-prose for rendered prose (eigendoc, markdown, plaintext paragraphs).
-    // drive-preview-code for raw <pre><code> blocks — eigen-prose's <pre> rule paints a
-    // dark code-block background that's wrong for a whole-file code thumbnail.
-    const wrapperClass =
-        mode === 'eigendoc'
-            ? 'eigen-prose tiptap'
-            : mode === 'eigenslides'
-              ? 'drive-preview-slides'
-              : mode === 'eigensheets'
-                ? 'eigensheets-preview'
-                : mode === 'markdown' || mode === 'plaintext'
-                  ? 'eigen-prose'
-                  : 'drive-preview-code';
-
     return (
         <div ref={containerRef} className="drive-preview-hero absolute inset-0 bg-background pointer-events-none">
             <div
                 ref={contentRef}
-                className={wrapperClass}
+                className={WRAPPER_CLASS[data.mode]}
                 style={{
                     transform: `scale(${scale})`,
                     transformOrigin: 'top left',

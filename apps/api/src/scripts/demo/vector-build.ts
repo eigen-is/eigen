@@ -41,6 +41,7 @@ import {
     type VerticalAlign,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
+import { type CanvasSide, mulberry32, SIDE_INDEX, ZERO_BOX } from './canvas-build';
 import type {
     SITE_PLAN,
     SitePlanArrow,
@@ -48,22 +49,17 @@ import type {
     SitePlanImage,
     SitePlanLine,
     SitePlanShape,
-    SitePlanSide,
     SitePlanText,
 } from './content';
 import { EXCALIFONT_ADVANCES, EXCALIFONT_KERNING } from './excalifont-metrics';
 
 // Fixed PRNG salt so every reseed of the demo world draws the same roughjs seeds (identical jitter).
 const SEED_SALT = 0x5170_2e73;
-const ZERO_BOX = { x: 0, y: 0, width: 0, height: 0, angle: 0 } as const;
 const FONT = 'Excalifont';
 // The vector app's own style table, with the drawing's font — what an editor-authored element inherits.
 const SITE_PLAN_STYLE: StyleDefaults = { ...VECTOR_STYLE_DEFAULTS, fontFamily: FONT };
 const DEFAULT_LABEL_SIZE = 16;
 const DEFAULT_ARROW_LABEL_SIZE = 13;
-
-// Side-midpoint order matches shapeAnchorPoints (right, bottom, left, top).
-const SIDE_INDEX: Record<'right' | 'bottom' | 'left' | 'top', number> = { right: 0, bottom: 1, left: 2, top: 3 };
 
 // Unlisted glyphs fall back to the average advance (the metrics table's own note).
 const AVG_ADVANCE =
@@ -95,17 +91,6 @@ const RICH_TEXT_SLACK = 1.08;
 function measureRichTextBox(text: string, fontSize: number): { width: number; height: number } {
     const { width, height } = measureExcalifont(text, fontSize);
     return { width: width * RICH_TEXT_SLACK, height };
-}
-
-// mulberry32 — a tiny deterministic PRNG, one draw per element (matches addElement's seed range).
-function mulberry32(seed: number): () => number {
-    let a = seed >>> 0;
-    return () => {
-        a = (a + 0x6d2b_79f5) | 0;
-        let t = Math.imul(a ^ (a >>> 15), 1 | a);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-        return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
-    };
 }
 
 export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
@@ -287,7 +272,7 @@ function resolveEnd(
 }
 
 // A point `along` (0..1) a rectangle's side, for docks that must not sit at the midpoint.
-function sidePoint(shape: VectorShapeElement, end: { side: SitePlanSide; along?: number }): Point {
+function sidePoint(shape: VectorShapeElement, end: { side: CanvasSide; along?: number }): Point {
     const t = end.along ?? 0.5;
     switch (end.side) {
         case 'top':

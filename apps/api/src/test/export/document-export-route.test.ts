@@ -4,13 +4,13 @@ import JSZip from 'jszip';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
 import { getHome } from '../../lib/home/get-home';
 import {
-    buildGoldenDeck,
+    buildGoldenDeckScene,
     buildGoldenDocJson,
     GOLDEN_BEYOND_CAP,
     GOLDEN_MEDIA_NAME,
+    seedDeckDoc,
     seedDocumentMedia,
     seedEigendoc,
-    seedSlidesDoc,
 } from '../fixtures/golden-documents';
 import { authedRequest, driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -49,7 +49,7 @@ beforeAll(async () => {
         { fileName: 'Deck Contract' },
     );
     const deckCollab = await home.drive.getCollabDocument(mountId, deckPath.id);
-    seedSlidesDoc(deckCollab.doc, buildGoldenDeck());
+    seedDeckDoc(deckCollab.doc, buildGoldenDeckScene());
     const deck = await home.drive.resolveFile(mountId, deckPath.id);
     await seedDocumentMedia(deck.mount, deck.path, GOLDEN_MEDIA_NAME, TEST_PNG_BYTES);
 });

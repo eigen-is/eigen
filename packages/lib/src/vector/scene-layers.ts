@@ -1,15 +1,15 @@
 // The scene as an ordered list of placed boxes: one definition of "where does this element go and what
-// does it draw", so a renderer that positions elements itself (absolutely positioned divs) and one that
-// serializes an SVG document agree by construction. The live canvas draws one elementLayer per element
-// (ElementLayer); sceneLayers is the same pass over a whole scene, for a host that lays a whole page out
-// at once.
+// does it draw", so the live canvas (one absolutely positioned div per element), the server compositor
+// (the same boxes as HTML) and the standalone SVG serializer agree by construction. The canvas draws one
+// elementLayer per element (ElementLayer); sceneLayers is the same pass over a whole scene, for a host
+// that lays a whole page out at once.
 
 import { arrowRoute } from './elbow-route';
 import { orderByFractionalIndex } from './fractional-index';
 import { elementsInFrame } from './frames';
 import type { Point } from './geometry';
 import { ELEMENT_KINDS, type RenderOutput } from './kinds';
-import { escapeXml } from './kinds/render-utils';
+import { escapeXml, round } from './kinds/render-utils';
 import type { MediaResolver } from './scene-to-svg';
 import type { VectorElement, VectorScene } from './types';
 
@@ -51,11 +51,36 @@ export function elementLayer(el: VectorElement, opts: ElementLayerOptions = {}):
     };
 }
 
-// The layer's body as one HTML string: an svg fragment passes through, rich text gets the styled wrapper
-// div the foreignObject arm emits. No class and no <p> reset here — those exist so a standalone SVG
-// carries its own typography; a live layer sits in the app, whose CSS already resets block margins.
+export type LayerBoxCss = { width: string; height: string; transform: string; opacity?: string };
+
+// The layer's box as CSS: one derivation, set as React style props by the live canvas and serialized
+// into a style attribute by the compositor, so what a user sees is what prints. The origin rides in a
+// transform rather than in left/top because a browser pixel-snaps a fractional box origin before
+// painting the layer's own <svg>; transforms are not snapped. transform-origin stays the default box
+// centre and translate is origin-independent, so `translate(x,y) rotate(a)` is the single-<svg>
+// renderer's `translate(x y) rotate(a w/2 h/2)` exactly.
+export function layerBoxCss({ box, opacity }: Pick<Layer, 'box' | 'opacity'>): LayerBoxCss {
+    const rotate = box.angle === 0 ? '' : ` rotate(${round(box.angle)}deg)`;
+    return {
+        width: `${round(box.width)}px`,
+        height: `${round(box.height)}px`,
+        transform: `translate(${round(box.x)}px,${round(box.y)}px)${rotate}`,
+        ...(opacity === 100 ? null : { opacity: `${round(opacity / 100)}` }),
+    };
+}
+
+// The class every rich-text body wraps in. It carries the descendant rules an inline style cannot
+// reach — list markers, blockquote rule, link underline (packages/ui/src/styles/canvas-text.css,
+// which the app imports and the standalone export document embeds).
+export const RICH_TEXT_CLASS = 'eigen-canvas-text';
+
+// The layer's body as one HTML string: an svg fragment passes through, rich text gets the styled
+// wrapper div. No <p> reset here — a live layer sits in the app, whose CSS already resets block
+// margins; a standalone SVG carries its own (scene-to-svg.ts).
 export function layerInnerHtml(content: RenderOutput): string {
-    return 'svg' in content ? content.svg : `<div style="${escapeXml(content.style)}">${content.html}</div>`;
+    return 'svg' in content
+        ? content.svg
+        : `<div class="${RICH_TEXT_CLASS}" style="${escapeXml(content.style)}">${content.html}</div>`;
 }
 
 export function sceneLayers(scene: VectorScene, opts: SceneLayersOptions = {}): Layer[] {

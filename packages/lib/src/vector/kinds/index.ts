@@ -100,8 +100,8 @@ function buildElementFields(): string[] {
     return out;
 }
 
-// The vector app's style table: roughness 1, hachure, Excalifont, curved corners. One table per host —
-// a flat, solid host writes its own. A fresh element starts unpainted but hatched: the hatch style rides
+// The vector app's style table: roughness 1, hachure, Excalifont, curved corners (SLIDES_STYLE_DEFAULTS
+// is the deck's flat counterpart). A fresh element starts unpainted but hatched — the hatch style rides
 // the fill, so the first colour the user picks lands as hachure.
 export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
     strokeColor: '#1e1e1e',
@@ -112,4 +112,18 @@ export const VECTOR_STYLE_DEFAULTS: StyleDefaults = {
     fontFamily: 'Excalifont',
     fontSize: 20,
     color: '#1e1e1e',
+};
+
+// The deck's style table: flat and solid in Inter, the way a presentation reads. Same keys, same
+// meaning — a host's table decides how a NEW element looks, never which kinds exist. There is no text
+// alignment here because StyleDefaults has none: a fresh box starts top-left in both apps.
+export const SLIDES_STYLE_DEFAULTS: StyleDefaults = {
+    strokeColor: '#1e1e1e',
+    strokeWidth: 2,
+    fill: serializeFill({ ...TRANSPARENT_FILL, style: 'solid' }),
+    roughness: 0,
+    corners: 'curved',
+    fontFamily: 'Inter',
+    fontSize: 48,
+    color: '#000000',
 };

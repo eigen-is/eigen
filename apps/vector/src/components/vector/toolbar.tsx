@@ -8,7 +8,7 @@ import {
     DropdownMenuItem,
     DropdownMenuShortcut,
 } from '@workspace/ui/components/dropdown-menu';
-import { VECTOR_TOOLS, type VectorTool } from '@workspace/ui/components/vector';
+import { EDIT_TOOLS, INSERT_TOOLS, ToolButtons, ToolMenuItems, type VectorTool } from '@workspace/ui/components/vector';
 import { Diamond, ImagePlus } from 'lucide-react';
 
 type ToolbarProps = {
@@ -28,29 +28,14 @@ type ToolbarProps = {
     // Present when the container has a media/ folder — opens the editor's image picker.
     onInsertImage?: () => void;
     onAccessDialogOpen: () => void;
-    // Document-level comments + activity (the props deliberately omitted until vector had a
-    // comment lifecycle). Always offered when the panels are wired: desktop draws the side panel,
-    // mobile the Column.
+    // Document-level comments + activity. Always offered: desktop draws the side panel, mobile the
+    // Column.
     onToggleCommentPanel: () => void;
     commentPanelOpen: boolean;
     assignedCommentCount: number;
     onToggleActivityPanel: () => void;
     activityPanelOpen: boolean;
 };
-
-// The registry's `inserts` flag splits the menus: inserting tools fill the Insert menu; Select +
-// Eraser live in the Edit menu — also the only surface that reaches them below the compact breakpoint.
-const INSERT_TOOLS = VECTOR_TOOLS.filter((t) => t.inserts);
-const EDIT_TOOLS = VECTOR_TOOLS.filter((t) => !t.inserts);
-
-function ToolMenuItem({ tool, setTool }: { tool: (typeof VECTOR_TOOLS)[number]; setTool: (t: VectorTool) => void }) {
-    return (
-        <DropdownMenuItem onClick={() => setTool(tool.tool)}>
-            <tool.icon className="h-4 w-4 mr-2" /> {tool.label}
-            <DropdownMenuShortcut>{tool.shortcut}</DropdownMenuShortcut>
-        </DropdownMenuItem>
-    );
-}
 
 export function Toolbar({
     path,
@@ -90,35 +75,24 @@ export function Toolbar({
                             createIcon={Diamond}
                             createType="vector"
                         />
-                        {/* Render unconditionally once vector has a DocSearchProvider (Find items survive read-only). */}
+                        {/* Unconditional: EditMenu drops its edit section itself, and its Find entries
+                            are the read-only viewer's only menu route to the find bar. */}
+                        <EditMenu canEdit={canEdit} canUndo={canUndo} canRedo={canRedo} onUndo={undo} onRedo={redo}>
+                            <ToolMenuItems tools={EDIT_TOOLS} setTool={setTool} />
+                            <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
+                                Keep selected tool
+                                <DropdownMenuShortcut>Q</DropdownMenuShortcut>
+                            </DropdownMenuCheckboxItem>
+                        </EditMenu>
                         {canEdit && (
-                            <>
-                                <EditMenu
-                                    canEdit={canEdit}
-                                    canUndo={canUndo}
-                                    canRedo={canRedo}
-                                    onUndo={undo}
-                                    onRedo={redo}
-                                >
-                                    {EDIT_TOOLS.map((t) => (
-                                        <ToolMenuItem key={t.tool} tool={t} setTool={setTool} />
-                                    ))}
-                                    <DropdownMenuCheckboxItem checked={toolLocked} onCheckedChange={setToolLocked}>
-                                        Keep selected tool
-                                        <DropdownMenuShortcut>Q</DropdownMenuShortcut>
-                                    </DropdownMenuCheckboxItem>
-                                </EditMenu>
-                                <ToolbarMenu label="Insert">
-                                    {INSERT_TOOLS.map((t) => (
-                                        <ToolMenuItem key={t.tool} tool={t} setTool={setTool} />
-                                    ))}
-                                    {onInsertImage && (
-                                        <DropdownMenuItem onClick={onInsertImage}>
-                                            <ImagePlus className="h-4 w-4 mr-2" /> Image
-                                        </DropdownMenuItem>
-                                    )}
-                                </ToolbarMenu>
-                            </>
+                            <ToolbarMenu label="Insert">
+                                <ToolMenuItems tools={INSERT_TOOLS} setTool={setTool} />
+                                {onInsertImage && (
+                                    <DropdownMenuItem onClick={onInsertImage}>
+                                        <ImagePlus className="h-4 w-4 mr-2" /> Image
+                                    </DropdownMenuItem>
+                                )}
+                            </ToolbarMenu>
                         )}
                     </div>
                 }
@@ -127,16 +101,7 @@ export function Toolbar({
                     canEdit &&
                     !isCompact && (
                         <>
-                            {VECTOR_TOOLS.map((t) => (
-                                <TooltipButton
-                                    key={t.tool}
-                                    icon={t.icon}
-                                    tooltipText={`${t.label} (${t.shortcut})`}
-                                    active={tool === t.tool}
-                                    preventFocusLoss
-                                    onClick={() => setTool(t.tool)}
-                                />
-                            ))}
+                            <ToolButtons tool={tool} setTool={setTool} />
                             {onInsertImage && (
                                 <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onInsertImage} />
                             )}

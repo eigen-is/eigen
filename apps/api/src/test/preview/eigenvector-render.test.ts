@@ -1,37 +1,127 @@
 import { describe, expect, test } from 'bun:test';
+import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
+import type { VectorScene } from '@workspace/lib/vector';
 import * as Y from 'yjs';
-import { renderEigenvectorPreview } from '../../lib/preview/eigenvector-render';
-import { buildGoldenVectorScene, GOLDEN_MEDIA_NAME, seedVectorDoc } from '../fixtures/golden-documents';
+import { renderEigenvectorPreviewBody } from '../../lib/preview/eigenvector-render';
+import {
+    buildGoldenVectorScene,
+    GOLDEN_MEDIA_NAME,
+    GOLDEN_VECTOR_TEXT,
+    seedVectorDoc,
+} from '../fixtures/golden-documents';
 
-// The preview body is served inline as image/svg+xml. Every scalar field is validated by the reader, but
-// a rich-text box's `html` is raw collaborator markup the reader only caps and cleans — so this renderer
-// filters each body itself, while leaving the eigen-media: hrefs the embed route resolves.
-function previewOf(html: string): string {
+// The preview body is a compositor page served as HTML, the same markup the PDF export prints, and
+// the drive hero and the preview pane both inject it as live DOM. Every scalar field is validated by
+// the reader, but a rich-text box's `html` is raw collaborator markup the reader only caps and
+// cleans — so this renderer filters each body itself before composing, and the assembled page after.
+const MEDIA_URL = 'https://api.test/drive/o/m/file/f/preview';
+const mediaUrls = new Map([[GOLDEN_MEDIA_NAME, MEDIA_URL]]);
+
+function previewOfScene(scene: VectorScene): string {
     const doc = new Y.Doc();
+    seedVectorDoc(doc, scene);
+    const { body } = renderEigenvectorPreviewBody(doc, mediaUrls);
+    doc.destroy();
+    return body;
+}
+
+// The golden scene with every rich-text box carrying the given body.
+function previewOf(html: string): string {
     const scene = buildGoldenVectorScene();
-    seedVectorDoc(doc, {
+    return previewOfScene({
         ...scene,
         elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html } : el)),
     });
-    return renderEigenvectorPreview(doc, new Map([[GOLDEN_MEDIA_NAME, `eigen-media:${GOLDEN_MEDIA_NAME}`]])).body;
 }
 
-describe('renderEigenvectorPreview', () => {
-    test('strips scripts, event handlers and javascript: refs from a rich-text body', () => {
-        const body = previewOf(
-            '<p onclick="alert(1)">safe<img src=x onerror="alert(2)">' +
-                '<script>alert(3)</script><a href="javascript:alert(4)">link</a></p>',
-        );
-        expect(body).toContain('safe');
-        expect(body).not.toContain('<script');
-        expect(body).not.toContain('onerror');
-        expect(body).not.toContain('onclick');
-        expect(body).not.toContain('javascript:');
+// The compositor rounds every length to two decimals.
+function round(n: number): number {
+    return Math.round(n * 100) / 100;
+}
+
+describe('renderEigenvectorPreviewBody', () => {
+    test('the body is a compositor page, not an svg document', () => {
+        const body = previewOf('<p>hello</p>');
+        expect(body).toContain('<div class="canvas-page"');
+        // Fitted like a slide is: the drawing preview is the same box on the same surfaces.
+        expect(body).toContain('<div class="page-fit" style="--page-w:960px;');
+        expect(body).not.toContain('viewBox=');
+        expect(body).not.toContain('<foreignObject');
     });
 
-    test('keeps ordinary markup and the media href the embed route resolves', () => {
-        const body = previewOf('<p><strong>bold</strong> text</p>');
-        expect(body).toContain('<strong>bold</strong>');
-        expect(body).toContain(`eigen-media:${GOLDEN_MEDIA_NAME}`);
+    test('the page composes at the shared preview width', () => {
+        const body = previewOf('<p>hello</p>');
+        expect(body).toContain(`width:${CANVAS_PREVIEW_WIDTH}px`);
+    });
+
+    test('a tall drawing fits the preview box instead of magnifying to the width', () => {
+        const golden = buildGoldenVectorScene();
+        const tall = golden.elements
+            .filter((el) => el.id === 'v-rect')
+            .map((el) => ({ ...el, width: 50, height: 5000 }));
+        const body = previewOfScene({ ...golden, elements: tall });
+        // Scaled on width alone this 70x5020 page (content + padding) would be 96,000px tall.
+        expect(body).toContain(`width:${CANVAS_PREVIEW_WIDTH}px;height:${CANVAS_PREVIEW_HEIGHT}px`);
+        // The box stays full width — drive-preview.tsx scales the body from exactly that width — so
+        // the page is widened in scene units and the drawing sits centred in it.
+        expect(body).toContain(`width:${round(CANVAS_PREVIEW_WIDTH / (CANVAS_PREVIEW_HEIGHT / 5020))}px;height:5020px`);
+    });
+
+    test('rich text renders as HTML', () => {
+        expect(previewOf(`<p>${GOLDEN_VECTOR_TEXT.replace('<', '&lt;').replace('>', '&gt;')}</p>`)).toContain(
+            '<p>Vector &lt;sketch&gt;</p>',
+        );
+    });
+
+    test('media resolves through the URL map the main thread prepared', () => {
+        expect(previewOf('<p>hi</p>')).toContain(MEDIA_URL);
+    });
+
+    test('a script in a rich-text body is stripped — the reader is not the trust boundary for html', () => {
+        const body = previewOf('<p>ok</p><script>alert(1)</script>');
+        expect(body).toContain('<p>ok</p>');
+        expect(body).not.toContain('<script');
+        expect(body).not.toContain('alert(1)');
+    });
+
+    test('an event handler on a rich-text element is stripped', () => {
+        expect(previewOf('<p onclick="alert(1)">ok</p>')).not.toContain('onclick');
+    });
+
+    test('an empty drawing previews as an empty page, so the cache stops serving its old body', () => {
+        const doc = new Y.Doc();
+        seedVectorDoc(doc, { elements: [], frames: [], meta: { background: '#fef3c7', gridSize: 20 } });
+        const { body, warnings } = renderEigenvectorPreviewBody(doc, new Map());
+        doc.destroy();
+        expect(body).toContain(`<div class="canvas-page" style="position:relative;overflow:hidden;width:960px;`);
+        expect(body).toContain('background-color:#fef3c7');
+        expect(body).not.toContain('<svg');
+        expect(warnings).toEqual([]);
+    });
+
+    test('an external reference in a rich-text body never reaches a viewer', () => {
+        // The body is injected as live DOM, so a url() or an <img src> a collaborator wrote is a
+        // beacon fired at everyone who opens the folder — the rich-text pass drops both.
+        // Every attribute that fetches without a click, not just <img src>.
+        const body = previewOf(
+            '<p style="background:url(https://evil.example/beacon.png)">ok</p>' +
+                '<img src="https://evil.example/pixel.png">' +
+                '<img srcset="https://evil.example/candidate.png 1x">' +
+                '<video src="https://evil.example/v.mp4" poster="https://evil.example/p.png"></video>' +
+                '<audio src="https://evil.example/a.mp3"></audio>' +
+                '<picture><source srcset="https://evil.example/s.png"><img alt=""></picture>' +
+                '<input type="image" src="https://evil.example/i.png">',
+        );
+        expect(body).toContain('<p style="background:url()">ok</p>');
+        expect(body).not.toContain('evil.example');
+        // What the compositor itself put in the page survives: the media URL the main thread
+        // resolved, and the SVG-attribute refs a kind points at its own gradient and clip with.
+        expect(body).toContain(MEDIA_URL);
+        expect(body).toContain('stroke="url(#fill-v-gradient)"');
+        expect(body).toContain('clip-path="url(#image-clip-v-image)"');
+    });
+
+    test('is deterministic run to run', () => {
+        expect(previewOf('<p>hi</p>')).toBe(previewOf('<p>hi</p>'));
     });
 });

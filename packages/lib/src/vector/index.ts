@@ -11,12 +11,14 @@ export * from './frames';
 export * from './geometry';
 export * from './image-fit';
 export * from './kinds';
+// The compositor prints the same 2dp lengths the kinds serialize with.
+export { round } from './kinds/render-utils';
 export * from './media-refs';
 export * from './outline';
 export * from './read-vector';
 export * from './scene-layers';
 export type { MediaResolver, SceneToSvgOptions } from './scene-to-svg';
-export { elementToSvg, SVG_NS, sceneToSvg } from './scene-to-svg';
+export { DEFAULT_PADDING, elementToSvg, SVG_NS, sceneToSvg } from './scene-to-svg';
 export * from './search-scene';
 export * from './snap';
 export * from './types';

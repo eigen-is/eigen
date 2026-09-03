@@ -1,0 +1,43 @@
+/* Rich-text body rendering — the descendant rules an element's inline style cannot reach. Applied by
+   layerInnerHtml (live canvas, compositor) and by sceneToSvg's foreignObject wrapper, so a box reads
+   the same in the editor, a thumbnail, present mode, a preview, an export and a downloaded SVG. */
+/* Loaded after eigen-prose.css on the FE (cascade-wins over `.tiptap`); embedded standalone in the
+   canvas export and preview documents. */
+
+.eigen-canvas-text p {
+    margin: 0;
+    line-height: inherit;
+}
+
+.eigen-canvas-text p + p {
+    margin-top: 0.5em;
+}
+
+.eigen-canvas-text ul,
+.eigen-canvas-text ol {
+    padding-left: 1.5em;
+    margin: 0;
+}
+
+.eigen-canvas-text ul {
+    list-style-type: disc;
+}
+
+.eigen-canvas-text ol {
+    list-style-type: decimal;
+}
+
+.eigen-canvas-text li {
+    line-height: inherit;
+}
+
+.eigen-canvas-text blockquote {
+    border-left: 3px solid currentColor;
+    padding-left: 0.75em;
+    opacity: 0.7;
+}
+
+.eigen-canvas-text a {
+    color: inherit;
+    text-decoration: underline;
+}

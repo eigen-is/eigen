@@ -1,4 +1,3 @@
-import { escapeHtml } from '@workspace/lib/html';
 import { isTransparentColor, readVectorFromDoc, sceneToSvg, type VectorScene } from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
@@ -9,7 +8,9 @@ import {
     toTransferableText,
     type VectorExportFormat,
 } from '../../document/transform/protocol';
-import { getFontCSS, getFontFaceCSSForFamilies } from '../fonts';
+import { drawingPage } from '../canvas/render';
+import { canvasHtmlDocument } from '../canvas/transform';
+import { getFontFaceCSSForFamilies } from '../fonts';
 import { sanitizeExportHtml } from '../sanitize';
 
 // A rich-text box renders as an HTML <div> inside <foreignObject>, and DOMPurify drops both by
@@ -39,34 +40,31 @@ export function renderEigenvectorExport(
         // A collaborator can put arbitrary strings in the schemaless scene — including a rich-text
         // box's raw HTML — so the assembled SVG runs through the shared sanitizer (the documented
         // SSRF closure) exactly like slides/sheets and the preview.
-        const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap, { inlineFonts: true }), RICH_TEXT_TAGS);
+        const svg = sanitizeExportHtml(renderSceneSvg(scene, dataUriMap), RICH_TEXT_TAGS);
         return { data: toTransferableText(svg), warnings: [] };
     }
 
-    // pdf-html: nothing to print from an empty scene (the SVG has a zero-size viewBox).
-    if (scene.elements.length === 0) throw new ApiError(400, 'The drawing is empty');
+    // pdf-html: the drawing as compositor layers on a page sized to the artwork. Rich text prints
+    // because it is an HTML div here — WeasyPrint ignores the foreignObject the svg arm uses.
     const paperScene = isTransparentColor(scene.meta.background)
         ? { ...scene, meta: { ...scene.meta, background: PDF_PAPER } }
         : scene;
-    // The page is sized off the serializer's own width/height, read before sanitizing (the
-    // sanitizer may reorder attributes). Fonts ride in the wrapping document's <style>
-    // (getFontCSS, whole faces), so the SVG itself carries only the sanitized drawing.
-    const rawSvg = renderSceneSvg(paperScene, dataUriMap, { inlineFonts: false });
-    const { width, height } = svgDimensions(rawSvg);
-    const html = wrapInPdfDocument(title, sanitizeExportHtml(rawSvg, RICH_TEXT_TAGS), width, height);
+    const page = drawingPage(paperScene, (mediaName) => dataUriMap.get(mediaName) ?? null);
+    // Nothing to print, and nothing to size a page from.
+    if (!page) throw new ApiError(400, 'The drawing is empty');
+    // The shared canvas document sanitizes the assembled body and owns the @page rule, the fonts and
+    // the reset — a deck's pages and a drawing's single page leave through the same wrapper.
+    const html = canvasHtmlDocument({ title, pages: [page], scale: 1, mode: 'pdf' });
     return { data: toTransferableText(html), warnings: [] };
 }
 
 // The drawing's own SVG, with the @font-face blocks its text uses injected into a <defs>
 // <style> for the standalone (svg) download. sceneToSvg emits no top-level <defs>, so the
 // style is spliced in right after the opening <svg> tag.
-function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>, opts: { inlineFonts: boolean }): string {
+function renderSceneSvg(scene: VectorScene, dataUriMap: Map<string, string>): string {
     const svg = sceneToSvg(scene, { resolveMedia: (mediaName) => dataUriMap.get(mediaName) ?? null });
-    if (!opts.inlineFonts) return svg;
-
     const faceCSS = getFontFaceCSSForFamilies(usedFontFamilies(scene));
     if (!faceCSS) return svg;
-
     return spliceAfterSvgOpenTag(svg, `<defs><style>${faceCSS}</style></defs>`);
 }
 
@@ -80,33 +78,4 @@ function usedFontFamilies(scene: VectorScene): Set<string> {
         if (el.type === 'arrow' && el.text !== '') families.add(el.fontFamily);
     }
     return families;
-}
-
-// A minimal page sized to the drawing so WeasyPrint prints one PDF page the size of the
-// artwork, with the same inlined-font set the screen uses. The SVG arrives already
-// sanitized; the wrapper and its fonts are ours.
-function wrapInPdfDocument(title: string, svg: string, width: number, height: number): string {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}
-@page { size: ${width}px ${height}px; margin: 0; }
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { margin: 0; }
-svg { display: block; }</style>
-</head>
-<body>
-    ${svg}
-</body>
-</html>`;
-}
-
-// The drawing's pixel size, read off the width/height sceneToSvg wrote on the root <svg>.
-// An empty scene never reaches here (pdf rejects it), so the attributes are always present.
-function svgDimensions(svg: string): { width: number; height: number } {
-    const width = Number(svg.match(/^<svg[^>]*\bwidth="([\d.]+)"/)?.[1] ?? 0);
-    const height = Number(svg.match(/^<svg[^>]*\bheight="([\d.]+)"/)?.[1] ?? 0);
-    return { width, height };
 }

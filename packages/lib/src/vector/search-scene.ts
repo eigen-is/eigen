@@ -15,18 +15,21 @@ export type SearchSceneOptions = {
     contextOf?: (el: VectorElement) => string | undefined;
 };
 
-export function searchScene(scene: VectorScene, regex: RegExp, opts: SearchSceneOptions = {}): DocSearchMatch[] {
-    // Both orders come from the fractional indices, not from array position, so a caller holding a
-    // scene it assembled itself gets the same reading order the reader would have produced.
+// The scene's elements in reading order — frame by frame, then z-order inside a frame. ⌘F and the
+// server-side content index both walk this, so they agree about what a document "says". Both orders
+// come from the fractional indices, not from array position, so a caller holding a scene it assembled
+// itself gets the order the reader would have produced; sort is stable, so ordering by frame keeps
+// each frame's z-order. An unframed element sorts first (-1) — the infinite canvas's only case.
+export function sceneReadingOrder(scene: VectorScene): VectorElement[] {
     const framePosition = new Map(orderByFractionalIndex(scene.frames).map((frame, i) => [frame.id, i]));
-    // sort is stable, so ordering by frame keeps the z-order within each frame. An unframed element
-    // sorts first (-1) — the infinite canvas's only case.
-    const ordered = orderByFractionalIndex(scene.elements).sort(
+    return orderByFractionalIndex(scene.elements).sort(
         (a, b) => (framePosition.get(a.frameId) ?? -1) - (framePosition.get(b.frameId) ?? -1),
     );
+}
 
+export function searchScene(scene: VectorScene, regex: RegExp, opts: SearchSceneOptions = {}): DocSearchMatch[] {
     const matches: DocSearchMatch[] = [];
-    for (const el of ordered) {
+    for (const el of sceneReadingOrder(scene)) {
         const text = ELEMENT_KINDS[el.type].searchText(el).trim();
         if (text === '') continue;
         // A /g regex remembers lastIndex between calls; reset it or every second element is skipped.

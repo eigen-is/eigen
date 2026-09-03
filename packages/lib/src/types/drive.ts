@@ -111,7 +111,7 @@ export const EIGEN_DOC_TYPE_INFO = {
         colorVar: '--app-slides-color',
         softColorVar: '--app-slides-color-soft',
         appName: 'slides',
-        yjsRoots: { slides: 'map', objects: 'map', slideOrder: 'array' },
+        yjsRoots: { elements: 'map', frames: 'map', meta: 'map' },
     },
     sheets: {
         type: DRIVE_TYPE_SHEETS,

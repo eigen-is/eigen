@@ -18,10 +18,8 @@ export const NORMALIZE_ORIGIN = Symbol('normalize-refs');
 // from that array are "strays" — themselves a corruption — and rank BEFORE every ordered parent, so a
 // stray only wins the dedupe when it is the sole holder and is never chosen as a re-home target (both
 // would park a child on a parent the UI never renders). With no ordered parents at all (order array
-// empty/unseeded) we fall back to map-key order. Slides (slides / objects / objectIds / slideOrder)
-// and stickies (columns / tasks / taskIds / columnOrder) share this exactly; slides' fontFamily
-// backfill and slideId reconciliation are separate passes and stay slides-side. All writes run in ONE
-// transaction under NORMALIZE_ORIGIN. Idempotent — a well-formed doc writes nothing, so it is safe to
+// empty/unseeded) we fall back to map-key order. Stickies (columns / tasks / taskIds / columnOrder) is
+// the shape this serves. All writes run in ONE transaction under NORMALIZE_ORIGIN. Idempotent — a well-formed doc writes nothing, so it is safe to
 // run once on sync and on every remote-origin merge.
 export function normalizeParentChildRefs(
     doc: Y.Doc,

@@ -23,7 +23,9 @@ const { authedRequest, driveGet, drivePost, getTestContext } = await import('./s
 const { getHome } = await import('../lib/home/get-home');
 const { importIntoDocument } = await import('../lib/import/import-document');
 const { buildHeavyOps, buildHeavySheets, seedSheetsDoc } = await import('./fixtures/heavy-sheets');
-const { buildHeavyDeck, buildHeavyDocJson, seedEigendoc, seedSlidesDoc } = await import('./fixtures/golden-documents');
+const { buildHeavyDeckScene, buildHeavyDocJson, seedDeckDoc, seedEigendoc } = await import(
+    './fixtures/golden-documents'
+);
 const fs = await import('node:fs');
 
 const args = process.argv.slice(2);
@@ -179,7 +181,7 @@ const scenarios: {
         label: `deck ${SLIDES}x${OBJECTS}`,
         fileName: 'bench-deck',
         type: 'slides',
-        seed: (doc) => seedSlidesDoc(doc, buildHeavyDeck(SLIDES, OBJECTS)),
+        seed: (doc) => seedDeckDoc(doc, buildHeavyDeckScene(SLIDES, OBJECTS)),
         format: 'html',
     },
 ];

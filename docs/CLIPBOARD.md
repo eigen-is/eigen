@@ -198,8 +198,8 @@ flavour is derived without a second parse. It stays sync because every reader it
 paths only ever want eigen items and keep `readEigenClipboardAsync`).
 
 It deliberately does **not** impose a priority order — each app keeps its own short ladder that reads the returned
-fields in its own rung order and calls its own per-kind insert handlers (the per-app ladders in docs / slides /
-sheets / vector). Rich-HTML arbitration also stays caller-side: a consumer that gates on foreign HTML (docs) calls
+fields in its own rung order and calls its own per-kind insert handlers (the ladders in docs, sheets and the canvas engine, which
+serves slides and vector alike). Rich-HTML arbitration also stays caller-side: a consumer that gates on foreign HTML (docs) calls
 `hasRichHtmlBeyondMarker` itself; `classifyPaste` makes no pass over `text/html` for that decision. The one built-in
 special case is the `internalMarkerText` option: sheets' same-tab copy writes a table marker in `text/html` and
 serves paste from `ctx.copyState`, so passing that marker string suppresses the `eigen` + `svg` flavours entirely
@@ -213,9 +213,8 @@ Rich payload (`EigenClipboardData`):
 | Surface | Entry point |
 |---|---|
 | eigendoc editor | `apps/docs/src/components/docs/editor.tsx` |
-| eigenslides editor | `apps/slides/src/components/slides/editor.tsx` |
 | eigensheets | `packages/sheet/src/components/Workbook/index.tsx` (media re-upload in `apps/sheets/src/components/sheets/editor.tsx`) |
-| eigenvector canvas | `packages/ui/src/components/vector/canvas-editor.tsx` + `hooks/use-canvas-clipboard.ts` (lives in `packages/ui`, not an app) |
+| eigenslides + eigenvector canvas | `packages/ui/src/components/vector/canvas-editor.tsx` + `hooks/use-canvas-clipboard.ts` (lives in `packages/ui`, not an app, so both apps get one paste path) |
 
 ### Sheets caveat
 

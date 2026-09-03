@@ -10,19 +10,23 @@ import { orderByFractionalIndex } from './fractional-index';
 import type { Box } from './geometry';
 import { ELEMENT_KINDS } from './kinds';
 import { escapeXml, round } from './kinds/render-utils';
+import { RICH_TEXT_CLASS } from './scene-layers';
 import type { VectorElement, VectorScene } from './types';
 
 // The SVG namespace, one spelling for every surface that writes it: the documents this module
 // serializes and the live <svg> nodes the canvas mounts.
 export const SVG_NS = 'http://www.w3.org/2000/svg';
-const DEFAULT_PADDING = 10;
+
+// The margin left around a drawing, so a standalone SVG and a compositor page frame it alike.
+// sceneBounds is the geometric union of the element boxes and the derived elbow routes; it does not
+// inflate for roughjs's overshoot, which is what this padding absorbs.
+export const DEFAULT_PADDING = 10;
 
 // A foreignObject clips to its own rect, so text a hair wider than the box the client measured would
-// lose its wrapped line; overflow="visible" keeps it drawn, the way slides' absolutely-positioned text
-// box does. The class-scoped reset rides inside the wrapper because a standalone SVG (download, <img>
-// embed) has none of the app's CSS, where the UA's 1em <p> margins would shift the text out of its box.
-const HTML_WRAPPER_CLASS = 'eigen-vector-text';
-const HTML_WRAPPER_RESET = `<style>.${HTML_WRAPPER_CLASS} p{margin:0}</style>`;
+// lose its wrapped line; overflow="visible" keeps it drawn. The reset rides INSIDE the wrapper because
+// a standalone SVG (download, <img> embed) has none of the app's CSS, where the UA's 1em <p> margins
+// would shift the text out of its box — the rest of canvas-text.css is the app's/export document's.
+const HTML_WRAPPER_RESET = `<style>.${RICH_TEXT_CLASS} p{margin:0}</style>`;
 
 // Resolve an image element's media reference to an <image> href (data: URI or URL). The
 // host (FE/BE) supplies it; unresolvable media renders nothing.
@@ -77,7 +81,7 @@ export function elementToSvg(
     const body =
         'svg' in out
             ? out.svg
-            : `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${HTML_WRAPPER_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`;
+            : `<foreignObject x="0" y="0" width="${round(el.width)}" height="${round(el.height)}" overflow="visible"><div xmlns="http://www.w3.org/1999/xhtml" class="${RICH_TEXT_CLASS}" style="${escapeXml(out.style)}">${HTML_WRAPPER_RESET}${out.html}</div></foreignObject>`;
     if (body === '') return '';
     return `${groupOpen(el)}${body}</g>`;
 }

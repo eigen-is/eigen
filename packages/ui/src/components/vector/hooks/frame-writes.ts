@@ -14,7 +14,7 @@ import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
 import { duplicateElementsInDoc } from './element-writes';
 
-function newFrameId(): string {
+export function newFrameId(): string {
     return `fr-${nanoid(10)}`;
 }
 
@@ -59,6 +59,13 @@ function writeFrame(framesMap: Y.Map<unknown>, frame: Partial<VectorFrame> & { i
         if (value !== undefined) map.set(field, value);
     }
     framesMap.set(frame.id, map);
+}
+
+// The same writer for a caller holding the doc rather than the frames map — the deck seeder, which
+// composes it with its own element write. Nested in a live transact it joins that one, so the
+// seeder's origin and its single-atom guarantee both survive.
+export function writeFrameInDoc(doc: Y.Doc, frame: Partial<VectorFrame> & { id: string }): void {
+    doc.transact(() => writeFrame(doc.getMap('frames'), frame));
 }
 
 export function addFrameInDoc(doc: Y.Doc, afterId?: string): string {
