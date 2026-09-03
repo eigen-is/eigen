@@ -153,6 +153,8 @@ type CanvasEditorProps = {
     // the host's useCanvasDocSearch — the canvas only paints them.
     searchMatchedIds?: ReadonlySet<string>;
     searchActiveId?: string | null;
+    // Page through frames on a one-finger swipe — the deck shell passes it on a view-only phone.
+    onSwipeFrame?: (delta: number) => void;
 };
 
 // The live, interactive SVG scene surface: pan/zoom viewport, tool-driven drag-create, selection,
@@ -180,6 +182,7 @@ export function CanvasEditor({
     onAddComment,
     searchMatchedIds,
     searchActiveId,
+    onSwipeFrame,
 }: CanvasEditorProps) {
     const {
         elements,
@@ -906,6 +909,7 @@ export function CanvasEditor({
         },
         isPenDrawing: drawing.isPenDrawing,
         onDoubleTap: openTextAtClient,
+        onSwipe: onSwipeFrame,
     });
     touchResetRef.current = touch.reset;
 

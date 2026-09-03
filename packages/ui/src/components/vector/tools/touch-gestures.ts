@@ -64,6 +64,16 @@ export function isDoubleTap(prev: Tap | null, curr: Tap): boolean {
     );
 }
 
+// A one-finger horizontal drag pages through the frames on a view-only phone (spec D8). Distance
+// keeps a slow scroll from paging; the 2:1 ratio keeps a diagonal drag out — a finger that is mostly
+// panning vertically is not asking for the next slide. -1 is FORWARD (content moves left under the
+// finger), matching every carousel.
+const SWIPE_MIN_DISTANCE = 60;
+export function swipeFrameDelta(dx: number, dy: number): number {
+    if (Math.abs(dx) < SWIPE_MIN_DISTANCE || Math.abs(dx) <= Math.abs(dy) * 2) return 0;
+    return dx < 0 ? -1 : 1;
+}
+
 type DownInfo = { t: number; x: number; y: number; moved: boolean };
 type TouchState = {
     // Active touch pointers by id, in client coords (updated every move so a late second finger has the
@@ -76,6 +86,10 @@ type TouchState = {
     downInfo: Map<number, DownInfo>;
     lastTap: Tap | null;
 };
+
+// Everything the policy reads off a pointer event. The canvas hands it a real React.PointerEvent; naming
+// the subset keeps the hook driveable without a DOM.
+export type TouchPointerEvent = Pick<React.PointerEvent, 'pointerType' | 'pointerId' | 'clientX' | 'clientY'>;
 
 export type TouchGesturesParams = {
     tool: VectorTool;
@@ -94,12 +108,15 @@ export type TouchGesturesParams = {
     isPenDrawing: () => boolean;
     // Enter text editing at a client point — the SAME entry a mouse double-click uses.
     onDoubleTap: (clientX: number, clientY: number) => void;
+    // Page through frames on a one-finger swipe. Present only where a swipe means something (a
+    // frame-mode canvas the user cannot edit); omitted, a swipe is just a pan.
+    onSwipe?: (delta: number) => void;
 };
 
 export type TouchGestures = {
-    onPointerDown: (e: React.PointerEvent) => boolean;
-    onPointerMove: (e: React.PointerEvent) => boolean;
-    onPointerUp: (e: React.PointerEvent) => boolean;
+    onPointerDown: (e: TouchPointerEvent) => boolean;
+    onPointerMove: (e: TouchPointerEvent) => boolean;
+    onPointerUp: (e: TouchPointerEvent) => boolean;
     // Tear down all transient touch state (pointers, two-finger, tap tracking) — the canvas calls it
     // from its blur/pointercancel safety net so a torn-down gesture can't wedge later touches.
     reset: () => void;
@@ -116,7 +133,7 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
     const st = stateRef.current;
     const { tool, containerRef, frozenRef } = params;
 
-    const onPointerDown = (e: React.PointerEvent): boolean => {
+    const onPointerDown = (e: TouchPointerEvent): boolean => {
         // First stylus contact latches penMode for the session; the pen itself draws normally.
         if (e.pointerType === 'pen') {
             st.penMode = true;
@@ -148,7 +165,7 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
         return false;
     };
 
-    const onPointerMove = (e: React.PointerEvent): boolean => {
+    const onPointerMove = (e: TouchPointerEvent): boolean => {
         if (e.pointerType !== 'touch') return false;
         if (!st.pointers.has(e.pointerId)) return false;
 
@@ -177,7 +194,7 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
         return false;
     };
 
-    const onPointerUp = (e: React.PointerEvent): boolean => {
+    const onPointerUp = (e: TouchPointerEvent): boolean => {
         if (e.pointerType !== 'touch') return false;
         const wasTwoFinger = st.twoFinger !== null;
         st.pointers.delete(e.pointerId);
@@ -190,6 +207,21 @@ export function useTouchGestures(params: TouchGesturesParams): TouchGestures {
             st.twoFinger = null;
             frozenRef.current = false;
             return true;
+        }
+
+        // Single-finger swipe: pages the deck before the tap logic, because a swipe has moved and so
+        // could never have been a tap anyway. The gesture MUST be aborted first — a view-only canvas
+        // starts a pan on the same pointerdown (canvas-editor.tsx:251 panMode, :923-930 capture +
+        // frozenRef + setPanning), and claiming the up here means the canvas' own onPointerUp returns
+        // early (:1189), so an un-aborted pan would keep the freeze and wedge every later touch. The
+        // double-tap branch below does exactly this for the same reason.
+        if (di && params.onSwipe) {
+            const delta = swipeFrameDelta(e.clientX - di.x, e.clientY - di.y);
+            if (delta !== 0) {
+                params.abortActiveGesture();
+                params.onSwipe(delta);
+                return true;
+            }
         }
 
         // Single-finger tap → double-tap detection for text-edit entry. A moved (dragged) or long press
