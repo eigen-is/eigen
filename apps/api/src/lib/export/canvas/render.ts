@@ -8,6 +8,7 @@ import {
     layerBoxCss,
     layerInnerHtml,
     type MediaResolver,
+    round,
     sceneBounds,
     sceneLayers,
     type VectorScene,
@@ -121,8 +122,4 @@ function renderLayer(layer: Layer): string {
 
 function style(declarations: string[]): string {
     return escapeHtml(declarations.join(';'));
-}
-
-function round(n: number): number {
-    return Math.round(n * 100) / 100;
 }

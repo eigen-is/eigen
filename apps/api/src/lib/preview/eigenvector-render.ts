@@ -1,6 +1,5 @@
 import { CANVAS_PREVIEW_HEIGHT, CANVAS_PREVIEW_WIDTH } from '@workspace/lib/constants/preview';
 import { readVectorFromDoc, type VectorScene } from '@workspace/lib/vector';
-import DOMPurify from 'isomorphic-dompurify';
 import type * as Y from 'yjs';
 import type { TransformWarning } from '../document/transform/protocol';
 import { type CanvasPage, drawingPage, emptyPage, renderCanvasPage } from '../export/canvas/render';
@@ -34,7 +33,8 @@ export function renderEigenvectorPreviewBody(
         ? renderPreviewPage(page)
         : renderCanvasPage(emptyPage(scene, CANVAS_PREVIEW_WIDTH, EMPTY_PREVIEW_HEIGHT), 1);
     const warnings: TransformWarning[] = [];
-    return { body: applyPreviewByteGuard(DOMPurify.sanitize(html, { FORCE_BODY: true }), warnings), warnings };
+    const sanitized = sanitizeExportHtml(html, { allowedRefs: new Set(mediaUrls.values()) });
+    return { body: applyPreviewByteGuard(sanitized, warnings), warnings };
 }
 
 function renderPreviewPage(page: CanvasPage): string {

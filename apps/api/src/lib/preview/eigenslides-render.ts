@@ -1,7 +1,7 @@
-import DOMPurify from 'isomorphic-dompurify';
 import type * as Y from 'yjs';
 import { readDeckFromDoc } from '../document/slides';
 import type { TransformWarning } from '../document/transform/protocol';
+import { sanitizeExportHtml } from '../export/sanitize';
 import { renderDeckHtml, responsiveSizeUnit } from '../export/slides/render';
 import { applyPreviewByteGuard, renderPreviewTruncatedMarker } from './preview-marker';
 
@@ -25,7 +25,7 @@ export function renderEigenslidesPreviewBody(
 
     const slidesHtml = renderDeckHtml(limitedDeck, responsiveSizeUnit, (mediaName) => mediaUrls.get(mediaName) ?? null);
     const warnings: TransformWarning[] = [];
-    const sanitized = DOMPurify.sanitize(slidesHtml, { FORCE_BODY: true });
+    const sanitized = sanitizeExportHtml(slidesHtml, { allowedRefs: new Set(mediaUrls.values()) });
     const body = truncated ? `${sanitized}${renderPreviewTruncatedMarker()}` : sanitized;
 
     return { body: applyPreviewByteGuard(body, warnings), warnings };

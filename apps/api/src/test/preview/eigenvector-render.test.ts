@@ -100,9 +100,15 @@ describe('renderEigenvectorPreviewBody', () => {
     test('an external reference in a rich-text body never reaches a viewer', () => {
         // The body is injected as live DOM, so a url() or an <img src> a collaborator wrote is a
         // beacon fired at everyone who opens the folder — the rich-text pass drops both.
+        // Every attribute that fetches without a click, not just <img src>.
         const body = previewOf(
             '<p style="background:url(https://evil.example/beacon.png)">ok</p>' +
-                '<img src="https://evil.example/pixel.png">',
+                '<img src="https://evil.example/pixel.png">' +
+                '<img srcset="https://evil.example/candidate.png 1x">' +
+                '<video src="https://evil.example/v.mp4" poster="https://evil.example/p.png"></video>' +
+                '<audio src="https://evil.example/a.mp3"></audio>' +
+                '<picture><source srcset="https://evil.example/s.png"><img alt=""></picture>' +
+                '<input type="image" src="https://evil.example/i.png">',
         );
         expect(body).toContain('<p style="background:url()">ok</p>');
         expect(body).not.toContain('evil.example');
