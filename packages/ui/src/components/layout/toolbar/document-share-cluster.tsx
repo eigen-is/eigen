@@ -1,9 +1,9 @@
 import { useIsMobile } from '@workspace/lib/media';
-import { cn } from '@workspace/ui/lib/utils';
 import { Activity, MessageSquare, Pencil, UserRoundPlus, WifiOff } from 'lucide-react';
-import { Badge } from '../../badge';
+import { Button } from '../../button';
 import { CountBadge } from '../../count-badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '../../dropdown-menu';
+import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
 import { FindInDocumentButton, FindInDocumentMenuItem, useFindBarRefocus } from '../../search/find-in-document-button';
 import { DocumentModeButton } from './document-mode-button';
 import { KebabTrigger } from './kebab-trigger';
@@ -27,10 +27,16 @@ type DocumentShareClusterProps = {
 export function DocumentShareCluster(props: DocumentShareClusterProps) {
     const isMobile = useIsMobile();
     const offlineBadge = props.offline && (
-        <Badge variant="outline" className="h-7 bg-muted font-normal text-muted-foreground">
-            <WifiOff />
-            <span className={cn(isMobile && 'sr-only')}>Offline, will sync when back online</span>
-        </Badge>
+        <Popover>
+            <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Offline" className="h-8 w-8 text-destructive">
+                    <WifiOff className="h-4 w-4" />
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-auto text-sm">
+                Offline, will sync when back online
+            </PopoverContent>
+        </Popover>
     );
 
     // Mobile: collapse the icon row into a kebab. Its own useFindBarRefocus keeps the find-bar
