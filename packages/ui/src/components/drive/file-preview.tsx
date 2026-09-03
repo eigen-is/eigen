@@ -299,6 +299,12 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
                 <div className="p-8 min-h-full">
                     <div className="eigensheets-preview mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
+            ) : data.mode === 'eigenvector' ? (
+                <div className="p-8 min-h-full flex justify-center">
+                    {/* The compositor body carries its own box and its own paint; the pane only
+                        centres it and lets it scroll. */}
+                    <div dangerouslySetInnerHTML={{ __html: data.body }} />
+                </div>
             ) : (
                 <div className="eigen-prose p-8 max-w-4xl mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
             )}

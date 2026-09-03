@@ -1,5 +1,5 @@
 import { getDriveItemThumbnail } from '@workspace/lib/api';
-import { getTextPreviewMode } from '@workspace/lib/constants';
+import { CANVAS_PREVIEW_WIDTH, getTextPreviewMode } from '@workspace/lib/constants';
 import { A4_WIDTH_PX } from '@workspace/lib/docs/eigendoc';
 import { useTextPreview } from '@workspace/lib/drive';
 import { SLIDE_BASE_WIDTH } from '@workspace/lib/slides';
@@ -70,9 +70,10 @@ function IconFallback({ icon: Icon, color }: { icon: LucideIcon; color: string }
 }
 
 // Scale a server-rendered HTML preview down to fit the thumbnail panel.
-// Eigendoc and eigenslides have a known intrinsic width (A4, 16:9 base) — we
-// render at that width and scale by containerW / intrinsicWidth. Other modes
-// (sheets, code, text) reflow to the container so we measure scrollWidth.
+// Eigendoc, eigenslides and eigenvector have a known intrinsic width (A4, 16:9
+// base, CANVAS_PREVIEW_WIDTH) — we render at that width and scale by
+// containerW / intrinsicWidth. Other modes (sheets, code, text) reflow to the
+// container so we measure scrollWidth.
 function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }) {
     const { data } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -81,13 +82,16 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
 
     // Text-based modes (eigendoc, markdown, plaintext, code) all render into an A4 page
     // with 2cm padding so thumbnails are proportional miniatures. Slides have a 16:9 base
-    // width. Sheets vary in width — fall back to scrollWidth measurement.
+    // width, drawings compose at CANVAS_PREVIEW_WIDTH. Sheets vary in width — fall back to
+    // scrollWidth measurement.
     const intrinsicWidth =
         data?.mode === 'eigenslides'
             ? SLIDE_BASE_WIDTH
-            : data?.mode && data.mode !== 'eigensheets'
-              ? A4_WIDTH_PX
-              : null;
+            : data?.mode === 'eigenvector'
+              ? CANVAS_PREVIEW_WIDTH
+              : data?.mode && data.mode !== 'eigensheets'
+                ? A4_WIDTH_PX
+                : null;
     const intrinsicPadding = intrinsicWidth === A4_WIDTH_PX ? '2cm' : undefined;
 
     useEffect(() => {
@@ -123,11 +127,13 @@ function HtmlPreview({ path, tintColor }: { path: DrivePath; tintColor: string }
             ? 'eigen-prose tiptap'
             : mode === 'eigenslides'
               ? 'drive-preview-slides'
-              : mode === 'eigensheets'
-                ? 'eigensheets-preview'
-                : mode === 'markdown' || mode === 'plaintext'
-                  ? 'eigen-prose'
-                  : 'drive-preview-code';
+              : mode === 'eigenvector'
+                ? 'drive-preview-canvas'
+                : mode === 'eigensheets'
+                  ? 'eigensheets-preview'
+                  : mode === 'markdown' || mode === 'plaintext'
+                    ? 'eigen-prose'
+                    : 'drive-preview-code';
 
     return (
         <div ref={containerRef} className="drive-preview-hero absolute inset-0 bg-background pointer-events-none">
