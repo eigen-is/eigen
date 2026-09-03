@@ -58,6 +58,7 @@ import {
     TEAM_MOUNT_NAME,
     TEAM_NAME,
 } from './demo/content';
+import { buildDeckDoc } from './demo/deck-build';
 import { buildVectorDoc } from './demo/vector-build';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -473,13 +474,13 @@ async function main(): Promise<void> {
         await teamDrive.flushContainerDb(teamMountId, docPath.id);
     }
 
-    // --- Slides / sheets / stickies: byte-copy the committed fixture containers. The slides deck and
-    // budget sheet are hand-maintained (edited in a live demo, copied back — see fixtures/), so their
-    // data.db carries the real content; the stickies board's creators/colors are patched below. ---
+    // --- Sheets / stickies: byte-copy the committed fixture containers. The budget sheet is
+    // hand-maintained (edited in a live demo, copied back — see fixtures/), so its data.db carries the
+    // real content; the stickies board's creators/colors are patched below. ---
     const placeFixture = async (
         parentId: string,
         driveName: string,
-        type: 'slides' | 'sheets' | 'stickies',
+        type: 'sheets' | 'stickies',
         fixtureDir: string,
         actor: User,
     ): Promise<string> => {
@@ -509,14 +510,6 @@ async function main(): Promise<void> {
         await teamDrive.createFolder(teamMountId, container.id, 'chat', actor);
         return container.id;
     };
-
-    await placeFixture(
-        folderId.get(SPONSOR_DECK.folder)!,
-        `${SPONSOR_DECK.name}.eigenslides`,
-        'slides',
-        'sponsor-pitch.eigenslides',
-        userForRole(SPONSOR_DECK.author),
-    );
 
     await placeFixture(
         folderId.get(BUDGET.folder)!,
@@ -597,6 +590,39 @@ async function main(): Promise<void> {
         }
         const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
         buildVectorDoc(collab.doc, SITE_PLAN);
+        await teamDrive.flushContainerDb(teamMountId, container.id);
+    }
+
+    // --- Sponsor deck: a slide deck built straight into the container's Y.Doc from the SPONSOR_DECK
+    // spec (no fixture bytes; see demo/deck-build.ts). Its images are uploaded into the container's
+    // media/ subfolder, which the deck references by name. ---
+    {
+        const author = userForRole(SPONSOR_DECK.author);
+        const container = await teamDrive.create(
+            teamMountId,
+            folderId.get(SPONSOR_DECK.folder)!,
+            SPONSOR_DECK.name,
+            'slides',
+            author,
+        );
+        const mediaFolder = await teamDrive.getChildByName(teamMountId, container.id, 'media');
+        if (!mediaFolder) throw new Error(`media/ subfolder missing for ${container.name}`);
+        for (const slide of SPONSOR_DECK.slides) {
+            for (const image of slide.images ?? []) {
+                const path = join(FIXTURES_DIR, image.file);
+                const bytes = readFileSync(path);
+                await teamDrive.createFileFromData(
+                    teamMountId,
+                    mediaFolder.id,
+                    basename(path),
+                    Bun.file(path).type,
+                    bytes,
+                    author,
+                );
+            }
+        }
+        const collab = await teamDrive.getCollabDocument(teamMountId, container.id);
+        buildDeckDoc(collab.doc, SPONSOR_DECK.slides);
         await teamDrive.flushContainerDb(teamMountId, container.id);
     }
 

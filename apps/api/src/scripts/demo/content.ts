@@ -9,7 +9,15 @@
 // the data model keys on (ACLs, comments, calendar attendees, stickies creators) resolves by that
 // email, so ids may be random per rebuild. All names, acts and vendors are fictional.
 
-import type { Arrowhead, Corners, FillStyle, Roundness, StrokeStyle } from '@workspace/lib/vector';
+import type {
+    Arrowhead,
+    Corners,
+    FillStyle,
+    Roundness,
+    StrokeStyle,
+    TextAlign,
+    VerticalAlign,
+} from '@workspace/lib/vector';
 
 export type LeadRole =
     | 'director'
@@ -163,9 +171,9 @@ export const DOCS: SeededDoc[] = [
     },
 ];
 
-// --- Budget sheet + sponsor deck: hand-maintained fixture containers (edited in a live demo and
-// copied back into fixtures/, so the content lives in their data.db, not here). These just say where
-// each lands and who authors it in the story: the budget → finance, the deck → comms. ---
+// --- Budget sheet: a hand-maintained fixture container (edited in a live demo and copied back into
+// fixtures/, so the content lives in its data.db, not here). This just says where it lands and who
+// authors it in the story. ---
 
 export const BUDGET = {
     folder: 'finance' as TeamFolder,
@@ -173,10 +181,358 @@ export const BUDGET = {
     author: 'finance' as LeadRole,
 };
 
+// --- Sponsor deck (a slide deck the seeder builds straight into the container's Y.Doc from this
+// spec — no fixture bytes; see deck-build.ts). A deck is a canvas of frames: one slide per frame,
+// pinned 1920x1080, its elements positioned relative to the frame's top-left corner. Slide keys are
+// stable so element ids stay the same across reseeds, and shape keys let an arrow bind by name. ---
+
+export type DeckSide = 'top' | 'right' | 'bottom' | 'left';
+
+export type DeckBackground =
+    | { type: 'solid'; color: string }
+    | { type: 'gradient'; from: string; to: string; angle: number };
+
+// A text box, authored as the TipTap HTML the editor itself stores (paragraphs, <strong>, lists).
+export type DeckText = {
+    html: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fontSize: number;
+    color?: string; // default the deck ink
+    bold?: boolean;
+    align?: TextAlign; // default left
+    valign?: VerticalAlign; // default top
+};
+
+export type DeckShape = {
+    key: string;
+    kind: 'rectangle' | 'ellipse';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fill?: string; // default transparent
+    stroke?: string;
+    strokeWidth?: number;
+};
+
+// Both ends dock on a named shape's side midpoint, so the arrow carries a real binding.
+export type DeckArrow = {
+    from: { shape: string; side: DeckSide };
+    to: { shape: string; side: DeckSide };
+    stroke?: string;
+};
+
+export type DeckImage = {
+    file: string; // fixture path under fixtures/, uploaded into the container's media/ folder
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+};
+
+// Drawn bottom-up: shapes, images, arrows, then every text on top.
+export type DeckSlide = {
+    key: string;
+    name: string; // the slide's name in the rail
+    background: DeckBackground;
+    texts: DeckText[];
+    shapes?: DeckShape[];
+    arrows?: DeckArrow[];
+    images?: DeckImage[];
+};
+
+// The deck's ink: every text box that does not name its own colour is built in this.
+export const DECK_INK = '#1b1b1f';
+const DECK_PAPER = { type: 'solid', color: '#fffdfa' } as const;
+const DECK_ACCENT = '#e8590c';
+const DECK_HEADING = { x: 160, y: 110, width: 1600, height: 130, fontSize: 88, bold: true } as const;
+
 export const SPONSOR_DECK = {
     folder: 'marketing' as TeamFolder,
     name: 'sponsor pitch', // lowercase, no extension
     author: 'comms' as LeadRole,
+    slides: [
+        {
+            key: 'title',
+            name: 'Title',
+            background: { type: 'gradient', from: '#2b1055', to: '#c2410c', angle: 160 },
+            images: [{ file: 'branding/logo.webp', x: 160, y: 150, width: 150, height: 150 }],
+            texts: [
+                {
+                    html: '<p>Tuimel Festival</p>',
+                    x: 160,
+                    y: 400,
+                    width: 1600,
+                    height: 170,
+                    fontSize: 120,
+                    bold: true,
+                    color: '#ffffff',
+                },
+                {
+                    html: '<p>Sponsor pitch, 2026 edition</p>',
+                    x: 160,
+                    y: 590,
+                    width: 1600,
+                    height: 90,
+                    fontSize: 48,
+                    color: '#ffd8a8',
+                },
+                {
+                    html: '<p>A volunteer-run arts and music festival on the coast</p>',
+                    x: 160,
+                    y: 860,
+                    width: 1600,
+                    height: 70,
+                    fontSize: 32,
+                    color: '#ffe8d5',
+                },
+            ],
+        },
+        {
+            key: 'agenda',
+            name: 'Agenda',
+            background: DECK_PAPER,
+            texts: [
+                { ...DECK_HEADING, html: '<p>Agenda</p>' },
+                {
+                    html:
+                        '<ul>' +
+                        '<li><p>Who we are</p></li>' +
+                        '<li><p>Last edition in numbers</p></li>' +
+                        '<li><p>What a sponsor gets</p></li>' +
+                        '<li><p>Packages</p></li>' +
+                        '<li><p>Next steps</p></li>' +
+                        '</ul>',
+                    x: 200,
+                    y: 320,
+                    width: 1500,
+                    height: 580,
+                    fontSize: 48,
+                },
+            ],
+        },
+        {
+            key: 'who',
+            name: 'Who we are',
+            background: DECK_PAPER,
+            images: [{ file: 'images/crowd-arriving.webp', x: 1040, y: 300, width: 720, height: 480 }],
+            texts: [
+                { ...DECK_HEADING, html: '<p>Who we are</p>' },
+                {
+                    html:
+                        '<p>Tuimel is a two-day festival in the dunes, run by 80 volunteers on a shoestring.</p>' +
+                        '<p>Two stages, a workshop tent, a camping field, and a crowd that comes back every year.</p>',
+                    x: 160,
+                    y: 320,
+                    width: 800,
+                    height: 460,
+                    fontSize: 40,
+                },
+            ],
+        },
+        {
+            key: 'numbers',
+            name: 'Last edition in numbers',
+            background: DECK_PAPER,
+            shapes: [
+                {
+                    key: 'stat-1',
+                    kind: 'rectangle',
+                    x: 160,
+                    y: 380,
+                    width: 480,
+                    height: 320,
+                    fill: '#ffe8d5',
+                    stroke: DECK_ACCENT,
+                },
+                {
+                    key: 'stat-2',
+                    kind: 'rectangle',
+                    x: 720,
+                    y: 380,
+                    width: 480,
+                    height: 320,
+                    fill: '#ffe8d5',
+                    stroke: DECK_ACCENT,
+                },
+                {
+                    key: 'stat-3',
+                    kind: 'rectangle',
+                    x: 1280,
+                    y: 380,
+                    width: 480,
+                    height: 320,
+                    fill: '#ffe8d5',
+                    stroke: DECK_ACCENT,
+                },
+            ],
+            texts: [
+                { ...DECK_HEADING, html: '<p>Last edition in numbers</p>' },
+                {
+                    html: '<p><strong>4,200</strong></p><p>visitors over two days</p>',
+                    x: 190,
+                    y: 410,
+                    width: 420,
+                    height: 260,
+                    fontSize: 44,
+                    align: 'center',
+                    valign: 'center',
+                },
+                {
+                    html: '<p><strong>26</strong></p><p>acts on two stages</p>',
+                    x: 750,
+                    y: 410,
+                    width: 420,
+                    height: 260,
+                    fontSize: 44,
+                    align: 'center',
+                    valign: 'center',
+                },
+                {
+                    html: '<p><strong>80</strong></p><p>volunteers on the crew</p>',
+                    x: 1310,
+                    y: 410,
+                    width: 420,
+                    height: 260,
+                    fontSize: 44,
+                    align: 'center',
+                    valign: 'center',
+                },
+            ],
+        },
+        {
+            key: 'offer',
+            name: 'What a sponsor gets',
+            background: DECK_PAPER,
+            shapes: [
+                {
+                    key: 'you-back',
+                    kind: 'rectangle',
+                    x: 200,
+                    y: 460,
+                    width: 620,
+                    height: 260,
+                    fill: '#e7f5ff',
+                    stroke: '#1c7ed6',
+                },
+                {
+                    key: 'we-name',
+                    kind: 'rectangle',
+                    x: 1100,
+                    y: 460,
+                    width: 620,
+                    height: 260,
+                    fill: '#fff0f6',
+                    stroke: '#c2255c',
+                },
+            ],
+            arrows: [{ from: { shape: 'you-back', side: 'right' }, to: { shape: 'we-name', side: 'left' } }],
+            texts: [
+                { ...DECK_HEADING, html: '<p>What a sponsor gets</p>' },
+                {
+                    html: '<p>You back a stage or the camping field</p>',
+                    x: 230,
+                    y: 490,
+                    width: 560,
+                    height: 200,
+                    fontSize: 40,
+                    align: 'center',
+                    valign: 'center',
+                },
+                {
+                    html: '<p>Your name on it, on site and in every announcement</p>',
+                    x: 1130,
+                    y: 490,
+                    width: 560,
+                    height: 200,
+                    fontSize: 40,
+                    align: 'center',
+                    valign: 'center',
+                },
+                {
+                    html: '<p>No pop-up banners, no logo soup. One partner per stage.</p>',
+                    x: 200,
+                    y: 810,
+                    width: 1520,
+                    height: 80,
+                    fontSize: 36,
+                    color: DECK_ACCENT,
+                    align: 'center',
+                },
+            ],
+        },
+        {
+            key: 'packages',
+            name: 'Packages',
+            background: DECK_PAPER,
+            texts: [
+                { ...DECK_HEADING, html: '<p>Packages</p>' },
+                {
+                    html:
+                        '<p><strong>Friend, 500 euro</strong></p>' +
+                        '<ul><li><p>Name on the site page</p></li><li><p>Two weekend tickets</p></li></ul>',
+                    x: 160,
+                    y: 340,
+                    width: 480,
+                    height: 520,
+                    fontSize: 34,
+                },
+                {
+                    html:
+                        '<p><strong>Partner, 2,500 euro</strong></p>' +
+                        '<ul><li><p>Logo on the programme and posters</p></li>' +
+                        '<li><p>A stand by the workshop tent</p></li>' +
+                        '<li><p>Six weekend tickets</p></li></ul>',
+                    x: 720,
+                    y: 340,
+                    width: 480,
+                    height: 520,
+                    fontSize: 34,
+                },
+                {
+                    html:
+                        '<p><strong>Main partner, 7,500 euro</strong></p>' +
+                        '<ul><li><p>Your name on the second stage</p></li>' +
+                        '<li><p>Everything in Partner</p></li>' +
+                        '<li><p>Twelve weekend tickets</p></li></ul>',
+                    x: 1280,
+                    y: 340,
+                    width: 480,
+                    height: 520,
+                    fontSize: 34,
+                },
+            ],
+        },
+        {
+            key: 'next',
+            name: 'Next steps',
+            background: { type: 'solid', color: '#1b1b2f' },
+            texts: [
+                {
+                    html: '<p>Let us talk</p>',
+                    x: 160,
+                    y: 380,
+                    width: 1600,
+                    height: 160,
+                    fontSize: 96,
+                    bold: true,
+                    color: '#ffffff',
+                },
+                {
+                    html: '<p>Reply to this deck, or walk the field with us at the site visit on 12 June.</p>',
+                    x: 160,
+                    y: 580,
+                    width: 1600,
+                    height: 200,
+                    fontSize: 44,
+                    color: '#ffd8a8',
+                },
+            ],
+        },
+    ] satisfies DeckSlide[],
 };
 
 // --- Stickies board fixture (authored once, byte-copied in; creator = persona email) ---

@@ -6,13 +6,19 @@ import { join } from 'node:path';
 import type { JSONContent } from '@tiptap/core';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
-import { orderByFractionalIndex, parseBinding, readVectorFromDoc, sceneBounds } from '@workspace/lib/vector';
+import {
+    elementsInFrame,
+    orderByFractionalIndex,
+    parseBackgroundFill,
+    parseBinding,
+    readVectorFromDoc,
+    sceneBounds,
+} from '@workspace/lib/vector';
 import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../lib/collab/db-config';
 import { loadYjsState } from '../../lib/collab/yjs-loader';
 import { openLocalDatabase } from '../../lib/core';
 import { readSheetsFromDoc } from '../../lib/document/sheets';
-import { readDeckFromDoc } from '../../lib/document/slides';
 import {
     BRANDING,
     BUDGET,
@@ -213,8 +219,8 @@ describe('seed-demo', () => {
             expect(sheets.length).toBeGreaterThanOrEqual(1);
             expect(sheets[0].celldata?.length ?? 0).toBeGreaterThan(0);
 
-            // Sponsor deck: its embedded image (media/logo.svg) landed as a real blob, so the
-            // byte-copied deck stays whole (the deck references it by name).
+            // Sponsor deck: built from code out of SPONSOR_DECK (no fixture bytes; see demo/deck-build.ts).
+            // Its images are uploaded into the container's media/ folder, which the deck references by name.
             const deck = query<{ id: string }>(
                 metadataDb,
                 `SELECT id FROM paths WHERE name = '${SPONSOR_DECK.name}.eigenslides' AND trashedAt IS NULL`,
@@ -229,39 +235,59 @@ describe('seed-demo', () => {
                 metadataDb,
                 `SELECT name, file FROM paths WHERE parentId = '${deckMedia[0].id}' AND trashedAt IS NULL`,
             );
-            expect(deckImages.length).toBeGreaterThanOrEqual(1);
+            const deckImageSpecs = SPONSOR_DECK.slides.flatMap((slide) => slide.images ?? []);
+            expect(deckImages.length).toBe(deckImageSpecs.length);
             for (const img of deckImages) {
                 const blob = join(mountsDir, mountId, 'data', img.file);
                 expect(existsSync(blob)).toBe(true);
                 expect(statSync(blob).size).toBeGreaterThan(0);
             }
 
-            // ...and the deck itself reads back through the shipped reader with canonical geometry on
-            // every object. yMapToObject materializes only OBJECT_FIELDS, so a fixture still carrying
-            // pre-rename keys (w/h/rotation) yields undefined width/height/angle rather than throwing —
-            // it would silently render collapsed in the demo. Assert the numbers, not just the read.
+            // ...and the deck reads back through the shipped canvas reader: one frame per slide, every
+            // element homed to a frame that exists (a dangling frameId re-homes on read and would
+            // silently move a slide's content) and canonical geometry on every one of them.
             const deckDoc = await loadCollabDoc(
                 findContainerDataDb(metadataDb, mountsDir, mountId, `${SPONSOR_DECK.name}.eigenslides`),
             );
-            const deckData = readDeckFromDoc(deckDoc);
-            expect(deckData.slideOrder.length).toBeGreaterThanOrEqual(1);
-            const deckObjects = Object.values(deckData.objects);
-            expect(deckObjects.length).toBeGreaterThanOrEqual(1);
-            for (const obj of deckObjects) {
+            const deckScene = readVectorFromDoc(deckDoc);
+            expect(deckScene.frames.length).toBe(SPONSOR_DECK.slides.length);
+            expect(deckScene.elements.length).toBeGreaterThanOrEqual(20);
+            const deckFrameIds = new Set(deckScene.frames.map((frame) => frame.id));
+            for (const element of deckScene.elements) {
                 for (const field of ['x', 'y', 'width', 'height', 'angle'] as const) {
-                    expect(Number.isFinite(obj[field])).toBe(true);
+                    expect(Number.isFinite(element[field])).toBe(true);
                 }
-                expect(obj.width).toBeGreaterThan(0);
-                expect(obj.height).toBeGreaterThan(0);
+                // A horizontal arrow's box is zero-height by construction, so it is the larger side
+                // that must be real — a collapsed element would render as nothing.
+                expect(Math.max(element.width, element.height)).toBeGreaterThan(0);
+                expect(deckFrameIds.has(element.frameId)).toBe(true);
             }
-            // Every slide's objectIds resolve, and each image object points at a media file that landed.
+
+            // Slide order is the authored order, and the title slide carries the gradient background.
+            const deckFrames = orderByFractionalIndex(deckScene.frames);
+            expect(deckFrames.map((frame) => frame.name)).toEqual(SPONSOR_DECK.slides.map((slide) => slide.name));
+            expect(parseBackgroundFill(deckFrames[0].background)?.type).toBe('gradient');
+            for (const frame of deckFrames) expect(parseBackgroundFill(frame.background)).not.toBeNull();
+
+            // Every slide holds text, every text box holds a body, and each image names a media file
+            // that landed. The arrow's binding survived the read, so its target shape is present.
             const deckMediaNames = new Set(deckImages.map((img) => img.name));
-            for (const slide of Object.values(deckData.slides)) {
-                for (const objId of slide.objectIds) expect(deckData.objects[objId]).toBeDefined();
+            for (const frame of deckFrames) {
+                const onFrame = elementsInFrame(deckScene.elements, frame.id);
+                expect(onFrame.filter((el) => el.type === 'richtext').length).toBeGreaterThanOrEqual(1);
             }
-            for (const obj of deckObjects) {
-                if (obj.type === 'image') expect(deckMediaNames.has(obj.mediaName)).toBe(true);
+            for (const element of deckScene.elements) {
+                if (element.type === 'richtext') expect(element.html.length).toBeGreaterThan(0);
+                if (element.type === 'image') expect(deckMediaNames.has(element.mediaName)).toBe(true);
             }
+            expect(deckScene.elements.filter((el) => el.type === 'image').length).toBe(deckImageSpecs.length);
+            const deckElementIds = new Set(deckScene.elements.map((el) => el.id));
+            const deckArrows = deckScene.elements.filter((el) => {
+                if (el.type !== 'arrow') return false;
+                const binding = parseBinding(el.endBinding);
+                return binding !== null && deckElementIds.has(binding.elementId);
+            });
+            expect(deckArrows.length).toBeGreaterThanOrEqual(1);
 
             // Team calendar: seeded events exist on the enabled team calendar.
             const calendarDb = join(root, 'team', teamId!, 'eigen.calendar', 'calendar.db');
