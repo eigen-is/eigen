@@ -10,38 +10,18 @@ import {
     type VectorRectangleElement,
     type VectorScene,
 } from '../../vector/types';
+import { scene, shape } from './element-factories';
 
-// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 // Freedraw/line/arrow rows carry the paint + roughjs fields the shared defaults no longer hold.
 const LINEAR_PAINT = { fill: solidFill('transparent'), fillStyle: 'solid', roughness: 1 } as const;
 
-// Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
-const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
-    ...DEFAULT_ELEMENT_PROPS,
-    x: 0,
-    y: 0,
-    width: 100,
-    height: 60,
-    angle: 0,
-    index: 'a0',
-    fill: solidFill('transparent'),
-    fillStyle: 'solid',
-    roughness: 1,
-    seed: 1,
-    corners: 'straight',
-};
+// The golden is pinned on the flat style (sharp corners, no hachure) so a change to the vector app's
+// style table can never rewrite it; everything else comes from the shared fixtures. Spread-only so the
+// ellipse case doesn't trip the excess-property check on `corners`.
+const GOLDEN_STYLE: Pick<VectorRectangleElement, 'corners' | 'fillStyle'> = { corners: 'straight', fillStyle: 'solid' };
 
-const shape = (over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorElement => {
-    const el = { ...SHAPE_BASE, ...over };
-    if (el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse') return el;
-    throw new Error('shape() expects a shape type');
-};
-
-const scene = (elements: VectorElement[], background = 'transparent'): VectorScene => ({
-    meta: { background, gridSize: 20 },
-    elements,
-    frames: [],
-});
+const goldenShape = (over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorElement =>
+    shape({ ...GOLDEN_STYLE, ...over });
 
 // The golden scene: each shape type, straight and curved corners, a rich-text box, the linear renders (a
 // freedraw stroke, a sharp open line, a round closed-and-filled line), and the arrows — a plain one with
@@ -55,11 +35,11 @@ const scene = (elements: VectorElement[], background = 'transparent'): VectorSce
 // GOLDEN_SVG by pasting the output of `sceneToSvg(buildGoldenScene())`.
 export function buildGoldenScene(): VectorScene {
     return scene([
-        shape({ id: 'r1', type: 'rectangle', corners: 'straight', x: 0, y: 0, seed: 1, index: 'a0' }),
-        shape({ id: 'r2', type: 'rectangle', corners: 'curved', x: 120, y: 0, seed: 2, index: 'a1' }),
-        shape({ id: 'd1', type: 'diamond', corners: 'straight', x: 0, y: 80, seed: 3, index: 'a2' }),
-        shape({ id: 'd2', type: 'diamond', corners: 'curved', x: 120, y: 80, seed: 4, index: 'a3' }),
-        shape({ id: 'e1', type: 'ellipse', x: 0, y: 160, seed: 5, index: 'a4' }),
+        goldenShape({ id: 'r1', type: 'rectangle', corners: 'straight', x: 0, y: 0, seed: 1, index: 'a0' }),
+        goldenShape({ id: 'r2', type: 'rectangle', corners: 'curved', x: 120, y: 0, seed: 2, index: 'a1' }),
+        goldenShape({ id: 'd1', type: 'diamond', corners: 'straight', x: 0, y: 80, seed: 3, index: 'a2' }),
+        goldenShape({ id: 'd2', type: 'diamond', corners: 'curved', x: 120, y: 80, seed: 4, index: 'a3' }),
+        goldenShape({ id: 'e1', type: 'ellipse', x: 0, y: 160, seed: 5, index: 'a4' }),
         {
             ...DEFAULT_ELEMENT_PROPS,
             id: 't1',
@@ -218,7 +198,7 @@ export function buildGoldenScene(): VectorScene {
             fontFamily: 'Excalifont',
             labelWidth: 0,
         },
-        shape({ id: 'r3', type: 'rectangle', corners: 'straight', x: 240, y: 200, seed: 13, index: 'aC' }),
+        goldenShape({ id: 'r3', type: 'rectangle', corners: 'straight', x: 240, y: 200, seed: 13, index: 'aC' }),
         // Same bound route as ar3 but `roundness: 'round'` — its bends render as quadratic corner arcs
         // (Excalidraw's generateElbowArrowShape) instead of the sharp linearPath, exercising the rounded
         // elbow branch. Endpoints and the final segment's direction (thus the head) stay identical to ar3.
@@ -353,7 +333,7 @@ export function buildGoldenScene(): VectorScene {
         // The two gradient paints, in free space inside the existing bounds so every fragment above stays
         // byte-identical: a solid-styled one (the gradient rides `fill=` on the fillPath) and a hachure one
         // (it rides `stroke=` on the fillSketch strokes).
-        shape({
+        goldenShape({
             id: 'gr1',
             type: 'rectangle',
             x: 230,
@@ -363,7 +343,7 @@ export function buildGoldenScene(): VectorScene {
             fill: '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45}',
             fillStyle: 'solid',
         }),
-        shape({
+        goldenShape({
             id: 'gr2',
             type: 'ellipse',
             x: 230,
@@ -432,7 +412,7 @@ describe('sceneToSvg', () => {
     });
 
     test('XML-escapes hostile shape attribute values (stroke color)', () => {
-        const svg = sceneToSvg(scene([shape({ id: 's', type: 'rectangle', strokeColor: '"><script>' })]));
+        const svg = sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', strokeColor: '"><script>' })]));
         expect(svg).toContain('stroke="&quot;&gt;&lt;script&gt;"');
         expect(svg).not.toContain('"><script>');
         expect(svg).not.toContain('<script>');
@@ -440,24 +420,28 @@ describe('sceneToSvg', () => {
 
     test('renders a fill (fillSketch/fillPath) using the background color', () => {
         const svg = sceneToSvg(
-            scene([shape({ id: 's', type: 'rectangle', fill: solidFill('#ff0000'), fillStyle: 'hachure' })]),
+            scene([goldenShape({ id: 's', type: 'rectangle', fill: solidFill('#ff0000'), fillStyle: 'hachure' })]),
         );
         expect(svg).toContain('stroke="#ff0000"');
     });
 
     test('emits stroke-dasharray for a dashed stroke', () => {
-        const svg = sceneToSvg(scene([shape({ id: 's', type: 'rectangle', strokeStyle: 'dashed' })]));
+        const svg = sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', strokeStyle: 'dashed' })]));
         expect(svg).toContain('stroke-dasharray=');
     });
 
     test('emits a rotate() transform only when angle is non-zero', () => {
-        expect(sceneToSvg(scene([shape({ id: 's', type: 'rectangle', angle: 30 })]))).toContain('rotate(30 ');
-        expect(sceneToSvg(scene([shape({ id: 's', type: 'rectangle', angle: 0 })]))).not.toContain('rotate(');
+        expect(sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', angle: 30 })]))).toContain('rotate(30 ');
+        expect(sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', angle: 0 })]))).not.toContain('rotate(');
     });
 
     test('emits opacity only when not 100', () => {
-        expect(sceneToSvg(scene([shape({ id: 's', type: 'rectangle', opacity: 50 })]))).toContain('opacity="0.5"');
-        expect(sceneToSvg(scene([shape({ id: 's', type: 'rectangle', opacity: 100 })]))).not.toContain('opacity=');
+        expect(sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', opacity: 50 })]))).toContain(
+            'opacity="0.5"',
+        );
+        expect(sceneToSvg(scene([goldenShape({ id: 's', type: 'rectangle', opacity: 100 })]))).not.toContain(
+            'opacity=',
+        );
     });
 
     test('renders images through the media resolver, nothing when unresolvable', () => {
@@ -504,8 +488,8 @@ describe('sceneToSvg', () => {
     });
 
     test('paints in fractional-index order regardless of input order', () => {
-        const front = shape({ id: 'front', type: 'rectangle', index: 'a2' });
-        const back = shape({ id: 'back', type: 'rectangle', index: 'a0' });
+        const front = goldenShape({ id: 'front', type: 'rectangle', index: 'a2' });
+        const back = goldenShape({ id: 'back', type: 'rectangle', index: 'a0' });
         // both share default styling, so compare paint order via a distinguishing stroke color
         const a = sceneToSvg(
             scene([
@@ -621,13 +605,13 @@ describe('gradient fills', () => {
     const gradient = '{"type":"gradient","from":"#ff0000","to":"#0000ff","angle":45}';
 
     test('a solid-styled gradient shape emits one element-scoped linearGradient and points fill at it', () => {
-        const svg = elementToSvg(shape({ id: 'g1', type: 'rectangle', fill: gradient, fillStyle: 'solid' }));
+        const svg = elementToSvg(goldenShape({ id: 'g1', type: 'rectangle', fill: gradient, fillStyle: 'solid' }));
         expect(svg).toContain('<linearGradient id="fill-g1"');
         expect(svg).toContain('fill="url(#fill-g1)"');
     });
 
     test('a hachure gradient paints the sketch STROKES with the same gradient', () => {
-        const svg = elementToSvg(shape({ id: 'g2', type: 'rectangle', fill: gradient, fillStyle: 'hachure' }));
+        const svg = elementToSvg(goldenShape({ id: 'g2', type: 'rectangle', fill: gradient, fillStyle: 'hachure' }));
         expect(svg).toContain('<linearGradient id="fill-g2"');
         expect(svg).toContain('stroke="url(#fill-g2)"');
     });
@@ -635,8 +619,8 @@ describe('gradient fills', () => {
     test('ids are element-scoped so two gradient shapes never collide', () => {
         const svg = sceneToSvg(
             scene([
-                shape({ id: 'a', type: 'rectangle', fill: gradient }),
-                shape({ id: 'b', type: 'ellipse', fill: gradient, x: 200 }),
+                goldenShape({ id: 'a', type: 'rectangle', fill: gradient }),
+                goldenShape({ id: 'b', type: 'ellipse', fill: gradient, x: 200 }),
             ]),
         );
         expect(svg).toContain('id="fill-a"');
@@ -667,24 +651,26 @@ describe('gradient fills', () => {
     });
 
     test('a hostile element id cannot escape the id attribute', () => {
-        const svg = elementToSvg(shape({ id: '"><script>', type: 'rectangle', fill: gradient }));
+        const svg = elementToSvg(goldenShape({ id: '"><script>', type: 'rectangle', fill: gradient }));
         expect(svg).not.toContain('<script>');
     });
 
     test('a transparent fill emits no defs', () => {
-        expect(elementToSvg(shape({ id: 'g3', type: 'rectangle' }))).not.toContain('linearGradient');
+        expect(elementToSvg(goldenShape({ id: 'g3', type: 'rectangle' }))).not.toContain('linearGradient');
     });
 });
 
 describe('elementToSvg options', () => {
     test('positioned:false drops the translate/rotate group so a layer box can carry it', () => {
-        const el = shape({ id: 'p', type: 'rectangle', x: 40, y: 60, angle: 30 });
+        const el = goldenShape({ id: 'p', type: 'rectangle', x: 40, y: 60, angle: 30 });
         expect(elementToSvg(el)).toContain('transform="translate(40 60) rotate(30');
         expect(elementToSvg(el, { positioned: false })).not.toContain('translate(');
     });
 
     test('positioned:false is per-element — a scene always places its elements', () => {
-        const svg = sceneToSvg(scene([shape({ id: 'p', type: 'rectangle', x: 40, y: 60 })]), { positioned: false });
+        const svg = sceneToSvg(scene([goldenShape({ id: 'p', type: 'rectangle', x: 40, y: 60 })]), {
+            positioned: false,
+        });
         expect(svg).toContain('transform="translate(40 60)"');
     });
 });

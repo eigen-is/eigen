@@ -12,6 +12,7 @@ export * from './kinds';
 export * from './media-refs';
 export * from './outline';
 export * from './read-vector';
+export * from './scene-layers';
 export type { MediaResolver, SceneToSvgOptions } from './scene-to-svg';
 export { elementToSvg, sceneToSvg } from './scene-to-svg';
 export * from './snap';
