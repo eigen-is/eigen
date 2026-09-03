@@ -1,9 +1,11 @@
 export { AboutDialog } from './about-dialog';
 export { AppLogo } from './app-logo';
 export { AppShell } from './app-shell';
+export { CollabLoadingState } from './collab-loading-state';
 export type { ColumnProps } from './column-layout';
 export { Column, ColumnLayout } from './column-layout';
 export { EigenApp } from './eigen-app';
+export { EigenDocRouteStatus } from './eigen-doc-route-status';
 export { EmptyState } from './empty-state';
 export { ErrorBoundary } from './error-boundary';
 export { ErrorState } from './error-state';

@@ -172,6 +172,12 @@ export function getEigenDocInfoByMime(mimeOrSlug: string): EigenDocTypeInfo | un
     return undefined;
 }
 
+// The on-disk name of an eigen document: every create path (FE hooks, Drive.create, the chat route's
+// dedupe) builds it here so the stored name and the name a client reconciles against can't drift.
+export function withEigenExtension(name: string, type: EigenDocType): string {
+    return `${name}${DRIVE_EXTENSIONS[type]}`;
+}
+
 export function stripEigenExtension(name: string): string {
     for (const ext of Object.values(DRIVE_EXTENSIONS)) {
         if (name.endsWith(ext)) return name.slice(0, -ext.length);

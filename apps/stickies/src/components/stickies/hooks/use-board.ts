@@ -1,8 +1,8 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCreateChat } from '@workspace/lib/chat';
 import { getIdArray, getIdArrayRoot, getItemMapRoot, useCollabDoc } from '@workspace/lib/collab';
 import { writeCardToDoc } from '@workspace/lib/comments';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { useCreateDriveItem } from '@workspace/lib/drive';
 import { nanoid } from 'nanoid';
 import { useCallback, useRef, useState } from 'react';
 import * as Y from 'yjs';
@@ -41,7 +41,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     // tears down the live board — the doc is keyed strictly on ownerId/mountId/pathId.
     const userEmailRef = useRef(user?.email);
     userEmailRef.current = user?.email;
-    const createChat = useCreateChat(ownerId, mountId);
+    const createChat = useCreateDriveItem('chat');
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
     const chatFolderIdRef = useRef(chatFolderId);
@@ -52,12 +52,14 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         if (!folderId) return undefined;
         const result = await createChatRef.current
             .mutateAsync({
+                ownerId,
+                mountId,
                 parentId: folderId,
                 fileName: `task-${nanoid(10)}`,
             })
             .catch(() => undefined);
         return result?.name;
-    }, []);
+    }, [ownerId, mountId]);
 
     const initializeDefaultBoard = useCallback(
         async (doc: Y.Doc, userEmail: string) => {
@@ -112,6 +114,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         synced: isSynced,
         offline,
         loaded,
+        storageUnavailable,
     } = useCollabDoc({
         ownerId,
         mountId,
@@ -216,6 +219,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         isSynced,
         offline,
         loaded,
+        storageUnavailable,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,
         handleAddColumn,

@@ -37,10 +37,10 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 }
 
 // GET FOLDER CONTENTS
-export function useFolderContent(ownerId: string, mountId: string, pathId: string) {
-    return useQuery<DrivePath[]>({
+export function folderContentQueryConfig(ownerId: string, mountId: string, pathId: string) {
+    return {
         queryKey: driveKeys.folder(ownerId, mountId, pathId),
-        queryFn: async () => {
+        queryFn: async (): Promise<DrivePath[]> => {
             if (!pathId) return [];
             const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
             if (response.error) {
@@ -51,7 +51,11 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
         enabled: !!pathId && !!ownerId && !!mountId,
         retry: 1,
         staleTime: STALE_TIME.FIVE_MINUTES,
-    });
+    };
+}
+
+export function useFolderContent(ownerId: string, mountId: string, pathId: string) {
+    return useQuery<DrivePath[]>(folderContentQueryConfig(ownerId, mountId, pathId));
 }
 
 // FOLDER LOOKUP — wraps useFolderContent with refetch-on-miss for name-based lookups.
@@ -144,21 +148,23 @@ export function useAggregateMimeContent(
 }
 
 // GET MIME CONTENTS scoped to a single mount
-export function useMountMimeContent(ownerId: string, mountId: string, mimeType: string) {
-    return useQuery<DrivePath[]>({
+export function mountMimeContentQueryConfig(ownerId: string, mountId: string, mimeType: string) {
+    return {
         queryKey: driveKeys.mountMime(ownerId, mountId, mimeType),
-        queryFn: async () => {
+        queryFn: async (): Promise<DrivePath[]> => {
             if (!mimeType) return [];
             const response = await driveApi({ ownerId })({ mountId }).mime({ mimeType }).get();
-            if (response.error) {
-                throw new AppError(response);
-            }
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         enabled: !!mimeType && !!ownerId && !!mountId,
         retry: 1,
         staleTime: STALE_TIME.FIVE_MINUTES,
-    });
+    };
+}
+
+export function useMountMimeContent(ownerId: string, mountId: string, mimeType: string) {
+    return useQuery<DrivePath[]>(mountMimeContentQueryConfig(ownerId, mountId, mimeType));
 }
 
 // GET PATH INFO

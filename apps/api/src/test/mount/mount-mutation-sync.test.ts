@@ -1,16 +1,13 @@
-import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { MountConfig, S3Config } from '@workspace/lib/types';
-import type { BunFile } from 'bun';
+import type { MountConfig } from '@workspace/lib/types';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
 import { buildStorageKey, createDefaultMountConfig } from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
-import type { StorageBackend, StorageFile } from '../../lib/storage';
-import { LocalStorage } from '../../lib/storage/local-storage';
 import { setShutdownDrainDeadline } from '../../lib/sync';
+import { countRowsInFile, createFaultMount, createGetLocalDatabase, type FaultStorage } from '../fault-storage-helpers';
 
 // Regression net for AUDIT_MOUNT § P1 (finding 2a + siblings): a cached document DB syncs to a
 // STALE storage key after move/rename/trash/delete on the `local` backend (keys are the hierarchical
@@ -18,26 +15,6 @@ import { setShutdownDrainDeadline } from '../../lib/sync';
 
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-mount-mutation-sync-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
-
-const DUMMY_S3: S3Config = {
-    endpoint: 'http://127.0.0.1:1',
-    bucket: 'test',
-    accessKeyId: 'x',
-    secretAccessKey: 'y',
-    region: 'us-east-1',
-    prefix: '',
-};
-
-function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        relativePath: string,
-    ): Promise<ManagedDatabase<S>> => {
-        const db = new ManagedDatabase(config, join(baseDir, relativePath));
-        await db.open(0);
-        return db;
-    };
-}
 
 const docSchema = {
     items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }),
@@ -49,30 +26,6 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     schema: docSchema,
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
-
-// S3-like backend over LocalStorage (omits getPath so the mount takes the temp-copy path, not the
-// path-based one). Exposed to tests so they can probe the backing store at exact object keys.
-class S3LikeStorage implements StorageBackend {
-    constructor(private readonly inner: LocalStorage) {}
-    read(key: string): StorageFile {
-        return this.inner.read(key);
-    }
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        // Buffer up-front like an S3 PUT streaming its body, so a cancel() unlinking the staging
-        // file mid-flight yields a completed late PUT (the resurrection shape), not a read error.
-        const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
-        return this.inner.write(key, bytes);
-    }
-    async delete(key: string): Promise<boolean> {
-        return this.inner.delete(key);
-    }
-    async exists(key: string): Promise<boolean> {
-        return this.inner.exists(key);
-    }
-    async size(key: string): Promise<number | null> {
-        return this.inner.size(key);
-    }
-}
 
 const createdMounts: Mount[] = [];
 
@@ -88,33 +41,16 @@ async function createMount(id: string, storageType: MountConfig['storageType']):
     return mount;
 }
 
-function createS3Mount(id: string): { mount: Mount; backing: S3LikeStorage } {
-    const config: MountConfig = {
-        id,
-        name: id,
-        storageType: 's3',
-        isDefault: false,
-        s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
-    };
-    const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
-    const backing = new S3LikeStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-    (mount as unknown as { storage: StorageBackend }).storage = backing;
+function createS3Mount(id: string): { mount: Mount; backing: FaultStorage } {
+    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
     createdMounts.push(mount);
-    return { mount, backing };
+    return { mount, backing: fault };
 }
 
 // Row count in the on-storage copy of data.db, read through the mount's storage at its CURRENT
 // resolved key (getStorageKey). If a sync wrote to a stale key, this reads the pre-mutation object.
 async function countStoredRows(mount: Mount, dataDbId: string): Promise<number | null> {
-    const file = await mount.readFile(dataDbId);
-    if (!file) return null;
-    const verifyPath = join(TEST_DIR, `verify-${Math.random().toString(36).slice(2)}.db`);
-    await Bun.write(verifyPath, await file.arrayBuffer());
-    const verify = new Database(verifyPath);
-    const row = verify.query('SELECT COUNT(*) as c FROM items').get() as { c: number };
-    verify.close();
-    rmSync(verifyPath, { force: true });
-    return row.c;
+    return countRowsInFile(await mount.readFile(dataDbId), TEST_DIR);
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));

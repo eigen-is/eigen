@@ -1,20 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
-import {
-    DRIVE_MIME_CHAT,
-    DRIVE_MIME_DOC,
-    DRIVE_MIME_SHEETS,
-    DRIVE_MIME_SLIDES,
-    DRIVE_MIME_STICKIES,
-    DRIVE_MIME_VECTOR,
-    type DrivePath,
-    type EigenDocType,
-} from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, type EigenDocType, withEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
+import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../reconcile-create';
 import { partitionCopyResults } from './copy-media-partition';
 import { invalidateItemCreated, invalidateItemDeleted, invalidatePathMoved, invalidatePathRenamed } from './keys';
+import { folderContentQueryConfig } from './reads';
 
 // CREATE FOLDER — owner/mount come per call so one instance serves any target drive.
 export function useCreateFolder() {
@@ -311,19 +304,12 @@ export function useRenamePath(
     });
 }
 
-const EIGENDOC_MIME: Record<EigenDocType, string> = {
-    doc: DRIVE_MIME_DOC,
-    stickies: DRIVE_MIME_STICKIES,
-    slides: DRIVE_MIME_SLIDES,
-    sheets: DRIVE_MIME_SHEETS,
-    chat: DRIVE_MIME_CHAT,
-    vector: DRIVE_MIME_VECTOR,
-};
-
+// CREATE EIGEN DOCUMENT — the create waits CREATE_TIMEOUT_MS, then reconciles against the parent
+// listing rather than reporting a failure for an item slow storage did land. See reconcile-create.ts.
 export function useCreateDriveItem(type: EigenDocType) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({
+        mutationFn: ({
             ownerId,
             mountId,
             parentId,
@@ -333,21 +319,26 @@ export function useCreateDriveItem(type: EigenDocType) {
             mountId: string;
             parentId: string;
             fileName: string;
-        }): Promise<DrivePath> => {
-            const response = await driveApi({ ownerId })({ mountId })
-                .folder({ pathId: parentId })
-                .create({ type })
-                .post({ fileName });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
+        }): Promise<DrivePath> =>
+            createWithReconcile({
+                create: async () => {
+                    const response = await driveApi({ ownerId })({ mountId })
+                        .folder({ pathId: parentId })
+                        .create({ type })
+                        .post({ fileName }, { fetch: { signal: AbortSignal.timeout(CREATE_TIMEOUT_MS) } });
+                    if (response.error) throw new AppError(response);
+                    return response.data;
+                },
+                listFolder: () => fetchListingOnce(queryClient, folderContentQueryConfig(ownerId, mountId, parentId)),
+                expectedName: withEigenExtension(fileName, type),
+            }),
         onSuccess: (_data, variables) =>
             invalidateItemCreated(
                 queryClient,
                 variables.ownerId,
                 variables.mountId,
                 variables.parentId,
-                EIGENDOC_MIME[type],
+                EIGEN_DOC_TYPE_INFO[type].mime,
             ),
         onError: onMutationError,
     });

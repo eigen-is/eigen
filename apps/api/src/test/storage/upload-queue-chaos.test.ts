@@ -2,14 +2,18 @@ import { Database } from 'bun:sqlite';
 import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import type { MountConfig, S3Config } from '@workspace/lib/types';
-import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../../lib/core';
+import type { DatabaseConfig } from '../../lib/core';
 import { buildStorageKey } from '../../lib/mount/helpers';
-import { Mount } from '../../lib/mount/mount';
-import type { StorageBackend, StorageFile } from '../../lib/storage';
-import { LocalStorage } from '../../lib/storage/local-storage';
+import type { Mount } from '../../lib/mount/mount';
+import {
+    createFaultMount,
+    type FaultStorage,
+    type ParkedWrite,
+    provisionDoc,
+    shrinkPutTimeout,
+    waitFor,
+} from '../fault-storage-helpers';
 
 // Chaos verification for the "orphaned PUT lands after a newer PUT and regresses the object" class
 // (performUpload's Promise.race timeout; repaired in-process via trackOrphan). A PUT that stalls
@@ -21,26 +25,6 @@ import { LocalStorage } from '../../lib/storage/local-storage';
 const TEST_DIR = join(import.meta.dir, `../../../../../data-test/test-upload-queue-chaos-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
 
-const DUMMY_S3: S3Config = {
-    endpoint: 'http://127.0.0.1:1',
-    bucket: 'test',
-    accessKeyId: 'x',
-    secretAccessKey: 'y',
-    region: 'us-east-1',
-    prefix: '',
-};
-
-function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        relativePath: string,
-    ): Promise<ManagedDatabase<S>> => {
-        const db = new ManagedDatabase(config, join(baseDir, relativePath));
-        await db.open(0);
-        return db;
-    };
-}
-
 const docSchema = {
     items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }),
 };
@@ -51,104 +35,26 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
-type ParkedPut = {
-    key: string;
-    rows: number | null;
-    landed: boolean;
-    commit: () => Promise<void>; // the server applies the bytes; the client response stays pending
-    respond: () => void; // deliver the (long-forgotten) client response
-    land: () => Promise<void>; // commit + respond
-};
-
-// S3-like backend (no getPath) whose writes can be parked: the body is read UP-FRONT (as a real S3
-// PUT streams the request body when issued) and applied to the inner store only when the test lands
-// it — so completions can be reordered exactly like orphaned requests landing late server-side.
-class ReorderStorage implements StorageBackend {
-    park = false;
-    failNextWrites = 0;
-    readonly parked: ParkedPut[] = [];
-    private waiters: Array<() => void> = [];
-
-    constructor(readonly inner: LocalStorage) {}
-
-    read(key: string): StorageFile {
-        return this.inner.read(key);
-    }
-    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        const bytes = data instanceof Blob ? new Uint8Array(await data.arrayBuffer()) : data;
-        if (this.failNextWrites > 0) {
-            this.failNextWrites--;
-            throw new Error('injected upload failure (503)');
-        }
-        if (!this.park) return this.inner.write(key, bytes);
-        const rows = await countRowsInBytes(bytes);
-        return new Promise<number>((resolve, reject) => {
-            const entry: ParkedPut = {
-                key,
-                rows,
-                landed: false,
-                commit: async () => {
-                    entry.landed = true;
-                    await this.inner.write(key, bytes).catch(reject);
-                },
-                respond: () => resolve(bytes instanceof ArrayBuffer ? bytes.byteLength : bytes.length),
-                land: async () => {
-                    await entry.commit();
-                    entry.respond();
-                },
-            };
-            this.parked.push(entry);
-            for (const w of this.waiters.splice(0)) w();
-        });
-    }
-    async delete(key: string): Promise<boolean> {
-        return this.inner.delete(key);
-    }
-    async exists(key: string): Promise<boolean> {
-        return this.inner.exists(key);
-    }
-    async size(key: string): Promise<number | null> {
-        return this.inner.size(key);
-    }
-
-    // Resolve when a parked PUT matching the predicate exists (event-driven, so the test can land a
-    // PUT within the queue's shrunk client-side timeout).
-    async waitForParked(match: (p: ParkedPut) => boolean, timeoutMs = 3_000): Promise<ParkedPut> {
-        const end = Date.now() + timeoutMs;
-        for (;;) {
-            const hit = this.parked.find((p) => !p.landed && match(p));
-            if (hit) return hit;
-            if (Date.now() > end) throw new Error('waitForParked timeout');
-            await new Promise<void>((r) => {
-                this.waiters.push(r);
-                setTimeout(r, 25);
-            });
-        }
-    }
-    async landAllRemaining(): Promise<void> {
-        for (const p of this.parked) {
-            if (!p.landed) await p.land();
-        }
-    }
-}
-
 const createdMounts: Mount[] = [];
 
-// Same id ⇒ same baseDir + backing dir ⇒ a second call simulates a process restart sharing the prior
-// mount's metadata.db, staging dir, and "S3" object store (pattern from sync-resilience.test.ts).
-function createS3Mount(id: string): { mount: Mount; fault: ReorderStorage } {
-    const config: MountConfig = {
-        id,
-        name: id,
-        storageType: 's3',
-        isDefault: false,
-        s3Config: { ...DUMMY_S3, bucket: `bucket-${id}` },
-    };
-    const mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
-    const fault = new ReorderStorage(new LocalStorage(join(TEST_DIR, `backing-${id}`)));
-    (mount as unknown as { storage: StorageBackend }).storage = fault;
+function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
+    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
     createdMounts.push(mount);
     return { mount, fault };
+}
+
+// A parked PUT is identified by the row count of the body it captured; memoized per entry so the
+// event-driven poll doesn't re-parse the same bytes on every tick.
+const parkedRows = new WeakMap<ParkedWrite, number | null>();
+async function parkedWithRows(fault: FaultStorage, rows: number): Promise<ParkedWrite> {
+    return fault.waitForParked(async (p) => {
+        let count = parkedRows.get(p);
+        if (count === undefined) {
+            count = await countRowsInBytes(p.bytes);
+            parkedRows.set(p, count);
+        }
+        return count === rows;
+    });
 }
 
 async function countRowsInBytes(bytes: Uint8Array | ArrayBuffer | Buffer | null): Promise<number | null> {
@@ -165,30 +71,10 @@ async function countRowsInBytes(bytes: Uint8Array | ArrayBuffer | Buffer | null)
     }
 }
 
-async function countBackingRows(mount: Mount, fault: ReorderStorage, id: string): Promise<number | null> {
-    const m = mount as unknown as { getStorageKey(id: string): Promise<string> };
-    const file = fault.inner.read(await m.getStorageKey(id));
+async function countBackingRows(mount: Mount, fault: FaultStorage, id: string): Promise<number | null> {
+    const file = fault.inner.read(await mount.getStorageKey(id));
     if (!file || !(await file.exists())) return null;
     return countRowsInBytes(await file.arrayBuffer());
-}
-
-async function provisionDoc(mount: Mount): Promise<{ containerId: string; dataDbId: string }> {
-    const rootId = (await mount.getRootFolder())!.id;
-    const containerId = await mount.createFolder(rootId, `doc-${Math.random().toString(36).slice(2)}`, 'doc');
-    const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
-    return { containerId, dataDbId };
-}
-
-function shrinkPutTimeout(mount: Mount, ms: number): void {
-    (mount.uploadQueue as unknown as { putTimeoutMs: number }).putTimeoutMs = ms;
-}
-
-async function waitFor(cond: () => boolean | Promise<boolean>, ms = 3_000): Promise<void> {
-    const end = Date.now() + ms;
-    while (!(await cond())) {
-        if (Date.now() > end) throw new Error('waitFor timeout');
-        await Bun.sleep(5);
-    }
 }
 
 beforeAll(() => mkdirSync(TEST_DIR, { recursive: true }));
@@ -223,17 +109,17 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         // shrunk client-side timeout → the queue treats it as failed and backs off, but the request
         // is still live server-side. This is the orphan.
         shrinkPutTimeout(mount, 50);
-        fault.park = true;
+        fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await managed.flush();
-        await fault.waitForParked((p) => p.rows === 2);
+        await parkedWithRows(fault, 2);
         await Bun.sleep(120); // let the 50ms PUT deadline fire → timeout, inFlight cleared, row backed off
 
         // Write {3}: a newer sync supersedes the row. Land its PUT immediately (well inside the
         // timeout) → it acks, the row is cleared, the queue believes everything is synced.
         managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
         await managed.flush();
-        const newest = await fault.waitForParked((p) => p.rows === 3);
+        const newest = await parkedWithRows(fault, 3);
         await newest.land();
         await waitFor(() => mount.pendingUploadCount === 0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(3); // newest write confirmed on "S3"
@@ -245,7 +131,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         // The orphan(s) — every remaining parked PUT carries the older {1,2} bytes — now land
         // server-side, regressing the object. Their settlement logs loudly and re-uploads the
         // retained {1,2,3} bytes through the guarded path, repairing the regression.
-        fault.park = false; // the repair PUT must go straight through
+        fault.parkWrites = false; // the repair PUT must go straight through
         const errorSpy = spyOn(console, 'error');
         await fault.landAllRemaining();
         await waitFor(() => mount.pendingUploadCount === 0);
@@ -267,15 +153,15 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         const { dataDbId } = await provisionDoc(mount);
 
         shrinkPutTimeout(mount, 50);
-        fault.park = true;
+        fault.parkWrites = true;
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await fault.waitForParked((p) => p.rows === 1);
+        await parkedWithRows(fault, 1);
         await Bun.sleep(120); // orphan the PUT
 
         // Retry with a healthy backend: same staged bytes re-PUT and ack.
-        fault.park = false;
+        fault.parkWrites = false;
         await mount.drainPendingUploads({ flushNow: true });
         expect(mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(1);
@@ -296,11 +182,11 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         const key = buildStorageKey(dataDbId, 'data.db');
 
         shrinkPutTimeout(mount, 50);
-        fault.park = true;
+        fault.parkWrites = true;
         const managed = await mount.createDatabase(docConfig, dataDbId);
         managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
         await managed.flush();
-        await fault.waitForParked((p) => p.rows === 1);
+        await parkedWithRows(fault, 1);
         await Bun.sleep(120); // orphan the PUT (timeout fired, inFlight cleared)
 
         // Permanent delete: cancel() removes the row + staged copy, and the mount deletes the object.
@@ -334,25 +220,25 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
 
         // Write {2}: its PUT parks and stalls past the ceiling — the orphan.
         shrinkPutTimeout(mount, 150);
-        fault.park = true;
+        fault.parkWrites = true;
         managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
         await managed.flush();
-        await fault.waitForParked((p) => p.rows === 2);
+        await parkedWithRows(fault, 2);
         await mount.drainPendingUploads(); // returns once the ceiling fired and the row backed off
 
         // Write {3}: supersedes the row; its PUT parks mid-flight (well inside its own ceiling).
         managed.db.insert(docSchema.items).values({ id: 3, data: 'c' }).run();
         await managed.flush();
-        const newest = await fault.waitForParked((p) => p.rows === 3);
+        const newest = await parkedWithRows(fault, 3);
 
         // Server-side commit order inverts the client view: {1,2,3} commits first (its response
         // still pending), then the orphan lands fully — the object now holds the OLDER {1,2}
         // bytes, and the orphan settles while the {1,2,3} PUT is mid-flight with nothing to
         // repair yet. The subsequent ack must distrust its own commit order and re-PUT.
         await newest.commit();
-        await fault.parked.find((p) => p.rows === 2 && !p.landed)!.land();
+        await (await parkedWithRows(fault, 2)).land();
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(2); // regressed
-        fault.park = false; // the re-PUT must go straight through
+        fault.parkWrites = false; // the re-PUT must go straight through
         newest.respond();
         await waitFor(() => mount.pendingUploadCount === 0);
         expect(await countBackingRows(mount, fault, dataDbId)).toBe(3); // newest bytes re-asserted

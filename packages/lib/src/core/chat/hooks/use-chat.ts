@@ -1,15 +1,16 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { chatApi, driveApi, openDocument } from '@workspace/lib/api';
+import { chatApi, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import { useMyTeams } from '@workspace/lib/home';
 import type { ChatAttachment, ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import { DRIVE_MIME_CHAT, type DrivePath, EIGEN_DOC_TYPE_INFO } from '@workspace/lib/types/drive';
+import { type DrivePath, EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
 import { teamOwnerId } from '@workspace/lib/types/owner';
 import { useMemo } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateItemCreated } from '../../drive/hooks/keys';
-import { useAggregateMimeContent } from '../../drive/hooks/reads';
+import { mountMimeContentQueryConfig, useAggregateMimeContent } from '../../drive/hooks/reads';
+import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../../drive/reconcile-create';
 import { publicUserKeys } from '../../public/hooks/keys';
 import { fetchPublicUser } from '../../public/user-batcher';
 import { chatKeys, invalidateChatMatches, invalidateMessages } from './keys';
@@ -108,23 +109,6 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
     });
 }
 
-export function useCreateChat(ownerId: string, mountId: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({ parentId, fileName }: { parentId: string; fileName: string }): Promise<DrivePath> => {
-            const response = await driveApi({ ownerId })({ mountId })
-                .folder({ pathId: parentId })
-                .create({ type: 'chat' })
-                .post({ fileName });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        onSuccess: (_data, variables) =>
-            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, DRIVE_MIME_CHAT),
-        onError: onMutationError,
-    });
-}
-
 // Shared by the live query and useStartChatWith's one-shot fetch so both hit one cache entry.
 function byMembersQueryConfig(ownerId: string, emails: string[]) {
     return {
@@ -146,11 +130,12 @@ export function useFindChatByMembers(ownerId: string, emails: string[]) {
     return useQuery<ChatMatch[]>(byMembersQueryConfig(ownerId, emails));
 }
 
-// Create a chat pre-shared with the picked members (server-side create + ACL in one step).
+// Create a chat pre-shared with the picked members (server-side create + ACL in one step). A create
+// that times out reconciles by name against the pre-create id snapshot.
 export function useCreateChatRoom(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({
+        mutationFn: ({
             parentId,
             fileName,
             members,
@@ -160,16 +145,29 @@ export function useCreateChatRoom(ownerId: string, mountId: string) {
             fileName: string;
             members: string[];
             dedupeName?: boolean;
-        }): Promise<DrivePath> => {
-            const response = await chatApi({ ownerId })({ mountId }).rooms.post({
-                parentId,
-                fileName,
-                members,
-                dedupeName,
-            });
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
+        }): Promise<DrivePath> =>
+            createWithReconcile({
+                create: async () => {
+                    const response = await chatApi({ ownerId })({ mountId }).rooms.post(
+                        { parentId, fileName, members, dedupeName },
+                        { fetch: { signal: AbortSignal.timeout(CREATE_TIMEOUT_MS) } },
+                    );
+                    if (response.error) throw new AppError(response);
+                    return response.data;
+                },
+                // The wizard can omit parentId (the route resolves the lazily-created `chats`
+                // folder, an id no client endpoint hands out), so reconcile over the mount-scoped
+                // chat listing, narrowed to the folder whenever the caller did name one.
+                listFolder: async () => {
+                    const chats = await fetchListingOnce(
+                        queryClient,
+                        mountMimeContentQueryConfig(ownerId, mountId, CHAT_MIME_SLUG),
+                    );
+                    return parentId ? chats.filter((chat) => chat.parentId === parentId) : chats;
+                },
+                // dedupeName lets the server suffix a colliding name (`Name (2)`), so no reconcile.
+                expectedName: dedupeName ? undefined : withEigenExtension(fileName, 'chat'),
+            }),
         // Refresh the parent folder, the sidebar aggregate, and the by-members family.
         onSuccess: (data) => {
             invalidateItemCreated(queryClient, ownerId, mountId, data.parentId, data.mimeType);

@@ -295,7 +295,14 @@ export class S3Storage implements StorageBackend {
     }
 
     async exists(key: string): Promise<boolean> {
-        return await this.read(key).exists();
+        // A missing object resolves false; a throw is the provider failing. 503 is the shape the
+        // create (rollback) and open (1013 close) paths speak, so the outage reads as one and not as a 500.
+        try {
+            return await this.read(key).exists();
+        } catch (error) {
+            console.error(`S3 exists probe failed for ${key}:`, error);
+            throw new ApiError(503, 'Storage unavailable');
+        }
     }
 
     async size(key: string): Promise<number | null> {
